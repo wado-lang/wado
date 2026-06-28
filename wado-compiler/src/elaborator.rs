@@ -931,6 +931,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }),
             defined_at: def_id,
             module: self.current_module_source.clone(),
+            visibility: crate::ast::Visibility::Private,
             span: Some(span),
         };
         self.sem.bindings.local_symbols.insert(def_id, symbol);
@@ -1331,7 +1332,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 // `ns$global` alias.
                                 for src_item in &source_module.items {
                                     if let Item::Global(global_decl) = src_item
-                                        && global_decl.is_pub
+                                        && global_decl.visibility.is_public()
                                     {
                                         to_import.push((
                                             crate::name::namespace_member_alias(

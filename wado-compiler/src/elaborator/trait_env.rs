@@ -116,7 +116,7 @@ pub(super) fn module_import_scope(
     // the scope so prelude types (`String`, `List`, `Option`, …) resolve
     // through the import branch like any `use`. Modules opting out
     // (`#![no_prelude]` — the prelude sub-modules and
-    // `core:internal`/`builtin`/`allocator`) import explicitly. Explicit `use`
+    // `core:rt`/`builtin`/`allocator`) import explicitly. Explicit `use`
     // items above take precedence, so they are not overwritten.
     if !module.has_no_prelude() {
         let prelude = ModuleSource::prelude();

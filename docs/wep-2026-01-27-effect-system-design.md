@@ -46,7 +46,7 @@ fn bad() {
 
 ### Ambient Effects
 
-`log_stdout` and `log_stderr` from `core:internal` are effect-less by compiler magic. They can be called from any function without effect declaration. This is _ambient authority_: no world import and no `with` annotation are required, justified by the effects being best-effort and unobservable as a dependency.
+`log_stdout` and `log_stderr` from `core:rt` are effect-less by compiler magic. They can be called from any function without effect declaration. This is _ambient authority_: no world import and no `with` annotation are required, justified by the effects being best-effort and unobservable as a dependency.
 
 ### Benign Effects
 

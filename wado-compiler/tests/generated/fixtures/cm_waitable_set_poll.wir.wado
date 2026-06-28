@@ -235,11 +235,11 @@ type "functype//wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_bind
 
 type "functype//wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_export__handle" = fn(i32);  // TypeId(44)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(45)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(45)
 
-type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(46)
+type "functype//core:rt/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(46)
 
-type "functype//core:internal/cm_waitable_set_poll" = fn(i32) -> ref null "core:prelude/types.wado//WaitEvent";  // TypeId(47)
+type "functype//core:rt/cm_waitable_set_poll" = fn(i32) -> ref null "core:prelude/types.wado//WaitEvent";  // TypeId(47)
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(48)
 
@@ -556,7 +556,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    event = "core:internal/cm_waitable_set_poll"(local.tee ws("wasi/waitable-set-new"()));
+    event = "core:rt/cm_waitable_set_poll"(local.tee ws("wasi/waitable-set-new"()));
     if ref.is_null(event) == 0 {
         "wasi/waitable-set-drop"(ws);
         let __pair_temp_1: i64;
@@ -589,7 +589,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
                 __local_180 = 0;
                 __local_181 = 0;
                 if __local_179 != 0 {
-                    __local_183 = builtin::i32_wrap_i64(local.tee __local_182("core:internal/cm_lower_string"(ref.as_non_null(__local_178))));
+                    __local_183 = builtin::i32_wrap_i64(local.tee __local_182("core:rt/cm_lower_string"(ref.as_non_null(__local_178))));
                     __local_184 = builtin::i32_wrap_i64(__local_182 >> 32_i64);
                     __local_180 = __local_183;
                     __local_181 = __local_184;
@@ -630,7 +630,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
                 __local_197 = 0;
                 __local_198 = 0;
                 if __local_196 != 0 {
-                    __local_200 = builtin::i32_wrap_i64(local.tee __local_199("core:internal/cm_lower_string"(ref.as_non_null(__local_195))));
+                    __local_200 = builtin::i32_wrap_i64(local.tee __local_199("core:rt/cm_lower_string"(ref.as_non_null(__local_195))));
                     __local_201 = builtin::i32_wrap_i64(__local_199 >> 32_i64);
                     __local_197 = __local_200;
                     __local_198 = __local_201;
@@ -678,7 +678,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
                     __local_223 = 0;
                     __local_224 = 0;
                     if __local_222 != 0 {
-                        __local_226 = builtin::i32_wrap_i64(local.tee __local_225("core:internal/cm_lower_string"(ref.as_non_null(__local_221))));
+                        __local_226 = builtin::i32_wrap_i64(local.tee __local_225("core:rt/cm_lower_string"(ref.as_non_null(__local_221))));
                         __local_227 = builtin::i32_wrap_i64(__local_225 >> 32_i64);
                         __local_223 = __local_226;
                         __local_224 = __local_227;
@@ -717,7 +717,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
                 __local_241 = 0;
                 __local_242 = 0;
                 if __local_240 != 0 {
-                    __local_244 = builtin::i32_wrap_i64(local.tee __local_243("core:internal/cm_lower_string"(ref.as_non_null(__local_239))));
+                    __local_244 = builtin::i32_wrap_i64(local.tee __local_243("core:rt/cm_lower_string"(ref.as_non_null(__local_239))));
                     __local_245 = builtin::i32_wrap_i64(__local_243 >> 32_i64);
                     __local_241 = __local_244;
                     __local_242 = __local_245;
@@ -750,7 +750,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
                 __local_259 = 0;
                 __local_260 = 0;
                 if __local_258 != 0 {
-                    __local_262 = builtin::i32_wrap_i64(local.tee __local_261("core:internal/cm_lower_string"(ref.as_non_null(__local_257))));
+                    __local_262 = builtin::i32_wrap_i64(local.tee __local_261("core:rt/cm_lower_string"(ref.as_non_null(__local_257))));
                     __local_263 = builtin::i32_wrap_i64(__local_261 >> 32_i64);
                     __local_259 = __local_262;
                     __local_260 = __local_263;
@@ -791,7 +791,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
                 __local_282 = 0;
                 __local_283 = 0;
                 if __local_281 != 0 {
-                    __local_285 = builtin::i32_wrap_i64(local.tee __local_284("core:internal/cm_lower_string"(ref.as_non_null(__local_280))));
+                    __local_285 = builtin::i32_wrap_i64(local.tee __local_284("core:rt/cm_lower_string"(ref.as_non_null(__local_280))));
                     __local_286 = builtin::i32_wrap_i64(__local_284 >> 32_i64);
                     __local_282 = __local_285;
                     __local_283 = __local_286;
@@ -813,7 +813,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
                 __local_294 = 0;
                 __local_295 = 0;
                 if __local_293 != 0 {
-                    __local_297 = builtin::i32_wrap_i64(local.tee __local_296("core:internal/cm_lower_string"(ref.as_non_null(__local_291))));
+                    __local_297 = builtin::i32_wrap_i64(local.tee __local_296("core:rt/cm_lower_string"(ref.as_non_null(__local_291))));
                     __local_298 = builtin::i32_wrap_i64(__local_296 >> 32_i64);
                     __local_294 = __local_297;
                     __local_295 = __local_298;
@@ -827,7 +827,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
                 __local_302 = 0;
                 __local_303 = 0;
                 if __local_301 != 0 {
-                    __local_305 = builtin::i32_wrap_i64(local.tee __local_304("core:internal/cm_lower_string"(ref.as_non_null(__local_299))));
+                    __local_305 = builtin::i32_wrap_i64(local.tee __local_304("core:rt/cm_lower_string"(ref.as_non_null(__local_299))));
                     __local_306 = builtin::i32_wrap_i64(__local_304 >> 32_i64);
                     __local_302 = __local_305;
                     __local_303 = __local_306;
@@ -846,7 +846,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
                 __local_310 = 0;
                 __local_311 = 0;
                 if __local_309 != 0 {
-                    __local_313 = builtin::i32_wrap_i64(local.tee __local_312("core:internal/cm_lower_string"(ref.as_non_null(__local_307))));
+                    __local_313 = builtin::i32_wrap_i64(local.tee __local_312("core:rt/cm_lower_string"(ref.as_non_null(__local_307))));
                     __local_314 = builtin::i32_wrap_i64(__local_312 >> 32_i64);
                     __local_310 = __local_313;
                     __local_311 = __local_314;
@@ -907,7 +907,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
             __local_29 = 0;
             __local_30 = 0;
             if __local_28 != 0 {
-                __local_32 = builtin::i32_wrap_i64(local.tee __local_31("core:internal/cm_lower_string"(ref.as_non_null(__local_27))));
+                __local_32 = builtin::i32_wrap_i64(local.tee __local_31("core:rt/cm_lower_string"(ref.as_non_null(__local_27))));
                 __local_33 = builtin::i32_wrap_i64(__local_31 >> 32_i64);
                 __local_29 = __local_32;
                 __local_30 = __local_33;
@@ -948,7 +948,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
             __local_46 = 0;
             __local_47 = 0;
             if __local_45 != 0 {
-                __local_49 = builtin::i32_wrap_i64(local.tee __local_48("core:internal/cm_lower_string"(ref.as_non_null(__local_44))));
+                __local_49 = builtin::i32_wrap_i64(local.tee __local_48("core:rt/cm_lower_string"(ref.as_non_null(__local_44))));
                 __local_50 = builtin::i32_wrap_i64(__local_48 >> 32_i64);
                 __local_46 = __local_49;
                 __local_47 = __local_50;
@@ -996,7 +996,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
                 __local_72 = 0;
                 __local_73 = 0;
                 if __local_71 != 0 {
-                    __local_75 = builtin::i32_wrap_i64(local.tee __local_74("core:internal/cm_lower_string"(ref.as_non_null(__local_70))));
+                    __local_75 = builtin::i32_wrap_i64(local.tee __local_74("core:rt/cm_lower_string"(ref.as_non_null(__local_70))));
                     __local_76 = builtin::i32_wrap_i64(__local_74 >> 32_i64);
                     __local_72 = __local_75;
                     __local_73 = __local_76;
@@ -1035,7 +1035,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
             __local_90 = 0;
             __local_91 = 0;
             if __local_89 != 0 {
-                __local_93 = builtin::i32_wrap_i64(local.tee __local_92("core:internal/cm_lower_string"(ref.as_non_null(__local_88))));
+                __local_93 = builtin::i32_wrap_i64(local.tee __local_92("core:rt/cm_lower_string"(ref.as_non_null(__local_88))));
                 __local_94 = builtin::i32_wrap_i64(__local_92 >> 32_i64);
                 __local_90 = __local_93;
                 __local_91 = __local_94;
@@ -1068,7 +1068,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
             __local_108 = 0;
             __local_109 = 0;
             if __local_107 != 0 {
-                __local_111 = builtin::i32_wrap_i64(local.tee __local_110("core:internal/cm_lower_string"(ref.as_non_null(__local_106))));
+                __local_111 = builtin::i32_wrap_i64(local.tee __local_110("core:rt/cm_lower_string"(ref.as_non_null(__local_106))));
                 __local_112 = builtin::i32_wrap_i64(__local_110 >> 32_i64);
                 __local_108 = __local_111;
                 __local_109 = __local_112;
@@ -1109,7 +1109,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
             __local_131 = 0;
             __local_132 = 0;
             if __local_130 != 0 {
-                __local_134 = builtin::i32_wrap_i64(local.tee __local_133("core:internal/cm_lower_string"(ref.as_non_null(__local_129))));
+                __local_134 = builtin::i32_wrap_i64(local.tee __local_133("core:rt/cm_lower_string"(ref.as_non_null(__local_129))));
                 __local_135 = builtin::i32_wrap_i64(__local_133 >> 32_i64);
                 __local_131 = __local_134;
                 __local_132 = __local_135;
@@ -1131,7 +1131,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
             __local_143 = 0;
             __local_144 = 0;
             if __local_142 != 0 {
-                __local_146 = builtin::i32_wrap_i64(local.tee __local_145("core:internal/cm_lower_string"(ref.as_non_null(__local_140))));
+                __local_146 = builtin::i32_wrap_i64(local.tee __local_145("core:rt/cm_lower_string"(ref.as_non_null(__local_140))));
                 __local_147 = builtin::i32_wrap_i64(__local_145 >> 32_i64);
                 __local_143 = __local_146;
                 __local_144 = __local_147;
@@ -1145,7 +1145,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
             __local_151 = 0;
             __local_152 = 0;
             if __local_150 != 0 {
-                __local_154 = builtin::i32_wrap_i64(local.tee __local_153("core:internal/cm_lower_string"(ref.as_non_null(__local_148))));
+                __local_154 = builtin::i32_wrap_i64(local.tee __local_153("core:rt/cm_lower_string"(ref.as_non_null(__local_148))));
                 __local_155 = builtin::i32_wrap_i64(__local_153 >> 32_i64);
                 __local_151 = __local_154;
                 __local_152 = __local_155;
@@ -1164,7 +1164,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
             __local_159 = 0;
             __local_160 = 0;
             if __local_158 != 0 {
-                __local_162 = builtin::i32_wrap_i64(local.tee __local_161("core:internal/cm_lower_string"(ref.as_non_null(__local_156))));
+                __local_162 = builtin::i32_wrap_i64(local.tee __local_161("core:rt/cm_lower_string"(ref.as_non_null(__local_156))));
                 __local_163 = builtin::i32_wrap_i64(__local_161 >> 32_i64);
                 __local_159 = __local_162;
                 __local_160 = __local_163;
@@ -1230,7 +1230,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_export__handle"(
     "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request);
 }
 
-fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
+fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
     b126: block {
@@ -1243,18 +1243,18 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     };
 }
 
-fn "core:internal/cm_lower_string"(s) {
+fn "core:rt/cm_lower_string"(s) {
     let len: i32;
     let bytes: ref Array<u8>;
     let ptr: i32;
     len = s.used;
     bytes = s.repr;
     ptr = "mem/realloc"(0, 0, 1, len);
-    "core:internal/gc_array_to_memory"(bytes, ptr, len);
+    "core:rt/gc_array_to_memory"(bytes, ptr, len);
     return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
 }
 
-fn "core:internal/cm_waitable_set_poll"(ws) {
+fn "core:rt/cm_waitable_set_poll"(ws) {
     let out_ptr: i32;
     let code: i32;
     let evt_handle: i32;

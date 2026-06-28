@@ -261,7 +261,7 @@ pub fn extract_doc_with(
 
 fn build_doc_trait(t: &TraitDecl, trivia: &TriviaMap) -> DocTrait {
     let mut sig = String::new();
-    if t.is_pub {
+    if t.visibility.is_public() {
         sig.push_str("pub ");
     }
     sig.push_str("trait ");
@@ -330,7 +330,7 @@ fn build_doc_struct(
 
 fn build_doc_type(t: &Newtype, trivia: &TriviaMap) -> DocType {
     let mut sig = String::new();
-    if t.is_pub {
+    if t.visibility.is_public() {
         sig.push_str("pub ");
     }
     sig.push_str("type ");
@@ -348,7 +348,7 @@ fn build_doc_type(t: &Newtype, trivia: &TriviaMap) -> DocType {
 
 fn build_doc_global(g: &GlobalDecl, trivia: &TriviaMap) -> DocGlobal {
     let mut sig = String::new();
-    if g.is_pub {
+    if g.visibility.is_public() {
         sig.push_str("pub ");
     }
     sig.push_str("global ");
@@ -386,7 +386,7 @@ fn build_doc_enum(e: &EnumDecl, trivia: &TriviaMap) -> DocEnum {
 
 fn build_doc_variant(v: &VariantDecl, trivia: &TriviaMap) -> DocVariant {
     let mut sig = String::new();
-    if v.is_pub {
+    if v.visibility.is_public() {
         sig.push_str("pub ");
     }
     sig.push_str("variant ");
@@ -413,7 +413,7 @@ fn build_doc_variant(v: &VariantDecl, trivia: &TriviaMap) -> DocVariant {
 
 fn build_doc_flags(f: &FlagsDecl, trivia: &TriviaMap) -> DocFlags {
     let mut sig = String::new();
-    if f.is_pub {
+    if f.visibility.is_public() {
         sig.push_str("pub ");
     }
     sig.push_str("flags ");
@@ -442,7 +442,7 @@ fn build_doc_flags(f: &FlagsDecl, trivia: &TriviaMap) -> DocFlags {
 
 fn build_doc_interface(e: &InterfaceDecl, trivia: &TriviaMap) -> DocEffect {
     let mut sig = String::new();
-    if e.is_pub {
+    if e.visibility.is_public() {
         sig.push_str("pub ");
     }
     sig.push_str("interface ");
@@ -467,7 +467,7 @@ fn build_doc_interface(e: &InterfaceDecl, trivia: &TriviaMap) -> DocEffect {
 
 fn build_doc_resource(r: &crate::ast::ResourceDecl, trivia: &TriviaMap) -> DocResource {
     let mut sig = String::new();
-    if r.is_pub {
+    if r.visibility.is_public() {
         sig.push_str("pub ");
     }
     sig.push_str("resource ");
@@ -575,19 +575,19 @@ fn extract_module_doc(trivia: &TriviaMap, module: &Module) -> Option<String> {
 
 fn is_pub_or_export(item: &Item) -> bool {
     match item {
-        Item::Function(f) => f.is_pub || f.is_export,
-        Item::Struct(s) => s.is_pub,
-        Item::Enum(e) => e.is_pub,
-        Item::Variant(v) => v.is_pub,
-        Item::Flags(f) => f.is_pub,
-        Item::Newtype(t) => t.is_pub,
-        Item::Trait(t) => t.is_pub,
-        Item::Interface(e) => e.is_pub,
-        Item::Global(g) => g.is_pub,
-        Item::Resource(r) => r.is_pub,
+        Item::Function(f) => f.visibility.is_public() || f.is_export,
+        Item::Struct(s) => s.visibility.is_public(),
+        Item::Enum(e) => e.visibility.is_public(),
+        Item::Variant(v) => v.visibility.is_public(),
+        Item::Flags(f) => f.visibility.is_public(),
+        Item::Newtype(t) => t.visibility.is_public(),
+        Item::Trait(t) => t.visibility.is_public(),
+        Item::Interface(e) => e.visibility.is_public(),
+        Item::Global(g) => g.visibility.is_public(),
+        Item::Resource(r) => r.visibility.is_public(),
         Item::Impl(_) => true,
-        Item::TupleTypeDecl(d) => d.is_pub,
-        Item::BuiltinTypeDecl(d) => d.is_pub,
+        Item::TupleTypeDecl(d) => d.visibility.is_public(),
+        Item::BuiltinTypeDecl(d) => d.visibility.is_public(),
         Item::Use(_) | Item::World(_) | Item::Test(_) => false,
         Item::Error(_) => false,
     }
@@ -777,7 +777,7 @@ fn collect_pub_use_sources(module: &Module) -> Vec<String> {
     let mut sources = Vec::new();
     for item in &module.items {
         if let Item::Use(u) = item
-            && u.is_pub
+            && u.visibility.is_public()
             && !u.items.iter().any(|i| matches!(i, UseItem::Wildcard))
         {
             sources.push(u.source.clone());
@@ -791,7 +791,7 @@ fn collect_pub_use_names(module: &Module) -> IndexSet<String> {
     let mut names = IndexSet::default();
     for item in &module.items {
         if let Item::Use(u) = item
-            && u.is_pub
+            && u.visibility.is_public()
         {
             for use_item in &u.items {
                 match use_item {
@@ -926,7 +926,7 @@ fn collect_impl_methods_for_type(
             });
         } else {
             for m in &i.methods {
-                if include_private || m.is_pub || m.is_export {
+                if include_private || m.visibility.is_public() || m.is_export {
                     inherent_methods.push(build_doc_function(m, trivia));
                 }
             }

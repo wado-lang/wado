@@ -567,7 +567,7 @@ fn grow_memory(new_offset: i32) {
     core::builtin::memory_grow(grow_pages);
 }
 
-export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
+pub export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
     if (newsize == 0) {
         if ((oldptr + oldsize) == core::allocator::heap_offset) {
             core::allocator::heap_offset = oldptr;
@@ -584,7 +584,7 @@ export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i
     return aligned;
 }
 
-export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
+pub export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
     if (newsize == 0) {
         if (oldsize > 0) {
             core::builtin::memory_fill(oldptr, 255, oldsize);
@@ -669,7 +669,7 @@ fn fl_carve(block: i32, block_size: i32, size: i32) {
     }
 }
 
-export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32) -> i32 {
+pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32) -> i32 {
     if (core::allocator::heap_offset < 152) {
         core::allocator::heap_offset = 152;
     }
@@ -1849,9 +1849,9 @@ pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: boo
         let mut new_repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"((len + 1));
         "core::builtin::core/builtin/array_copy<u8>"(&mut new_repr, 0, &bytes, 0, len);
         core::builtin::array_set_u8(&mut new_repr, len, 10);
-        core::internal::cm_stream_write_raw_u8(&tx as i32, new_repr, (len + 1));
+        core::rt::cm_stream_write_raw_u8(&tx as i32, new_repr, (len + 1));
     } else {
-        core::internal::cm_stream_write_raw_u8(&tx as i32, bytes, len);
+        core::rt::cm_stream_write_raw_u8(&tx as i32, bytes, len);
     }
     cm_raw_call stream-drop-writable(&tx as i32);
 }
@@ -1862,7 +1862,7 @@ pub fn println(message: String) with Stdout {
     let tx: StreamWritable<u8> = __pattern_temp_0.1;
     let handle: Future<Result<(), ErrorCode>> = __cm_binding__Stdout_write_via_stream(rx as i32);
     core::cli::write_to_stream(tx, message, true);
-    core::internal::drop_cli_write_future(handle);
+    core::rt::drop_cli_write_future(handle);
 }
 
 pub fn eprintln(message: String) with Stderr {
@@ -1871,7 +1871,7 @@ pub fn eprintln(message: String) with Stderr {
     let tx: StreamWritable<u8> = __pattern_temp_0.1;
     let handle: Future<Result<(), ErrorCode>> = __cm_binding__Stderr_write_via_stream(rx as i32);
     core::cli::write_to_stream(tx, message, true);
-    core::internal::drop_cli_write_future(handle);
+    core::rt::drop_cli_write_future(handle);
 }
 
 pub fn print(message: String) with Stdout {
@@ -1880,7 +1880,7 @@ pub fn print(message: String) with Stdout {
     let tx: StreamWritable<u8> = __pattern_temp_0.1;
     let handle: Future<Result<(), ErrorCode>> = __cm_binding__Stdout_write_via_stream(rx as i32);
     core::cli::write_to_stream(tx, message, false);
-    core::internal::drop_cli_write_future(handle);
+    core::rt::drop_cli_write_future(handle);
 }
 
 pub fn eprint(message: String) with Stderr {
@@ -1889,7 +1889,7 @@ pub fn eprint(message: String) with Stderr {
     let tx: StreamWritable<u8> = __pattern_temp_0.1;
     let handle: Future<Result<(), ErrorCode>> = __cm_binding__Stderr_write_via_stream(rx as i32);
     core::cli::write_to_stream(tx, message, false);
-    core::internal::drop_cli_write_future(handle);
+    core::rt::drop_cli_write_future(handle);
 }
 
 pub fn print_bytes(data: List<u8>) with Stdout {
@@ -1897,9 +1897,9 @@ pub fn print_bytes(data: List<u8>) with Stdout {
     let rx: Stream<u8> = __pattern_temp_0.0;
     let tx: StreamWritable<u8> = __pattern_temp_0.1;
     let handle: Future<Result<(), ErrorCode>> = __cm_binding__Stdout_write_via_stream(rx as i32);
-    core::internal::cm_stream_write_u8(&tx as i32, data);
+    core::rt::cm_stream_write_u8(&tx as i32, data);
     cm_raw_call stream-drop-writable(&tx as i32);
-    core::internal::drop_cli_write_future(handle);
+    core::rt::drop_cli_write_future(handle);
 }
 
 pub fn env(name: String) -> Option<String> with Environment {
@@ -1938,531 +1938,6 @@ pub fn exit_error() -> ! with Exit {
 
 pub fn exit(code: u8) -> ! with Exit {
     __cm_binding__Exit_exit_with_code(code as i32);
-}
-
-pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"StreamWritable<u8>", used: 18 });
-}
-
-pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Stream<u8>", used: 10 });
-}
-
-pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Future<Result<(), ErrorCode>>", used: 29 });
-}
-
-pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
-
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
-
-pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
-
-pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
-
-pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
-
-pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
-
-pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
-
-pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
-
-pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
-
-pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
-
-pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
-
-pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
-
-pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
-
-pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
-    self."StreamWritable<u8>^Inspect::inspect"(f);
-}
-
-pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
-    self."Stream<u8>^Inspect::inspect"(f);
-}
-
-pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
-
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
-
-pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
-
-pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
-
-pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
-
-pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
-
-pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
-
-pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
-
-pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
-
-pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
-
-pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
-
-pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
-
-pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
-
-pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
-    self."StreamWritable<u8>^Inspect::inspect"(f);
-}
-
-pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
-    self."Stream<u8>^Inspect::inspect"(f);
-}
-
-pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
-    self."Fn<1,bool>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
-    self."Fn<1,()>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
-    self."Fn<2,T>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
-    self."Fn<2,u8>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,char>^Display::fmt"(self: Box<Fn<2,char>>, f: &mut Formatter) {
-    self."Fn<2,char>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<1,char>^Display::fmt"(self: Box<Fn<1,char>>, f: &mut Formatter) {
-    self."Fn<1,char>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
-    self."Fn<2,String>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
-    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
-    self."Fn<1,i32>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter) {
-    self."Fn<2,I::Item>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
-    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
-    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
-}
-
-pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
-    self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
-    self."Stream<u8>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
-    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
-    self."Fn<1,()>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
-    self."Fn<2,T>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
-    self."Fn<2,u8>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,char>^DisplayAlt::fmt_alt"(self: Box<Fn<2,char>>, f: &mut Formatter) {
-    self."Fn<2,char>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<1,char>^DisplayAlt::fmt_alt"(self: Box<Fn<1,char>>, f: &mut Formatter) {
-    self."Fn<1,char>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
-    self."Fn<2,String>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
-    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
-    self."Fn<1,i32>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter) {
-    self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
-    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
-    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn i32_min(a: i32, b: i32) -> i32 {
-    return "core::builtin::core/builtin/select<i32>"((a < b), a, b);
-}
-
-pub fn i32_max(a: i32, b: i32) -> i32 {
-    return "core::builtin::core/builtin/select<i32>"((a > b), a, b);
-}
-
-pub fn i32_clamp(value: i32, lo: i32, hi: i32) -> i32 {
-    __assert_0: {
-        let __v0: i32 = lo;
-        let __v1: i32 = hi;
-        let __cond: bool = (__v0 <= __v1);
-        if !__cond {
-            core::builtin::cold_path();
-            core::internal::panic(__tmpl: {
-                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(154);
-                __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
-                __r.String::push_str(&String { repr: packed"i32_clamp", used: 9 });
-                __r.String::push_str(&String { repr: packed" at ", used: 4 });
-                __r.String::push_str(&String { repr: packed"core:internal", used: 13 });
-                __r.String::push_str(&String { repr: packed":", used: 1 });
-                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 38 }."i32^Display::fmt"(&mut __f);
-                __r.String::push_str(&String { repr: packed": ", used: 2 });
-                __r.String::push_str(&String { repr: packed"i32_clamp: lo must be <= hi", used: 27 });
-                __r.String::push_str(&String { repr: packed"\ncondition: lo <= hi\n", used: 21 });
-                __r.String::push_str(&String { repr: packed"lo: ", used: 4 });
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: __v0 }."i32^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&String { repr: packed"\n", used: 1 });
-                __r.String::push_str(&String { repr: packed"hi: ", used: 4 });
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: __v1 }."i32^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&String { repr: packed"\n", used: 1 });
-                break __tmpl: __r;
-            });
-        }
-    }
-    return core::internal::i32_min(core::internal::i32_max(value, lo), hi);
-}
-
-pub fn memory_to_gc_array(ptr: i32, len: i32) -> Array<u8> {
-    let mut arr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
-    let mut i: i32 = 0;
-    loop {
-        if !(i < len) {
-            break;
-        }
-        __for_0_body: {
-            core::builtin::array_set_u8(&mut arr, i, core::builtin::i32_load8_u((ptr + i)) as u8);
-        }
-        i = (i + 1);
-    }
-    return arr;
-}
-
-pub fn memory_to_gc_string(ptr: i32, len: i32) -> String {
-    let arr: Array<u8> = core::internal::memory_to_gc_array(ptr, len);
-    return "core::prelude/string.wado::String::internal_from_utf8_raw"(arr, len);
-}
-
-pub fn gc_array_to_memory(arr: &Array<u8>, ptr: i32, len: i32) {
-    let mut i: i32 = 0;
-    loop {
-        if !(i < len) {
-            break;
-        }
-        __for_0_body: {
-            core::builtin::i32_store8((ptr + i), core::builtin::array_get_u8(arr, i));
-        }
-        i = (i + 1);
-    }
-}
-
-pub fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool) {
-    let bytes: Array<u8> = message.String::internal_raw_bytes();
-    let len: i32 = message.String::len();
-    if add_newline {
-        let mut new_repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"((len + 1));
-        "core::builtin::core/builtin/array_copy<u8>"(&mut new_repr, 0, &bytes, 0, len);
-        core::builtin::array_set_u8(&mut new_repr, len, 10);
-        core::internal::cm_stream_write_raw_u8(&tx as i32, new_repr, (len + 1));
-    } else {
-        core::internal::cm_stream_write_raw_u8(&tx as i32, bytes, len);
-    }
-    cm_raw_call stream-drop-writable(&tx as i32);
-}
-
-pub fn wait_for_subtask(packed: i32) with WaitableSet, Subtask {
-    let handle: i32 = (packed >> 4);
-    if (handle != 0) {
-        let subtask: Subtask = handle as Subtask;
-        let ws: WaitableSet = cm_raw_call waitable-set-new();
-        core::internal::cm_waitable_join(&subtask as i32, &ws);
-        loop {
-            let event: WaitEvent = core::internal::cm_waitable_set_wait(&ws as i32);
-            if (event.payload == 2) {
-                break;
-            }
-        }
-        cm_raw_call subtask-drop(&subtask as i32);
-        cm_raw_call waitable-set-drop(&ws as i32);
-    }
-}
-
-pub fn drop_cli_write_future(future: Future<Result<(), ErrorCode>>) {
-    future."Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>::drop"();
-}
-
-pub fn log_stdout(message: String) {
-    let __pattern_temp_0: [Stream<u8>, StreamWritable<u8>] = "core::prelude/types.wado::Stream<u8>::new"();
-    let rx: Stream<u8> = __pattern_temp_0.0;
-    let tx: StreamWritable<u8> = __pattern_temp_0.1;
-    let future_handle: i32 = core::builtin::call_indirect_stdout_write_via_stream(rx as i32);
-    core::internal::write_string_to_stream(tx, message, true);
-    core::internal::drop_cli_write_future(future_handle as Future<Result<(), ErrorCode>>);
-}
-
-pub fn log_stderr(message: String) {
-    let __pattern_temp_0: [Stream<u8>, StreamWritable<u8>] = "core::prelude/types.wado::Stream<u8>::new"();
-    let rx: Stream<u8> = __pattern_temp_0.0;
-    let tx: StreamWritable<u8> = __pattern_temp_0.1;
-    let future_handle: i32 = core::builtin::call_indirect_stderr_write_via_stream(rx as i32);
-    core::internal::write_string_to_stream(tx, message, true);
-    core::internal::drop_cli_write_future(future_handle as Future<Result<(), ErrorCode>>);
-}
-
-pub fn panic(message: String) -> ! {
-    core::internal::log_stderr(message);
-    core::builtin::unreachable();
-}
-
-pub fn assert_failed(message: String) -> ! {
-    core::internal::panic(message);
-}
-
-pub fn unreachable() -> ! {
-    core::builtin::unreachable();
-}
-
-pub fn cm_lower_string(s: String) -> i64 {
-    let len: i32 = s.String::len();
-    let bytes: Array<u8> = s.String::internal_raw_bytes();
-    let ptr: i32 = core::builtin::realloc(0, 0, 1, len);
-    core::internal::gc_array_to_memory(&bytes, ptr, len);
-    return (ptr as i64 | (len as i64 << 32));
-}
-
-pub fn cm_lower_list_u8(data: Array<u8>, len: i32) -> i64 {
-    let ptr: i32 = core::builtin::realloc(0, 0, 1, len);
-    core::internal::gc_array_to_memory(&data, ptr, len);
-    return (ptr as i64 | (len as i64 << 32));
-}
-
-pub fn cm_lower_array_u8(arr: List<u8>) -> i64 {
-    let data: Array<u8> = arr."List<u8>::internal_raw_data"();
-    let len: i32 = arr."List<u8>::len"();
-    return core::internal::cm_lower_list_u8(data, len);
-}
-
-pub fn write_escaped_string(s: String, f: &mut Formatter) {
-    __for_of_2: {
-        let mut __iter_2: StrCharIter = s.String::chars()."core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"();
-        loop {
-            let __match_4: Option<char> = __iter_2."StrCharIter^Iterator::next"();
-            match __match_4 {
-                Some(c) => {
-                    match c {
-                        '"' => f.Formatter::write_str(&String { repr: packed"\\\"", used: 2 }),
-                        '\' => f.Formatter::write_str(&String { repr: packed"\\\\", used: 2 }),
-                        '
-' => f.Formatter::write_str(&String { repr: packed"\\n", used: 2 }),
-                        '	' => f.Formatter::write_str(&String { repr: packed"\\t", used: 2 }),
-                        '' => f.Formatter::write_str(&String { repr: packed"\\r", used: 2 }),
-                        _ => f.Formatter::write_char(c),
-                    };
-                },
-                _ => {
-                    break;
-                },
-            };
-        }
-    }
-}
-
-pub fn wait_for_blocked(handle: i32) -> i32 {
-    let ws: i32 = core::builtin::waitable_set_new();
-    core::builtin::waitable_join(handle, ws);
-    let evt_ptr: i32 = core::builtin::realloc(0, 0, 4, 8);
-    let code: i32 = core::builtin::waitable_set_wait(ws, evt_ptr);
-    let payload: i32 = core::builtin::i32_load((evt_ptr + 4));
-    let freed: i32 = core::builtin::realloc(evt_ptr, 8, 4, 0);
-    core::builtin::waitable_set_drop(ws);
-    return payload;
-}
-
-pub fn future_await_blocked(handle: i32) -> i32 {
-    let ws: i32 = core::builtin::waitable_set_new();
-    core::builtin::waitable_join(handle, ws);
-    let evt_ptr: i32 = core::builtin::realloc(0, 0, 4, 8);
-    let code: i32 = core::builtin::waitable_set_wait(ws, evt_ptr);
-    let status: i32 = core::builtin::i32_load((evt_ptr + 4));
-    let freed: i32 = core::builtin::realloc(evt_ptr, 8, 4, 0);
-    core::builtin::waitable_join(handle, 0);
-    core::builtin::waitable_set_drop(ws);
-    return status;
-}
-
-pub fn cm_stream_read_u8(handle: i32, max: i32) -> List<u8> {
-    let ptr: i32 = core::builtin::realloc(0, 0, 1, max);
-    let mut result: i32 = core::builtin::stream_read(handle, ptr, max);
-    if (result == -1) {
-        result = core::internal::wait_for_blocked(handle);
-    }
-    let count: i32 = (result >> 4);
-    let arr: Array<u8> = core::internal::memory_to_gc_array(ptr, count);
-    let freed: i32 = core::builtin::realloc(ptr, max, 1, 0);
-    return "core::prelude/list.wado::List<u8>::internal_from_raw"(arr, count);
-}
-
-pub fn cm_stream_read_raw(handle: i32, max: i32, element_size: i32, element_align: i32) -> [i32, i32] {
-    let byte_count: i32 = (max * element_size);
-    let ptr: i32 = core::builtin::realloc(0, 0, element_align, byte_count);
-    let mut result: i32 = core::builtin::stream_read(handle, ptr, max);
-    if (result == -1) {
-        result = core::internal::wait_for_blocked(handle);
-    }
-    let count: i32 = (result >> 4);
-    return [ptr, count];
-}
-
-pub fn array_new_empty(capacity: i32) -> List<u8> {
-    return "core::prelude/list.wado::List<u8>::with_capacity"(capacity);
-}
-
-pub fn cm_stream_read_raw_free(ptr: i32, byte_count: i32, element_align: i32) {
-    let freed: i32 = core::builtin::realloc(ptr, byte_count, element_align, 0);
-}
-
-pub fn cm_stream_write_u8(handle: i32, data: List<u8>) {
-    let packed: i64 = core::internal::cm_lower_array_u8(data);
-    let ptr: i32 = packed as i32;
-    let len: i32 = (packed >> 32) as i32;
-    let result: i32 = core::builtin::stream_write(handle, ptr, len);
-    if (result == -1) {
-        let payload: i32 = core::internal::wait_for_blocked(handle);
-    }
-    let freed: i32 = core::builtin::realloc(ptr, len, 1, 0);
-}
-
-pub fn cm_stream_write_raw_u8(handle: i32, data: Array<u8>, len: i32) {
-    let packed: i64 = core::internal::cm_lower_list_u8(data, len);
-    let ptr: i32 = packed as i32;
-    let raw_len: i32 = (packed >> 32) as i32;
-    let result: i32 = core::builtin::stream_write(handle, ptr, raw_len);
-    if (result == -1) {
-        let payload: i32 = core::internal::wait_for_blocked(handle);
-    }
-    let freed: i32 = core::builtin::realloc(ptr, raw_len, 1, 0);
-}
-
-pub fn cm_error_context_new(msg: String) -> i32 {
-    let packed: i64 = core::internal::cm_lower_string(msg);
-    let ptr: i32 = packed as i32;
-    let len: i32 = (packed >> 32) as i32;
-    let handle: i32 = core::builtin::error_context_new(ptr, len);
-    let freed: i32 = core::builtin::realloc(ptr, len, 1, 0);
-    return handle;
-}
-
-pub fn cm_error_context_debug_message(handle: i32) -> String {
-    let out_ptr: i32 = core::builtin::realloc(0, 0, 4, 8);
-    core::builtin::error_context_debug_message(handle, out_ptr);
-    let ptr: i32 = core::builtin::i32_load(out_ptr);
-    let len: i32 = core::builtin::i32_load((out_ptr + 4));
-    let freed_out: i32 = core::builtin::realloc(out_ptr, 8, 4, 0);
-    let result: String = core::internal::memory_to_gc_string(ptr, len);
-    let freed_data: i32 = core::builtin::realloc(ptr, len, 1, 0);
-    return result;
-}
-
-pub fn cm_waitable_set_wait(ws: i32) -> WaitEvent {
-    let out_ptr: i32 = core::builtin::realloc(0, 0, 4, 8);
-    let code: i32 = core::builtin::waitable_set_wait(ws, out_ptr);
-    let evt_handle: i32 = core::builtin::i32_load(out_ptr);
-    let payload: i32 = core::builtin::i32_load((out_ptr + 4));
-    let freed: i32 = core::builtin::realloc(out_ptr, 8, 4, 0);
-    return WaitEvent { code: code, handle: evt_handle as i32, payload: payload as u32 };
-}
-
-pub fn cm_waitable_join(handle: i32, ws: i32) -> i32 {
-    core::builtin::waitable_join(handle, ws);
-    return handle;
-}
-
-pub fn cm_waitable_set_poll(ws: i32) -> Option<WaitEvent> {
-    let out_ptr: i32 = core::builtin::realloc(0, 0, 4, 8);
-    let code: i32 = core::builtin::waitable_set_poll(ws, out_ptr);
-    if (code == 0) {
-        let freed: i32 = core::builtin::realloc(out_ptr, 8, 4, 0);
-        return %8;
-    }
-    let evt_handle: i32 = core::builtin::i32_load(out_ptr);
-    let payload: i32 = core::builtin::i32_load((out_ptr + 4));
-    let freed: i32 = core::builtin::realloc(out_ptr, 8, 4, 0);
-    return Option<WaitEvent>::Some(WaitEvent { code: code, handle: evt_handle as i32, payload: payload as u32 });
 }
 
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -3824,7 +3299,7 @@ fn pow10_coarse(i: i32) -> PmHiLo {
         23 => PmHiLo { hi: 17458768723248864464, lo: 4871985254153548563 },
         24 => PmHiLo { hi: 14103081061443981064, lo: 17688398255684648759 },
         25 => PmHiLo { hi: 11392378155556871082, lo: 10662374636882016558 },
-        _ => core::internal::unreachable(),
+        _ => core::rt::unreachable(),
     };
 }
 
@@ -3857,7 +3332,7 @@ fn pow10_fine(i: i32) -> u64 {
         24 => 15258789062500000000,
         25 => 9536743164062500000,
         26 => 11920928955078125000,
-        _ => core::internal::unreachable(),
+        _ => core::rt::unreachable(),
     };
 }
 
@@ -3927,7 +3402,7 @@ pub fn fixed_width(f: f64, n: i32) -> FormatResult {
         let __cond: bool = (__v0 <= 18);
         if !__cond {
             core::builtin::cold_path();
-            core::internal::panic(__tmpl: {
+            core::rt::panic(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(131);
                 __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r.String::push_str(&String { repr: packed"fixed_width", used: 11 });
@@ -5079,7 +4554,7 @@ fn u128::round_to_mantissa(self: &u128, mant_bits: i32) -> [u64, i64] {
         let __cond: bool = (__v0 != 0);
         if !__cond {
             core::builtin::cold_path();
-            core::internal::panic(__tmpl: {
+            core::rt::panic(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(128);
                 __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r.String::push_str(&String { repr: packed"u128::round_to_mantissa", used: 23 });
@@ -5131,7 +4606,7 @@ fn u128::round_to_mantissa(self: &u128, mant_bits: i32) -> [u64, i64] {
         let __cond: bool = (__v1 == 1);
         if !__cond {
             core::builtin::cold_path();
-            core::internal::panic(__tmpl: {
+            core::rt::panic(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(180);
                 __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r.String::push_str(&String { repr: packed"u128::round_to_mantissa", used: 23 });
@@ -5184,7 +4659,7 @@ pub fn u128::as_f32(self: &u128) -> f32 {
 
 pub fn u128::div_rem(self: &u128, divisor: &u128) -> [u128, u128] {
     if ((divisor.low == 0) && (divisor.high == 0)) {
-        core::internal::panic(String { repr: packed"u128 division by zero", used: 21 });
+        core::rt::panic(String { repr: packed"u128 division by zero", used: 21 });
     }
     if (*self."u128^Ord::cmp"(&*divisor) == Ordering::Less) {
         return ["core::prelude/int128.wado::u128::zero"(), *self];
@@ -5289,7 +4764,7 @@ fn u128::fmt_decimal_magnitude(self: &u128, f: &mut Formatter, is_neg: bool) {
         let __cond: bool = (__v0 == __v1);
         if !__cond {
             core::builtin::cold_path();
-            core::internal::panic(__tmpl: {
+            core::rt::panic(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(146);
                 __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r.String::push_str(&String { repr: packed"u128::fmt_decimal_magnitude", used: 27 });
@@ -5370,7 +4845,7 @@ fn u128::fmt_base(self: &u128, f: &mut Formatter, base: i32, upper: bool, prefix
             let __cond: bool = (__v0 == __v1);
             if !__cond {
                 core::builtin::cold_path();
-                core::internal::panic(__tmpl: {
+                core::rt::panic(__tmpl: {
                     let mut __r: String = "core::prelude/string.wado::String::with_capacity"(146);
                     __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
                     __r.String::push_str(&String { repr: packed"u128::fmt_base", used: 14 });
@@ -5404,7 +4879,7 @@ pub fn "u128^FromStr::from_str"(s: &String) -> Result<u128, ParseIntError> {
 }
 
 fn "u128^LenientFromStr::from_str_lenient"(s: &String) -> Result<u128, LenientParseError> {
-    let __pattern_temp_0: [String, u32] = "$value_copy$T185"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
+    let __pattern_temp_0: [String, u32] = "$value_copy$T176"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
         Ok(p) => p,
         Err(e) => {
             return Result<u128, LenientParseError>::Err(e);
@@ -5584,7 +5059,7 @@ pub fn i128::from_str_radix(s: &String, radix: u32) -> Result<i128, ParseIntErro
 
 pub fn i128::from_str_radix_range(s: &String, start: i32, end: i32, radix: u32) -> Result<i128, ParseIntError> {
     "core::prelude/intparse.wado::assert_radix"(radix);
-    let __pattern_temp_0: [bool, i32] = "$value_copy$T187"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
+    let __pattern_temp_0: [bool, i32] = "$value_copy$T178"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
         Ok(p) => p,
         Err(k) => {
             return Result<i128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
@@ -5668,7 +5143,7 @@ pub fn i128::as_f32(self: &i128) -> f32 {
 
 pub fn i128::div_rem(self: &i128, divisor: &i128) -> [i128, i128] {
     if ((divisor.low == 0) && (divisor.high == 0)) {
-        core::internal::panic(String { repr: packed"i128 division by zero", used: 21 });
+        core::rt::panic(String { repr: packed"i128 division by zero", used: 21 });
     }
     let dividend_neg: bool = self.i128::is_negative();
     let divisor_neg: bool = divisor.i128::is_negative();
@@ -5712,7 +5187,7 @@ pub fn "i128^FromStr::from_str"(s: &String) -> Result<i128, ParseIntError> {
 }
 
 fn "i128^LenientFromStr::from_str_lenient"(s: &String) -> Result<i128, LenientParseError> {
-    let __pattern_temp_0: [String, u32] = "$value_copy$T185"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
+    let __pattern_temp_0: [String, u32] = "$value_copy$T176"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
         Ok(p) => p,
         Err(e) => {
             return Result<i128, LenientParseError>::Err(e);
@@ -6490,7 +5965,7 @@ pub fn parse_unsigned_prefix_range(s: &String, start: i32, end: i32) -> Result<i
 
 pub fn assert_radix(radix: u32) {
     if ((radix < 2) || (radix > 36)) {
-        core::internal::panic(String { repr: packed"from_str_radix: radix must be in 2..=36", used: 39 });
+        core::rt::panic(String { repr: packed"from_str_radix: radix must be in 2..=36", used: 39 });
     }
 }
 
@@ -6504,7 +5979,7 @@ pub fn parse_unsigned_prefix(s: &String) -> Result<i32, IntErrorKind> {
 
 pub fn parse_i64_radix_range(s: &String, start: i32, end: i32, radix: u32, max: i64, min_abs: u64) -> Result<i64, ParseIntError> {
     "core::prelude/intparse.wado::assert_radix"(radix);
-    let __pattern_temp_0: [bool, i32] = "$value_copy$T187"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
+    let __pattern_temp_0: [bool, i32] = "$value_copy$T178"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
         Ok(p) => p,
         Err(k) => {
             return Result<i64, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
@@ -7444,7 +6919,7 @@ pub fn char::hex_digit_value(self: Box<char>) -> i32 {
     if ((c >= 'A') && (c <= 'F')) {
         return ((c as i32 - 'A' as i32) + 10);
     }
-    core::internal::panic(String { repr: packed"char::hex_digit_value: not a hex digit", used: 38 });
+    core::rt::panic(String { repr: packed"char::hex_digit_value: not a hex digit", used: 38 });
 }
 
 pub fn char::len_utf8(self: Box<char>) -> i32 {
@@ -7550,7 +7025,7 @@ pub fn "i8^FromStr::from_str"(s: &String) -> Result<i8, ParseIntError> {
 }
 
 fn "i8^LenientFromStr::from_str_lenient"(s: &String) -> Result<i8, LenientParseError> {
-    let __pattern_temp_0: [String, u32] = "$value_copy$T185"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
+    let __pattern_temp_0: [String, u32] = "$value_copy$T176"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
         Ok(p) => p,
         Err(e) => {
             return Result<i8, LenientParseError>::Err(e);
@@ -7606,7 +7081,7 @@ pub fn "u8^FromStr::from_str"(s: &String) -> Result<u8, ParseIntError> {
 }
 
 fn "u8^LenientFromStr::from_str_lenient"(s: &String) -> Result<u8, LenientParseError> {
-    let __pattern_temp_0: [String, u32] = "$value_copy$T185"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
+    let __pattern_temp_0: [String, u32] = "$value_copy$T176"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
         Ok(p) => p,
         Err(e) => {
             return Result<u8, LenientParseError>::Err(e);
@@ -7662,7 +7137,7 @@ pub fn "i16^FromStr::from_str"(s: &String) -> Result<i16, ParseIntError> {
 }
 
 fn "i16^LenientFromStr::from_str_lenient"(s: &String) -> Result<i16, LenientParseError> {
-    let __pattern_temp_0: [String, u32] = "$value_copy$T185"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
+    let __pattern_temp_0: [String, u32] = "$value_copy$T176"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
         Ok(p) => p,
         Err(e) => {
             return Result<i16, LenientParseError>::Err(e);
@@ -7718,7 +7193,7 @@ pub fn "u16^FromStr::from_str"(s: &String) -> Result<u16, ParseIntError> {
 }
 
 fn "u16^LenientFromStr::from_str_lenient"(s: &String) -> Result<u16, LenientParseError> {
-    let __pattern_temp_0: [String, u32] = "$value_copy$T185"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
+    let __pattern_temp_0: [String, u32] = "$value_copy$T176"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
         Ok(p) => p,
         Err(e) => {
             return Result<u16, LenientParseError>::Err(e);
@@ -7798,7 +7273,7 @@ pub fn "i32^FromStr::from_str"(s: &String) -> Result<i32, ParseIntError> {
 }
 
 fn "i32^LenientFromStr::from_str_lenient"(s: &String) -> Result<i32, LenientParseError> {
-    let __pattern_temp_0: [String, u32] = "$value_copy$T185"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
+    let __pattern_temp_0: [String, u32] = "$value_copy$T176"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
         Ok(p) => p,
         Err(e) => {
             return Result<i32, LenientParseError>::Err(e);
@@ -7866,7 +7341,7 @@ pub fn "u32^FromStr::from_str"(s: &String) -> Result<u32, ParseIntError> {
 }
 
 fn "u32^LenientFromStr::from_str_lenient"(s: &String) -> Result<u32, LenientParseError> {
-    let __pattern_temp_0: [String, u32] = "$value_copy$T185"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
+    let __pattern_temp_0: [String, u32] = "$value_copy$T176"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
         Ok(p) => p,
         Err(e) => {
             return Result<u32, LenientParseError>::Err(e);
@@ -7951,7 +7426,7 @@ pub fn "i64^FromStr::from_str"(s: &String) -> Result<i64, ParseIntError> {
 }
 
 fn "i64^LenientFromStr::from_str_lenient"(s: &String) -> Result<i64, LenientParseError> {
-    let __pattern_temp_0: [String, u32] = "$value_copy$T185"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
+    let __pattern_temp_0: [String, u32] = "$value_copy$T176"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
         Ok(p) => p,
         Err(e) => {
             return Result<i64, LenientParseError>::Err(e);
@@ -8078,7 +7553,7 @@ pub fn "u64^FromStr::from_str"(s: &String) -> Result<u64, ParseIntError> {
 }
 
 fn "u64^LenientFromStr::from_str_lenient"(s: &String) -> Result<u64, LenientParseError> {
-    let __pattern_temp_0: [String, u32] = "$value_copy$T185"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
+    let __pattern_temp_0: [String, u32] = "$value_copy$T176"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
         Ok(p) => p,
         Err(e) => {
             return Result<u64, LenientParseError>::Err(e);
@@ -10569,7 +10044,7 @@ pub fn String::grow(self: &mut String, min_capacity: i32) {
     if (min_capacity <= capacity) {
         return;
     }
-    let new_capacity: i32 = core::internal::i32_max(core::internal::i32_max((capacity * 2), min_capacity), 8);
+    let new_capacity: i32 = core::rt::i32_max(core::rt::i32_max((capacity * 2), min_capacity), 8);
     let mut new_repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(new_capacity);
     "core::builtin::core/builtin/array_copy<u8>"(&mut new_repr, 0, &self.repr, 0, self.used);
     self.repr = new_repr;
@@ -10701,7 +10176,7 @@ fn "String^LenientFromStr::from_str_lenient"(s: &String) -> Result<String, Lenie
 pub fn "String^Ord::cmp"(self: &String, other: &String) -> Ordering {
     let len_a: i32 = self.String::len();
     let len_b: i32 = other.String::len();
-    let min_len: i32 = core::internal::i32_min(len_a, len_b);
+    let min_len: i32 = core::rt::i32_min(len_a, len_b);
     let a_repr: Array<u8> = self.String::internal_raw_bytes();
     let b_repr: Array<u8> = other.String::internal_raw_bytes();
     let mut i: i32 = 0;
@@ -11267,7 +10742,7 @@ pub fn String::truncate(self: &mut String, byte_len: i32) {
         let __cond: bool = (__v0 >= 0);
         if !__cond {
             core::builtin::cold_path();
-            core::internal::panic(__tmpl: {
+            core::rt::panic(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(144);
                 __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r.String::push_str(&String { repr: packed"String::truncate", used: 16 });
@@ -11292,7 +10767,7 @@ pub fn String::truncate(self: &mut String, byte_len: i32) {
         let __cond: bool = __v0;
         if !__cond {
             core::builtin::cold_path();
-            core::internal::panic(__tmpl: {
+            core::rt::panic(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(185);
                 __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r.String::push_str(&String { repr: packed"String::truncate", used: 16 });
@@ -11573,7 +11048,7 @@ pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
         let __cond: bool = (__v5 && __v8);
         if !__cond {
             core::builtin::cold_path();
-            core::internal::panic(__tmpl: {
+            core::rt::panic(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(410);
                 __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r.String::push_str(&String { repr: packed"String::substr_bytes", used: 20 });
@@ -11631,7 +11106,7 @@ pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
         let __cond: bool = (__v0 && __v1);
         if !__cond {
             core::builtin::cold_path();
-            core::internal::panic(__tmpl: {
+            core::rt::panic(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(254);
                 __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r.String::push_str(&String { repr: packed"String::substr_bytes", used: 20 });
@@ -11841,7 +11316,7 @@ pub fn String::insert(self: &mut String, byte_index: i32, ch: char) {
         let __cond: bool = __v0;
         if !__cond {
             core::builtin::cold_path();
-            core::internal::panic(__tmpl: {
+            core::rt::panic(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(189);
                 __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r.String::push_str(&String { repr: packed"String::insert", used: 14 });
@@ -11900,7 +11375,7 @@ pub fn String::insert_str(self: &mut String, byte_index: i32, s: String) {
         let __cond: bool = __v0;
         if !__cond {
             core::builtin::cold_path();
-            core::internal::panic(__tmpl: {
+            core::rt::panic(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(189);
                 __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r.String::push_str(&String { repr: packed"String::insert_str", used: 18 });
@@ -11947,7 +11422,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
         let __cond: bool = (__v1 && __v4);
         if !__cond {
             core::builtin::cold_path();
-            core::internal::panic(__tmpl: {
+            core::rt::panic(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(306);
                 __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r.String::push_str(&String { repr: packed"String::remove", used: 14 });
@@ -11988,7 +11463,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
         let __cond: bool = __v0;
         if !__cond {
             core::builtin::cold_path();
-            core::internal::panic(__tmpl: {
+            core::rt::panic(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(189);
                 __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r.String::push_str(&String { repr: packed"String::remove", used: 14 });
@@ -13169,7 +12644,7 @@ pub fn "StrCharIndicesIter^Iterator::for_each"(self: &mut StrCharIndicesIter, f:
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                f("$value_copy$T337"(item));
+                f("$value_copy$T331"(item));
             },
             _ => {
                 break;
@@ -13183,7 +12658,7 @@ pub fn "StrCharIndicesIter^Iterator::find"(self: &mut StrCharIndicesIter, pred: 
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T337"(item)) {
+                if pred("$value_copy$T331"(item)) {
                     return Option<[i32, char]>::Some(item);
                 }
             },
@@ -13200,7 +12675,7 @@ pub fn "StrCharIndicesIter^Iterator::any"(self: &mut StrCharIndicesIter, pred: f
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T337"(item)) {
+                if pred("$value_copy$T331"(item)) {
                     return true;
                 }
             },
@@ -13217,7 +12692,7 @@ pub fn "StrCharIndicesIter^Iterator::all"(self: &mut StrCharIndicesIter, pred: f
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if !pred("$value_copy$T337"(item)) {
+                if !pred("$value_copy$T331"(item)) {
                     return false;
                 }
             },
@@ -13270,7 +12745,7 @@ pub fn "StrCharIndicesIter^Iterator::position"(self: &mut StrCharIndicesIter, pr
         let __match_4: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_4 {
             Some(item) => {
-                if pred("$value_copy$T337"(item)) {
+                if pred("$value_copy$T331"(item)) {
                     return Option<i32>::Some(idx);
                 }
                 idx = (idx + 1);
@@ -13287,12 +12762,12 @@ pub fn "StrCharIndicesIter^Iterator::reduce"(self: &mut StrCharIndicesIter, f: f
     let __match_5: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
     match __match_5 {
         Some(first) => {
-            let mut acc: [i32, char] = "$value_copy$T337"(first);
+            let mut acc: [i32, char] = "$value_copy$T331"(first);
             loop {
                 let __match_6: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
                 match __match_6 {
                     Some(item) => {
-                        acc = f("$value_copy$T337"(acc), "$value_copy$T337"(item));
+                        acc = f("$value_copy$T331"(acc), "$value_copy$T331"(item));
                     },
                     _ => {
                         break;
@@ -14547,6 +14022,531 @@ pub fn "WaitEvent^DisplayAlt::fmt_alt"(self: &WaitEvent, f: &mut Formatter) {
 
 pub fn "Waitable^DisplayAlt::fmt_alt"(self: Box<i32>, f: &mut Formatter) {
     self."Waitable^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
+    self."Fn<1,()>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
+    self."Fn<2,T>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
+    self."Fn<2,u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,char>^DisplayAlt::fmt_alt"(self: Box<Fn<2,char>>, f: &mut Formatter) {
+    self."Fn<2,char>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,char>^DisplayAlt::fmt_alt"(self: Box<Fn<1,char>>, f: &mut Formatter) {
+    self."Fn<1,char>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
+    self."Fn<2,String>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
+    self."Fn<1,i32>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter) {
+    self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn i32_min(a: i32, b: i32) -> i32 {
+    return "core::builtin::core/builtin/select<i32>"((a < b), a, b);
+}
+
+pub fn i32_max(a: i32, b: i32) -> i32 {
+    return "core::builtin::core/builtin/select<i32>"((a > b), a, b);
+}
+
+pub fn i32_clamp(value: i32, lo: i32, hi: i32) -> i32 {
+    __assert_0: {
+        let __v0: i32 = lo;
+        let __v1: i32 = hi;
+        let __cond: bool = (__v0 <= __v1);
+        if !__cond {
+            core::builtin::cold_path();
+            core::rt::panic(__tmpl: {
+                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(154);
+                __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
+                __r.String::push_str(&String { repr: packed"i32_clamp", used: 9 });
+                __r.String::push_str(&String { repr: packed" at ", used: 4 });
+                __r.String::push_str(&String { repr: packed"core:rt", used: 7 });
+                __r.String::push_str(&String { repr: packed":", used: 1 });
+                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: 37 }."i32^Display::fmt"(&mut __f);
+                __r.String::push_str(&String { repr: packed": ", used: 2 });
+                __r.String::push_str(&String { repr: packed"i32_clamp: lo must be <= hi", used: 27 });
+                __r.String::push_str(&String { repr: packed"\ncondition: lo <= hi\n", used: 21 });
+                __r.String::push_str(&String { repr: packed"lo: ", used: 4 });
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: __v0 }."i32^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&String { repr: packed"\n", used: 1 });
+                __r.String::push_str(&String { repr: packed"hi: ", used: 4 });
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: __v1 }."i32^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&String { repr: packed"\n", used: 1 });
+                break __tmpl: __r;
+            });
+        }
+    }
+    return core::rt::i32_min(core::rt::i32_max(value, lo), hi);
+}
+
+pub fn memory_to_gc_array(ptr: i32, len: i32) -> Array<u8> {
+    let mut arr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
+    let mut i: i32 = 0;
+    loop {
+        if !(i < len) {
+            break;
+        }
+        __for_0_body: {
+            core::builtin::array_set_u8(&mut arr, i, core::builtin::i32_load8_u((ptr + i)) as u8);
+        }
+        i = (i + 1);
+    }
+    return arr;
+}
+
+pub fn memory_to_gc_string(ptr: i32, len: i32) -> String {
+    let arr: Array<u8> = core::rt::memory_to_gc_array(ptr, len);
+    return "core::prelude/string.wado::String::internal_from_utf8_raw"(arr, len);
+}
+
+pub fn gc_array_to_memory(arr: &Array<u8>, ptr: i32, len: i32) {
+    let mut i: i32 = 0;
+    loop {
+        if !(i < len) {
+            break;
+        }
+        __for_0_body: {
+            core::builtin::i32_store8((ptr + i), core::builtin::array_get_u8(arr, i));
+        }
+        i = (i + 1);
+    }
+}
+
+pub fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool) {
+    let bytes: Array<u8> = message.String::internal_raw_bytes();
+    let len: i32 = message.String::len();
+    if add_newline {
+        let mut new_repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"((len + 1));
+        "core::builtin::core/builtin/array_copy<u8>"(&mut new_repr, 0, &bytes, 0, len);
+        core::builtin::array_set_u8(&mut new_repr, len, 10);
+        core::rt::cm_stream_write_raw_u8(&tx as i32, new_repr, (len + 1));
+    } else {
+        core::rt::cm_stream_write_raw_u8(&tx as i32, bytes, len);
+    }
+    cm_raw_call stream-drop-writable(&tx as i32);
+}
+
+pub fn wait_for_subtask(packed: i32) with WaitableSet, Subtask {
+    let handle: i32 = (packed >> 4);
+    if (handle != 0) {
+        let subtask: Subtask = handle as Subtask;
+        let ws: WaitableSet = cm_raw_call waitable-set-new();
+        core::rt::cm_waitable_join(&subtask as i32, &ws);
+        loop {
+            let event: WaitEvent = core::rt::cm_waitable_set_wait(&ws as i32);
+            if (event.payload == 2) {
+                break;
+            }
+        }
+        cm_raw_call subtask-drop(&subtask as i32);
+        cm_raw_call waitable-set-drop(&ws as i32);
+    }
+}
+
+pub fn drop_cli_write_future(future: Future<Result<(), ErrorCode>>) {
+    future."Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>::drop"();
+}
+
+pub fn log_stdout(message: String) {
+    let __pattern_temp_0: [Stream<u8>, StreamWritable<u8>] = "core::prelude/types.wado::Stream<u8>::new"();
+    let rx: Stream<u8> = __pattern_temp_0.0;
+    let tx: StreamWritable<u8> = __pattern_temp_0.1;
+    let future_handle: i32 = core::builtin::call_indirect_stdout_write_via_stream(rx as i32);
+    core::rt::write_string_to_stream(tx, message, true);
+    core::rt::drop_cli_write_future(future_handle as Future<Result<(), ErrorCode>>);
+}
+
+pub fn log_stderr(message: String) {
+    let __pattern_temp_0: [Stream<u8>, StreamWritable<u8>] = "core::prelude/types.wado::Stream<u8>::new"();
+    let rx: Stream<u8> = __pattern_temp_0.0;
+    let tx: StreamWritable<u8> = __pattern_temp_0.1;
+    let future_handle: i32 = core::builtin::call_indirect_stderr_write_via_stream(rx as i32);
+    core::rt::write_string_to_stream(tx, message, true);
+    core::rt::drop_cli_write_future(future_handle as Future<Result<(), ErrorCode>>);
+}
+
+pub fn panic(message: String) -> ! {
+    core::rt::log_stderr(message);
+    core::builtin::unreachable();
+}
+
+pub fn assert_failed(message: String) -> ! {
+    core::rt::panic(message);
+}
+
+pub fn unreachable() -> ! {
+    core::builtin::unreachable();
+}
+
+pub fn cm_lower_string(s: String) -> i64 {
+    let len: i32 = s.String::len();
+    let bytes: Array<u8> = s.String::internal_raw_bytes();
+    let ptr: i32 = core::builtin::realloc(0, 0, 1, len);
+    core::rt::gc_array_to_memory(&bytes, ptr, len);
+    return (ptr as i64 | (len as i64 << 32));
+}
+
+pub fn cm_lower_list_u8(data: Array<u8>, len: i32) -> i64 {
+    let ptr: i32 = core::builtin::realloc(0, 0, 1, len);
+    core::rt::gc_array_to_memory(&data, ptr, len);
+    return (ptr as i64 | (len as i64 << 32));
+}
+
+pub fn cm_lower_array_u8(arr: List<u8>) -> i64 {
+    let data: Array<u8> = arr."List<u8>::internal_raw_data"();
+    let len: i32 = arr."List<u8>::len"();
+    return core::rt::cm_lower_list_u8(data, len);
+}
+
+pub fn write_escaped_string(s: String, f: &mut Formatter) {
+    __for_of_2: {
+        let mut __iter_2: StrCharIter = s.String::chars()."core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"();
+        loop {
+            let __match_4: Option<char> = __iter_2."StrCharIter^Iterator::next"();
+            match __match_4 {
+                Some(c) => {
+                    match c {
+                        '"' => f.Formatter::write_str(&String { repr: packed"\\\"", used: 2 }),
+                        '\' => f.Formatter::write_str(&String { repr: packed"\\\\", used: 2 }),
+                        '
+' => f.Formatter::write_str(&String { repr: packed"\\n", used: 2 }),
+                        '	' => f.Formatter::write_str(&String { repr: packed"\\t", used: 2 }),
+                        '' => f.Formatter::write_str(&String { repr: packed"\\r", used: 2 }),
+                        _ => f.Formatter::write_char(c),
+                    };
+                },
+                _ => {
+                    break;
+                },
+            };
+        }
+    }
+}
+
+pub fn wait_for_blocked(handle: i32) -> i32 {
+    let ws: i32 = core::builtin::waitable_set_new();
+    core::builtin::waitable_join(handle, ws);
+    let evt_ptr: i32 = core::builtin::realloc(0, 0, 4, 8);
+    let code: i32 = core::builtin::waitable_set_wait(ws, evt_ptr);
+    let payload: i32 = core::builtin::i32_load((evt_ptr + 4));
+    let freed: i32 = core::builtin::realloc(evt_ptr, 8, 4, 0);
+    core::builtin::waitable_set_drop(ws);
+    return payload;
+}
+
+pub fn future_await_blocked(handle: i32) -> i32 {
+    let ws: i32 = core::builtin::waitable_set_new();
+    core::builtin::waitable_join(handle, ws);
+    let evt_ptr: i32 = core::builtin::realloc(0, 0, 4, 8);
+    let code: i32 = core::builtin::waitable_set_wait(ws, evt_ptr);
+    let status: i32 = core::builtin::i32_load((evt_ptr + 4));
+    let freed: i32 = core::builtin::realloc(evt_ptr, 8, 4, 0);
+    core::builtin::waitable_join(handle, 0);
+    core::builtin::waitable_set_drop(ws);
+    return status;
+}
+
+pub fn cm_stream_read_u8(handle: i32, max: i32) -> List<u8> {
+    let ptr: i32 = core::builtin::realloc(0, 0, 1, max);
+    let mut result: i32 = core::builtin::stream_read(handle, ptr, max);
+    if (result == -1) {
+        result = core::rt::wait_for_blocked(handle);
+    }
+    let count: i32 = (result >> 4);
+    let arr: Array<u8> = core::rt::memory_to_gc_array(ptr, count);
+    let freed: i32 = core::builtin::realloc(ptr, max, 1, 0);
+    return "core::prelude/list.wado::List<u8>::internal_from_raw"(arr, count);
+}
+
+pub fn cm_stream_read_raw(handle: i32, max: i32, element_size: i32, element_align: i32) -> [i32, i32] {
+    let byte_count: i32 = (max * element_size);
+    let ptr: i32 = core::builtin::realloc(0, 0, element_align, byte_count);
+    let mut result: i32 = core::builtin::stream_read(handle, ptr, max);
+    if (result == -1) {
+        result = core::rt::wait_for_blocked(handle);
+    }
+    let count: i32 = (result >> 4);
+    return [ptr, count];
+}
+
+pub fn array_new_empty(capacity: i32) -> List<u8> {
+    return "core::prelude/list.wado::List<u8>::with_capacity"(capacity);
+}
+
+pub fn cm_stream_read_raw_free(ptr: i32, byte_count: i32, element_align: i32) {
+    let freed: i32 = core::builtin::realloc(ptr, byte_count, element_align, 0);
+}
+
+pub fn cm_stream_write_u8(handle: i32, data: List<u8>) {
+    let packed: i64 = core::rt::cm_lower_array_u8(data);
+    let ptr: i32 = packed as i32;
+    let len: i32 = (packed >> 32) as i32;
+    let result: i32 = core::builtin::stream_write(handle, ptr, len);
+    if (result == -1) {
+        let payload: i32 = core::rt::wait_for_blocked(handle);
+    }
+    let freed: i32 = core::builtin::realloc(ptr, len, 1, 0);
+}
+
+pub fn cm_stream_write_raw_u8(handle: i32, data: Array<u8>, len: i32) {
+    let packed: i64 = core::rt::cm_lower_list_u8(data, len);
+    let ptr: i32 = packed as i32;
+    let raw_len: i32 = (packed >> 32) as i32;
+    let result: i32 = core::builtin::stream_write(handle, ptr, raw_len);
+    if (result == -1) {
+        let payload: i32 = core::rt::wait_for_blocked(handle);
+    }
+    let freed: i32 = core::builtin::realloc(ptr, raw_len, 1, 0);
+}
+
+pub fn cm_error_context_new(msg: String) -> i32 {
+    let packed: i64 = core::rt::cm_lower_string(msg);
+    let ptr: i32 = packed as i32;
+    let len: i32 = (packed >> 32) as i32;
+    let handle: i32 = core::builtin::error_context_new(ptr, len);
+    let freed: i32 = core::builtin::realloc(ptr, len, 1, 0);
+    return handle;
+}
+
+pub fn cm_error_context_debug_message(handle: i32) -> String {
+    let out_ptr: i32 = core::builtin::realloc(0, 0, 4, 8);
+    core::builtin::error_context_debug_message(handle, out_ptr);
+    let ptr: i32 = core::builtin::i32_load(out_ptr);
+    let len: i32 = core::builtin::i32_load((out_ptr + 4));
+    let freed_out: i32 = core::builtin::realloc(out_ptr, 8, 4, 0);
+    let result: String = core::rt::memory_to_gc_string(ptr, len);
+    let freed_data: i32 = core::builtin::realloc(ptr, len, 1, 0);
+    return result;
+}
+
+pub fn cm_waitable_set_wait(ws: i32) -> WaitEvent {
+    let out_ptr: i32 = core::builtin::realloc(0, 0, 4, 8);
+    let code: i32 = core::builtin::waitable_set_wait(ws, out_ptr);
+    let evt_handle: i32 = core::builtin::i32_load(out_ptr);
+    let payload: i32 = core::builtin::i32_load((out_ptr + 4));
+    let freed: i32 = core::builtin::realloc(out_ptr, 8, 4, 0);
+    return WaitEvent { code: code, handle: evt_handle as i32, payload: payload as u32 };
+}
+
+pub fn cm_waitable_join(handle: i32, ws: i32) -> i32 {
+    core::builtin::waitable_join(handle, ws);
+    return handle;
+}
+
+pub fn cm_waitable_set_poll(ws: i32) -> Option<WaitEvent> {
+    let out_ptr: i32 = core::builtin::realloc(0, 0, 4, 8);
+    let code: i32 = core::builtin::waitable_set_poll(ws, out_ptr);
+    if (code == 0) {
+        let freed: i32 = core::builtin::realloc(out_ptr, 8, 4, 0);
+        return %8;
+    }
+    let evt_handle: i32 = core::builtin::i32_load(out_ptr);
+    let payload: i32 = core::builtin::i32_load((out_ptr + 4));
+    let freed: i32 = core::builtin::realloc(out_ptr, 8, 4, 0);
+    return Option<WaitEvent>::Some(WaitEvent { code: code, handle: evt_handle as i32, payload: payload as u32 });
+}
+
+pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    f.Formatter::write_str(&String { repr: packed"StreamWritable<u8>", used: 18 });
+}
+
+pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
+    f.Formatter::write_str(&String { repr: packed"Stream<u8>", used: 10 });
+}
+
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    f.Formatter::write_str(&String { repr: packed"Future<Result<(), ErrorCode>>", used: 29 });
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
+
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
+pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
+
+pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
+
+pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
+
+pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
+
+pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
+
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+
+pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
+
+pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
+
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
+
+pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
+
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
+pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
+
+pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
+
+pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
+
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
+
+pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
+
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+
+pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
+
+pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
+
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
+
+pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
+    self."Fn<1,()>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
+    self."Fn<2,u8>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,char>^Display::fmt"(self: Box<Fn<2,char>>, f: &mut Formatter) {
+    self."Fn<2,char>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,char>^Display::fmt"(self: Box<Fn<1,char>>, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
+    self."Fn<2,String>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
+    self."Fn<1,i32>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter) {
+    self."Fn<2,I::Item>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -17505,7 +17505,7 @@ fn Logger::log(self: &Logger, msg: String) {
 fn Logger::log_level(self: &Logger, level: i32, msg: String) {
 }
 
-export fn run() {
+pub export fn run() {
     __initialize_modules();
 }
 
@@ -18070,8 +18070,8 @@ fn __cm_binding__Environment_get_environment() -> List<[String, String]> with En
             break;
         }
         let __elem_addr: i32 = (__base + (__i * 16));
-        let __lifted_result_6: String = core::internal::memory_to_gc_string(core::builtin::i32_load((__elem_addr + 0)), core::builtin::i32_load(((__elem_addr + 0) + 4)));
-        let __lifted_result_7: String = core::internal::memory_to_gc_string(core::builtin::i32_load((__elem_addr + 8)), core::builtin::i32_load(((__elem_addr + 8) + 4)));
+        let __lifted_result_6: String = core::rt::memory_to_gc_string(core::builtin::i32_load((__elem_addr + 0)), core::builtin::i32_load(((__elem_addr + 0) + 4)));
+        let __lifted_result_7: String = core::rt::memory_to_gc_string(core::builtin::i32_load((__elem_addr + 8)), core::builtin::i32_load(((__elem_addr + 8) + 4)));
         __result."List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::push"([__lifted_result_6, __lifted_result_7]);
         core::builtin::realloc(core::builtin::i32_load((__elem_addr + 0)), core::builtin::i32_load(((__elem_addr + 0) + 4)), 1, 0);
         core::builtin::realloc(core::builtin::i32_load((__elem_addr + 8)), core::builtin::i32_load(((__elem_addr + 8) + 4)), 1, 0);
@@ -18096,7 +18096,7 @@ fn __cm_binding__Environment_get_arguments() -> List<String> with Environment {
             break;
         }
         let __elem_addr: i32 = (__base + (__i * 8));
-        __result."List<core:prelude/string.wado/String>::push"(core::internal::memory_to_gc_string(core::builtin::i32_load(__elem_addr), core::builtin::i32_load((__elem_addr + 4))));
+        __result."List<core:prelude/string.wado/String>::push"(core::rt::memory_to_gc_string(core::builtin::i32_load(__elem_addr), core::builtin::i32_load((__elem_addr + 4))));
         core::builtin::realloc(core::builtin::i32_load(__elem_addr), core::builtin::i32_load((__elem_addr + 4)), 1, 0);
         __i = (__i + 1);
     }
@@ -18113,7 +18113,7 @@ fn __cm_binding__Environment_get_initial_cwd() -> Option<String> with Environmen
     let __disc: i32 = core::builtin::i32_load8_u(__outptr);
     let mut __option_result: Option<String> = Option<String>::None;
     if (__disc != 0) {
-        __option_result = Option<String>::Some(core::internal::memory_to_gc_string(core::builtin::i32_load((__outptr + 4)), core::builtin::i32_load(((__outptr + 4) + 4))));
+        __option_result = Option<String>::Some(core::rt::memory_to_gc_string(core::builtin::i32_load((__outptr + 4)), core::builtin::i32_load(((__outptr + 4) + 4))));
         core::builtin::realloc(core::builtin::i32_load((__outptr + 4)), core::builtin::i32_load(((__outptr + 4) + 4)), 1, 0);
     }
     core::builtin::realloc(__outptr, 12, 4, 0);
@@ -19215,6 +19215,10 @@ fn "[]<f64,f64>^Eq::eq"(self: &[f64, f64], other: &[f64, f64]) -> bool {
     return true;
 }
 
+pub fn "List<u8>::internal_from_raw"(repr: Array<u8>, used: i32) -> List<u8> {
+    return List<u8> { repr: repr, used: used };
+}
+
 pub fn "List<[i32,char]>::push"(self: &mut List<[i32, char]>, value: [i32, char]) with stores[value] {
     let used: i32 = self.used;
     if (used >= core::builtin::array_len(&self.repr)) {
@@ -19253,7 +19257,7 @@ fn "List<core:prelude/string.wado/String>^SequenceLiteralBuilder::new_literal"(c
 
 pub fn "ArraySlice<u8>::to_array"(self: &ArraySlice<u8>) -> Array<u8> {
     let len: i32 = (self.end - self.start);
-    let mut out: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(core::internal::i32_max(len, 0));
+    let mut out: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(core::rt::i32_max(len, 0));
     if (len > 0) {
         "core::builtin::core/builtin/array_copy<u8>"(&mut out, 0, self.repr, self.start, len);
     }
@@ -19262,6 +19266,10 @@ pub fn "ArraySlice<u8>::to_array"(self: &ArraySlice<u8>) -> Array<u8> {
 
 pub fn "ArraySlice<u8>::len"(self: &ArraySlice<u8>) -> i32 {
     return (self.end - self.start);
+}
+
+fn "core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"(self: &StrCharIter) -> StrCharIter {
+    return *self;
 }
 
 pub fn "StrCharIter^Iterator::map<char>"(self: &StrCharIter, f: fn mut(char) -> char) -> IterMap<core:prelude/string.wado/StrCharIter,char> {
@@ -19309,6 +19317,14 @@ fn "List<char>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> List<char>
     return "core::prelude/list.wado::List<char>::with_capacity"(capacity);
 }
 
+pub fn "List<u8>::internal_raw_data"(self: &List<u8>) -> Array<u8> {
+    return self.repr;
+}
+
+pub fn "List<u8>::len"(self: &List<u8>) -> i32 {
+    return self.used;
+}
+
 fn "core/builtin/array_fill<u8>"(arr: &mut Array<u8>, offset: i32, value: u8, len: i32);
 
 pub fn "ArraySlice<u8>::internal_new"(repr: &Array<u8>, start: i32, end: i32) -> ArraySlice<u8> with stores[repr] {
@@ -19324,6 +19340,8 @@ fn "core/builtin/select<u64>"(cond: bool, if_true: u64, if_false: u64) -> u64;
 fn "core/builtin/select<i64>"(cond: bool, if_true: i64, if_false: i64) -> i64;
 
 fn "core/builtin/select<u32>"(cond: bool, if_true: u32, if_false: u32) -> u32;
+
+fn "core/builtin/select<i32>"(cond: bool, if_true: i32, if_false: i32) -> i32;
 
 fn "core/builtin/select<u16>"(cond: bool, if_true: u16, if_false: u16) -> u16;
 
@@ -19341,6 +19359,10 @@ pub fn "List<u8>::push"(self: &mut List<u8>, value: u8) with stores[value] {
     }
     core::builtin::array_set::<u8>(&mut self.repr, used, value);
     self.used = (used + 1);
+}
+
+pub fn "List<u8>::with_capacity"(capacity: i32) -> List<u8> {
+    return List<u8> { repr: "core::builtin::core/builtin/array_new<u8>"(capacity), used: 0 };
 }
 
 fn "List<u8>^SequenceLiteralBuilder::build"(self: &List<u8>) -> List<u8> {
@@ -19365,7 +19387,7 @@ pub fn "Result<i32,core:prelude/intparse.wado/IntErrorKind>::unwrap"(self: Box<c
         },
         _ => (),
     };
-    core::internal::panic(String { repr: packed"called Result::unwrap() on an Err value", used: 39 });
+    core::rt::panic(String { repr: packed"called Result::unwrap() on an Err value", used: 39 });
 }
 
 fn "List<u64>^IndexValue<i32>::index_value"(self: &List<u64>, index: i32) -> u64 {
@@ -19375,7 +19397,7 @@ fn "List<u64>^IndexValue<i32>::index_value"(self: &List<u64>, index: i32) -> u64
         let __cond: bool = (__v0 < __v1);
         if !__cond {
             core::builtin::cold_path();
-            core::internal::panic(__tmpl: {
+            core::rt::panic(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(173);
                 __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r.String::push_str(&String { repr: packed"List::index_value", used: 17 });
@@ -19454,36 +19476,14 @@ pub fn "Array<u8>::len"(self: &Array<u8>) -> i32 {
 
 pub fn "Array<u8>::slice"(self: &Array<u8>, start: i32, end: i32) -> ArraySlice<u8> with stores[self] {
     let len: i32 = core::builtin::array_len(self);
-    let s: i32 = core::internal::i32_clamp(start, 0, len);
-    let e: i32 = core::internal::i32_clamp(end, s, len);
+    let s: i32 = core::rt::i32_clamp(start, 0, len);
+    let e: i32 = core::rt::i32_clamp(end, s, len);
     return "core::prelude/slice.wado::ArraySlice<u8>::internal_new"(self, s, e);
 }
 
 pub fn "List<u8>::as_slice"(self: &List<u8>) -> ArraySlice<u8> {
     return "core::prelude/slice.wado::ArraySlice<u8>::internal_new"(&self.repr, 0, self.used);
 }
-
-pub fn "List<u8>::with_capacity"(capacity: i32) -> List<u8> {
-    return List<u8> { repr: "core::builtin::core/builtin/array_new<u8>"(capacity), used: 0 };
-}
-
-pub fn "List<u8>::internal_from_raw"(repr: Array<u8>, used: i32) -> List<u8> {
-    return List<u8> { repr: repr, used: used };
-}
-
-fn "core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"(self: &StrCharIter) -> StrCharIter {
-    return *self;
-}
-
-pub fn "List<u8>::len"(self: &List<u8>) -> i32 {
-    return self.used;
-}
-
-pub fn "List<u8>::internal_raw_data"(self: &List<u8>) -> Array<u8> {
-    return self.repr;
-}
-
-fn "core/builtin/select<i32>"(cond: bool, if_true: i32, if_false: i32) -> i32;
 
 fn "List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>^IndexValue<i32>::index_value"(self: &List<[String, String]>, index: i32) -> [String, String] {
     __assert_0: {
@@ -19492,7 +19492,7 @@ fn "List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>^Inde
         let __cond: bool = (__v0 < __v1);
         if !__cond {
             core::builtin::cold_path();
-            core::internal::panic(__tmpl: {
+            core::rt::panic(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(173);
                 __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r.String::push_str(&String { repr: packed"List::index_value", used: 17 });
@@ -19605,7 +19605,7 @@ pub fn "&Array<u8>^InspectAlt::inspect_alt"(self: &&Array<u8>, f: &mut Formatter
 
 pub fn "List<u8>::grow"(self: &mut List<u8>) {
     let capacity: i32 = core::builtin::array_len(&self.repr);
-    let new_capacity: i32 = core::internal::i32_max((capacity * 2), 4);
+    let new_capacity: i32 = core::rt::i32_max((capacity * 2), 4);
     let mut new_repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(new_capacity);
     "core::builtin::core/builtin/array_copy<u8>"(&mut new_repr, 0, &self.repr, 0, self.used);
     self.repr = new_repr;
@@ -19613,7 +19613,7 @@ pub fn "List<u8>::grow"(self: &mut List<u8>) {
 
 pub fn "List<char>::grow"(self: &mut List<char>) {
     let capacity: i32 = core::builtin::array_len(&self.repr);
-    let new_capacity: i32 = core::internal::i32_max((capacity * 2), 4);
+    let new_capacity: i32 = core::rt::i32_max((capacity * 2), 4);
     let mut new_repr: Array<char> = core::builtin::array_new::<char>(new_capacity);
     core::builtin::array_copy::<char>(&mut new_repr, 0, &self.repr, 0, self.used);
     self.repr = new_repr;
@@ -19636,7 +19636,7 @@ fn "IterMap<core:prelude/string.wado/StrCharIter,char>^IntoIterator::into_iter"(
 
 pub fn "List<core:prelude/string.wado/String>::grow"(self: &mut List<String>) {
     let capacity: i32 = core::builtin::array_len(&self.repr);
-    let new_capacity: i32 = core::internal::i32_max((capacity * 2), 4);
+    let new_capacity: i32 = core::rt::i32_max((capacity * 2), 4);
     let mut new_repr: Array<String> = core::builtin::array_new::<String>(new_capacity);
     core::builtin::array_copy::<String>(&mut new_repr, 0, &self.repr, 0, self.used);
     self.repr = new_repr;
@@ -19648,7 +19648,7 @@ pub fn "List<[i32,char]>::with_capacity"(capacity: i32) -> List<[i32, char]> {
 
 pub fn "List<[i32,char]>::grow"(self: &mut List<[i32, char]>) {
     let capacity: i32 = core::builtin::array_len(&self.repr);
-    let new_capacity: i32 = core::internal::i32_max((capacity * 2), 4);
+    let new_capacity: i32 = core::rt::i32_max((capacity * 2), 4);
     let mut new_repr: Array<[i32, char]> = core::builtin::array_new::<[i32, char]>(new_capacity);
     core::builtin::array_copy::<[i32, char]>(&mut new_repr, 0, &self.repr, 0, self.used);
     self.repr = new_repr;
@@ -19656,7 +19656,7 @@ pub fn "List<[i32,char]>::grow"(self: &mut List<[i32, char]>) {
 
 pub fn "List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::grow"(self: &mut List<[String, String]>) {
     let capacity: i32 = core::builtin::array_len(&self.repr);
-    let new_capacity: i32 = core::internal::i32_max((capacity * 2), 4);
+    let new_capacity: i32 = core::rt::i32_max((capacity * 2), 4);
     let mut new_repr: Array<[String, String]> = core::builtin::array_new::<[String, String]>(new_capacity);
     core::builtin::array_copy::<[String, String]>(&mut new_repr, 0, &self.repr, 0, self.used);
     self.repr = new_repr;
@@ -19678,7 +19678,7 @@ pub fn "List<u64>::push"(self: &mut List<u64>, value: u64) with stores[value] {
 
 pub fn "List<u64>::grow"(self: &mut List<u64>) {
     let capacity: i32 = core::builtin::array_len(&self.repr);
-    let new_capacity: i32 = core::internal::i32_max((capacity * 2), 4);
+    let new_capacity: i32 = core::rt::i32_max((capacity * 2), 4);
     let mut new_repr: Array<u64> = core::builtin::array_new::<u64>(new_capacity);
     core::builtin::array_copy::<u64>(&mut new_repr, 0, &self.repr, 0, self.used);
     self.repr = new_repr;
@@ -19752,7 +19752,7 @@ fn "$value_copy$T26"(v: [f64, f64]) -> [f64, f64] {
     return [f64,f64] { 0: v.0, 1: v.1 };
 }
 
-fn "$value_copy$T337"(v: [i32, char]) -> [i32, char] {
+fn "$value_copy$T331"(v: [i32, char]) -> [i32, char] {
     return [i32,char] { 0: v.0, 1: v.1 };
 }
 
@@ -19764,11 +19764,11 @@ fn "$value_copy$T28"(v: String) -> String {
     return String { repr: core::builtin::array_clone::<u8>(&v.repr), used: v.used };
 }
 
-fn "$value_copy$T187"(v: [bool, i32]) -> [bool, i32] {
+fn "$value_copy$T178"(v: [bool, i32]) -> [bool, i32] {
     return [bool,i32] { 0: v.0, 1: v.1 };
 }
 
-fn "$value_copy$T185"(v: [String, u32]) -> [String, u32] {
+fn "$value_copy$T176"(v: [String, u32]) -> [String, u32] {
     return [core:prelude/string.wado/String,u32] { 0: "$value_copy$T28"(v.0), 1: v.1 };
 }
 

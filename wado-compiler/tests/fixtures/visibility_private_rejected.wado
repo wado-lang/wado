@@ -1,0 +1,9 @@
+//! Importing a file-private symbol from another module is a compile error.
+use { vis_private } from "./sub/visibility_lib.wado";
+
+export fn run() {
+    assert vis_private() == 3;
+}
+
+__DATA__
+{"compile_error": "is private to"}

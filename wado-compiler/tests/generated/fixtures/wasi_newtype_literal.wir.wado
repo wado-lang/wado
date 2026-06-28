@@ -35,7 +35,7 @@ type "functype//wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_lift
 
 type "functype//wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_export____test_0_literal_coercion_to_duration_via_effect_fn" = fn();  // TypeId(11)
 
-type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(12)
+type "functype//core:rt/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(12)
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(13)
 
@@ -81,7 +81,7 @@ fn "wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_export____test_0
     "wasi/task-return"(0);
 }
 
-fn "core:internal/cm_waitable_set_wait"(ws) {
+fn "core:rt/cm_waitable_set_wait"(ws) {
     let out_ptr: i32;
     let code: i32;
     let evt_handle: i32;
@@ -109,7 +109,7 @@ fn "core:prelude/types.wado/AsyncCall<()>::wait"(self) {
                 let event_mv_code: i32;
                 let event_mv_handle: i32;
                 let event_mv_payload: u32;
-                multivalue_bind [event_mv_code, event_mv_handle, event_mv_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
+                multivalue_bind [event_mv_code, event_mv_handle, event_mv_payload] = "core:rt/cm_waitable_set_wait"(ws_3);
                 break_if b1 event_mv_payload == 2;
                 continue l2;
             };

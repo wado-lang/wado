@@ -1,0 +1,9 @@
+//! `internal` cannot combine with `pub` (or `export`).
+internal pub fn bad() -> i32 { return 1 }
+
+test "unreachable" {
+    assert bad() == 1;
+}
+
+__DATA__
+{"compile_error": "`internal` cannot combine with `pub`"}

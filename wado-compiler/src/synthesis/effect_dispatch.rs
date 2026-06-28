@@ -803,7 +803,7 @@ fn build_dispatch_wrapper_function(
         let panic_call = TirExpr::new(
             TirExprKind::Call {
                 func: FunctionRef {
-                    module_source: ModuleSource::internal(),
+                    module_source: ModuleSource::rt(),
                     name: "panic".to_string(),
                     monomorph_info: None,
                     method_info: None,

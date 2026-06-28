@@ -48,7 +48,7 @@ pub fn internal_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> Tir
     TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef {
-                module_source: ModuleSource::internal(),
+                module_source: ModuleSource::rt(),
                 name: name.to_string(),
                 monomorph_info: None,
                 method_info: None,

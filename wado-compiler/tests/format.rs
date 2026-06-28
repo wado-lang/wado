@@ -186,6 +186,26 @@ fn test_format_turbofish_wildcard_roundtrips() {
     assert_eq!(formatted, formatted2, "format should be idempotent");
 }
 
+/// The visibility ladder (`internal` / `pub` / file-private) and the
+/// orthogonal `export` flag must survive formatting. `export` implies `pub`,
+/// so the canonical form drops the redundant `pub` (never `pub export`).
+#[test]
+fn test_format_visibility_modifiers_roundtrip() {
+    let source = "internal fn a() {}\npub fn b() {}\nfn c() {}\nexport fn d() {}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(formatted.contains("internal fn a"), "got:\n{formatted}");
+    assert!(formatted.contains("pub fn b"), "got:\n{formatted}");
+    assert!(formatted.contains("\nfn c"), "got:\n{formatted}");
+    assert!(formatted.contains("export fn d"), "got:\n{formatted}");
+    assert!(
+        !formatted.contains("pub export"),
+        "`export` already implies `pub`, got:\n{formatted}"
+    );
+    assert_format_preserves_ast(source);
+    let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
 /// `reactive` is a prefix keyword that must precede `let`. The formatter used
 /// to emit `let reactive ...`, which the parser rejects ("expected pattern,
 /// found Reactive"), so formatting any `reactive let` binding produced output

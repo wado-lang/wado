@@ -9,7 +9,7 @@
 
 use crate::hashmap::IndexMap;
 
-use crate::ast::{AstId, CmImport};
+use crate::ast::{AstId, CmImport, Visibility};
 use crate::module_source::ModuleSource;
 use crate::token::Span;
 
@@ -181,6 +181,10 @@ pub struct Symbol {
     /// directly — not a fact-map key — so navigation reads it without a
     /// space-registry lookup.
     pub module: ModuleSource,
+    /// Declared visibility (the Wado scope ladder). Module-level symbols carry
+    /// the decl's modifier; function-local and synthesized symbols default to
+    /// `Private`. Consulted by cross-module import visibility enforcement.
+    pub visibility: Visibility,
     /// Source location (if available)
     pub span: Option<Span>,
 }
@@ -207,7 +211,7 @@ impl Symbol {
     }
 }
 
-/// Target of a re-export (`pub use`)
+/// Target of a re-export (`pub use` / `internal use`)
 ///
 /// Represents where a re-exported symbol originally comes from.
 #[derive(Debug, Clone)]
@@ -216,6 +220,10 @@ pub struct ReExportTarget {
     pub source_module: ModuleSource,
     /// Original name in the source module
     pub source_name: String,
+    /// Visibility of the re-export binding itself: `pub use` → `Public`,
+    /// `internal use` → `Internal`. This is the binding's reach from the
+    /// re-exporting module, independent of the original symbol's visibility.
+    pub visibility: Visibility,
 }
 
 /// The symbol table
@@ -287,6 +295,7 @@ impl SymbolTable {
         ast_id: AstId,
         name: &str,
         kind: SymbolKind,
+        visibility: Visibility,
         span: Option<Span>,
     ) -> AstId {
         let symbol = Symbol {
@@ -294,6 +303,7 @@ impl SymbolTable {
             kind,
             defined_at: ast_id,
             module: module_source.clone(),
+            visibility,
             span,
         };
         self.symbols.insert(ast_id, symbol);
@@ -325,6 +335,7 @@ impl SymbolTable {
         export_name: &str,
         source_module: &ModuleSource,
         source_name: &str,
+        visibility: Visibility,
     ) {
         let module_reexports = self.reexports.entry(module_source.clone()).or_default();
         module_reexports.insert(
@@ -332,8 +343,33 @@ impl SymbolTable {
             ReExportTarget {
                 source_module: source_module.clone(),
                 source_name: source_name.to_string(),
+                visibility,
             },
         );
+    }
+
+    /// Visibility of the binding named `name` as it appears *in* `module_source`
+    /// — a direct definition's declared visibility, or a re-export's own
+    /// visibility (`pub use`/`internal use`). `None` when the module neither
+    /// defines nor re-exports the name (a plain `use` import is file-private
+    /// and is not a binding visible to importers). This is the reach test
+    /// applied at cross-module import sites.
+    #[must_use]
+    pub fn binding_visibility_in_module(
+        &self,
+        module_source: &ModuleSource,
+        name: &str,
+    ) -> Option<Visibility> {
+        if let Some(symbol) = self
+            .modules
+            .get(module_source)
+            .and_then(|module| module.get(name))
+            .and_then(|key| self.symbols.get(key))
+        {
+            return Some(symbol.visibility);
+        }
+        self.get_reexport(module_source, name)
+            .map(|reexport| reexport.visibility)
     }
 
     /// Names a module re-exports via `pub use`, in declaration order.
@@ -521,6 +557,7 @@ mod tests {
                 is_builtin: true,
                 cm_import: None,
             }),
+            Visibility::Public,
             None,
         );
 
@@ -547,6 +584,7 @@ mod tests {
             AstId::new(space_a, 0),
             "f",
             SymbolKind::BuiltinType,
+            Visibility::Public,
             None,
         );
         assert_eq!(table.get(&id).unwrap().module_source(), &cli);
@@ -572,6 +610,7 @@ mod tests {
                 is_builtin: true,
                 cm_import: None,
             }),
+            Visibility::Public,
             None,
         );
 
@@ -600,6 +639,7 @@ mod tests {
             SymbolKind::Struct(StructSymbol {
                 fields: vec!["x".to_string(), "y".to_string()],
             }),
+            Visibility::Public,
             None,
         );
 
@@ -626,6 +666,7 @@ mod tests {
             SymbolKind::Struct(StructSymbol {
                 fields: vec!["x".to_string(), "y".to_string()],
             }),
+            Visibility::Public,
             None,
         );
 

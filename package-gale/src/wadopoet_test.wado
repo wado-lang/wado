@@ -8,6 +8,7 @@ use {
     FnSpec,
     GlobalSpec,
     ImplSpec,
+    Vis,
     str_lit,
     char_lit,
     char_range_pat,
@@ -137,8 +138,7 @@ test "StructSpec basic" {
 }
 
 test "StructSpec pub with pub fields" {
-    let mut s = StructSpec::new("Token");
-    s.set_pub();
+    let mut s = StructSpec::new("Token", Vis::Pub);
     s.add_pub_field(&"kind", &"i32");
     s.add_pub_field(&"text", &"String");
 
@@ -149,8 +149,7 @@ test "StructSpec pub with pub fields" {
 }
 
 test "StructSpec mixed visibility fields" {
-    let mut s = StructSpec::new("Config");
-    s.set_pub();
+    let mut s = StructSpec::new("Config", Vis::Pub);
     s.add_pub_field(&"name", &"String");
     s.add_field(&"secret", &"i32");
 
@@ -171,8 +170,7 @@ test "StructSpec with FieldSpec" {
 
 
 test "VariantSpec unit cases" {
-    let mut v = VariantSpec::new("TokenKind");
-    v.set_pub();
+    let mut v = VariantSpec::new("TokenKind", Vis::Pub);
     v.add_case(&"Number");
     v.add_case(&"String");
     v.add_case(&"Eof");
@@ -197,8 +195,7 @@ test "VariantSpec with payloads" {
 
 
 test "EnumSpec basic" {
-    let mut e = EnumSpec::new("Color");
-    e.set_pub();
+    let mut e = EnumSpec::new("Color", Vis::Pub);
     e.add_member(&"Red");
     e.add_member(&"Green");
     e.add_member(&"Blue");
@@ -225,8 +222,7 @@ test "FnSpec simple" {
 }
 
 test "FnSpec with receiver" {
-    let mut f = FnSpec::new("len");
-    f.set_pub();
+    let mut f = FnSpec::new("len", Vis::Pub);
     f.set_receiver(&"&self");
     f.set_return_type(&"i32");
 
@@ -259,8 +255,7 @@ test "FnSpec no return type" {
 }
 
 test "FnSpec signature string" {
-    let mut f = FnSpec::new("transform");
-    f.set_pub();
+    let mut f = FnSpec::new("transform", Vis::Pub);
     f.set_receiver(&"&self");
     f.add_param(&"input", &"&String");
     f.add_param(&"scale", &"f64");
@@ -282,8 +277,7 @@ test "FnSpec export with effects" {
 }
 
 test "FnSpec generic type parameter" {
-    let mut f = FnSpec::new("walk_stmt");
-    f.set_pub();
+    let mut f = FnSpec::new("walk_stmt", Vis::Pub);
     f.add_generic(&"V: Visitor");
     f.add_param(&"v", &"&mut V");
     f.add_param(&"node", &"&StmtNode");
@@ -314,8 +308,7 @@ test "GlobalSpec basic" {
 }
 
 test "GlobalSpec pub" {
-    let mut g = GlobalSpec::new("COUNTER", "i32", "0");
-    g.set_pub();
+    let mut g = GlobalSpec::new("COUNTER", "i32", "0", Vis::Pub);
 
     let mut w = CodeWriter::new();
     g.emit(&mut w);
@@ -361,8 +354,7 @@ test "struct + impl + fn composition" {
 test "variant + global composition" {
     let mut w = CodeWriter::new();
 
-    let mut v = VariantSpec::new("TokenKind");
-    v.set_pub();
+    let mut v = VariantSpec::new("TokenKind", Vis::Pub);
     v.add_case(&"Number");
     v.add_case(&"Eof");
     v.add_case(&"Error");
@@ -378,8 +370,8 @@ test "variant + global composition" {
 }
 
 test "chaining builder methods" {
-    let mut s = StructSpec::new("Pair");
-    s.set_pub().add_pub_field(&"first", &"i32").add_pub_field(&"second", &"i32");
+    let mut s = StructSpec::new("Pair", Vis::Pub);
+    s.add_pub_field(&"first", &"i32").add_pub_field(&"second", &"i32");
 
     let mut w = CodeWriter::new();
     s.emit(&mut w);
@@ -516,8 +508,7 @@ test "struct + impl trait composition" {
     let mut w = CodeWriter::new();
 
     // struct
-    let mut s = StructSpec::new("Article");
-    s.set_pub();
+    let mut s = StructSpec::new("Article", Vis::Pub);
     s.add_pub_field(&"name", &"String");
     s.emit(&mut w);
     w.blank();

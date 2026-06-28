@@ -581,7 +581,7 @@ mod tests {
     fn module_with_use(source: &str, attrs: ImportAttributes) -> Module {
         let use_decl = UseDecl {
             id: AstId::fresh(),
-            is_pub: false,
+            visibility: crate::ast::Visibility::Private,
             source: source.to_string(),
             source_span: span(),
             source_id: AstId::fresh(),

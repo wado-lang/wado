@@ -972,6 +972,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             function_ref: func_ref,
                             param_is_mut,
                             type_args: vec![],
+                            param_defaults: vec![],
                         },
                     );
 
@@ -1049,10 +1050,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         }
         // Check for prelude functions (panic, unreachable)
-        // These are defined in core:internal and re-exported by core:prelude
+        // These are defined in core:rt and re-exported by core:prelude
         else if matches!(effective_name, "panic" | "unreachable") {
             (
-                Some(CalleeRef::internal_prelude(effective_name)),
+                Some(CalleeRef::rt_prelude(effective_name)),
                 effective_name.to_string(),
             )
         }
@@ -1260,6 +1261,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 function_ref: func_ref,
                 param_is_mut,
                 type_args: type_args.clone(),
+                param_defaults: vec![],
             },
         );
         // Stage 7-B: reify rebuilds the `Call` TIR from the recorded
@@ -2708,6 +2710,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     function_ref: func_ref,
                     param_is_mut: vec![false; args.len()],
                     type_args: vec![],
+                    param_defaults: vec![],
                 },
             );
 

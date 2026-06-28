@@ -1061,7 +1061,7 @@ pub struct GlobalDecl {
     pub ty: Type,
     pub initializer: Expr,
     pub mutable: bool,
-    pub is_pub: bool,
+    pub visibility: Visibility,
     pub attributes: Vec<Attribute>,
     pub span: Span,
 }
@@ -1298,7 +1298,7 @@ impl CmImport {
 pub struct ResourceDecl {
     pub id: AstId,
     pub name: String,
-    pub is_pub: bool,
+    pub visibility: Visibility,
     /// Generic type parameters: `resource Future<T> { ... }`
     pub type_params: Vec<GenericParam>,
     pub attrs: Vec<Attribute>,
@@ -1320,7 +1320,7 @@ pub struct ResourceDecl {
 pub struct WorldDecl {
     pub id: AstId,
     pub name: String,
-    pub is_pub: bool,
+    pub visibility: Visibility,
     pub attrs: Vec<Attribute>,
     pub imports: Vec<WorldImport>,
     pub exports: Vec<WorldExport>,
@@ -1510,6 +1510,47 @@ impl ImportAttributes {
     }
 }
 
+/// Symbol visibility — the Wado scope ladder, orthogonal to `is_export`
+/// (the Component Model surface flag). See
+/// docs/wep-2026-06-25-visibility-internal-pub-export.md.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Visibility {
+    /// No modifier: visible only within the defining file.
+    #[default]
+    Private,
+    /// `internal`: visible to other files in the same package.
+    Internal,
+    /// `pub`: visible to other Wado packages (the library API).
+    Public,
+}
+
+impl Visibility {
+    /// `pub` — reaches other Wado packages (the library API surface).
+    pub fn is_public(self) -> bool {
+        matches!(self, Visibility::Public)
+    }
+
+    /// `internal` — reaches other files in the same package only.
+    pub fn is_internal(self) -> bool {
+        matches!(self, Visibility::Internal)
+    }
+
+    /// Reaches beyond the defining file (`internal` or `pub`).
+    pub fn reaches_beyond_file(self) -> bool {
+        !matches!(self, Visibility::Private)
+    }
+
+    /// Source keyword with a trailing space (`"pub "`, `"internal "`, or `""`
+    /// for file-private). Used by the unparser.
+    pub fn keyword(self) -> &'static str {
+        match self {
+            Visibility::Private => "",
+            Visibility::Internal => "internal ",
+            Visibility::Public => "pub ",
+        }
+    }
+}
+
 /// Use declaration with ESM-like syntax:
 /// `use {items} from "source"`
 /// `use {items} from "source" with { version: "1.0" }`
@@ -1517,8 +1558,9 @@ impl ImportAttributes {
 #[derive(Debug, Clone)]
 pub struct UseDecl {
     pub id: AstId,
-    /// Whether this is a public re-export
-    pub is_pub: bool,
+    /// Re-export visibility: `pub use` (Public) / `internal use` (Internal) /
+    /// plain `use` (Private — a local import, not re-exported).
+    pub visibility: Visibility,
     /// Import source (e.g., "core:cli", "wasi:filesystem", "./utils.wado")
     pub source: String,
     /// Span of the source string literal (without surrounding quotes in the
@@ -1540,7 +1582,7 @@ pub struct Function {
     pub name: String,
     /// Span of the function name identifier alone (for LSP name-targeted queries).
     pub name_span: Span,
-    pub is_pub: bool,
+    pub visibility: Visibility,
     /// Whether this function is exported at the Component Model boundary (world export)
     pub is_export: bool,
     /// Whether this is an async function (`export async fn`).
@@ -2860,7 +2902,7 @@ pub struct InterfaceDecl {
     pub name: String,
     /// Span of the interface name identifier.
     pub name_span: Span,
-    pub is_pub: bool,
+    pub visibility: Visibility,
     pub attrs: Vec<Attribute>,
     pub methods: Vec<InterfaceMethod>,
     pub span: Span,
@@ -2946,7 +2988,7 @@ pub struct StructDecl {
     pub name: String,
     /// Span of the struct name identifier.
     pub name_span: Span,
-    pub is_pub: bool,
+    pub visibility: Visibility,
     /// Generic type parameters: `struct Pair<T, U> { ... }`
     pub type_params: Vec<GenericParam>,
     pub fields: Vec<StructField>,
@@ -2977,7 +3019,7 @@ pub struct EnumDecl {
     pub name: String,
     /// Span of the enum name identifier.
     pub name_span: Span,
-    pub is_pub: bool,
+    pub visibility: Visibility,
     /// Generic type parameters: `enum Option<T> { Some(T), None }`
     pub type_params: Vec<GenericParam>,
     pub cases: Vec<EnumCase>,
@@ -3013,7 +3055,7 @@ pub struct FlagsDecl {
     pub name: String,
     /// Span of the flags name identifier.
     pub name_span: Span,
-    pub is_pub: bool,
+    pub visibility: Visibility,
     pub attributes: Option<Vec<Attribute>>,
     pub flags: Vec<FlagsVariant>,
     pub span: Span,
@@ -3043,7 +3085,7 @@ pub struct VariantDecl {
     pub name: String,
     /// Span of the variant name identifier.
     pub name_span: Span,
-    pub is_pub: bool,
+    pub visibility: Visibility,
     /// Generic type parameters: `variant Option<T> { Some(T), None }`
     pub type_params: Vec<GenericParam>,
     pub cases: Vec<VariantCase>,
@@ -3079,7 +3121,7 @@ pub struct Newtype {
     pub name: String,
     /// Span of the newtype name identifier.
     pub name_span: Span,
-    pub is_pub: bool,
+    pub visibility: Visibility,
     pub type_params: Vec<GenericParam>,
     pub ty: Type,
     pub attrs: Vec<Attribute>,
@@ -3093,7 +3135,7 @@ pub struct Newtype {
 #[derive(Debug, Clone)]
 pub struct TupleTypeDecl {
     pub id: AstId,
-    pub is_pub: bool,
+    pub visibility: Visibility,
     pub attrs: Vec<Attribute>,
     pub span: Span,
 }
@@ -3110,7 +3152,7 @@ pub struct BuiltinTypeDecl {
     pub name: String,
     /// Span of the type name identifier.
     pub name_span: Span,
-    pub is_pub: bool,
+    pub visibility: Visibility,
     pub type_params: Vec<GenericParam>,
     pub attrs: Vec<Attribute>,
     pub span: Span,
@@ -3155,7 +3197,7 @@ pub struct TraitDecl {
     pub name: String,
     /// Span of the trait name identifier.
     pub name_span: Span,
-    pub is_pub: bool,
+    pub visibility: Visibility,
     pub type_params: Vec<GenericParam>,
     /// Associated type declarations: `type Output;`
     pub associated_types: Vec<AssociatedTypeDecl>,

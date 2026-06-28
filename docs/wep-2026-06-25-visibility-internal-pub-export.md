@@ -91,8 +91,25 @@ private module.
   package's public API and were also `export`ed need no change. `pub use`
   re-exports gain an `internal use` counterpart for package-internal
   re-exports.
-- Enforcing "a consumer may import only `pub`/`export` items of a dependency"
-  for Wado-to-Wado source dependencies remains unimplemented, as before.
+
+## Implementation
+
+- [x] Parse `internal` (the keyword was previously reserved as a no-op).
+      `internal` and `pub` are mutually exclusive; `export` implies `pub` (no
+      `pub export`). The AST carries a `Visibility { Private, Internal, Public }`
+      enum on every top-level declaration, orthogonal to the `is_export` flag.
+- [x] Package identity: `ModuleSource::package_id()` groups modules into
+      packages. `core:*` is one package, `wasi:*` another (independent), the entry
+      point and its local modules the `Root` package, and each resolved dependency
+      / remote URL its own package.
+- [x] Enforcement at import resolution (analyze phase): file-private symbols are
+      never importable; `internal` reaches only same-package importers; `pub` /
+      `export` reach anywhere. A violation is a `PRIVATE_SYMBOL` compile error. The
+      `Symbol` and re-export entries carry their declared visibility; namespace
+      imports register only the visible members.
+- [x] `internal use` re-exports (the package-internal counterpart to `pub use`).
+- The bundled `core:internal` module was renamed to `core:rt` so the module
+  name no longer collides with the `internal` visibility keyword.
 
 ## References
 

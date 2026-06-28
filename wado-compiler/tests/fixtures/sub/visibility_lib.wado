@@ -1,0 +1,10 @@
+//! Shared library module for the `visibility_*` fixtures.
+//!
+//! `vis_private` is file-private (used here in-file, never importable);
+//! `vis_internal` is package-internal; `vis_pub` is the public API.
+
+fn vis_private() -> i32 { return 3 }
+
+internal fn vis_internal() -> i32 { return vis_private() - 1 }
+
+pub fn vis_pub() -> i32 { return 1 }

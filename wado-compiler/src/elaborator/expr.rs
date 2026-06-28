@@ -590,7 +590,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Check if it's a prelude function (panic, unreachable)
-        // These are defined in core:internal and re-exported by core:prelude
+        // These are defined in core:rt and re-exported by core:prelude
         if matches!(ident.name.as_str(), "panic" | "unreachable") {
             // Stage 7-B: reify rebuilds the prelude `FuncRef`.
             return TypeTable::UNKNOWN;

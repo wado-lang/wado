@@ -1,6 +1,6 @@
 use { Grammar, LexerRule, ParserRule, Alternative, Element } from "./ir.wado";
 use { LitToken, TokenSlot, token_slot_order } from "./lexer_gen.wado";
-use { CodeWriter, FnSpec, GlobalSpec, str_lit } from "./wadopoet.wado";
+use { CodeWriter, FnSpec, GlobalSpec, Vis, str_lit } from "./wadopoet.wado";
 
 /// `highlight`: build the token/rule mapping, then drive `highlight_walk`
 /// over the parsed `CstNode` tree. `parse` always returns a tree (partial on
@@ -8,8 +8,7 @@ use { CodeWriter, FnSpec, GlobalSpec, str_lit } from "./wadopoet.wado";
 /// broken input still highlights from its partial tree.
 pub fn gen_highlight(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>) {
     gen_highlight_mapping(w, &grammar.lexer_rules, &grammar.parser_rules, lit_tokens);
-    let mut f = FnSpec::new("highlight");
-    f.set_pub();
+    let mut f = FnSpec::new("highlight", Vis::Pub);
     f.add_param(&"input", &"&String");
     f.set_return_type(&"String");
     f.emit_begin(w);
@@ -46,8 +45,7 @@ fn gen_highlight_mapping(
     parser_rules: &List<ParserRule>,
     lit_tokens: &List<LitToken>,
 ) {
-    let mut f = FnSpec::new("highlight_mapping");
-    f.set_pub();
+    let mut f = FnSpec::new("highlight_mapping", Vis::Pub);
     f.set_return_type(&"HighlightMapping");
     f.emit_begin(w);
 

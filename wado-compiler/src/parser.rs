@@ -15,8 +15,8 @@ use crate::ast::{
     StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
     StructLiteralField, StructPatternField, TaskReturnStmt, TemplatePart, TemplateStringExpr,
     TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
-    UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, WhileStmt, WorldDecl, WorldExport,
-    WorldExportFn, WorldExportInterface, WorldImport,
+    UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WorldDecl,
+    WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
 };
 use crate::compiler_host::{Code, DiagnosticSpan, Severity};
 use crate::token::{Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
@@ -997,14 +997,16 @@ impl Parser {
         // Parse any leading attributes
         let attrs = self.parse_attributes()?;
 
-        // TODO: package-internal visibility. `internal` is reserved and
-        // consumed as a nop until the three-tier visibility model is wired up.
+        // Parse the Wado visibility ladder: `internal` (package) / `pub`
+        // (library). `internal` and `pub` are mutually exclusive.
         // See docs/wep-2026-06-25-visibility-internal-pub-export.md.
-        if self.check(&TokenKind::Internal) {
+        let vis_span = self.peek().span;
+        let is_internal = if self.check(&TokenKind::Internal) {
             self.advance();
-        }
-
-        // Parse visibility: pub
+            true
+        } else {
+            false
+        };
         let is_pub = if self.check(&TokenKind::Pub) {
             self.advance();
             true
@@ -1012,12 +1014,30 @@ impl Parser {
             false
         };
 
-        // Parse export keyword (for CM boundary export)
+        // Parse export keyword (the orthogonal CM boundary flag). `export`
+        // implies `pub` (a CM export is part of the public API).
         let is_export = if self.check(&TokenKind::Export) {
             self.advance();
             true
         } else {
             false
+        };
+
+        if is_internal && (is_pub || is_export) {
+            return Err(ParseError {
+                message: "`internal` cannot combine with `pub` or `export` \
+                    (`export` already implies `pub`)"
+                    .to_string(),
+                span: vis_span,
+            });
+        }
+
+        let visibility = if is_pub || is_export {
+            Visibility::Public
+        } else if is_internal {
+            Visibility::Internal
+        } else {
+            Visibility::Private
         };
 
         // Parse optional `async` modifier after `export` (only valid on exported fns)
@@ -1036,23 +1056,27 @@ impl Parser {
         }
 
         match self.peek_kind() {
-            TokenKind::Use => self.parse_use_decl(is_pub).map(Item::Use),
+            TokenKind::Use => self.parse_use_decl(visibility).map(Item::Use),
             TokenKind::Fn => self
-                .parse_function(is_pub, is_export, is_async, attrs)
+                .parse_function(visibility, is_export, is_async, attrs)
                 .map(Item::Function),
             TokenKind::Interface => self
-                .parse_interface_decl(is_pub, attrs)
+                .parse_interface_decl(visibility, attrs)
                 .map(Item::Interface),
-            TokenKind::Struct => self.parse_struct_decl(is_pub, attrs).map(Item::Struct),
-            TokenKind::Enum => self.parse_enum_decl(is_pub, attrs).map(Item::Enum),
-            TokenKind::Variant => self.parse_variant_decl(is_pub, attrs).map(Item::Variant),
-            TokenKind::Flags => self.parse_flags_decl(is_pub, attrs).map(Item::Flags),
-            TokenKind::Type => self.parse_type_decl(is_pub, attrs),
+            TokenKind::Struct => self.parse_struct_decl(visibility, attrs).map(Item::Struct),
+            TokenKind::Enum => self.parse_enum_decl(visibility, attrs).map(Item::Enum),
+            TokenKind::Variant => self
+                .parse_variant_decl(visibility, attrs)
+                .map(Item::Variant),
+            TokenKind::Flags => self.parse_flags_decl(visibility, attrs).map(Item::Flags),
+            TokenKind::Type => self.parse_type_decl(visibility, attrs),
             TokenKind::Impl => self.parse_impl_block().map(Item::Impl),
-            TokenKind::Trait => self.parse_trait_decl(is_pub, attrs).map(Item::Trait),
-            TokenKind::Resource => self.parse_resource_decl(is_pub, attrs).map(Item::Resource),
-            TokenKind::World => self.parse_world_decl(is_pub, attrs).map(Item::World),
-            TokenKind::Global => self.parse_global_decl(is_pub, attrs).map(Item::Global),
+            TokenKind::Trait => self.parse_trait_decl(visibility, attrs).map(Item::Trait),
+            TokenKind::Resource => self
+                .parse_resource_decl(visibility, attrs)
+                .map(Item::Resource),
+            TokenKind::World => self.parse_world_decl(visibility, attrs).map(Item::World),
+            TokenKind::Global => self.parse_global_decl(visibility, attrs).map(Item::Global),
             _ => Err(ParseError {
                 message: format!("expected item, found {:?}", self.peek_kind()),
                 span: self.peek().span,
@@ -1091,7 +1115,7 @@ impl Parser {
     /// Parse global variable declaration: `[pub] global [mut] name: Type = expr;`
     fn parse_global_decl(
         &mut self,
-        is_pub: bool,
+        visibility: Visibility,
         attributes: Vec<Attribute>,
     ) -> ParseResult<GlobalDecl> {
         let id = self.alloc_ast_id();
@@ -1127,7 +1151,7 @@ impl Parser {
             ty,
             initializer,
             mutable,
-            is_pub,
+            visibility,
             attributes,
             span: start_span.merge(&end_span),
         })
@@ -1293,7 +1317,7 @@ impl Parser {
 
     fn parse_resource_decl(
         &mut self,
-        is_pub: bool,
+        visibility: Visibility,
         attrs: Vec<Attribute>,
     ) -> ParseResult<ResourceDecl> {
         let id = self.alloc_ast_id();
@@ -1324,7 +1348,7 @@ impl Parser {
         Ok(ResourceDecl {
             id,
             name,
-            is_pub,
+            visibility,
             type_params,
             attrs,
             methods,
@@ -1341,7 +1365,7 @@ impl Parser {
     /// - Simple: `name` or `name as alias`
     /// - Effect functions: `Effect::{func1, func2}` or `Effect::{func1 as alias}`
     /// - Wildcard: `_` (no braces needed)
-    fn parse_use_decl(&mut self, is_pub: bool) -> ParseResult<UseDecl> {
+    fn parse_use_decl(&mut self, visibility: Visibility) -> ParseResult<UseDecl> {
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Use)?;
@@ -1386,7 +1410,7 @@ impl Parser {
 
         Ok(UseDecl {
             id,
-            is_pub,
+            visibility,
             source,
             source_span,
             source_id,
@@ -1633,7 +1657,7 @@ impl Parser {
 
     fn parse_function(
         &mut self,
-        is_pub: bool,
+        visibility: Visibility,
         is_export: bool,
         is_async: bool,
         attrs: Vec<Attribute>,
@@ -1688,7 +1712,7 @@ impl Parser {
             id,
             name,
             name_span,
-            is_pub,
+            visibility,
             is_export,
             is_async,
             type_params,
@@ -4567,7 +4591,7 @@ impl Parser {
 
     fn parse_interface_decl(
         &mut self,
-        is_pub: bool,
+        visibility: Visibility,
         attrs: Vec<Attribute>,
     ) -> ParseResult<InterfaceDecl> {
         let id = self.alloc_ast_id();
@@ -4587,7 +4611,7 @@ impl Parser {
             id,
             name,
             name_span,
-            is_pub,
+            visibility,
             attrs,
             methods,
             span: start_span.merge(&end_span),
@@ -4883,7 +4907,7 @@ impl Parser {
 
     fn parse_struct_decl(
         &mut self,
-        is_pub: bool,
+        visibility: Visibility,
         attrs: Vec<Attribute>,
     ) -> ParseResult<StructDecl> {
         let id = self.alloc_ast_id();
@@ -4904,7 +4928,7 @@ impl Parser {
             id,
             name,
             name_span,
-            is_pub,
+            visibility,
             type_params,
             fields,
             attrs,
@@ -4966,7 +4990,11 @@ impl Parser {
         Ok(fields)
     }
 
-    fn parse_enum_decl(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<EnumDecl> {
+    fn parse_enum_decl(
+        &mut self,
+        visibility: Visibility,
+        attrs: Vec<Attribute>,
+    ) -> ParseResult<EnumDecl> {
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Enum)?;
@@ -4992,7 +5020,7 @@ impl Parser {
             id,
             name,
             name_span,
-            is_pub,
+            visibility,
             type_params,
             cases,
             attrs,
@@ -5022,7 +5050,11 @@ impl Parser {
     ///     Write,
     /// }
     /// ```
-    fn parse_flags_decl(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<FlagsDecl> {
+    fn parse_flags_decl(
+        &mut self,
+        visibility: Visibility,
+        attrs: Vec<Attribute>,
+    ) -> ParseResult<FlagsDecl> {
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Flags)?;
@@ -5055,7 +5087,7 @@ impl Parser {
             id,
             name,
             name_span,
-            is_pub,
+            visibility,
             attributes: if attrs.is_empty() { None } else { Some(attrs) },
             flags,
             span: start_span.merge(&end_span),
@@ -5071,7 +5103,7 @@ impl Parser {
     /// ```
     fn parse_variant_decl(
         &mut self,
-        is_pub: bool,
+        visibility: Visibility,
         attrs: Vec<Attribute>,
     ) -> ParseResult<VariantDecl> {
         let id = self.alloc_ast_id();
@@ -5099,7 +5131,7 @@ impl Parser {
             id,
             name,
             name_span,
-            is_pub,
+            visibility,
             type_params,
             cases,
             attrs,
@@ -5152,7 +5184,11 @@ impl Parser {
     /// Parse a `type` declaration: a newtype (`type Name = T;`), a tuple
     /// type family declaration (`type [..T];`), or a named definition-less
     /// builtin type (`type Array<T>;`).
-    fn parse_type_decl(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<Item> {
+    fn parse_type_decl(
+        &mut self,
+        visibility: Visibility,
+        attrs: Vec<Attribute>,
+    ) -> ParseResult<Item> {
         let start_span = self.peek().span;
         // peek past `type` to see if next token is `[` (tuple type decl)
         if self.peek_nth(1).kind == TokenKind::LBracket {
@@ -5163,7 +5199,7 @@ impl Parser {
             let end_span = self.expect(&TokenKind::Semicolon)?.span;
             return Ok(Item::TupleTypeDecl(TupleTypeDecl {
                 id,
-                is_pub,
+                visibility,
                 attrs,
                 span: start_span.merge(&end_span),
             }));
@@ -5181,7 +5217,7 @@ impl Parser {
                 id,
                 name,
                 name_span,
-                is_pub,
+                visibility,
                 type_params,
                 attrs,
                 span: start_span.merge(&end_span),
@@ -5196,7 +5232,7 @@ impl Parser {
             id,
             name,
             name_span,
-            is_pub,
+            visibility,
             type_params,
             ty,
             attrs,
@@ -5339,8 +5375,13 @@ impl Parser {
                         span: const_span.merge(&end),
                     });
                 } else {
-                    // Methods cannot be exported at the CM boundary
-                    methods.push(self.parse_function(is_pub, false, false, attrs)?);
+                    // Methods cannot be exported at the CM boundary.
+                    let method_vis = if is_pub {
+                        Visibility::Public
+                    } else {
+                        Visibility::Private
+                    };
+                    methods.push(self.parse_function(method_vis, false, false, attrs)?);
                 }
             }
         }
@@ -5450,7 +5491,11 @@ impl Parser {
     ///     fn display(&self) -> String;
     /// }
     /// ```
-    fn parse_trait_decl(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<TraitDecl> {
+    fn parse_trait_decl(
+        &mut self,
+        visibility: Visibility,
+        attrs: Vec<Attribute>,
+    ) -> ParseResult<TraitDecl> {
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Trait)?;
@@ -5491,7 +5536,7 @@ impl Parser {
                 // Trait methods cannot be exported at the CM boundary.
                 // Attributes (e.g. `#[compiler_item("...")]`) carry through so
                 // the elaborator can register per-method compiler items.
-                methods.push(self.parse_function(false, false, false, attrs)?);
+                methods.push(self.parse_function(Visibility::Private, false, false, attrs)?);
             }
         }
 
@@ -5501,7 +5546,7 @@ impl Parser {
             id,
             name,
             name_span,
-            is_pub,
+            visibility,
             type_params,
             associated_types,
             methods,
@@ -5519,7 +5564,11 @@ impl Parser {
     ///     export async fn run() -> Result<(), ()>;
     /// }
     /// ```
-    fn parse_world_decl(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<WorldDecl> {
+    fn parse_world_decl(
+        &mut self,
+        visibility: Visibility,
+        attrs: Vec<Attribute>,
+    ) -> ParseResult<WorldDecl> {
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::World)?;
@@ -5554,7 +5603,7 @@ impl Parser {
         Ok(WorldDecl {
             id,
             name,
-            is_pub,
+            visibility,
             attrs,
             imports,
             exports,
@@ -6264,7 +6313,7 @@ mod tests {
 
         if let Item::Interface(effect) = &module.items[0] {
             assert_eq!(effect.name, "Stdout");
-            assert!(effect.is_pub);
+            assert!(effect.visibility.is_public());
             assert_eq!(effect.methods.len(), 1);
 
             let method = &effect.methods[0];
@@ -6440,7 +6489,7 @@ mod tests {
         // First function: pub fn stream_new() -> i64;
         if let Item::Function(func) = &module.items[0] {
             assert_eq!(func.name, "stream_new");
-            assert!(func.is_pub);
+            assert!(func.visibility.is_public());
             assert!(func.params.is_empty());
             assert!(func.return_type.is_some());
             assert!(func.body.is_none(), "bodyless function should have no body");
@@ -6451,7 +6500,7 @@ mod tests {
         // Second function: pub fn stream_write(tx: i32, ptr: i32, len: i32) -> i32;
         if let Item::Function(func) = &module.items[1] {
             assert_eq!(func.name, "stream_write");
-            assert!(func.is_pub);
+            assert!(func.visibility.is_public());
             assert_eq!(func.params.len(), 3);
             assert!(func.return_type.is_some());
             assert!(func.body.is_none(), "bodyless function should have no body");
@@ -6462,13 +6511,41 @@ mod tests {
         // Third function: fn internal_helper();
         if let Item::Function(func) = &module.items[2] {
             assert_eq!(func.name, "internal_helper");
-            assert!(!func.is_pub);
+            assert!(!func.visibility.is_public());
             assert!(func.params.is_empty());
             assert!(func.return_type.is_none());
             assert!(func.body.is_none(), "bodyless function should have no body");
         } else {
             panic!("expected function");
         }
+    }
+
+    #[test]
+    fn test_visibility_ladder_parsing() {
+        use crate::ast::Visibility;
+        let module =
+            parse("internal fn a() {}\npub fn b() {}\nfn c() {}\nexport fn d() {}").unwrap();
+        let vis = |i: usize| match &module.items[i] {
+            Item::Function(f) => (f.visibility, f.is_export),
+            _ => panic!("expected function"),
+        };
+        assert_eq!(vis(0), (Visibility::Internal, false));
+        assert_eq!(vis(1), (Visibility::Public, false));
+        assert_eq!(vis(2), (Visibility::Private, false));
+        // `export` implies `pub` and sets the CM-export flag.
+        assert_eq!(vis(3), (Visibility::Public, true));
+    }
+
+    #[test]
+    fn test_internal_pub_conflict_is_a_parse_error() {
+        assert!(
+            parse("internal pub fn x() {}").is_err(),
+            "`internal` must not combine with `pub`"
+        );
+        assert!(
+            parse("internal export fn x() {}").is_err(),
+            "`internal` must not combine with `export`"
+        );
     }
 
     #[test]

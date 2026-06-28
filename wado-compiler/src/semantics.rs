@@ -667,7 +667,9 @@ impl Semantics {
                     names.extend(
                         b.methods
                             .iter()
-                            .filter(|m| member_visible(public_only, inherent, m.is_pub))
+                            .filter(|m| {
+                                member_visible(public_only, inherent, m.visibility.is_public())
+                            })
                             .map(|m| m.name.clone()),
                     );
                     names.extend(
@@ -722,16 +724,16 @@ impl Semantics {
         if let Some(ast) = self.modules.get(module) {
             for item in &ast.items {
                 let (is_pub, name) = match item {
-                    Item::Function(d) => (d.is_pub, &d.name),
-                    Item::Struct(d) => (d.is_pub, &d.name),
-                    Item::Enum(d) => (d.is_pub, &d.name),
-                    Item::Variant(d) => (d.is_pub, &d.name),
-                    Item::Flags(d) => (d.is_pub, &d.name),
-                    Item::Newtype(d) => (d.is_pub, &d.name),
-                    Item::Trait(d) => (d.is_pub, &d.name),
-                    Item::Resource(d) => (d.is_pub, &d.name),
-                    Item::Global(d) => (d.is_pub, &d.name),
-                    Item::Interface(d) => (d.is_pub, &d.name),
+                    Item::Function(d) => (d.visibility.is_public(), &d.name),
+                    Item::Struct(d) => (d.visibility.is_public(), &d.name),
+                    Item::Enum(d) => (d.visibility.is_public(), &d.name),
+                    Item::Variant(d) => (d.visibility.is_public(), &d.name),
+                    Item::Flags(d) => (d.visibility.is_public(), &d.name),
+                    Item::Newtype(d) => (d.visibility.is_public(), &d.name),
+                    Item::Trait(d) => (d.visibility.is_public(), &d.name),
+                    Item::Resource(d) => (d.visibility.is_public(), &d.name),
+                    Item::Global(d) => (d.visibility.is_public(), &d.name),
+                    Item::Interface(d) => (d.visibility.is_public(), &d.name),
                     _ => continue,
                 };
                 if !public_only || is_pub {
