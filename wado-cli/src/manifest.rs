@@ -143,7 +143,11 @@ pub(crate) fn workspace_member_dirs(root_dir: &Path, members: &[String]) -> Vec<
 /// inherited required fields, which a full parse would reject).
 fn read_workspace_members(content: &str) -> Option<Vec<String>> {
     let table: toml::Table = toml::from_str(content).ok()?;
-    let members = table.get("workspace")?.as_table()?.get("members")?.as_array()?;
+    let members = table
+        .get("workspace")?
+        .as_table()?
+        .get("members")?
+        .as_array()?;
     Some(
         members
             .iter()
@@ -666,7 +670,9 @@ authors = ["Alice"]
     #[test]
     fn workspace_root_that_is_also_a_package_parses_standalone() {
         let tmp = tempfile::tempdir().unwrap();
-        let toml = format!("{WS_ROOT}\n[package]\nname = \"root-pkg\"\nversion = \"0.1.0\"\nrepository = \"https://github.com/org/monorepo\"\nnamespace = \"org\"\n");
+        let toml = format!(
+            "{WS_ROOT}\n[package]\nname = \"root-pkg\"\nversion = \"0.1.0\"\nrepository = \"https://github.com/org/monorepo\"\nnamespace = \"org\"\n"
+        );
         write(&tmp.path().join("wado.toml"), &toml);
         let project = discover(tmp.path()).unwrap().unwrap();
         assert_eq!(project.manifest.package.unwrap().name, "root-pkg");
@@ -683,11 +689,7 @@ authors = ["Alice"]
         );
         let root = governing_workspace_root_dir(&member_dir).unwrap().unwrap();
         assert_eq!(root, tmp.path());
-        assert!(
-            governing_workspace_root_dir(tmp.path())
-                .unwrap()
-                .is_none()
-        );
+        assert!(governing_workspace_root_dir(tmp.path()).unwrap().is_none());
     }
 
     #[test]

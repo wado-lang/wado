@@ -44,7 +44,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<PublishOptions, CliExit>
     let mut dry_run = false;
     while let Some(arg) = args::next_arg(&mut parser)? {
         match arg {
-            lexopt::Arg::Long("help") | lexopt::Arg::Short('h') => return Err(CliExit::help(usage)),
+            lexopt::Arg::Long("help") | lexopt::Arg::Short('h') => {
+                return Err(CliExit::help(usage));
+            }
             lexopt::Arg::Long("dry-run") => dry_run = true,
             other => return Err(args::unexpected_arg(other, &usage)),
         }
@@ -124,9 +126,9 @@ fn publish_single_dry_run(manifest: &Manifest) -> Result<(), CliExit> {
             &problems,
         )),
         Verdict::NotAPackage => Err(CliExit::error("no [package] to publish")),
-        Verdict::Skipped(reason) => {
-            Err(CliExit::error(format!("package is not publishable: {reason}")))
-        }
+        Verdict::Skipped(reason) => Err(CliExit::error(format!(
+            "package is not publishable: {reason}"
+        ))),
     }
 }
 

@@ -1380,10 +1380,7 @@ version = "0.1.0"
 repository = "https://github.com/org/app"
 "#;
         let pkg = toml.parse::<Manifest>().unwrap().package.unwrap();
-        assert_eq!(
-            pkg.effective_homepage(),
-            Some("https://github.com/org/app")
-        );
+        assert_eq!(pkg.effective_homepage(), Some("https://github.com/org/app"));
         assert_eq!(
             pkg.effective_documentation(),
             Some("https://github.com/org/app")
@@ -1475,7 +1472,9 @@ wado-version = "not a req"
     #[test]
     fn valid_spdx_license_accepted() {
         for license in ["MIT", "MIT OR Apache-2.0", "Apache-2.0 WITH LLVM-exception"] {
-            let toml = format!("[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"{license}\"\n");
+            let toml = format!(
+                "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"{license}\"\n"
+            );
             assert!(
                 toml.parse::<Manifest>().is_ok(),
                 "expected {license:?} to be accepted"
@@ -1503,7 +1502,10 @@ version = "0.1.0"
 license = "Definitely Not A License"
 "#;
         let err = toml.parse::<Manifest>().unwrap_err();
-        assert!(matches!(err, ManifestError::InvalidLicense { .. }), "{err:?}");
+        assert!(
+            matches!(err, ManifestError::InvalidLicense { .. }),
+            "{err:?}"
+        );
     }
 
     const ROOT_WS: &str = r#"
@@ -1528,7 +1530,10 @@ lib = "src/lib.wado"
 "#;
         let pkg = resolve_member(member, ROOT_WS).unwrap().package.unwrap();
         assert_eq!(pkg.version, "0.2.0");
-        assert_eq!(pkg.repository.as_deref(), Some("https://github.com/org/monorepo"));
+        assert_eq!(
+            pkg.repository.as_deref(),
+            Some("https://github.com/org/monorepo")
+        );
         assert_eq!(pkg.namespace.as_deref(), Some("org"));
         assert_eq!(pkg.license.as_deref(), Some("MIT"));
         assert_eq!(pkg.authors, vec!["Alice <a@example.com>"]);

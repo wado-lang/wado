@@ -154,7 +154,9 @@ pub fn validate_for_publish(manifest: &Manifest) -> Vec<PublishError> {
         });
     }
     if pkg.repository.is_none() {
-        errors.push(PublishError::MissingMetadata { field: "repository" });
+        errors.push(PublishError::MissingMetadata {
+            field: "repository",
+        });
     }
     if pkg.authors.is_empty() {
         errors.push(PublishError::MissingMetadata { field: "authors" });
@@ -162,7 +164,11 @@ pub fn validate_for_publish(manifest: &Manifest) -> Vec<PublishError> {
     if pkg.license.is_none() && pkg.license_file.is_none() {
         errors.push(PublishError::MissingLicense);
     }
-    for (name, dep) in manifest.dependencies.iter().chain(&manifest.build_dependencies) {
+    for (name, dep) in manifest
+        .dependencies
+        .iter()
+        .chain(&manifest.build_dependencies)
+    {
         match &dep.source {
             DependencySource::Path {
                 publish_source: None,
@@ -420,11 +426,15 @@ authors = ["Alice"]
         assert!(errs.contains(&MissingNamespace), "{errs:?}");
         assert!(errs.contains(&MissingLicense), "{errs:?}");
         assert!(
-            errs.contains(&MissingMetadata { field: "description" }),
+            errs.contains(&MissingMetadata {
+                field: "description"
+            }),
             "{errs:?}"
         );
         assert!(
-            errs.contains(&MissingMetadata { field: "repository" }),
+            errs.contains(&MissingMetadata {
+                field: "repository"
+            }),
             "{errs:?}"
         );
         assert!(
