@@ -102,6 +102,9 @@ pub struct CompileOptions {
     pub embed_wit: bool,
     /// `--no-embed-metadata`: opt out of embedding the `[package]` metadata.
     pub no_embed_metadata: bool,
+    /// `--embed-metadata`: force embedding on, overriding the `-Os` default-off.
+    /// Mutually exclusive with `--no-embed-metadata`.
+    pub embed_metadata: bool,
     /// True when the entry was resolved from a manifest (no path argument, or a
     /// directory argument), so the build represents the package's declared
     /// artifact. An explicit `.wado` file argument sets this false and embeds no
@@ -220,6 +223,7 @@ enum Opt {
     NoEmbedWit,
     EmbedWit,
     NoEmbedMetadata,
+    EmbedMetadata,
     Help,
 }
 
@@ -241,6 +245,7 @@ impl Opt {
         Self::NoEmbedWit,
         Self::EmbedWit,
         Self::NoEmbedMetadata,
+        Self::EmbedMetadata,
         Self::Help,
     ];
 
@@ -297,6 +302,12 @@ impl Opt {
                 value: None,
                 desc: "Do not embed the [package] metadata sections in the output",
             },
+            Self::EmbedMetadata => args::OptSpec {
+                long: Some("embed-metadata"),
+                short: None,
+                value: None,
+                desc: "Force embedding the [package] metadata on (e.g. under -Os, where it is off by default)",
+            },
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -342,6 +353,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     let mut no_embed_wit = false;
     let mut embed_wit = false;
     let mut no_embed_metadata = false;
+    let mut embed_metadata = false;
     let mut param_args = args::ParamArgs::default();
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
@@ -381,6 +393,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
                 Opt::NoEmbedWit => no_embed_wit = true,
                 Opt::EmbedWit => embed_wit = true,
                 Opt::NoEmbedMetadata => no_embed_metadata = true,
+                Opt::EmbedMetadata => embed_metadata = true,
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -400,6 +413,12 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     if no_embed_wit && embed_wit {
         return Err(CliExit::error(
             "`--no-embed-wit` and `--embed-wit` are mutually exclusive",
+        ));
+    }
+
+    if no_embed_metadata && embed_metadata {
+        return Err(CliExit::error(
+            "`--no-embed-metadata` and `--embed-metadata` are mutually exclusive",
         ));
     }
 
@@ -442,6 +461,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         no_embed_wit,
         embed_wit,
         no_embed_metadata,
+        embed_metadata,
         manifest_driven,
     })
 }
@@ -1032,10 +1052,11 @@ async fn embed_wit_section(
 /// Embed the `[package]` metadata into the component when building the package's
 /// declared artifact (manifest-driven mode) and `--no-embed-metadata` was not
 /// given. Returns `wasm` unchanged otherwise — an explicit file argument, no
-/// `wado.toml`, a manifest without `[package]`, or `-Os` (which strips symbols
-/// for minimal frontend delivery, where the metadata is dead weight — matching
-/// the WIT section being dropped). The git `revision` is included only on a
-/// clean tree (omitted silently here; `wado publish` warns).
+/// `wado.toml`, or a manifest without `[package]`. Under `-Os` (strip symbols
+/// for minimal frontend delivery) the metadata is dropped as dead weight unless
+/// `--embed-metadata` forces it on, matching the WIT section's policy. The git
+/// `revision` is included only on a clean tree (omitted silently here; `wado
+/// publish` warns).
 ///
 /// `project` is the manifest already discovered by [`run`], reused here rather
 /// than re-parsed.
@@ -1044,7 +1065,10 @@ fn embed_package_metadata(
     project: Option<&manifest::ProjectManifest>,
     wasm: Vec<u8>,
 ) -> Vec<u8> {
-    if opts.no_embed_metadata || !opts.manifest_driven || opts.opt_level == OptLevel::Os {
+    if opts.no_embed_metadata || !opts.manifest_driven {
+        return wasm;
+    }
+    if opts.opt_level == OptLevel::Os && !opts.embed_metadata {
         return wasm;
     }
     let Some(project) = project else {

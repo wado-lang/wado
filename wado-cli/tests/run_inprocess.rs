@@ -108,6 +108,7 @@ fn hello_compile_opts(output_path: &Path, format: Option<OutputFormat>) -> Compi
         no_embed_wit: false,
         embed_wit: false,
         no_embed_metadata: false,
+        embed_metadata: false,
         // Input is an explicit `.wado` file, so this is not manifest-driven.
         manifest_driven: false,
     }

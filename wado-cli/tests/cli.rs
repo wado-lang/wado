@@ -148,6 +148,30 @@ fn test_compile_os_skips_metadata() {
 }
 
 #[test]
+fn test_compile_os_embed_metadata_forces_on() {
+    // --embed-metadata overrides the -Os default-off, mirroring --embed-wit.
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    write_metadata_project(dir);
+    let out = dir.join("out.wasm");
+
+    wado_in(dir)
+        .arg("compile")
+        .arg("-Os")
+        .arg("--embed-metadata")
+        .arg("-o")
+        .arg(&out)
+        .assert()
+        .success();
+
+    let sections = custom_sections(&out);
+    assert!(
+        sections.iter().any(|(n, _)| n == "description"),
+        "--embed-metadata must force metadata on under -Os, got {sections:?}"
+    );
+}
+
+#[test]
 fn test_compile_no_embed_metadata_opts_out() {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path();

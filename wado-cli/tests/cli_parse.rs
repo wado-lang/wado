@@ -142,6 +142,12 @@ fn compile_lib_and_world_mutually_exclusive() {
 }
 
 #[test]
+fn compile_embed_metadata_flags_mutually_exclusive() {
+    let parser = Parser::from_args(&["--no-embed-metadata", "--embed-metadata", "input.wado"]);
+    assert_err(compile::parse_args(parser), "mutually exclusive");
+}
+
+#[test]
 fn compile_lib_rejects_single_file() {
     // `--lib` requires a package directory (for the [package] namespace), not a
     // bare .wado file.
