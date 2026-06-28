@@ -44,8 +44,6 @@
 
 use cranelift_entity::EntityRef;
 
-use crate::hashmap::IndexMap;
-use crate::module_source::ModuleSource;
 use crate::nir_arena::ExprKind;
 use crate::nir_package::NirPackage;
 
@@ -101,16 +99,9 @@ struct CallGraph {
 impl CallGraph {
     fn build(project: &NirPackage) -> Self {
         let n = project.functions.len();
-        let mut name_to_id: IndexMap<(ModuleSource, String), FunctionId> = IndexMap::default();
-        for (i, func_rc) in project.functions.iter().enumerate() {
-            let func = func_rc.borrow();
-            let key = (
-                func.module_source.clone(),
-                crate::nir::FunctionRef::from_resolved(&func, func.module_source.clone())
-                    .full_name(),
-            );
-            name_to_id.insert(key, FunctionId::new(i));
-        }
+        // The canonical identity resolver maps each call's `FunctionRef` to its
+        // dense id (the same `(module_source, full_name)` key this graph keys on).
+        let resolver = super::func_resolve::FuncResolver::build(project);
 
         let mut callees: Vec<Vec<FunctionId>> = vec![Vec::new(); n];
         let mut callers: Vec<Vec<FunctionId>> = vec![Vec::new(); n];
@@ -125,8 +116,7 @@ impl CallGraph {
                     ExprKind::Call { func, .. } | ExprKind::MethodCall { func, .. } => func,
                     _ => continue,
                 };
-                let key = (func_ref.module_source.clone(), func_ref.full_name());
-                if let Some(&callee) = name_to_id.get(&key)
+                if let Some(callee) = resolver.resolve(func_ref)
                     && !seen.contains(&callee)
                 {
                     seen.push(callee);
