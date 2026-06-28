@@ -298,10 +298,10 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// Private field access from outside the declaring module
     PrivateFieldAccess {
         struct_name: String,
         field_name: String,
+        visibility: crate::ast::Visibility,
         span: Span,
     },
 
@@ -709,10 +709,22 @@ impl TypeError {
             TypeError::PrivateFieldAccess {
                 struct_name,
                 field_name,
+                visibility,
                 span,
             } => (
-                Code::ImmutableAssignment,
-                format!("field `{field_name}` of struct `{struct_name}` is private"),
+                Code::PrivateSymbol,
+                match visibility {
+                    crate::ast::Visibility::Internal => format!(
+                        "field `{field_name}` of struct `{struct_name}` is `internal` to its \
+                         package and cannot be accessed from another package; mark it `pub` to \
+                         expose it across packages"
+                    ),
+                    crate::ast::Visibility::Private | crate::ast::Visibility::Public => format!(
+                        "field `{field_name}` of struct `{struct_name}` is private to its defining \
+                         file; mark it `internal` (same package) or `pub` (cross package) to widen \
+                         access"
+                    ),
+                },
                 *span,
             ),
             TypeError::MethodNotFound {

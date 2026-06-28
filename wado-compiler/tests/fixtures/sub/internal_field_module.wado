@@ -1,0 +1,21 @@
+//! Structs with mixed field visibility, used by same-package cross-module
+//! field-visibility tests.
+
+pub struct Widget {
+    pub name: String,
+    internal id: i32,
+}
+
+pub fn make_widget(name: String, id: i32) -> Widget {
+    return Widget { name, id };
+}
+
+// File-private field `hidden`, reachable only through this module's own API.
+pub struct Secret {
+    pub label: String,
+    hidden: i32,
+}
+
+pub fn make_secret(label: String, hidden: i32) -> Secret {
+    return Secret { label, hidden };
+}

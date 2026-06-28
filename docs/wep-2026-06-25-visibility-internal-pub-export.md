@@ -133,9 +133,15 @@ view present such re-exports at the re-export's visibility, so a `pub use`-d
       collection so the two never disagree (a same-package `internal` global is
       reachable through `use ns from "..."; ns::FOO` as well as a named import).
 - [x] `internal use` re-exports (the package-internal counterpart to `pub use`).
-- The ladder applies only to top-level items. Impl members (methods, associated
-  constants) carry a binary `pub` / file-private visibility; `internal` and
-  `export` on an impl member are a compile error with a targeted diagnostic.
+- The ladder applies to top-level items and to struct fields. A struct field's
+  `internal` reaches other files in the same package; `pub` reaches other
+  packages; no modifier is file-private. Reading, setting, or binding a field
+  beyond its reach (field access, struct literal, or destructuring pattern) is a
+  `PRIVATE_SYMBOL` compile error, checked via the same
+  `Visibility::reachable_from(same_package)` predicate as item imports.
+- Impl members (methods, associated constants) carry a binary `pub` /
+  file-private visibility; `internal` and `export` on an impl member are a
+  compile error with a targeted diagnostic.
 - The bundled `core:internal` module was renamed to `core:rt` so the module
   name no longer collides with the `internal` visibility keyword.
 

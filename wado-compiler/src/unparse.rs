@@ -4188,7 +4188,7 @@ impl<'a> TirUnparser<'a> {
         self.emit_indented_block(|this| {
             for field in &s.fields {
                 this.write_indent();
-                this.emit_kw_if(field.visibility.is_public(), "pub ");
+                this.output.push_str(field.visibility.keyword());
                 this.output.push_str(&field.name);
                 this.output.push_str(": ");
                 this.output
