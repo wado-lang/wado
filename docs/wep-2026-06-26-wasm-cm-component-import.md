@@ -126,7 +126,7 @@ panic-path imports become the composed component's imports).
 The instance-type emitter and the binding synthesis cover the full value-type
 surface for component-import params and returns. The work was almost entirely
 removing drift between parallel code paths — for an imported component, a
-type's `source_interface` namespace is arbitrary (`wado:cm-catalog/...`), which
+type's `source_interface` namespace is arbitrary (`wado-lang:cm-catalog/...`), which
 broke every WASI-only shortcut:
 
 - **Component module-source provenance.** `register_component_decls` records each

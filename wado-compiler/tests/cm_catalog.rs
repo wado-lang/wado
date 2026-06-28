@@ -30,7 +30,7 @@ use wasmtime::component::{
 
 /// FQ of the synthesized library world. Mirrors `lib_world_fq` in
 /// `wado-cli`: `namespace:name/name@version`.
-const LIB_WORLD_FQ: &str = "wado:cm-catalog/cm-catalog@0.1.0";
+const LIB_WORLD_FQ: &str = "wado-lang:cm-catalog/cm-catalog@0.1.0";
 
 const FIXTURE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -368,7 +368,7 @@ fn run_round_trips(opt_level: OptLevel) {
             .expect("instantiate library component");
 
         // Named-type exports group into the default interface; resolve the
-        // `wado:cm-catalog/cm-catalog@…` instance once and look funcs up inside.
+        // `wado-lang:cm-catalog/cm-catalog@…` instance once and look funcs up inside.
         let iface = instance
             .get_export(&mut store, None, LIB_WORLD_FQ)
             .map(|(_, idx)| idx);
