@@ -1,4 +1,4 @@
-//! Host implementation for `wasi:clocks/timezone@0.3.0-rc-2026-03-15`.
+//! Host implementation for `wasi:clocks/timezone@0.3.0`.
 //!
 //! Wasmtime ships the binding for this interface gated behind the unstable
 //! `clocks-timezone` feature, but provides no host implementation, so we

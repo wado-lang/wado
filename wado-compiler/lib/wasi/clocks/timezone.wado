@@ -3,7 +3,7 @@
 
 use { Instant } from "wasi:clocks/system_clock.wado";
 
-#[cm("wasi:clocks/timezone@0.3.0-rc-2026-03-15")]
+#[cm("wasi:clocks/timezone@0.3.0")]
 pub interface Timezone {
     /// Return the IANA identifier of the currently configured timezone. This
     /// should be an identifier from the IANA Time Zone Database.
@@ -15,7 +15,7 @@ pub interface Timezone {
     /// to provide mappings from times to deltas between the configured timezone
     /// and UTC, or determining the current timezone fails, or the timezone does
     /// not have an IANA identifier, this returns nothing.
-    #[cm("wasi:clocks/timezone@0.3.0-rc-2026-03-15#iana-id")]
+    #[cm("wasi:clocks/timezone@0.3.0#iana-id")]
     fn iana_id() -> Option<String>;
     /// The number of nanoseconds difference between UTC time and the local
     /// time of the currently configured timezone, at the exact time of
@@ -29,7 +29,7 @@ pub interface Timezone {
     /// to provide mappings from times to deltas between the configured timezone
     /// and UTC, or determining the current timezone fails, this returns
     /// nothing.
-    #[cm("wasi:clocks/timezone@0.3.0-rc-2026-03-15#utc-offset")]
+    #[cm("wasi:clocks/timezone@0.3.0#utc-offset")]
     #[cm_params("when")]
     fn utc_offset(when: Instant) -> Option<i64>;
     /// Returns a string that is suitable to assist humans in debugging whether
@@ -40,6 +40,6 @@ pub interface Timezone {
     /// WARNING: The returned string should not be consumed mechanically! It may
     /// change across platforms, hosts, or other implementation details. Parsing
     /// this string is a major platform-compatibility hazard.
-    #[cm("wasi:clocks/timezone@0.3.0-rc-2026-03-15#to-debug-string")]
+    #[cm("wasi:clocks/timezone@0.3.0#to-debug-string")]
     fn to_debug_string() -> String;
 }
