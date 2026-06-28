@@ -83,6 +83,10 @@ Dependency keys in `[dependencies]` are quoted specifiers — an open coordinate
 
 A package must declare at least one world: a `[world]` entry, `[package].lib`, or both.
 
+#### Unknown keys
+
+Keys the schema does not recognize — at the top level, in `[package]`, or in `[workspace.package]` — are reported as warnings, never errors. A typo (`descripton`, `licence`) is surfaced without breaking the build, and an inherited `[workspace.package]` typo surfaces on the member that inherits it.
+
 ### Package Metadata and Publishing
 
 The human-facing `[package]` fields are universal package metadata that happen
@@ -743,10 +747,16 @@ either, it replaces the inherited slot entirely (and the two remain mutually
 exclusive within any single manifest). `license-file` inherited from the
 workspace resolves relative to the workspace root.
 
-Forced inheritance is all-or-nothing per field: putting `version` in
-`[workspace.package]` locks every member to it. A workspace that needs
-independent per-member versioning simply omits `version` from
-`[workspace.package]`, and each member declares its own.
+Forced inheritance is all-or-nothing per field: a field placed in
+`[workspace.package]` is single-sourced, and members cannot diverge from it.
+Workspace membership is the lockstep boundary. There is deliberately **no**
+per-field opt-out that would let a member override a forced field while staying
+in the workspace — and none is planned. A package that must set its identity
+(and publish) independently is kept out of the workspace and lives as a
+standalone project; that binary (in the workspace = locked, outside = free) is
+the whole contract. (A workspace that does not want to share a particular field
+simply omits it from `[workspace.package]`; the field is then not shared and
+each member sets it itself.)
 
 `[workspace.dependencies]` and `[workspace.dev-dependencies]` declare shared dependency versions. Member packages reference them with explicit opt-in (unlike metadata):
 
@@ -818,7 +828,7 @@ validations apply:
 - `publish` must not be `false`
 - `description`, `repository`, and `authors` must be present
 - exactly one of `license` or `license-file` must be present
-- All `path` dependencies must have accompanying registry or git source information
+- every shipped dependency must carry a concrete source: a `path` dependency needs an accompanying registry/git source, and a `workspace = true` dependency must resolve to one (the workspace context is gone once the package is extracted)
 
 A published package must carry its descriptive metadata, so the non-exclusive
 fields above are required. The exceptions: `homepage` and `documentation` are
@@ -886,6 +896,9 @@ This enables seamless local development while ensuring published packages are se
 - Path deps with dual source (`path` + `registry`) enable seamless dev-to-publish workflow
 - Workspace support enables multi-package development with shared lock files and dependency declarations
 - Name/namespace validation (`[a-zA-Z0-9_-]+` per segment) keeps dependency keys (`"ns:pkg"`, `"lib:nick"`) unambiguous as specifiers
+- Human-facing metadata lives in `[package]` with `wado.toml` as the single source of truth, mapped to standard OCI annotations on publish (no `wkg.toml`); `license` is validated as an SPDX expression
+- `[workspace.package]` removes metadata duplication across members; force-inherited `version`/`repository`/`namespace` make in-repo drift impossible, and root-only `wado publish` extends that guarantee to the registry
+- Unknown manifest keys warn instead of erroring, so typos are caught without breaking builds
 
 ### Negative
 
@@ -903,6 +916,8 @@ This enables seamless local development while ensuring published packages are se
 - **Dependency specifier resolution**: an open coordinate or `lib:` nickname requires a `wado.toml` lookup at compile time, adding a project-discovery step. The compiler itself is not affected — only `CompilerHost` implementations need to handle this.
 - **Self-sufficient lock file**: duplicates entry points and dependency edges from each package's `wado.toml`. This makes the lock file larger and introduces a potential staleness risk (if a dependency's `wado.toml` changes entry points without version bump). The trade-off is worth it — builds skip all transitive manifest I/O, and staleness is caught by `wado update` or integrity mismatch.
 - **Archive-level integrity** (not source-level): simpler and unambiguous, but means the hash depends on the registry's archive format. If a registry changes its packaging format, hashes change even if sources are identical.
+- **Workspace membership as the lockstep boundary**: force-inherited identity fields plus root-only publishing make version drift across members structurally impossible, at the cost of per-member independence. Independence is regained only by leaving the workspace (standalone), never by an in-workspace per-field opt-out — Wado intentionally provides none, keeping the contract a simple binary rather than a Cargo-style per-field opt-in that lets same-repo versions silently diverge.
+- **Forced metadata inheritance has no `{ workspace = true }` marker** (unlike dependencies): a field in `[workspace.package]` is inherited automatically and a member that re-declares a forced one is an error. This trades a small surprise (no opt-in syntax) for the guarantee that forced fields have exactly one definition site.
 - **`[world]` table keyed by FQ world name**: hosted worlds are declared by their Component Model world name (`"wasi:cli/command"`) rather than a short alias (`command`/`bin`/`cli`). The key is the world the entry conforms to, so new worlds need no new manifest field and the mapping to the CM world is explicit. The library world is the one exception — it has no externally-fixed FQ name, so it is named after the package and declared by `[package].lib`.
 - **`[package]` over `[project]`**: `[package]` aligns with CM's "package" concept (`package ns:name@version` in WIT). The file itself represents the project; `[package]` describes the distributable unit within it. `[workspace]` > `[package]` hierarchy is natural, whereas `[workspace]` > `[project]` would be confusing.
 - **`path` + `registry` dual source**: adds complexity to the dependency spec but eliminates the "path deps can't be published" problem. The alternative (Cargo's separate `[patch]` section) is more complex and harder to maintain.
