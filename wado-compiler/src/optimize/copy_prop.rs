@@ -365,10 +365,12 @@ fn analyze_expr(
         ExprKind::MethodCall {
             receiver,
             func,
+            func_id,
             args,
             ..
         } => {
             let receiver = *receiver;
+            let func_id = *func_id;
             let arg_data: Vec<(ExprId, bool)> = args
                 .iter()
                 .filter_map(|a| a.expr.as_expr().map(|e| (e, a.is_mut)))
@@ -377,7 +379,7 @@ fn analyze_expr(
             // mutate the receiver (`conservative_on_unknown = false`).
             if let Some(recv_e) = receiver.as_expr()
                 && super::alias::method_mutates_receiver(
-                    body, recv_e, func, fpt, type_table, false, None,
+                    body, recv_e, func, func_id, fpt, type_table, false, None,
                 )
             {
                 mark_potentially_mutated_local_operand(body, receiver, result);
