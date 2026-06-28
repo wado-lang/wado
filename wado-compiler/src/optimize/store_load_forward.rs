@@ -54,10 +54,7 @@ pub fn forward_stores_to_loads_all(project: &mut NirPackage) -> bool {
 fn forward_one(
     func: &mut NirFunction,
     type_table: &crate::tir::TypeTable,
-    first_param_types: &crate::hashmap::IndexMap<
-        (crate::module_source::ModuleSource, String),
-        crate::tir::TypeId,
-    >,
+    first_param_types: &super::alias::FirstParamTypes,
     call_immutability: &super::alias::CallImmutability,
     buffers: &mut EngineBuffers,
 ) -> bool {

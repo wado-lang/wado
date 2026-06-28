@@ -17,7 +17,6 @@ use std::cell::Cell;
 use cranelift_entity::EntityRef;
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::module_source::ModuleSource;
 use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
@@ -226,7 +225,7 @@ struct AnalysisResult {
     usage: IndexMap<u32, LocalUsage>,
 }
 
-type FirstParamTypes = IndexMap<(ModuleSource, String), TypeId>;
+type FirstParamTypes = super::alias::FirstParamTypes;
 
 fn analyze_function_body(
     body: &Body,
@@ -364,7 +363,6 @@ fn analyze_expr(
         }
         ExprKind::MethodCall {
             receiver,
-            func,
             func_id,
             args,
             ..
@@ -379,7 +377,7 @@ fn analyze_expr(
             // mutate the receiver (`conservative_on_unknown = false`).
             if let Some(recv_e) = receiver.as_expr()
                 && super::alias::method_mutates_receiver(
-                    body, recv_e, func, func_id, fpt, type_table, false, None,
+                    body, recv_e, func_id, fpt, type_table, false, None,
                 )
             {
                 mark_potentially_mutated_local_operand(body, receiver, result);

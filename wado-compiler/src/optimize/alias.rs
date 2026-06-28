@@ -103,20 +103,19 @@ pub(super) fn build_alias_info(
     }
 }
 
-/// The `(module_source, func_name) → first-param type` map. Mirrors the
-/// `FirstParamTypes` map `copy_prop` builds: it lets the mutable-escape scan
-/// decide whether a method call takes `&self` (immutable, cannot mutate the
-/// receiver) or `&mut self` from the callee's declared signature, without a
-/// whole-program mod-ref analysis. Build once per pass over all functions.
-pub(super) fn first_param_types(project: &NirPackage) -> IndexMap<(ModuleSource, String), TypeId> {
-    let mut map = IndexMap::default();
+/// Per-[`FuncId`] first-parameter type. Lets the mutable-escape scan decide
+/// whether a method call takes `&self` (immutable, cannot mutate the receiver)
+/// or `&mut self` from the callee's declared signature, without a whole-program
+/// mod-ref analysis. Keyed by the callee's id (read off the call node), so no
+/// `full_name` is resolved per lookup. Build once per pass over all functions.
+pub(super) type FirstParamTypes = SecondaryMap<FuncId, Option<TypeId>>;
+
+pub(super) fn first_param_types(project: &NirPackage) -> FirstParamTypes {
+    let mut map = FirstParamTypes::new();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
-        if let Some(first_param) = func.params.first() {
-            map.insert(
-                (func.module_source.clone(), func.name.clone()),
-                first_param.type_id,
-            );
+        if let (Some(id), Some(first_param)) = (func.id, func.params.first()) {
+            map[id] = Some(first_param.type_id);
         }
     }
     map
@@ -137,7 +136,7 @@ pub(super) fn builder_alias_sets(
     address_taken_locals: &IndexSet<u32>,
     stores_aliased_locals: &IndexSet<u32>,
     type_table: &TypeTable,
-    first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
+    first_param_types: &FirstParamTypes,
     call_immutability: &CallImmutability,
 ) -> (IndexSet<u32>, IndexSet<u32>, IndexSet<u32>) {
     // A mutating method call `recv.m(…)` (`&mut self`) aliases `recv` implicitly:
@@ -154,13 +153,12 @@ pub(super) fn builder_alias_sets(
         |body, node| {
             if let NodeRef::Expr(e) = node
                 && let ExprKind::MethodCall {
-                    receiver, func, func_id, ..
+                    receiver, func_id, ..
                 } = &body.exprs[e].kind
                 && let Some(re) = receiver.as_expr()
                 && method_mutates_receiver(
                     body,
                     re,
-                    func,
                     *func_id,
                     first_param_types,
                     type_table,
@@ -206,7 +204,7 @@ fn build_mut_escaped(
     aliased: &IndexSet<u32>,
     stores_aliased_locals: &IndexSet<u32>,
     type_table: &TypeTable,
-    first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
+    first_param_types: &FirstParamTypes,
     call_immutability: &CallImmutability,
     alias_groups: &IndexMap<u32, IndexSet<u32>>,
 ) -> IndexSet<u32> {
@@ -397,7 +395,7 @@ use super::arena_query::projection_root_local;
 pub(super) fn pure_calls(
     body: &Body,
     type_table: &TypeTable,
-    first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
+    first_param_types: &FirstParamTypes,
     call_immutability: &CallImmutability,
 ) -> IndexSet<crate::nir_arena::ExprId> {
     let arg_safe = |arg: &crate::nir_arena::ArenaCallArg| -> bool {
@@ -430,7 +428,6 @@ pub(super) fn pure_calls(
             ExprKind::Call { args, .. } => args.iter().all(&arg_safe),
             ExprKind::MethodCall {
                 receiver,
-                func,
                 func_id,
                 args,
                 ..
@@ -439,7 +436,6 @@ pub(super) fn pure_calls(
                     !method_mutates_receiver(
                         body,
                         re,
-                        func,
                         *func_id,
                         first_param_types,
                         type_table,
@@ -467,9 +463,8 @@ pub(super) fn pure_calls(
 pub(super) fn method_mutates_receiver(
     body: &Body,
     receiver: crate::nir_arena::ExprId,
-    func: &crate::nir::FunctionRef,
     func_id: Option<FuncId>,
-    first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
+    first_param_types: &FirstParamTypes,
     type_table: &TypeTable,
     conservative_on_unknown: bool,
     call_immutability: Option<&CallImmutability>,
@@ -478,7 +473,6 @@ pub(super) fn method_mutates_receiver(
         type_table.get(body.exprs[receiver].type_id),
         ResolvedType::MutRef(_)
     );
-    let key = (func.module_source.clone(), func.name.clone());
     // The receiver type alone cannot tell `&self` from `&mut self` once boxing
     // has made both a `Box<T>` param, so consult the body-derived verdict: a
     // method that writes through its receiver mutates it, one that does not is
@@ -488,8 +482,8 @@ pub(super) fn method_mutates_receiver(
     // copy-propagation caller, which keeps its own type-based receiver guard.
     let callee_mutates = match call_immutability.and_then(|ci| ci.method_writes_receiver(func_id)) {
         Some(writes) => writes,
-        None => match first_param_types.get(&key) {
-            Some(&tp) => matches!(type_table.get(tp), ResolvedType::MutRef(_)),
+        None => match func_id.and_then(|fid| first_param_types[fid]) {
+            Some(tp) => matches!(type_table.get(tp), ResolvedType::MutRef(_)),
             None => conservative_on_unknown,
         },
     };
@@ -507,7 +501,7 @@ pub(super) fn method_mutates_receiver(
 fn compute_receiver_mutating(
     project: &NirPackage,
     type_table: &TypeTable,
-    first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
+    first_param_types: &FirstParamTypes,
 ) -> (SecondaryMap<FuncId, bool>, SecondaryMap<FuncId, bool>) {
     let mut has_body: SecondaryMap<FuncId, bool> = SecondaryMap::new();
     let mut p0_of: SecondaryMap<FuncId, Option<u32>> = SecondaryMap::new();
@@ -581,7 +575,7 @@ fn summarize_receiver_writes(
     body: &Body,
     p0: u32,
     has_body: &SecondaryMap<FuncId, bool>,
-    first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
+    first_param_types: &FirstParamTypes,
     type_table: &TypeTable,
 ) -> (bool, Vec<FuncId>) {
     let projects_p0 = |e: crate::nir_arena::ExprId| -> bool {
@@ -612,7 +606,6 @@ fn summarize_receiver_writes(
             }
             ExprKind::MethodCall {
                 receiver,
-                func,
                 func_id,
                 args,
                 ..
@@ -625,9 +618,8 @@ fn summarize_receiver_writes(
                     match func_id {
                         Some(fid) if has_body[*fid] => pending.push(*fid),
                         _ => {
-                            let key = (func.module_source.clone(), func.name.clone());
-                            let inner_mut = match first_param_types.get(&key) {
-                                Some(&tp) => matches!(type_table.get(tp), ResolvedType::MutRef(_)),
+                            let inner_mut = match (*func_id).and_then(|fid| first_param_types[fid]) {
+                                Some(tp) => matches!(type_table.get(tp), ResolvedType::MutRef(_)),
                                 None => true,
                             };
                             if inner_mut {
@@ -666,7 +658,7 @@ fn collect_mut_escaped_node(
     body: &Body,
     node: NodeRef,
     type_table: &TypeTable,
-    first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
+    first_param_types: &FirstParamTypes,
     call_immutability: &CallImmutability,
     out: &mut IndexSet<u32>,
 ) {
@@ -698,7 +690,6 @@ fn collect_mut_escaped_node(
         }
         ExprKind::MethodCall {
             receiver,
-            func,
             func_id,
             args,
             ..
@@ -711,7 +702,6 @@ fn collect_mut_escaped_node(
                 && method_mutates_receiver(
                     body,
                     re,
-                    func,
                     *func_id,
                     first_param_types,
                     type_table,
