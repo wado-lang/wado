@@ -40,7 +40,7 @@ use super::arena_query::place_root_local;
 use super::gate::{FunctionGate, GatedPass};
 use crate::nir::FuncId;
 
-type FnKey = (ModuleSource, String);
+type FnKey = crate::nir::FuncId;
 
 /// Per-candidate metadata captured during Phase 1.
 #[derive(Clone)]
@@ -125,7 +125,7 @@ fn collect_and_validate(
         if !is_eligible(&func) || func.body.is_none() {
             continue;
         }
-        let key: FnKey = (func.module_source.clone(), func.name.clone());
+        let Some(key) = func.id else { continue };
         for (pi, param) in func.params.iter().enumerate() {
             if func.address_taken_locals.contains(&param.local_index) {
                 continue;
@@ -142,7 +142,7 @@ fn collect_and_validate(
             if param_may_alias_sibling(&func, pi, &info.struct_key, &type_table) {
                 continue;
             }
-            candidates.insert((key.clone(), pi), info);
+            candidates.insert((key, pi), info);
         }
     }
     if candidates.is_empty() {
@@ -154,14 +154,14 @@ fn collect_and_validate(
         let mut invalid: IndexSet<(FnKey, usize)> = IndexSet::default();
         for ((key, pi), _info) in &candidates {
             let Some(func_rc) = lookup_function(project, key) else {
-                invalid.insert((key.clone(), *pi));
+                invalid.insert((*key, *pi));
                 continue;
             };
             let func = func_rc.borrow();
             let local_index = func.params[*pi].local_index;
             let body = func.body.as_ref().unwrap();
             if !body_uses_param_safely(body, local_index, &candidates) {
-                invalid.insert((key.clone(), *pi));
+                invalid.insert((*key, *pi));
             }
         }
         if invalid.is_empty() {
@@ -302,27 +302,27 @@ fn check_expr(
             }
             check_operand(body, inner, idx, candidates)
         }
-        ExprKind::Call { func, args, .. } => {
-            let key: FnKey = (func.module_source.clone(), func.name.clone());
+        ExprKind::Call { func_id, args, .. } => {
+            let key = *func_id;
             let args: Vec<Operand> = args.iter().map(|a| a.expr).collect();
             args.iter()
                 .enumerate()
-                .all(|(i, &a)| check_call_arg(body, &key, i, a, idx, candidates))
+                .all(|(i, &a)| check_call_arg(body, key, i, a, idx, candidates))
         }
         ExprKind::MethodCall {
             receiver,
-            func,
+            func_id,
             args,
             ..
         } => {
-            let key: FnKey = (func.module_source.clone(), func.name.clone());
+            let key = *func_id;
             let receiver = *receiver;
             let args: Vec<Operand> = args.iter().map(|a| a.expr).collect();
-            check_call_arg(body, &key, 0, receiver, idx, candidates)
+            check_call_arg(body, key, 0, receiver, idx, candidates)
                 && args
                     .iter()
                     .enumerate()
-                    .all(|(i, &a)| check_call_arg(body, &key, i + 1, a, idx, candidates))
+                    .all(|(i, &a)| check_call_arg(body, key, i + 1, a, idx, candidates))
         }
         ExprKind::Assign { target, value } => {
             let (target, value) = (*target, *value);
@@ -342,7 +342,7 @@ fn check_expr(
 
 fn check_call_arg(
     body: &Body,
-    callee: &FnKey,
+    callee: Option<FnKey>,
     pos: usize,
     arg: Operand,
     idx: u32,
@@ -353,7 +353,10 @@ fn check_call_arg(
         return true;
     };
     if matches!(&body.exprs[arg].kind, ExprKind::Local { index, .. } if *index == idx) {
-        return candidates.contains_key(&(callee.clone(), pos));
+        // The candidate local is passed directly; safe only if the callee SROAs
+        // this position too. An unstamped callee (`func_id` None) is unknown, so
+        // conservatively an escape.
+        return callee.is_some_and(|c| candidates.contains_key(&(c, pos)));
     }
     check_expr(body, arg, idx, candidates)
 }
@@ -381,10 +384,10 @@ fn rewrite_callees(
 ) {
     for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
-        let key: FnKey = (func.module_source.clone(), func.name.clone());
+        let Some(key) = func.id else { continue };
         let mut affected: Vec<(u32, String)> = Vec::new();
         for pi in 0..func.params.len() {
-            if let Some(info) = candidates.get(&(key.clone(), pi)) {
+            if let Some(info) = candidates.get(&(key, pi)) {
                 let local_index = func.params[pi].local_index;
                 affected.push((local_index, info.field_name.clone()));
                 func.params[pi].type_id = info.inner_type_id;
@@ -448,7 +451,7 @@ fn rewrite_call_sites(
     let mut sroa_positions: IndexMap<FnKey, IndexMap<usize, SroaInfo>> = IndexMap::default();
     for ((key, pi), info) in candidates {
         sroa_positions
-            .entry(key.clone())
+            .entry(*key)
             .or_default()
             .insert(*pi, info.clone());
     }
@@ -456,10 +459,10 @@ fn rewrite_call_sites(
     let type_table_rc = project.type_table.clone();
     for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
-        let key: FnKey = (func.module_source.clone(), func.name.clone());
+        let Some(key) = func.id else { continue };
         let mut scalar_param_struct: IndexMap<u32, (String, ModuleSource)> = IndexMap::default();
         for (pi, param) in func.params.iter().enumerate() {
-            if let Some(info) = candidates.get(&(key.clone(), pi)) {
+            if let Some(info) = candidates.get(&(key, pi)) {
                 scalar_param_struct.insert(param.local_index, info.struct_key.clone());
             }
         }
@@ -520,9 +523,8 @@ fn rewrite_call_expr(
     type_table: &TypeTable,
 ) -> bool {
     match &body.exprs[id].kind {
-        ExprKind::Call { func, args, .. } => {
-            let key: FnKey = (func.module_source.clone(), func.name.clone());
-            let Some(positions) = sroa_positions.get(&key).cloned() else {
+        ExprKind::Call { func_id, args, .. } => {
+            let Some(positions) = func_id.and_then(|k| sroa_positions.get(&k)).cloned() else {
                 return false;
             };
             let args: Vec<Option<ExprId>> = args.iter().map(|a| a.expr.as_expr()).collect();
@@ -533,9 +535,8 @@ fn rewrite_call_expr(
             }
             true
         }
-        ExprKind::MethodCall { func, .. } => {
-            let key: FnKey = (func.module_source.clone(), func.name.clone());
-            let Some(positions) = sroa_positions.get(&key).cloned() else {
+        ExprKind::MethodCall { func_id, .. } => {
+            let Some(positions) = func_id.and_then(|k| sroa_positions.get(&k)).cloned() else {
                 return false;
             };
             if positions.contains_key(&0) {
@@ -678,10 +679,8 @@ fn lookup_function<'a>(
     project: &'a NirPackage,
     key: &FnKey,
 ) -> Option<&'a std::rc::Rc<std::cell::RefCell<NirFunction>>> {
-    project.functions.iter().find(|f| {
-        let f = f.borrow();
-        f.module_source == key.0 && f.name == key.1
-    })
+    use cranelift_entity::EntityRef;
+    project.functions.get(key.index())
 }
 
 /// Same pinning rules DAE uses — see `optimize::dae::is_eligible`.

@@ -79,8 +79,7 @@
 //!   expression.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::module_source::ModuleSource;
-use crate::nir::{FunctionRef, NirFunction, NirLocal, NirUnaryOp};
+use crate::nir::{NirFunction, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
 };
@@ -104,7 +103,7 @@ struct FuncUsageEntry {
 }
 
 /// Maps each function (by module + name) to its usage info.
-type FieldUsageCache = IndexMap<(ModuleSource, String), FuncUsageEntry>;
+type FieldUsageCache = IndexMap<crate::nir::FuncId, FuncUsageEntry>;
 
 pub fn scalarize_hot_fields(project: &mut NirPackage) -> bool {
     // Phase 1: Build field usage cache (immutable access to all functions)
@@ -138,9 +137,11 @@ fn build_field_usage_cache(project: &NirPackage) -> FieldUsageCache {
                 immut_ref_params.insert(position as u32);
             }
         }
-        if !params.is_empty() || !immut_ref_params.is_empty() {
+        if (!params.is_empty() || !immut_ref_params.is_empty())
+            && let Some(id) = func.id
+        {
             cache.insert(
-                (func.module_source.clone(), func.name.clone()),
+                id,
                 FuncUsageEntry {
                     params,
                     immut_ref_params,
@@ -2456,15 +2457,15 @@ fn accumulate_call_sync(
     result: &mut SyncFields,
 ) {
     match &body.exprs[call].kind {
-        ExprKind::Call { func, args, .. } => {
-            let func = func.clone();
+        ExprKind::Call { func_id, args, .. } => {
+            let callee_id = *func_id;
             let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
             for (arg_position, aid) in arg_ids.into_iter().enumerate() {
                 let immut_ref = is_immut_ref_arg(body, aid, type_table);
                 add_sync_fields_for_arg(
                     body,
                     aid,
-                    &func,
+                    callee_id,
                     arg_position as u32,
                     candidates,
                     type_table,
@@ -2475,24 +2476,24 @@ fn accumulate_call_sync(
             }
         }
         ExprKind::MethodCall {
-            func,
+            func_id,
             receiver,
             args,
             ..
         } => {
-            let func = func.clone();
+            let callee_id = *func_id;
             let receiver = *receiver;
             let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
             let immut_ref = is_immut_ref_arg_operand(body, receiver, type_table);
             add_sync_fields_for_arg_operand(
-                body, receiver, &func, 0, candidates, type_table, cache, immut_ref, result,
+                body, receiver, callee_id, 0, candidates, type_table, cache, immut_ref, result,
             );
             for (arg_position, aid) in arg_ids.into_iter().enumerate() {
                 let immut_ref = is_immut_ref_arg(body, aid, type_table);
                 add_sync_fields_for_arg(
                     body,
                     aid,
-                    &func,
+                    callee_id,
                     (arg_position + 1) as u32,
                     candidates,
                     type_table,
@@ -3013,7 +3014,7 @@ fn is_immut_ref_arg(body: &Body, e: ExprId, type_table: &TypeTable) -> bool {
 fn add_sync_fields_for_arg_operand(
     body: &Body,
     op: Operand,
-    func_ref: &FunctionRef,
+    callee_id: Option<crate::nir::FuncId>,
     param_position: u32,
     candidates: &[ScalarizeCandidate],
     type_table: &TypeTable,
@@ -3025,7 +3026,7 @@ fn add_sync_fields_for_arg_operand(
         add_sync_fields_for_arg(
             body,
             e,
-            func_ref,
+            callee_id,
             param_position,
             candidates,
             type_table,
@@ -3041,7 +3042,7 @@ fn add_sync_fields_for_arg_operand(
 fn add_sync_fields_for_arg(
     body: &Body,
     arg_expr: ExprId,
-    func_ref: &FunctionRef,
+    callee_id: Option<crate::nir::FuncId>,
     param_position: u32,
     candidates: &[ScalarizeCandidate],
     type_table: &TypeTable,
@@ -3057,8 +3058,7 @@ fn add_sync_fields_for_arg(
         return;
     }
 
-    let cache_key = (func_ref.module_source.clone(), func_ref.name.clone());
-    let callee = cache.get(&cache_key);
+    let callee = callee_id.and_then(|id| cache.get(&id));
 
     // If the callee's parameter at this position is typed `&T` (not
     // `&mut T`), the callee cannot mutate through the reference — re-read

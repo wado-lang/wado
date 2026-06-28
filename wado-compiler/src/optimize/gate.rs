@@ -91,11 +91,9 @@ impl CallGraph {
     fn build(project: &NirPackage) -> Self {
         let n = project.functions.len();
         // Read the callee off each call node's stamped `func_id` (`FuncId ==
-        // store position`, Phase 4). An optimizer retarget can leave `func_id`
-        // None on an in-package call; only then fall back to name resolution,
-        // built lazily so a fully-stamped program never pays for it.
-        let mut resolver: Option<super::func_resolve::FuncResolver> = None;
-
+        // store position`, Phase 4). Every call is born resolved (Phase 5d), so
+        // `func_id` is total here — a `None` would be an unstamped call the
+        // graph conservatively ignores.
         let mut callees: Vec<Vec<FuncId>> = vec![Vec::new(); n];
         let mut callers: Vec<Vec<FuncId>> = vec![Vec::new(); n];
         for (i, func_rc) in project.functions.iter().enumerate() {
@@ -105,18 +103,11 @@ impl CallGraph {
             };
             let mut seen: Vec<FuncId> = Vec::new();
             for node in body.exprs.values() {
-                let (func_ref, func_id) = match &node.kind {
-                    ExprKind::Call { func, func_id, .. }
-                    | ExprKind::MethodCall { func, func_id, .. } => (func, func_id),
+                let func_id = match &node.kind {
+                    ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => func_id,
                     _ => continue,
                 };
-                let callee = match func_id {
-                    Some(fid) => Some(*fid),
-                    None => resolver
-                        .get_or_insert_with(|| super::func_resolve::FuncResolver::build(project))
-                        .resolve(func_ref),
-                };
-                if let Some(callee) = callee
+                if let Some(callee) = *func_id
                     && !seen.contains(&callee)
                 {
                     seen.push(callee);

@@ -71,7 +71,6 @@ mod elide_box_local;
 mod elide_local;
 mod extract;
 mod field_scalarize;
-mod func_resolve;
 mod gate;
 mod inline;
 mod labeled_block_fusion;

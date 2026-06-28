@@ -53,7 +53,8 @@ pub(super) fn resolve_ctx(project: &NirPackage) -> Option<Ctx> {
 }
 
 pub(super) struct Ctx {
-    push_str: FunctionRef,
+    /// `FuncId` of `push_str`, the call this rule recognizes.
+    push_str_id: crate::nir::FuncId,
     push_char: FunctionRef,
     /// `FuncId` of `push_char`, captured at resolution so the synthesized
     /// per-byte `push(ch)` calls are born resolved.
@@ -62,13 +63,13 @@ pub(super) struct Ctx {
 
 impl Ctx {
     fn resolve(project: &NirPackage) -> Option<Self> {
-        let mut push_str: Option<FunctionRef> = None;
+        let mut push_str_id: Option<crate::nir::FuncId> = None;
         let mut push_char: Option<(FunctionRef, crate::nir::FuncId)> = None;
         for func_rc in &project.functions {
             let f = func_rc.borrow();
             match f.compiler_item {
                 Some(CompilerItem::StringPushStr) => {
-                    push_str = Some(FunctionRef::from_resolved(&f, f.module_source.clone()));
+                    push_str_id = Some(f.id.expect("func_id assigned at lower"));
                 }
                 Some(CompilerItem::StringPushChar) => {
                     let id = f.id.expect("func_id assigned at lower");
@@ -79,15 +80,11 @@ impl Ctx {
         }
         let (push_char, push_char_id) = push_char?;
         Some(Self {
-            push_str: push_str?,
+            push_str_id: push_str_id?,
             push_char,
             push_char_id,
         })
     }
-}
-
-fn func_matches(func: &FunctionRef, target: &FunctionRef) -> bool {
-    func.module_source == target.module_source && func.name == target.name
 }
 
 pub(super) struct ShortPushStrRule {
@@ -131,14 +128,14 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
     let (receiver, arg0) = {
         let ExprKind::MethodCall {
             receiver,
-            func,
+            func_id,
             args,
             ..
         } = &engine.body.exprs[expr_id].kind
         else {
             return None;
         };
-        if !func_matches(func, &ctx.push_str) || args.len() != 1 {
+        if *func_id != Some(ctx.push_str_id) || args.len() != 1 {
             return None;
         }
         (*receiver, args[0].expr)
