@@ -1141,9 +1141,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (0, TypeTable::UNKNOWN)
     }
 
-    /// Check if a struct field is accessible from the current module.
-    /// Non-pub fields are private to the module that defines them.
-    fn check_field_visibility(&mut self, struct_type: TypeId, field_name: &str, span: Span) {
+    pub(super) fn check_field_visibility(
+        &mut self,
+        struct_type: TypeId,
+        field_name: &str,
+        span: Span,
+    ) {
         let resolved = self.tysys.type_table.borrow().get(struct_type).clone();
         let (struct_name, module_source) = match resolved {
             ResolvedType::Struct {
@@ -1172,13 +1175,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
 
-        // Look up field visibility
+        let same_package = module_source.same_package(&self.current_module_source);
         if let Some(struct_info) = self.lookup_struct_fields_in(&struct_name, &module_source) {
             for (fname, _, vis) in &struct_info.fields {
-                if fname == field_name && !vis.is_public() {
+                if fname == field_name && !vis.reachable_from(same_package) {
                     let _ = self.logger.error(TypeError::PrivateFieldAccess {
                         struct_name: struct_name.clone(),
                         field_name: field_name.to_string(),
+                        visibility: *vis,
                         span,
                     });
                     return;
@@ -3219,11 +3223,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(struct_info) =
                 self.lookup_struct_fields_in(&struct_name, &struct_module_source)
         {
+            let same_package = struct_module_source.same_package(&self.current_module_source);
             for (fname, _, vis) in &struct_info.fields {
-                if !vis.is_public() && provided_names.contains(fname) {
+                if !vis.reachable_from(same_package) && provided_names.contains(fname) {
                     let _ = self.logger.error(TypeError::PrivateFieldAccess {
                         struct_name: struct_name.clone(),
                         field_name: fname.clone(),
+                        visibility: *vis,
                         span: struct_lit.span,
                     });
                 }

@@ -2220,11 +2220,12 @@ Struct fields follow the same visibility rules as other declarations (see [Visib
 ```wado
 pub struct Config {
     pub name: String,   // visible to other packages
+    internal tag: i32,  // visible to other files in this package
     secret: i32,        // private to this file
 }
 ```
 
-Within the defining module, all fields (including private ones) are accessible for construction, reading, and mutation. From other modules, reading or setting a private field produces a compile error — including naming it in a struct literal. A private field may still be _omitted_ from a struct literal in another module when it has a default expression (`f: T = expr`): the default is evaluated in the defining module, so the field is never read or set across the boundary and encapsulation is preserved. A private field without a default cannot be satisfied from another module, so such a struct can only be constructed by a function in its own module.
+Within the defining module, all fields (including private ones) are accessible for construction, reading, and mutation. From another file in the same package, `internal` (and `pub`) fields are accessible; from another package, only `pub` fields are. Reading, setting, or binding a field beyond its reach produces a compile error — whether through field access (`c.secret`), a struct literal (`Config { secret: ... }`), or a destructuring pattern (`let Config { secret, .. } = c`, `match`). A non-reachable field may still be _omitted_ from a struct literal in another module when it has a default expression (`f: T = expr`): the default is evaluated in the defining module, so the field is never read or set across the boundary and encapsulation is preserved. A non-reachable field without a default cannot be satisfied from another module, so such a struct can only be constructed by a function within reach.
 
 **Struct Construction:**
 
