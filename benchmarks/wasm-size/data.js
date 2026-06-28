@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782626449499,
+  "lastUpdate": 1782631806446,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -36181,6 +36181,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ca1dd28d53b6c65928d5a43d791eaf3ca35465a7"
         },
         "date": 1782626448840,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1845,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8434,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15339,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288458,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "15fdbf5bb01185a7f9ac8b97231d8c3b20867125",
+          "message": "Merge pull request #1463 from wado-lang/gfx/publish_oci\n\nchore(cm-catalog): set up OCI publishing under the wado-lang namespace",
+          "timestamp": "2026-06-28T16:21:30+09:00",
+          "tree_id": "45962cd7bccc71aaf3b553e7682e509f4129b3dc",
+          "url": "https://github.com/wado-lang/wado/commit/15fdbf5bb01185a7f9ac8b97231d8c3b20867125"
+        },
+        "date": 1782631805985,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
