@@ -253,13 +253,18 @@ fn body_is_list_wrapper_copy(body: &Body) -> bool {
 /// shallow sibling `array_clone_shallow`.
 fn rewrite_array_clone_to_shallow(body: &mut Body) {
     for id in reachable_exprs(body) {
-        if let ExprKind::Call { func, .. } = &mut body.exprs[id].kind
+        if let ExprKind::Call { func, func_id, .. } = &mut body.exprs[id].kind
             && builtin_gname(func).as_deref() == Some("builtin::array_clone")
         {
             func.name = "array_clone_shallow".to_string();
             if let Some(mi) = &mut func.monomorph_info {
                 mi.generic_name = "array_clone_shallow".to_string();
             }
+            // The callee just changed (array_clone → array_clone_shallow), so the
+            // stamped `func_id` is stale. Clear it (born-resolved invariant): a
+            // pass that rewrites a call's callee must re-stamp or drop its id, or
+            // codegen would resolve the descriptor from the old callee.
+            *func_id = None;
         }
     }
 }
