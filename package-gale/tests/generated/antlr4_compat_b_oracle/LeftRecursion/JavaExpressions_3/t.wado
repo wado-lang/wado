@@ -817,7 +817,7 @@ fn tree_build_node(events: &List<BuildEvent>, pos: &mut i32) -> CstNode {
         let kind = info.0;
         let start = info.1;
         *pos += 1;
-        let mut children: List<CstChild> = [];
+        let mut children: List<CstChild> = List::with_capacity(4);
         let mut flags = if kind == K_ERROR { NODE_ERROR } else { 0 };
         let mut alt = -1;
         let mut end = start;
@@ -1190,7 +1190,7 @@ struct Lexer {
 
 impl Lexer {
     fn new(input: &String) -> Lexer {
-        return Lexer { chars: input.chars().collect(), pos: 0 };
+        return Lexer { chars: input.to_chars(), pos: 0 };
     }
 
     fn at_end(&self) -> bool {
@@ -1208,14 +1208,14 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
     let mut alts_ok_1 = false;
     alts_1_0: {
         pos = alts_saved_1;
-        if pos >= chars.len() || !('a' <= chars[pos] <= 'z') { break alts_1_0; }
+        if pos >= chars.len() || !(chars[pos] matches { 'a'..='z' }) { break alts_1_0; }
         pos += 1;
         alts_ok_1 = true;
     }
     if !alts_ok_1 {
         alts_1_1: {
             pos = alts_saved_1;
-            if pos >= chars.len() || !('A' <= chars[pos] <= 'Z') { break alts_1_1; }
+            if pos >= chars.len() || !(chars[pos] matches { 'A'..='Z' }) { break alts_1_1; }
             pos += 1;
             alts_ok_1 = true;
         }
@@ -1244,14 +1244,14 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
             let mut alts_ok_2 = false;
             alts_2_0: {
                 pos = alts_saved_2;
-                if pos >= chars.len() || !('a' <= chars[pos] <= 'z') { break alts_2_0; }
+                if pos >= chars.len() || !(chars[pos] matches { 'a'..='z' }) { break alts_2_0; }
                 pos += 1;
                 alts_ok_2 = true;
             }
             if !alts_ok_2 {
                 alts_2_1: {
                     pos = alts_saved_2;
-                    if pos >= chars.len() || !('A' <= chars[pos] <= 'Z') { break alts_2_1; }
+                    if pos >= chars.len() || !(chars[pos] matches { 'A'..='Z' }) { break alts_2_1; }
                     pos += 1;
                     alts_ok_2 = true;
                 }
@@ -1283,12 +1283,12 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
 
 fn try_INT(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || !('0' <= chars[pos] <= '9') { return -1; }
+    if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { return -1; }
     pos += 1;
     loop {
         let rep_saved_3 = pos;
         rep_3: {
-            if pos >= chars.len() || !('0' <= chars[pos] <= '9') { break rep_3; }
+            if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break rep_3; }
             pos += 1;
             continue;
         }

@@ -217,6 +217,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut trait_impl_module_source: Option<ModuleSource> = None;
         let mut blanket_type_param: Option<String> = None;
         let mut trait_impl_struct_name: Option<String> = None;
+        let mut matched_impl_struct_name: Option<String> = None;
 
         // If receiver is a reference type, try ref-type trait impls first.
         // e.g., impl IntoIterator for &List<T> takes priority over impl IntoIterator for List<T>.
@@ -248,6 +249,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some(trait_match) = result
                     && !trait_match.is_blanket_ref_impl
                 {
+                    matched_impl_struct_name = Some(trait_match.impl_struct_name.clone());
                     trait_impl_struct_name = Some(trait_match.impl_struct_name);
                     trait_name = Some(trait_match.trait_name);
                     let mut info = trait_match.method_info;
@@ -274,6 +276,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(base_type_id),
             )
         {
+            matched_impl_struct_name = Some(trait_match.impl_struct_name.clone());
             if trait_match.impl_struct_name != struct_name {
                 trait_impl_struct_name = Some(trait_match.impl_struct_name);
             }
@@ -800,6 +803,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     vec![arg_name],
                     Some(vec![elem]),
                 )
+            }
+            ResolvedType::Newtype { name, .. }
+                if matched_impl_struct_name.as_deref() == Some(name.as_str()) =>
+            {
+                (name.clone(), name, vec![], None)
             }
             _ => {
                 let name = self

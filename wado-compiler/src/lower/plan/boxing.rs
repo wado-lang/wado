@@ -80,6 +80,15 @@ pub fn shadow_params(flat: &mut FlatPackage, plan: &BoxPlan) {
     }
 }
 
+pub fn shadow_new_functions(flat: &mut FlatPackage, plan: &BoxPlan, start: usize) {
+    let type_table = flat.type_table.clone();
+    let type_table = type_table.borrow();
+    for func_rc in &flat.functions[start..] {
+        let mut func = func_rc.borrow_mut();
+        shadow_one_function(&mut func, plan, &type_table);
+    }
+}
+
 fn shadow_one_function(func: &mut crate::tir::TirFunction, plan: &BoxPlan, type_table: &TypeTable) {
     let address_taken = func.address_taken_locals.clone();
     let param_count = u32::try_from(func.params.len()).unwrap();

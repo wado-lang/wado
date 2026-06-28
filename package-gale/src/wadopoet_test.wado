@@ -10,6 +10,7 @@ use {
     ImplSpec,
     str_lit,
     char_lit,
+    char_range_pat,
 } from "./wadopoet.wado";
 
 
@@ -465,6 +466,20 @@ test "char_lit named control" {
 
 test "char_lit keeps printable non-ASCII verbatim" {
     assert `{char_lit('あ')}` == "'あ'";
+}
+
+test "char_range_pat renders an inclusive range" {
+    assert `{char_range_pat('a'..='z')}` == "'a'..='z'";
+}
+
+test "char_range_pat collapses a singleton to one literal" {
+    assert `{char_range_pat('_'..='_')}` == "'_'";
+}
+
+test "char_range_pat escapes both endpoints" {
+    let mut expected = String::new();
+    expected.push_str(&"'\\t'..='\\n'");
+    assert `{char_range_pat('\t'..='\n')}` == expected, `got: {char_range_pat('\t'..='\n')}`;
 }
 
 test "ImplSpec basic" {

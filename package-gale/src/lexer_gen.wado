@@ -17,7 +17,7 @@ use {
     LabelElement,
 } from "./ir.wado";
 use { literal_const_name, gen_visibility_comment } from "./gen_util.wado";
-use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec, char_lit } from "./wadopoet.wado";
+use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec, char_lit, char_range_pat } from "./wadopoet.wado";
 use { TreeMap } from "core:collections";
 
 pub struct LitToken {
@@ -316,7 +316,7 @@ fn gen_lexer_struct(w: &mut CodeWriter) {
     f.add_param(&"input", &"&String");
     f.set_return_type(&"Lexer");
     f.emit_begin(w);
-    w.line(&"return Lexer { chars: input.chars().collect(), pos: 0 };");
+    w.line(&"return Lexer { chars: input.to_chars(), pos: 0 };");
     w.end();
     w.blank();
 
@@ -742,7 +742,7 @@ fn gen_lexer_elem(w: &mut CodeWriter, elem: &LexerElement, all_rules: &List<Lexe
                 gen_char_class(w, &cc, fail_action);
             } else {
                 w.line(
-                    &`if pos >= chars.len() || !({char_lit(pair.0)} <= chars[pos] <= {char_lit(pair.1)}) \{ {fail_action}; \}`,
+                    &`if pos >= chars.len() || !(chars[pos] matches \{ {char_range_pat(pair.0..=pair.1)} \}) \{ {fail_action}; \}`,
                 );
                 w.line(&"pos += 1;");
             }
@@ -811,26 +811,22 @@ fn gen_char_class(w: &mut CodeWriter, cc: &CharClass, fail_action: &String) {
     w.line(&"pos += 1;");
 }
 
-/// Build the `chars[pos] == X || lo <= chars[pos] <= hi || ...` disjunction for
-/// a char class (no leading `false ||` seed). Empty class lowers to `false`
-/// (negated: matches any char; positive: always fails).
+/// Build `(chars[pos] matches { 'x' | 'lo'..='hi' | ... })` for a char class.
 fn char_class_disjunction(cc: &CharClass) -> String {
     if cc.ranges.len() == 0 {
-        return "false";
+        return "(false)";
     }
     let mut s = String::with_capacity(64);
+    s.push_str(&"(chars[pos] matches { ");
     let mut first = true;
     for let range of &cc.ranges {
         if !first {
-            s.push_str(&" || ");
+            s.push_str(&" | ");
         }
         first = false;
-        if range.start == range.end {
-            s.push_str(&`chars[pos] == {char_lit(range.start)}`);
-        } else {
-            s.push_str(&`{char_lit(range.start)} <= chars[pos] <= {char_lit(range.end)}`);
-        }
+        s.push_str(&`{char_range_pat(range.start..=range.end)}`);
     }
+    s.push_str(&" })");
     return s;
 }
 

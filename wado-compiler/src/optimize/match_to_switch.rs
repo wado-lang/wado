@@ -136,9 +136,15 @@ struct SwitchAnalysis {
     default_arm: Option<usize>,
 }
 
+enum CaseSpec {
+    Value(i64),
+    Range { lo: i64, hi: i64 },
+}
+
 /// Analyze whether a `Match` can be rewritten into a `Switch`. Accepts
-/// only integer / enum scrutinees with guard-less arms whose patterns
-/// are integer literals, enum cases, or wildcard (the default).
+/// integer / `char` / enum scrutinees with guard-less arms whose patterns
+/// are integer or `char` literals, enum cases, integer/`char` ranges, or
+/// wildcard (the default).
 fn analyze(scrutinee_type: &ResolvedType, arms: &[ArmData], body: &Body) -> Option<SwitchAnalysis> {
     match scrutinee_type {
         ResolvedType::Primitive(
@@ -149,33 +155,70 @@ fn analyze(scrutinee_type: &ResolvedType, arms: &[ArmData], body: &Body) -> Opti
             | PrimitiveType::I16
             | PrimitiveType::U16
             | PrimitiveType::I8
-            | PrimitiveType::U8,
+            | PrimitiveType::U8
+            | PrimitiveType::Char,
         )
         | ResolvedType::Enum { .. } => {}
         _ => return None,
     }
 
-    let mut value_to_arm: Vec<(i64, usize)> = Vec::new();
+    let mut specs: Vec<(CaseSpec, usize)> = Vec::new();
     let mut default_arm: Option<usize> = None;
+    let mut min_value = i64::MAX;
+    let mut max_value = i64::MIN;
 
     for (arm_idx, arm) in arms.iter().enumerate() {
         if arm.guard.is_some() {
             return None;
         }
+        let mut record = |lo: i64, hi: i64, specs: &mut Vec<(CaseSpec, usize)>| {
+            min_value = min_value.min(lo);
+            max_value = max_value.max(hi);
+            specs.push((
+                if lo == hi {
+                    CaseSpec::Value(lo)
+                } else {
+                    CaseSpec::Range { lo, hi }
+                },
+                arm_idx,
+            ));
+        };
         match &body.pats[arm.pattern].kind {
+            // Bail if a literal does not fit in `i64`: the Switch dispatch
+            // operates on `i64` case values, so a wrapping cast would corrupt
+            // the min/max range analysis.
             PatKind::Literal(NirLiteralPattern::I128(v)) => {
-                // Bail if the literal does not fit in `i64`: the Switch
-                // dispatch operates on `i64` case values, so a wrapping
-                // cast would corrupt the min/max range analysis.
                 let v = i64::try_from(*v).ok()?;
-                value_to_arm.push((v, arm_idx));
+                record(v, v, &mut specs);
             }
             PatKind::Literal(NirLiteralPattern::U128(v)) => {
                 let v = i64::try_from(*v).ok()?;
-                value_to_arm.push((v, arm_idx));
+                record(v, v, &mut specs);
+            }
+            PatKind::Literal(NirLiteralPattern::Char(c)) => {
+                let v = i64::from(u32::from(*c));
+                record(v, v, &mut specs);
             }
             PatKind::Enum { case_index, .. } => {
-                value_to_arm.push((i64::from(*case_index), arm_idx));
+                let v = i64::from(*case_index);
+                record(v, v, &mut specs);
+            }
+            PatKind::Range {
+                start,
+                end,
+                inclusive,
+                ..
+            } => {
+                let lo = i64::try_from(*start).ok()?;
+                let mut hi = i64::try_from(*end).ok()?;
+                if !*inclusive {
+                    hi -= 1;
+                }
+                if hi < lo {
+                    // Empty range — let the generic lowering handle it.
+                    return None;
+                }
+                record(lo, hi, &mut specs);
             }
             PatKind::Wildcard => {
                 if default_arm.is_some() {
@@ -191,21 +234,43 @@ fn analyze(scrutinee_type: &ResolvedType, arms: &[ArmData], body: &Body) -> Opti
         }
     }
 
-    if value_to_arm.len() < SWITCH_MIN_CASES {
+    if specs.is_empty() {
         return None;
     }
 
-    let min_value = value_to_arm.iter().map(|(v, _)| *v).min().unwrap();
-    let max_value = value_to_arm.iter().map(|(v, _)| *v).max().unwrap();
-    let range = max_value - min_value + 1;
-
-    if range > SWITCH_MAX_RANGE {
+    let range = i128::from(max_value) - i128::from(min_value) + 1;
+    if range > i128::from(SWITCH_MAX_RANGE) {
         return None;
     }
 
-    let density = value_to_arm.len() as f64 / range as f64;
-    if density < SWITCH_DENSITY_THRESHOLD {
+    if specs.len() < 2 {
         return None;
+    }
+
+    let covered: i128 = specs
+        .iter()
+        .map(|(spec, _)| match spec {
+            CaseSpec::Value(_) => 1,
+            CaseSpec::Range { lo, hi } => i128::from(*hi) - i128::from(*lo) + 1,
+        })
+        .sum();
+    if covered < SWITCH_MIN_CASES as i128 {
+        return None;
+    }
+    if (covered as f64) / (range as f64) < SWITCH_DENSITY_THRESHOLD {
+        return None;
+    }
+
+    let mut value_to_arm: Vec<(i64, usize)> = Vec::new();
+    for (spec, arm_idx) in &specs {
+        match spec {
+            CaseSpec::Value(v) => value_to_arm.push((*v, *arm_idx)),
+            CaseSpec::Range { lo, hi } => {
+                for v in *lo..=*hi {
+                    value_to_arm.push((v, *arm_idx));
+                }
+            }
+        }
     }
 
     Some(SwitchAnalysis {
@@ -232,7 +297,9 @@ fn build_switch(
     let mut offset_to_arm: Vec<Option<usize>> = vec![None; range];
     for (value, arm_idx) in &analysis.value_to_arm {
         let offset = (*value - analysis.min_value) as usize;
-        offset_to_arm[offset] = Some(*arm_idx);
+        if offset_to_arm[offset].is_none() {
+            offset_to_arm[offset] = Some(*arm_idx);
+        }
     }
 
     let switch_arms: Vec<BlockId> = offset_to_arm

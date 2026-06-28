@@ -354,6 +354,14 @@ impl Monomorphizer {
             .as_ref()
             .map(|info| info.method_name.clone())
             .unwrap_or_else(|| method_func.name.clone());
+
+        if type_args.is_empty()
+            && let Some(info) = method_func.method_info.as_ref()
+            && self.receiver_keeps_newtype_own_impl(receiver.type_id, type_table, info)
+        {
+            return;
+        }
+
         // If this is a generic method call, rewrite to monomorphized name
         if !type_args.is_empty()
             && let Some(struct_name) = self.get_struct_name_from_type(receiver.type_id, type_table)

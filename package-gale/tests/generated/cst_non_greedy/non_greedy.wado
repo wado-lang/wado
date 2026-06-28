@@ -817,7 +817,7 @@ fn tree_build_node(events: &List<BuildEvent>, pos: &mut i32) -> CstNode {
         let kind = info.0;
         let start = info.1;
         *pos += 1;
-        let mut children: List<CstChild> = [];
+        let mut children: List<CstChild> = List::with_capacity(4);
         let mut flags = if kind == K_ERROR { NODE_ERROR } else { 0 };
         let mut alt = -1;
         let mut end = start;
@@ -1074,7 +1074,7 @@ struct Lexer {
 
 impl Lexer {
     fn new(input: &String) -> Lexer {
-        return Lexer { chars: input.chars().collect(), pos: 0 };
+        return Lexer { chars: input.to_chars(), pos: 0 };
     }
 
     fn at_end(&self) -> bool {
@@ -1089,13 +1089,13 @@ impl Lexer {
 fn try_INT(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !('0' <= chars[pos] <= '9') { return -1; }
+    if !((chars[pos] matches { '0'..='9' })) { return -1; }
     pos += 1;
     loop {
         let rep_saved_0 = pos;
         rep_0: {
             if pos >= chars.len() { break rep_0; }
-            if !('0' <= chars[pos] <= '9') { break rep_0; }
+            if !((chars[pos] matches { '0'..='9' })) { break rep_0; }
             pos += 1;
             continue;
         }
@@ -1108,13 +1108,13 @@ fn try_INT(chars: &List<char>, start: i32) -> i32 {
 fn try_NAME(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !('a' <= chars[pos] <= 'z') { return -1; }
+    if !((chars[pos] matches { 'a'..='z' })) { return -1; }
     pos += 1;
     loop {
         let rep_saved_1 = pos;
         rep_1: {
             if pos >= chars.len() { break rep_1; }
-            if !('a' <= chars[pos] <= 'z') { break rep_1; }
+            if !((chars[pos] matches { 'a'..='z' })) { break rep_1; }
             pos += 1;
             continue;
         }
@@ -1127,13 +1127,13 @@ fn try_NAME(chars: &List<char>, start: i32) -> i32 {
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { return -1; }
+    if !((chars[pos] matches { ' ' | '\t' | '\r' | '\n' })) { return -1; }
     pos += 1;
     loop {
         let rep_saved_2 = pos;
         rep_2: {
             if pos >= chars.len() { break rep_2; }
-            if !(chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { break rep_2; }
+            if !((chars[pos] matches { ' ' | '\t' | '\r' | '\n' })) { break rep_2; }
             pos += 1;
             continue;
         }

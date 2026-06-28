@@ -1,0 +1,21 @@
+// A closure taking a `&mut` ref to its own (boxed) local must not ICE codegen.
+
+use { Stdout, println } from "core:cli";
+
+fn incr(x: &mut i32) {
+    *x += 1;
+}
+
+export fn run() with Stdout {
+    let f = || {
+        let mut c = 0;
+        incr(&mut c);
+        return c;
+    };
+    println(`{f()}`);
+}
+
+__DATA__
+{
+    "stdout": "1\n"
+}

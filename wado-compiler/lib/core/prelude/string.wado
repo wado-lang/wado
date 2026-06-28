@@ -500,6 +500,20 @@ impl String {
         };
     }
 
+    /// Decode the whole string into an owned `List<char>`.
+    pub fn to_chars(&self) -> List<char> {
+        let bytes = self.as_bytes() as ByteSlice;
+        let len = self.used;
+        let mut chars: List<char> = List::with_capacity(len);
+        let mut i = 0;
+        while i < len {
+            let scalar = decode_utf8_scalar(bytes, i, len);
+            chars.push(char::from_u32_unchecked(scalar.code));
+            i += scalar.advance;
+        }
+        return chars;
+    }
+
     /// Decodes the UTF-8 character starting at the given byte index.
     /// Returns None if `byte_index` is past the end of the string or there
     /// aren't enough bytes to form a full UTF-8 sequence.

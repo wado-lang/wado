@@ -1,0 +1,34 @@
+// A newtype's own trait impl overrides an inherited blanket `impl<T> Trait for G<T>`.
+use { println, Stdout } from "core:cli";
+
+trait Label {
+    fn label(&self) -> String;
+}
+
+struct Boxed<T> {
+    value: T,
+}
+
+impl<T> Label for Boxed<T> {
+    fn label(&self) -> String {
+        return "blanket";
+    }
+}
+
+type IntBox = Boxed<i32>;
+
+impl Label for IntBox {
+    fn label(&self) -> String {
+        return "newtype";
+    }
+}
+
+export fn run() with Stdout {
+    let b = Boxed { value: 7 } as IntBox;
+    println(b.label());
+}
+
+__DATA__
+{
+    "stdout": "newtype\n"
+}
