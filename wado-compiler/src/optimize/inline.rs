@@ -21,7 +21,8 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 use cranelift_entity::EntityRef;
 
 use super::arena_query;
-use super::gate::{FunctionGate, FunctionId, GatedPass};
+use super::gate::{FunctionGate, GatedPass};
+use crate::nir::FuncId;
 use crate::token::Span;
 
 // The inline threshold is based on expression count, which provides a more
@@ -753,7 +754,7 @@ pub fn inline_functions(
                 // not modified), so report just the caller. The caller's
                 // call-graph edges shift, but stale edges only cost 1-hop
                 // propagation precision (quality), not correctness.
-                gate.mark_changed(FunctionId::new(caller_idx));
+                gate.mark_changed(FuncId::new(caller_idx));
             }
 
             // Update function_strings: add strings from inlined functions to the caller

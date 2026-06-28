@@ -60,7 +60,8 @@ use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtKi
 use crate::nir_package::NirPackage;
 
 use super::arena_query;
-use super::gate::{FunctionGate, FunctionId, GatedPass};
+use super::gate::{FunctionGate, GatedPass};
+use crate::nir::FuncId;
 
 pub(super) type FnKey = (ModuleSource, String);
 
@@ -98,7 +99,7 @@ pub fn eliminate_dead_arguments(project: &mut NirPackage, gate: &mut FunctionGat
     // passes re-examine only those and their call-graph neighbours.
     let touched = apply_dae(project, &confirmed);
     for idx in touched {
-        gate.mark_changed(FunctionId::new(idx));
+        gate.mark_changed(FuncId::new(idx));
     }
     true
 }

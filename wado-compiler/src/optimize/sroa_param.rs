@@ -37,7 +37,8 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 use cranelift_entity::EntityRef;
 
 use super::arena_query::place_root_local;
-use super::gate::{FunctionGate, FunctionId, GatedPass};
+use super::gate::{FunctionGate, GatedPass};
+use crate::nir::FuncId;
 
 type FnKey = (ModuleSource, String);
 
@@ -67,7 +68,7 @@ pub fn sroa_single_field_parameters(project: &mut NirPackage, gate: &mut Functio
     rewrite_callees(project, &candidates, &mut touched);
     rewrite_call_sites(project, &candidates, &mut touched);
     for idx in touched {
-        gate.mark_changed(FunctionId::new(idx));
+        gate.mark_changed(FuncId::new(idx));
     }
     true
 }

@@ -41,7 +41,8 @@ use cranelift_entity::EntityRef;
 
 use super::arena_query;
 use super::dae;
-use super::gate::{FunctionGate, FunctionId, GatedPass};
+use super::gate::{FunctionGate, GatedPass};
+use crate::nir::FuncId;
 
 type FnKey = dae::FnKey;
 
@@ -76,7 +77,7 @@ pub fn eliminate_dead_return_values(project: &mut NirPackage, gate: &mut Functio
     // re-examine only those. The call graph is unaffected, so no refresh.
     let touched = apply_drve(project, &confirmed);
     for idx in touched {
-        gate.mark_changed(FunctionId::new(idx));
+        gate.mark_changed(FuncId::new(idx));
     }
     true
 }

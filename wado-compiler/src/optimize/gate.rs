@@ -8,15 +8,12 @@
 //!
 //! # Identity
 //!
-//! [`FunctionId`] is a function's index in `NirPackage::functions`. That index
-//! is immutable across one `run_optimization_passes` call — only `dce`, which
-//! runs *outside* the loop, reorders the vector — so it is a stable id for the
-//! gate's lifetime. It is typed (a `cranelift_entity` id, like the arena's
-//! `ExprId` / `BlockId`) so the dense side-tables below are keyed without
-//! passing raw indices around. It is deliberately *not* a phase-stable id:
-//! cross-`dce` / cross-phase identity (for incremental compilation) would need
-//! the function store to preserve ids across removal, a larger change scoped
-//! out of Phase 6.
+//! The gate keys on the canonical [`FuncId`] (`docs/wep-2026-06-28-function-identity.md`),
+//! which equals a function's index in `NirPackage::functions`: `lower` mints
+//! `id = index`, and `dce` marks dead in place without renumbering (Phase 4), so
+//! `FuncId == position` holds for the whole pipeline. The call graph reads each
+//! call node's stamped `func_id` directly — no per-edge name resolution — and the
+//! dense side-tables below index by `FuncId.index()`.
 //!
 //! # Model
 //!
@@ -44,14 +41,9 @@
 
 use cranelift_entity::EntityRef;
 
+use crate::nir::FuncId;
 use crate::nir_arena::ExprKind;
 use crate::nir_package::NirPackage;
-
-/// Stable identity of a function within one optimizer run: its index in
-/// `NirPackage::functions`. See the module docs.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct FunctionId(u32);
-cranelift_entity::entity_impl!(FunctionId, "func");
 
 /// The gated passes. Each owns a column of per-function watermarks. Add a
 /// variant when a pass becomes gate-aware; `COUNT` sizes the watermark table.
@@ -75,13 +67,12 @@ impl GatedPass {
     const COUNT: usize = 12;
 }
 
-/// Static call graph over [`FunctionId`]s, built once at loop start.
+/// Static call graph over [`FuncId`]s, built once at loop start.
 ///
-/// Edges resolve a call node's `FunctionRef` to a `FunctionId` through the
-/// `(module_source, full_name)` key (the same key `const_folding::build_callee_map`
-/// uses). Indirect calls (`ExprKind::IndirectCall`) and calls to functions
-/// outside the package have no static edge and are simply absent — conservative
-/// for propagation, which only risks under-optimizing.
+/// Each edge comes from a call node's stamped `func_id` (an unstamped in-package
+/// call falls back to name resolution). Indirect calls (`ExprKind::IndirectCall`)
+/// and calls to functions outside the package have no static edge and are simply
+/// absent — conservative for propagation, which only risks under-optimizing.
 ///
 /// The graph is built once and not refreshed as bodies change. A pass that
 /// restructures calls (`inline` copies a callee body in; `container_sroa` /
@@ -92,38 +83,47 @@ impl GatedPass {
 /// rewritten function is itself reported dirty regardless. Incremental refresh
 /// could improve propagation precision but is not needed for soundness.
 struct CallGraph {
-    callees: Vec<Vec<FunctionId>>,
-    callers: Vec<Vec<FunctionId>>,
+    callees: Vec<Vec<FuncId>>,
+    callers: Vec<Vec<FuncId>>,
 }
 
 impl CallGraph {
     fn build(project: &NirPackage) -> Self {
         let n = project.functions.len();
-        // The canonical identity resolver maps each call's `FunctionRef` to its
-        // dense id (the same `(module_source, full_name)` key this graph keys on).
-        let resolver = super::func_resolve::FuncResolver::build(project);
+        // Read the callee off each call node's stamped `func_id` (`FuncId ==
+        // store position`, Phase 4). An optimizer retarget can leave `func_id`
+        // None on an in-package call; only then fall back to name resolution,
+        // built lazily so a fully-stamped program never pays for it.
+        let mut resolver: Option<super::func_resolve::FuncResolver> = None;
 
-        let mut callees: Vec<Vec<FunctionId>> = vec![Vec::new(); n];
-        let mut callers: Vec<Vec<FunctionId>> = vec![Vec::new(); n];
+        let mut callees: Vec<Vec<FuncId>> = vec![Vec::new(); n];
+        let mut callers: Vec<Vec<FuncId>> = vec![Vec::new(); n];
         for (i, func_rc) in project.functions.iter().enumerate() {
             let func = func_rc.borrow();
             let Some(body) = func.body.as_ref() else {
                 continue;
             };
-            let mut seen: Vec<FunctionId> = Vec::new();
+            let mut seen: Vec<FuncId> = Vec::new();
             for node in body.exprs.values() {
-                let func_ref = match &node.kind {
-                    ExprKind::Call { func, .. } | ExprKind::MethodCall { func, .. } => func,
+                let (func_ref, func_id) = match &node.kind {
+                    ExprKind::Call { func, func_id, .. }
+                    | ExprKind::MethodCall { func, func_id, .. } => (func, func_id),
                     _ => continue,
                 };
-                if let Some(callee) = resolver.resolve(func_ref)
+                let callee = match func_id {
+                    Some(fid) => Some(*fid),
+                    None => resolver
+                        .get_or_insert_with(|| super::func_resolve::FuncResolver::build(project))
+                        .resolve(func_ref),
+                };
+                if let Some(callee) = callee
                     && !seen.contains(&callee)
                 {
                     seen.push(callee);
                 }
             }
             for &callee in &seen {
-                callers[callee.index()].push(FunctionId::new(i));
+                callers[callee.index()].push(FuncId::new(i));
             }
             callees[i] = seen;
         }
@@ -171,21 +171,21 @@ impl FunctionGate {
 
     /// Whether `pass` should process `func` (it changed since `pass` last saw
     /// it).
-    pub fn needs(&mut self, pass: GatedPass, func: FunctionId) -> bool {
+    pub fn needs(&mut self, pass: GatedPass, func: FuncId) -> bool {
         self.ensure(func.index() + 1);
         self.revision[func.index()] > self.watermarks[pass as usize][func.index()]
     }
 
     /// Record that `pass` has processed `func` at its current revision.
-    pub fn seen(&mut self, pass: GatedPass, func: FunctionId) {
+    pub fn seen(&mut self, pass: GatedPass, func: FuncId) {
         self.ensure(func.index() + 1);
         self.watermarks[pass as usize][func.index()] = self.revision[func.index()];
     }
 
     /// The functions `pass` must (re)examine this round, each marked seen.
-    pub fn dirty_funcs(&mut self, pass: GatedPass, len: usize) -> Vec<FunctionId> {
+    pub fn dirty_funcs(&mut self, pass: GatedPass, len: usize) -> Vec<FuncId> {
         (0..len)
-            .map(FunctionId::new)
+            .map(FuncId::new)
             .filter(|&fid| {
                 let dirty = self.needs(pass, fid);
                 if dirty {
@@ -198,7 +198,7 @@ impl FunctionGate {
 
     /// Record that `func`'s body changed: bump its revision and, conservatively,
     /// its 1-hop call-graph neighbours (callers and callees).
-    pub fn mark_changed(&mut self, func: FunctionId) {
+    pub fn mark_changed(&mut self, func: FuncId) {
         self.ensure(func.index() + 1);
         let i = func.index();
         self.revision[i] += 1;
@@ -219,11 +219,11 @@ impl FunctionGate {
         &mut self,
         pass: GatedPass,
         len: usize,
-        mut f: impl FnMut(FunctionId) -> bool,
+        mut f: impl FnMut(FuncId) -> bool,
     ) -> bool {
         let mut any = false;
         for i in 0..len {
-            let fid = FunctionId::new(i);
+            let fid = FuncId::new(i);
             if !self.needs(pass, fid) {
                 continue;
             }
@@ -285,11 +285,11 @@ mod tests {
     /// Build a gate with `n` functions and an explicit call graph, bypassing
     /// `NirPackage` so the propagation algebra can be tested in isolation.
     fn gate_with_graph(n: usize, edges: &[(usize, usize)]) -> FunctionGate {
-        let mut callees: Vec<Vec<FunctionId>> = vec![Vec::new(); n];
-        let mut callers: Vec<Vec<FunctionId>> = vec![Vec::new(); n];
+        let mut callees: Vec<Vec<FuncId>> = vec![Vec::new(); n];
+        let mut callers: Vec<Vec<FuncId>> = vec![Vec::new(); n];
         for &(caller, callee) in edges {
-            callees[caller].push(FunctionId::new(callee));
-            callers[callee].push(FunctionId::new(caller));
+            callees[caller].push(FuncId::new(callee));
+            callers[callee].push(FuncId::new(caller));
         }
         FunctionGate {
             revision: vec![1; n],
@@ -302,14 +302,14 @@ mod tests {
     fn fresh_gate_needs_every_function() {
         let mut gate = gate_with_graph(3, &[]);
         for i in 0..3 {
-            assert!(gate.needs(GatedPass::Peephole, FunctionId::new(i)));
+            assert!(gate.needs(GatedPass::Peephole, FuncId::new(i)));
         }
     }
 
     #[test]
     fn seen_clears_need_until_next_change() {
         let mut gate = gate_with_graph(2, &[]);
-        let f = FunctionId::new(0);
+        let f = FuncId::new(0);
         gate.seen(GatedPass::Peephole, f);
         assert!(!gate.needs(GatedPass::Peephole, f));
         // Another pass is unaffected by Peephole catching up.
@@ -324,14 +324,14 @@ mod tests {
         let mut gate = gate_with_graph(3, &[(0, 1), (1, 2)]);
         for p in [GatedPass::Peephole, GatedPass::CopyProp] {
             for i in 0..3 {
-                gate.seen(p, FunctionId::new(i));
+                gate.seen(p, FuncId::new(i));
             }
         }
         // Changing the middle function dirties its caller (0) and callee (2).
-        gate.mark_changed(FunctionId::new(1));
-        assert!(gate.needs(GatedPass::Peephole, FunctionId::new(0)));
-        assert!(gate.needs(GatedPass::Peephole, FunctionId::new(1)));
-        assert!(gate.needs(GatedPass::Peephole, FunctionId::new(2)));
+        gate.mark_changed(FuncId::new(1));
+        assert!(gate.needs(GatedPass::Peephole, FuncId::new(0)));
+        assert!(gate.needs(GatedPass::Peephole, FuncId::new(1)));
+        assert!(gate.needs(GatedPass::Peephole, FuncId::new(2)));
     }
 
     #[test]
@@ -339,10 +339,10 @@ mod tests {
         // 0 -> 1; function 2 is unrelated.
         let mut gate = gate_with_graph(3, &[(0, 1)]);
         for i in 0..3 {
-            gate.seen(GatedPass::Peephole, FunctionId::new(i));
+            gate.seen(GatedPass::Peephole, FuncId::new(i));
         }
-        gate.mark_changed(FunctionId::new(0));
-        assert!(!gate.needs(GatedPass::Peephole, FunctionId::new(2)));
+        gate.mark_changed(FuncId::new(0));
+        assert!(!gate.needs(GatedPass::Peephole, FuncId::new(2)));
     }
 
     #[test]
@@ -352,7 +352,7 @@ mod tests {
         // visited, and the change propagates to function 2's (none) neighbours.
         let mut gate = gate_with_graph(3, &[(0, 1)]);
         for i in 0..3 {
-            gate.seen(GatedPass::CopyProp, FunctionId::new(i));
+            gate.seen(GatedPass::CopyProp, FuncId::new(i));
         }
         // Nothing dirty for CopyProp now: run_gated visits nothing.
         let mut visited = Vec::new();
@@ -363,12 +363,12 @@ mod tests {
         assert!(visited.is_empty());
         assert!(!changed);
         // Dirty function 1 (and its caller 0 via propagation), then run again.
-        gate.mark_changed(FunctionId::new(1));
+        gate.mark_changed(FuncId::new(1));
         let mut visited = Vec::new();
         gate.run_gated(GatedPass::CopyProp, 3, |fid| {
             visited.push(fid);
             false
         });
-        assert_eq!(visited, vec![FunctionId::new(0), FunctionId::new(1)]);
+        assert_eq!(visited, vec![FuncId::new(0), FuncId::new(1)]);
     }
 }

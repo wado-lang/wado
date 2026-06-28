@@ -42,7 +42,8 @@ use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeTable};
 
 use super::arena_query::{expr_mentions_local, is_local, strip_refs};
-use super::gate::{FunctionGate, FunctionId, GatedPass};
+use super::gate::{FunctionGate, GatedPass};
+use crate::nir::FuncId;
 use cranelift_entity::EntityRef;
 
 type FuncKey = (ModuleSource, String);
@@ -187,7 +188,7 @@ pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) ->
     // shifts a caller's call edges (a `$value_copy$` call → its shallow twin),
     // which only costs propagation precision, not correctness.
     for fi in touched {
-        gate.mark_changed(FunctionId::new(fi));
+        gate.mark_changed(FuncId::new(fi));
     }
     changed
 }

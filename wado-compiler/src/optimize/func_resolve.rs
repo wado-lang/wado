@@ -2,10 +2,10 @@
 //!
 //! One function entity is addressed two ways: structurally at a call site (a
 //! [`FunctionRef`], carrying `module_source` + `name` + monomorph/method info)
-//! and densely in the function store (its [`FunctionId`] index in
+//! and densely in the function store (its [`FuncId`] index in
 //! `NirPackage::functions`). [`FuncResolver`] is the single bridge between them:
 //! it maps a function's *canonical mangled identity* (`(module_source,
-//! full_name)`) to its [`FunctionId`], so a `FunctionRef` resolves to a dense
+//! full_name)`) to its [`FuncId`], so a `FunctionRef` resolves to a dense
 //! integer once and callers key on the id instead of re-deriving and comparing
 //! mangled-name strings.
 //!
@@ -24,32 +24,30 @@ use cranelift_entity::EntityRef;
 
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::nir::{FunctionRef, NirFunction};
+use crate::nir::{FuncId, FunctionRef, NirFunction};
 use crate::nir_package::NirPackage;
 
-use super::gate::FunctionId;
-
-/// `(module_source, full_name) → FunctionId` over a package's functions. Built
+/// `(module_source, full_name) → FuncId` over a package's functions. Built
 /// once; resolution is a hash lookup, not a body walk.
 pub(super) struct FuncResolver {
-    ids: IndexMap<(ModuleSource, String), FunctionId>,
+    ids: IndexMap<(ModuleSource, String), FuncId>,
 }
 
 impl FuncResolver {
-    /// Build the resolver from the current function store. `FunctionId` is the
+    /// Build the resolver from the current function store. `FuncId` is the
     /// index in `project.functions`, matching [`super::gate`]'s call graph.
     pub(super) fn build(project: &NirPackage) -> Self {
         let mut ids = IndexMap::default();
         for (i, func_rc) in project.functions.iter().enumerate() {
             let func = func_rc.borrow();
-            ids.insert(def_key(&func), FunctionId::new(i));
+            ids.insert(def_key(&func), FuncId::new(i));
         }
         Self { ids }
     }
 
     /// Resolve a call-site reference to its function's dense id, or `None` for a
     /// callee outside the package (extern / builtin) — callers stay conservative.
-    pub(super) fn resolve(&self, func: &FunctionRef) -> Option<FunctionId> {
+    pub(super) fn resolve(&self, func: &FunctionRef) -> Option<FuncId> {
         self.ids
             .get(&(func.module_source.clone(), func.full_name()))
             .copied()
