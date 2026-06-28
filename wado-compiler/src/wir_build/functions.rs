@@ -13,6 +13,21 @@ use super::context::{PendingFunctionBody, WirContext};
 
 /// Collect all functions from the `NirPackage`, register imports, and create function stubs.
 pub fn collect_functions(ctx: &mut WirContext<'_>) {
+    // `FuncId == position` holds end-to-end: `lower` mints `id = index`, `dce`
+    // marks dead in place without renumbering (Phase 4), and synthesized
+    // functions append at `id = next_func_id() = len`. Phase 5's `store[id]`
+    // descriptor reads depend on this; the check is O(n), once.
+    {
+        use cranelift_entity::EntityRef;
+        for (i, func_rc) in ctx.package.functions.iter().enumerate() {
+            assert_eq!(
+                func_rc.borrow().id,
+                Some(crate::nir::FuncId::new(i)),
+                "FuncId must equal store position at codegen (function #{i})"
+            );
+        }
+    }
+
     // Step 1: Register builtin + bundled imports
     register_imports(ctx);
 

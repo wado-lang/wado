@@ -107,7 +107,8 @@ mutations — was rejected: it duplicates the arena record and risks drift, agai
 - [x] Phase 1 — mint `FuncId` in `lower`; stamp the call node; `NirFunction.id`.
 - [x] Phase 2 — analyses read the call-node `FuncId`, keyed by `SecondaryMap`.
 - [x] Phase 3 — codegen resolves in-package calls by `FuncId` (`funcid_map`).
-- [ ] Phase 4 — liveness-bit `dce` (no renumber) so `store[id]` is valid; fold the
-      gate onto `FuncId`.
+- [x] Phase 4a — liveness-bit `dce` (no renumber): `FuncId == position` holds
+      end-to-end, asserted at the `wir_build` entry.
+- [ ] Phase 4b — fold the gate onto `FuncId` (drop `gate::FunctionId` = index).
 - [ ] Phase 5 — drop `FunctionRef` from call nodes; intern externs; codegen reads
       the callee descriptor by `store[id]`.
