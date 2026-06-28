@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782631806446,
+  "lastUpdate": 1782650506801,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -36225,6 +36225,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/15fdbf5bb01185a7f9ac8b97231d8c3b20867125"
         },
         "date": 1782631805985,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1845,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8434,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15339,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288458,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a802c1f8d1f018178182ae66dc6d628311f92fd8",
+          "message": "Merge pull request #1464 from wado-lang/claude/symbol-visibility-xace4d\n\nfeat: implement symbol visibility (internal / pub / export)",
+          "timestamp": "2026-06-28T21:33:11+09:00",
+          "tree_id": "4d9fd6fc212eb5918a14d0b4b9185b011010481d",
+          "url": "https://github.com/wado-lang/wado/commit/a802c1f8d1f018178182ae66dc6d628311f92fd8"
+        },
+        "date": 1782650506164,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
