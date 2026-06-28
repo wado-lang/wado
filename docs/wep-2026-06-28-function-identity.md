@@ -109,6 +109,17 @@ mutations — was rejected: it duplicates the arena record and risks drift, agai
 - [x] Phase 3 — codegen resolves in-package calls by `FuncId` (`funcid_map`).
 - [x] Phase 4a — liveness-bit `dce` (no renumber): `FuncId == position` holds
       end-to-end, asserted at the `wir_build` entry.
-- [ ] Phase 4b — fold the gate onto `FuncId` (drop `gate::FunctionId` = index).
-- [ ] Phase 5 — drop `FunctionRef` from call nodes; intern externs; codegen reads
-      the callee descriptor by `store[id]`.
+- [x] Phase 4b — fold the gate onto `FuncId` (dropped `gate::FunctionId` = index).
+- [x] Phase 5a — codegen reads the callee descriptor by `store[id]`
+      (`callee_descriptor`); node `FunctionRef` kept only as the extern fallback.
+- [x] Phase 5b — stamp call `FuncId`s by the canonical `function_id`, collapsed to
+      a single `Free(module, name)` identity (no `Method`/`Free` drift).
+- [x] Phase 5c — intern externs into the `FuncId` space (`extern_stub`): every call
+      now carries a `func_id`. Unblocked by a born-resolved fix —
+      `value_copy_demote`'s `array_clone`→shallow rewrite was leaving a stale
+      `func_id`, which `store[id]`-based codegen then read (latent; surfaced once
+      externs were interned).
+- [ ] Phase 5d — make `func_id` non-optional and drop `FunctionRef` from the call
+      node. Requires every optimizer call rewrite/synthesis to stamp (or re-intern)
+      a `func_id` so no call is left `None`, then migrate the ~110 `node.func`
+      readers to `func_id` + `SecondaryMap` facts.
