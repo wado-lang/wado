@@ -92,6 +92,14 @@ impl Manifest {
                 });
             }
         }
+        if let Some(ws) = &self.workspace {
+            for field in &ws.package_unknown_fields {
+                warnings.push(ManifestWarning::UnknownField {
+                    section: Some("workspace.package".to_string()),
+                    field: field.clone(),
+                });
+            }
+        }
         warnings
     }
 }
@@ -223,6 +231,9 @@ pub struct Workspace {
     pub members: Vec<String>,
     pub dependencies: IndexMap<String, Dependency>,
     pub dev_dependencies: IndexMap<String, Dependency>,
+    /// Unknown keys in `[workspace.package]` (typos, or fields that are not
+    /// inheritable). Reported as warnings.
+    pub package_unknown_fields: Vec<String>,
 }
 
 /// A single dependency declaration.
@@ -313,6 +324,9 @@ pub enum ManifestError {
     InvalidLicense { value: String, reason: String },
     /// `[package].wado-version` is not a valid semver requirement.
     InvalidWadoVersion { value: String, reason: String },
+    /// A workspace member set a field that is force-inherited from
+    /// `[workspace.package]` (`version`, `repository`, or `namespace`).
+    WorkspaceFieldOverride { field: String },
 }
 
 impl fmt::Display for ManifestError {
@@ -364,6 +378,10 @@ impl fmt::Display for ManifestError {
             ManifestError::InvalidWadoVersion { value, reason } => write!(
                 f,
                 "[package].wado-version {value:?} is not a valid version requirement: {reason}"
+            ),
+            ManifestError::WorkspaceFieldOverride { field } => write!(
+                f,
+                "[package].{field} is inherited from [workspace.package]; remove it from this member"
             ),
         }
     }
@@ -424,9 +442,25 @@ struct RawPackage {
 #[derive(Deserialize)]
 struct RawWorkspace {
     members: Option<Vec<String>>,
+    package: Option<RawWorkspacePackage>,
     dependencies: Option<IndexMap<String, RawDependency>>,
     #[serde(rename = "dev-dependencies")]
     dev_dependencies: Option<IndexMap<String, RawDependency>>,
+}
+
+/// The `[workspace.package]` table: shared metadata inherited by members. Only
+/// the inheritable fields are accepted; other keys are reported as warnings.
+#[derive(Deserialize, Default)]
+struct RawWorkspacePackage {
+    version: Option<String>,
+    repository: Option<String>,
+    namespace: Option<String>,
+    license: Option<String>,
+    #[serde(rename = "license-file")]
+    license_file: Option<String>,
+    authors: Option<Vec<String>>,
+    #[serde(rename = "wado-version")]
+    wado_version: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -517,6 +551,95 @@ fn collect_unknown_fields(toml_str: &str, manifest: &mut Manifest) -> Result<(),
             .cloned()
             .collect();
     }
+    if let Some(ws) = manifest.workspace.as_mut()
+        && let Some(toml::Value::Table(ws_table)) = table.get("workspace")
+        && let Some(toml::Value::Table(ws_pkg)) = ws_table.get("package")
+    {
+        ws.package_unknown_fields = ws_pkg
+            .keys()
+            .filter(|k| !KNOWN_WORKSPACE_PACKAGE.contains(&k.as_str()))
+            .cloned()
+            .collect();
+    }
+    Ok(())
+}
+
+// Fields accepted in `[workspace.package]` (forced + default inheritance).
+const KNOWN_WORKSPACE_PACKAGE: &[&str] = &[
+    "version",
+    "repository",
+    "namespace",
+    "license",
+    "license-file",
+    "authors",
+    "wado-version",
+];
+
+/// Parse a workspace member's manifest, inheriting metadata from the workspace
+/// root's `[workspace.package]`.
+///
+/// `version`/`repository`/`namespace` are force-inherited: if the member sets
+/// one (and the workspace defines it) it is a [`ManifestError::WorkspaceFieldOverride`].
+/// `license`/`license-file`/`authors`/`wado-version` are defaults the member may
+/// override. The merge runs before conversion, so required fields (e.g.
+/// `version`) may be supplied by the workspace.
+///
+/// # Errors
+/// Propagates TOML, inheritance, and validation errors for the merged member.
+pub fn resolve_member(member_toml: &str, root_toml: &str) -> Result<Manifest, ManifestError> {
+    let mut member_raw: RawManifest =
+        toml::from_str(member_toml).map_err(|e| ManifestError::Toml(e.to_string()))?;
+    let root_raw: RawManifest =
+        toml::from_str(root_toml).map_err(|e| ManifestError::Toml(e.to_string()))?;
+
+    if let (Some(pkg), Some(ws_pkg)) = (
+        member_raw.package.as_mut(),
+        root_raw.workspace.and_then(|w| w.package),
+    ) {
+        inherit_workspace_package(pkg, &ws_pkg)?;
+    }
+
+    let mut manifest = convert_raw(member_raw)?;
+    collect_unknown_fields(member_toml, &mut manifest)?;
+    validate::validate(&manifest)?;
+    Ok(manifest)
+}
+
+fn inherit_workspace_package(
+    pkg: &mut RawPackage,
+    ws: &RawWorkspacePackage,
+) -> Result<(), ManifestError> {
+    inherit_forced(&mut pkg.version, ws.version.as_ref(), "version")?;
+    inherit_forced(&mut pkg.repository, ws.repository.as_ref(), "repository")?;
+    inherit_forced(&mut pkg.namespace, ws.namespace.as_ref(), "namespace")?;
+    // `license` and `license-file` are one logical slot: the member overrides
+    // the whole slot or inherits the whole slot.
+    if pkg.license.is_none() && pkg.license_file.is_none() {
+        pkg.license.clone_from(&ws.license);
+        pkg.license_file.clone_from(&ws.license_file);
+    }
+    if pkg.authors.is_none() {
+        pkg.authors.clone_from(&ws.authors);
+    }
+    if pkg.wado_version.is_none() {
+        pkg.wado_version.clone_from(&ws.wado_version);
+    }
+    Ok(())
+}
+
+fn inherit_forced(
+    field: &mut Option<String>,
+    ws_value: Option<&String>,
+    name: &'static str,
+) -> Result<(), ManifestError> {
+    if let Some(ws_value) = ws_value {
+        if field.is_some() {
+            return Err(ManifestError::WorkspaceFieldOverride {
+                field: name.to_string(),
+            });
+        }
+        *field = Some(ws_value.clone());
+    }
     Ok(())
 }
 
@@ -573,6 +696,7 @@ fn convert_workspace(raw: RawWorkspace) -> Result<Workspace, ManifestError> {
         members,
         dependencies,
         dev_dependencies,
+        package_unknown_fields: Vec::new(),
     })
 }
 
@@ -1386,5 +1510,120 @@ license = "Definitely Not A License"
 "#;
         let err = toml.parse::<Manifest>().unwrap_err();
         assert!(matches!(err, ManifestError::InvalidLicense { .. }), "{err:?}");
+    }
+
+    const ROOT_WS: &str = r#"
+[workspace]
+members = ["packages/*"]
+
+[workspace.package]
+version = "0.2.0"
+repository = "https://github.com/org/monorepo"
+namespace = "org"
+license = "MIT"
+authors = ["Alice <a@example.com>"]
+"#;
+
+    #[test]
+    fn member_inherits_workspace_metadata() {
+        let member = r#"
+[package]
+name = "core"
+description = "Shared core"
+lib = "src/lib.wado"
+"#;
+        let pkg = resolve_member(member, ROOT_WS).unwrap().package.unwrap();
+        assert_eq!(pkg.version, "0.2.0");
+        assert_eq!(pkg.repository.as_deref(), Some("https://github.com/org/monorepo"));
+        assert_eq!(pkg.namespace.as_deref(), Some("org"));
+        assert_eq!(pkg.license.as_deref(), Some("MIT"));
+        assert_eq!(pkg.authors, vec!["Alice <a@example.com>"]);
+        // member-specific fields stay
+        assert_eq!(pkg.name, "core");
+        assert_eq!(pkg.description.as_deref(), Some("Shared core"));
+    }
+
+    #[test]
+    fn member_overriding_forced_field_is_error() {
+        for (field, line) in [
+            ("version", "version = \"9.9.9\""),
+            ("repository", "repository = \"https://example.com/other\""),
+            ("namespace", "namespace = \"other\""),
+        ] {
+            let member = format!("[package]\nname = \"core\"\nlib = \"src/lib.wado\"\n{line}\n");
+            let err = resolve_member(&member, ROOT_WS).unwrap_err();
+            assert!(
+                matches!(&err, ManifestError::WorkspaceFieldOverride { field: f } if f == field),
+                "field {field}: {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn member_may_override_default_fields() {
+        let member = r#"
+[package]
+name = "core"
+lib = "src/lib.wado"
+license = "Apache-2.0"
+authors = ["Bob"]
+"#;
+        let pkg = resolve_member(member, ROOT_WS).unwrap().package.unwrap();
+        assert_eq!(pkg.license.as_deref(), Some("Apache-2.0"));
+        assert_eq!(pkg.authors, vec!["Bob"]);
+        // forced fields still inherited
+        assert_eq!(pkg.version, "0.2.0");
+    }
+
+    #[test]
+    fn member_license_file_overrides_inherited_license_slot() {
+        let member = r#"
+[package]
+name = "core"
+lib = "src/lib.wado"
+license-file = "LICENSE-CUSTOM"
+"#;
+        let pkg = resolve_member(member, ROOT_WS).unwrap().package.unwrap();
+        assert_eq!(pkg.license_file.as_deref(), Some("LICENSE-CUSTOM"));
+        assert!(pkg.license.is_none(), "inherited license must not coexist");
+    }
+
+    #[test]
+    fn member_missing_version_without_workspace_version_errors() {
+        let root = r#"
+[workspace]
+members = ["packages/*"]
+
+[workspace.package]
+repository = "https://github.com/org/monorepo"
+"#;
+        let member = "[package]\nname = \"core\"\nlib = \"src/lib.wado\"\n";
+        let err = resolve_member(member, root).unwrap_err();
+        assert!(
+            matches!(&err, ManifestError::MissingField { field, .. } if field == "version"),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn unknown_workspace_package_field_warns() {
+        let toml = r#"
+[workspace]
+members = ["packages/*"]
+
+[workspace.package]
+version = "0.1.0"
+description = "not inheritable"
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        let warnings = m.warnings();
+        assert!(
+            warnings.iter().any(|w| matches!(
+                w,
+                ManifestWarning::UnknownField { section: Some(s), field }
+                    if s == "workspace.package" && field == "description"
+            )),
+            "got {warnings:?}"
+        );
     }
 }

@@ -48,7 +48,7 @@ pub fn discover(start_dir: &Path) -> Result<Option<ProjectManifest>, DiscoveryEr
         let candidate = dir.join(MANIFEST_FILENAME);
         if candidate.is_file() {
             let content = fs::read_to_string(&candidate).map_err(DiscoveryError::Io)?;
-            let manifest: Manifest = content.parse().map_err(DiscoveryError::Parse)?;
+            let manifest = resolve_manifest(&dir, &content)?;
             return Ok(Some(ProjectManifest {
                 manifest,
                 root: dir,
@@ -58,6 +58,73 @@ pub fn discover(start_dir: &Path) -> Result<Option<ProjectManifest>, DiscoveryEr
             return Ok(None);
         }
     }
+}
+
+/// Parse a member's `wado.toml`, applying `[workspace.package]` inheritance when
+/// the directory belongs to a workspace; otherwise parse it standalone.
+fn resolve_manifest(member_dir: &Path, member_content: &str) -> Result<Manifest, DiscoveryError> {
+    match find_workspace_root(member_dir, member_content) {
+        Some(root_content) => wado_manifest::resolve_member(member_content, &root_content)
+            .map_err(DiscoveryError::Parse),
+        None => member_content.parse().map_err(DiscoveryError::Parse),
+    }
+}
+
+/// The workspace-root `wado.toml` contents governing `member_dir`, if any. The
+/// member's own manifest may declare the workspace (root = self); otherwise walk
+/// up to the nearest ancestor whose `[workspace].members` glob covers the member.
+fn find_workspace_root(member_dir: &Path, member_content: &str) -> Option<String> {
+    if read_workspace_members(member_content).is_some() {
+        return Some(member_content.to_string());
+    }
+    let mut dir = member_dir.to_path_buf();
+    while dir.pop() {
+        let candidate = dir.join(MANIFEST_FILENAME);
+        if !candidate.is_file() {
+            continue;
+        }
+        let Ok(content) = fs::read_to_string(&candidate) else {
+            continue;
+        };
+        if let Some(members) = read_workspace_members(&content)
+            && workspace_governs(&dir, &members, member_dir)
+        {
+            return Some(content);
+        }
+    }
+    None
+}
+
+/// Read `[workspace].members` without full validation (the member may omit
+/// inherited required fields, which a full parse would reject).
+fn read_workspace_members(content: &str) -> Option<Vec<String>> {
+    let table: toml::Table = toml::from_str(content).ok()?;
+    let members = table.get("workspace")?.as_table()?.get("members")?.as_array()?;
+    Some(
+        members
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_owned))
+            .collect(),
+    )
+}
+
+/// Whether `member_dir` matches any `members` glob, resolved relative to the
+/// workspace root directory.
+fn workspace_governs(root_dir: &Path, members: &[String], member_dir: &Path) -> bool {
+    let Ok(target) = member_dir.canonicalize() else {
+        return false;
+    };
+    members.iter().any(|pattern| {
+        let Some(joined) = root_dir.join(pattern).to_str().map(str::to_owned) else {
+            return false;
+        };
+        let Ok(paths) = glob::glob(&joined) else {
+            return false;
+        };
+        paths
+            .filter_map(Result::ok)
+            .any(|p| p.canonicalize().is_ok_and(|c| c == target))
+    })
 }
 
 /// The kind of entry point to resolve, identified by the CM world it targets.
@@ -174,7 +241,7 @@ pub fn resolve_entry_point(project: &ProjectManifest, kind: EntryPointKind) -> O
 fn load_from_dir(dir: &Path) -> Result<ProjectManifest, DiscoveryError> {
     let candidate = dir.join(MANIFEST_FILENAME);
     let content = fs::read_to_string(&candidate).map_err(DiscoveryError::Io)?;
-    let manifest: Manifest = content.parse().map_err(DiscoveryError::Parse)?;
+    let manifest = resolve_manifest(dir, &content)?;
     Ok(ProjectManifest {
         manifest,
         root: dir.to_path_buf(),
