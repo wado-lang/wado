@@ -222,13 +222,13 @@ A registry dependency with no `registry` field requires `default` to be set. If 
 
 ### Registry backend
 
-Registry resolution and publishing use **OCI** (the OCI Distribution Spec): a component is an OCI artifact in a container registry (e.g. `ghcr.io`), and the content digest provides integrity. A registry URL takes the form `oci://<host>/<prefix>`; an open coordinate `ns:pkg` resolves to the repository `<host>/<prefix>/<ns>/<pkg>`, with the version as an image tag.
+Registry resolution and publishing use OCI (the OCI Distribution Spec): a component is an OCI artifact in a container registry (e.g. `ghcr.io`), and the content digest provides integrity. A registry URL takes the form `oci://<host>/<prefix>`; an open coordinate `ns:pkg` resolves to the repository `<host>/<prefix>/<ns>/<pkg>`, with the version as an image tag.
 
-The earlier **warg** protocol is dropped. Its registry (`bytecodealliance/registry`) is archived and the ecosystem (`wasm-pkg-tools`) defaults to OCI. A warg-only registry such as wa.dev is reachable only through the external `wkg` tool, not natively; Wado neither implements nor wraps warg. Publishing is likewise done with `wkg`, not a Wado subcommand.
+The earlier warg protocol is dropped. Its registry (`bytecodealliance/registry`) is archived and the ecosystem (`wasm-pkg-tools`) defaults to OCI. A warg-only registry such as wa.dev is reachable only through the external `wkg` tool, not natively; Wado neither implements nor wraps warg. Publishing is likewise done with `wkg`, not a Wado subcommand.
 
 ### `[dependencies]` and `[dev-dependencies]`
 
-Each key is the **specifier** used in Wado source code, byte-for-byte (`"docs:regex"`, `"lib:shared"`). Values are inline tables specifying the dependency source. See [Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md) for the key forms and resolution rules.
+Each key is the specifier used in Wado source code, byte-for-byte (`"docs:regex"`, `"lib:shared"`). Values are inline tables specifying the dependency source. See [Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md) for the key forms and resolution rules.
 
 `[dev-dependencies]` are only available during `wado test` and are excluded from production builds.
 
@@ -306,8 +306,8 @@ The specifier grammar and the reserved = bundled rule are defined in
 [Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md).
 A dependency-backed specifier is one of:
 
-- an **open coordinate** `ns:pkg` (`ns` ∉ {`wasi`, `core`}), or
-- a **`lib:` nickname**.
+- an open coordinate `ns:pkg` (`ns` ∉ {`wasi`, `core`}), or
+- a `lib:` nickname.
 
 Both resolve by looking up the byte-identical key in `[dependencies]` (or
 `[dev-dependencies]` during test). `wasi:`/`core:` resolve to bundled sources,
@@ -350,7 +350,7 @@ When a dependency itself has a `wado.toml` with dependencies, those are transiti
 
 #### Resolution Algorithm: PubGrub
 
-Wado uses the **PubGrub** algorithm for dependency resolution. PubGrub is a conflict-driven nogood learning (CDCL) solver, originally designed for Dart's `pub` and adopted by `uv` (Python), Swift Package Manager, and others.
+Wado uses the PubGrub algorithm for dependency resolution. PubGrub is a conflict-driven nogood learning (CDCL) solver, originally designed for Dart's `pub` and adopted by `uv` (Python), Swift Package Manager, and others.
 
 Why PubGrub over alternatives:
 
@@ -362,9 +362,9 @@ Why PubGrub over alternatives:
 
 PubGrub provides:
 
-- **Conflict-driven learning**: when a conflict is found, the solver derives a precise incompatibility that explains _why_ this combination fails and never re-explores it
-- **Human-readable error messages**: each resolution failure comes with a derivation chain (e.g., "because A requires utils ^1.0 and B requires utils ^2.0, and your project requires both A and B, version solving failed")
-- **Efficient pruning**: near-polynomial performance in practice despite NP-hard worst case
+- Conflict-driven learning: when a conflict is found, the solver derives a precise incompatibility that explains _why_ this combination fails and never re-explores it
+- Human-readable error messages: each resolution failure comes with a derivation chain (e.g., "because A requires utils ^1.0 and B requires utils ^2.0, and your project requires both A and B, version solving failed")
+- Efficient pruning: near-polynomial performance in practice despite NP-hard worst case
 
 The Rust crate `pubgrub` provides a ready-made implementation.
 
@@ -378,7 +378,7 @@ The `version` field requires an explicit range operator — bare versions are er
 | `^`    | Caret (pre-1.0)    | `^0.2.3` | `>=0.2.3, <0.3.0` |
 | `~`    | Tilde (patch-only) | `~1.2.3` | `>=1.2.3, <1.3.0` |
 | `=`    | Exact              | `=1.2.3` | `=1.2.3`          |
-| (none) | **Error**          | `1.2.3`  | compile error     |
+| (none) | Error              | `1.2.3`  | compile error     |
 
 ```
 version = "^1.0.0"   # OK: caret range
@@ -403,7 +403,7 @@ The rule: ignore the first `[a-zA-Z]+` prefix if present. Tags that do not conta
 
 #### Semver Compatibility
 
-Two requirements are **semver-compatible** if they share the same compatibility range (same major version for `>=1.0.0`, same major.minor for `0.x`). Within a compatibility range, the resolver selects **exactly one version** — the highest that satisfies all constraints.
+Two requirements are semver-compatible if they share the same compatibility range (same major version for `>=1.0.0`, same major.minor for `0.x`). Within a compatibility range, the resolver selects exactly one version — the highest that satisfies all constraints.
 
 #### Multiple Version Coexistence
 
@@ -435,7 +435,7 @@ Within a single `wado.toml`, a user can also explicitly depend on multiple major
 
 #### Transitive Version Isolation
 
-The resolver runs on the **full dependency graph** and produces a flat resolution map. Each resolved package is identified by `(package identity, compatibility range)`:
+The resolver runs on the full dependency graph and produces a flat resolution map. Each resolved package is identified by `(package identity, compatibility range)`:
 
 ```
 package identity = registry URL + namespace:name  (for registry deps)
@@ -465,9 +465,9 @@ The compiler sees distinct `ModuleSource::Dependency` values (different `id`) an
 
 When two dependencies require the same transitive dependency:
 
-- **Compatible versions**: unified to one resolved instance (highest compatible). PubGrub finds this automatically.
-- **Incompatible versions**: coexist as separate instances. Each dependent sees its own version. Types do not cross boundaries.
-- **Unsatisfiable**: if constraints within a compatibility range conflict (e.g., `=1.2.0` and `=1.3.0`), PubGrub reports a precise error with derivation chain.
+- Compatible versions: unified to one resolved instance (highest compatible). PubGrub finds this automatically.
+- Incompatible versions: coexist as separate instances. Each dependent sees its own version. Types do not cross boundaries.
+- Unsatisfiable: if constraints within a compatibility range conflict (e.g., `=1.2.0` and `=1.3.0`), PubGrub reports a precise error with derivation chain.
 
 #### Cyclic Dependency Detection
 
@@ -610,7 +610,7 @@ The prefix makes the format extensible — if SHA-256 is ever deprecated, a new 
 | Git        | `resolved-ref` (commit SHA) serves as integrity. Git's content-addressable storage already guarantees integrity. No separate `integrity` field needed. |
 | Local path | Not locked. Always resolved fresh.                                                                                                                     |
 
-For registry packages, the hash input is the **downloaded archive bytes** (not individual source files concatenated). This matches how registries distribute packages and avoids ambiguity about file ordering or line endings.
+For registry packages, the hash input is the downloaded archive bytes (not individual source files concatenated). This matches how registries distribute packages and avoids ambiguity about file ordering or line endings.
 
 The initial algorithm is SHA-256. The resolver verifies integrity on every install: if the computed hash does not match `integrity`, the install fails with an error.
 
@@ -716,7 +716,7 @@ Properties:
 
 ### Lockstep Contract
 
-Workspace metadata inheritance and root-only publishing together guarantee that **a workspace's packages cannot drift to mismatched public versions**, enforced in two places:
+Workspace metadata inheritance and root-only publishing together guarantee that a workspace's packages cannot drift to mismatched public versions, enforced in two places:
 
 - Repository: `version`, `repository`, and `namespace` are declared once in `[workspace.package]` and cannot be overridden, so there is one definition site and drift is impossible by construction, not merely linted.
 - Registry: `wado publish` runs only from the workspace root and publishes every member together at that shared version (see [Publishing](#publishing)), so members can't be pushed piecemeal at different versions.
@@ -732,7 +732,7 @@ When no `wado.toml` exists, the compiler operates in single-file mode:
 - `core:*`, `wasi:*`, `./`, `../`, and `https://` imports work as always.
 - A dependency specifier (`ns:pkg` or `lib:nick`) must carry an inline
   `with { ... }` supplying its source — the same vocabulary as a
-  `[dependencies]` value, with an **exact** `version` (no lock to resolve a
+  `[dependencies]` value, with an exact `version` (no lock to resolve a
   range). See [Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md).
 - A dependency specifier without `with` produces a clear error:
   `dependency "lib:foo" needs a source (add a with-clause or a wado.toml)`.
@@ -850,18 +850,18 @@ This enables seamless local development while ensuring published packages are se
 
 ### Trade-offs
 
-- **PubGrub over MVS**: PubGrub selects the highest compatible version (users get security patches automatically) at the cost of needing a lock file for reproducibility. MVS would give O(n) resolution and reproducibility without a lock file, but users would be stuck on old versions unless every library author proactively bumps minimums. For an ecosystem that values security and freshness, PubGrub is the better default.
-- **`version` XOR `ref` for git**: `version` enables semver resolution on tags (like Go/Swift PM), `ref` pins to an exact ref. XOR ensures the intent is always unambiguous — no implicit defaults.
-- **Bare version = error**: more verbose than Cargo's implicit caret, but eliminates a source of confusion ("does `1.0.0` mean exact or `^1.0.0`?"). Every `version` field is self-documenting.
-- **Registry names per-project**: avoids global configuration but requires repetition across projects. The `default` registry mitigates this for the common case. A future `~/.wado/config.toml` could provide user-level defaults.
-- **Dependency specifier resolution**: an open coordinate or `lib:` nickname requires a `wado.toml` lookup at compile time, adding a project-discovery step. The compiler itself is not affected — only `CompilerHost` implementations need to handle this.
-- **Self-sufficient lock file**: duplicates entry points and dependency edges from each package's `wado.toml`. This makes the lock file larger and introduces a potential staleness risk (if a dependency's `wado.toml` changes entry points without version bump). The trade-off is worth it — builds skip all transitive manifest I/O, and staleness is caught by `wado update` or integrity mismatch.
-- **Archive-level integrity** (not source-level): simpler and unambiguous, but means the hash depends on the registry's archive format. If a registry changes its packaging format, hashes change even if sources are identical.
-- **Lockstep over per-field opt-in** (see [Lockstep Contract](#lockstep-contract)): `[workspace.package]` inherits automatically (no `{ workspace = true }` marker) and forced fields can't be overridden, plus root-only publishing — trading per-member independence for one definition site and structurally drift-free releases. Independence means leaving the workspace, not an in-workspace opt-out.
-- **`[world]` table keyed by FQ world name**: hosted worlds are declared by their Component Model world name (`"wasi:cli/command"`) rather than a short alias (`command`/`bin`/`cli`). The key is the world the entry conforms to, so new worlds need no new manifest field and the mapping to the CM world is explicit. The library world is the one exception — it has no externally-fixed FQ name, so it is named after the package and declared by `[package].lib`.
-- **`[package]` over `[project]`**: `[package]` aligns with CM's "package" concept (`package ns:name@version` in WIT). The file itself represents the project; `[package]` describes the distributable unit within it. `[workspace]` > `[package]` hierarchy is natural, whereas `[workspace]` > `[project]` would be confusing.
-- **`path` + `registry` dual source**: adds complexity to the dependency spec but eliminates the "path deps can't be published" problem. The alternative (Cargo's separate `[patch]` section) is more complex and harder to maintain.
+- PubGrub over MVS: PubGrub selects the highest compatible version (users get security patches automatically) at the cost of needing a lock file for reproducibility. MVS would give O(n) resolution and reproducibility without a lock file, but users would be stuck on old versions unless every library author proactively bumps minimums. For an ecosystem that values security and freshness, PubGrub is the better default.
+- `version` XOR `ref` for git: `version` enables semver resolution on tags (like Go/Swift PM), `ref` pins to an exact ref. XOR ensures the intent is always unambiguous — no implicit defaults.
+- Bare version = error: more verbose than Cargo's implicit caret, but eliminates a source of confusion ("does `1.0.0` mean exact or `^1.0.0`?"). Every `version` field is self-documenting.
+- Registry names per-project: avoids global configuration but requires repetition across projects. The `default` registry mitigates this for the common case. A future `~/.wado/config.toml` could provide user-level defaults.
+- Dependency specifier resolution: an open coordinate or `lib:` nickname requires a `wado.toml` lookup at compile time, adding a project-discovery step. The compiler itself is not affected — only `CompilerHost` implementations need to handle this.
+- Self-sufficient lock file: duplicates entry points and dependency edges from each package's `wado.toml`. This makes the lock file larger and introduces a potential staleness risk (if a dependency's `wado.toml` changes entry points without version bump). The trade-off is worth it — builds skip all transitive manifest I/O, and staleness is caught by `wado update` or integrity mismatch.
+- Archive-level integrity (not source-level): simpler and unambiguous, but means the hash depends on the registry's archive format. If a registry changes its packaging format, hashes change even if sources are identical.
+- Lockstep over per-field opt-in (see [Lockstep Contract](#lockstep-contract)): `[workspace.package]` inherits automatically (no `{ workspace = true }` marker) and forced fields can't be overridden, plus root-only publishing — trading per-member independence for one definition site and structurally drift-free releases. Independence means leaving the workspace, not an in-workspace opt-out.
+- `[world]` table keyed by FQ world name: hosted worlds are declared by their Component Model world name (`"wasi:cli/command"`) rather than a short alias (`command`/`bin`/`cli`). The key is the world the entry conforms to, so new worlds need no new manifest field and the mapping to the CM world is explicit. The library world is the one exception — it has no externally-fixed FQ name, so it is named after the package and declared by `[package].lib`.
+- `[package]` over `[project]`: `[package]` aligns with CM's "package" concept (`package ns:name@version` in WIT). The file itself represents the project; `[package]` describes the distributable unit within it. `[workspace]` > `[package]` hierarchy is natural, whereas `[workspace]` > `[project]` would be confusing.
+- `path` + `registry` dual source: adds complexity to the dependency spec but eliminates the "path deps can't be published" problem. The alternative (Cargo's separate `[patch]` section) is more complex and harder to maintain.
 
 ### Not Included
 
-- **URL dependencies (`url = "..."`)**: Not included in this WEP. Remote module imports via `use ... from "https://..."` remain a source-level feature (not a `wado.toml` dependency). A `url` dependency source type may be added in a future WEP if a compelling use case emerges that cannot be served by git or registry dependencies.
+- URL dependencies (`url = "..."`): Not included in this WEP. Remote module imports via `use ... from "https://..."` remain a source-level feature (not a `wado.toml` dependency). A `url` dependency source type may be added in a future WEP if a compelling use case emerges that cannot be served by git or registry dependencies.
