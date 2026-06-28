@@ -124,6 +124,30 @@ fn test_compile_file_arg_does_not_embed_metadata() {
 }
 
 #[test]
+fn test_compile_os_skips_metadata() {
+    // -Os strips symbols for minimal frontend delivery; package metadata is
+    // dropped too, matching the WIT section.
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    write_metadata_project(dir);
+    let out = dir.join("out.wasm");
+
+    wado_in(dir)
+        .arg("compile")
+        .arg("-Os")
+        .arg("-o")
+        .arg(&out)
+        .assert()
+        .success();
+
+    let sections = custom_sections(&out);
+    assert!(
+        !sections.iter().any(|(n, _)| n == "description"),
+        "-Os must not embed metadata, got {sections:?}"
+    );
+}
+
+#[test]
 fn test_compile_no_embed_metadata_opts_out() {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path();

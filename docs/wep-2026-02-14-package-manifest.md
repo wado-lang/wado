@@ -126,7 +126,9 @@ Neither OCI nor git addresses a repository subdirectory, so `repository` stays a
 custom-section format. Embedding happens only in manifest-driven mode — `wado
 compile` with no argument (the cwd `wado.toml`) or a directory argument
 (`<dir>/wado.toml`); an explicit `.wado` file argument compiles that file as a
-standalone target and embeds nothing. `--no-embed-metadata` opts out.
+standalone target and embeds nothing. `--no-embed-metadata` opts out, and `-Os`
+(strip symbols for minimal frontend delivery) drops the metadata too, matching
+the WIT section.
 
 `wado publish` builds through the same compile path and shells out to `wkg`
 (wasm-pkg-tools), which derives the OCI annotations. There is no `wkg.toml` —

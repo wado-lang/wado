@@ -1032,8 +1032,10 @@ async fn embed_wit_section(
 /// Embed the `[package]` metadata into the component when building the package's
 /// declared artifact (manifest-driven mode) and `--no-embed-metadata` was not
 /// given. Returns `wasm` unchanged otherwise — an explicit file argument, no
-/// `wado.toml`, or a manifest without `[package]`. The git `revision` is
-/// included only on a clean tree (omitted silently here; `wado publish` warns).
+/// `wado.toml`, a manifest without `[package]`, or `-Os` (which strips symbols
+/// for minimal frontend delivery, where the metadata is dead weight — matching
+/// the WIT section being dropped). The git `revision` is included only on a
+/// clean tree (omitted silently here; `wado publish` warns).
 ///
 /// `project` is the manifest already discovered by [`run`], reused here rather
 /// than re-parsed.
@@ -1042,7 +1044,7 @@ fn embed_package_metadata(
     project: Option<&manifest::ProjectManifest>,
     wasm: Vec<u8>,
 ) -> Vec<u8> {
-    if opts.no_embed_metadata || !opts.manifest_driven {
+    if opts.no_embed_metadata || !opts.manifest_driven || opts.opt_level == OptLevel::Os {
         return wasm;
     }
     let Some(project) = project else {
