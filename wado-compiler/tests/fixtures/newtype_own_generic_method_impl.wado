@@ -1,0 +1,45 @@
+// A newtype's own impl of a generic-method trait resolves through a generic bound.
+
+use { println, Stdout } from "core:cli";
+
+trait Sink {
+    fn put(&mut self, tag: i32);
+}
+
+trait Encode {
+    fn encode<S: Sink>(&self, s: &mut S);
+}
+
+type Bytes = List<u8>;
+
+impl Encode for Bytes {
+    fn encode<S: Sink>(&self, s: &mut S) {
+        s.put(self.len() as i32);
+    }
+}
+
+struct Counter {
+    total: i32,
+}
+
+impl Sink for Counter {
+    fn put(&mut self, tag: i32) {
+        self.total += tag;
+    }
+}
+
+fn encode_with<T: Encode>(value: &T) -> i32 {
+    let mut c = Counter { total: 0 };
+    value.encode(&mut c);
+    return c.total;
+}
+
+export fn run() with Stdout {
+    let b: Bytes = [1, 2, 3];
+    println(`{encode_with(&b)}`);
+}
+
+__DATA__
+{
+    "stdout": "3\n"
+}

@@ -355,13 +355,8 @@ impl Monomorphizer {
             .map(|info| info.method_name.clone())
             .unwrap_or_else(|| method_func.name.clone());
 
-        // Newtype-own-impl guard (mirrors `func_inst.rs`'s collect-side guard):
-        // when the call already names a newtype with its OWN impl of this trait
-        // (e.g. `IntBox^Label::label`) and the receiver is that newtype, keep the
-        // name. The rewrites below peel the newtype to its erased generic base
-        // (`Boxed<i32>`) and would retarget the inherited/blanket base impl,
-        // shadowing the newtype's own.
-        if let Some(info) = method_func.method_info.as_ref()
+        if type_args.is_empty()
+            && let Some(info) = method_func.method_info.as_ref()
             && self.receiver_keeps_newtype_own_impl(receiver.type_id, type_table, info)
         {
             return;
