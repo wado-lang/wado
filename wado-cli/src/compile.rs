@@ -731,6 +731,7 @@ pub fn empty_manifest() -> wado_manifest::Manifest {
         workspace: None,
         test: wado_manifest::TestSettings::default(),
         format: wado_manifest::FormatSettings::default(),
+        unknown_sections: Vec::new(),
     }
 }
 

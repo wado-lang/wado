@@ -24,7 +24,114 @@ fn validate_package(pkg: &crate::manifest::Package) -> Result<(), ManifestError>
         version: pkg.version.clone(),
         reason: e.to_string(),
     })?;
+    // `license` and `license-file` are mutually exclusive.
+    if pkg.license.is_some() && pkg.license_file.is_some() {
+        return Err(ManifestError::ConflictingLicense);
+    }
+    // `wado-version` is a semver requirement (e.g. ">=0.5"); accepts the full
+    // comparator grammar, unlike dependency specifiers.
+    if let Some(req) = &pkg.wado_version {
+        semver::VersionReq::parse(req).map_err(|e| ManifestError::InvalidWadoVersion {
+            value: req.clone(),
+            reason: e.to_string(),
+        })?;
+    }
     Ok(())
+}
+
+/// Reasons a package is not ready to publish. Returned by
+/// [`validate_for_publish`]; an empty result means the package is publishable.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PublishError {
+    /// No `[package]` section.
+    NoPackage,
+    /// `namespace` is absent, so the package has no registry identity.
+    MissingNamespace,
+    /// `publish = false` opts the package out.
+    PublishDisabled,
+    /// A required descriptive field (`description`, `repository`, `authors`) is
+    /// missing.
+    MissingMetadata { field: &'static str },
+    /// Neither `license` nor `license-file` is set.
+    MissingLicense,
+    /// A shipped `path` dependency lacks a registry/git source for publishing.
+    PathDependencyWithoutSource { dep_name: String },
+}
+
+impl std::fmt::Display for PublishError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PublishError::NoPackage => write!(f, "no [package] section to publish"),
+            PublishError::MissingNamespace => {
+                write!(f, "[package].namespace is required to publish")
+            }
+            PublishError::PublishDisabled => {
+                write!(f, "[package].publish = false opts out of publishing")
+            }
+            PublishError::MissingMetadata { field } => {
+                write!(f, "[package].{field} is required to publish")
+            }
+            PublishError::MissingLicense => write!(
+                f,
+                "[package] requires `license` or `license-file` to publish"
+            ),
+            PublishError::PathDependencyWithoutSource { dep_name } => write!(
+                f,
+                "path dependency {dep_name:?} needs a registry or git source to publish"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for PublishError {}
+
+/// Check whether a manifest meets the requirements to publish, collecting every
+/// problem rather than stopping at the first. An empty `Vec` means publishable.
+///
+/// Per WEP, a published package must carry its descriptive metadata
+/// (`description`, `repository`, `authors`) and a license; `homepage` and
+/// `documentation` fall back to `repository`, and `repository-directory` /
+/// `wado-version` stay optional.
+#[must_use]
+pub fn validate_for_publish(manifest: &Manifest) -> Vec<PublishError> {
+    let mut errors = Vec::new();
+    let Some(pkg) = &manifest.package else {
+        return vec![PublishError::NoPackage];
+    };
+    if !pkg.publish {
+        errors.push(PublishError::PublishDisabled);
+    }
+    if pkg.namespace.is_none() {
+        errors.push(PublishError::MissingNamespace);
+    }
+    if pkg.description.is_none() {
+        errors.push(PublishError::MissingMetadata {
+            field: "description",
+        });
+    }
+    if pkg.repository.is_none() {
+        errors.push(PublishError::MissingMetadata { field: "repository" });
+    }
+    if pkg.authors.is_empty() {
+        errors.push(PublishError::MissingMetadata { field: "authors" });
+    }
+    if pkg.license.is_none() && pkg.license_file.is_none() {
+        errors.push(PublishError::MissingLicense);
+    }
+    // Shipped dependencies (not dev-dependencies) must be self-contained: a
+    // `path` source needs a registry/git fallback for the published manifest.
+    for (name, dep) in manifest.dependencies.iter().chain(&manifest.build_dependencies) {
+        if let DependencySource::Path {
+            publish_source: None,
+            ..
+        } = &dep.source
+        {
+            errors.push(PublishError::PathDependencyWithoutSource {
+                dep_name: name.clone(),
+            });
+        }
+    }
+    errors
 }
 
 /// Validate that a name matches `[a-zA-Z0-9_-]+` and is 1-64 characters.
@@ -239,5 +346,103 @@ version = "not-a-version"
 "#;
         let err = toml.parse::<crate::Manifest>().unwrap_err();
         assert!(matches!(err, ManifestError::InvalidVersion { .. }));
+    }
+
+    #[test]
+    fn publishable_package_has_no_publish_errors() {
+        let toml = r#"
+[package]
+namespace = "myorg"
+name = "app"
+version = "0.1.0"
+description = "An app"
+repository = "https://github.com/myorg/app"
+license = "MIT"
+authors = ["Alice"]
+"#;
+        let m = toml.parse::<crate::Manifest>().unwrap();
+        assert!(super::validate_for_publish(&m).is_empty());
+    }
+
+    #[test]
+    fn publish_collects_all_missing_requirements() {
+        // Only name+version: namespace, description, repository, authors, license missing.
+        let toml = "[package]\nname = \"app\"\nversion = \"0.1.0\"\n";
+        let m = toml.parse::<crate::Manifest>().unwrap();
+        let errs = super::validate_for_publish(&m);
+        use super::PublishError::*;
+        assert!(errs.contains(&MissingNamespace), "{errs:?}");
+        assert!(errs.contains(&MissingLicense), "{errs:?}");
+        assert!(
+            errs.contains(&MissingMetadata { field: "description" }),
+            "{errs:?}"
+        );
+        assert!(
+            errs.contains(&MissingMetadata { field: "repository" }),
+            "{errs:?}"
+        );
+        assert!(
+            errs.contains(&MissingMetadata { field: "authors" }),
+            "{errs:?}"
+        );
+    }
+
+    #[test]
+    fn publish_disabled_is_an_error() {
+        let toml = r#"
+[package]
+namespace = "myorg"
+name = "app"
+version = "0.1.0"
+description = "An app"
+repository = "https://github.com/myorg/app"
+license = "MIT"
+authors = ["Alice"]
+publish = false
+"#;
+        let m = toml.parse::<crate::Manifest>().unwrap();
+        assert!(super::validate_for_publish(&m).contains(&super::PublishError::PublishDisabled));
+    }
+
+    #[test]
+    fn license_file_satisfies_publish_license_requirement() {
+        let toml = r#"
+[package]
+namespace = "myorg"
+name = "app"
+version = "0.1.0"
+description = "An app"
+repository = "https://github.com/myorg/app"
+license-file = "LICENSE-COMMERCIAL"
+authors = ["Alice"]
+"#;
+        let m = toml.parse::<crate::Manifest>().unwrap();
+        assert!(super::validate_for_publish(&m).is_empty());
+    }
+
+    #[test]
+    fn publish_flags_path_dependency_without_source() {
+        let toml = r#"
+[package]
+namespace = "myorg"
+name = "app"
+version = "0.1.0"
+description = "An app"
+repository = "https://github.com/myorg/app"
+license = "MIT"
+authors = ["Alice"]
+
+[dependencies]
+"lib:shared" = { path = "../shared" }
+"#;
+        let m = toml.parse::<crate::Manifest>().unwrap();
+        let errs = super::validate_for_publish(&m);
+        assert!(
+            errs.iter().any(|e| matches!(
+                e,
+                super::PublishError::PathDependencyWithoutSource { dep_name } if dep_name == "lib:shared"
+            )),
+            "{errs:?}"
+        );
     }
 }

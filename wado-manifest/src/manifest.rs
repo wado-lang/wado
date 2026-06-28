@@ -23,6 +23,9 @@ pub struct Manifest {
     pub workspace: Option<Workspace>,
     pub test: TestSettings,
     pub format: FormatSettings,
+    /// Unknown top-level keys/sections (typos, unsupported). Reported as
+    /// warnings, never errors.
+    pub unknown_sections: Vec<String>,
 }
 
 impl Manifest {
@@ -71,9 +74,25 @@ impl Manifest {
             .keys()
             .chain(self.dev_dependencies.keys())
             .chain(self.build_dependencies.keys());
-        keys.filter(|k| !k.contains(':'))
+        let mut warnings: Vec<ManifestWarning> = keys
+            .filter(|k| !k.contains(':'))
             .map(|k| ManifestWarning::BareDependencyKey { key: k.clone() })
-            .collect()
+            .collect();
+        for field in &self.unknown_sections {
+            warnings.push(ManifestWarning::UnknownField {
+                section: None,
+                field: field.clone(),
+            });
+        }
+        if let Some(pkg) = &self.package {
+            for field in &pkg.unknown_fields {
+                warnings.push(ManifestWarning::UnknownField {
+                    section: Some("package".to_string()),
+                    field: field.clone(),
+                });
+            }
+        }
+        warnings
     }
 }
 
@@ -81,6 +100,12 @@ impl Manifest {
 pub enum ManifestWarning {
     /// Bare key (no `:`); deprecated in favor of `ns:pkg` / `lib:nick` (WEP).
     BareDependencyKey { key: String },
+    /// Unknown key not recognized by the schema. `section` is the table it
+    /// appeared in (`None` for a top-level key/section).
+    UnknownField {
+        section: Option<String>,
+        field: String,
+    },
 }
 
 impl std::fmt::Display for ManifestWarning {
@@ -91,6 +116,14 @@ impl std::fmt::Display for ManifestWarning {
                 "dependency key {key:?} is a bare name (deprecated); use a coordinate \
                  like \"ns:{key}\" or a \"lib:{key}\" indirection",
             ),
+            ManifestWarning::UnknownField {
+                section: Some(section),
+                field,
+            } => write!(f, "unknown field {field:?} in [{section}] (ignored)"),
+            ManifestWarning::UnknownField {
+                section: None,
+                field,
+            } => write!(f, "unknown top-level key {field:?} (ignored)"),
         }
     }
 }
@@ -138,6 +171,50 @@ pub struct Package {
     /// dependency (`use { … } from "<dep-name>"`). Only `export` items are
     /// visible to consumers.
     pub lib: Option<String>,
+    /// Short, human-readable summary (→ `org.opencontainers.image.description`).
+    pub description: Option<String>,
+    /// Project home page URL (→ `org.opencontainers.image.url`). Falls back to
+    /// `repository` when unset; see [`Package::effective_homepage`].
+    pub homepage: Option<String>,
+    /// Source repository URL, bare (no subdirectory)
+    /// (→ `org.opencontainers.image.source`).
+    pub repository: Option<String>,
+    /// Subdirectory holding the package within a monorepo. Wado-custom; not an
+    /// OCI annotation.
+    pub repository_directory: Option<String>,
+    /// Documentation URL (→ `org.opencontainers.image.documentation`). Falls
+    /// back to `repository`; see [`Package::effective_documentation`].
+    pub documentation: Option<String>,
+    /// SPDX License Expression (→ `org.opencontainers.image.licenses`).
+    /// Mutually exclusive with `license_file`.
+    pub license: Option<String>,
+    /// Path to a non-standard license file. Mutually exclusive with `license`.
+    pub license_file: Option<String>,
+    /// Contact details of the people/organization responsible
+    /// (→ `org.opencontainers.image.authors`).
+    pub authors: Vec<String>,
+    /// Minimum Wado compiler version required to build (a semver requirement,
+    /// e.g. `">=0.5"`).
+    pub wado_version: Option<String>,
+    /// Whether the package may be published. `false` opts out even when a
+    /// `namespace` is present. Defaults to `true`.
+    pub publish: bool,
+    /// Unknown `[package]` keys (typos, unsupported). Reported as warnings.
+    pub unknown_fields: Vec<String>,
+}
+
+impl Package {
+    /// Homepage, falling back to the repository URL when unset.
+    #[must_use]
+    pub fn effective_homepage(&self) -> Option<&str> {
+        self.homepage.as_deref().or(self.repository.as_deref())
+    }
+
+    /// Documentation URL, falling back to the repository URL when unset.
+    #[must_use]
+    pub fn effective_documentation(&self) -> Option<&str> {
+        self.documentation.as_deref().or(self.repository.as_deref())
+    }
 }
 
 /// The `[workspace]` section of `wado.toml`.
@@ -196,7 +273,8 @@ impl FromStr for Manifest {
     fn from_str(toml_str: &str) -> Result<Self, Self::Err> {
         let raw: RawManifest = toml::from_str::<RawManifest>(toml_str)
             .map_err(|e| ManifestError::Toml(e.to_string()))?;
-        let manifest = convert_raw(raw)?;
+        let mut manifest = convert_raw(raw)?;
+        collect_unknown_fields(toml_str, &mut manifest)?;
         validate::validate(&manifest)?;
         Ok(manifest)
     }
@@ -229,6 +307,10 @@ pub enum ManifestError {
     },
     /// Registry dependency without a default registry defined.
     NoDefaultRegistry { dep_name: String },
+    /// `[package]` set both `license` and `license-file` (mutually exclusive).
+    ConflictingLicense,
+    /// `[package].wado-version` is not a valid semver requirement.
+    InvalidWadoVersion { value: String, reason: String },
 }
 
 impl fmt::Display for ManifestError {
@@ -269,6 +351,14 @@ impl fmt::Display for ManifestError {
                     "dependency {dep_name:?}: registry dependency requires [registries].default"
                 )
             }
+            ManifestError::ConflictingLicense => write!(
+                f,
+                "[package]: `license` and `license-file` are mutually exclusive"
+            ),
+            ManifestError::InvalidWadoVersion { value, reason } => write!(
+                f,
+                "[package].wado-version {value:?} is not a valid version requirement: {reason}"
+            ),
         }
     }
 }
@@ -310,6 +400,19 @@ struct RawPackage {
     name: Option<String>,
     version: Option<String>,
     lib: Option<String>,
+    description: Option<String>,
+    homepage: Option<String>,
+    repository: Option<String>,
+    #[serde(rename = "repository-directory")]
+    repository_directory: Option<String>,
+    documentation: Option<String>,
+    license: Option<String>,
+    #[serde(rename = "license-file")]
+    license_file: Option<String>,
+    authors: Option<Vec<String>>,
+    #[serde(rename = "wado-version")]
+    wado_version: Option<String>,
+    publish: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -353,7 +456,62 @@ fn convert_raw(raw: RawManifest) -> Result<Manifest, ManifestError> {
         workspace,
         test,
         format,
+        unknown_sections: Vec::new(),
     })
+}
+
+// Top-level keys and `[package]` keys recognized by the schema. Unknown keys
+// are reported as warnings (not errors); these lists must stay in sync with
+// `RawManifest` / `RawPackage` (using their serde-renamed, hyphenated forms).
+const KNOWN_TOP_LEVEL: &[&str] = &[
+    "package",
+    "world",
+    "registries",
+    "dependencies",
+    "dev-dependencies",
+    "build-dependencies",
+    "workspace",
+    "test",
+    "format",
+];
+const KNOWN_PACKAGE: &[&str] = &[
+    "namespace",
+    "name",
+    "version",
+    "lib",
+    "description",
+    "homepage",
+    "repository",
+    "repository-directory",
+    "documentation",
+    "license",
+    "license-file",
+    "authors",
+    "wado-version",
+    "publish",
+];
+
+// Re-parse the raw TOML table to flag keys the schema does not recognize.
+// Done outside serde so unknown keys warn instead of being silently dropped
+// (serde) or hard-erroring (`deny_unknown_fields`).
+fn collect_unknown_fields(toml_str: &str, manifest: &mut Manifest) -> Result<(), ManifestError> {
+    let table: toml::Table =
+        toml::from_str(toml_str).map_err(|e| ManifestError::Toml(e.to_string()))?;
+    manifest.unknown_sections = table
+        .keys()
+        .filter(|k| !KNOWN_TOP_LEVEL.contains(&k.as_str()))
+        .cloned()
+        .collect();
+    if let (Some(pkg), Some(toml::Value::Table(pkg_table))) =
+        (manifest.package.as_mut(), table.get("package"))
+    {
+        pkg.unknown_fields = pkg_table
+            .keys()
+            .filter(|k| !KNOWN_PACKAGE.contains(&k.as_str()))
+            .cloned()
+            .collect();
+    }
+    Ok(())
 }
 
 fn convert_test(raw: RawTestSettings) -> TestSettings {
@@ -384,6 +542,17 @@ fn convert_package(raw: RawPackage) -> Result<Package, ManifestError> {
         name,
         version,
         lib: raw.lib,
+        description: raw.description,
+        homepage: raw.homepage,
+        repository: raw.repository,
+        repository_directory: raw.repository_directory,
+        documentation: raw.documentation,
+        license: raw.license,
+        license_file: raw.license_file,
+        authors: raw.authors.unwrap_or_default(),
+        wado_version: raw.wado_version,
+        publish: raw.publish.unwrap_or(true),
+        unknown_fields: Vec::new(),
     })
 }
 
@@ -1030,5 +1199,152 @@ json = { workspace = true }
             m.dependencies["json"].source,
             DependencySource::Workspace
         ));
+    }
+
+    #[test]
+    fn parse_package_metadata() {
+        let toml = r#"
+[package]
+namespace = "myorg"
+name = "my-app"
+version = "0.1.0"
+description = "A fast widget toolkit"
+homepage = "https://wado-lang.org"
+repository = "https://github.com/myorg/my-app"
+repository-directory = "packages/foo"
+documentation = "https://docs.wado-lang.org"
+license = "MIT OR Apache-2.0"
+authors = ["Alice <a@example.com>", "Bob"]
+wado-version = ">=0.5"
+publish = false
+"#;
+        let pkg = toml.parse::<Manifest>().unwrap().package.unwrap();
+        assert_eq!(pkg.description.as_deref(), Some("A fast widget toolkit"));
+        assert_eq!(pkg.homepage.as_deref(), Some("https://wado-lang.org"));
+        assert_eq!(
+            pkg.repository.as_deref(),
+            Some("https://github.com/myorg/my-app")
+        );
+        assert_eq!(pkg.repository_directory.as_deref(), Some("packages/foo"));
+        assert_eq!(
+            pkg.documentation.as_deref(),
+            Some("https://docs.wado-lang.org")
+        );
+        assert_eq!(pkg.license.as_deref(), Some("MIT OR Apache-2.0"));
+        assert_eq!(pkg.authors, vec!["Alice <a@example.com>", "Bob"]);
+        assert_eq!(pkg.wado_version.as_deref(), Some(">=0.5"));
+        assert!(!pkg.publish);
+    }
+
+    #[test]
+    fn metadata_defaults_when_omitted() {
+        let toml = "[package]\nname = \"app\"\nversion = \"0.1.0\"\n";
+        let pkg = toml.parse::<Manifest>().unwrap().package.unwrap();
+        assert!(pkg.description.is_none());
+        assert!(pkg.authors.is_empty());
+        assert!(pkg.wado_version.is_none());
+        assert!(pkg.publish, "publish defaults to true");
+        assert!(pkg.repository_directory.is_none());
+    }
+
+    #[test]
+    fn homepage_and_documentation_fall_back_to_repository() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+repository = "https://github.com/org/app"
+"#;
+        let pkg = toml.parse::<Manifest>().unwrap().package.unwrap();
+        assert_eq!(
+            pkg.effective_homepage(),
+            Some("https://github.com/org/app")
+        );
+        assert_eq!(
+            pkg.effective_documentation(),
+            Some("https://github.com/org/app")
+        );
+    }
+
+    #[test]
+    fn explicit_homepage_overrides_repository_fallback() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+homepage = "https://app.example"
+repository = "https://github.com/org/app"
+"#;
+        let pkg = toml.parse::<Manifest>().unwrap().package.unwrap();
+        assert_eq!(pkg.effective_homepage(), Some("https://app.example"));
+    }
+
+    #[test]
+    fn unknown_package_field_warns_but_parses() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+descshunption = "typo"
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        let warnings = m.warnings();
+        assert!(
+            warnings.iter().any(|w| matches!(
+                w,
+                ManifestWarning::UnknownField { section: Some(s), field }
+                    if s == "package" && field == "descshunption"
+            )),
+            "got {warnings:?}"
+        );
+    }
+
+    #[test]
+    fn unknown_top_level_section_warns_but_parses() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+
+[dependancies]
+"ns:x" = { version = "^1.0.0" }
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        let warnings = m.warnings();
+        assert!(
+            warnings.iter().any(|w| matches!(
+                w,
+                ManifestWarning::UnknownField { section: None, field } if field == "dependancies"
+            )),
+            "got {warnings:?}"
+        );
+    }
+
+    #[test]
+    fn license_and_license_file_conflict_rejected() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+license = "MIT"
+license-file = "LICENSE"
+"#;
+        let err = toml.parse::<Manifest>().unwrap_err();
+        assert!(matches!(err, ManifestError::ConflictingLicense), "{err:?}");
+    }
+
+    #[test]
+    fn invalid_wado_version_rejected() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+wado-version = "not a req"
+"#;
+        let err = toml.parse::<Manifest>().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::InvalidWadoVersion { .. }),
+            "{err:?}"
+        );
     }
 }

@@ -14,4 +14,5 @@ pub use provider::{
     DependencyProvider, GitTagInfo, InMemoryDependencyProvider, ProviderError, RegistryPackageInfo,
 };
 pub use resolve::{ResolveError, resolve};
+pub use validate::{PublishError, validate_for_publish};
 pub use version::{Version, VersionError, VersionSpecifier};
