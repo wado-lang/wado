@@ -713,7 +713,9 @@ fn build_dep_generator_local_path(
 /// both spellings land on the same entry file.
 fn package_generator_entry(pkg_dir: &Path) -> Option<String> {
     let manifest_text = fs::read_to_string(pkg_dir.join("wado.toml")).ok()?;
-    let manifest: wado_manifest::Manifest = manifest_text.parse().ok()?;
+    // Workspace-aware: a generator package may be a member that inherits
+    // required fields (e.g. version) from [workspace.package].
+    let manifest = crate::manifest::resolve_manifest(pkg_dir, &manifest_text).ok()?;
     Some(manifest.world_entry("core:kiln/generator")?.to_string())
 }
 
@@ -732,6 +734,7 @@ pub fn empty_manifest() -> wado_manifest::Manifest {
         test: wado_manifest::TestSettings::default(),
         format: wado_manifest::FormatSettings::default(),
         unknown_sections: Vec::new(),
+        inherited_unknown_fields: Vec::new(),
     }
 }
 
@@ -927,17 +930,12 @@ pub fn load_nearest_manifest(
     if dir.as_os_str().is_empty() {
         dir = std::path::PathBuf::from(".");
     }
-    loop {
-        let candidate = dir.join("wado.toml");
-        if candidate.is_file() {
-            let text = fs::read_to_string(&candidate).ok()?;
-            let manifest: wado_manifest::Manifest = text.parse().ok()?;
-            return Some((manifest, dir));
-        }
-        if !dir.pop() {
-            return None;
-        }
-    }
+    // Reuse workspace-aware discovery so a member manifest that inherits
+    // required fields from [workspace.package] resolves instead of failing to
+    // parse standalone. A malformed manifest yields `None` (no Kiln config), as
+    // before.
+    let project = crate::manifest::discover(&dir).ok().flatten()?;
+    Some((project.manifest, project.root))
 }
 
 fn wasm_to_wat(wasm: &[u8]) -> Result<String, CliExit> {

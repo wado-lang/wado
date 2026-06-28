@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fmt;
 use std::str::FromStr;
 
@@ -26,6 +27,10 @@ pub struct Manifest {
     /// Unknown top-level keys/sections (typos, unsupported). Reported as
     /// warnings, never errors.
     pub unknown_sections: Vec<String>,
+    /// Unknown `[workspace.package]` keys inherited from the workspace root
+    /// during member resolution. Surfaced as `workspace.package` warnings on the
+    /// member (whose own `workspace` is `None`). Empty otherwise.
+    pub inherited_unknown_fields: Vec<String>,
 }
 
 impl Manifest {
@@ -92,13 +97,19 @@ impl Manifest {
                 });
             }
         }
-        if let Some(ws) = &self.workspace {
-            for field in &ws.package_unknown_fields {
-                warnings.push(ManifestWarning::UnknownField {
-                    section: Some("workspace.package".to_string()),
-                    field: field.clone(),
-                });
-            }
+        let workspace_pkg_unknowns = self
+            .workspace
+            .as_ref()
+            .and_then(|ws| ws.package.as_ref())
+            .map(|p| p.unknown_fields.as_slice())
+            .unwrap_or_default()
+            .iter()
+            .chain(&self.inherited_unknown_fields);
+        for field in workspace_pkg_unknowns {
+            warnings.push(ManifestWarning::UnknownField {
+                section: Some("workspace.package".to_string()),
+                field: field.clone(),
+            });
         }
         warnings
     }
@@ -231,9 +242,25 @@ pub struct Workspace {
     pub members: Vec<String>,
     pub dependencies: IndexMap<String, Dependency>,
     pub dev_dependencies: IndexMap<String, Dependency>,
-    /// Unknown keys in `[workspace.package]` (typos, or fields that are not
-    /// inheritable). Reported as warnings.
-    pub package_unknown_fields: Vec<String>,
+    /// The `[workspace.package]` table: metadata members inherit.
+    pub package: Option<WorkspacePackage>,
+}
+
+/// The `[workspace.package]` table: package metadata shared by members.
+/// `version`/`repository`/`namespace` are force-inherited; the rest are
+/// overridable defaults. See [`resolve_member`].
+#[derive(Debug, Clone, Default)]
+pub struct WorkspacePackage {
+    pub version: Option<String>,
+    pub repository: Option<String>,
+    pub namespace: Option<String>,
+    pub license: Option<String>,
+    pub license_file: Option<String>,
+    pub authors: Vec<String>,
+    pub wado_version: Option<String>,
+    /// Unknown keys in `[workspace.package]` (typos, or non-inheritable fields).
+    /// Reported as warnings.
+    pub unknown_fields: Vec<String>,
 }
 
 /// A single dependency declaration.
@@ -284,8 +311,7 @@ impl FromStr for Manifest {
     fn from_str(toml_str: &str) -> Result<Self, Self::Err> {
         let raw: RawManifest = toml::from_str::<RawManifest>(toml_str)
             .map_err(|e| ManifestError::Toml(e.to_string()))?;
-        let mut manifest = convert_raw(raw)?;
-        collect_unknown_fields(toml_str, &mut manifest)?;
+        let manifest = convert_raw(raw)?;
         validate::validate(&manifest)?;
         Ok(manifest)
     }
@@ -327,6 +353,10 @@ pub enum ManifestError {
     /// A workspace member set a field that is force-inherited from
     /// `[workspace.package]` (`version`, `repository`, or `namespace`).
     WorkspaceFieldOverride { field: String },
+    /// `[workspace.package]` set both `license` and `license-file`.
+    WorkspaceConflictingLicense,
+    /// `[workspace.package].license` is not a valid SPDX expression.
+    WorkspaceInvalidLicense { value: String, reason: String },
 }
 
 impl fmt::Display for ManifestError {
@@ -383,6 +413,14 @@ impl fmt::Display for ManifestError {
                 f,
                 "[package].{field} is inherited from [workspace.package]; remove it from this member"
             ),
+            ManifestError::WorkspaceConflictingLicense => write!(
+                f,
+                "[workspace.package]: `license` and `license-file` are mutually exclusive"
+            ),
+            ManifestError::WorkspaceInvalidLicense { value, reason } => write!(
+                f,
+                "[workspace.package].license {value:?} is not a valid SPDX expression: {reason}"
+            ),
         }
     }
 }
@@ -404,6 +442,14 @@ struct RawManifest {
     workspace: Option<RawWorkspace>,
     test: Option<RawTestSettings>,
     format: Option<RawFormatSettings>,
+    #[serde(flatten)]
+    unknown: BTreeMap<String, toml::Value>,
+}
+
+// Sorted, deterministic list of the keys captured by a `#[serde(flatten)]`
+// catch-all — the keys the schema did not recognize.
+fn unknown_keys(captured: &BTreeMap<String, toml::Value>) -> Vec<String> {
+    captured.keys().cloned().collect()
 }
 
 #[derive(Deserialize)]
@@ -437,6 +483,8 @@ struct RawPackage {
     #[serde(rename = "wado-version")]
     wado_version: Option<String>,
     publish: Option<bool>,
+    #[serde(flatten)]
+    unknown: BTreeMap<String, toml::Value>,
 }
 
 #[derive(Deserialize)]
@@ -461,6 +509,8 @@ struct RawWorkspacePackage {
     authors: Option<Vec<String>>,
     #[serde(rename = "wado-version")]
     wado_version: Option<String>,
+    #[serde(flatten)]
+    unknown: BTreeMap<String, toml::Value>,
 }
 
 #[derive(Deserialize)]
@@ -476,6 +526,7 @@ struct RawDependency {
 }
 
 fn convert_raw(raw: RawManifest) -> Result<Manifest, ManifestError> {
+    let unknown_sections = unknown_keys(&raw.unknown);
     let package = raw.package.map(convert_package).transpose()?;
     let world = raw.world.unwrap_or_default();
     let registries = raw.registries.unwrap_or_default();
@@ -496,84 +547,10 @@ fn convert_raw(raw: RawManifest) -> Result<Manifest, ManifestError> {
         workspace,
         test,
         format,
-        unknown_sections: Vec::new(),
+        unknown_sections,
+        inherited_unknown_fields: Vec::new(),
     })
 }
-
-// Top-level keys and `[package]` keys recognized by the schema. Unknown keys
-// are reported as warnings (not errors); these lists must stay in sync with
-// `RawManifest` / `RawPackage` (using their serde-renamed, hyphenated forms).
-const KNOWN_TOP_LEVEL: &[&str] = &[
-    "package",
-    "world",
-    "registries",
-    "dependencies",
-    "dev-dependencies",
-    "build-dependencies",
-    "workspace",
-    "test",
-    "format",
-];
-const KNOWN_PACKAGE: &[&str] = &[
-    "namespace",
-    "name",
-    "version",
-    "lib",
-    "description",
-    "homepage",
-    "repository",
-    "repository-directory",
-    "documentation",
-    "license",
-    "license-file",
-    "authors",
-    "wado-version",
-    "publish",
-];
-
-// Re-parse the raw TOML table to flag keys the schema does not recognize.
-// Done outside serde so unknown keys warn instead of being silently dropped
-// (serde) or hard-erroring (`deny_unknown_fields`).
-fn collect_unknown_fields(toml_str: &str, manifest: &mut Manifest) -> Result<(), ManifestError> {
-    let table: toml::Table =
-        toml::from_str(toml_str).map_err(|e| ManifestError::Toml(e.to_string()))?;
-    manifest.unknown_sections = table
-        .keys()
-        .filter(|k| !KNOWN_TOP_LEVEL.contains(&k.as_str()))
-        .cloned()
-        .collect();
-    if let (Some(pkg), Some(toml::Value::Table(pkg_table))) =
-        (manifest.package.as_mut(), table.get("package"))
-    {
-        pkg.unknown_fields = pkg_table
-            .keys()
-            .filter(|k| !KNOWN_PACKAGE.contains(&k.as_str()))
-            .cloned()
-            .collect();
-    }
-    if let Some(ws) = manifest.workspace.as_mut()
-        && let Some(toml::Value::Table(ws_table)) = table.get("workspace")
-        && let Some(toml::Value::Table(ws_pkg)) = ws_table.get("package")
-    {
-        ws.package_unknown_fields = ws_pkg
-            .keys()
-            .filter(|k| !KNOWN_WORKSPACE_PACKAGE.contains(&k.as_str()))
-            .cloned()
-            .collect();
-    }
-    Ok(())
-}
-
-// Fields accepted in `[workspace.package]` (forced + default inheritance).
-const KNOWN_WORKSPACE_PACKAGE: &[&str] = &[
-    "version",
-    "repository",
-    "namespace",
-    "license",
-    "license-file",
-    "authors",
-    "wado-version",
-];
 
 /// Parse a workspace member's manifest, inheriting metadata from the workspace
 /// root's `[workspace.package]`.
@@ -585,29 +562,39 @@ const KNOWN_WORKSPACE_PACKAGE: &[&str] = &[
 /// `version`) may be supplied by the workspace.
 ///
 /// # Errors
-/// Propagates TOML, inheritance, and validation errors for the merged member.
+/// Propagates TOML, inheritance, and validation errors for the merged member,
+/// including problems in the root's `[workspace.package]` itself.
 pub fn resolve_member(member_toml: &str, root_toml: &str) -> Result<Manifest, ManifestError> {
     let mut member_raw: RawManifest =
         toml::from_str(member_toml).map_err(|e| ManifestError::Toml(e.to_string()))?;
     let root_raw: RawManifest =
         toml::from_str(root_toml).map_err(|e| ManifestError::Toml(e.to_string()))?;
 
-    if let (Some(pkg), Some(ws_pkg)) = (
-        member_raw.package.as_mut(),
-        root_raw.workspace.and_then(|w| w.package),
-    ) {
-        inherit_workspace_package(pkg, &ws_pkg)?;
+    let ws_pkg = root_raw
+        .workspace
+        .and_then(|w| w.package)
+        .map(convert_workspace_package);
+    let inherited_unknown_fields = ws_pkg
+        .as_ref()
+        .map(|p| p.unknown_fields.clone())
+        .unwrap_or_default();
+
+    if let (Some(pkg), Some(ws)) = (member_raw.package.as_mut(), ws_pkg.as_ref()) {
+        // Validate the source [workspace.package] so license problems are
+        // attributed to the root, not the inheriting member.
+        validate::validate_workspace_package(ws)?;
+        inherit_workspace_package(pkg, ws)?;
     }
 
     let mut manifest = convert_raw(member_raw)?;
-    collect_unknown_fields(member_toml, &mut manifest)?;
+    manifest.inherited_unknown_fields = inherited_unknown_fields;
     validate::validate(&manifest)?;
     Ok(manifest)
 }
 
 fn inherit_workspace_package(
     pkg: &mut RawPackage,
-    ws: &RawWorkspacePackage,
+    ws: &WorkspacePackage,
 ) -> Result<(), ManifestError> {
     inherit_forced(&mut pkg.version, ws.version.as_ref(), "version")?;
     inherit_forced(&mut pkg.repository, ws.repository.as_ref(), "repository")?;
@@ -618,8 +605,8 @@ fn inherit_workspace_package(
         pkg.license.clone_from(&ws.license);
         pkg.license_file.clone_from(&ws.license_file);
     }
-    if pkg.authors.is_none() {
-        pkg.authors.clone_from(&ws.authors);
+    if pkg.authors.is_none() && !ws.authors.is_empty() {
+        pkg.authors = Some(ws.authors.clone());
     }
     if pkg.wado_version.is_none() {
         pkg.wado_version.clone_from(&ws.wado_version);
@@ -681,7 +668,7 @@ fn convert_package(raw: RawPackage) -> Result<Package, ManifestError> {
         authors: raw.authors.unwrap_or_default(),
         wado_version: raw.wado_version,
         publish: raw.publish.unwrap_or(true),
-        unknown_fields: Vec::new(),
+        unknown_fields: unknown_keys(&raw.unknown),
     })
 }
 
@@ -696,8 +683,21 @@ fn convert_workspace(raw: RawWorkspace) -> Result<Workspace, ManifestError> {
         members,
         dependencies,
         dev_dependencies,
-        package_unknown_fields: Vec::new(),
+        package: raw.package.map(convert_workspace_package),
     })
+}
+
+fn convert_workspace_package(raw: RawWorkspacePackage) -> WorkspacePackage {
+    WorkspacePackage {
+        version: raw.version,
+        repository: raw.repository,
+        namespace: raw.namespace,
+        license: raw.license,
+        license_file: raw.license_file,
+        authors: raw.authors.unwrap_or_default(),
+        wado_version: raw.wado_version,
+        unknown_fields: unknown_keys(&raw.unknown),
+    }
 }
 
 fn convert_deps(
@@ -1601,6 +1601,71 @@ repository = "https://github.com/org/monorepo"
         let err = resolve_member(member, root).unwrap_err();
         assert!(
             matches!(&err, ManifestError::MissingField { field, .. } if field == "version"),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn member_resolution_surfaces_root_workspace_package_typo() {
+        let root = r#"
+[workspace]
+members = ["packages/*"]
+
+[workspace.package]
+version = "0.1.0"
+licence = "MIT"
+"#;
+        let member = "[package]\nname = \"core\"\nlib = \"src/lib.wado\"\n";
+        let m = resolve_member(member, root).unwrap();
+        let warnings = m.warnings();
+        assert!(
+            warnings.iter().any(|w| matches!(
+                w,
+                ManifestWarning::UnknownField { section: Some(s), field }
+                    if s == "workspace.package" && field == "licence"
+            )),
+            "got {warnings:?}"
+        );
+    }
+
+    #[test]
+    fn workspace_package_conflicting_license_attributed_to_workspace() {
+        let root = r#"
+[workspace]
+members = ["packages/*"]
+
+[workspace.package]
+version = "0.1.0"
+license = "MIT"
+license-file = "LICENSE"
+"#;
+        let member = "[package]\nname = \"core\"\nlib = \"src/lib.wado\"\n";
+        let err = resolve_member(member, root).unwrap_err();
+        assert!(
+            matches!(err, ManifestError::WorkspaceConflictingLicense),
+            "{err:?}"
+        );
+        // Same problem when the root is parsed directly.
+        let err = root.parse::<Manifest>().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::WorkspaceConflictingLicense),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn workspace_package_invalid_spdx_rejected() {
+        let root = r#"
+[workspace]
+members = ["packages/*"]
+
+[workspace.package]
+version = "0.1.0"
+license = "Not A License"
+"#;
+        let err = root.parse::<Manifest>().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::WorkspaceInvalidLicense { .. }),
             "{err:?}"
         );
     }

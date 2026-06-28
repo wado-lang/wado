@@ -1,4 +1,4 @@
-use crate::manifest::{DependencySource, Manifest, ManifestError};
+use crate::manifest::{DependencySource, Manifest, ManifestError, WorkspacePackage};
 use crate::version::{Version, VersionSpecifier};
 
 /// Validate a parsed manifest for semantic consistency.
@@ -9,7 +9,41 @@ pub fn validate(manifest: &Manifest) -> Result<(), ManifestError> {
     if let Some(pkg) = &manifest.package {
         validate_package(pkg)?;
     }
+    if let Some(ws_pkg) = manifest.workspace.as_ref().and_then(|w| w.package.as_ref()) {
+        validate_workspace_package(ws_pkg)?;
+    }
     validate_dependencies(manifest)?;
+    Ok(())
+}
+
+/// Validate the `[workspace.package]` table at its source, so problems are
+/// attributed to the workspace root rather than to an inheriting member.
+pub(crate) fn validate_workspace_package(p: &WorkspacePackage) -> Result<(), ManifestError> {
+    if p.license.is_some() && p.license_file.is_some() {
+        return Err(ManifestError::WorkspaceConflictingLicense);
+    }
+    if let Some(license) = &p.license {
+        spdx::Expression::parse(license).map_err(|e| ManifestError::WorkspaceInvalidLicense {
+            value: license.clone(),
+            reason: e.to_string(),
+        })?;
+    }
+    if let Some(version) = &p.version {
+        Version::parse(version).map_err(|e| ManifestError::InvalidVersion {
+            context: "workspace.package.version".to_string(),
+            version: version.clone(),
+            reason: e.to_string(),
+        })?;
+    }
+    if let Some(namespace) = &p.namespace {
+        validate_name("workspace.package.namespace", namespace)?;
+    }
+    if let Some(req) = &p.wado_version {
+        semver::VersionReq::parse(req).map_err(|e| ManifestError::InvalidWadoVersion {
+            value: req.clone(),
+            reason: e.to_string(),
+        })?;
+    }
     Ok(())
 }
 
@@ -64,6 +98,9 @@ pub enum PublishError {
     MissingLicense,
     /// A shipped `path` dependency lacks a registry/git source for publishing.
     PathDependencyWithoutSource { dep_name: String },
+    /// A shipped `workspace = true` dependency has no concrete source once the
+    /// package is extracted from its workspace.
+    WorkspaceDependency { dep_name: String },
 }
 
 impl std::fmt::Display for PublishError {
@@ -86,6 +123,10 @@ impl std::fmt::Display for PublishError {
             PublishError::PathDependencyWithoutSource { dep_name } => write!(
                 f,
                 "path dependency {dep_name:?} needs a registry or git source to publish"
+            ),
+            PublishError::WorkspaceDependency { dep_name } => write!(
+                f,
+                "workspace dependency {dep_name:?} must resolve to a concrete source to publish"
             ),
         }
     }
@@ -129,14 +170,19 @@ pub fn validate_for_publish(manifest: &Manifest) -> Vec<PublishError> {
     // Shipped dependencies (not dev-dependencies) must be self-contained: a
     // `path` source needs a registry/git fallback for the published manifest.
     for (name, dep) in manifest.dependencies.iter().chain(&manifest.build_dependencies) {
-        if let DependencySource::Path {
-            publish_source: None,
-            ..
-        } = &dep.source
-        {
-            errors.push(PublishError::PathDependencyWithoutSource {
+        match &dep.source {
+            DependencySource::Path {
+                publish_source: None,
+                ..
+            } => errors.push(PublishError::PathDependencyWithoutSource {
                 dep_name: name.clone(),
-            });
+            }),
+            DependencySource::Workspace => errors.push(PublishError::WorkspaceDependency {
+                dep_name: name.clone(),
+            }),
+            DependencySource::Path { .. }
+            | DependencySource::Git { .. }
+            | DependencySource::Registry { .. } => {}
         }
     }
     errors
@@ -426,6 +472,32 @@ authors = ["Alice"]
 "#;
         let m = toml.parse::<crate::Manifest>().unwrap();
         assert!(super::validate_for_publish(&m).is_empty());
+    }
+
+    #[test]
+    fn publish_flags_workspace_dependency() {
+        let toml = r#"
+[package]
+namespace = "myorg"
+name = "app"
+version = "0.1.0"
+description = "An app"
+repository = "https://github.com/myorg/app"
+license = "MIT"
+authors = ["Alice"]
+
+[dependencies]
+"ns:shared" = { workspace = true }
+"#;
+        let m = toml.parse::<crate::Manifest>().unwrap();
+        let errs = super::validate_for_publish(&m);
+        assert!(
+            errs.iter().any(|e| matches!(
+                e,
+                super::PublishError::WorkspaceDependency { dep_name } if dep_name == "ns:shared"
+            )),
+            "{errs:?}"
+        );
     }
 
     #[test]

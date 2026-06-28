@@ -759,7 +759,7 @@ independent per-member versioning simply omits `version` from
 "lib:bench" = { workspace = true }  # inherits from [workspace.dev-dependencies]
 ```
 
-A workspace root `wado.toml` can have both `[workspace]` and `[package]` — the root itself is both a workspace and a package (like Cargo).
+A workspace root `wado.toml` can have both `[workspace]` and `[package]` — the root itself is both a workspace and a package (like Cargo). The root's own `[package]` is the authority, not a governed member: it does not force-inherit from `[workspace.package]` and declares its own `version`/`repository`/`namespace` directly.
 
 Properties:
 

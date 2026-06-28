@@ -62,7 +62,10 @@ pub fn discover(start_dir: &Path) -> Result<Option<ProjectManifest>, DiscoveryEr
 
 /// Parse a member's `wado.toml`, applying `[workspace.package]` inheritance when
 /// the directory belongs to a workspace; otherwise parse it standalone.
-fn resolve_manifest(member_dir: &Path, member_content: &str) -> Result<Manifest, DiscoveryError> {
+pub(crate) fn resolve_manifest(
+    member_dir: &Path,
+    member_content: &str,
+) -> Result<Manifest, DiscoveryError> {
     match find_workspace_root(member_dir, member_content) {
         Some(root_content) => wado_manifest::resolve_member(member_content, &root_content)
             .map_err(DiscoveryError::Parse),
@@ -70,12 +73,15 @@ fn resolve_manifest(member_dir: &Path, member_content: &str) -> Result<Manifest,
     }
 }
 
-/// The workspace-root `wado.toml` contents governing `member_dir`, if any. The
-/// member's own manifest may declare the workspace (root = self); otherwise walk
-/// up to the nearest ancestor whose `[workspace].members` glob covers the member.
+/// The workspace-root `wado.toml` contents governing `member_dir`, if any.
+///
+/// A manifest that itself declares `[workspace]` is the workspace authority, not
+/// a governed member, so it does not inherit (it returns `None` and is parsed
+/// standalone). Otherwise walk up to the nearest ancestor whose
+/// `[workspace].members` glob covers the member.
 fn find_workspace_root(member_dir: &Path, member_content: &str) -> Option<String> {
     if read_workspace_members(member_content).is_some() {
-        return Some(member_content.to_string());
+        return None;
     }
     let mut dir = member_dir.to_path_buf();
     while dir.pop() {
@@ -108,22 +114,17 @@ fn read_workspace_members(content: &str) -> Option<Vec<String>> {
     )
 }
 
-/// Whether `member_dir` matches any `members` glob, resolved relative to the
-/// workspace root directory.
+/// Whether `member_dir` matches any `members` glob, evaluated as a pure path
+/// match (no filesystem walk, no canonicalize) against the member path relative
+/// to the workspace root. Reuses the walker's glob options so membership and
+/// test-discovery agree.
 fn workspace_governs(root_dir: &Path, members: &[String], member_dir: &Path) -> bool {
-    let Ok(target) = member_dir.canonicalize() else {
+    let Ok(rel) = member_dir.strip_prefix(root_dir) else {
         return false;
     };
     members.iter().any(|pattern| {
-        let Some(joined) = root_dir.join(pattern).to_str().map(str::to_owned) else {
-            return false;
-        };
-        let Ok(paths) = glob::glob(&joined) else {
-            return false;
-        };
-        paths
-            .filter_map(Result::ok)
-            .any(|p| p.canonicalize().is_ok_and(|c| c == target))
+        glob::Pattern::new(pattern)
+            .is_ok_and(|p| p.matches_path_with(rel, crate::discover::WALK_MATCH_OPTIONS))
     })
 }
 
@@ -588,5 +589,69 @@ version = "0.1.0"
 
         let project = discover(tmp.path()).unwrap().unwrap();
         assert!(resolve_entry_point(&project, EntryPointKind::Service).is_none());
+    }
+
+    const WS_ROOT: &str = r#"
+[workspace]
+members = ["packages/*"]
+
+[workspace.package]
+version = "0.1.0"
+repository = "https://github.com/org/monorepo"
+namespace = "org"
+license = "MIT"
+authors = ["Alice"]
+"#;
+
+    fn write(path: &Path, content: &str) {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, content).unwrap();
+    }
+
+    #[test]
+    fn member_inherits_workspace_metadata_via_discovery() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(&tmp.path().join("wado.toml"), WS_ROOT);
+        let member_dir = tmp.path().join("packages/core");
+        write(
+            &member_dir.join("wado.toml"),
+            "[package]\nname = \"core\"\nlib = \"src/lib.wado\"\n",
+        );
+        let project = discover(&member_dir).unwrap().unwrap();
+        let pkg = project.manifest.package.unwrap();
+        assert_eq!(pkg.name, "core");
+        assert_eq!(pkg.version, "0.1.0");
+        assert_eq!(pkg.namespace.as_deref(), Some("org"));
+        assert_eq!(pkg.license.as_deref(), Some("MIT"));
+    }
+
+    #[test]
+    fn workspace_root_that_is_also_a_package_parses_standalone() {
+        // A root declaring both [workspace] and [package] is the authority, not
+        // a governed member: it does not force-inherit and must not error.
+        let tmp = tempfile::tempdir().unwrap();
+        let toml = format!("{WS_ROOT}\n[package]\nname = \"root-pkg\"\nversion = \"0.1.0\"\nrepository = \"https://github.com/org/monorepo\"\nnamespace = \"org\"\n");
+        write(&tmp.path().join("wado.toml"), &toml);
+        let project = discover(tmp.path()).unwrap().unwrap();
+        assert_eq!(project.manifest.package.unwrap().name, "root-pkg");
+    }
+
+    #[test]
+    fn non_member_directory_does_not_inherit() {
+        // A dir outside the members globs is standalone: omitting an inherited
+        // required field must fail rather than silently inherit.
+        let tmp = tempfile::tempdir().unwrap();
+        write(&tmp.path().join("wado.toml"), WS_ROOT);
+        let outside = tmp.path().join("tools/helper");
+        write(
+            &outside.join("wado.toml"),
+            "[package]\nname = \"helper\"\nlib = \"src/lib.wado\"\n",
+        );
+        let err = discover(&outside).unwrap_err();
+        assert!(
+            matches!(&err, DiscoveryError::Parse(e)
+                if matches!(e, wado_manifest::ManifestError::MissingField { field, .. } if field == "version")),
+            "{err:?}"
+        );
     }
 }
