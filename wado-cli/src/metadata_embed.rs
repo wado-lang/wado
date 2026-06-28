@@ -60,12 +60,9 @@ pub fn clean_git_revision(dir: &Path) -> Option<String> {
 mod tests {
     use super::*;
 
-    /// A minimal valid empty component: the 8-byte component preamble.
+    /// A minimal valid empty component (just the preamble).
     fn empty_component() -> Vec<u8> {
-        let mut c = b"\0asm".to_vec();
-        // Component layer: version 0x0d, layer 0x01.
-        c.extend_from_slice(&[0x0d, 0x00, 0x01, 0x00]);
-        c
+        wasm_encoder::Component::new().finish()
     }
 
     fn sections_of(bytes: &[u8]) -> Vec<(String, Vec<u8>)> {
