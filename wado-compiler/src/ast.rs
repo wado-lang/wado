@@ -1001,6 +1001,27 @@ pub enum Item {
     Error(ErrorItem),
 }
 
+impl Item {
+    /// Declared visibility, or `None` for items that carry no modifier.
+    pub fn visibility(&self) -> Option<Visibility> {
+        match self {
+            Item::Function(d) => Some(d.visibility),
+            Item::Interface(d) => Some(d.visibility),
+            Item::Struct(d) => Some(d.visibility),
+            Item::Enum(d) => Some(d.visibility),
+            Item::Variant(d) => Some(d.visibility),
+            Item::Flags(d) => Some(d.visibility),
+            Item::Newtype(d) => Some(d.visibility),
+            Item::TupleTypeDecl(d) => Some(d.visibility),
+            Item::BuiltinTypeDecl(d) => Some(d.visibility),
+            Item::Trait(d) => Some(d.visibility),
+            Item::Resource(d) => Some(d.visibility),
+            Item::Global(d) => Some(d.visibility),
+            Item::Use(_) | Item::Impl(_) | Item::World(_) | Item::Test(_) | Item::Error(_) => None,
+        }
+    }
+}
+
 /// Placeholder for a token run that failed to parse as an item. See [`Item::Error`].
 #[derive(Debug, Clone)]
 pub struct ErrorItem {
@@ -1510,9 +1531,8 @@ impl ImportAttributes {
     }
 }
 
-/// Symbol visibility — the Wado scope ladder, orthogonal to `is_export`
-/// (the Component Model surface flag). See
-/// docs/wep-2026-06-25-visibility-internal-pub-export.md.
+/// Symbol visibility ladder, orthogonal to `is_export` (the Component Model
+/// surface flag). See docs/wep-2026-06-25-visibility-internal-pub-export.md.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Visibility {
     /// No modifier: visible only within the defining file.
@@ -1525,23 +1545,28 @@ pub enum Visibility {
 }
 
 impl Visibility {
-    /// `pub` — reaches other Wado packages (the library API surface).
     pub fn is_public(self) -> bool {
         matches!(self, Visibility::Public)
     }
 
-    /// `internal` — reaches other files in the same package only.
     pub fn is_internal(self) -> bool {
         matches!(self, Visibility::Internal)
     }
 
-    /// Reaches beyond the defining file (`internal` or `pub`).
     pub fn reaches_beyond_file(self) -> bool {
         !matches!(self, Visibility::Private)
     }
 
-    /// Source keyword with a trailing space (`"pub "`, `"internal "`, or `""`
-    /// for file-private). Used by the unparser.
+    /// Importable from a module in (`same_package`) or outside the package.
+    pub fn reachable_from(self, same_package: bool) -> bool {
+        match self {
+            Visibility::Public => true,
+            Visibility::Internal => same_package,
+            Visibility::Private => false,
+        }
+    }
+
+    /// Source keyword with a trailing space (`""` for file-private).
     pub fn keyword(self) -> &'static str {
         match self {
             Visibility::Private => "",
@@ -1558,8 +1583,7 @@ impl Visibility {
 #[derive(Debug, Clone)]
 pub struct UseDecl {
     pub id: AstId,
-    /// Re-export visibility: `pub use` (Public) / `internal use` (Internal) /
-    /// plain `use` (Private — a local import, not re-exported).
+    /// Re-export visibility; `Private` is a local import, not re-exported.
     pub visibility: Visibility,
     /// Import source (e.g., "core:cli", "wasi:filesystem", "./utils.wado")
     pub source: String,

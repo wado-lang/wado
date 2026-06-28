@@ -362,12 +362,12 @@ mod tests {
         assert!(
             get_stdlib_module("core:kiln/kiln_host.wado")
                 .unwrap()
-                .contains("pub interface KilnHost")
+                .contains("internal interface KilnHost")
         );
         assert!(
             get_stdlib_module("core:kiln/types.wado")
                 .unwrap()
-                .contains("pub struct RawRequest")
+                .contains("internal struct RawRequest")
         );
         assert!(
             get_stdlib_module("core:kiln/worlds.wado")

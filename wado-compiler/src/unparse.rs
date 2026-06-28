@@ -124,6 +124,16 @@ fn emit_visibility_into(visibility: Visibility, output: &mut String) {
     output.push_str(visibility.keyword());
 }
 
+/// Leading keyword for a function declaration; `export` implies `pub` and is
+/// emitted alone.
+fn function_decl_keyword(is_export: bool, visibility: Visibility) -> &'static str {
+    if is_export {
+        "export "
+    } else {
+        visibility.keyword()
+    }
+}
+
 /// Number of blank lines the formatter emits between two source lines.
 ///
 /// This is the formatter's gap-display rule: if the source had no blank
@@ -703,12 +713,8 @@ impl<'a> Unparser<'a> {
 
     fn unparse_function(&mut self, f: &Function) {
         self.emit_outer_attrs(&f.attrs);
-        // `export` implies `pub`, so the canonical form is just `export`.
-        if f.is_export {
-            self.output.push_str("export ");
-        } else {
-            self.emit_visibility(f.visibility);
-        }
+        self.output
+            .push_str(function_decl_keyword(f.is_export, f.visibility));
         self.emit_kw_if(f.is_async, "async ");
 
         self.output.push_str("fn ");
@@ -3633,12 +3639,7 @@ pub fn unparse_function_signature(f: &Function) -> String {
 }
 
 pub fn unparse_function_signature_into(f: &Function, output: &mut String) {
-    // `export` implies `pub`, so the canonical form is just `export`.
-    if f.is_export {
-        output.push_str("export ");
-    } else {
-        emit_visibility_into(f.visibility, output);
-    }
+    output.push_str(function_decl_keyword(f.is_export, f.visibility));
     emit_kw_if_into(f.is_async, "async ", output);
     output.push_str("fn ");
     output.push_str(&f.name);

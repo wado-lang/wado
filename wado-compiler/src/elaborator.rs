@@ -1328,11 +1328,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 }
                             }
                             ast::UseItem::Namespace { name: ns } => {
-                                // Each public global is imported under its
-                                // `ns$global` alias.
+                                // Reachable means `pub`, or `internal` when the
+                                // source module shares the importer's package.
+                                // Mirrors analyze-phase registration
+                                // (`import_reachable`).
+                                let same_package =
+                                    source_module_source.same_package(&module_source);
                                 for src_item in &source_module.items {
                                     if let Item::Global(global_decl) = src_item
-                                        && global_decl.visibility.is_public()
+                                        && global_decl.visibility.reachable_from(same_package)
                                     {
                                         to_import.push((
                                             crate::name::namespace_member_alias(

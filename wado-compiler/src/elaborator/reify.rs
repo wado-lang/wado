@@ -6352,9 +6352,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .map(|(a, is_mut)| CallArg::new(self.reify_expr(a, ctx, None), is_mut))
                 .collect();
 
-            // Pad omitted trailing arguments with the static method's declared
-            // parameter defaults (`Type::make()` where `make(x: i32 = 5)`),
-            // recorded by annotate. Mirrors the free-function / instance paths.
             let callee_module = dispatch.function_ref.module_source.clone();
             self.reify_apply_param_defaults(
                 &mut args,
@@ -6505,11 +6502,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Pad `args` with reified default values for the trailing `func_params`
-    /// the call omitted. Shared by the free-function, namespace, and static-
-    /// method call paths; `func_params` is the callee's `(name, default)` list
-    /// in declaration order, `callee_module` its defining module (for the
-    /// perspective swap), and `call_span` the call site (for location
-    /// literals).
+    /// the call omitted. `func_params` is the callee's `(name, default)` list in
+    /// declaration order, `callee_module` its defining module (for the
+    /// perspective swap), and `call_span` the call site (for location literals).
     fn reify_apply_param_defaults(
         &mut self,
         args: &mut Vec<crate::tir::CallArg>,
@@ -6816,9 +6811,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 &dispatch.function_ref.name,
                 ctx,
             );
-            // A `Type::method()` written as a `::`-qualified call resolves a
-            // static-method dispatch (not a free function), so the free-function
-            // pad above finds nothing; apply the recorded static-method defaults.
+            // A `::`-qualified `Type::method()` is a static-method dispatch, so
+            // the free-function pad above finds nothing; apply its own defaults.
             let smc_module = dispatch.function_ref.module_source.clone();
             self.reify_apply_param_defaults(
                 &mut arg_exprs,

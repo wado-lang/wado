@@ -997,8 +997,7 @@ impl Parser {
         // Parse any leading attributes
         let attrs = self.parse_attributes()?;
 
-        // Parse the Wado visibility ladder: `internal` (package) / `pub`
-        // (library). `internal` and `pub` are mutually exclusive.
+        // `internal` and `pub` are mutually exclusive.
         // See docs/wep-2026-06-25-visibility-internal-pub-export.md.
         let vis_span = self.peek().span;
         let is_internal = if self.check(&TokenKind::Internal) {
@@ -1014,8 +1013,7 @@ impl Parser {
             false
         };
 
-        // Parse export keyword (the orthogonal CM boundary flag). `export`
-        // implies `pub` (a CM export is part of the public API).
+        // `export` implies `pub` (a CM export is part of the public API).
         let is_export = if self.check(&TokenKind::Export) {
             self.advance();
             true
@@ -5346,6 +5344,22 @@ impl Parser {
                     span: type_span.merge(&end),
                 });
             } else {
+                // Impl members carry a binary `pub` / file-private visibility,
+                // not the top-level `internal`/`export` ladder. Reject those
+                // with a clear message instead of the cryptic token error the
+                // member parsers would otherwise produce.
+                if self.check(&TokenKind::Internal) {
+                    return Err(self.error_at_span(
+                        self.peek().span,
+                        "`internal` is not allowed on impl members; methods and associated constants are `pub` or file-private",
+                    ));
+                }
+                if self.check(&TokenKind::Export) {
+                    return Err(self.error_at_span(
+                        self.peek().span,
+                        "`export` is not allowed on impl members; methods cannot be exported at the Component Model boundary",
+                    ));
+                }
                 let is_pub = if self.check(&TokenKind::Pub) {
                     self.advance();
                     true
@@ -6532,7 +6546,6 @@ mod tests {
         assert_eq!(vis(0), (Visibility::Internal, false));
         assert_eq!(vis(1), (Visibility::Public, false));
         assert_eq!(vis(2), (Visibility::Private, false));
-        // `export` implies `pub` and sets the CM-export flag.
         assert_eq!(vis(3), (Visibility::Public, true));
     }
 
@@ -6545,6 +6558,25 @@ mod tests {
         assert!(
             parse("internal export fn x() {}").is_err(),
             "`internal` must not combine with `export`"
+        );
+    }
+
+    #[test]
+    fn test_internal_export_on_impl_member_is_a_parse_error() {
+        let internal_err =
+            parse("struct S { v: i32 }\nimpl S { internal fn h() -> i32 { return 1 } }")
+                .unwrap_err();
+        assert!(
+            internal_err.message.contains("not allowed on impl members"),
+            "`internal` on an impl member should be a targeted error, got: {}",
+            internal_err.message
+        );
+        let export_err =
+            parse("struct S { v: i32 }\nimpl S { export fn h() -> i32 { return 1 } }").unwrap_err();
+        assert!(
+            export_err.message.contains("cannot be exported"),
+            "`export` on an impl member should be a targeted error, got: {}",
+            export_err.message
         );
     }
 

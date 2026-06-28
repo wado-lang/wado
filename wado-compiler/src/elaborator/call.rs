@@ -964,7 +964,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Record so reify replays the same Call shape via its
                     // `static_method_dispatch` early return — without
                     // re-running `locate_static_method_impl` /
-                    // `lookup_static_method_*` from the AST alone.
+                    // `lookup_static_method_*` from the AST alone. Carry the
+                    // parameter defaults so reify pads omitted trailing
+                    // arguments, matching the unqualified `Type::method()` path.
+                    let param_defaults = self.lookup_static_method_param_defaults_keyed(
+                        type_name,
+                        method_name,
+                        None,
+                    );
                     let key = call.id;
                     self.sem.types.static_method_dispatch.insert(
                         key,
@@ -972,7 +979,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             function_ref: func_ref,
                             param_is_mut,
                             type_args: vec![],
-                            param_defaults: vec![],
+                            param_defaults,
                         },
                     );
 
@@ -2702,7 +2709,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // by the `CallExpr`'s AstId — distinct from any
             // `StaticMethodCallExpr` id, so reusing `static_method_dispatch`
             // is collision-free. Args here carry no `is_mut` (the
-            // production builder below uses all-false `CallArg`s).
+            // production builder below uses all-false `CallArg`s). Carry the
+            // trait-declared parameter defaults so reify pads omitted trailing
+            // arguments.
+            let param_defaults: Vec<(String, Option<ast::Expr>)> = method_info_result
+                .param_names
+                .iter()
+                .cloned()
+                .zip(method_info_result.param_defaults.iter().cloned())
+                .collect();
             let key = call.id;
             self.sem.types.static_method_dispatch.insert(
                 key,
@@ -2710,7 +2725,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     function_ref: func_ref,
                     param_is_mut: vec![false; args.len()],
                     type_args: vec![],
-                    param_defaults: vec![],
+                    param_defaults,
                 },
             );
 

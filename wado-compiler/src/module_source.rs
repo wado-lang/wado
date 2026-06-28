@@ -302,7 +302,7 @@ impl WasmAssetKind {
 pub enum ModuleSource {
     /// Core library module (e.g., `core:prelude`, `core:cli`, `core:rt`, `core:builtin`)
     Core {
-        /// Module name within core (e.g., "prelude", "cli", "internal", "builtin")
+        /// Module name within core (e.g., "prelude", "cli", "rt", "builtin")
         name: InternedStr,
     },
     /// WASI module (e.g., `wasi:cli`, `wasi:io`)
@@ -384,21 +384,16 @@ pub enum ModuleSource {
 /// package being compiled.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PackageId {
-    /// The `core:` standard-library package.
     Core,
-    /// The `wasi:` standard-library package.
     Wasi,
-    /// The package currently being compiled (entry point, its local modules,
-    /// Kiln redirects, and wasm assets bundled into the same component).
+    /// Entry point, its local modules, Kiln redirects, and wasm assets bundled
+    /// into the same component.
     Root,
-    /// A dependency package, identified by its resolved entry-module path.
     Dependency(InternedStr),
-    /// A remote package, identified by its URL.
     Remote(InternedStr),
 }
 
 impl ModuleSource {
-    /// The package this module belongs to. See [`PackageId`].
     #[must_use]
     pub fn package_id(&self) -> PackageId {
         match self {
@@ -413,8 +408,7 @@ impl ModuleSource {
         }
     }
 
-    /// Whether `self` and `other` belong to the same package — the reach test
-    /// for `internal` visibility.
+    /// The reach test for `internal` visibility.
     #[must_use]
     pub fn same_package(&self, other: &Self) -> bool {
         self.package_id() == other.package_id()
@@ -867,7 +861,6 @@ mod tests {
     fn test_package_id_and_same_package() {
         let mut interner = ModuleSourceInterner::new();
 
-        // core modules share one package; wasi is a distinct package.
         let rt = ModuleSource::rt();
         let cli = ModuleSource::cli();
         assert_eq!(rt.package_id(), PackageId::Core);
@@ -880,7 +873,6 @@ mod tests {
             "core and wasi are separate packages"
         );
 
-        // entry point + local modules form the single Root package.
         let entry = ModuleSource::entry_point_uninitialized();
         let local_a = interner.local("./a.wado");
         let local_b = interner.local("./b.wado");
@@ -889,7 +881,6 @@ mod tests {
         assert!(local_a.same_package(&entry));
         assert!(!local_a.same_package(&rt), "root and core are separate");
 
-        // dependencies are keyed by resolved path; distinct paths differ.
         let dep_a = interner.dependency("dep_a/lib.wado");
         let dep_a2 = interner.dependency("dep_a/lib.wado");
         let dep_b = interner.dependency("dep_b/lib.wado");

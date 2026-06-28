@@ -3280,8 +3280,11 @@ export fn run() { ... }
 | `export fn foo()`   | Yes       | Yes          | Yes                 | Yes         |
 
 A `pub`-only item reaches Wado consumers only (source dependency or
-provider-tagged `.wasm`); a non-Wado CM consumer sees `export` items only. All
-entity definitions take these modifiers, including struct fields.
+provider-tagged `.wasm`); a non-Wado CM consumer sees `export` items only.
+
+The ladder applies to top-level items. Members of an `impl` block (methods,
+associated constants) and struct fields carry a binary `pub` / file-private
+visibility instead; `internal` or `export` on a member is a compile error.
 
 #### Re-export visibility
 

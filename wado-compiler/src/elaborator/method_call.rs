@@ -1032,6 +1032,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .unwrap_or_default();
 
+        // Looked up once, reused for arg padding and the recorded dispatch fact.
+        let static_method_defaults: Vec<(String, Option<ast::Expr>)> = struct_name_for_lookup
+            .as_ref()
+            .map(|name| {
+                self.lookup_static_method_param_defaults_keyed(
+                    name,
+                    &static_call.method,
+                    struct_key_for_lookup.as_ref(),
+                )
+            })
+            .unwrap_or_default();
+
         // For generic variant constructors (e.g., Option::<List<u8>>::Some([])),
         // compute substituted payload type so literal coercion works on first resolve.
         if param_types.is_empty() {
@@ -1155,38 +1167,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
 
-        // Pad omitted trailing arguments with the static method's declared
-        // parameter defaults (`Type::make()` where `make(x: i32 = 5)`), mirroring
-        // the instance-method and free-function paths. Variant / flags
-        // constructors carry no defaults here, so their arg-count checks below
-        // are unaffected.
-        if args.len() < param_types.len()
-            && let Some(name) = struct_name_for_lookup.as_ref()
-        {
-            let defaults = self.lookup_static_method_param_defaults_keyed(
-                name,
-                &static_call.method,
-                struct_key_for_lookup.as_ref(),
-            );
-            if !defaults.is_empty() {
-                let mut subs: crate::hashmap::IndexMap<String, ast::Expr> =
-                    crate::hashmap::IndexMap::default();
-                for (i, arg_ast) in static_call.args.iter().enumerate() {
-                    if let Some((pname, _)) = defaults.get(i) {
-                        subs.insert(pname.clone(), arg_ast.clone());
-                    }
+        // Pad omitted trailing arguments with declared parameter defaults.
+        // Variant / flags constructors carry no defaults, so the arg-count
+        // checks below are unaffected.
+        if args.len() < param_types.len() && !static_method_defaults.is_empty() {
+            let defaults = &static_method_defaults;
+            let mut subs: crate::hashmap::IndexMap<String, ast::Expr> =
+                crate::hashmap::IndexMap::default();
+            for (i, arg_ast) in static_call.args.iter().enumerate() {
+                if let Some((pname, _)) = defaults.get(i) {
+                    subs.insert(pname.clone(), arg_ast.clone());
                 }
-                for i in args.len()..param_types.len() {
-                    let Some((pname, Some(default_ast))) = defaults.get(i) else {
-                        break;
-                    };
-                    let expected_type = param_types[i];
-                    let mut default_expr = default_ast.clone();
-                    default_expr.substitute_idents(&subs);
-                    let resolved = self.resolve_expr(&default_expr, ctx, Some(expected_type));
-                    args.push(placeholder(resolved, default_expr.span()));
-                    subs.insert(pname.clone(), default_expr);
-                }
+            }
+            for i in args.len()..param_types.len() {
+                let Some((pname, Some(default_ast))) = defaults.get(i) else {
+                    break;
+                };
+                let expected_type = param_types[i];
+                let mut default_expr = default_ast.clone();
+                default_expr.substitute_idents(&subs);
+                let resolved = self.resolve_expr(&default_expr, ctx, Some(expected_type));
+                args.push(placeholder(resolved, default_expr.span()));
+                subs.insert(pname.clone(), default_expr);
             }
         }
 
@@ -1711,23 +1713,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `StaticMethodCallExpr`'s own `AstId`; variant-ctor turbofish
         // shapes are handled by reify before this fact is consulted.
         let key = static_call.id;
-        let param_defaults = struct_name_for_lookup
-            .as_ref()
-            .map(|name| {
-                self.lookup_static_method_param_defaults_keyed(
-                    name,
-                    &static_call.method,
-                    struct_key_for_lookup.as_ref(),
-                )
-            })
-            .unwrap_or_default();
         self.sem.types.static_method_dispatch.insert(
             key,
             super::sem::types::StaticMethodDispatch {
                 function_ref: func_ref,
                 param_is_mut,
                 type_args: method_type_args,
-                param_defaults,
+                param_defaults: static_method_defaults,
             },
         );
 
@@ -2366,8 +2358,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Resolve a static-method receiver `TypeId` to its `(struct_name,
     /// decl_key)` for impl / parameter lookups: follow newtypes to the base,
-    /// map flags to `u32` and builtin arrays to `core:array`. Shared by the
-    /// annotate and reify static-call paths.
+    /// map flags to `u32` and builtin arrays to `core:array`.
     pub(super) fn static_receiver_struct_key(
         &self,
         target_type_id: TypeId,
@@ -2407,11 +2398,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (name, key)
     }
 
-    /// Default-value expressions for a static method's non-self parameters,
-    /// in the same order as [`Self::lookup_static_method_param_types_keyed`].
-    /// Powers default-argument padding for `Type::method(...)` calls that omit
-    /// trailing arguments. Returns `(param_name, default_expr)` pairs; the
-    /// default is `None` for parameters without a declared default.
+    /// Default-value expressions for a static method's non-self parameters, in
+    /// the same order as [`Self::lookup_static_method_param_types_keyed`].
+    /// Returns `(param_name, default_expr)` pairs; `default_expr` is `None` for
+    /// parameters without a declared default.
     pub(super) fn lookup_static_method_param_defaults_keyed(
         &mut self,
         struct_name: &str,
@@ -2427,7 +2417,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect()
         }
 
-        // Current module's impl blocks first (highest priority).
+        // Current module's impl blocks take priority over the global index.
         let found: Option<ast::Function> = self.current_module_items.iter().find_map(|item| {
             if let Item::Impl(impl_block) = item
                 && self.get_type_name(&impl_block.ty) == struct_name
@@ -2448,7 +2438,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return extract(&method);
         }
 
-        // Pre-built static-method index (keyed by canonical receiver).
         let static_key = static_key_hint
             .cloned()
             .unwrap_or_else(|| self.canonical_decl_key(struct_name));
@@ -3137,8 +3126,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let param_is_mut = self.lookup_static_method_param_is_mut(&actual_struct_name, method_name);
 
-        // Trailing-default expressions for padding calls that omit them
-        // (`Type::make()` where `make(x = …)`), consumed by reify.
         let param_defaults =
             self.lookup_static_method_param_defaults_keyed(&actual_struct_name, method_name, None);
 

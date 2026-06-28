@@ -127,8 +127,15 @@ view present such re-exports at the re-export's visibility, so a `pub use`-d
       never importable; `internal` reaches only same-package importers; `pub` /
       `export` reach anywhere. A violation is a `PRIVATE_SYMBOL` compile error. The
       `Symbol` and re-export entries carry their declared visibility; namespace
-      imports register only the visible members.
+      imports register only the visible members. The reachability ladder is a
+      single predicate, `Visibility::reachable_from(same_package)`, shared by the
+      analyze-phase symbol registration and the elaborator's namespace-global
+      collection so the two never disagree (a same-package `internal` global is
+      reachable through `use ns from "..."; ns::FOO` as well as a named import).
 - [x] `internal use` re-exports (the package-internal counterpart to `pub use`).
+- The ladder applies only to top-level items. Impl members (methods, associated
+  constants) carry a binary `pub` / file-private visibility; `internal` and
+  `export` on an impl member are a compile error with a targeted diagnostic.
 - The bundled `core:internal` module was renamed to `core:rt` so the module
   name no longer collides with the `internal` visibility keyword.
 

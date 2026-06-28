@@ -93,9 +93,7 @@ pub enum AnalyzeError {
     /// from a different package.
     SymbolNotVisible {
         name: String,
-        /// The module the symbol is imported from.
         module_source: ModuleSource,
-        /// The symbol's binding visibility in `module_source`.
         visibility: crate::ast::Visibility,
         span: Span,
     },
@@ -175,8 +173,6 @@ impl std::fmt::Display for AnalyzeError {
     }
 }
 
-/// Diagnostic message for an import of a non-visible symbol. Branches on the
-/// symbol's binding visibility to suggest the right modifier.
 fn symbol_not_visible_message(
     name: &str,
     module_source: &ModuleSource,
@@ -187,8 +183,8 @@ fn symbol_not_visible_message(
             "symbol '{name}' is `internal` to '{module_source}' and cannot be imported \
              from another package; mark it `pub` to export it across packages"
         ),
-        // Private (or any non-public): file-private.
-        _ => format!(
+        // `Public` never reaches here (always importable); folded in for exhaustiveness.
+        crate::ast::Visibility::Private | crate::ast::Visibility::Public => format!(
             "symbol '{name}' is private to '{module_source}' and cannot be imported; \
              mark it `internal` (same package) or `pub` (cross package) to export it"
         ),
@@ -778,9 +774,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     ) {
         for item in &module.items {
             if let Item::Use(use_decl) = item {
-                // `pub use` re-exports across packages, `internal use` within
-                // the package; a plain `use` is a file-private import and
-                // re-exports nothing.
+                // A plain `use` is a file-private import that re-exports nothing.
                 if !use_decl.visibility.reaches_beyond_file() {
                     continue;
                 }
@@ -850,26 +844,20 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         }
     }
 
-    /// Whether the binding `visibility` of a symbol in `target_module` is
-    /// reachable from `from_module_source`. `pub` reaches anywhere, `internal`
-    /// only within the same package, file-private nowhere.
+    /// Whether a symbol with `visibility` in `target_module` is reachable from
+    /// `from_module_source`.
     fn import_reachable(
         &self,
         from_module_source: &ModuleSource,
         target_module: &ModuleSource,
         visibility: crate::ast::Visibility,
     ) -> bool {
-        match visibility {
-            crate::ast::Visibility::Public => true,
-            crate::ast::Visibility::Internal => target_module.same_package(from_module_source),
-            crate::ast::Visibility::Private => false,
-        }
+        visibility.reachable_from(target_module.same_package(from_module_source))
     }
 
-    /// Enforce import visibility: when `name` — a binding in `target_module` —
-    /// is not reachable from `from_module_source`, emit a `SymbolNotVisible`
-    /// diagnostic. A name that is neither defined nor re-exported by
-    /// `target_module` is left to the `ImportNotFound` path.
+    /// Emit `SymbolNotVisible` when `name` is a binding in `target_module` not
+    /// reachable from `from_module_source`. A name that is neither defined nor
+    /// re-exported there is left to the `ImportNotFound` path.
     fn check_import_visibility(
         &self,
         from_module_source: &ModuleSource,
@@ -1007,11 +995,10 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             // no symbols to register
                         }
                         UseItem::Namespace { name: ns } => {
-                            // Namespace import: register every symbol reachable
-                            // from the importer (pub, or internal within the
-                            // same package) under its `ns$member` alias, matching
-                            // how the elaborator canonicalizes `ns::member` at
-                            // lookup time (`ModuleImports::canonical_ns_ref`).
+                            // Register each reachable symbol under its `ns$member`
+                            // alias, matching how the elaborator canonicalizes
+                            // `ns::member` at lookup time
+                            // (`ModuleImports::canonical_ns_ref`).
                             let symbols: Vec<(String, crate::ast::AstId)> = self
                                 .symbols
                                 .get_module_symbols(&module_source)

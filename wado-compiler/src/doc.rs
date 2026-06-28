@@ -4,7 +4,7 @@ use serde::Serialize;
 use crate::ast::{
     AssociatedConst, AstId, Attribute, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl,
     ImplBlock, InterfaceDecl, Item, Module, Newtype, Param, SelfKind, StructDecl, StructField,
-    TraitDecl, Type, UseItem, VariantDecl,
+    TraitDecl, Type, UseItem, VariantDecl, Visibility,
 };
 use crate::comment::{CommentKind, TriviaMap};
 use crate::stdlib;
@@ -206,10 +206,9 @@ pub fn extract_doc_with(
 }
 
 /// Like [`extract_doc_with`], but `include_internal` also admits top-level
-/// `internal` items (their members are still rendered at the `include_private`
-/// level). Used to follow `pub use` re-exports of `internal` definitions: the
-/// re-export publishes the item, so the facade module's docs must carry it,
-/// without leaking the item's own private fields / methods.
+/// `internal` items, while their members stay at the `include_private` level.
+/// Lets a `pub use` re-export publish an `internal` item without leaking its
+/// own private fields / methods.
 pub fn extract_doc_filtered(
     module: &Module,
     trivia: &TriviaMap,
@@ -592,42 +591,14 @@ fn extract_module_doc(trivia: &TriviaMap, module: &Module) -> Option<String> {
 }
 
 fn is_pub_or_export(item: &Item) -> bool {
-    match item {
-        Item::Function(f) => f.visibility.is_public() || f.is_export,
-        Item::Struct(s) => s.visibility.is_public(),
-        Item::Enum(e) => e.visibility.is_public(),
-        Item::Variant(v) => v.visibility.is_public(),
-        Item::Flags(f) => f.visibility.is_public(),
-        Item::Newtype(t) => t.visibility.is_public(),
-        Item::Trait(t) => t.visibility.is_public(),
-        Item::Interface(e) => e.visibility.is_public(),
-        Item::Global(g) => g.visibility.is_public(),
-        Item::Resource(r) => r.visibility.is_public(),
-        Item::Impl(_) => true,
-        Item::TupleTypeDecl(d) => d.visibility.is_public(),
-        Item::BuiltinTypeDecl(d) => d.visibility.is_public(),
-        Item::Use(_) | Item::World(_) | Item::Test(_) => false,
-        Item::Error(_) => false,
-    }
+    // `impl` carries no visibility but always contributes; `export` implies pub.
+    matches!(item, Item::Impl(_))
+        || matches!(item, Item::Function(f) if f.is_export)
+        || item.visibility().is_some_and(Visibility::is_public)
 }
 
-/// Whether a top-level item carries the `internal` visibility modifier.
 fn is_internal_item(item: &Item) -> bool {
-    match item {
-        Item::Function(f) => f.visibility.is_internal(),
-        Item::Struct(s) => s.visibility.is_internal(),
-        Item::Enum(e) => e.visibility.is_internal(),
-        Item::Variant(v) => v.visibility.is_internal(),
-        Item::Flags(f) => f.visibility.is_internal(),
-        Item::Newtype(t) => t.visibility.is_internal(),
-        Item::Trait(t) => t.visibility.is_internal(),
-        Item::Interface(e) => e.visibility.is_internal(),
-        Item::Global(g) => g.visibility.is_internal(),
-        Item::Resource(r) => r.visibility.is_internal(),
-        Item::TupleTypeDecl(d) => d.visibility.is_internal(),
-        Item::BuiltinTypeDecl(d) => d.visibility.is_internal(),
-        Item::Impl(_) | Item::Use(_) | Item::World(_) | Item::Test(_) | Item::Error(_) => false,
-    }
+    item.visibility().is_some_and(Visibility::is_internal)
 }
 
 fn render_type(ty: &Type) -> String {
@@ -754,13 +725,8 @@ pub fn extract_stdlib_doc_with(module_name: &str, include_private: bool) -> Opti
         for reexport_source in &reexport_sources {
             if let Some(sub_source) = stdlib::get_stdlib_module(reexport_source) {
                 let sub_parsed = parse_stdlib_for_doc(reexport_source, sub_source);
-                // Include `internal` items: a `pub use { x }` re-export makes `x`
-                // part of this module's public API even when `x` is `internal`
-                // in its defining submodule (the common "internal impl, public
-                // facade" pattern). Members stay at the public level
-                // (`include_private = false`) so the item's own private fields /
-                // methods are not leaked. `merge_reexported_items` filters to the
-                // re-exported names and presents them as `pub`.
+                // Admit `internal` items so a `pub use` re-export can publish
+                // them, but keep `include_private = false` to hide their fields.
                 let sub_doc = extract_doc_filtered(
                     &sub_parsed.ast,
                     &sub_parsed.trivia,
@@ -854,9 +820,8 @@ fn collect_pub_use_names(module: &Module) -> IndexSet<String> {
     names
 }
 
-/// Rewrite a re-exported item's signature so its visibility reads `pub`: a
-/// `pub use { x }` re-export publishes `x` regardless of `x`'s own modifier, so
-/// the facade module's docs must present it as public, not `internal`.
+/// Rewrite a re-exported item's signature to read `pub`: the re-export
+/// publishes it regardless of its own modifier.
 fn promote_reexport_signature(sig: &str) -> String {
     if let Some(rest) = sig.strip_prefix("internal ") {
         format!("pub {rest}")
@@ -867,9 +832,8 @@ fn promote_reexport_signature(sig: &str) -> String {
     }
 }
 
-/// Merge items from a sub-module into the parent doc, filtered by re-exported
-/// names. Re-exported items are presented as `pub` (see
-/// [`promote_reexport_signature`]).
+/// Merge re-exported sub-module items into the parent doc, presented as `pub`
+/// (see [`promote_reexport_signature`]).
 fn merge_reexported_items(parent: &mut DocModule, child: &DocModule, names: &IndexSet<String>) {
     macro_rules! merge {
         ($field:ident, $it:ident => $key:expr) => {

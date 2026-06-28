@@ -181,9 +181,8 @@ pub struct Symbol {
     /// directly — not a fact-map key — so navigation reads it without a
     /// space-registry lookup.
     pub module: ModuleSource,
-    /// Declared visibility (the Wado scope ladder). Module-level symbols carry
-    /// the decl's modifier; function-local and synthesized symbols default to
-    /// `Private`. Consulted by cross-module import visibility enforcement.
+    /// Declared visibility. Function-local and synthesized symbols default to
+    /// `Private`.
     pub visibility: Visibility,
     /// Source location (if available)
     pub span: Option<Span>,
@@ -220,9 +219,8 @@ pub struct ReExportTarget {
     pub source_module: ModuleSource,
     /// Original name in the source module
     pub source_name: String,
-    /// Visibility of the re-export binding itself: `pub use` → `Public`,
-    /// `internal use` → `Internal`. This is the binding's reach from the
-    /// re-exporting module, independent of the original symbol's visibility.
+    /// Visibility of the re-export binding itself (the re-exporting module's
+    /// `pub use`/`internal use`), independent of the original symbol's visibility.
     pub visibility: Visibility,
 }
 
@@ -349,11 +347,9 @@ impl SymbolTable {
     }
 
     /// Visibility of the binding named `name` as it appears *in* `module_source`
-    /// — a direct definition's declared visibility, or a re-export's own
-    /// visibility (`pub use`/`internal use`). `None` when the module neither
-    /// defines nor re-exports the name (a plain `use` import is file-private
-    /// and is not a binding visible to importers). This is the reach test
-    /// applied at cross-module import sites.
+    /// — a direct definition's, or a re-export's own visibility. `None` when the
+    /// module neither defines nor re-exports the name; a plain `use` import is
+    /// file-private and is not a binding visible to importers.
     #[must_use]
     pub fn binding_visibility_in_module(
         &self,
