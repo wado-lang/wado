@@ -667,17 +667,13 @@ impl Semantics {
                     names.extend(
                         b.methods
                             .iter()
-                            .filter(|m| {
-                                member_visible(public_only, inherent, m.visibility.is_public())
-                            })
+                            .filter(|m| member_visible(public_only, inherent, m.visibility))
                             .map(|m| m.name.clone()),
                     );
                     names.extend(
                         b.constants
                             .iter()
-                            .filter(|c| {
-                                member_visible(public_only, inherent, c.visibility.is_public())
-                            })
+                            .filter(|c| member_visible(public_only, inherent, c.visibility))
                             .map(|c| c.name.clone()),
                     );
                 }
@@ -725,20 +721,20 @@ impl Semantics {
         let mut names: Vec<String> = Vec::new();
         if let Some(ast) = self.modules.get(module) {
             for item in &ast.items {
-                let (is_public, name) = match item {
-                    Item::Function(d) => (d.visibility.is_public(), &d.name),
-                    Item::Struct(d) => (d.visibility.is_public(), &d.name),
-                    Item::Enum(d) => (d.visibility.is_public(), &d.name),
-                    Item::Variant(d) => (d.visibility.is_public(), &d.name),
-                    Item::Flags(d) => (d.visibility.is_public(), &d.name),
-                    Item::Newtype(d) => (d.visibility.is_public(), &d.name),
-                    Item::Trait(d) => (d.visibility.is_public(), &d.name),
-                    Item::Resource(d) => (d.visibility.is_public(), &d.name),
-                    Item::Global(d) => (d.visibility.is_public(), &d.name),
-                    Item::Interface(d) => (d.visibility.is_public(), &d.name),
+                let (visibility, name) = match item {
+                    Item::Function(d) => (d.visibility, &d.name),
+                    Item::Struct(d) => (d.visibility, &d.name),
+                    Item::Enum(d) => (d.visibility, &d.name),
+                    Item::Variant(d) => (d.visibility, &d.name),
+                    Item::Flags(d) => (d.visibility, &d.name),
+                    Item::Newtype(d) => (d.visibility, &d.name),
+                    Item::Trait(d) => (d.visibility, &d.name),
+                    Item::Resource(d) => (d.visibility, &d.name),
+                    Item::Global(d) => (d.visibility, &d.name),
+                    Item::Interface(d) => (d.visibility, &d.name),
                     _ => continue,
                 };
-                if !public_only || is_public {
+                if !public_only || visibility.is_public() {
                     names.push(name.clone());
                 }
             }
@@ -1320,6 +1316,10 @@ fn receiver_matches_impl(
 /// Whether a type member is shown in the public-API view. Inherent-`impl`
 /// members need `pub`; trait-`impl` members are always shown (they are the
 /// trait's public surface). Shared with `unparse::unparse_impl_block_signature`.
-pub(crate) fn member_visible(public_only: bool, inherent: bool, is_public: bool) -> bool {
-    !public_only || !inherent || is_public
+pub(crate) fn member_visible(
+    public_only: bool,
+    inherent: bool,
+    visibility: crate::ast::Visibility,
+) -> bool {
+    !public_only || !inherent || visibility.is_public()
 }

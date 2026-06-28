@@ -3744,17 +3744,16 @@ pub fn unparse_assoc_const_signature(c: &AssociatedConst) -> String {
 /// drop the block.
 pub fn unparse_impl_block_signature(b: &ImplBlock, public_only: bool) -> String {
     let inherent = b.trait_type.is_none();
-    let visible =
-        |is_public: bool| crate::semantics::member_visible(public_only, inherent, is_public);
+    let visible = |visibility| crate::semantics::member_visible(public_only, inherent, visibility);
 
     let mut lines: Vec<String> = Vec::new();
     for c in &b.constants {
-        if visible(c.visibility.is_public()) {
+        if visible(c.visibility) {
             lines.push(unparse_assoc_const_signature(c));
         }
     }
     for m in &b.methods {
-        if visible(m.visibility.is_public()) {
+        if visible(m.visibility) {
             lines.push(unparse_function_signature(m));
         }
     }

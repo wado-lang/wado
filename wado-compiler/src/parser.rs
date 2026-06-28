@@ -1000,13 +1000,13 @@ impl Parser {
         // `internal` and `pub` are mutually exclusive.
         // See docs/wep-2026-06-25-visibility-internal-pub-export.md.
         let vis_span = self.peek().span;
-        let is_internal = if self.check(&TokenKind::Internal) {
+        let has_internal = if self.check(&TokenKind::Internal) {
             self.advance();
             true
         } else {
             false
         };
-        let is_public = if self.check(&TokenKind::Pub) {
+        let has_pub = if self.check(&TokenKind::Pub) {
             self.advance();
             true
         } else {
@@ -1014,14 +1014,14 @@ impl Parser {
         };
 
         // `export` implies `pub` (a CM export is part of the public API).
-        let is_export = if self.check(&TokenKind::Export) {
+        let has_export = if self.check(&TokenKind::Export) {
             self.advance();
             true
         } else {
             false
         };
 
-        if is_internal && (is_public || is_export) {
+        if has_internal && (has_pub || has_export) {
             return Err(ParseError {
                 message: "`internal` cannot combine with `pub` or `export` \
                     (`export` already implies `pub`)"
@@ -1030,16 +1030,16 @@ impl Parser {
             });
         }
 
-        let visibility = if is_public || is_export {
+        let visibility = if has_pub || has_export {
             Visibility::Public
-        } else if is_internal {
+        } else if has_internal {
             Visibility::Internal
         } else {
             Visibility::Private
         };
 
         // Parse optional `async` modifier after `export` (only valid on exported fns)
-        let is_async = if is_export && self.check(&TokenKind::Async) {
+        let is_async = if has_export && self.check(&TokenKind::Async) {
             self.advance();
             true
         } else {
@@ -1056,7 +1056,7 @@ impl Parser {
         match self.peek_kind() {
             TokenKind::Use => self.parse_use_decl(visibility).map(Item::Use),
             TokenKind::Fn => self
-                .parse_function(visibility, is_export, is_async, attrs)
+                .parse_function(visibility, has_export, is_async, attrs)
                 .map(Item::Function),
             TokenKind::Interface => self
                 .parse_interface_decl(visibility, attrs)

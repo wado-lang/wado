@@ -1174,8 +1174,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Look up field visibility
         if let Some(struct_info) = self.lookup_struct_fields_in(&struct_name, &module_source) {
-            for (fname, _, is_public) in &struct_info.fields {
-                if fname == field_name && !is_public {
+            for (fname, _, vis) in &struct_info.fields {
+                if fname == field_name && !vis.is_public() {
                     let _ = self.logger.error(TypeError::PrivateFieldAccess {
                         struct_name: struct_name.clone(),
                         field_name: field_name.to_string(),
@@ -3219,8 +3219,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(struct_info) =
                 self.lookup_struct_fields_in(&struct_name, &struct_module_source)
         {
-            for (fname, _, is_public) in &struct_info.fields {
-                if !is_public && provided_names.contains(fname) {
+            for (fname, _, vis) in &struct_info.fields {
+                if !vis.is_public() && provided_names.contains(fname) {
                     let _ = self.logger.error(TypeError::PrivateFieldAccess {
                         struct_name: struct_name.clone(),
                         field_name: fname.clone(),
@@ -3435,7 +3435,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             module_source,
             fields: resolved_fields
                 .iter()
-                .map(|f| (f.name.clone(), f.value.type_id, true))
+                .map(|f| {
+                    (
+                        f.name.clone(),
+                        f.value.type_id,
+                        crate::ast::Visibility::Public,
+                    )
+                })
                 .collect(),
             field_ast_ids: Vec::new(),
             field_defaults: vec![None; resolved_fields.len()],

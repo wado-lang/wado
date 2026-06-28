@@ -15,8 +15,8 @@ pub(crate) struct StructFieldInfo {
     /// Canonical type name (original declaration name, not import alias).
     pub(super) name: String,
     pub(super) module_source: ModuleSource,
-    /// Field definitions: (name, `type_id`, `is_public`) triples
-    pub(super) fields: Vec<(String, TypeId, bool)>,
+    /// Field definitions: (name, `type_id`, visibility) triples
+    pub(super) fields: Vec<(String, TypeId, crate::ast::Visibility)>,
     /// Parallel array to `fields` holding each field's defining `AstId`.
     /// Used for recording use→def references (e.g. field access → field def).
     pub(super) field_ast_ids: Vec<AstId>,

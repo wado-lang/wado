@@ -4397,7 +4397,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 info.fields
                     .iter()
                     .enumerate()
-                    .map(|(i, (n, t, _is_public))| {
+                    .map(|(i, (n, t, _vis))| {
                         let default = info.field_defaults.get(i).and_then(Option::clone);
                         (n.clone(), i as u32, *t, default)
                     })
