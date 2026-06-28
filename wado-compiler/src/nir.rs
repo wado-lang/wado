@@ -22,12 +22,26 @@ use crate::name::LocalMethodName;
 use crate::tir::{EffectRef, TypeId, TypeTable};
 use crate::token::Span;
 
+/// Canonical identity of a function entity (see
+/// `docs/wep-2026-06-28-function-identity.md`). Minted in `lower` over the
+/// post-monomorphization function set and intrinsic to the entity — not its
+/// storage position, so it is stable across `dce` compaction. The mangled
+/// `name` is a lookup attribute, never identity.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct FuncId(u32);
+cranelift_entity::entity_impl!(FuncId, "fn");
+
 #[derive(Debug, Clone)]
 pub struct FunctionRef {
     pub module_source: ModuleSource,
     pub name: String,
     pub monomorph_info: Option<MonomorphInfo>,
     pub method_info: Option<LocalMethodName>,
+    /// The callee's canonical id, stamped at `lower` when this reference sits on
+    /// a call node ("born resolved"); `None` for an unstamped or extern callee,
+    /// which every analysis treats conservatively. Migration scaffolding: Phase 4
+    /// hoists this onto the call node as `FunctionRef` is dropped.
+    pub resolved: Option<FuncId>,
 }
 
 impl FunctionRef {
@@ -38,6 +52,7 @@ impl FunctionRef {
             name: func.name.clone(),
             monomorph_info: func.monomorph_info.clone(),
             method_info: func.method_info.clone(),
+            resolved: None,
         }
     }
 

@@ -80,6 +80,7 @@ impl Rule for SelectLoweringRule<'_> {
                 is_blanket: false,
             }),
             method_info: None,
+            resolved: None,
         };
         engine.replace_expr_kind(
             id,

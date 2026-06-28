@@ -727,6 +727,7 @@ impl FunctionTranslator<'_, '_> {
                     name: helper_name.clone(),
                     monomorph_info: None,
                     method_info: None,
+                    resolved: None,
                 },
                 type_args: vec![],
                 args: vec![ArenaCallArg {
@@ -1072,6 +1073,7 @@ impl FunctionTranslator<'_, '_> {
                         name: call_method_name,
                         monomorph_info: None,
                         method_info: Some(call_method_info),
+                        resolved: None,
                     },
                     type_args: Vec::new(),
                     args: nir_args,
@@ -1398,6 +1400,7 @@ impl FunctionTranslator<'_, '_> {
                     name: helper_name.clone(),
                     monomorph_info: None,
                     method_info: None,
+                    resolved: None,
                 },
                 type_args: vec![],
                 args: args.iter().map(|a| self.convert_call_arg(a)).collect(),
@@ -1802,6 +1805,7 @@ fn convert_function_ref(func: &FunctionRef) -> nir::FunctionRef {
         name: func.name.clone(),
         monomorph_info: func.monomorph_info.as_ref().map(convert_monomorph_info),
         method_info: func.method_info.clone(),
+        resolved: None,
     }
 }
 
