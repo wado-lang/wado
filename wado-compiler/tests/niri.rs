@@ -3393,6 +3393,17 @@ fn set_arena_body(f: &mut NirFunction, stmts: Vec<StmtBuild>) {
     f.body = Some(body);
 }
 
+/// A process-wide counter minting a fresh [`FuncId`] per test function, so a
+/// `make_pure_fn` result and the `call_expr` / `build_callee_map_test` that
+/// reference it agree on the callee identity (production code stamps these in
+/// `lower`).
+fn next_test_func_id() -> wado_compiler::nir::FuncId {
+    use cranelift_entity::EntityRef;
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static NEXT: AtomicU32 = AtomicU32::new(0);
+    wado_compiler::nir::FuncId::new(NEXT.fetch_add(1, Ordering::Relaxed) as usize)
+}
+
 fn make_pure_fn(
     name: &str,
     params: Vec<(&str, TypeId)>,
@@ -3421,7 +3432,7 @@ fn make_pure_fn(
         })
         .collect();
     let mut f = NirFunction {
-        id: None,
+        id: Some(next_test_func_id()),
         name: name.to_string(),
         module_source: ModuleSource::default(),
         is_pub: true,
@@ -3465,6 +3476,7 @@ fn call_expr(func: &NirFunction, args: Vec<Build>) -> Build {
         monomorph_info: None,
         method_info: None,
     };
+    let func_id = func.id;
     let return_type = func.return_type;
     Rc::new(move |b| {
         let call_args = args
@@ -3478,7 +3490,7 @@ fn call_expr(func: &NirFunction, args: Vec<Build>) -> Build {
             b,
             ExprKind::Call {
                 func: func_ref.clone(),
-                func_id: None,
+                func_id,
                 type_args: Vec::new(),
                 args: call_args,
             },
@@ -3492,10 +3504,7 @@ fn call_expr(func: &NirFunction, args: Vec<Build>) -> Build {
 fn build_callee_map_test(funcs: &[NirFunction]) -> CalleeMap {
     let mut map = CalleeMap::default();
     for f in funcs {
-        let key = (
-            f.module_source.clone(),
-            FunctionRef::from_resolved(f, f.module_source.clone()).full_name(),
-        );
+        let key = f.id.expect("test function must have an id");
         map.insert(key, Rc::new(RefCell::new(f.clone())));
     }
     map
