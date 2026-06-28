@@ -91,18 +91,18 @@ Keys the schema does not recognize — at the top level, in `[package]`, or in `
 
 The human-facing `[package]` fields are universal package metadata; on publish to OCI (see [Registry backend](#registry-backend)) each maps to a standard `org.opencontainers.image.*` annotation:
 
-| `[package]` field      | OCI annotation                                       | Notes                                                |
-| ---------------------- | ---------------------------------------------------- | ---------------------------------------------------- |
-| `description`          | `org.opencontainers.image.description`               | Short human-readable summary                         |
-| `homepage`             | `org.opencontainers.image.url`                       |                                                      |
-| `repository`           | `org.opencontainers.image.source`                    | Bare repo URL — enables registry → repo auto-linking |
-| `documentation`        | `org.opencontainers.image.documentation`             |                                                      |
-| `license`              | `org.opencontainers.image.licenses`                  | SPDX License Expression                              |
-| `authors`              | `org.opencontainers.image.authors`                   | Array, serialized comma-separated                    |
-| `version`              | `org.opencontainers.image.version`                   | Set by the registry tool at publish time             |
-| (git commit SHA)       | `org.opencontainers.image.revision`                  | Auto-derived at build time                           |
-| `repository-directory` | `org.wado-lang.package.repository-directory`         | Wado-custom annotation (no OCI key); embedded, not promoted by `wkg`        |
-| `license-file`         | `org.opencontainers.image.licenses` = `LicenseRef-…` | License text embedded in the `org.wado-lang.license` custom section         |
+| `[package]` field      | OCI annotation                                       | Notes                                                                |
+| ---------------------- | ---------------------------------------------------- | -------------------------------------------------------------------- |
+| `description`          | `org.opencontainers.image.description`               | Short human-readable summary                                         |
+| `homepage`             | `org.opencontainers.image.url`                       |                                                                      |
+| `repository`           | `org.opencontainers.image.source`                    | Bare repo URL — enables registry → repo auto-linking                 |
+| `documentation`        | `org.opencontainers.image.documentation`             |                                                                      |
+| `license`              | `org.opencontainers.image.licenses`                  | SPDX License Expression                                              |
+| `authors`              | `org.opencontainers.image.authors`                   | Array, serialized comma-separated                                    |
+| `version`              | `org.opencontainers.image.version`                   | Package semver                                                       |
+| (git commit SHA)       | `org.opencontainers.image.revision`                  | Auto-derived at build time; clean tree only                          |
+| `repository-directory` | `org.wado-lang.package.repository-directory`         | Wado-custom annotation (no OCI key); embedded, not promoted by `wkg` |
+| `license-file`         | `org.opencontainers.image.licenses` = `LicenseRef-…` | License text embedded in the `org.wado-lang.license` custom section  |
 
 `created` is not modeled (the registry tool owns publish timestamps);
 `keywords`/`categories` are omitted (no OCI key, so they would not reach the registry).

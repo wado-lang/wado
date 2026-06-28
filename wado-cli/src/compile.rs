@@ -105,10 +105,9 @@ pub struct CompileOptions {
     /// `--embed-metadata`: force embedding on, overriding the `-Os` default-off.
     /// Mutually exclusive with `--no-embed-metadata`.
     pub embed_metadata: bool,
-    /// True when the entry was resolved from a manifest (no path argument, or a
-    /// directory argument), so the build represents the package's declared
-    /// artifact. An explicit `.wado` file argument sets this false and embeds no
-    /// metadata. See WEP `wep-2026-02-14-package-manifest.md`.
+    /// The entry came from a manifest (no path argument, or a directory
+    /// argument), so the build is the package's declared artifact and carries
+    /// its metadata. False for an explicit `.wado` file argument.
     pub manifest_driven: bool,
 }
 
@@ -422,10 +421,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         ));
     }
 
-    // Manifest-driven mode: no path argument, or a directory argument. An
-    // explicit `.wado` file argument is a standalone target — `resolve_input`
-    // returns it verbatim without consulting a manifest for the entry, and
-    // metadata is not embedded (WEP `wep-2026-02-14-package-manifest.md`).
+    // No path argument or a directory argument resolves the entry through a
+    // manifest; an explicit `.wado` file is a standalone target. Gates metadata
+    // embedding (WEP `wep-2026-02-14-package-manifest.md`).
     let manifest_driven = input.as_deref().is_none_or(|s| Path::new(s).is_dir());
 
     let (input, lib_world) = if lib {

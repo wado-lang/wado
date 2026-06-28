@@ -17,12 +17,11 @@ use crate::manifest::Package;
 /// Custom section name for the Wado-custom monorepo subdirectory field.
 pub const REPOSITORY_DIRECTORY_SECTION: &str = "org.wado-lang.package.repository-directory";
 
-/// A custom section carrying one metadata field.
+/// A custom section carrying one metadata field: the section name and its
+/// UTF-8 payload.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MetadataSection {
-    /// Custom section name.
     pub name: String,
-    /// UTF-8 payload.
     pub value: String,
 }
 
@@ -150,7 +149,6 @@ authors = ["Alice <alice@example.com>", "Bob"]
             Some("Alice <alice@example.com>, Bob")
         );
         assert_eq!(value_of(&sections, "version"), Some("0.1.0"));
-        // No git SHA passed.
         assert!(value_of(&sections, "revision").is_none());
     }
 
@@ -182,7 +180,7 @@ repository = "https://github.com/myorg/app"
         assert!(value_of(&sections, "description").is_none());
         assert!(value_of(&sections, "homepage").is_none());
         assert!(value_of(&sections, "licenses").is_none());
-        // version is always present.
+        // version is unconditional, unlike the optional fields above.
         assert_eq!(value_of(&sections, "version"), Some("0.1.0"));
     }
 
