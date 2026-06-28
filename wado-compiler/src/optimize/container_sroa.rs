@@ -203,23 +203,29 @@ fn classify_array_method_sig(func: &NirFunction, type_table: &TypeTable) -> Opti
     }
 }
 
-/// Extract the `SigKey` (trait name, method name) from a `FunctionRef` that
-/// refers to an List method. Returns `None` for non-method functions or methods
-/// on other types.
-fn sig_key_of(func: &FunctionRef) -> Option<SigKey> {
-    let info = func.method_info.as_ref()?;
-    if info.base_struct_name != "List" {
-        return None;
-    }
-    Some((info.trait_name.clone(), info.method_name.clone()))
-}
-
 /// Lookup: method family `SigKey` → `ListMethodKind`. Built once from the
 /// function table and used at every call site to classify the operation.
 /// Since classification depends only on signature *shape* (not element type),
 /// one entry per family suffices — `List<i32>::push` and `List<i64>::push`
 /// share `((None, "push"), ElementWriter)`.
 type SigKindIndex = IndexMap<SigKey, ListMethodKind>;
+
+/// Per-callee classification: a `List` method's [`FuncId`](crate::nir::FuncId) →
+/// its [`ListMethodKind`]. Lets a call site be classified by its stamped
+/// `func_id` instead of reading the call node's `FunctionRef`. Built alongside
+/// [`SigKindIndex`]; an entry exists for exactly the functions whose `SigKey`
+/// classifies, so `id_kinds.get(call.func_id) == sig_kinds.get(sig_key_of(call))`.
+type IdKindIndex = IndexMap<crate::nir::FuncId, ListMethodKind>;
+
+/// The method-signature classification, bundled so it threads as one borrow.
+struct MethodSig {
+    sig_kinds: SigKindIndex,
+    id_kinds: IdKindIndex,
+    /// A `List` method's [`FuncId`](crate::nir::FuncId) → its `SigKey`, so the
+    /// rewriter recovers the callee's `(trait, method)` by id (for catalog
+    /// retargeting) instead of reading the call node's `FunctionRef`.
+    id_sigkeys: IndexMap<crate::nir::FuncId, SigKey>,
+}
 
 /// Lookup table: (element type `T_k`, (trait, method)) → `FunctionRef` for
 /// `List<T_k>::method`. Built once per pass.
@@ -279,7 +285,7 @@ struct CandidateInit {
 pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     // Build the method catalog + signature-kind index once, using an immutable
     // borrow on functions. Both indexes are derived from the same scan.
-    let (catalog, sig_kinds) = {
+    let (catalog, method_sig) = {
         let type_table = project.type_table.borrow();
         build_method_catalog(project, &type_table)
     };
@@ -311,7 +317,7 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
         let mut func = func_rc.borrow_mut();
         let rule = ContainerSroaRule {
             catalog: &catalog,
-            sig_kinds: &sig_kinds,
+            sig: &method_sig,
             struct_index: &struct_index,
             type_table_rc: type_table_rc.clone(),
             applied: Cell::new(false),
@@ -332,7 +338,7 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
 /// function container SROA at the body root.
 pub(super) struct ContainerSroaRule<'a> {
     catalog: &'a MethodCatalog,
-    sig_kinds: &'a SigKindIndex,
+    sig: &'a MethodSig,
     struct_index: &'a StructIndex<'a>,
     /// Shared `TypeTable` — `make_list(elem_ty)` interns per-field array types
     /// during the local-allocation step. Borrowed through the `Rc` to avoid
@@ -371,9 +377,11 @@ fn build_struct_index(structs: &[NirStruct]) -> StructIndex<'_> {
 fn build_method_catalog(
     project: &NirPackage,
     type_table: &TypeTable,
-) -> (MethodCatalog, SigKindIndex) {
+) -> (MethodCatalog, MethodSig) {
     let mut catalog = MethodCatalog::default();
     let mut sig_kinds = SigKindIndex::default();
+    let mut id_kinds = IdKindIndex::default();
+    let mut id_sigkeys: IndexMap<crate::nir::FuncId, SigKey> = IndexMap::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         // Skip dead/extern declarations: a bodyless function's signature types
@@ -407,6 +415,7 @@ fn build_method_catalog(
         );
         let func_ref = FunctionRef::from_resolved(&func, func.module_source.clone());
         let func_id = func.id.expect("func_id assigned at lower");
+        id_sigkeys.insert(func_id, sig_key.clone());
         // First-writer wins (there should only be one per (T, sig)).
         catalog
             .entry((element_ty, sig_key.clone()))
@@ -414,14 +423,25 @@ fn build_method_catalog(
 
         // Classify this method by signature shape. A method family (same
         // `SigKey`) has the same shape across all element types, so first-
-        // writer-wins is fine here too.
-        if !sig_kinds.contains_key(&sig_key)
-            && let Some(kind) = classify_array_method_sig(&func, type_table)
-        {
-            sig_kinds.insert(sig_key, kind);
+        // writer-wins is fine here too. The family's kind, once known, is also
+        // recorded per `func_id` so call sites classify by id.
+        let kind = sig_kinds
+            .get(&sig_key)
+            .copied()
+            .or_else(|| classify_array_method_sig(&func, type_table));
+        if let Some(kind) = kind {
+            sig_kinds.entry(sig_key).or_insert(kind);
+            id_kinds.insert(func_id, kind);
         }
     }
-    (catalog, sig_kinds)
+    (
+        catalog,
+        MethodSig {
+            sig_kinds,
+            id_kinds,
+            id_sigkeys,
+        },
+    )
 }
 
 /// Whole-function container SROA driven from the engine session root.
@@ -429,7 +449,7 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
     // Step 1: collect candidates. Immutable borrow of type_table.
     let candidates = {
         let type_table = rule.type_table_rc.borrow();
-        collect_candidates(engine.body, &type_table, rule.struct_index, rule.sig_kinds)
+        collect_candidates(engine.body, &type_table, rule.struct_index, rule.sig)
     };
     if candidates.is_empty() {
         return false;
@@ -439,7 +459,7 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
     // Also track which `ListMethodKind`s were observed on each whitelisted use,
     // so step 3 can demand only the monomorphizations that will actually be
     // emitted per field (rather than unconditionally requiring all four kinds).
-    let (safe_indices, used_kinds_map) = compute_safe_set(engine.body, &candidates, rule.sig_kinds);
+    let (safe_indices, used_kinds_map) = compute_safe_set(engine.body, &candidates, rule.sig);
     if safe_indices.is_empty() {
         return false;
     }
@@ -453,7 +473,7 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
         .filter(|c| safe_indices.contains(&c.local_index))
         .filter(|c| {
             let used = used_kinds_map.get(&c.local_index).unwrap_or(&empty_used);
-            required_methods_available(c, used, rule.catalog, rule.sig_kinds)
+            required_methods_available(c, used, rule.catalog, rule.sig)
         })
         .collect();
     if safe_candidates.is_empty() {
@@ -503,7 +523,7 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
         field_info_map: &field_info_map,
         candidate_data: &candidate_data,
         catalog: rule.catalog,
-        sig_kinds: rule.sig_kinds,
+        sig: rule.sig,
     };
     let root = engine.body.root;
     Rewriter { ctx: &ctx }.rewrite_block(engine, root);
@@ -526,7 +546,7 @@ struct RewriteCtx<'a> {
     field_info_map: &'a IndexMap<(u32, u32), (String, TypeId)>,
     candidate_data: &'a IndexMap<u32, CandidateRewriteInfo>,
     catalog: &'a MethodCatalog,
-    sig_kinds: &'a SigKindIndex,
+    sig: &'a MethodSig,
 }
 
 /// Returns true if every `ListMethodKind` the rewrite might use is available
@@ -556,7 +576,7 @@ fn required_methods_available(
     c: &Candidate,
     used_kinds: &IndexSet<ListMethodKind>,
     catalog: &MethodCatalog,
-    sig_kinds: &SigKindIndex,
+    sig: &MethodSig,
 ) -> bool {
     let mut required: IndexSet<ListMethodKind> = IndexSet::default();
     required.insert(ListMethodKind::Constructor);
@@ -565,7 +585,7 @@ fn required_methods_available(
     }
     for &t in &c.element_types {
         for &kind in &required {
-            if find_sig_key_for_kind(catalog, sig_kinds, t, kind).is_none() {
+            if find_sig_key_for_kind(catalog, sig, t, kind).is_none() {
                 return false;
             }
         }
@@ -578,13 +598,13 @@ fn required_methods_available(
 /// monomorphized in this project.
 fn find_sig_key_for_kind(
     catalog: &MethodCatalog,
-    sig_kinds: &SigKindIndex,
+    sig: &MethodSig,
     elem_ty: TypeId,
     kind: ListMethodKind,
 ) -> Option<SigKey> {
-    for ((t, sig), _) in catalog {
-        if *t == elem_ty && sig_kinds.get(sig).copied() == Some(kind) {
-            return Some(sig.clone());
+    for ((t, sig_key), _) in catalog {
+        if *t == elem_ty && sig.sig_kinds.get(sig_key).copied() == Some(kind) {
+            return Some(sig_key.clone());
         }
     }
     None
@@ -597,7 +617,7 @@ fn collect_candidates(
     body: &Body,
     type_table: &TypeTable,
     struct_index: &StructIndex<'_>,
-    sig_kinds: &SigKindIndex,
+    sig: &MethodSig,
 ) -> Vec<Candidate> {
     let mut out = Vec::new();
     for s in &body.blocks[body.root].stmts {
@@ -624,7 +644,7 @@ fn collect_candidates(
             continue;
         }
         // Initializer must be one of the recognized forms.
-        let Some(init) = recognize_init_operand(body, *value, sig_kinds) else {
+        let Some(init) = recognize_init_operand(body, *value, sig) else {
             continue;
         };
         out.push(Candidate {
@@ -681,10 +701,10 @@ fn element_layout_of(
 fn recognize_init_operand(
     body: &Body,
     op: Operand,
-    sig_kinds: &SigKindIndex,
+    sig: &MethodSig,
 ) -> Option<CandidateInit> {
     op.as_expr()
-        .and_then(|e| recognize_init(body, e, sig_kinds))
+        .and_then(|e| recognize_init(body, e, sig))
 }
 
 /// Recognize the supported initializer form for container-SROA candidates.
@@ -702,12 +722,12 @@ fn recognize_init_operand(
 ///    fall through to form (1) on the inner constructor call. Neither the
 ///    label string nor the builder method name is inspected — only the
 ///    shape of the wrapper.
-fn recognize_init(body: &Body, value: ExprId, sig_kinds: &SigKindIndex) -> Option<CandidateInit> {
+fn recognize_init(body: &Body, value: ExprId, sig: &MethodSig) -> Option<CandidateInit> {
     let inner = unwrap_builder_labeled_block(body, value).unwrap_or(value);
-    let ExprKind::Call { func, args, .. } = &body.exprs[inner].kind else {
+    let ExprKind::Call { func_id, args, .. } = &body.exprs[inner].kind else {
         return None;
     };
-    if list_method_kind(func, sig_kinds) != Some(ListMethodKind::Constructor) {
+    if list_method_kind(*func_id, sig) != Some(ListMethodKind::Constructor) {
         return None;
     }
     if args.len() != 1 {
@@ -795,9 +815,17 @@ fn unwrap_builder_labeled_block(body: &Body, expr: ExprId) -> Option<ExprId> {
 /// Look up the `ListMethodKind` of a call target by signature, via the
 /// pre-built `SigKindIndex`. Returns `None` for non-method functions, non-List
 /// methods, or List methods whose signature didn't match any kind.
-fn list_method_kind(func: &FunctionRef, sig_kinds: &SigKindIndex) -> Option<ListMethodKind> {
-    let sig = sig_key_of(func)?;
-    sig_kinds.get(&sig).copied()
+fn list_method_kind(
+    func_id: Option<crate::nir::FuncId>,
+    sig: &MethodSig,
+) -> Option<ListMethodKind> {
+    sig.id_kinds.get(&func_id?).copied()
+}
+
+/// The callee's `SigKey` by its stamped `func_id` (the rewriter's catalog
+/// retarget key), or `None` for a non-`List`-method / unstamped callee.
+fn sig_key_of_id(sig: &MethodSig, func_id: Option<crate::nir::FuncId>) -> Option<SigKey> {
+    sig.id_sigkeys.get(&func_id?).cloned()
 }
 
 /// Compute the set of safe (decomposable) candidate locals via whitelist escape
@@ -805,7 +833,7 @@ fn list_method_kind(func: &FunctionRef, sig_kinds: &SigKindIndex) -> Option<List
 fn compute_safe_set(
     body: &Body,
     candidates: &[Candidate],
-    sig_kinds: &SigKindIndex,
+    sig: &MethodSig,
 ) -> (IndexSet<u32>, IndexMap<u32, IndexSet<ListMethodKind>>) {
     // Map candidate local → element arity (for push/index_assign/index_value arity checks).
     let mut arity_of: IndexMap<u32, usize> = IndexMap::default();
@@ -825,7 +853,7 @@ fn compute_safe_set(
             safe: &safe,
             arity_of: &arity_of,
             layout_of: &layout_of,
-            sig_kinds,
+            sig,
             escaped: IndexSet::default(),
             used_kinds: IndexMap::default(),
         };
@@ -844,7 +872,7 @@ struct WhitelistChecker<'a> {
     safe: &'a IndexSet<u32>,
     arity_of: &'a IndexMap<u32, usize>,
     layout_of: &'a IndexMap<u32, ElementLayout>,
-    sig_kinds: &'a SigKindIndex,
+    sig: &'a MethodSig,
     escaped: IndexSet<u32>,
     /// Per-candidate set of `ListMethodKind`s observed on whitelisted uses.
     used_kinds: IndexMap<u32, IndexSet<ListMethodKind>>,
@@ -969,10 +997,10 @@ impl WhitelistChecker<'_> {
             // Element from another candidate: other.IndexReader(j)
             ExprKind::MethodCall {
                 receiver,
-                func,
+                func_id,
                 args,
                 ..
-            } if list_method_kind(func, self.sig_kinds) == Some(ListMethodKind::IndexReader) => {
+            } if list_method_kind(*func_id, self.sig) == Some(ListMethodKind::IndexReader) => {
                 if args.len() != 1 {
                     return false;
                 }
@@ -1023,7 +1051,7 @@ impl WhitelistChecker<'_> {
             // v.method(...) — inspect receiver for whitelisted patterns.
             ExprKind::MethodCall {
                 receiver,
-                func,
+                func_id,
                 args,
                 ..
             } => {
@@ -1036,7 +1064,7 @@ impl WhitelistChecker<'_> {
                 // judged per arg below, not by requiring every arg be a skeleton
                 // expression.
                 let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
-                let kind = list_method_kind(func, self.sig_kinds);
+                let kind = list_method_kind(*func_id, self.sig);
                 if let Some(rec_local) = receiver_local(body, receiver)
                     && self.safe.contains(&rec_local)
                 {
@@ -1111,11 +1139,11 @@ impl WhitelistChecker<'_> {
                 let safe_read = if let Some(inner_e) = inner.as_expr()
                     && let ExprKind::MethodCall {
                         receiver,
-                        func,
+                        func_id,
                         args,
                         ..
                     } = &body.exprs[inner_e].kind
-                    && list_method_kind(func, self.sig_kinds) == Some(ListMethodKind::IndexReader)
+                    && list_method_kind(*func_id, self.sig) == Some(ListMethodKind::IndexReader)
                     && args.len() == 1
                     && let Some(rec_local) = receiver_local(body, *receiver)
                     && self.safe.contains(&rec_local)
@@ -1283,15 +1311,15 @@ impl Rewriter<'_, '_> {
         span: Span,
     ) -> Option<Vec<StmtId>> {
         let ctx = self.ctx;
-        let (receiver, func, arg_ids) = match &engine.body.exprs[expr].kind {
+        let (receiver, func_id, arg_ids) = match &engine.body.exprs[expr].kind {
             ExprKind::MethodCall {
                 receiver,
-                func,
+                func_id,
                 args,
                 ..
             } => (
                 *receiver,
-                func.clone(),
+                *func_id,
                 args.iter().map(|a| a.expr).collect::<Vec<_>>(),
             ),
             _ => return None,
@@ -1305,13 +1333,13 @@ impl Rewriter<'_, '_> {
         let layout = info.layout.clone();
         let element_types = info.element_types.clone();
 
-        let kind = list_method_kind(&func, ctx.sig_kinds);
+        let kind = list_method_kind(func_id, ctx.sig);
         match (kind, arg_ids.len()) {
             // Case 1: v.ElementWriter(source) — e.g. push
             (Some(ListMethodKind::ElementWriter), 1) => {
                 let per_field =
                     self.decompose_source(engine, arg_ids[0].as_expr()?, arity, &layout)?;
-                let sig = sig_key_of(&func)?;
+                let sig = sig_key_of_id(ctx.sig, func_id)?;
                 let mut out = Vec::with_capacity(arity);
                 for (k, elem_expr) in per_field.into_iter().enumerate() {
                     let field_local = ctx.field_local_map[&(rec_local, k as u32)];
@@ -1341,7 +1369,7 @@ impl Rewriter<'_, '_> {
                     return None;
                 }
                 let per_field = self.decompose_source(engine, src.as_expr()?, arity, &layout)?;
-                let sig = sig_key_of(&func)?;
+                let sig = sig_key_of_id(ctx.sig, func_id)?;
                 let mut out = Vec::with_capacity(arity);
                 for (k, elem_expr) in per_field.into_iter().enumerate() {
                     let field_local = ctx.field_local_map[&(rec_local, k as u32)];
@@ -1425,10 +1453,10 @@ impl Rewriter<'_, '_> {
             }
             ExprKind::MethodCall {
                 receiver,
-                func,
+                func_id,
                 args,
                 ..
-            } if list_method_kind(func, ctx.sig_kinds) == Some(ListMethodKind::IndexReader)
+            } if list_method_kind(*func_id, ctx.sig) == Some(ListMethodKind::IndexReader)
                 && args.len() == 1 =>
             {
                 let other = receiver_local(engine.body, *receiver)?;
@@ -1449,7 +1477,7 @@ impl Rewriter<'_, '_> {
                 {
                     return None;
                 }
-                let sig = sig_key_of(func)?;
+                let sig = sig_key_of_id(ctx.sig, *func_id)?;
                 Source::IndexRead {
                     other,
                     idx: idx_expr,
@@ -1550,16 +1578,16 @@ impl Rewriter<'_, '_> {
             if let Some(inner_e) = inner.as_expr()
                 && let ExprKind::MethodCall {
                     receiver,
-                    func,
+                    func_id,
                     args,
                     ..
                 } = &engine.body.exprs[inner_e].kind
-                && list_method_kind(func, ctx.sig_kinds) == Some(ListMethodKind::IndexReader)
+                && list_method_kind(*func_id, ctx.sig) == Some(ListMethodKind::IndexReader)
                 && args.len() == 1
                 && let Some(rec_local) = receiver_local(engine.body, *receiver)
                 && ctx.decomposed.contains(&rec_local)
             {
-                sig_key_of(func).map(|sig| (rec_local, field_index, args[0].expr, sig))
+                sig_key_of_id(ctx.sig, *func_id).map(|sig| (rec_local, field_index, args[0].expr, sig))
             } else {
                 None
             }
@@ -1607,7 +1635,7 @@ impl Rewriter<'_, '_> {
         // Handle Query calls on decomposed candidates (len/is_empty/capacity).
         let query = if let ExprKind::MethodCall {
             receiver,
-            func,
+            func_id,
             args,
             ..
         } = &engine.body.exprs[e].kind
@@ -1615,9 +1643,9 @@ impl Rewriter<'_, '_> {
             if let Some(rec_local) = receiver_local(engine.body, *receiver)
                 && ctx.decomposed.contains(&rec_local)
                 && args.is_empty()
-                && list_method_kind(func, ctx.sig_kinds) == Some(ListMethodKind::Query)
+                && list_method_kind(*func_id, ctx.sig) == Some(ListMethodKind::Query)
             {
-                sig_key_of(func).map(|sig| (rec_local, sig))
+                sig_key_of_id(ctx.sig, *func_id).map(|sig| (rec_local, sig))
             } else {
                 None
             }
@@ -1714,7 +1742,7 @@ fn build_with_capacity_call(
 ) -> ExprId {
     let sig = find_sig_key_for_kind(
         ctx.catalog,
-        ctx.sig_kinds,
+        ctx.sig,
         elem_ty,
         ListMethodKind::Constructor,
     )
