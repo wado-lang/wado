@@ -133,30 +133,20 @@ impl FunctionRef {
             .is_some_and(LocalMethodName::is_trait_method)
     }
 
-    /// The canonical [`crate::name::FunctionId`] this reference denotes — the
-    /// injective identity the DCE call graph keys on (`dce::function_id_for`).
-    /// Unlike `full_name()` it normalizes a monomorphized method to its
-    /// `(module, name)` free identity, so a call site whose method mangling
-    /// drifts from the callee still resolves to the same function. Used to mint
-    /// and stamp `FuncId`s in `lower` (`docs/wep-2026-06-28-function-identity.md`).
+    /// The canonical [`crate::name::FunctionId`] this reference denotes, keyed on
+    /// `(module_source, mangled name)`. The mangled `name` already encodes a
+    /// method's `struct^trait::method` and any monomorphization type args, so it
+    /// is the one injective identity for a function — independent of whether a
+    /// *call site* happens to carry `monomorph_info` (which flipped the older
+    /// `Method`/`Free` split and made the same callee key two different ways).
+    /// Used to mint and stamp `FuncId`s in `lower`
+    /// (`docs/wep-2026-06-28-function-identity.md`).
     pub fn function_id(&self) -> crate::name::FunctionId {
-        use crate::name::{FreeFunctionName, FunctionId, MethodName};
-        match (&self.method_info, &self.monomorph_info) {
-            (Some(info), None) => FunctionId::Method(MethodName::new(
-                self.module_source.clone(),
-                info.struct_name.clone(),
-                info.trait_name.clone(),
-                info.method_name.clone(),
-            )),
-            (_, Some(mono)) => FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                self.module_source.clone(),
-                self.name.clone(),
-                mono.generic_name.clone(),
-            )),
-            (None, None) => {
-                FunctionId::Free(FreeFunctionName::from_module_source(&self.module_source, &self.name))
-            }
-        }
+        use crate::name::{FreeFunctionName, FunctionId};
+        FunctionId::Free(FreeFunctionName::from_module_source(
+            &self.module_source,
+            &self.name,
+        ))
     }
 }
 
