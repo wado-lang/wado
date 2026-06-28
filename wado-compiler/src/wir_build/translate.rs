@@ -456,6 +456,9 @@ fn register_inspect_wrapper(
     let impl_unqualified_name = format!("{functor_name}^{trait_name}::{method_name}");
     let impl_param_names: Option<Vec<String>> = ctx.package.functions.iter().find_map(|f| {
         let f = f.borrow();
+        if f.is_dead {
+            return None;
+        }
         if f.module_source == *module_source && f.name == impl_unqualified_name {
             Some(f.params.iter().map(|p| p.name.clone()).collect())
         } else {

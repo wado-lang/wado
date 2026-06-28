@@ -341,6 +341,7 @@ impl Translator<'_> {
         });
         NirFunction {
             id: None,
+            is_dead: false,
             name: func.name.clone(),
             module_source: func.module_source.clone(),
             is_pub: func.is_pub,

@@ -269,6 +269,13 @@ pub struct NirFunction {
     /// (and for optimizer-synthesized functions not yet minted). Analyses key
     /// per-function facts by this id via `SecondaryMap<FuncId, _>`.
     pub id: Option<FuncId>,
+    /// Liveness bit. `dce` sets this `true` for an unreachable function instead
+    /// of removing it from the store, so `FuncId == position` holds for the whole
+    /// pipeline (see `docs/wep-2026-06-28-function-identity.md` Phase 4). A dead
+    /// function lingers as an inert bodyless record; `wir_build` skips it. Distinct
+    /// from a live-but-bodyless declaration (extern / `FnCanonicalDispatch`), which
+    /// keeps `is_dead == false`.
+    pub is_dead: bool,
     pub name: String,
     /// Module this function belongs to. Set by the link phase when flattening
     /// per-module body data into flat lists; before link, the `module_source` is

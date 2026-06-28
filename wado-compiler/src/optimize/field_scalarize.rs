@@ -125,6 +125,12 @@ fn build_field_usage_cache(project: &NirPackage) -> FieldUsageCache {
     let type_table = project.type_table.borrow();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
+        // Dead/extern declarations have no body and their signature types may be
+        // DCE'd (Phase 4 clears dead bodies in place); skip to avoid dangling
+        // `type_table.get` on a removed param type.
+        if func.body.is_none() {
+            continue;
+        }
         let params = analyze_function_field_usage(&func, &type_table);
         let mut immut_ref_params = IndexSet::default();
         for (position, param) in func.params.iter().enumerate() {

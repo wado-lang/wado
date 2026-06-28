@@ -177,6 +177,12 @@ fn compute_inspectable_fn_dispatch(package: &NirPackage) -> IndexSet<(usize, Typ
         let Ok(func) = func_rc.try_borrow() else {
             continue;
         };
+        // `dce` marks unreachable functions dead in place (Phase 4) rather than
+        // removing them, so a dead `FnCanonicalDispatch` stub lingers; gate on
+        // liveness, not mere presence.
+        if func.is_dead {
+            continue;
+        }
         if let Some((_, arity, return_type)) = func.fn_canonical_dispatch() {
             set.insert((arity, return_type));
         }

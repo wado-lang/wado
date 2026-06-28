@@ -309,6 +309,13 @@ fn register_methods(ctx: &mut WirContext<'_>) {
         let tir_func = func_rc.borrow();
         let module_source = &tir_func.module_source;
 
+        // Skip dead functions. A dead `FnCanonicalDispatch` is bodyless yet would
+        // otherwise pass the `body.is_none()` exception below; `is_dead`
+        // distinguishes it from a live bodyless dispatch (Phase 4).
+        if tir_func.is_dead {
+            continue;
+        }
+
         // Only methods
         if tir_func.method_info.is_none() {
             continue;

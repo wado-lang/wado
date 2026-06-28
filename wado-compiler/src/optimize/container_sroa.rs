@@ -376,6 +376,12 @@ fn build_method_catalog(
     let mut sig_kinds = SigKindIndex::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
+        // Skip dead/extern declarations: a bodyless function's signature types
+        // may already be DCE'd, so reading them (element type, sig classify)
+        // would dangle. `dce` clears dead bodies in place (Phase 4).
+        if func.body.is_none() {
+            continue;
+        }
         // Must be an instance/static method with `method_info`.
         let Some(method_info) = &func.method_info else {
             continue;

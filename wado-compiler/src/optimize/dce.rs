@@ -457,9 +457,14 @@ pub fn filter_string_literals(project: &mut NirPackage) {
     let surviving: IndexSet<(ModuleSource, String)> = project
         .functions
         .iter()
-        .map(|f| {
+        .filter_map(|f| {
             let func = f.borrow();
-            (func.module_source.clone(), func.name.clone())
+            // Dead functions linger in `functions` (Phase 4 marks, never removes);
+            // their string literals must not be kept alive.
+            if func.is_dead {
+                return None;
+            }
+            Some((func.module_source.clone(), func.name.clone()))
         })
         .collect();
 
@@ -522,9 +527,14 @@ pub fn remove_unreachable_closure_functors(project: &mut NirPackage) {
     let surviving_funcs: IndexSet<(ModuleSource, String)> = project
         .functions
         .iter()
-        .map(|f| {
+        .filter_map(|f| {
             let func = f.borrow();
-            (func.module_source.clone(), func.name.clone())
+            // A dead `__call` lingers in `functions` (Phase 4 marks, never removes),
+            // so filter by liveness rather than mere presence.
+            if func.is_dead {
+                return None;
+            }
+            Some((func.module_source.clone(), func.name.clone()))
         })
         .collect();
 
@@ -1420,28 +1430,35 @@ fn compute_reachable(
     reachable
 }
 
-/// Retain only the functions whose original position is in
-/// `reachable_positions` (computed by [`analyze_dce`]). Downstream
-/// phases (`wir_build`, codegen) see every surviving function and
-/// don't repeat reachability work.
+/// Mark every function whose original position is **not** in
+/// `reachable_positions` (computed by [`analyze_dce`]) as dead by clearing
+/// its body. The function record stays in `project.functions` at its
+/// original position, so `FuncId == position` holds for the whole pipeline
+/// (`dce` never renumbers) — see `docs/wep-2026-06-28-function-identity.md`
+/// Phase 4. A dead function then lingers as an inert bodyless record,
+/// indistinguishable from an extern declaration: every body-iterating pass
+/// and codegen already skip `body.is_none()`, and the type / global / string
+/// reachability is filtered by reachable *position* (not body presence), so
+/// clearing the body is behavior-preserving versus the old `retain` removal.
 pub fn remove_unreachable_functions(
     project: &mut NirPackage,
     reachable_positions: &IndexSet<usize>,
 ) {
     // Dense `Vec<bool>` indexed by original position avoids hashing each
-    // index against `reachable_positions` once per retain step.
+    // index against `reachable_positions` once per step.
     let mut keep = vec![false; project.functions.len()];
     for &pos in reachable_positions {
         if pos < keep.len() {
             keep[pos] = true;
         }
     }
-    let mut idx = 0;
-    project.functions.retain(|_| {
-        let k = keep[idx];
-        idx += 1;
-        k
-    });
+    for (i, func_rc) in project.functions.iter().enumerate() {
+        if !keep[i] {
+            let mut func = func_rc.borrow_mut();
+            func.is_dead = true;
+            func.body = None;
+        }
+    }
 }
 
 impl DceAnalysis {

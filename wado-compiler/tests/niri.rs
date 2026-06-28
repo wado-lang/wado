@@ -3433,6 +3433,7 @@ fn make_pure_fn(
         .collect();
     let mut f = NirFunction {
         id: Some(next_test_func_id()),
+        is_dead: false,
         name: name.to_string(),
         module_source: ModuleSource::default(),
         is_pub: true,
