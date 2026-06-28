@@ -73,7 +73,7 @@ an open coordinate `ns:pkg`, or a `lib:` nickname for indirection. Bare keys
 
 `namespace` and `name` together form the registry identity (`namespace:name`, e.g., `myorg:my-app`). Without `namespace`, the package cannot be published to a registry — this is the natural state for closed-source applications and internal tools. A namespaced package can still opt out explicitly with `publish = false`.
 
-The human-facing fields (`description`, `homepage`, `repository`, `documentation`, `license`, `authors`) are backend-agnostic package metadata; they live in `[package]` rather than a registry-flavored section, and map to OCI annotations only as a serialization detail. See [Package Metadata and Publishing](#package-metadata-and-publishing).
+The human-facing fields are backend-agnostic metadata kept in `[package]` (not a registry-flavored section); the OCI mapping is just a serialization detail (see [Package Metadata and Publishing](#package-metadata-and-publishing)).
 
 #### Name and Namespace Validation
 
@@ -89,9 +89,7 @@ Keys the schema does not recognize — at the top level, in `[package]`, or in `
 
 ### Package Metadata and Publishing
 
-The human-facing `[package]` fields are universal package metadata that happen
-to map to OCI annotations. The registry backend is OCI (see [Registry backend](#registry-backend)), so on publish each field is serialized to a
-standard `org.opencontainers.image.*` annotation:
+The human-facing `[package]` fields are universal package metadata; on publish to OCI (see [Registry backend](#registry-backend)) each maps to a standard `org.opencontainers.image.*` annotation:
 
 | `[package]` field      | OCI annotation                                       | Notes                                                |
 | ---------------------- | ---------------------------------------------------- | ---------------------------------------------------- |
@@ -106,51 +104,20 @@ standard `org.opencontainers.image.*` annotation:
 | `repository-directory` | — (Wado-custom)                                      | No OCI key exists; embedded in the component only    |
 | `license-file`         | `org.opencontainers.image.licenses` = `LicenseRef-…` | License text embedded as a custom section            |
 
-`created` is not modeled: no embeddable field exists for it, and the registry
-tool owns publish-time timestamps. `keywords`/`categories` are omitted — OCI has
-no standard key for them, so they would not reach an OCI registry.
+`created` is not modeled (the registry tool owns publish timestamps);
+`keywords`/`categories` are omitted (no OCI key, so they would not reach the registry).
 
 #### License
 
-`license` (an SPDX expression such as `"MIT OR Apache-2.0"`) is the primary
-form, and is validated as a well-formed SPDX expression at parse time. For a
-standard license the SPDX identifier is the canonical reference, so no file is
-shipped. A non-standard or proprietary license uses `license-file` instead: the
-annotation becomes `LicenseRef-<name>` (SPDX's syntax for custom licenses, also
-accepted in the `license` field) and the file's text is embedded in the
-component. `license` and `license-file` are mutually exclusive; publishing
-requires one of them.
+`license` is an SPDX expression (`"MIT OR Apache-2.0"`), validated at parse time; the SPDX id is the canonical reference, so no file ships. A non-standard license uses `license-file` instead — the annotation becomes `LicenseRef-<name>` and the file's text is embedded. The two are mutually exclusive; publishing requires one.
 
 #### Repository subdirectory (monorepo)
 
-Neither OCI nor git has a standard way to address a subdirectory within a
-repository. `repository` therefore stays a bare repo URL (so the registry can
-link the artifact back to its repository); a package's location inside a
-monorepo is recorded in `repository-directory`. This value is not emitted as an
-OCI annotation — it is embedded as Wado-custom metadata and preserved in the
-component for Wado tooling.
-
-The same need on the consuming side — depending on a package that lives in a
-subdirectory of a git repository — is served by the git dependency's
-`directory` field (see [Git](#git)).
+Neither OCI nor git addresses a repository subdirectory, so `repository` stays a bare repo URL (for registry → repo linking) and the package's location is recorded in `repository-directory` — embedded as Wado-custom metadata, not an OCI annotation. The consuming side is served by the git dependency's `directory` field (see [Git](#git)).
 
 #### Metadata embedding and the publish backend
 
-Metadata is embedded into the compiled component using the `wasm-metadata`
-custom-section format that the registry tooling reads. `wado publish` shells out
-to `wkg` (wasm-pkg-tools), which derives the OCI annotations from the embedded
-metadata. There is no `wkg.toml`: `wado.toml` is the single source of truth, and
-users interact only with `wado publish` — `wkg` is an implementation detail. The
-only requirement is that `wkg` is installed; a missing `wkg` produces an error
-with install guidance and exits.
-
-Registry authentication is delegated to the ambient OCI credential store
-(`docker login`, read by `wkg`), with an environment-variable token override for
-CI. Wado stores no credentials of its own.
-
-`revision` (the git commit SHA) is derived at build time. When the working tree
-is dirty, the revision is omitted (with a warning) rather than recording an
-unreproducible state.
+`wado publish` embeds the metadata into the component in the `wasm-metadata` custom-section format and shells out to `wkg` (wasm-pkg-tools), which derives the OCI annotations. There is no `wkg.toml` — `wado.toml` is the only source of truth, and `wkg` is an implementation detail (a missing `wkg` errors with install guidance). Authentication is delegated to the ambient OCI credential store (`docker login`), with an env-var token override for CI; Wado stores no credentials. `revision` is the git commit SHA, derived at build time and omitted (with a warning) on a dirty tree.
 
 ### Entry Points and Worlds
 
@@ -292,11 +259,7 @@ Each dependency must have exactly one primary source type (`git`, `registry`, or
 "org:foo" = { git = "https://github.com/org/monorepo.git", version = "^1.0.0", directory = "packages/foo" }
 ```
 
-`directory` addresses the subdirectory through an explicit field rather than
-encoding it into the URL — git has no URL syntax for subdirectories, and the
-ecosystem conventions that bolt one on (`//subdir`, `#subdirectory=`, `?path=`)
-are not interoperable. The inline table already has room for a dedicated key, so
-the path is unambiguous and host-independent.
+`directory` is an explicit field rather than URL-encoded: git has no subdirectory URL syntax and the ecosystem conventions that bolt one on (`//subdir`, `#subdirectory=`, `?path=`) are not interoperable, so a dedicated key keeps the path unambiguous and host-independent.
 
 Exactly one of `version` or `ref` must be specified. `version` resolves against semver-tagged releases in the repository. `ref` pins to an exact git ref — use explicit branch names (e.g., `"main"`) rather than implicit defaults.
 
@@ -715,10 +678,7 @@ repository-directory = "packages/cli"
 
 #### `[workspace.package]` — Shared Package Metadata
 
-`[workspace.package]` declares package metadata shared by every member.
-Inheritance is automatic — unlike dependencies, members do **not** write
-`{ workspace = true }`. Whether a member may override an inherited field depends
-on the field:
+`[workspace.package]` holds metadata shared by every member. Inheritance is automatic — unlike dependencies, members do not write `{ workspace = true }`. Override depends on the field:
 
 | Field          | Inheritance                     | Member override          |
 | -------------- | ------------------------------- | ------------------------ |
@@ -730,24 +690,9 @@ on the field:
 | `authors`      | Default                         | Allowed                  |
 | `wado-version` | Default                         | Allowed                  |
 
-Only these seven fields may appear in `[workspace.package]`; any other key
-(`name`, `lib`, `description`, `homepage`, `documentation`,
-`repository-directory`, `publish`) is package-specific and is not inheritable —
-there is no mechanism to set it workspace-wide.
+Only these seven fields are inheritable; any other key (`name`, `lib`, `description`, `homepage`, `documentation`, `repository-directory`, `publish`) is package-specific. A member that re-declares a forced field is an error (`version is inherited from [workspace.package]; remove it here`) — see the [Lockstep Contract](#lockstep-contract).
 
-The forced fields (`version`, `repository`, `namespace`) have exactly one
-definition site, the workspace root. A member that re-declares one is an error
-(`version is inherited from [workspace.package]; remove it here`). Why this is
-forced rather than opt-in is the [Lockstep Contract](#lockstep-contract).
-
-`license` and `license-file` form one logical license slot: if a member sets
-either, it replaces the inherited slot entirely (and the two remain mutually
-exclusive within any single manifest). `license-file` inherited from the
-workspace resolves relative to the workspace root.
-
-Inheritance is all-or-nothing per field: a field placed in `[workspace.package]`
-is single-sourced; a workspace that does not want to share a field simply omits
-it, and each member sets its own.
+`license` and `license-file` are one slot: a member setting either replaces it whole (still mutually exclusive within a manifest), and an inherited `license-file` resolves relative to the root. A field a workspace does not want to share is simply omitted, and each member sets its own.
 
 `[workspace.dependencies]` and `[workspace.dev-dependencies]` declare shared dependency versions. Member packages reference them with explicit opt-in (unlike metadata):
 
@@ -771,31 +716,14 @@ Properties:
 
 ### Lockstep Contract
 
-Workspace metadata inheritance and root-only publishing together provide a single
-guarantee: **a workspace's packages cannot drift to mismatched public versions.**
-Two mechanisms enforce it, one for the repository and one for the registry.
+Workspace metadata inheritance and root-only publishing together guarantee that **a workspace's packages cannot drift to mismatched public versions**, enforced in two places:
 
-- Force-inherited identity. `version`, `repository`, and `namespace` are declared
-  once in `[workspace.package]` and cannot be overridden by a member. There is
-  exactly one definition site, so in-repository drift is impossible by
-  construction — not merely linted against.
-- Root-only publish. `wado publish` runs only from the workspace root and
-  publishes every publishable member together at that shared version (see
-  [Publishing](#publishing)). Members can never be pushed piecemeal at different
-  versions, so the registry cannot drift either.
+- Repository: `version`, `repository`, and `namespace` are declared once in `[workspace.package]` and cannot be overridden, so there is one definition site and drift is impossible by construction, not merely linted.
+- Registry: `wado publish` runs only from the workspace root and publishes every member together at that shared version (see [Publishing](#publishing)), so members can't be pushed piecemeal at different versions.
 
-Membership is the boundary. A package is either inside the workspace — bound by
-the contract — or outside it as a standalone project with full freedom. There is
-deliberately no per-field opt-out that lets a member stay in the workspace yet
-diverge from a forced field, and none is planned: the binary keeps the contract
-simple and the guarantee total.
+Membership is the boundary: a package is either inside the workspace (bound) or a standalone project (free). There is deliberately no per-field opt-out to diverge while staying in — and none is planned.
 
-This is the clean departure from Cargo. Cargo's `[workspace.package]` is opt-in
-per field (`version.workspace = true`), so a crate that omits the opt-in silently
-keeps its own version; same-repository version skew (familiar from the
-`wasmtime` / `wasm-tools` crate families) is the routine result. Wado inverts the
-default: for the fields that define a package's published identity, sharing is
-the only in-workspace option, so the drift Cargo permits cannot arise.
+This is the departure from Cargo, whose `[workspace.package]` is opt-in per field (`version.workspace = true`): a crate that omits it silently keeps its own version, so same-repo skew (familiar from `wasmtime` / `wasm-tools`) is routine. Wado makes sharing the only in-workspace option for identity fields, so that drift cannot arise.
 
 ### Single-File Mode
 
@@ -849,11 +777,7 @@ validations apply:
 - exactly one of `license` or `license-file` must be present
 - every shipped dependency must carry a concrete source: a `path` dependency needs an accompanying registry/git source, and a `workspace = true` dependency must resolve to one (the workspace context is gone once the package is extracted)
 
-A published package must carry its descriptive metadata, so the non-exclusive
-fields above are required. The exceptions: `homepage` and `documentation` are
-redundant with `repository` and default to it when omitted; `repository-directory`
-is meaningful only for a monorepo; and `wado-version` is a build constraint, not
-descriptive metadata. These four stay optional even when publishing.
+The descriptive fields are required because a published package must carry its metadata. The rest stay optional: `homepage`/`documentation` default to `repository`, `repository-directory` is monorepo-only, and `wado-version` is a build constraint.
 
 `wado publish --dry-run` runs these checks and reports every problem at once
 (it does not upload). The OCI upload itself is not yet implemented, so a bare
@@ -933,8 +857,7 @@ This enables seamless local development while ensuring published packages are se
 - **Dependency specifier resolution**: an open coordinate or `lib:` nickname requires a `wado.toml` lookup at compile time, adding a project-discovery step. The compiler itself is not affected — only `CompilerHost` implementations need to handle this.
 - **Self-sufficient lock file**: duplicates entry points and dependency edges from each package's `wado.toml`. This makes the lock file larger and introduces a potential staleness risk (if a dependency's `wado.toml` changes entry points without version bump). The trade-off is worth it — builds skip all transitive manifest I/O, and staleness is caught by `wado update` or integrity mismatch.
 - **Archive-level integrity** (not source-level): simpler and unambiguous, but means the hash depends on the registry's archive format. If a registry changes its packaging format, hashes change even if sources are identical.
-- **Workspace membership as the lockstep boundary** (see [Lockstep Contract](#lockstep-contract)): forced identity inheritance plus root-only publishing make version drift structurally impossible, at the cost of per-member independence — regained only by leaving the workspace, not by an in-workspace opt-out.
-- **Forced metadata inheritance has no `{ workspace = true }` marker** (unlike dependencies): a field in `[workspace.package]` is inherited automatically and a member that re-declares a forced one is an error. This trades a small surprise (no opt-in syntax) for the guarantee that forced fields have exactly one definition site.
+- **Lockstep over per-field opt-in** (see [Lockstep Contract](#lockstep-contract)): `[workspace.package]` inherits automatically (no `{ workspace = true }` marker) and forced fields can't be overridden, plus root-only publishing — trading per-member independence for one definition site and structurally drift-free releases. Independence means leaving the workspace, not an in-workspace opt-out.
 - **`[world]` table keyed by FQ world name**: hosted worlds are declared by their Component Model world name (`"wasi:cli/command"`) rather than a short alias (`command`/`bin`/`cli`). The key is the world the entry conforms to, so new worlds need no new manifest field and the mapping to the CM world is explicit. The library world is the one exception — it has no externally-fixed FQ name, so it is named after the package and declared by `[package].lib`.
 - **`[package]` over `[project]`**: `[package]` aligns with CM's "package" concept (`package ns:name@version` in WIT). The file itself represents the project; `[package]` describes the distributable unit within it. `[workspace]` > `[package]` hierarchy is natural, whereas `[workspace]` > `[project]` would be confusing.
 - **`path` + `registry` dual source**: adds complexity to the dependency spec but eliminates the "path deps can't be published" problem. The alternative (Cargo's separate `[patch]` section) is more complex and harder to maintain.
