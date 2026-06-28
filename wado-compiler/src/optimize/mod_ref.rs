@@ -842,7 +842,6 @@ mod tests {
             name: name.to_string(),
             monomorph_info: None,
             method_info: None,
-            resolved: None,
         }
     }
     fn call(body: &mut Body, args: Vec<ExprId>) -> ExprId {
@@ -857,6 +856,7 @@ mod tests {
             body,
             ExprKind::Call {
                 func: func_ref("f"),
+                func_id: None,
                 type_args: vec![],
                 args,
             },

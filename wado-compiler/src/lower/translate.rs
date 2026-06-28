@@ -722,12 +722,12 @@ impl FunctionTranslator<'_, '_> {
         };
         self.alloc_expr(
             ExprKind::Call {
+                func_id: None,
                 func: nir::FunctionRef {
                     module_source: helper_module.clone(),
                     name: helper_name.clone(),
                     monomorph_info: None,
                     method_info: None,
-                    resolved: None,
                 },
                 type_args: vec![],
                 args: vec![ArenaCallArg {
@@ -1067,13 +1067,13 @@ impl FunctionTranslator<'_, '_> {
                 .collect();
             return self.alloc_expr(
                 ExprKind::MethodCall {
+                    func_id: None,
                     receiver: nir_receiver.into(),
                     func: nir::FunctionRef {
                         module_source: functor.module_source.clone(),
                         name: call_method_name,
                         monomorph_info: None,
                         method_info: Some(call_method_info),
-                        resolved: None,
                     },
                     type_args: Vec::new(),
                     args: nir_args,
@@ -1219,6 +1219,7 @@ impl FunctionTranslator<'_, '_> {
                 args,
                 ..
             } => ExprKind::MethodCall {
+                func_id: None,
                 receiver: self.convert_operand(receiver),
                 func: convert_function_ref(func),
                 type_args: type_args.clone(),
@@ -1395,18 +1396,19 @@ impl FunctionTranslator<'_, '_> {
                 self.base.value_copy.name_for_type.get(&type_id)
         {
             return ExprKind::Call {
+                func_id: None,
                 func: nir::FunctionRef {
                     module_source: helper_module.clone(),
                     name: helper_name.clone(),
                     monomorph_info: None,
                     method_info: None,
-                    resolved: None,
                 },
                 type_args: vec![],
                 args: args.iter().map(|a| self.convert_call_arg(a)).collect(),
             };
         }
         ExprKind::Call {
+            func_id: None,
             func: convert_function_ref(func),
             type_args: type_args.to_vec(),
             args: args.iter().map(|a| self.convert_call_arg(a)).collect(),
@@ -1805,7 +1807,6 @@ fn convert_function_ref(func: &FunctionRef) -> nir::FunctionRef {
         name: func.name.clone(),
         monomorph_info: func.monomorph_info.as_ref().map(convert_monomorph_info),
         method_info: func.method_info.clone(),
-        resolved: None,
     }
 }
 

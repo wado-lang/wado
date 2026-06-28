@@ -3463,7 +3463,6 @@ fn call_expr(func: &NirFunction, args: Vec<Build>) -> Build {
         name: func.name.clone(),
         monomorph_info: None,
         method_info: None,
-        resolved: None,
     };
     let return_type = func.return_type;
     Rc::new(move |b| {
@@ -3478,6 +3477,7 @@ fn call_expr(func: &NirFunction, args: Vec<Build>) -> Build {
             b,
             ExprKind::Call {
                 func: func_ref.clone(),
+                func_id: None,
                 type_args: Vec::new(),
                 args: call_args,
             },

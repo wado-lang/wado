@@ -570,6 +570,7 @@ fn rewrite_call_expr(
                 });
                 new_args.extend(args);
                 body.exprs[id].kind = ExprKind::Call {
+                    func_id: None,
                     func,
                     type_args,
                     args: new_args,

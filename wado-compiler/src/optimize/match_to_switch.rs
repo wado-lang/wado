@@ -251,12 +251,12 @@ fn build_switch(
         // matching the other compiler-synthesized cold branches.
         let cold_call = engine.alloc_expr(
             ExprKind::Call {
+                func_id: None,
                 func: FunctionRef {
                     module_source: ModuleSource::builtin(),
                     name: "cold_path".to_string(),
                     monomorph_info: None,
                     method_info: None,
-                    resolved: None,
                 },
                 args: vec![],
                 type_args: vec![],
@@ -273,12 +273,12 @@ fn build_switch(
         // synthesised callee being removed.
         let call = engine.alloc_expr(
             ExprKind::Call {
+                func_id: None,
                 func: FunctionRef {
                     module_source: ModuleSource::builtin(),
                     name: "unreachable".to_string(),
                     monomorph_info: None,
                     method_info: None,
-                    resolved: None,
                 },
                 args: vec![],
                 type_args: vec![],

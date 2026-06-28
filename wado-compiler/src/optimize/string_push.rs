@@ -189,6 +189,7 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
             engine.const_operand(crate::nir_value_graph::ValueKind::Char(ch), TypeTable::CHAR);
         let call = engine.alloc_expr(
             ExprKind::MethodCall {
+                func_id: None,
                 receiver: recv_clone.into(),
                 func: ctx.push_char.clone(),
                 type_args: Vec::new(),

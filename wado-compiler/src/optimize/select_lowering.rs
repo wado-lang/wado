@@ -80,11 +80,11 @@ impl Rule for SelectLoweringRule<'_> {
                 is_blanket: false,
             }),
             method_info: None,
-            resolved: None,
         };
         engine.replace_expr_kind(
             id,
             ExprKind::Call {
+                func_id: None,
                 func,
                 type_args: vec![result_type],
                 args: vec![

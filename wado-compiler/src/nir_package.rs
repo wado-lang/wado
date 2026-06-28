@@ -157,10 +157,10 @@ impl NirPackage {
                 continue;
             };
             for expr in body.exprs.values_mut() {
-                if let ExprKind::Call { func, .. } | ExprKind::MethodCall { func, .. } =
-                    &mut expr.kind
+                if let ExprKind::Call { func, func_id, .. }
+                | ExprKind::MethodCall { func, func_id, .. } = &mut expr.kind
                 {
-                    func.resolved = ids
+                    *func_id = ids
                         .get(&(func.module_source.clone(), func.full_name()))
                         .copied();
                 }

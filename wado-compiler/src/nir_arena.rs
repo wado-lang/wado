@@ -193,6 +193,11 @@ pub enum ExprKind {
     },
     Call {
         func: FunctionRef,
+        /// Canonical callee id, stamped at `lower` ("born resolved"); `None` for
+        /// an extern / builtin or not-yet-stamped callee, which every analysis
+        /// treats conservatively. Permanent: Phase 4 drops `func` and this
+        /// becomes the sole callee reference.
+        func_id: Option<crate::nir::FuncId>,
         type_args: Vec<TypeId>,
         args: Vec<ArenaCallArg>,
     },
@@ -203,6 +208,7 @@ pub enum ExprKind {
     MethodCall {
         receiver: Operand,
         func: FunctionRef,
+        func_id: Option<crate::nir::FuncId>,
         type_args: Vec<TypeId>,
         args: Vec<ArenaCallArg>,
     },
@@ -857,10 +863,12 @@ impl Body {
             },
             ExprKind::Call {
                 func,
+                func_id,
                 type_args,
                 args,
             } => ExprKind::Call {
                 func,
+                func_id,
                 type_args,
                 args: args
                     .into_iter()
@@ -877,11 +885,13 @@ impl Body {
             ExprKind::MethodCall {
                 receiver,
                 func,
+                func_id,
                 type_args,
                 args,
             } => ExprKind::MethodCall {
                 receiver: self.clone_operand(receiver),
                 func,
+                func_id,
                 type_args,
                 args: args
                     .into_iter()

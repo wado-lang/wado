@@ -1629,12 +1629,12 @@ mod tests {
         use crate::nir_arena::ArenaCallArg;
         body.exprs.push(ExprNode {
             kind: ExprKind::Call {
+                func_id: None,
                 func: FunctionRef {
                     module_source: ModuleSource::entry_point_synthetic(),
                     name: "foo".to_string(),
                     monomorph_info: None,
                     method_info: None,
-                    resolved: None,
                 },
                 type_args: vec![],
                 args: vec![ArenaCallArg {

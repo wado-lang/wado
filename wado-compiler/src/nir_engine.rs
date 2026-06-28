@@ -928,10 +928,12 @@ impl<'a> Engine<'a> {
             },
             ExprKind::Call {
                 func,
+                func_id,
                 type_args,
                 args,
             } => ExprKind::Call {
                 func,
+                func_id,
                 type_args,
                 args: args
                     .into_iter()
@@ -948,11 +950,13 @@ impl<'a> Engine<'a> {
             ExprKind::MethodCall {
                 receiver,
                 func,
+                func_id,
                 type_args,
                 args,
             } => ExprKind::MethodCall {
                 receiver: self.clone_operand(receiver),
                 func,
+                func_id,
                 type_args,
                 args: args
                     .into_iter()

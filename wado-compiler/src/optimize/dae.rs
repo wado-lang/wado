@@ -464,6 +464,7 @@ fn rewrite_call(body: &mut Body, id: ExprId, confirmed: &IndexMap<FnKey, Vec<boo
                     new_args.push(arg);
                 }
                 body.exprs[id].kind = ExprKind::Call {
+                    func_id: None,
                     func,
                     type_args,
                     args: new_args,

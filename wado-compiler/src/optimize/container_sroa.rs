@@ -1635,6 +1635,7 @@ impl Rewriter<'_, '_> {
             engine.replace_expr_kind(
                 e,
                 ExprKind::MethodCall {
+                    func_id: None,
                     receiver: new_receiver.into(),
                     func: new_func,
                     type_args: Vec::new(),
@@ -1718,6 +1719,7 @@ fn build_with_capacity_call(
         .clone();
     engine.alloc_expr(
         ExprKind::Call {
+            func_id: None,
             func,
             type_args: Vec::new(),
             args: vec![ArenaCallArg {
@@ -1751,6 +1753,7 @@ fn build_element_writer_call(
     let receiver = build_receiver(engine, field_local, field_name, arr_ty, true, span);
     engine.alloc_expr(
         ExprKind::MethodCall {
+            func_id: None,
             receiver: receiver.into(),
             func,
             type_args: Vec::new(),
@@ -1786,6 +1789,7 @@ fn build_index_writer_call(
     let receiver = build_receiver(engine, field_local, field_name, arr_ty, true, span);
     engine.alloc_expr(
         ExprKind::MethodCall {
+            func_id: None,
             receiver: receiver.into(),
             func,
             type_args: Vec::new(),
@@ -1826,6 +1830,7 @@ fn build_index_reader_call(
     let receiver = build_receiver(engine, field_local, field_name, arr_ty, false, span);
     engine.alloc_expr(
         ExprKind::MethodCall {
+            func_id: None,
             receiver: receiver.into(),
             func,
             type_args: Vec::new(),

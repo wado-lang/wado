@@ -37,11 +37,6 @@ pub struct FunctionRef {
     pub name: String,
     pub monomorph_info: Option<MonomorphInfo>,
     pub method_info: Option<LocalMethodName>,
-    /// The callee's canonical id, stamped at `lower` when this reference sits on
-    /// a call node ("born resolved"); `None` for an unstamped or extern callee,
-    /// which every analysis treats conservatively. Migration scaffolding: Phase 4
-    /// hoists this onto the call node as `FunctionRef` is dropped.
-    pub resolved: Option<FuncId>,
 }
 
 impl FunctionRef {
@@ -52,7 +47,6 @@ impl FunctionRef {
             name: func.name.clone(),
             monomorph_info: func.monomorph_info.clone(),
             method_info: func.method_info.clone(),
-            resolved: None,
         }
     }
 
