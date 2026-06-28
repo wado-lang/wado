@@ -34,9 +34,6 @@ pub fn plan(flat: &mut FlatPackage) -> LowerPlan {
     boxing::shadow_params(flat, &box_plan);
     let lifted_from = flat.functions.len();
     let closure = closure::plan(flat);
-    // `closure::plan` lifts closure bodies into fresh `__call` functions; retag
-    // their `&mut`-borrowed locals to box types (`shadow_params` ran before they
-    // existed). New range only — the param-shadow step is not idempotent.
     boxing::shadow_new_functions(flat, &box_plan, lifted_from);
     globals::build_initialize_modules(flat);
     flat.rebuild_variant_indices();

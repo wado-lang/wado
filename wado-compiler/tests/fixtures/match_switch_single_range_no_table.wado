@@ -1,7 +1,4 @@
-// A single wide range arm must NOT become a `br_table`: one range test is two
-// comparisons, far cheaper than a multi-hundred-entry jump table. The switch
-// rewrite requires at least two switchable arms, so this stays a cascade while
-// a multi-arm dense range class (see match_char_range_switch) still converts.
+// A single wide range arm stays a comparison cascade, not a `br_table`.
 
 use { println, Stdout } from "core:cli";
 

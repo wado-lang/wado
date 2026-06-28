@@ -217,9 +217,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut trait_impl_module_source: Option<ModuleSource> = None;
         let mut blanket_type_param: Option<String> = None;
         let mut trait_impl_struct_name: Option<String> = None;
-        // The resolved trait impl's target name, recorded even when it equals the
-        // receiver's own name (unlike `trait_impl_struct_name`, which is gated).
-        // Used to mangle a newtype's own trait-method call with the newtype name.
         let mut matched_impl_struct_name: Option<String> = None;
 
         // If receiver is a reference type, try ref-type trait impls first.
@@ -807,12 +804,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     Some(vec![elem]),
                 )
             }
-            // A newtype with its OWN trait impl (`impl Trait for NewType`): the
-            // impl function is named after the newtype, so mangle the call with
-            // the newtype name. Without this, `mangle_type_name` erases the
-            // newtype to its base, and a blanket `impl<T> Trait for Base<T>`
-            // would shadow the newtype's impl at the call site. Inherited
-            // methods (matched on the base) fall through to the default below.
             ResolvedType::Newtype { name, .. }
                 if matched_impl_struct_name.as_deref() == Some(name.as_str()) =>
             {

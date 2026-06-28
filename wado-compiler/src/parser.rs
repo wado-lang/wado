@@ -2696,9 +2696,7 @@ impl Parser {
         }
     }
 
-    /// Parse a single pattern alternative: an atom optionally extended into a
-    /// range (`a..=b` / `a..<b`). Used for both the leading pattern and each
-    /// `|` alternative, so ranges may appear as or-pattern members.
+    /// Parse an atom, optionally extended into a range (`a..=b` / `a..<b`).
     fn parse_pattern_atom_or_range(&mut self) -> ParseResult<Pattern> {
         let start_span = self.peek().span;
         let first = self.parse_pattern_atom()?;

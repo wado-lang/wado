@@ -145,11 +145,7 @@ pub struct Lowering {
     eq_trait_name: String,
     /// Canonical stdlib name of the `String` struct.
     string_struct_name: String,
-    /// Immutable globals whose initializer is a bare integer literal, keyed by
-    /// `(module_source, name)`. A `ConstantValue` pattern referencing one of
-    /// these is the same as matching that literal, so pattern lowering
-    /// substitutes the literal instead of a binding + equality guard — letting
-    /// the `match_to_switch` optimizer reach a dense `br_table`.
+    /// Immutable globals with a bare integer-literal initializer, keyed by `(module, name)`.
     const_int_globals: IndexMap<(ModuleSource, String), i128>,
 }
 
@@ -2045,11 +2041,6 @@ impl<'a> PatternLowerer<'a> {
                     }
                 }
 
-                // A constant-value pattern naming an immutable integer-literal
-                // global IS that literal: rewrite it to a `Literal` pattern so
-                // the generic lowering and `match_to_switch` treat it like a
-                // bare integer (the latter reaches a dense `br_table`). Only the
-                // guard-free form folds; a `const if cond` arm keeps its guard.
                 for arm in arms.iter_mut() {
                     if arm.guard.is_some() {
                         continue;

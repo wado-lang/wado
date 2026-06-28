@@ -9361,9 +9361,6 @@ fn pattern_endpoint_to_i128(endpoint: &ast::Pattern) -> i128 {
             }
         }
         ast::Pattern::Literal(ast::Literal::Char(s)) => {
-            // Decode escapes via the shared `unescape_char`. A hand-rolled
-            // `chars().next()` reads the backslash of `'\u{7e}'` as `'\'`,
-            // mangling every escaped range bound to codepoint 92.
             let ch = super::util::unescape_char(s).unwrap_or('\0');
             i128::from(ch as u32)
         }
@@ -9403,8 +9400,6 @@ fn ast_literal_to_pattern(lit: &ast::Literal) -> crate::tir::TirLiteralPattern {
         }
         ast::Literal::String(s) => TirLiteralPattern::String(s.clone()),
         ast::Literal::Char(s) => {
-            // Decode escapes via the shared `unescape_char` (not a raw
-            // `chars().next()`, which reads the backslash of `'\u{7e}'`).
             TirLiteralPattern::Char(super::util::unescape_char(s).unwrap_or('\0'))
         }
         ast::Literal::Bool(b) => TirLiteralPattern::Bool(*b),

@@ -812,8 +812,6 @@ fn gen_char_class(w: &mut CodeWriter, cc: &CharClass, fail_action: &String) {
 }
 
 /// Build `(chars[pos] matches { 'x' | 'lo'..='hi' | ... })` for a char class.
-/// Parenthesized so the `matches` braces are not read as the `if` body. Empty
-/// class lowers to `(false)`.
 fn char_class_disjunction(cc: &CharClass) -> String {
     if cc.ranges.len() == 0 {
         return "(false)";

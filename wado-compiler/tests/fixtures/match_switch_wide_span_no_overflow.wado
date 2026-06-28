@@ -1,8 +1,4 @@
-// Regression: a `match` on an i64 whose arms straddle a span wider than i64
-// must not overflow the switch-range analysis. `max - min + 1` was computed
-// in i64 before the range gate, panicking (debug) on a full-width span. The
-// span is now computed in i128 and the gate bails, falling back to the normal
-// match cascade.
+// A `match` spanning wider than i64 must not overflow the switch-range analysis.
 
 use { println, Stdout } from "core:cli";
 

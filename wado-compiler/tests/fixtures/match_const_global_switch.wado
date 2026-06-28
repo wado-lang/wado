@@ -1,8 +1,4 @@
-// `matches` / `match` over named immutable-global constants should lower to a
-// dense `br_table` (Switch), exactly like the same values written as integer
-// literals. Before the const-pattern literalization fix, each `TK_*` constant
-// pattern desugared to a binding + equality guard, which `match_to_switch`
-// rejected (guards bail), leaving a compare cascade.
+// `match` / `matches` over immutable integer-global constants lowers to a `br_table`.
 
 use { println, Stdout } from "core:cli";
 

@@ -136,9 +136,6 @@ struct SwitchAnalysis {
     default_arm: Option<usize>,
 }
 
-/// One arm's switchable cases: a single value or an inclusive `[lo, hi]`
-/// range. `char` literals and range patterns both reduce to integer
-/// codepoints, so they share this representation.
 enum CaseSpec {
     Value(i64),
     Range { lo: i64, hi: i64 },
@@ -147,8 +144,7 @@ enum CaseSpec {
 /// Analyze whether a `Match` can be rewritten into a `Switch`. Accepts
 /// integer / `char` / enum scrutinees with guard-less arms whose patterns
 /// are integer or `char` literals, enum cases, integer/`char` ranges, or
-/// wildcard (the default). `char` is an i32 codepoint at WIR, so it switches
-/// on the same `br_table` path as the integer types.
+/// wildcard (the default).
 fn analyze(scrutinee_type: &ResolvedType, arms: &[ArmData], body: &Body) -> Option<SwitchAnalysis> {
     match scrutinee_type {
         ResolvedType::Primitive(
@@ -166,10 +162,6 @@ fn analyze(scrutinee_type: &ResolvedType, arms: &[ArmData], body: &Body) -> Opti
         _ => return None,
     }
 
-    // Collect each arm's cases without materialising range values yet: a
-    // large range (`0..=1_000_000`) would blow up before the range gate.
-    // Compute min/max as we go, then expand only once the gate has bounded
-    // the total range to `SWITCH_MAX_RANGE`.
     let mut specs: Vec<(CaseSpec, usize)> = Vec::new();
     let mut default_arm: Option<usize> = None;
     let mut min_value = i64::MAX;
@@ -246,23 +238,15 @@ fn analyze(scrutinee_type: &ResolvedType, arms: &[ArmData], body: &Body) -> Opti
         return None;
     }
 
-    // Span in i128: `max - min` can exceed i64 (e.g. arms near i64::MIN and
-    // i64::MAX), which would overflow before the range gate could reject it.
     let range = i128::from(max_value) - i128::from(min_value) + 1;
     if range > i128::from(SWITCH_MAX_RANGE) {
         return None;
     }
 
-    // A br_table replaces a comparison cascade; with a single switchable arm
-    // it would degenerate into a one-target table (a range/equality test is
-    // strictly cheaper), so require at least two.
     if specs.len() < 2 {
         return None;
     }
 
-    // Count covered values (a range covers its whole span) for the
-    // case-count and density gates. Bounded by `range <= SWITCH_MAX_RANGE`
-    // and non-overlapping arms (the front-end rejects overlapping match arms).
     let covered: i128 = specs
         .iter()
         .map(|(spec, _)| match spec {
@@ -277,9 +261,6 @@ fn analyze(scrutinee_type: &ResolvedType, arms: &[ArmData], body: &Body) -> Opti
         return None;
     }
 
-    // Bounded by `range <= SWITCH_MAX_RANGE`: expand ranges into individual
-    // `(value, arm)` pairs. Arm order is preserved, so `build_switch`'s
-    // first-wins fill gives earlier arms priority on overlap.
     let mut value_to_arm: Vec<(i64, usize)> = Vec::new();
     for (spec, arm_idx) in &specs {
         match spec {
@@ -316,9 +297,6 @@ fn build_switch(
     let mut offset_to_arm: Vec<Option<usize>> = vec![None; range];
     for (value, arm_idx) in &analysis.value_to_arm {
         let offset = (*value - analysis.min_value) as usize;
-        // First-wins: `value_to_arm` is in arm order, so an earlier arm
-        // claims the offset and a later overlapping range cannot steal it
-        // (match semantics: the first matching arm runs).
         if offset_to_arm[offset].is_none() {
             offset_to_arm[offset] = Some(*arm_idx);
         }
