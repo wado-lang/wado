@@ -27,91 +27,72 @@ package-gale ~40% (6.0s → 8.4s), the cost landing in `FunctionRef::full_name`.
 The lesson: `full_name()` must be computed once per call site, never per lookup.
 That forces the identity to be **stored**, which forces a canonical id.
 
-## Decision
+## Decision — the end state
 
-Introduce `FuncId`, a `cranelift_entity` id (like the arena's `ExprId`), as the
-one canonical function identity. It is **minted in `lower`** — the phase that
-creates every NIR function and call node — over the post-monomorphization
-function set, and is intrinsic to the entity, not its storage position.
+Functions become an entity arena, exactly like the expression arena. `FuncId` is
+a `cranelift_entity` id (like `ExprId`), minted in `lower` over the
+post-monomorphization function set and **permanent**: the function store is a
+`PrimaryMap<FuncId, NirFunction>`, append-only, and `dce` marks a function dead
+with a liveness bit rather than removing/renumbering it. So a `FuncId` never
+moves — it can be stored on a node and carried across every phase.
 
-Calls are **born resolved**. `lower` already holds each callee's identity when it
-builds a call node, so it stamps the node's `FuncId` at construction. There is no
-separate resolution pass and no `full_name()` recomputation downstream; the
-"resolve once" happens at the earliest possible point, reusing work `lower`
-already does. Concretely `lower` runs in two sub-steps: (i) assign a `FuncId` to
-each function and build the canonical `key → FuncId` map; (ii) translate bodies,
-stamping each call with its callee's id.
+A call node carries its callee as a `FuncId`; there is no `FunctionRef` on the
+call. `lower` stamps it at construction ("born resolved"), reusing the callee
+identity it already holds — `full_name()` is materialized once, in `lower`, and
+never recomputed downstream. The mangled `name` lives only in the function's
+arena record, read solely when a name is emitted (codegen, diagnostics). Externs
+/ builtins are interned into the same `FuncId` space (with an `extern` marker),
+so a call site is always an integer.
 
-`NirPackage` owns a `FuncRegistry` (`FuncId ↔ function`, plus the resolver),
-populated by `lower`. The mangled `name` becomes a registry _attribute_, looked
-up only when a name is actually emitted (codegen, diagnostics) — never for
-identity or keying. In the end state external / builtin callees are interned into
-the same id space (with an `extern` marker) so a call site is always an integer;
-that interning is deferred to Phase 4 (see below).
+There is no `FuncId → index` map, ever. `FuncId` is the arena key: `store[id]` is
+direct, and any per-function fact is a `SecondaryMap<FuncId, T>` (sparse-tolerant,
+sized to the id space). Analyses iterate the store — which yields `(FuncId, &fn)`
+pairs — and key everything by `FuncId`; callees come straight off the call node's
+id. Nothing is keyed by storage position, so there is nothing to remap when a
+function dies. This is the same entity-id + `SecondaryMap` discipline the arena
+and `cranelift` already use; the only state of record is the arena itself.
 
-`FuncId` is stable across `dce` compaction and mid-loop appends. Functions the
-optimizer adds (`value_copy_demote`) draw fresh ids from the registry; copied
-calls (`inline`) carry their id; retargeted calls (`container_sroa`) are stamped
-by the pass that rewrites them. Indexing the store goes through a `FuncId → index`
-map — integer→integer, cheap to rebuild at the few `dce` boundaries. The gate's
-"index stable only within one run" constraint and its call-graph rebuild
-disappear.
-
-## Externs and invariants
-
-- Externs deferred. Until Phase 4, call nodes carry `func_id: Option<FuncId>`
-  covering only defined functions; an extern / builtin / not-yet-stamped callee is
-  `None`, which every analysis already treats conservatively. Extern interning (so
-  the field can become non-optional) lands with Phase 4, when codegen needs the
-  registry to name them.
-- `None` is always safe. Stamp maintenance is best-effort: a copied call carries
-  its id (plain field), a pass that creates or retargets a call stamps the new
-  callee's id, and anything missed reads as `None` → conservative. Per the gate's
-  existing rule, an imprecise id costs optimization _quality_, never correctness.
-- Uniqueness guard. `lower` `debug_assert`s that no two functions produce the same
-  canonical key when building `key → FuncId` — `full_name` uniqueness is the
-  load-bearing assumption (the gate's call graph already relies on it).
-- Two ids coexist transiently. The intrinsic `FuncId` (DCE-stable) and
-  `gate::FunctionId` (the store index) live side by side until Phase 5 folds the
-  gate onto `FuncId`.
+The gate's dirty set becomes `SecondaryMap<FuncId, _>`; its "index stable only
+within one run" constraint and its per-run call-graph rebuild disappear.
 
 ## Staging
 
-Dual-carry keeps every phase green; the payoff lands when complete.
+Toward the end state without throwaway: every step adds code that survives to the
+end; the only removals (Phase 4–5) delete the _old_ `FunctionRef` / `Vec` store,
+never code a prior phase introduced.
 
-1. `FuncId` + `FuncRegistry` on `NirPackage`, minted and stamped in `lower`,
-   carried on call nodes _alongside_ the existing `FunctionRef`. Unread — green by
-   construction.
-2. Optimizer analyses (gate call graph, `alias`, `const_folding` callee map) read
-   the stamped `func_id` instead of resolving `full_name`. Removes the +40%
-   per-lookup cost, integer-keys the whole-program maps, fixes the bare-name
-   collision. Measure here.
-3. WIR build / codegen resolve names via the registry by `FuncId`, dropping the
-   `func_ref.name` path in `wir_build/calls.rs`.
-4. Drop `FunctionRef` from call nodes — it becomes registry metadata; `lower`
-   stops materializing call-site name strings. Updates the ~30 nir-side
-   construction sites and `monomorphize`.
-5. Simplify the gate: with `FuncId` DCE-stable, drop the rebuild and the
-   "not phase-stable" caveat.
+1. Mint `FuncId` in `lower` and stamp it onto the call node (the permanent home),
+   alongside the existing `FunctionRef` (kept only until codegen migrates).
+   `NirFunction` carries its `FuncId`. Unread — green by construction.
+2. Optimizer analyses read the call node's `FuncId` and key facts by
+   `SecondaryMap<FuncId, _>`. Removes the +40% per-lookup `full_name`, fixes the
+   bare-name collision. Measure here.
+3. WIR build / codegen resolve names by `FuncId` from the function record,
+   dropping the `func_ref.name` path in `wir_build/calls.rs`.
+4. Drop `FunctionRef` from the call node (now unused); intern externs so the
+   callee `FuncId` is non-optional. Updates the ~30 nir-side construction sites
+   and `monomorphize`.
+5. Make the store a `PrimaryMap<FuncId, NirFunction>` with liveness-bit `dce`, and
+   fold the gate onto `FuncId`. The position/id duality is gone.
 
 ## Consequences
 
-- One identity; name demoted to a lookup attribute. The four-representation smell
-  is gone.
-- Performance: eliminates per-lookup `full_name()` and per-pass
-  `(ModuleSource, String)` map rebuilds in favour of integer keys. Bounded but
-  real, and the precondition for any further integer-keyed analysis — the project
-  only pays off complete.
-- Correctness: a single canonical id removes the bare-name conflation;
-  identity/storage separation removes the gate's DCE-rebuild fragility.
-- Blast radius spans `lower`, `optimize`, `wir_build`, `codegen`, `monomorphize`.
-  Phase 1 transiently stores identity twice (dual-carry scaffolding).
+- One identity; name demoted to an arena-record attribute. The
+  four-representation smell is gone.
+- Performance: per-lookup `full_name()` and per-pass `(ModuleSource, String)` map
+  rebuilds become integer `SecondaryMap` keys; the store needs no remap on `dce`.
+- Correctness: a single canonical id removes the bare-name conflation; identity
+  no longer rides on storage position, so the gate's DCE-rebuild fragility is
+  designed out. A `lower`-time `assert` guards `full_name` uniqueness (the
+  load-bearing minting invariant; the check is O(1)).
+- Blast radius spans `lower`, `optimize`, `wir_build`, `codegen`, `monomorphize`,
+  and the function store. Staged so each phase compiles and passes the suite.
 
 ## TODO
 
-- [ ] Phase 1 — `FuncId` + `FuncRegistry`, minted and stamped in `lower`,
-      dual-carried on call nodes.
-- [ ] Phase 2 — optimizer analyses read `func_id`; measure.
-- [ ] Phase 3 — WIR build / codegen resolve names via the registry.
-- [ ] Phase 4 — drop `FunctionRef` from call nodes.
-- [ ] Phase 5 — simplify the gate.
+- [ ] Phase 1 — mint `FuncId` in `lower`; stamp the call node; `NirFunction.id`.
+- [ ] Phase 2 — analyses read the call-node `FuncId`, keyed by `SecondaryMap`.
+- [ ] Phase 3 — codegen resolves names by `FuncId` from the record.
+- [ ] Phase 4 — drop `FunctionRef` from call nodes; intern externs.
+- [ ] Phase 5 — `PrimaryMap<FuncId, NirFunction>` store + liveness `dce`; fold the
+      gate onto `FuncId`.
