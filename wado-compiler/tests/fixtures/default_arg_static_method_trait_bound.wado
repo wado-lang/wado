@@ -1,0 +1,30 @@
+//! Regression: a trait-bounded static call (`T::method()` inside a generic
+//! function) that omits a defaulted trailing argument must materialize the
+//! default declared on the trait. The trait-bounded dispatch recorded empty
+//! `param_defaults`, so reify padded nothing and codegen emitted a call
+//! missing the argument, producing invalid Wasm.
+
+trait Maker {
+    fn produce(n: i32 = 9) -> i32;
+}
+
+struct Widget {
+    x: i32,
+}
+
+impl Maker for Widget {
+    fn produce(n: i32) -> i32 {
+        return n;
+    }
+}
+
+fn via<T: Maker>() -> i32 {
+    return T::produce();
+}
+
+test "trait-bounded static method fills omitted default" {
+    assert via::<Widget>() == 9;
+}
+
+__DATA__
+{"test": {}}

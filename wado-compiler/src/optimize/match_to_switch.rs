@@ -332,7 +332,7 @@ fn build_switch(
         );
         let cold_stmt = engine.alloc_stmt(StmtKind::Expr(cold_call.into()), span);
         // Call `builtin::unreachable` rather than
-        // `core:internal/unreachable`: the former lowers to
+        // `core:rt/unreachable`: the former lowers to
         // `WirInstr::Unreachable` directly in `wir_build::calls.rs`
         // and is never DCE'd, so this pass can run after the
         // optimizer's pre-loop DCE without worrying about the

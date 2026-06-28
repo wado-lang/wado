@@ -1,0 +1,13 @@
+//! `pub use { x }` re-exports a package-internal symbol as part of the facade
+//! module's public API (the "internal impl, public facade" pattern). The
+//! re-export's own visibility is `pub`, independent of `x`'s `internal`
+//! modifier, so a consumer reaches it through the facade.
+
+use { facade_value } from "./sub/visibility_facade.wado";
+
+test "pub use re-exports an internal symbol publicly" {
+    assert facade_value() == 42;
+}
+
+__DATA__
+{"test": {}}

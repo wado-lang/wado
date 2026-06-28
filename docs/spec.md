@@ -3280,8 +3280,42 @@ export fn run() { ... }
 | `export fn foo()`   | Yes       | Yes          | Yes                 | Yes         |
 
 A `pub`-only item reaches Wado consumers only (source dependency or
-provider-tagged `.wasm`); a non-Wado CM consumer sees `export` items only. All
-entity definitions take these modifiers, including struct fields.
+provider-tagged `.wasm`); a non-Wado CM consumer sees `export` items only.
+
+The ladder applies to top-level items. Members of an `impl` block (methods,
+associated constants) carry a binary `pub` / file-private visibility; `internal`
+or `export` on a member is a compile error. A struct field accepts `pub` or
+`internal` (only `pub` widens access beyond the defining module; `internal`
+currently behaves like file-private).
+
+#### Re-export visibility
+
+A `use` declaration carrying a visibility modifier re-exports the imported names
+as members of the importing module, at the modifier's reach:
+
+| Form                          | Re-exported reach                           |
+| ----------------------------- | ------------------------------------------- |
+| `pub use { x } from "M"`      | `x` joins this module's public API          |
+| `internal use { x } from "M"` | `x` is re-exported package-internal         |
+| `use { x } from "M"`          | file-private import; `x` is not re-exported |
+
+A re-export's reach is the re-export keyword's, **not** `x`'s own visibility. So
+a `pub use` publishes `x` even when `x` is `internal` in its defining module —
+the "internal implementation, public facade" pattern, where a package's entry
+module re-exports its internal submodules' items as the library API:
+
+```wado
+// foo/impl.wado — package-internal implementation
+internal fn compute() -> i32 { ... }
+
+// foo.wado — the package's public entry module
+pub use { compute } from "./impl.wado";   // compute is now the library API
+```
+
+You may only re-export a name you can see: `pub use { x } from "M"` requires `x`
+to be importable here (`x` is `pub`, or `x` is `internal` and `M` is in this
+package). Re-exporting a file-private name is a visibility error, like any other
+import. See [Re-export Syntax (`pub use`)](./wep-2026-01-25-pub-use-reexport.md).
 
 ### Module Source Types
 

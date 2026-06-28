@@ -284,7 +284,7 @@ fn ensure_kiln_imports(module: &mut Module, span: Span, needed: &[&str]) {
     // No existing core:kiln use — synthesize one at the top.
     let decl = UseDecl {
         id: module.alloc_ast_id(),
-        is_pub: false,
+        visibility: crate::ast::Visibility::Private,
         source: "core:kiln".to_string(),
         source_span: span,
         source_id: module.alloc_ast_id(),

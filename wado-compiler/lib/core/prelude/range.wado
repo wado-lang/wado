@@ -9,7 +9,7 @@ use { IterMap, IterFilter, IterEnumerate, IterTake, IterSkip, IterChain, IterZip
 use { Formatter } from "core:prelude/format.wado";
 
 /// Types that can be incremented by one step (for range iteration).
-pub trait Step {
+internal trait Step {
     fn next_step(&self) -> Option<Self>;
 }
 
@@ -95,7 +95,7 @@ impl Step for char {
 /// Half-open range [start, end).
 /// Constructed via the `..<` operator: `0..<10` produces `RangeExclusive<i32>`.
 #[compiler_item("range_exclusive")]
-pub struct RangeExclusive<T: Ord> {
+internal struct RangeExclusive<T: Ord> {
     pub start: T,
     pub end: T,
 }
@@ -103,7 +103,7 @@ pub struct RangeExclusive<T: Ord> {
 /// Inclusive range [start, end].
 /// Constructed via the `..=` operator: `0..=10` produces `RangeInclusive<i32>`.
 #[compiler_item("range_inclusive")]
-pub struct RangeInclusive<T: Ord> {
+internal struct RangeInclusive<T: Ord> {
     pub start: T,
     pub end: T,
     exhausted: bool,

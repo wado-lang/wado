@@ -88,6 +88,15 @@ pub enum AnalyzeError {
     },
     /// Type name collides with a prelude type
     PreludeTypeCollision { name: String, span: Span },
+    /// Import of a symbol that is not visible at the import site: a
+    /// file-private symbol (no modifier), or an `internal` symbol reached
+    /// from a different package.
+    SymbolNotVisible {
+        name: String,
+        module_source: ModuleSource,
+        visibility: crate::ast::Visibility,
+        span: Span,
+    },
 }
 
 impl std::fmt::Display for AnalyzeError {
@@ -146,7 +155,39 @@ impl std::fmt::Display for AnalyzeError {
                     span.line, span.column, name
                 )
             }
+            AnalyzeError::SymbolNotVisible {
+                name,
+                module_source,
+                visibility,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: {}",
+                    span.line,
+                    span.column,
+                    symbol_not_visible_message(name, module_source, *visibility)
+                )
+            }
         }
+    }
+}
+
+fn symbol_not_visible_message(
+    name: &str,
+    module_source: &ModuleSource,
+    visibility: crate::ast::Visibility,
+) -> String {
+    match visibility {
+        crate::ast::Visibility::Internal => format!(
+            "symbol '{name}' is `internal` to '{module_source}' and cannot be imported \
+             from another package; mark it `pub` to export it across packages"
+        ),
+        // `Public` never reaches here (always importable); folded in for exhaustiveness.
+        crate::ast::Visibility::Private | crate::ast::Visibility::Public => format!(
+            "symbol '{name}' is private to '{module_source}' and cannot be imported; \
+             mark it `internal` (same package) or `pub` (cross package) to export it"
+        ),
     }
 }
 
@@ -198,6 +239,16 @@ impl From<AnalyzeError> for crate::compiler_host::Diagnostic {
             AnalyzeError::PreludeTypeCollision { name, span } => (
                 Code::DuplicateDefinition,
                 format!("type '{name}' conflicts with prelude type of the same name"),
+                *span,
+            ),
+            AnalyzeError::SymbolNotVisible {
+                name,
+                module_source,
+                visibility,
+                span,
+            } => (
+                Code::PrivateSymbol,
+                symbol_not_visible_message(name, module_source, *visibility),
                 *span,
             ),
         };
@@ -275,6 +326,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         ast_id: crate::ast::AstId,
         name: &str,
         kind: SymbolKind,
+        visibility: crate::ast::Visibility,
         span: Span,
     ) -> Option<crate::ast::AstId> {
         if let Some(first) = self.symbols.defined_span_in_module(module_source, name) {
@@ -287,7 +339,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         }
         Some(
             self.symbols
-                .define(module_source, ast_id, name, kind, Some(span)),
+                .define(module_source, ast_id, name, kind, visibility, Some(span)),
         )
     }
 
@@ -311,7 +363,14 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         cm_import: func.attrs.first().and_then(|a| a.as_cm_import().cloned()),
                     });
 
-                    self.define_unique(module_source, func.id, &func.name, kind, func.span);
+                    self.define_unique(
+                        module_source,
+                        func.id,
+                        &func.name,
+                        kind,
+                        func.visibility,
+                        func.span,
+                    );
                 }
 
                 Item::Interface(effect) => {
@@ -324,7 +383,14 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         cm_import: effect_cm_import,
                     });
 
-                    self.define_unique(module_source, effect.id, &effect.name, kind, effect.span);
+                    self.define_unique(
+                        module_source,
+                        effect.id,
+                        &effect.name,
+                        kind,
+                        effect.visibility,
+                        effect.span,
+                    );
 
                     // Also register each effect method as a function symbol
                     // with the fully qualified name "{Effect}.{method}"
@@ -348,6 +414,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             method.id,
                             &qualified_name,
                             func_kind,
+                            effect.visibility,
                             method.span,
                         );
                     }
@@ -363,6 +430,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         struct_decl.id,
                         &struct_decl.name,
                         kind,
+                        struct_decl.visibility,
                         struct_decl.span,
                     );
                 }
@@ -377,6 +445,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         enum_decl.id,
                         &enum_decl.name,
                         kind,
+                        enum_decl.visibility,
                         enum_decl.span,
                     );
                 }
@@ -391,6 +460,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         variant_decl.id,
                         &variant_decl.name,
                         kind,
+                        variant_decl.visibility,
                         variant_decl.span,
                     );
                 }
@@ -410,6 +480,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         trait_decl.id,
                         &trait_decl.name,
                         kind,
+                        trait_decl.visibility,
                         trait_decl.span,
                     );
                 }
@@ -424,6 +495,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         newtype.id,
                         &newtype.name,
                         kind,
+                        newtype.visibility,
                         newtype.span,
                     );
                 }
@@ -442,6 +514,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         resource.id,
                         &resource.name,
                         kind,
+                        resource.visibility,
                         resource.span,
                     );
 
@@ -466,6 +539,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             method.id,
                             &qualified_name,
                             func_kind,
+                            resource.visibility,
                             method.span,
                         );
                     }
@@ -508,7 +582,14 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             .collect(),
                     });
 
-                    self.define_unique(module_source, world.id, &world.name, kind, world.span);
+                    self.define_unique(
+                        module_source,
+                        world.id,
+                        &world.name,
+                        kind,
+                        world.visibility,
+                        world.span,
+                    );
                 }
 
                 Item::Use(_) => {
@@ -529,6 +610,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         flags_decl.id,
                         &flags_decl.name,
                         kind,
+                        flags_decl.visibility,
                         flags_decl.span,
                     );
                 }
@@ -543,7 +625,14 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         is_mut: global.mutable,
                     });
 
-                    self.define_unique(module_source, global.id, &global.name, kind, global.span);
+                    self.define_unique(
+                        module_source,
+                        global.id,
+                        &global.name,
+                        kind,
+                        global.visibility,
+                        global.span,
+                    );
                 }
 
                 Item::TupleTypeDecl(_) => {
@@ -560,6 +649,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         decl.id,
                         &decl.name,
                         SymbolKind::BuiltinType,
+                        decl.visibility,
                         decl.span,
                     );
                 }
@@ -644,7 +734,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
         // Second pass: process pub use (re-exports) now that all symbols are collected
         for (source, module) in modules {
-            self.process_pub_use(module, source, modules);
+            self.process_reexports(module, source, modules);
         }
 
         // Third pass: check for prelude type collisions
@@ -671,12 +761,12 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         Ok(())
     }
 
-    /// Process pub use declarations (re-exports) in a module
+    /// Process re-export declarations (`pub use` / `internal use`) in a module.
     ///
     /// This registers re-export relationships without creating new symbols.
     /// The actual symbol resolution happens in `lookup_in_module` which
     /// follows re-export chains transparently.
-    fn process_pub_use(
+    fn process_reexports(
         &mut self,
         module: &Module,
         module_source: &ModuleSource,
@@ -684,7 +774,8 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     ) {
         for item in &module.items {
             if let Item::Use(use_decl) = item {
-                if !use_decl.is_pub {
+                // A plain `use` is a file-private import that re-exports nothing.
+                if !use_decl.visibility.reaches_beyond_file() {
                     continue;
                 }
 
@@ -724,6 +815,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                 export_name,
                                 &source_module,
                                 name,
+                                use_decl.visibility,
                             );
                         }
                         UseItem::InterfaceFunctions {
@@ -739,6 +831,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                     export_name,
                                     &source_module,
                                     &source_name,
+                                    use_decl.visibility,
                                 );
                             }
                         }
@@ -749,6 +842,44 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 }
             }
         }
+    }
+
+    /// Whether a symbol with `visibility` in `target_module` is reachable from
+    /// `from_module_source`.
+    fn import_reachable(
+        &self,
+        from_module_source: &ModuleSource,
+        target_module: &ModuleSource,
+        visibility: crate::ast::Visibility,
+    ) -> bool {
+        visibility.reachable_from(target_module.same_package(from_module_source))
+    }
+
+    /// Emit `SymbolNotVisible` when `name` is a binding in `target_module` not
+    /// reachable from `from_module_source`. A name that is neither defined nor
+    /// re-exported there is left to the `ImportNotFound` path.
+    fn check_import_visibility(
+        &self,
+        from_module_source: &ModuleSource,
+        target_module: &ModuleSource,
+        name: &str,
+        span: Span,
+    ) -> Result<(), Bail> {
+        let Some(visibility) = self
+            .symbols
+            .binding_visibility_in_module(target_module, name)
+        else {
+            return Ok(());
+        };
+        if !self.import_reachable(from_module_source, target_module, visibility) {
+            self.logger.error(AnalyzeError::SymbolNotVisible {
+                name: name.to_string(),
+                module_source: target_module.clone(),
+                visibility,
+                span,
+            })?;
+        }
+        Ok(())
     }
 
     /// Validate imports in a module (for pre-loaded modules)
@@ -811,6 +942,12 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             {
                                 let key = symbol.defined_at;
                                 let import_name = alias.as_ref().unwrap_or(name);
+                                self.check_import_visibility(
+                                    from_module_source,
+                                    &module_source,
+                                    name,
+                                    use_decl.span,
+                                )?;
                                 self.symbols
                                     .register_import(from_module_source, import_name, key);
                             } else {
@@ -833,6 +970,12 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                     let key = symbol.defined_at;
                                     let import_name =
                                         func_item.alias.as_ref().unwrap_or(&func_item.name);
+                                    self.check_import_visibility(
+                                        from_module_source,
+                                        &module_source,
+                                        &lookup_name,
+                                        use_decl.span,
+                                    )?;
                                     self.symbols.register_import(
                                         from_module_source,
                                         import_name,
@@ -852,14 +995,21 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             // no symbols to register
                         }
                         UseItem::Namespace { name: ns } => {
-                            // Namespace import: register every public symbol
-                            // under its `ns$member` alias, matching how the
-                            // elaborator canonicalizes `ns::member` at lookup
-                            // time (`ModuleImports::canonical_ns_ref`).
+                            // Register each reachable symbol under its `ns$member`
+                            // alias, matching how the elaborator canonicalizes
+                            // `ns::member` at lookup time
+                            // (`ModuleImports::canonical_ns_ref`).
                             let symbols: Vec<(String, crate::ast::AstId)> = self
                                 .symbols
                                 .get_module_symbols(&module_source)
                                 .into_iter()
+                                .filter(|s| {
+                                    self.import_reachable(
+                                        from_module_source,
+                                        &module_source,
+                                        s.visibility,
+                                    )
+                                })
                                 .map(|s| {
                                     (
                                         crate::name::namespace_member_alias(ns, &s.name),

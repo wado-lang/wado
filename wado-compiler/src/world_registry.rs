@@ -395,7 +395,7 @@ mod tests {
         let world = WorldDecl {
             id: crate::ast::AstId::fresh(),
             name: "Command".to_string(),
-            is_pub: false,
+            visibility: crate::ast::Visibility::Private,
             attrs: vec![Attribute {
                 name: "cm".to_string(),
                 args: vec![ast::AttrArg::Str("wasi:cli/command@0.3.0".to_string())],

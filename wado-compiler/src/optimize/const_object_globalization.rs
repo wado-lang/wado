@@ -131,7 +131,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
             ),
             mutable: true,
             wado_mutable: false,
-            is_pub: false,
+            visibility: crate::ast::Visibility::Private,
             module_source: cand.module_source,
             span: crate::token::Span::new(0, 0, 1, 1),
             is_nullable: true,

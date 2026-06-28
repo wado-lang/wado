@@ -27,7 +27,7 @@ pub const CORE_PRELUDE: &str = include_str!("../lib/core/prelude.wado");
 // `.wat`, binary for `.wasm`) and dispatched through `get_stdlib_wasm_asset`.
 pub const CORE_LIBM_WAT: &[u8] = include_bytes!("../lib/core/libm.wat");
 pub const CORE_CLI: &str = include_str!("../lib/core/cli.wado");
-pub const CORE_INTERNAL: &str = include_str!("../lib/core/internal.wado");
+pub const CORE_RT: &str = include_str!("../lib/core/rt.wado");
 pub const CORE_ALLOCATOR: &str = include_str!("../lib/core/allocator.wado");
 pub const CORE_PRELUDE_STRING: &str = include_str!("../lib/core/prelude/string.wado");
 pub const CORE_BUILTIN: &str = include_str!("../lib/core/builtin.wado");
@@ -131,7 +131,7 @@ pub const ALL_CORE_MODULES: &[(&str, &str)] = &[
     ("core:builtin", CORE_BUILTIN),
     ("core:cli", CORE_CLI),
     ("core:collections", CORE_COLLECTIONS),
-    ("core:internal", CORE_INTERNAL),
+    ("core:rt", CORE_RT),
     ("core:prelude", CORE_PRELUDE),
     ("core:prelude/array.wado", CORE_PRELUDE_ARRAY),
     ("core:prelude/slice.wado", CORE_PRELUDE_SLICE),
@@ -362,12 +362,12 @@ mod tests {
         assert!(
             get_stdlib_module("core:kiln/kiln_host.wado")
                 .unwrap()
-                .contains("pub interface KilnHost")
+                .contains("internal interface KilnHost")
         );
         assert!(
             get_stdlib_module("core:kiln/types.wado")
                 .unwrap()
-                .contains("pub struct RawRequest")
+                .contains("internal struct RawRequest")
         );
         assert!(
             get_stdlib_module("core:kiln/worlds.wado")

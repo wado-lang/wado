@@ -653,7 +653,7 @@ b : 'y' ;
     let traced = generate(&mut grammar, &GenerateOptions { highlight: false, trace: true }).source;
     // The ambient logger import, the trace helpers, the depth field, and the
     // per-rule calls are all present.
-    assert str_contains(&traced, &"use { log_stderr } from \"core:internal\";");
+    assert str_contains(&traced, &"use { log_stderr } from \"core:rt\";");
     assert str_contains(&traced, &"fn trace_enter(p: &Parser, rule: &String)");
     assert str_contains(&traced, &"trace_depth: i32,");
     assert str_contains(&traced, &"trace_enter(p, &\"a\");");

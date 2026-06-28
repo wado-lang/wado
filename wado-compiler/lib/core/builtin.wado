@@ -217,7 +217,7 @@ fn cold_path();
 // These are the low-level canonical built-in functions imported from the
 // Component Model runtime.  Each maps 1:1 to a `canon` instruction.
 // Higher-level Wado APIs (Stream, Future, WaitableSet, …) are implemented
-// as adapter functions in core:internal that call these builtins.
+// as adapter functions in core:rt that call these builtins.
 // =========================================================================
 
 // --- Stream ---
@@ -397,13 +397,13 @@ fn thread_yield_to_suspended(target: i32, cancellable: i32);
 
 /// Calls stdout's write_via_stream indirectly (ambient, no effect required).
 /// Returns the subtask handle for the async operation.
-/// Internal only: used by core:internal for ambient logging (panic, assert).
+/// Internal only: used by core:rt for ambient logging (panic, assert).
 /// Public API should use Stdout::write_via_stream() through the effect system.
 fn call_indirect_stdout_write_via_stream(rx: i32) -> i32;
 
 /// Calls stderr's write_via_stream indirectly (ambient, no effect required).
 /// Returns the subtask handle for the async operation.
-/// Internal only: used by core:internal for ambient logging (panic, assert).
+/// Internal only: used by core:rt for ambient logging (panic, assert).
 /// Public API should use Stderr::write_via_stream() through the effect system.
 fn call_indirect_stderr_write_via_stream(rx: i32) -> i32;
 /// Absolute value of f32

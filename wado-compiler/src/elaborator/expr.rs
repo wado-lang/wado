@@ -590,7 +590,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Check if it's a prelude function (panic, unreachable)
-        // These are defined in core:internal and re-exported by core:prelude
+        // These are defined in core:rt and re-exported by core:prelude
         if matches!(ident.name.as_str(), "panic" | "unreachable") {
             // Stage 7-B: reify rebuilds the prelude `FuncRef`.
             return TypeTable::UNKNOWN;
@@ -1174,8 +1174,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Look up field visibility
         if let Some(struct_info) = self.lookup_struct_fields_in(&struct_name, &module_source) {
-            for (fname, _, is_pub) in &struct_info.fields {
-                if fname == field_name && !is_pub {
+            for (fname, _, vis) in &struct_info.fields {
+                if fname == field_name && !vis.is_public() {
                     let _ = self.logger.error(TypeError::PrivateFieldAccess {
                         struct_name: struct_name.clone(),
                         field_name: field_name.to_string(),
@@ -3219,8 +3219,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(struct_info) =
                 self.lookup_struct_fields_in(&struct_name, &struct_module_source)
         {
-            for (fname, _, is_pub) in &struct_info.fields {
-                if !is_pub && provided_names.contains(fname) {
+            for (fname, _, vis) in &struct_info.fields {
+                if !vis.is_public() && provided_names.contains(fname) {
                     let _ = self.logger.error(TypeError::PrivateFieldAccess {
                         struct_name: struct_name.clone(),
                         field_name: fname.clone(),
@@ -3435,7 +3435,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             module_source,
             fields: resolved_fields
                 .iter()
-                .map(|f| (f.name.clone(), f.value.type_id, true))
+                .map(|f| {
+                    (
+                        f.name.clone(),
+                        f.value.type_id,
+                        crate::ast::Visibility::Public,
+                    )
+                })
                 .collect(),
             field_ast_ids: Vec::new(),
             field_defaults: vec![None; resolved_fields.len()],
@@ -3453,7 +3459,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .enumerate()
             .map(|(i, f)| TirField {
                 name: f.name.clone(),
-                is_pub: true,
+                visibility: crate::ast::Visibility::Public,
                 type_id: f.value.type_id,
                 index: i as u32,
                 span: struct_lit.span,
@@ -3468,7 +3474,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.sem.decls.pending_anonymous_structs.push(TirStruct {
             name: anon_name.clone(),
             module_source: self.current_module_source.clone(),
-            is_pub: false,
+            visibility: crate::ast::Visibility::Private,
             type_params: Vec::new(),
             monomorph_info: None,
             fields: tir_fields,

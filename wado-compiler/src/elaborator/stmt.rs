@@ -249,8 +249,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         if module_source != self.current_module_source
                             && let Some(struct_info) = self.lookup_struct_fields(&name)
                         {
-                            for (fname, _, is_pub) in &struct_info.fields {
-                                if !is_pub && struct_lit.fields.iter().any(|f| f.name == *fname) {
+                            for (fname, _, vis) in &struct_info.fields {
+                                if !vis.is_public()
+                                    && struct_lit.fields.iter().any(|f| f.name == *fname)
+                                {
                                     let _ = self.logger.error(TypeError::PrivateFieldAccess {
                                         struct_name: name.clone(),
                                         field_name: fname.clone(),

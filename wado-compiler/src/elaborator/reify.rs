@@ -652,7 +652,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         TirEnum {
             name: enum_decl.name.clone(),
             module_source: self.current_module_source.clone(),
-            is_pub: enum_decl.is_pub,
+            visibility: enum_decl.visibility,
             type_params: Vec::new(),
             monomorph_info: None,
             cases: enum_decl
@@ -683,7 +683,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         Some(TirFlags {
             name: flags_decl.name.clone(),
             module_source: self.current_module_source.clone(),
-            is_pub: flags_decl.is_pub,
+            visibility: flags_decl.visibility,
             type_id: info.type_id,
             members: flags_decl
                 .flags
@@ -716,7 +716,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         Some(TirNewtype {
             name: newtype_decl.name.clone(),
             module_source: self.current_module_source.clone(),
-            is_pub: newtype_decl.is_pub,
+            visibility: newtype_decl.visibility,
             type_id,
             span: newtype_decl.span,
         })
@@ -771,7 +771,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
             fields.push(crate::tir::TirField {
                 name: field.name.clone(),
-                is_pub: field.is_pub,
+                visibility: field.visibility,
                 type_id,
                 index: index as u32,
                 span: field.span,
@@ -795,7 +795,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         TirStruct {
             name: struct_decl.name.clone(),
             module_source: self.current_module_source.clone(),
-            is_pub: struct_decl.is_pub,
+            visibility: struct_decl.visibility,
             type_params,
             monomorph_info: None,
             fields,
@@ -842,7 +842,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         TirVariantDecl {
             name: variant_decl.name.clone(),
             module_source: self.current_module_source.clone(),
-            is_pub: variant_decl.is_pub,
+            visibility: variant_decl.visibility,
             type_params,
             cases,
             span: variant_decl.span,
@@ -862,7 +862,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .expect("resolve_effect_decl records op signatures for every effect reify emits");
         tir::TirEffect {
             name: decl.name.clone(),
-            is_pub: decl.is_pub,
+            visibility: decl.visibility,
             operations,
             span: decl.span,
         }
@@ -879,7 +879,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .expect("resolve_resource_decl records op signatures for every resource reify emits");
         tir::TirResource {
             name: decl.name.clone(),
-            is_pub: decl.is_pub,
+            visibility: decl.visibility,
             operations,
             span: decl.span,
         }
@@ -987,7 +987,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         Some(TirFunction {
             module_source: ModuleSource::default(),
             name: func.name.clone(),
-            is_pub: func.is_pub,
+            visibility: func.visibility,
             is_export: func.is_export,
             is_async: func.is_async,
             type_params,
@@ -1201,7 +1201,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // Default methods from trait declarations are not marked
                 // pub in the AST, but they should be treated as pub since
                 // they are part of a trait implementation.
-                tir_func.is_pub = true;
+                tir_func.visibility = crate::ast::Visibility::Public;
                 out.push(tir_func);
             }
         }
@@ -1414,7 +1414,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         Some(TirFunction {
             module_source: ModuleSource::default(),
             name: mangled_name,
-            is_pub: func.is_pub,
+            visibility: func.visibility,
             is_export: false,
             is_async: func.is_async,
             type_params,
@@ -1503,7 +1503,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let tir_func = TirFunction {
             module_source: ModuleSource::default(),
             name: function_name.clone(),
-            is_pub: false,
+            visibility: crate::ast::Visibility::Private,
             is_export: false,
             is_async: false,
             type_params: vec![],
@@ -1576,7 +1576,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             mutable: global_decl.mutable,
             param,
             wado_mutable: global_decl.mutable,
-            is_pub: global_decl.is_pub,
+            visibility: global_decl.visibility,
             module_source: self.current_module_source.clone(),
             span: global_decl.span,
             is_nullable: false,
@@ -2847,11 +2847,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let template_tir = TirExpr::new(TirExprKind::TemplateString { parts }, string_type, span);
 
-        // Emit `core:internal::assert_failed`, not `panic`: a distinct callee
+        // Emit `core:rt::assert_failed`, not `panic`: a distinct callee
         // lets `-f bare-asserts` (see `lower::bare_asserts`) replace assertion
         // failures with a bare trap, dropping this diagnostic without touching
         // explicit `panic(...)` calls. It behaves identically to `panic`.
-        let assert_failed_module_source = self.interner.borrow_mut().core("internal");
+        let assert_failed_module_source = self.interner.borrow_mut().core("rt");
         let panic_call = TirExpr::new(
             TirExprKind::Call {
                 func: FunctionRef {
@@ -4397,7 +4397,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 info.fields
                     .iter()
                     .enumerate()
-                    .map(|(i, (n, t, _is_pub))| {
+                    .map(|(i, (n, t, _vis))| {
                         let default = info.field_defaults.get(i).and_then(Option::clone);
                         (n.clone(), i as u32, *t, default)
                     })
@@ -6339,7 +6339,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // are not recorded here (annotate returns before the static-call
         // path), so they fall through to the variant detection below.
         if let Some(dispatch) = self.ann_static_method_dispatch(static_call.id) {
-            let args: Vec<CallArg> = static_call
+            let mut args: Vec<CallArg> = static_call
                 .args
                 .iter()
                 .zip(
@@ -6351,6 +6351,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 )
                 .map(|(a, is_mut)| CallArg::new(self.reify_expr(a, ctx, None), is_mut))
                 .collect();
+
+            let callee_module = dispatch.function_ref.module_source.clone();
+            self.reify_apply_param_defaults(
+                &mut args,
+                &dispatch.param_defaults,
+                &callee_module,
+                static_call.span,
+                ctx,
+            );
+
             // Replay the production `Call`'s exact type args (method-level;
             // impl args ride along in `function_ref.monomorph_info`).
             return TirExpr::new(
@@ -6488,6 +6498,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return;
         };
         let func_params = self.lookup_free_func_params(callee_module, callee_name);
+        self.reify_apply_param_defaults(args, &func_params, callee_module, callee.span(), ctx);
+    }
+
+    /// Pad `args` with reified default values for the trailing `func_params`
+    /// the call omitted. `func_params` is the callee's `(name, default)` list in
+    /// declaration order, `callee_module` its defining module (for the
+    /// perspective swap), and `call_span` the call site (for location literals).
+    fn reify_apply_param_defaults(
+        &mut self,
+        args: &mut Vec<crate::tir::CallArg>,
+        func_params: &[(String, Option<ast::Expr>)],
+        callee_module: &ModuleSource,
+        call_span: crate::token::Span,
+        ctx: &mut FunctionContext,
+    ) {
         if func_params.is_empty() || args.len() >= func_params.len() {
             return;
         }
@@ -6516,7 +6541,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if captured_call_site {
             self.call_site_location = Some(CallSiteLocation {
                 module: self.current_module_source.clone(),
-                span: callee.span(),
+                span: call_span,
                 function_name: ctx.function_name.clone(),
             });
         }
@@ -6784,6 +6809,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 &mut arg_exprs,
                 &dispatch.function_ref.module_source,
                 &dispatch.function_ref.name,
+                ctx,
+            );
+            // A `::`-qualified `Type::method()` is a static-method dispatch, so
+            // the free-function pad above finds nothing; apply its own defaults.
+            let smc_module = dispatch.function_ref.module_source.clone();
+            self.reify_apply_param_defaults(
+                &mut arg_exprs,
+                &dispatch.param_defaults,
+                &smc_module,
+                span,
                 ctx,
             );
             // Type args: replay exactly what the production builder put on

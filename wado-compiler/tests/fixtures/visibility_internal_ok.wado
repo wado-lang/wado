@@ -1,0 +1,10 @@
+//! `internal` and `pub` symbols are both importable within the same package.
+use { vis_internal, vis_pub } from "./sub/visibility_lib.wado";
+
+test "internal and pub import within the package" {
+    assert vis_internal() == 2;
+    assert vis_pub() == 1;
+}
+
+__DATA__
+{"test": {}}

@@ -342,7 +342,7 @@ impl Translator<'_> {
         NirFunction {
             name: func.name.clone(),
             module_source: func.module_source.clone(),
-            is_pub: func.is_pub,
+            visibility: func.visibility,
             is_export: func.is_export,
             is_async: func.is_async,
             type_params: func.type_params.iter().map(convert_type_param).collect(),
@@ -396,7 +396,7 @@ impl Translator<'_> {
             initializer,
             mutable: global.mutable,
             wado_mutable: global.wado_mutable,
-            is_pub: global.is_pub,
+            visibility: global.visibility,
             module_source: global.module_source.clone(),
             span: global.span,
             is_nullable: global.is_nullable,
@@ -410,7 +410,7 @@ impl Translator<'_> {
         NirStruct {
             name: s.name.clone(),
             module_source: s.module_source.clone(),
-            is_pub: s.is_pub,
+            visibility: s.visibility,
             type_params: s.type_params.iter().map(convert_type_param).collect(),
             monomorph_info: s.monomorph_info.as_ref().map(convert_monomorph_info),
             fields: s.fields.iter().map(|f| fctx.convert_field(f)).collect(),
@@ -1632,7 +1632,7 @@ impl FunctionTranslator<'_, '_> {
         // write-only.
         NirField {
             name: field.name.clone(),
-            is_pub: field.is_pub,
+            visibility: field.visibility,
             type_id: field.type_id,
             index: field.index,
             span: field.span,
@@ -1672,7 +1672,7 @@ fn convert_enum(e: &TirEnum) -> NirEnum {
     NirEnum {
         name: e.name.clone(),
         module_source: e.module_source.clone(),
-        is_pub: e.is_pub,
+        visibility: e.visibility,
         type_params: e.type_params.iter().map(convert_type_param).collect(),
         monomorph_info: e.monomorph_info.as_ref().map(convert_monomorph_info),
         cases: e.cases.iter().map(convert_enum_case).collect(),
@@ -1684,7 +1684,7 @@ fn convert_flags(f: &TirFlags) -> NirFlags {
     NirFlags {
         name: f.name.clone(),
         module_source: f.module_source.clone(),
-        is_pub: f.is_pub,
+        visibility: f.visibility,
         type_id: f.type_id,
         members: f.members.iter().map(convert_flags_member).collect(),
         span: f.span,
@@ -1695,7 +1695,7 @@ fn convert_variant_decl(v: &TirVariantDecl) -> NirVariantDecl {
     NirVariantDecl {
         name: v.name.clone(),
         module_source: v.module_source.clone(),
-        is_pub: v.is_pub,
+        visibility: v.visibility,
         type_params: v.type_params.iter().map(convert_type_param).collect(),
         cases: v.cases.iter().map(convert_variant_case).collect(),
         span: v.span,

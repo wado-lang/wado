@@ -396,7 +396,7 @@ fn synthesize_future_read_func(
     TirFunction {
         module_source: ModuleSource::default(),
         name: func_name,
-        is_pub: false,
+        visibility: crate::ast::Visibility::Private,
         is_export: false,
         is_async: false,
         type_params: vec![],
@@ -802,7 +802,7 @@ fn synthesize_stream_read_func(
     TirFunction {
         module_source: ModuleSource::default(),
         name: func_name,
-        is_pub: false,
+        visibility: crate::ast::Visibility::Private,
         is_export: false,
         is_async: false,
         type_params: vec![],

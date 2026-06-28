@@ -1093,7 +1093,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     /// Load all modules starting from the entry source
     ///
     /// This loads the entry module and all its transitive dependencies.
-    /// It also loads implicit modules (core:prelude, core:internal, core:builtin).
+    /// It also loads implicit modules (core:prelude, core:rt, core:builtin).
     ///
     /// # Arguments
     /// * `entry_source` - Source code of the entry module
@@ -1459,7 +1459,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             ModuleSource::builtin(),
             ModuleSource::string(),
             ModuleSource::prelude(),
-            ModuleSource::internal(),
+            ModuleSource::rt(),
             ModuleSource::allocator(),
         ];
 

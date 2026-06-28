@@ -317,7 +317,7 @@ fn synthesize_dispatch_struct(
     let mut fields: Vec<TirField> = Vec::with_capacity(meta.operations.len() + 1);
     fields.push(TirField {
         name: "outer".to_string(),
-        is_pub: false,
+        visibility: crate::ast::Visibility::Private,
         type_id: outer_field_type,
         index: 0,
         span: synth_span(),
@@ -339,7 +339,7 @@ fn synthesize_dispatch_struct(
         let field_index = (i + 1) as u32;
         fields.push(TirField {
             name: field_name.clone(),
-            is_pub: false,
+            visibility: crate::ast::Visibility::Private,
             type_id: field_type,
             index: field_index,
             span: synth_span(),
@@ -361,7 +361,7 @@ fn synthesize_dispatch_struct(
     entry_module.add_struct(TirStruct {
         name: struct_name,
         module_source: entry_source.clone(),
-        is_pub: false,
+        visibility: crate::ast::Visibility::Private,
         type_params: vec![],
         monomorph_info: None,
         fields,
@@ -405,7 +405,7 @@ fn synthesize_dispatch_global(
         mutable: true,
         param: None,
         wado_mutable: true,
-        is_pub: false,
+        visibility: crate::ast::Visibility::Private,
         module_source: entry_source.clone(),
         span,
         is_nullable: true,
@@ -803,7 +803,7 @@ fn build_dispatch_wrapper_function(
         let panic_call = TirExpr::new(
             TirExprKind::Call {
                 func: FunctionRef {
-                    module_source: ModuleSource::internal(),
+                    module_source: ModuleSource::rt(),
                     name: "panic".to_string(),
                     monomorph_info: None,
                     method_info: None,
@@ -875,7 +875,7 @@ fn build_dispatch_wrapper_function(
     TirFunction {
         module_source: entry_source.clone(),
         name: wrapper_name,
-        is_pub: false,
+        visibility: crate::ast::Visibility::Private,
         is_export: false,
         is_async: false,
         type_params: Vec::new(),

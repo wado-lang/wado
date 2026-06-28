@@ -4,7 +4,7 @@ use serde::Serialize;
 use crate::ast::{
     AssociatedConst, AstId, Attribute, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl,
     ImplBlock, InterfaceDecl, Item, Module, Newtype, Param, SelfKind, StructDecl, StructField,
-    TraitDecl, Type, UseItem, VariantDecl,
+    TraitDecl, Type, UseItem, VariantDecl, Visibility,
 };
 use crate::comment::{CommentKind, TriviaMap};
 use crate::stdlib;
@@ -202,6 +202,20 @@ pub fn extract_doc_with(
     module_name: &str,
     include_private: bool,
 ) -> DocModule {
+    extract_doc_filtered(module, trivia, module_name, include_private, false)
+}
+
+/// Like [`extract_doc_with`], but `include_internal` also admits top-level
+/// `internal` items, while their members stay at the `include_private` level.
+/// Lets a `pub use` re-export publish an `internal` item without leaking its
+/// own private fields / methods.
+pub fn extract_doc_filtered(
+    module: &Module,
+    trivia: &TriviaMap,
+    module_name: &str,
+    include_private: bool,
+    include_internal: bool,
+) -> DocModule {
     let module_doc = extract_module_doc(trivia, module);
 
     let mut traits: Vec<DocTrait> = Vec::new();
@@ -224,7 +238,10 @@ pub fn extract_doc_with(
     }
 
     for item in &module.items {
-        if !include_private && !is_pub_or_export(item) {
+        let visible = include_private
+            || is_public_or_export(item)
+            || (include_internal && is_internal_item(item));
+        if !visible {
             continue;
         }
         match item {
@@ -261,7 +278,7 @@ pub fn extract_doc_with(
 
 fn build_doc_trait(t: &TraitDecl, trivia: &TriviaMap) -> DocTrait {
     let mut sig = String::new();
-    if t.is_pub {
+    if t.visibility.is_public() {
         sig.push_str("pub ");
     }
     sig.push_str("trait ");
@@ -301,7 +318,9 @@ fn build_doc_struct(
     // as having hidden state via `has_private_fields` so the rendered
     // signature gets a `..` placeholder. With `include_private`, nothing is
     // hidden.
-    let is_hidden = |f: &StructField| !include_private && (!f.is_pub || f.name.starts_with("__"));
+    let is_hidden = |f: &StructField| {
+        !include_private && (!f.visibility.is_public() || f.name.starts_with("__"))
+    };
     let has_private_fields = s.fields.iter().any(is_hidden);
 
     let fields: Vec<DocField> = s
@@ -330,7 +349,7 @@ fn build_doc_struct(
 
 fn build_doc_type(t: &Newtype, trivia: &TriviaMap) -> DocType {
     let mut sig = String::new();
-    if t.is_pub {
+    if t.visibility.is_public() {
         sig.push_str("pub ");
     }
     sig.push_str("type ");
@@ -348,7 +367,7 @@ fn build_doc_type(t: &Newtype, trivia: &TriviaMap) -> DocType {
 
 fn build_doc_global(g: &GlobalDecl, trivia: &TriviaMap) -> DocGlobal {
     let mut sig = String::new();
-    if g.is_pub {
+    if g.visibility.is_public() {
         sig.push_str("pub ");
     }
     sig.push_str("global ");
@@ -386,7 +405,7 @@ fn build_doc_enum(e: &EnumDecl, trivia: &TriviaMap) -> DocEnum {
 
 fn build_doc_variant(v: &VariantDecl, trivia: &TriviaMap) -> DocVariant {
     let mut sig = String::new();
-    if v.is_pub {
+    if v.visibility.is_public() {
         sig.push_str("pub ");
     }
     sig.push_str("variant ");
@@ -413,7 +432,7 @@ fn build_doc_variant(v: &VariantDecl, trivia: &TriviaMap) -> DocVariant {
 
 fn build_doc_flags(f: &FlagsDecl, trivia: &TriviaMap) -> DocFlags {
     let mut sig = String::new();
-    if f.is_pub {
+    if f.visibility.is_public() {
         sig.push_str("pub ");
     }
     sig.push_str("flags ");
@@ -442,7 +461,7 @@ fn build_doc_flags(f: &FlagsDecl, trivia: &TriviaMap) -> DocFlags {
 
 fn build_doc_interface(e: &InterfaceDecl, trivia: &TriviaMap) -> DocEffect {
     let mut sig = String::new();
-    if e.is_pub {
+    if e.visibility.is_public() {
         sig.push_str("pub ");
     }
     sig.push_str("interface ");
@@ -467,7 +486,7 @@ fn build_doc_interface(e: &InterfaceDecl, trivia: &TriviaMap) -> DocEffect {
 
 fn build_doc_resource(r: &crate::ast::ResourceDecl, trivia: &TriviaMap) -> DocResource {
     let mut sig = String::new();
-    if r.is_pub {
+    if r.visibility.is_public() {
         sig.push_str("pub ");
     }
     sig.push_str("resource ");
@@ -573,24 +592,15 @@ fn extract_module_doc(trivia: &TriviaMap, module: &Module) -> Option<String> {
     }
 }
 
-fn is_pub_or_export(item: &Item) -> bool {
-    match item {
-        Item::Function(f) => f.is_pub || f.is_export,
-        Item::Struct(s) => s.is_pub,
-        Item::Enum(e) => e.is_pub,
-        Item::Variant(v) => v.is_pub,
-        Item::Flags(f) => f.is_pub,
-        Item::Newtype(t) => t.is_pub,
-        Item::Trait(t) => t.is_pub,
-        Item::Interface(e) => e.is_pub,
-        Item::Global(g) => g.is_pub,
-        Item::Resource(r) => r.is_pub,
-        Item::Impl(_) => true,
-        Item::TupleTypeDecl(d) => d.is_pub,
-        Item::BuiltinTypeDecl(d) => d.is_pub,
-        Item::Use(_) | Item::World(_) | Item::Test(_) => false,
-        Item::Error(_) => false,
-    }
+fn is_public_or_export(item: &Item) -> bool {
+    // `impl` carries no visibility but always contributes; `export` implies pub.
+    matches!(item, Item::Impl(_))
+        || matches!(item, Item::Function(f) if f.is_export)
+        || item.visibility().is_some_and(Visibility::is_public)
+}
+
+fn is_internal_item(item: &Item) -> bool {
+    item.visibility().is_some_and(Visibility::is_internal)
 }
 
 fn render_type(ty: &Type) -> String {
@@ -717,11 +727,14 @@ pub fn extract_stdlib_doc_with(module_name: &str, include_private: bool) -> Opti
         for reexport_source in &reexport_sources {
             if let Some(sub_source) = stdlib::get_stdlib_module(reexport_source) {
                 let sub_parsed = parse_stdlib_for_doc(reexport_source, sub_source);
-                let sub_doc = extract_doc_with(
+                // Admit `internal` items so a `pub use` re-export can publish
+                // them, but keep `include_private = false` to hide their fields.
+                let sub_doc = extract_doc_filtered(
                     &sub_parsed.ast,
                     &sub_parsed.trivia,
                     reexport_source,
-                    include_private,
+                    false,
+                    true,
                 );
                 merge_reexported_items(&mut doc, &sub_doc, &exported_names);
             }
@@ -777,7 +790,7 @@ fn collect_pub_use_sources(module: &Module) -> Vec<String> {
     let mut sources = Vec::new();
     for item in &module.items {
         if let Item::Use(u) = item
-            && u.is_pub
+            && u.visibility.is_public()
             && !u.items.iter().any(|i| matches!(i, UseItem::Wildcard))
         {
             sources.push(u.source.clone());
@@ -791,7 +804,7 @@ fn collect_pub_use_names(module: &Module) -> IndexSet<String> {
     let mut names = IndexSet::default();
     for item in &module.items {
         if let Item::Use(u) = item
-            && u.is_pub
+            && u.visibility.is_public()
         {
             for use_item in &u.items {
                 match use_item {
@@ -809,58 +822,43 @@ fn collect_pub_use_names(module: &Module) -> IndexSet<String> {
     names
 }
 
-/// Merge items from a sub-module into the parent doc, filtered by re-exported names.
+/// Rewrite a re-exported item's signature to read `pub`: the re-export
+/// publishes it regardless of its own modifier.
+fn promote_reexport_signature(sig: &str) -> String {
+    if let Some(rest) = sig.strip_prefix("internal ") {
+        format!("pub {rest}")
+    } else if sig.starts_with("pub ") || sig.starts_with("export ") {
+        sig.to_string()
+    } else {
+        format!("pub {sig}")
+    }
+}
+
+/// Merge re-exported sub-module items into the parent doc, presented as `pub`
+/// (see [`promote_reexport_signature`]).
 fn merge_reexported_items(parent: &mut DocModule, child: &DocModule, names: &IndexSet<String>) {
-    for t in &child.traits {
-        if names.contains(extract_item_name(&t.signature, "trait ")) {
-            parent.traits.push(t.clone());
-        }
+    macro_rules! merge {
+        ($field:ident, $it:ident => $key:expr) => {
+            for $it in &child.$field {
+                let key: &str = $key;
+                if names.contains(key) {
+                    let mut cloned = $it.clone();
+                    cloned.signature = promote_reexport_signature(&cloned.signature);
+                    parent.$field.push(cloned);
+                }
+            }
+        };
     }
-    for s in &child.structs {
-        if names.contains(extract_item_name(&s.signature, "struct ")) {
-            parent.structs.push(s.clone());
-        }
-    }
-    for t in &child.types {
-        if names.contains(&t.name) {
-            parent.types.push(t.clone());
-        }
-    }
-    for g in &child.globals {
-        if names.contains(&g.name) {
-            parent.globals.push(g.clone());
-        }
-    }
-    for e in &child.enums {
-        if names.contains(extract_item_name(&e.signature, "enum ")) {
-            parent.enums.push(e.clone());
-        }
-    }
-    for v in &child.variants {
-        if names.contains(&v.name) {
-            parent.variants.push(v.clone());
-        }
-    }
-    for f in &child.flags {
-        if names.contains(&f.name) {
-            parent.flags.push(f.clone());
-        }
-    }
-    for e in &child.effects {
-        if names.contains(&e.name) {
-            parent.effects.push(e.clone());
-        }
-    }
-    for r in &child.resources {
-        if names.contains(&r.name) {
-            parent.resources.push(r.clone());
-        }
-    }
-    for f in &child.functions {
-        if names.contains(extract_item_name(&f.signature, "fn ")) {
-            parent.functions.push(f.clone());
-        }
-    }
+    merge!(traits, it => extract_item_name(&it.signature, "trait "));
+    merge!(structs, it => extract_item_name(&it.signature, "struct "));
+    merge!(types, it => it.name.as_str());
+    merge!(globals, it => it.name.as_str());
+    merge!(enums, it => extract_item_name(&it.signature, "enum "));
+    merge!(variants, it => it.name.as_str());
+    merge!(flags, it => it.name.as_str());
+    merge!(effects, it => it.name.as_str());
+    merge!(resources, it => it.name.as_str());
+    merge!(functions, it => extract_item_name(&it.signature, "fn "));
 }
 
 /// Merge primitive impl entries, combining methods for the same type name.
@@ -926,7 +924,7 @@ fn collect_impl_methods_for_type(
             });
         } else {
             for m in &i.methods {
-                if include_private || m.is_pub || m.is_export {
+                if include_private || m.visibility.is_public() || m.is_export {
                     inherent_methods.push(build_doc_function(m, trivia));
                 }
             }
@@ -942,7 +940,7 @@ const PRIMITIVE_TYPE_NAMES: &[&str] = &[
 
 fn build_doc_const(c: &AssociatedConst, trivia: &TriviaMap) -> DocFunction {
     let mut sig = String::new();
-    if c.is_pub {
+    if c.visibility.is_public() {
         sig.push_str("pub ");
     }
     sig.push_str("const ");
@@ -1001,7 +999,7 @@ fn collect_primitive_types_from_module(
                 continue;
             }
             for c in &i.constants {
-                if include_private || c.is_pub {
+                if include_private || c.visibility.is_public() {
                     constants.push(build_doc_const(c, trivia));
                 }
             }

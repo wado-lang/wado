@@ -145,7 +145,7 @@ pub const CONST_OBJ_GLOBAL_PREFIX: &str = "__const_obj_";
 ///
 /// Examples:
 /// - `./geometry.wado/helper`
-/// - `core/internal/log_stdout`
+/// - `core/rt/log_stdout`
 #[derive(Debug, Clone)]
 pub struct FreeFunctionName {
     /// The module where the function is defined
@@ -736,7 +736,7 @@ impl From<MethodName> for FunctionId {
 ///
 /// Examples:
 /// - `./geometry.wado/Point`
-/// - `core/internal/SomeType`
+/// - `core/rt/SomeType`
 ///
 /// Note: When traits are added to Wado, this may need to evolve into a more
 /// general `TypeId` enum (similar to `FunctionId`) to handle trait types.
@@ -793,16 +793,13 @@ impl fmt::Display for StructName {
     }
 }
 
-/// Build a core/internal function name.
+/// Build a core/rt function name.
 ///
-/// Format: `core/internal/{name}`
+/// Format: `core/rt/{name}`
 ///
-/// Example: `core/internal/log_stdout`
-pub fn build_core_internal_name(
-    interner: &mut ModuleSourceInterner,
-    name: &str,
-) -> FreeFunctionName {
-    FreeFunctionName::from_strs(interner, &["core", "internal"], name)
+/// Example: `core/rt/log_stdout`
+pub fn build_core_rt_name(interner: &mut ModuleSourceInterner, name: &str) -> FreeFunctionName {
+    FreeFunctionName::from_strs(interner, &["core", "rt"], name)
 }
 
 /// Validate that a string can name a module.
@@ -1475,8 +1472,8 @@ mod tests {
     #[test]
     fn test_free_function_name_from_strs() {
         let mut interner = ModuleSourceInterner::new();
-        let func = FreeFunctionName::from_strs(&mut interner, &["core", "internal"], "log_stdout");
-        assert_eq!(func.to_string(), "core/internal/log_stdout");
+        let func = FreeFunctionName::from_strs(&mut interner, &["core", "rt"], "log_stdout");
+        assert_eq!(func.to_string(), "core/rt/log_stdout");
     }
 
     #[test]
@@ -1500,8 +1497,8 @@ mod tests {
     #[test]
     fn test_struct_name_from_strs() {
         let mut interner = ModuleSourceInterner::new();
-        let struct_name = StructName::from_strs(&mut interner, &["core", "internal"], "SomeType");
-        assert_eq!(struct_name.to_string(), "core:internal/SomeType");
+        let struct_name = StructName::from_strs(&mut interner, &["core", "rt"], "SomeType");
+        assert_eq!(struct_name.to_string(), "core:rt/SomeType");
     }
 
     #[test]
@@ -1535,11 +1532,11 @@ mod tests {
     }
 
     #[test]
-    fn test_build_core_internal_name() {
+    fn test_build_core_rt_name() {
         let mut interner = ModuleSourceInterner::new();
-        let name = build_core_internal_name(&mut interner, "log_stdout");
-        assert_eq!(name.to_string(), "core/internal/log_stdout");
-        assert_eq!(name.module_source, ModuleSource::internal());
+        let name = build_core_rt_name(&mut interner, "log_stdout");
+        assert_eq!(name.to_string(), "core/rt/log_stdout");
+        assert_eq!(name.module_source, ModuleSource::rt());
         assert_eq!(name.name, "log_stdout");
     }
 

@@ -11,7 +11,7 @@
 //   assert snapshot.get() == 0;   // must fold to `true` and panic must vanish
 //
 // Verified at the WIR level by checking that:
-//   - the assert's `core:internal/panic` call is gone (folded away), and
+//   - the assert's `core:rt/panic` call is gone (folded away), and
 //   - the synthesized `$value_copy$T<id>` helper itself is dead-code-
 //     eliminated because every call site was elided or its result folded.
 //
@@ -46,6 +46,6 @@ __DATA__
 {
     "test": {},
     "wir_not_expect:O2": [
-        "core:internal/panic"
+        "core:rt/panic"
     ]
 }

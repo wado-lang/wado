@@ -1,0 +1,23 @@
+//! Regression: a namespace-qualified static call (`ns::Type::method()`) that
+//! omits a defaulted trailing argument must materialize the default. The
+//! namespace static-method dispatch recorded empty `param_defaults`, so reify
+//! padded nothing and codegen emitted a call missing the argument, producing
+//! invalid Wasm ("expected i32 but nothing on stack").
+
+use counter from "./sub/default_arg_static_lib.wado";
+
+test "namespace static method fills omitted defaults" {
+    let a = counter::Counter::make();
+    assert a.start == 5;
+    assert a.step == 6;
+
+    let b = counter::Counter::make(10);
+    assert b.start == 10;
+    assert b.step == 11;
+
+    let c = counter::Counter::make(1, 2);
+    assert c.sum() == 3;
+}
+
+__DATA__
+{"test": {}}

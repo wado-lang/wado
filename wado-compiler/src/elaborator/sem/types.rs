@@ -677,6 +677,10 @@ pub(crate) struct StaticMethodDispatch {
     /// in as method-level type args and mangle `Container<i32>::make` as
     /// `Container::make<i32>`.
     pub(crate) type_args: Vec<crate::tir::TypeId>,
+    /// The callee's `(param_name, default_expr)` list in declaration order,
+    /// used by reify to pad trailing arguments the call omitted. Empty when
+    /// the method declares no defaults (or for variant / builtin dispatches).
+    pub(crate) param_defaults: Vec<(String, Option<crate::ast::Expr>)>,
 }
 
 /// Generic-instantiation decision recorded by the body walk at a call,

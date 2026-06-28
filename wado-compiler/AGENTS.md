@@ -50,7 +50,7 @@ Standard libraries (stdlib) are implemented in `lib`, with `lib/wasi/` for WASI 
 For other important files:
 
 - `lib/core/builtin.wado` for compiler intrinsics.
-- `lib/core/internal.wado` for utilities to implement language features
+- `lib/core/rt.wado` for runtime support helpers (panic, assert, CM ABI glue)
 
 ## E2E Test Specification (Compiler Tests)
 

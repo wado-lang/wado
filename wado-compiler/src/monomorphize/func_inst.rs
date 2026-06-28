@@ -1266,7 +1266,7 @@ impl Monomorphizer {
             module_source: key.module_source.clone(),
             is_async: generic.is_async,
             name: mangled_name,
-            is_pub: generic.is_pub,
+            visibility: generic.visibility,
             is_export: generic.is_export, // Inherit from generic
             type_params: vec![],          // Concrete function has no type params
             impl_type_params: vec![],     // Already monomorphized, no impl type params

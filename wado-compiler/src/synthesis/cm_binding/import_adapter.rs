@@ -213,7 +213,7 @@ pub(super) fn make_binding_function(
     Rc::new(RefCell::new(TirFunction {
         module_source: ModuleSource::default(),
         name,
-        is_pub: false,
+        visibility: crate::ast::Visibility::Private,
         is_export: false,
         is_async: false,
         type_params: vec![],

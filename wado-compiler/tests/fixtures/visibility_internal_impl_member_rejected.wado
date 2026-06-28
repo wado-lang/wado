@@ -1,0 +1,20 @@
+//! `internal` is a top-level visibility modifier; impl members are `pub` or
+//! file-private. Using it on a method must produce a clear diagnostic, not the
+//! cryptic "expected Fn, found Internal" token error.
+
+struct S {
+    v: i32,
+}
+
+impl S {
+    internal fn helper() -> i32 {
+        return 1;
+    }
+}
+
+test "unused" {
+    assert true;
+}
+
+__DATA__
+{"compile_error": "`internal` is not allowed on impl members"}

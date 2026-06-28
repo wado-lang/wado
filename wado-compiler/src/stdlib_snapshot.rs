@@ -298,7 +298,7 @@ mod tests {
         // The implicit-modules pass always pulls in `core:prelude` and
         // its closure.  Verify the snapshot covers them so downstream
         // consumers can rely on the cache hitting for these names.
-        let must_have = ["core:prelude", "core:builtin", "core:internal"];
+        let must_have = ["core:prelude", "core:builtin", "core:rt"];
         for name in must_have {
             let found = snap.tir_modules.keys().any(|ms| ms.to_string() == name);
             assert!(
