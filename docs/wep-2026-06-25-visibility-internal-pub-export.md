@@ -80,6 +80,27 @@ scope-parameterized `pub(...)` forms have nothing to scope to. Unlike Rust,
 `pub` is absolute: a `pub` item is library-public, never gated by an enclosing
 private module.
 
+### Re-export visibility
+
+The same ladder applies to re-exports. A `use` declaration may carry a
+visibility modifier, re-exporting the imported names at that reach:
+
+- `pub use { x } from "M"` — `x` joins this module's public API.
+- `internal use { x } from "M"` — `x` is re-exported package-internal.
+- plain `use { x } from "M"` — a file-private import; nothing is re-exported.
+
+A re-export's reach is the re-export keyword's, **not** the original item's
+visibility. So a `pub use` of an `internal` symbol publishes it: this is the
+canonical "internal implementation, public facade" pattern, where a package's
+entry module re-exports its internal submodules' items as the library API
+(`core:prelude` and `core:kiln` are built this way — their submodule
+definitions are `internal`, surfaced as `pub` through the facade's `pub use`).
+The only constraint is that the re-export must itself be a legal import: you can
+`pub use { x }` only a name visible at the re-export site (`x` is `pub`, or `x`
+is `internal` and `M` is in this package). `wado doc` and the public-API query
+view present such re-exports at the re-export's visibility, so a `pub use`-d
+`internal` item appears as part of the facade module's public API.
+
 ## Consequences
 
 - Generic / higher-order / trait libraries are publishable across packages

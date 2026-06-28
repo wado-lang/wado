@@ -824,6 +824,16 @@ export fn run() { }           // library API + CM boundary
 import site (file-private, or `internal` from another package) is a compile
 error. Struct fields take the same modifiers.
 
+A `use` with a visibility modifier re-exports at that reach, independent of the
+original's visibility — so `pub use { x }` can publish an `internal` `x` (the
+"internal impl, public facade" pattern):
+
+```wado
+internal fn compute() { }                  // package-internal
+pub use { compute } from "./impl.wado";    // re-exported as public API
+internal use { helper } from "./impl.wado"; // re-exported package-internal
+```
+
 ## Traits
 
 ```wado
