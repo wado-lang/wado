@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782650506801,
+  "lastUpdate": 1782658286606,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -36269,6 +36269,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a802c1f8d1f018178182ae66dc6d628311f92fd8"
         },
         "date": 1782650506164,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1845,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8434,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15339,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288458,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "257330c4dd557e3a42a1595ed8b922513620ae31",
+          "message": "Merge pull request #1465 from wado-lang/claude/struct-field-internal-visibility-672yfd\n\nfeat(compiler): implement internal visibility for struct fields",
+          "timestamp": "2026-06-28T23:43:02+09:00",
+          "tree_id": "8d50a08d533dfb50d424af197fe1a4fbd6e61127",
+          "url": "https://github.com/wado-lang/wado/commit/257330c4dd557e3a42a1595ed8b922513620ae31"
+        },
+        "date": 1782658286055,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
