@@ -136,23 +136,28 @@ impl NirPackage {
     /// conservatively.
     pub fn assign_func_ids(&mut self) {
         use cranelift_entity::EntityRef;
-        let mut ids: IndexMap<(ModuleSource, String), FuncId> = IndexMap::default();
+        // Key on the canonical `name::FunctionId` (`FunctionRef::function_id`),
+        // the same injective identity the DCE call graph uses — not `full_name()`,
+        // whose monomorphized-method mangling can drift between a call site and
+        // its callee and leave an in-package call unstamped.
+        let mut ids: IndexMap<crate::name::FunctionId, FuncId> = IndexMap::default();
         for (i, func_rc) in self.functions.iter().enumerate() {
             let mut func = func_rc.borrow_mut();
             let id = FuncId::new(i);
             func.id = Some(id);
-            let key = (
-                func.module_source.clone(),
-                FunctionRef::from_resolved(&func, func.module_source.clone()).full_name(),
-            );
+            let key = FunctionRef::from_resolved(&func, func.module_source.clone()).function_id();
             let prev = ids.insert(key, id);
             // Load-bearing invariant: two functions sharing a canonical key would
             // share a FuncId (a miscompile). The check is O(1); keep it always-on.
             assert!(
                 prev.is_none(),
-                "duplicate canonical function key: full_name must be unique"
+                "duplicate canonical function key: function_id must be unique"
             );
         }
+        // A call to a function outside the package (builtin / CM import / wasm
+        // asset) keys to no entry here and stays `func_id = None`; codegen
+        // resolves it by name. Interning these externs into the store (so the
+        // callee is always an integer) is the next Phase 5 step.
         for func_rc in &self.functions {
             let mut func = func_rc.borrow_mut();
             let Some(body) = func.body.as_mut() else {
@@ -162,9 +167,7 @@ impl NirPackage {
                 if let ExprKind::Call { func, func_id, .. }
                 | ExprKind::MethodCall { func, func_id, .. } = &mut expr.kind
                 {
-                    *func_id = ids
-                        .get(&(func.module_source.clone(), func.full_name()))
-                        .copied();
+                    *func_id = ids.get(&func.function_id()).copied();
                 }
             }
         }
