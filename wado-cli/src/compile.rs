@@ -568,13 +568,15 @@ pub async fn compile(filename: &str, flags: &CompileFlags) -> Result<Vec<u8>, Cl
 /// entry point attaches dependency resolution identically.
 pub(crate) fn attach_manifest_deps(
     host: FilesystemCompilerHost,
-    manifest_pair: Option<&(wado_manifest::Manifest, std::path::PathBuf)>,
+    project: Option<&manifest::ProjectManifest>,
     base_path: &Path,
 ) -> FilesystemCompilerHost {
-    match manifest_pair {
-        Some((manifest, root)) => host.with_dependency_index(
-            wado_lsp::host::dependency_index_from(manifest, root, base_path),
-        ),
+    match project {
+        Some(project) => host.with_dependency_index(wado_lsp::host::dependency_index_from(
+            &project.manifest,
+            &project.root,
+            base_path,
+        )),
         None => host,
     }
 }
@@ -591,9 +593,9 @@ pub(crate) async fn maybe_run_pipeline(
     entry_file: &Path,
     host: &FilesystemCompilerHost,
     no_cache: bool,
-    manifest_pair: Option<(wado_manifest::Manifest, std::path::PathBuf)>,
+    project: Option<manifest::ProjectManifest>,
 ) -> Result<PipelineOutcome, PipelineError> {
-    let manifest_root_for_inline = manifest_pair.as_ref().map(|(_, root)| root.clone());
+    let manifest_root_for_inline = project.as_ref().map(|p| p.root.clone());
     let probe_manifest_root = manifest_root_for_inline.clone().unwrap_or_else(|| {
         entry_file
             .parent()
@@ -619,8 +621,8 @@ pub(crate) async fn maybe_run_pipeline(
         ));
     }
 
-    let (manifest, manifest_root) = match manifest_pair {
-        Some(pair) => pair,
+    let (manifest, manifest_root) = match project {
+        Some(p) => (p.manifest, p.root),
         None if inline.is_empty() => return Ok(PipelineOutcome::default()),
         None => (empty_manifest(), probe_manifest_root),
     };
@@ -943,9 +945,7 @@ pub(crate) fn remap_and_report_conflicts(
 
 /// Walk up from `entry_file` looking for the nearest `wado.toml`. Returns
 /// `None` (treated as "no Kiln config") on missing or malformed manifest.
-pub fn load_nearest_manifest(
-    entry_file: &Path,
-) -> Option<(wado_manifest::Manifest, std::path::PathBuf)> {
+pub fn load_nearest_manifest(entry_file: &Path) -> Option<manifest::ProjectManifest> {
     let mut dir = entry_file
         .parent()
         .map(std::path::Path::to_path_buf)
@@ -953,8 +953,7 @@ pub fn load_nearest_manifest(
     if dir.as_os_str().is_empty() {
         dir = std::path::PathBuf::from(".");
     }
-    let project = crate::manifest::discover(&dir).ok().flatten()?;
-    Some((project.manifest, project.root))
+    crate::manifest::discover(&dir).ok().flatten()
 }
 
 fn wasm_to_wat(wasm: &[u8]) -> Result<String, CliExit> {
@@ -974,6 +973,7 @@ fn wasm_to_wat(wasm: &[u8]) -> Result<String, CliExit> {
 /// (still valid, self-describing) component.
 async fn embed_wit_section(
     opts: &CompileOptions,
+    project: Option<&manifest::ProjectManifest>,
     wasm: Vec<u8>,
     world_imports: Vec<String>,
     explicit: bool,
@@ -997,10 +997,9 @@ async fn embed_wit_section(
     // Attach the manifest `[dependencies]` so a multi-package project's
     // re-analysis resolves the same imports the main compile did; a quiet host
     // avoids re-emitting diagnostics.
-    let manifest_pair = load_nearest_manifest(path);
     let host = attach_manifest_deps(
         FilesystemCompilerHost::silent(base_path.clone()),
-        manifest_pair.as_ref(),
+        project,
         &base_path,
     );
     let sem = wado_compiler::semantics(&source, &host, Some(input)).await;
@@ -1035,17 +1034,24 @@ async fn embed_wit_section(
 /// given. Returns `wasm` unchanged otherwise — an explicit file argument, no
 /// `wado.toml`, or a manifest without `[package]`. The git `revision` is
 /// included only on a clean tree (omitted silently here; `wado publish` warns).
-fn embed_package_metadata(opts: &CompileOptions, wasm: Vec<u8>) -> Vec<u8> {
+///
+/// `project` is the manifest already discovered by [`run`], reused here rather
+/// than re-parsed.
+fn embed_package_metadata(
+    opts: &CompileOptions,
+    project: Option<&manifest::ProjectManifest>,
+    wasm: Vec<u8>,
+) -> Vec<u8> {
     if opts.no_embed_metadata || !opts.manifest_driven {
         return wasm;
     }
-    let Some((manifest, root)) = load_nearest_manifest(Path::new(&opts.input)) else {
+    let Some(project) = project else {
         return wasm;
     };
-    let Some(pkg) = manifest.package.as_ref() else {
+    let Some(pkg) = project.manifest.package.as_ref() else {
         return wasm;
     };
-    let revision = crate::metadata_embed::clean_git_revision(&root);
+    let revision = crate::metadata_embed::clean_git_revision(&project.root);
     let sections = wado_manifest::metadata_sections(pkg, revision.as_deref());
     crate::metadata_embed::embed_metadata_sections(wasm, &sections)
 }
@@ -1089,16 +1095,26 @@ pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
         Path::new(&opts.input).with_extension(ext)
     };
 
+    // Discover the package manifest once for the wasm-output embedding paths
+    // (WIT + metadata), so neither step re-parses it.
+    let manifest_pair = (format == OutputFormat::Wasm)
+        .then(|| load_nearest_manifest(Path::new(&opts.input)))
+        .flatten();
+
     let bytes = match (format, embed) {
         (OutputFormat::Wasm, Some(explicit)) => {
             let world_imports = result
                 .wir_package
                 .map(|p| p.imported_cm_interfaces)
                 .unwrap_or_default();
-            let embedded = embed_wit_section(&opts, wasm, world_imports, explicit).await?;
-            embed_package_metadata(&opts, embedded)
+            let embedded =
+                embed_wit_section(&opts, manifest_pair.as_ref(), wasm, world_imports, explicit)
+                    .await?;
+            embed_package_metadata(&opts, manifest_pair.as_ref(), embedded)
         }
-        (OutputFormat::Wasm, None) => embed_package_metadata(&opts, wasm),
+        (OutputFormat::Wasm, None) => {
+            embed_package_metadata(&opts, manifest_pair.as_ref(), wasm)
+        }
         (OutputFormat::Wat, _) => wasm_to_wat(&wasm)?.into_bytes(),
     };
     fs::write(&output_path, &bytes)

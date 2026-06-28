@@ -6,7 +6,7 @@
 use predicates::prelude::*;
 
 mod common;
-use common::{wado, wado_in};
+use common::{custom_sections, wado, wado_in};
 
 /// A project under a directory whose name contains a space must compile. The
 /// entry is passed by ABSOLUTE path so the Kiln harvest uses an absolute
@@ -40,18 +40,6 @@ fn test_compile_project_under_path_with_space() {
         .assert()
         .success();
     assert!(out.exists(), "expected out.wasm to be written");
-}
-
-/// Read the custom sections (name, payload) from a compiled component.
-fn read_custom_sections(wasm_path: &std::path::Path) -> Vec<(String, Vec<u8>)> {
-    let bytes = std::fs::read(wasm_path).unwrap();
-    let mut out = Vec::new();
-    for payload in wasmparser::Parser::new(0).parse_all(&bytes) {
-        if let Ok(wasmparser::Payload::CustomSection(reader)) = payload {
-            out.push((reader.name().to_string(), reader.data().to_vec()));
-        }
-    }
-    out
 }
 
 /// Write a minimal manifest-driven CLI package under `dir` and return the
@@ -90,7 +78,7 @@ fn test_compile_embeds_package_metadata_in_manifest_mode() {
         .assert()
         .success();
 
-    let sections = read_custom_sections(&out);
+    let sections = custom_sections(&out);
     let value = |name: &str| {
         sections
             .iter()
@@ -128,7 +116,7 @@ fn test_compile_file_arg_does_not_embed_metadata() {
         .assert()
         .success();
 
-    let sections = read_custom_sections(&out);
+    let sections = custom_sections(&out);
     assert!(
         !sections.iter().any(|(n, _)| n == "description"),
         "file-arg compile must not embed metadata, got {sections:?}"
@@ -150,7 +138,7 @@ fn test_compile_no_embed_metadata_opts_out() {
         .assert()
         .success();
 
-    let sections = read_custom_sections(&out);
+    let sections = custom_sections(&out);
     assert!(
         !sections.iter().any(|(n, _)| n == "description"),
         "--no-embed-metadata must opt out, got {sections:?}"
