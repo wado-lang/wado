@@ -119,7 +119,23 @@ mutations — was rejected: it duplicates the arena record and risks drift, agai
       `value_copy_demote`'s `array_clone`→shallow rewrite was leaving a stale
       `func_id`, which `store[id]`-based codegen then read (latent; surfaced once
       externs were interned).
-- [ ] Phase 5d — make `func_id` non-optional and drop `FunctionRef` from the call
-      node. Requires every optimizer call rewrite/synthesis to stamp (or re-intern)
-      a `func_id` so no call is left `None`, then migrate the ~110 `node.func`
-      readers to `func_id` + `SecondaryMap` facts.
+- [x] Phase 5d-i — born-resolved stamping at the synthesis site. The package owns
+      `func_index` (the arena's reverse index, built once, grown append-only by
+      `intern_extern`); every optimizer call synthesis/retarget stamps its
+      `func_id` in O(1) there (extern builtins interned once per pass; in-package
+      callees captured off the store record). No post-loop re-scan re-derives
+      identity. `reintern_calls` is gone, replaced by `assert_calls_resolved` — an
+      always-on guard that proved loop-time totality across the whole suite.
+- [ ] Phase 5d-ii — drop `FunctionRef` from the call node. Migrate the `node.func`
+      readers to read identity by `func_id` (`store[id]` descriptor, or compare to
+      a resolved builtin `FuncId`), then remove the field from the struct and the
+      construction sites; flip `Option<FuncId>` → `FuncId` last (folds the
+      `lower`-time minting so a call is never transiently `None`).
+
+Staging finding (2026-06-28): loop-time totality is cheapest as a *maintained*
+invariant (stamp at synthesis), not a *restored* one (re-scan). A per-pass
+re-scan re-derives identity — the very smell this WEP removes — and a single
+post-loop re-scan still leaves calls `None` mid-loop, which blocks any in-loop
+`node.func` reader from migrating to `func_id`. Born-resolved-at-site is O(1) per
+mutation, perf-neutral (package-gale `-O2` byte-identical), and makes `func_id`
+total for the whole loop.
