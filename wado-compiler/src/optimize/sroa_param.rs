@@ -542,6 +542,7 @@ fn rewrite_call_expr(
                 let ExprKind::MethodCall {
                     receiver,
                     func,
+                    func_id,
                     type_args,
                     args,
                     ..
@@ -570,7 +571,7 @@ fn rewrite_call_expr(
                 });
                 new_args.extend(args);
                 body.exprs[id].kind = ExprKind::Call {
-                    func_id: None,
+                    func_id,
                     func,
                     type_args,
                     args: new_args,

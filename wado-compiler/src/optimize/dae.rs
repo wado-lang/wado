@@ -448,6 +448,7 @@ fn rewrite_call(body: &mut Body, id: ExprId, confirmed: &IndexMap<FnKey, Vec<boo
                 // it (along with the dead `args`) is observation-free.
                 let ExprKind::MethodCall {
                     func,
+                    func_id,
                     type_args,
                     args,
                     ..
@@ -464,7 +465,7 @@ fn rewrite_call(body: &mut Body, id: ExprId, confirmed: &IndexMap<FnKey, Vec<boo
                     new_args.push(arg);
                 }
                 body.exprs[id].kind = ExprKind::Call {
-                    func_id: None,
+                    func_id,
                     func,
                     type_args,
                     args: new_args,
