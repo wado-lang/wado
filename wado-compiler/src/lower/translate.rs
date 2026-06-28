@@ -340,6 +340,7 @@ impl Translator<'_> {
             arena
         });
         NirFunction {
+            id: None,
             name: func.name.clone(),
             module_source: func.module_source.clone(),
             is_pub: func.is_pub,

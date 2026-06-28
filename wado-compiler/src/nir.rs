@@ -264,6 +264,11 @@ pub struct NirGlobal {
 
 #[derive(Debug, Clone)]
 pub struct NirFunction {
+    /// This function's canonical [`FuncId`], set by
+    /// `NirPackage::assign_func_ids` at the end of `lower`. `None` until then
+    /// (and for optimizer-synthesized functions not yet minted). Analyses key
+    /// per-function facts by this id via `SecondaryMap<FuncId, _>`.
+    pub id: Option<FuncId>,
     pub name: String,
     /// Module this function belongs to. Set by the link phase when flattening
     /// per-module body data into flat lists; before link, the `module_source` is

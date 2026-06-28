@@ -138,12 +138,14 @@ impl NirPackage {
         use cranelift_entity::EntityRef;
         let mut ids: IndexMap<(ModuleSource, String), FuncId> = IndexMap::default();
         for (i, func_rc) in self.functions.iter().enumerate() {
-            let func = func_rc.borrow();
+            let mut func = func_rc.borrow_mut();
+            let id = FuncId::new(i);
+            func.id = Some(id);
             let key = (
                 func.module_source.clone(),
                 FunctionRef::from_resolved(&func, func.module_source.clone()).full_name(),
             );
-            let prev = ids.insert(key, FuncId::new(i));
+            let prev = ids.insert(key, id);
             // Load-bearing invariant: two functions sharing a canonical key would
             // share a FuncId (a miscompile). The check is O(1); keep it always-on.
             assert!(
