@@ -61,10 +61,10 @@ an open coordinate `ns:pkg`, or a `lib:` nickname for indirection. Bare keys
 | `version`              | `string`   | Yes      | Semver version (e.g., `"0.1.0"`)                                                              |
 | `lib`                  | `string`   | No       | Entry module of the package's library world                                                   |
 | `description`          | `string`   | No       | Short, human-readable summary                                                                 |
-| `homepage`             | `string`   | No       | Project home page URL                                                                         |
+| `homepage`             | `string`   | No       | Project home page URL (defaults to `repository`)                                              |
 | `repository`           | `string`   | No       | Source repository URL (bare repo URL, no subdirectory)                                        |
 | `repository-directory` | `string`   | No       | Subdirectory holding the package within a monorepo (Wado-custom; not an OCI key)              |
-| `documentation`        | `string`   | No       | Documentation URL                                                                             |
+| `documentation`        | `string`   | No       | Documentation URL (defaults to `repository`)                                                  |
 | `license`              | `string`   | No       | SPDX License Expression (e.g., `"MIT OR Apache-2.0"`). Mutually exclusive with `license-file` |
 | `license-file`         | `string`   | No       | Path to a non-standard license file. Mutually exclusive with `license`                        |
 | `authors`              | `string[]` | No       | Contact details of the people or organization responsible                                     |
@@ -767,8 +767,15 @@ validations apply:
 - `namespace` and `name` must be present
 - `version` must be present and valid semver
 - `publish` must not be `false`
+- `description`, `repository`, and `authors` must be present
 - exactly one of `license` or `license-file` must be present
 - All `path` dependencies must have accompanying registry or git source information
+
+A published package must carry its descriptive metadata, so the non-exclusive
+fields above are required. The exceptions: `homepage` and `documentation` are
+redundant with `repository` and default to it when omitted; `repository-directory`
+is meaningful only for a monorepo; and `wado-version` is a build constraint, not
+descriptive metadata. These four stay optional even when publishing.
 
 #### Path Dependency Replacement
 
@@ -813,7 +820,7 @@ This enables seamless local development while ensuring published packages are se
 - The `[world]` table and `[package].lib` map directly to CM worlds; `wado run` / `wado serve` select a hosted world by its FQ name
 - `export` as CM boundary gives clear, consistent public API semantics across all consumption modes
 - Wado-to-Wado optimization eliminates CM overhead for same-language dependencies without changing semantics
-- `namespace` absence naturally indicates non-publishable packages — no extra `publish = false` flag needed
+- `namespace` absence naturally indicates non-publishable packages; a namespaced package can still opt out explicitly with `publish = false`
 - Path deps with dual source (`path` + `registry`) enable seamless dev-to-publish workflow
 - Workspace support enables multi-package development with shared lock files and dependency declarations
 - Name/namespace validation (`[a-zA-Z0-9_-]+` per segment) keeps dependency keys (`"ns:pkg"`, `"lib:nick"`) unambiguous as specifiers
