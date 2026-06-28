@@ -119,6 +119,28 @@ impl FunctionTranslator<'_, '_> {
         self.resolve_function_ref(func)
     }
 
+    /// The callee's identity descriptor (`module_source`, `name`,
+    /// `monomorph_info`, `method_info`) used for builtin / canonical dispatch and
+    /// diagnostics. Reads it from the function record by `func_id` — the single
+    /// source of truth (`FuncId == store position`, Phase 4) — and falls back to
+    /// the call node's own `FunctionRef` for an extern / unstamped callee. The
+    /// record's descriptor equals the stamped node `FunctionRef` for an in-package
+    /// callee, so this is behavior-preserving; it lets Phase 5 drop the node copy.
+    pub(super) fn callee_descriptor(
+        &self,
+        func: &crate::nir::FunctionRef,
+        func_id: Option<crate::nir::FuncId>,
+    ) -> crate::nir::FunctionRef {
+        use cranelift_entity::EntityRef;
+        if let Some(id) = func_id
+            && let Some(rec) = self.ctx.package.functions.get(id.index())
+        {
+            let rec = rec.borrow();
+            return crate::nir::FunctionRef::from_resolved(&rec, rec.module_source.clone());
+        }
+        func.clone()
+    }
+
     /// Try to resolve a method call on a newtype by substituting the base type name.
     /// For example, `Location::sum` → `Point::sum` when `type Location = Point`.
     /// Follows the newtype chain for chained newtypes (C → B → A → Point).

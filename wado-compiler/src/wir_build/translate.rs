@@ -2100,6 +2100,9 @@ impl FunctionTranslator<'_, '_> {
                 args,
                 ..
             } => {
+                // Read the callee descriptor from the function record (Phase 5);
+                // the node's own `FunctionRef` is used only as the extern fallback.
+                let func = &self.callee_descriptor(func, *func_id);
                 // Check for instruction-builtins first
                 let builtin = func
                     .builtin_name()
@@ -2154,6 +2157,8 @@ impl FunctionTranslator<'_, '_> {
                 args,
                 ..
             } => {
+                // Read the callee descriptor from the function record (Phase 5).
+                let func = &self.callee_descriptor(func, *func_id);
                 // Canonical resource method dispatch: uses #[canonical("...")] from types.wado
                 if let Some(re) = receiver.as_expr()
                     && let Some(instr) =
