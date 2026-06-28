@@ -318,7 +318,8 @@ fn build_doc_struct(
     // as having hidden state via `has_private_fields` so the rendered
     // signature gets a `..` placeholder. With `include_private`, nothing is
     // hidden.
-    let is_hidden = |f: &StructField| !include_private && (!f.is_pub || f.name.starts_with("__"));
+    let is_hidden =
+        |f: &StructField| !include_private && (!f.visibility.is_public() || f.name.starts_with("__"));
     let has_private_fields = s.fields.iter().any(is_hidden);
 
     let fields: Vec<DocField> = s

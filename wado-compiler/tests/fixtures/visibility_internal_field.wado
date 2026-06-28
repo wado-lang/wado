@@ -1,0 +1,19 @@
+//! `internal` parses on a struct field. It currently behaves like a
+//! file-private field (a no-op beyond `pub`): field access within the
+//! defining module works regardless of the modifier.
+
+struct Point {
+    pub x: i32,
+    internal y: i32,
+    z: i32,
+}
+
+test "internal field is usable within the defining module" {
+    let p = Point { x: 1, y: 2, z: 3 };
+    assert p.x == 1;
+    assert p.y == 2;
+    assert p.z == 3;
+}
+
+__DATA__
+{"test": {}}

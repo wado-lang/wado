@@ -215,7 +215,7 @@ impl Builder {
                         id: self.id(),
                         name: f.name.to_snake_case(),
                         name_span: syn(),
-                        is_pub: true,
+                        visibility: Visibility::Public,
                         ty: self.map_type(resolve, f.ty, fq),
                         attrs: vec![self.cm_name_attr(&f.name)],
                         default: None,

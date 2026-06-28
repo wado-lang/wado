@@ -570,7 +570,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     &type_params,
                                 )
                             };
-                            fields.push((field.name.clone(), type_id, field.is_pub));
+                            fields.push((field.name.clone(), type_id, field.visibility.is_public()));
                             field_ast_ids.push(field.id);
                             field_defaults.push(field.default.clone());
                         }

@@ -820,7 +820,7 @@ impl<'a> Unparser<'a> {
 
     fn unparse_struct_field(&mut self, field: &StructField) {
         self.emit_outer_attrs(&field.attrs);
-        self.emit_kw_if(field.is_pub, "pub ");
+        self.output.push_str(field.visibility.keyword());
         self.output.push_str(&field.name);
         self.output.push_str(": ");
         self.unparse_type(&field.ty);
@@ -3694,7 +3694,8 @@ pub fn unparse_struct_signature(s: &StructDecl, public_only: bool) -> String {
     let mut out = String::new();
     emit_decl_header(s.visibility, "struct ", &s.name, &s.type_params, &mut out);
     out.push_str(" { ");
-    let hidden = |f: &StructField| public_only && (!f.is_pub || f.name.starts_with("__"));
+    let hidden =
+        |f: &StructField| public_only && (!f.visibility.is_public() || f.name.starts_with("__"));
     let has_hidden = s.fields.iter().any(hidden);
     let mut first = true;
     for field in s.fields.iter().filter(|f| !hidden(f)) {

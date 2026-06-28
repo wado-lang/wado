@@ -4941,11 +4941,14 @@ impl Parser {
             let attrs = self.parse_attributes()?;
             let id = self.alloc_ast_id();
             let start_span = self.peek().span;
-            let is_pub = if self.check(&TokenKind::Pub) {
+            let visibility = if self.check(&TokenKind::Pub) {
                 self.advance();
-                true
+                Visibility::Public
+            } else if self.check(&TokenKind::Internal) {
+                self.advance();
+                Visibility::Internal
             } else {
-                false
+                Visibility::Private
             };
             // Allow keywords as field names (unambiguous in context)
             let name_span = self.peek().span;
@@ -4973,7 +4976,7 @@ impl Parser {
                 id,
                 name,
                 name_span,
-                is_pub,
+                visibility,
                 ty,
                 attrs,
                 default,

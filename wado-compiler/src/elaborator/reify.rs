@@ -771,7 +771,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
             fields.push(crate::tir::TirField {
                 name: field.name.clone(),
-                is_pub: field.is_pub,
+                is_pub: field.visibility.is_public(),
                 type_id,
                 index: index as u32,
                 span: field.span,

@@ -3027,7 +3027,9 @@ pub struct StructField {
     pub name: String,
     /// Span of the field name identifier.
     pub name_span: Span,
-    pub is_pub: bool,
+    /// Field visibility. Only `pub` widens access beyond the defining module;
+    /// `internal` parses but currently behaves like file-private.
+    pub visibility: Visibility,
     pub ty: Type,
     /// Attributes like `#[cm("...")]` for CM name override
     pub attrs: Vec<Attribute>,
