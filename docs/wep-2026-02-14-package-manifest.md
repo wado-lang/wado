@@ -735,28 +735,19 @@ Only these seven fields may appear in `[workspace.package]`; any other key
 `repository-directory`, `publish`) is package-specific and is not inheritable —
 there is no mechanism to set it workspace-wide.
 
-The forced fields are repository-identity invariants: `version`, `repository`,
-and `namespace` have exactly one definition site (the workspace root), so they
-cannot drift between members. A member that sets a forced field is an error
-(`version is inherited from [workspace.package]; remove it here`). This is the
-deliberate difference from Cargo's per-field opt-in, where same-repo versions
-routinely fall out of sync.
+The forced fields (`version`, `repository`, `namespace`) have exactly one
+definition site, the workspace root. A member that re-declares one is an error
+(`version is inherited from [workspace.package]; remove it here`). Why this is
+forced rather than opt-in is the [Lockstep Contract](#lockstep-contract).
 
 `license` and `license-file` form one logical license slot: if a member sets
 either, it replaces the inherited slot entirely (and the two remain mutually
 exclusive within any single manifest). `license-file` inherited from the
 workspace resolves relative to the workspace root.
 
-Forced inheritance is all-or-nothing per field: a field placed in
-`[workspace.package]` is single-sourced, and members cannot diverge from it.
-Workspace membership is the lockstep boundary. There is deliberately **no**
-per-field opt-out that would let a member override a forced field while staying
-in the workspace — and none is planned. A package that must set its identity
-(and publish) independently is kept out of the workspace and lives as a
-standalone project; that binary (in the workspace = locked, outside = free) is
-the whole contract. (A workspace that does not want to share a particular field
-simply omits it from `[workspace.package]`; the field is then not shared and
-each member sets it itself.)
+Inheritance is all-or-nothing per field: a field placed in `[workspace.package]`
+is single-sourced; a workspace that does not want to share a field simply omits
+it, and each member sets its own.
 
 `[workspace.dependencies]` and `[workspace.dev-dependencies]` declare shared dependency versions. Member packages reference them with explicit opt-in (unlike metadata):
 
@@ -777,6 +768,34 @@ Properties:
 - `wado` commands run from any member directory discover the workspace root automatically
 - Each member has its own `[package]` with an independent `name` and entry points; `version`/`repository`/`namespace` are inherited from `[workspace.package]`
 - Members can depend on each other via `path` dependencies
+
+### Lockstep Contract
+
+Workspace metadata inheritance and root-only publishing together provide a single
+guarantee: **a workspace's packages cannot drift to mismatched public versions.**
+Two mechanisms enforce it, one for the repository and one for the registry.
+
+- Force-inherited identity. `version`, `repository`, and `namespace` are declared
+  once in `[workspace.package]` and cannot be overridden by a member. There is
+  exactly one definition site, so in-repository drift is impossible by
+  construction — not merely linted against.
+- Root-only publish. `wado publish` runs only from the workspace root and
+  publishes every publishable member together at that shared version (see
+  [Publishing](#publishing)). Members can never be pushed piecemeal at different
+  versions, so the registry cannot drift either.
+
+Membership is the boundary. A package is either inside the workspace — bound by
+the contract — or outside it as a standalone project with full freedom. There is
+deliberately no per-field opt-out that lets a member stay in the workspace yet
+diverge from a forced field, and none is planned: the binary keeps the contract
+simple and the guarantee total.
+
+This is the clean departure from Cargo. Cargo's `[workspace.package]` is opt-in
+per field (`version.workspace = true`), so a crate that omits the opt-in silently
+keeps its own version; same-repository version skew (familiar from the
+`wasmtime` / `wasm-tools` crate families) is the routine result. Wado inverts the
+default: for the fields that define a package's published identity, sharing is
+the only in-workspace option, so the drift Cargo permits cannot arise.
 
 ### Single-File Mode
 
@@ -842,12 +861,10 @@ descriptive metadata. These four stay optional even when publishing.
 
 In a workspace, `wado publish` is gated to the workspace root: it publishes every
 publishable member (and the root's own `[package]`, if any) together at the
-shared, force-inherited version. Members that are not publishable (`publish =
-false` or no `namespace`) are skipped. Running `wado publish` from a member
-directory is an error pointing at the root. Forced `version` inheritance already
-prevents version drift _within_ the repository; publishing only from the root
-extends that guarantee to the registry — members can never be published
-piecemeal at mismatched versions.
+shared version. Members that are not publishable (`publish = false` or no
+`namespace`) are skipped, and any member with unmet requirements aborts the whole
+publish. Running `wado publish` from a member directory is an error pointing at
+the root. This is the registry half of the [Lockstep Contract](#lockstep-contract).
 
 #### Path Dependency Replacement
 
@@ -916,7 +933,7 @@ This enables seamless local development while ensuring published packages are se
 - **Dependency specifier resolution**: an open coordinate or `lib:` nickname requires a `wado.toml` lookup at compile time, adding a project-discovery step. The compiler itself is not affected — only `CompilerHost` implementations need to handle this.
 - **Self-sufficient lock file**: duplicates entry points and dependency edges from each package's `wado.toml`. This makes the lock file larger and introduces a potential staleness risk (if a dependency's `wado.toml` changes entry points without version bump). The trade-off is worth it — builds skip all transitive manifest I/O, and staleness is caught by `wado update` or integrity mismatch.
 - **Archive-level integrity** (not source-level): simpler and unambiguous, but means the hash depends on the registry's archive format. If a registry changes its packaging format, hashes change even if sources are identical.
-- **Workspace membership as the lockstep boundary**: force-inherited identity fields plus root-only publishing make version drift across members structurally impossible, at the cost of per-member independence. Independence is regained only by leaving the workspace (standalone), never by an in-workspace per-field opt-out — Wado intentionally provides none, keeping the contract a simple binary rather than a Cargo-style per-field opt-in that lets same-repo versions silently diverge.
+- **Workspace membership as the lockstep boundary** (see [Lockstep Contract](#lockstep-contract)): forced identity inheritance plus root-only publishing make version drift structurally impossible, at the cost of per-member independence — regained only by leaving the workspace, not by an in-workspace opt-out.
 - **Forced metadata inheritance has no `{ workspace = true }` marker** (unlike dependencies): a field in `[workspace.package]` is inherited automatically and a member that re-declares a forced one is an error. This trades a small surprise (no opt-in syntax) for the guarantee that forced fields have exactly one definition site.
 - **`[world]` table keyed by FQ world name**: hosted worlds are declared by their Component Model world name (`"wasi:cli/command"`) rather than a short alias (`command`/`bin`/`cli`). The key is the world the entry conforms to, so new worlds need no new manifest field and the mapping to the CM world is explicit. The library world is the one exception — it has no externally-fixed FQ name, so it is named after the package and declared by `[package].lib`.
 - **`[package]` over `[project]`**: `[package]` aligns with CM's "package" concept (`package ns:name@version` in WIT). The file itself represents the project; `[package]` describes the distributable unit within it. `[workspace]` > `[package]` hierarchy is natural, whereas `[workspace]` > `[project]` would be confusing.
