@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782604259428,
+  "lastUpdate": 1782615427632,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -36113,6 +36113,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 288701,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4b185d80bb99ff5fd97226b2bc77830eaa6fb206",
+          "message": "Merge pull request #1461 from wado-lang/claude/gale-optimization-plan-1gv9ss\n\nperf(gale): lower char-class lexer matches to br_table",
+          "timestamp": "2026-06-28T11:47:15+09:00",
+          "tree_id": "9dacd042ff89f2038820d02bc8626b99b9c9c46c",
+          "url": "https://github.com/wado-lang/wado/commit/4b185d80bb99ff5fd97226b2bc77830eaa6fb206"
+        },
+        "date": 1782615426982,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1887,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8476,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15409,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288528,
             "unit": "bytes"
           }
         ]
