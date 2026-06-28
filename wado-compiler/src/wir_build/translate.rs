@@ -400,7 +400,7 @@ fn register_call_wrapper(
         export_name: None,
     };
 
-    ctx.register_function(func)
+    ctx.register_function(func, None)
 }
 
 /// Build an inspect / `inspect_alt` wrapper for a functor.
@@ -560,7 +560,7 @@ fn register_inspect_wrapper(
         export_name: None,
     };
 
-    ctx.register_function(func)
+    ctx.register_function(func, None)
 }
 
 /// Build the WIR body for a `FunctionKind::FnCanonicalDispatch`
@@ -2091,7 +2091,9 @@ impl FunctionTranslator<'_, '_> {
                 }
             },
 
-            ExprKind::Call { func, args, .. } => {
+            ExprKind::Call {
+                func, func_id, args, ..
+            } => {
                 // Check for instruction-builtins first
                 let builtin = func
                     .builtin_name()
@@ -2125,9 +2127,9 @@ impl FunctionTranslator<'_, '_> {
                     .map(|op| self.translate_operand(op))
                     .collect();
 
-                if let Some(func_id) = self.resolve_function_ref(func) {
+                if let Some(wir_func_id) = self.resolve_call(func, *func_id) {
                     WirInstr::Call {
-                        func_id,
+                        func_id: wir_func_id,
                         args: translated_args,
                     }
                 } else {
@@ -2141,6 +2143,7 @@ impl FunctionTranslator<'_, '_> {
             }
             ExprKind::MethodCall {
                 func,
+                func_id,
                 receiver,
                 args,
                 ..
@@ -2164,9 +2167,9 @@ impl FunctionTranslator<'_, '_> {
                     }
                 }
 
-                if let Some(func_id) = self.resolve_function_ref(func) {
+                if let Some(wir_func_id) = self.resolve_call(func, *func_id) {
                     WirInstr::Call {
-                        func_id,
+                        func_id: wir_func_id,
                         args: translated_args,
                     }
                 } else {

@@ -443,7 +443,7 @@ fn register_single_function(
         export_name: tir_func.export_name.clone(),
     };
 
-    let _func_id = ctx.register_function(wir_func);
+    let _func_id = ctx.register_function(wir_func, tir_func.id);
     let wir_func_index = ctx.functions.len() - 1;
 
     // Register as pending body for translation

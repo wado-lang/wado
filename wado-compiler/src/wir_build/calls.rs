@@ -101,6 +101,24 @@ impl FunctionTranslator<'_, '_> {
         None
     }
 
+    /// Resolve a call target, preferring the stamped canonical `func_id` (a
+    /// direct id→`WirFuncId` lookup, no name reconstruction) and falling back to
+    /// [`Self::resolve_function_ref`] for an extern / unstamped callee. The
+    /// fast-path yields the same `WirFuncId` the name path would for an
+    /// in-package callee, so this is behavior-preserving.
+    pub(super) fn resolve_call(
+        &self,
+        func: &crate::nir::FunctionRef,
+        func_id: Option<crate::nir::FuncId>,
+    ) -> Option<crate::wir::WirFuncId> {
+        if let Some(id) = func_id
+            && let Some(wid) = self.ctx.funcid_map.get(&id)
+        {
+            return Some(wid.clone());
+        }
+        self.resolve_function_ref(func)
+    }
+
     /// Try to resolve a method call on a newtype by substituting the base type name.
     /// For example, `Location::sum` → `Point::sum` when `type Location = Point`.
     /// Follows the newtype chain for chained newtypes (C → B → A → Point).
