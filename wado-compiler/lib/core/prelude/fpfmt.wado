@@ -6,6 +6,11 @@
 // Copyright 2025 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 // See https://github.com/rsc/fpfmt/blob/main/LICENSE
+//
+// Functions stay `pub` (not `internal` like the other prelude submodules)
+// because fpfmt_test.wado / fpfmt_comprehensive_test.wado are white-box test
+// entry modules in the Root package that import these helpers directly across
+// the package boundary.
 
 use { String } from "core:prelude/string.wado";
 use { List } from "core:prelude/list.wado";
@@ -19,33 +24,33 @@ global POW10: List<u64> = [
     10000000000000000000,
 ];
 
-internal fn pow10(n: i32) -> u64 {
+pub fn pow10(n: i32) -> u64 {
     return POW10[n];
 }
 
 // Returns the bit length of x (position of highest set bit + 1)
-internal fn u64_bit_len(x: u64) -> i32 {
+pub fn u64_bit_len(x: u64) -> i32 {
     return 64 - builtin::i64_clz(x as i64) as i32;
 }
 
 // log10_pow2(x) returns floor(log10(2^x)) = floor(x * log10(2))
-internal fn log10_pow2(x: i32) -> i32 {
+pub fn log10_pow2(x: i32) -> i32 {
     return x * 78913 >> 18;
 }
 
 // log2_pow10(x) returns floor(log2(10^x)) = floor(x * log2(10))
-internal fn log2_pow10(x: i32) -> i32 {
+pub fn log2_pow10(x: i32) -> i32 {
     return x * 108853 >> 15;
 }
 
 // Result of unpacking a float64
-internal struct UnpackResult {
+pub struct UnpackResult {
     pub mantissa: u64,
     pub exponent: i32,
 }
 
 // unpack64 returns (mantissa, exponent) such that f = mantissa * 2^exponent
-internal fn unpack64(f: f64) -> UnpackResult {
+pub fn unpack64(f: f64) -> UnpackResult {
     let bits = f.to_bits() as u64;
 
     let mantissa_mask: u64 = 0x000FFFFFFFFFFFFF;
@@ -74,7 +79,7 @@ internal fn unpack64(f: f64) -> UnpackResult {
 
 // unpack32 returns (mantissa, exponent) such that f = mantissa * 2^exponent
 // The mantissa is left-aligned in 64 bits (top 24 bits significant).
-internal fn unpack32(f: f32) -> UnpackResult {
+pub fn unpack32(f: f32) -> UnpackResult {
     let bits = f.to_bits() as u32;
 
     let mantissa_mask: u32 = 0x007FFFFF;
@@ -101,29 +106,29 @@ internal fn unpack32(f: f32) -> UnpackResult {
     return UnpackResult { mantissa: m, exponent: e };
 }
 
-internal fn unrounded_floor(u: u64) -> u64 {
+pub fn unrounded_floor(u: u64) -> u64 {
     return u + 0 >> 2;
 }
 
-internal fn unrounded_round(u: u64) -> u64 {
+pub fn unrounded_round(u: u64) -> u64 {
     return u + 1 + (u >> 2 & 1) >> 2;
 }
 
-internal fn unrounded_ceil(u: u64) -> u64 {
+pub fn unrounded_ceil(u: u64) -> u64 {
     return u + 3 >> 2;
 }
 
-internal fn unrounded_nudge(u: u64, delta: i32) -> u64 {
+pub fn unrounded_nudge(u: u64, delta: i32) -> u64 {
     return (u as i64 + delta as i64) as u64;
 }
 
-internal fn unrounded_div(u: u64, d: u64) -> u64 {
+pub fn unrounded_div(u: u64, d: u64) -> u64 {
     let q = u / d;
     let r = u % d;
     return q | u & 1 | (r != 0) as u64;
 }
 
-internal struct PmHiLo {
+pub struct PmHiLo {
     pub hi: u64,
     pub lo: u64,
 }
@@ -258,12 +263,12 @@ fn mul_pow10(p: i32) -> PmHiLo {
     return PmHiLo { hi: top_hi, lo: 0 };
 }
 
-internal fn get_pow10(p: i32) -> PmHiLo {
+pub fn get_pow10(p: i32) -> PmHiLo {
     return mul_pow10(p);
 }
 
 // uscale computes unround(x * 2^e * 10^p) using the pow10 table
-internal fn uscale(x: u64, pm_hi: u64, pm_lo: u64, s: i32) -> u64 {
+pub fn uscale(x: u64, pm_hi: u64, pm_lo: u64, s: i32) -> u64 {
     // Note: i64_mul_wide_u returns [low, high] but Go's bits.Mul64 returns (high, low)
     let [mid_i64, hi_tmp] = builtin::i64_mul_wide_u(x as i64, pm_hi as i64);
     let mid = mid_i64 as u64;
@@ -286,13 +291,13 @@ internal fn uscale(x: u64, pm_hi: u64, pm_lo: u64, s: i32) -> u64 {
 }
 
 // Result of formatting
-internal struct FormatResult {
+pub struct FormatResult {
     pub digits: u64,
     pub exponent: i32,
 }
 
 // FixedWidth returns the n-digit decimal form of f
-internal fn fixed_width(f: f64, n: i32) -> FormatResult {
+pub fn fixed_width(f: f64, n: i32) -> FormatResult {
     assert n <= 18, "digits must be <= 18";
 
     let unpack = unpack64(f);
@@ -319,7 +324,7 @@ internal fn fixed_width(f: f64, n: i32) -> FormatResult {
 // Combines decimal position estimation and digit computation in a single function,
 // sharing the unpack64 call. This avoids the expensive short() + fixed_width() two-pass.
 // Cost: 1×unpack64 + 2×get_pow10 + 2×uscale (vs 2×unpack64 + 2×get_pow10 + 3-4×uscale)
-internal fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
+pub fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
     let unpack = unpack64(f);
     let m = unpack.mantissa;
     let e = unpack.exponent;
@@ -383,7 +388,7 @@ internal fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
 }
 
 // Short computes the shortest formatting of f that round-trips
-internal fn short(f: f64) -> FormatResult {
+pub fn short(f: f64) -> FormatResult {
     let min_exp = -1085;
 
     let unpack = unpack64(f);
@@ -434,7 +439,7 @@ internal fn short(f: f64) -> FormatResult {
 
 // short32 computes the shortest formatting of f32 that round-trips through f32.
 // Uses f32's 24-bit mantissa (z=40) instead of f64's 53-bit mantissa (z=11).
-internal fn short32(f: f32) -> FormatResult {
+pub fn short32(f: f32) -> FormatResult {
     let min_exp = -189;
 
     let unpack = unpack32(f);
@@ -482,18 +487,18 @@ internal fn short32(f: f32) -> FormatResult {
     return FormatResult { digits: d, exponent: -p };
 }
 
-internal fn skewed(e: i32) -> i32 {
+pub fn skewed(e: i32) -> i32 {
     return e * 631305 - 261663 >> 21;
 }
 
 // Unsigned multiply (low 64 bits only, modular)
-internal fn u64_mul(a: u64, b: u64) -> u64 {
+pub fn u64_mul(a: u64, b: u64) -> u64 {
     // Use wide multiply and take the low part
     let [lo, _] = builtin::i64_mul_wide_u(a as i64, b as i64);
     return lo as u64;  // Low 64 bits
 }
 
-internal fn trim_zeros(x: u64, p: i32) -> [u64, i32] {
+pub fn trim_zeros(x: u64, p: i32) -> [u64, i32] {
     let inv5: u64 = 0xcccccccccccccccd;
     let inv5p2: u64 = 0x8f5c28f5c28f5c29;
     let inv5p4: u64 = 0xd288ce703afb7e91;
@@ -543,12 +548,12 @@ internal fn trim_zeros(x: u64, p: i32) -> [u64, i32] {
     return [xv, pv];
 }
 
-internal fn rotate_right(x: u64, n: u64) -> u64 {
+pub fn rotate_right(x: u64, n: u64) -> u64 {
     return x >> n | x << 64 - n;
 }
 
 // digits returns the number of decimal digits in d
-internal fn digits(d: u64) -> i32 {
+pub fn digits(d: u64) -> i32 {
     let nd = log10_pow2(u64_bit_len(d));
     return nd + (d >= pow10(nd)) as i32;
 }
@@ -579,7 +584,7 @@ fn fill_zeros(buf: &mut String, n: i32) {
 }
 
 // Write decimal representation directly into buf (appends to existing content).
-internal fn write_decimal(buf: &mut String, d: u64, p: i32, nd: i32) {
+pub fn write_decimal(buf: &mut String, d: u64, p: i32, nd: i32) {
     let decimal_pos = nd + p;
 
     if decimal_pos <= 0 {
@@ -608,7 +613,7 @@ internal fn write_decimal(buf: &mut String, d: u64, p: i32, nd: i32) {
 }
 
 // Format result to decimal string (no exponent)
-internal fn format_decimal(d: u64, p: i32, nd: i32) -> String {
+pub fn format_decimal(d: u64, p: i32, nd: i32) -> String {
     let decimal_pos = nd + p;
     let total = if decimal_pos <= 0 {
         2 + -decimal_pos + nd;
@@ -623,7 +628,7 @@ internal fn format_decimal(d: u64, p: i32, nd: i32) -> String {
 }
 
 // Write exponential representation directly into buf (appends to existing content).
-internal fn write_exp(buf: &mut String, d: u64, p: i32, nd: i32, upper: bool) {
+pub fn write_exp(buf: &mut String, d: u64, p: i32, nd: i32, upper: bool) {
     let exp = p + nd - 1;
 
     // Write digits: first digit, then '.' and rest
@@ -660,7 +665,7 @@ internal fn write_exp(buf: &mut String, d: u64, p: i32, nd: i32, upper: bool) {
 }
 
 // Format result to exponential string (upper: true for 'E', false for 'e')
-internal fn format_exp(d: u64, p: i32, nd: i32, upper: bool) -> String {
+pub fn format_exp(d: u64, p: i32, nd: i32, upper: bool) -> String {
     let mut buf = String::with_capacity(30);
     write_exp(&mut buf, d, p, nd, upper);
     return buf;
@@ -668,7 +673,7 @@ internal fn format_exp(d: u64, p: i32, nd: i32, upper: bool) -> String {
 
 
 // Write decimal with specified precision directly into buf (appends to existing content).
-internal fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32) {
+pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32) {
     if precision < 0 {
         write_decimal(buf, d, p, nd);
         return;
@@ -744,14 +749,14 @@ internal fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precis
 
 /// Format f64 to decimal string with specified precision (digits after decimal point)
 /// precision < 0 means use shortest representation
-internal fn format_decimal_prec(d: u64, p: i32, nd: i32, precision: i32) -> String {
+pub fn format_decimal_prec(d: u64, p: i32, nd: i32, precision: i32) -> String {
     let mut buf = String::with_capacity(30);
     write_decimal_prec(&mut buf, d, p, nd, precision);
     return buf;
 }
 
 // Write exponential with precision directly into buf (appends to existing content).
-internal fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32, upper: bool) {
+pub fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32, upper: bool) {
     if precision < 0 {
         write_exp(buf, d, p, nd, upper);
         return;
@@ -808,14 +813,14 @@ internal fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision:
 
 /// Format f64 to exponential string with specified precision (digits after decimal point)
 /// precision < 0 means use shortest representation
-internal fn format_exp_prec(d: u64, p: i32, nd: i32, precision: i32, upper: bool) -> String {
+pub fn format_exp_prec(d: u64, p: i32, nd: i32, precision: i32, upper: bool) -> String {
     let mut buf = String::with_capacity(30);
     write_exp_prec(&mut buf, d, p, nd, precision, upper);
     return buf;
 }
 
 // Encodes the kind of special floating-point value detected by check_special.
-internal enum SpecialKind {
+pub enum SpecialKind {
     NotSpecial,
     Zero,
     Inf,
@@ -828,7 +833,7 @@ internal enum SpecialKind {
 //   is_neg:     true if f is negative (for use on either the special or non-special path)
 //   kind:       SpecialKind enum (NotSpecial, Zero, Inf, or NaN)
 // On the non-special path (is_special=false), kind is SpecialKind::NotSpecial.
-internal fn check_special(f: f64) -> [bool, bool, SpecialKind] {
+pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
     let bits = f.to_bits();
 
     // Check for zero
@@ -874,16 +879,16 @@ fn pack64(m: u64, e: i32) -> f64 {
 
 /// `parse` accepts at most this many decimal digits in `d` — the most that
 /// always fit a u64 (u64::MAX has 20 digits).
-internal global PARSE_DIGITS_MAX: i32 = 19;
+pub global PARSE_DIGITS_MAX: i32 = 19;
 
 /// Exponent domain of `parse`'s pow10 table. Outside it the result is
 /// definitely ±infinity (above) or ±0 (below).
-internal global PARSE_EXP_MAX: i32 = 350;
-internal global PARSE_EXP_MIN: i32 = -351;
+pub global PARSE_EXP_MAX: i32 = 350;
+pub global PARSE_EXP_MIN: i32 = -351;
 
 // parse rounds d * 10^p to the nearest f64.
 // d must have at most PARSE_DIGITS_MAX digits.
-internal fn parse(d: u64, p: i32) -> f64 {
+pub fn parse(d: u64, p: i32) -> f64 {
     let b = u64_bit_len(d);
     let lp = log2_pow10(p);
     let mut e = i32::min(1074, 53 - b - lp);
@@ -908,7 +913,7 @@ internal fn parse(d: u64, p: i32) -> f64 {
 //          "inf"/"infinity" (case-insensitive), "nan" (case-insensitive).
 // Rejects: leading dot (".5"), trailing dot ("5."), empty input.
 // Examples: "3.14", "1e2", "0.5", "123", "+1.5e-3", "-42", "inf", "NaN"
-internal fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
+pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
     // Bounds check keeps the public surface total: an out-of-range slice
     // is treated the same as malformed input.
     if start < 0 || end > s.len() || start >= end {
@@ -1058,6 +1063,6 @@ internal fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
 }
 
 /// Non-range variant of `parse_text_range`.
-internal fn parse_text(s: &String) -> Option<f64> {
+pub fn parse_text(s: &String) -> Option<f64> {
     return parse_text_range(s, 0, s.len());
 }
