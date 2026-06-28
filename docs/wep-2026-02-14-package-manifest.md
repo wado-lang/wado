@@ -668,6 +668,13 @@ A workspace groups multiple packages for co-development. The workspace root has 
 [workspace]
 members = ["packages/*"]
 
+[workspace.package]
+version = "0.1.0"
+repository = "https://github.com/myorg/monorepo"
+namespace = "myorg"
+license = "MIT"
+authors = ["Alice <alice@example.com>"]
+
 [workspace.dependencies]
 "std:json" = { version = "^1.0.0" }
 
@@ -678,17 +685,18 @@ members = ["packages/*"]
 ```toml
 # packages/core/wado.toml
 [package]
-namespace = "myorg"
 name = "core"
-version = "0.1.0"
+description = "Shared core types"
 lib = "src/lib.wado"
+# version / repository / namespace / license / authors inherited
 ```
 
 ```toml
 # packages/cli/wado.toml
 [package]
 name = "my-tool"
-version = "0.1.0"
+description = "The command-line tool"
+repository-directory = "packages/cli"
 
 [world]
 "wasi:cli/command" = "src/main.wado"
@@ -701,7 +709,46 @@ version = "0.1.0"
 | --------- | ---------- | -------- | -------------------------------------------- |
 | `members` | `string[]` | Yes      | Glob patterns for member package directories |
 
-`[workspace.dependencies]` and `[workspace.dev-dependencies]` declare shared dependency versions. Member packages reference them without repeating version information:
+#### `[workspace.package]` — Shared Package Metadata
+
+`[workspace.package]` declares package metadata shared by every member.
+Inheritance is automatic — unlike dependencies, members do **not** write
+`{ workspace = true }`. Whether a member may override an inherited field depends
+on the field:
+
+| Field          | Inheritance                     | Member override          |
+| -------------- | ------------------------------- | ------------------------ |
+| `version`      | Forced                          | Error if set in a member |
+| `repository`   | Forced                          | Error if set in a member |
+| `namespace`    | Forced                          | Error if set in a member |
+| `license`      | Default                         | Allowed                  |
+| `license-file` | Default (path relative to root) | Allowed                  |
+| `authors`      | Default                         | Allowed                  |
+| `wado-version` | Default                         | Allowed                  |
+
+Only these seven fields may appear in `[workspace.package]`; any other key
+(`name`, `lib`, `description`, `homepage`, `documentation`,
+`repository-directory`, `publish`) is package-specific and is not inheritable —
+there is no mechanism to set it workspace-wide.
+
+The forced fields are repository-identity invariants: `version`, `repository`,
+and `namespace` have exactly one definition site (the workspace root), so they
+cannot drift between members. A member that sets a forced field is an error
+(`version is inherited from [workspace.package]; remove it here`). This is the
+deliberate difference from Cargo's per-field opt-in, where same-repo versions
+routinely fall out of sync.
+
+`license` and `license-file` form one logical license slot: if a member sets
+either, it replaces the inherited slot entirely (and the two remain mutually
+exclusive within any single manifest). `license-file` inherited from the
+workspace resolves relative to the workspace root.
+
+Forced inheritance is all-or-nothing per field: putting `version` in
+`[workspace.package]` locks every member to it. A workspace that needs
+independent per-member versioning simply omits `version` from
+`[workspace.package]`, and each member declares its own.
+
+`[workspace.dependencies]` and `[workspace.dev-dependencies]` declare shared dependency versions. Member packages reference them with explicit opt-in (unlike metadata):
 
 ```toml
 # In a workspace member's wado.toml
@@ -718,7 +765,7 @@ Properties:
 
 - All member packages share one `wado.lock` at the workspace root
 - `wado` commands run from any member directory discover the workspace root automatically
-- Each member has its own `[package]` with independent `name`, `version`, and entry points
+- Each member has its own `[package]` with an independent `name` and entry points; `version`/`repository`/`namespace` are inherited from `[workspace.package]`
 - Members can depend on each other via `path` dependencies
 
 ### Single-File Mode
