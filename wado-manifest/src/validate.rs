@@ -28,6 +28,14 @@ fn validate_package(pkg: &crate::manifest::Package) -> Result<(), ManifestError>
     if pkg.license.is_some() && pkg.license_file.is_some() {
         return Err(ManifestError::ConflictingLicense);
     }
+    // `license`, when set, must be a valid SPDX license expression. `LicenseRef-`
+    // (for a bundled non-standard license) is part of the SPDX grammar.
+    if let Some(license) = &pkg.license {
+        spdx::Expression::parse(license).map_err(|e| ManifestError::InvalidLicense {
+            value: license.clone(),
+            reason: e.to_string(),
+        })?;
+    }
     // `wado-version` is a semver requirement (e.g. ">=0.5"); accepts the full
     // comparator grammar, unlike dependency specifiers.
     if let Some(req) = &pkg.wado_version {

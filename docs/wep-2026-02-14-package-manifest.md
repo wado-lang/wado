@@ -109,11 +109,13 @@ no standard key for them, so they would not reach an OCI registry.
 #### License
 
 `license` (an SPDX expression such as `"MIT OR Apache-2.0"`) is the primary
-form. For a standard license the SPDX identifier is the canonical reference, so
-no file is shipped. A non-standard or proprietary license uses `license-file`
-instead: the annotation becomes `LicenseRef-<name>` (SPDX's syntax for custom
-licenses) and the file's text is embedded in the component. `license` and
-`license-file` are mutually exclusive; publishing requires one of them.
+form, and is validated as a well-formed SPDX expression at parse time. For a
+standard license the SPDX identifier is the canonical reference, so no file is
+shipped. A non-standard or proprietary license uses `license-file` instead: the
+annotation becomes `LicenseRef-<name>` (SPDX's syntax for custom licenses, also
+accepted in the `license` field) and the file's text is embedded in the
+component. `license` and `license-file` are mutually exclusive; publishing
+requires one of them.
 
 #### Repository subdirectory (monorepo)
 
@@ -776,6 +778,10 @@ fields above are required. The exceptions: `homepage` and `documentation` are
 redundant with `repository` and default to it when omitted; `repository-directory`
 is meaningful only for a monorepo; and `wado-version` is a build constraint, not
 descriptive metadata. These four stay optional even when publishing.
+
+`wado publish --dry-run` runs these checks and reports every problem at once
+(it does not upload). The OCI upload itself is not yet implemented, so a bare
+`wado publish` errors rather than pretending to publish.
 
 #### Path Dependency Replacement
 

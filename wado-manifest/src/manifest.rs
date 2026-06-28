@@ -309,6 +309,8 @@ pub enum ManifestError {
     NoDefaultRegistry { dep_name: String },
     /// `[package]` set both `license` and `license-file` (mutually exclusive).
     ConflictingLicense,
+    /// `[package].license` is not a valid SPDX license expression.
+    InvalidLicense { value: String, reason: String },
     /// `[package].wado-version` is not a valid semver requirement.
     InvalidWadoVersion { value: String, reason: String },
 }
@@ -354,6 +356,10 @@ impl fmt::Display for ManifestError {
             ManifestError::ConflictingLicense => write!(
                 f,
                 "[package]: `license` and `license-file` are mutually exclusive"
+            ),
+            ManifestError::InvalidLicense { value, reason } => write!(
+                f,
+                "[package].license {value:?} is not a valid SPDX expression: {reason}"
             ),
             ManifestError::InvalidWadoVersion { value, reason } => write!(
                 f,
@@ -1346,5 +1352,39 @@ wado-version = "not a req"
             matches!(err, ManifestError::InvalidWadoVersion { .. }),
             "{err:?}"
         );
+    }
+
+    #[test]
+    fn valid_spdx_license_accepted() {
+        for license in ["MIT", "MIT OR Apache-2.0", "Apache-2.0 WITH LLVM-exception"] {
+            let toml = format!("[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"{license}\"\n");
+            assert!(
+                toml.parse::<Manifest>().is_ok(),
+                "expected {license:?} to be accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn license_ref_for_nonstandard_license_accepted() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+license = "LicenseRef-Commercial"
+"#;
+        assert!(toml.parse::<Manifest>().is_ok());
+    }
+
+    #[test]
+    fn invalid_spdx_license_rejected() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+license = "Definitely Not A License"
+"#;
+        let err = toml.parse::<Manifest>().unwrap_err();
+        assert!(matches!(err, ManifestError::InvalidLicense { .. }), "{err:?}");
     }
 }
