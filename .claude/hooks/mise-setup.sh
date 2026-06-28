@@ -121,20 +121,6 @@ else
     log "Warning: Some tools may have failed to install"
 fi
 
-# Sync the wasmtime submodule to the commit pinned in the superproject.
-# The build no longer depends on it (the wasmtime crates come from crates.io;
-# see [workspace.dependencies] in Cargo.toml) — it is a reference submodule
-# tracking upstream bytecodealliance/wasmtime, used for WIT sources
-# (update-stdlib-wasi) and the wasmtime CLI build. The rest of vendor/ holds
-# reference specs that can be initialized on demand. --recommend-shallow keeps
-# the checkout small.
-#
-# We run this unconditionally (not just when the checkout is absent): the
-# remote container provisions submodules at the branch tip rather than the
-# pinned gitlink SHA, so a populated-but-stale checkout drifts away from the
-# pin each session. A bare `git submodule update` is idempotent when already in
-# sync and reconciles the checkout back to the pinned SHA otherwise; --force
-# resets it even if the container left the working tree pointing elsewhere.
 if [ -f .gitmodules ]; then
     log "Syncing vendor/wasmtime submodule to the pinned commit..."
     if git submodule update --init --force --recommend-shallow vendor/wasmtime; then
