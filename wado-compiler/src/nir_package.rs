@@ -170,6 +170,23 @@ impl NirPackage {
         }
     }
 
+    /// The next free [`FuncId`] (one past the current maximum). Optimizer passes
+    /// that synthesize functions (`value_copy_demote`'s shallow-copy twins,
+    /// container SROA's per-field accessors) mint fresh ids from here so a new
+    /// function never collides with an existing id. `FuncId` stays monotonic and
+    /// intrinsic — independent of `dce` compaction.
+    pub fn next_func_id(&self) -> FuncId {
+        use cranelift_entity::EntityRef;
+        let next = self
+            .functions
+            .iter()
+            .filter_map(|f| f.borrow().id)
+            .map(|id| id.index() + 1)
+            .max()
+            .unwrap_or(0);
+        FuncId::new(next)
+    }
+
     /// Check if the project targets the synthetic test world.
     pub fn is_test_world(&self) -> bool {
         self.target_world == world_registry::TEST_WORLD

@@ -171,6 +171,16 @@ pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) ->
             retarget_block(body, fi, &site_elig, &list_wrapper_copies, &shallow_name);
         }
     }
+    // Mint a fresh FuncId for each shallow twin (cloned from a source function,
+    // so it would otherwise inherit the source's id).
+    {
+        use cranelift_entity::EntityRef;
+        let mut next = project.next_func_id().index();
+        for f in &new_funcs {
+            f.borrow_mut().id = Some(crate::nir::FuncId::new(next));
+            next += 1;
+        }
+    }
     project.functions.extend(new_funcs);
     // Report the retargeted callers; the appended shallow specializations get a
     // fresh dirty gate slot via the gate's auto-grow on first access. Retarget
@@ -461,7 +471,9 @@ fn retarget_wrapper_call(
     wrappers: &IndexSet<FuncKey>,
     shallow_name: &IndexMap<FuncKey, String>,
 ) {
-    if let ExprKind::Call { func, args, .. } = &mut body.exprs[value].kind
+    if let ExprKind::Call {
+        func, func_id, args, ..
+    } = &mut body.exprs[value].kind
         && args.len() == 1
     {
         let key = (func.module_source.clone(), func.name.clone());
@@ -469,6 +481,9 @@ fn retarget_wrapper_call(
             && let Some(new) = shallow_name.get(&key)
         {
             func.name.clone_from(new);
+            // The callee changed to the shallow twin; the old stamp is stale.
+            // Clear it (conservative — the twin's calls re-stamp at Phase 4).
+            *func_id = None;
         }
     }
 }
