@@ -239,7 +239,7 @@ pub fn extract_doc_filtered(
 
     for item in &module.items {
         let visible = include_private
-            || is_pub_or_export(item)
+            || is_public_or_export(item)
             || (include_internal && is_internal_item(item));
         if !visible {
             continue;
@@ -318,8 +318,9 @@ fn build_doc_struct(
     // as having hidden state via `has_private_fields` so the rendered
     // signature gets a `..` placeholder. With `include_private`, nothing is
     // hidden.
-    let is_hidden =
-        |f: &StructField| !include_private && (!f.visibility.is_public() || f.name.starts_with("__"));
+    let is_hidden = |f: &StructField| {
+        !include_private && (!f.visibility.is_public() || f.name.starts_with("__"))
+    };
     let has_private_fields = s.fields.iter().any(is_hidden);
 
     let fields: Vec<DocField> = s
@@ -591,7 +592,7 @@ fn extract_module_doc(trivia: &TriviaMap, module: &Module) -> Option<String> {
     }
 }
 
-fn is_pub_or_export(item: &Item) -> bool {
+fn is_public_or_export(item: &Item) -> bool {
     // `impl` carries no visibility but always contributes; `export` implies pub.
     matches!(item, Item::Impl(_))
         || matches!(item, Item::Function(f) if f.is_export)
@@ -939,7 +940,7 @@ const PRIMITIVE_TYPE_NAMES: &[&str] = &[
 
 fn build_doc_const(c: &AssociatedConst, trivia: &TriviaMap) -> DocFunction {
     let mut sig = String::new();
-    if c.is_pub {
+    if c.visibility.is_public() {
         sig.push_str("pub ");
     }
     sig.push_str("const ");
@@ -998,7 +999,7 @@ fn collect_primitive_types_from_module(
                 continue;
             }
             for c in &i.constants {
-                if include_private || c.is_pub {
+                if include_private || c.visibility.is_public() {
                     constants.push(build_doc_const(c, trivia));
                 }
             }

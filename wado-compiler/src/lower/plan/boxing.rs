@@ -238,7 +238,7 @@ impl TypeBuilder {
         let tir_struct = TirStruct {
             name: struct_name,
             module_source: self.box_module_source.clone(),
-            is_pub: true,
+            visibility: crate::ast::Visibility::Public,
             type_params: Vec::new(),
             monomorph_info: Some(MonomorphInfo {
                 generic_name: "Box".to_string(),
@@ -248,7 +248,7 @@ impl TypeBuilder {
             }),
             fields: vec![TirField {
                 name: "value".to_string(),
-                is_pub: false,
+                visibility: crate::ast::Visibility::Private,
                 type_id: inner_type_id,
                 index: 0,
                 span: Span::new(0, 0, 0, 0),

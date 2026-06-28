@@ -3608,7 +3608,7 @@ pub struct TirGlobal {
     /// Preserved across lowering so the optimizer can promote lazy-init globals
     /// back to immutable when their initializers fold to constants.
     pub wado_mutable: bool,
-    pub is_pub: bool,
+    pub visibility: crate::ast::Visibility,
     /// Module where this global is defined
     pub module_source: ModuleSource,
     pub span: Span,
@@ -3647,7 +3647,7 @@ pub struct TirFunction {
     /// per-module TIR into flat lists; before link, the `module_source` is
     /// carried implicitly by the parent `TirModule`.
     pub module_source: ModuleSource,
-    pub is_pub: bool,
+    pub visibility: crate::ast::Visibility,
     /// Whether this function is exported at the Component Model boundary (world export)
     pub is_export: bool,
     /// Whether this is an async function (`export async fn`).
@@ -3950,7 +3950,7 @@ pub struct TirParam {
 pub struct TirStruct {
     pub name: String,
     pub module_source: ModuleSource,
-    pub is_pub: bool,
+    pub visibility: crate::ast::Visibility,
     /// Generic type parameters (empty for non-generic structs)
     pub type_params: Vec<TirTypeParam>,
     /// If this struct was created by monomorphization, contains the origin info
@@ -3964,7 +3964,7 @@ pub struct TirStruct {
 #[derive(Debug, Clone)]
 pub struct TirField {
     pub name: String,
-    pub is_pub: bool,
+    pub visibility: crate::ast::Visibility,
     pub type_id: TypeId,
     pub index: u32,
     pub span: Span,
@@ -3988,7 +3988,7 @@ pub struct TirField {
 pub struct TirEnum {
     pub name: String,
     pub module_source: ModuleSource,
-    pub is_pub: bool,
+    pub visibility: crate::ast::Visibility,
     /// Generic type parameters (empty for non-generic enums)
     pub type_params: Vec<TirTypeParam>,
     /// If this enum was created by monomorphization, contains the origin info
@@ -4017,7 +4017,7 @@ pub struct TirEnumCase {
 pub struct TirFlags {
     pub name: String,
     pub module_source: ModuleSource,
-    pub is_pub: bool,
+    pub visibility: crate::ast::Visibility,
     /// The newtype `TypeId` (base type is u32)
     pub type_id: TypeId,
     pub members: Vec<TirFlagsMember>,
@@ -4039,7 +4039,7 @@ pub struct TirFlagsMember {
 pub struct TirVariantDecl {
     pub name: String,
     pub module_source: ModuleSource,
-    pub is_pub: bool,
+    pub visibility: crate::ast::Visibility,
     /// Generic type parameters (e.g., `T` in `variant Option<T>`)
     pub type_params: Vec<TirTypeParam>,
     /// Cases of the variant (e.g., Some, None for Option)
@@ -4072,7 +4072,7 @@ pub struct TirVariantCase {
 pub struct TirNewtype {
     pub name: String,
     pub module_source: ModuleSource,
-    pub is_pub: bool,
+    pub visibility: crate::ast::Visibility,
     pub type_id: TypeId,
     pub span: Span,
 }
@@ -4103,7 +4103,7 @@ pub struct TirTest {
 #[derive(Debug, Clone)]
 pub struct TirEffect {
     pub name: String,
-    pub is_pub: bool,
+    pub visibility: crate::ast::Visibility,
     pub operations: Vec<TirEffectOp>,
     pub span: Span,
 }
@@ -4132,7 +4132,7 @@ pub struct TirEffectOp {
 #[derive(Debug, Clone)]
 pub struct TirResource {
     pub name: String,
-    pub is_pub: bool,
+    pub visibility: crate::ast::Visibility,
     pub operations: Vec<TirEffectOp>,
     pub span: Span,
 }
@@ -4141,7 +4141,7 @@ pub struct TirResource {
 #[derive(Debug, Clone)]
 pub struct TirTrait {
     pub name: String,
-    pub is_pub: bool,
+    pub visibility: crate::ast::Visibility,
     pub type_params: Vec<TirTypeParam>,
     pub methods: Vec<TirTraitMethod>,
     pub span: Span,

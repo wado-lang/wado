@@ -1053,7 +1053,7 @@ fn synthetic_result_variant_decl(type_table: &TypeTable, result_type_id: TypeId)
     TirVariantDecl {
         name: result_name,
         module_source: ModuleSource::default(),
-        is_pub: true,
+        visibility: crate::ast::Visibility::Public,
         type_params: Vec::new(),
         cases: vec![
             case(ok_name, ok_index, ok_tid),

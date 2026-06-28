@@ -652,7 +652,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         TirEnum {
             name: enum_decl.name.clone(),
             module_source: self.current_module_source.clone(),
-            is_pub: enum_decl.visibility.is_public(),
+            visibility: enum_decl.visibility,
             type_params: Vec::new(),
             monomorph_info: None,
             cases: enum_decl
@@ -683,7 +683,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         Some(TirFlags {
             name: flags_decl.name.clone(),
             module_source: self.current_module_source.clone(),
-            is_pub: flags_decl.visibility.is_public(),
+            visibility: flags_decl.visibility,
             type_id: info.type_id,
             members: flags_decl
                 .flags
@@ -716,7 +716,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         Some(TirNewtype {
             name: newtype_decl.name.clone(),
             module_source: self.current_module_source.clone(),
-            is_pub: newtype_decl.visibility.is_public(),
+            visibility: newtype_decl.visibility,
             type_id,
             span: newtype_decl.span,
         })
@@ -771,7 +771,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
             fields.push(crate::tir::TirField {
                 name: field.name.clone(),
-                is_pub: field.visibility.is_public(),
+                visibility: field.visibility,
                 type_id,
                 index: index as u32,
                 span: field.span,
@@ -795,7 +795,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         TirStruct {
             name: struct_decl.name.clone(),
             module_source: self.current_module_source.clone(),
-            is_pub: struct_decl.visibility.is_public(),
+            visibility: struct_decl.visibility,
             type_params,
             monomorph_info: None,
             fields,
@@ -842,7 +842,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         TirVariantDecl {
             name: variant_decl.name.clone(),
             module_source: self.current_module_source.clone(),
-            is_pub: variant_decl.visibility.is_public(),
+            visibility: variant_decl.visibility,
             type_params,
             cases,
             span: variant_decl.span,
@@ -862,7 +862,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .expect("resolve_effect_decl records op signatures for every effect reify emits");
         tir::TirEffect {
             name: decl.name.clone(),
-            is_pub: decl.visibility.is_public(),
+            visibility: decl.visibility,
             operations,
             span: decl.span,
         }
@@ -879,7 +879,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .expect("resolve_resource_decl records op signatures for every resource reify emits");
         tir::TirResource {
             name: decl.name.clone(),
-            is_pub: decl.visibility.is_public(),
+            visibility: decl.visibility,
             operations,
             span: decl.span,
         }
@@ -987,7 +987,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         Some(TirFunction {
             module_source: ModuleSource::default(),
             name: func.name.clone(),
-            is_pub: func.visibility.is_public(),
+            visibility: func.visibility,
             is_export: func.is_export,
             is_async: func.is_async,
             type_params,
@@ -1201,7 +1201,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // Default methods from trait declarations are not marked
                 // pub in the AST, but they should be treated as pub since
                 // they are part of a trait implementation.
-                tir_func.is_pub = true;
+                tir_func.visibility = crate::ast::Visibility::Public;
                 out.push(tir_func);
             }
         }
@@ -1414,7 +1414,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         Some(TirFunction {
             module_source: ModuleSource::default(),
             name: mangled_name,
-            is_pub: func.visibility.is_public(),
+            visibility: func.visibility,
             is_export: false,
             is_async: func.is_async,
             type_params,
@@ -1503,7 +1503,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let tir_func = TirFunction {
             module_source: ModuleSource::default(),
             name: function_name.clone(),
-            is_pub: false,
+            visibility: crate::ast::Visibility::Private,
             is_export: false,
             is_async: false,
             type_params: vec![],
@@ -1576,7 +1576,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             mutable: global_decl.mutable,
             param,
             wado_mutable: global_decl.mutable,
-            is_pub: global_decl.visibility.is_public(),
+            visibility: global_decl.visibility,
             module_source: self.current_module_source.clone(),
             span: global_decl.span,
             is_nullable: false,
@@ -4397,7 +4397,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 info.fields
                     .iter()
                     .enumerate()
-                    .map(|(i, (n, t, _is_pub))| {
+                    .map(|(i, (n, t, _is_public))| {
                         let default = info.field_defaults.get(i).and_then(Option::clone);
                         (n.clone(), i as u32, *t, default)
                     })

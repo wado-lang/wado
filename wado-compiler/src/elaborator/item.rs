@@ -52,7 +52,7 @@ fn placeholder_function(name: String, span: Span) -> TirFunction {
     TirFunction {
         module_source: ModuleSource::default(),
         name,
-        is_pub: false,
+        visibility: crate::ast::Visibility::Private,
         is_export: false,
         is_async: false,
         type_params: vec![],
@@ -611,7 +611,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         TirStruct {
             name: struct_decl.name.clone(),
             module_source: self.current_module_source.clone(),
-            is_pub: struct_decl.visibility.is_public(),
+            visibility: struct_decl.visibility,
             type_params: vec![],
             monomorph_info: None,
             fields: vec![],
@@ -768,7 +768,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .insert(decl.id, operations.clone());
         TirEffect {
             name: decl.name.clone(),
-            is_pub: decl.visibility.is_public(),
+            visibility: decl.visibility,
             operations,
             span: decl.span,
         }
@@ -789,7 +789,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .insert(decl.id, operations.clone());
         TirResource {
             name: decl.name.clone(),
-            is_pub: decl.visibility.is_public(),
+            visibility: decl.visibility,
             operations,
             span: decl.span,
         }
@@ -869,7 +869,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         TirVariantDecl {
             name: variant_decl.name.clone(),
             module_source: self.current_module_source.clone(),
-            is_pub: variant_decl.visibility.is_public(),
+            visibility: variant_decl.visibility,
             type_params: vec![],
             cases: vec![],
             span: variant_decl.span,

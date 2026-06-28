@@ -1001,7 +1001,7 @@ impl<'a> Unparser<'a> {
             for assoc_const in &i.constants {
                 this.emit_member(assoc_const.id, assoc_const.span, &[], |this| {
                     this.write_indent();
-                    this.emit_kw_if(assoc_const.is_pub, "pub ");
+                    this.emit_kw_if(assoc_const.visibility.is_public(), "pub ");
                     this.output.push_str("const ");
                     this.output.push_str(&assoc_const.name);
                     this.output.push_str(": ");
@@ -3720,7 +3720,7 @@ pub fn unparse_struct_signature(s: &StructDecl, public_only: bool) -> String {
 /// Render an associated constant's signature (no value): `[pub ]const NAME: T`.
 pub fn unparse_assoc_const_signature(c: &AssociatedConst) -> String {
     let mut out = String::new();
-    emit_kw_if_into(c.is_pub, "pub ", &mut out);
+    emit_kw_if_into(c.visibility.is_public(), "pub ", &mut out);
     out.push_str("const ");
     out.push_str(&c.name);
     out.push_str(": ");
@@ -3744,11 +3744,12 @@ pub fn unparse_assoc_const_signature(c: &AssociatedConst) -> String {
 /// drop the block.
 pub fn unparse_impl_block_signature(b: &ImplBlock, public_only: bool) -> String {
     let inherent = b.trait_type.is_none();
-    let visible = |is_pub: bool| crate::semantics::member_visible(public_only, inherent, is_pub);
+    let visible =
+        |is_public: bool| crate::semantics::member_visible(public_only, inherent, is_public);
 
     let mut lines: Vec<String> = Vec::new();
     for c in &b.constants {
-        if visible(c.is_pub) {
+        if visible(c.visibility.is_public()) {
             lines.push(unparse_assoc_const_signature(c));
         }
     }
@@ -4152,7 +4153,7 @@ impl<'a> TirUnparser<'a> {
 
     fn unparse_tir_global(&mut self, g: &TirGlobal) {
         self.write_indent();
-        self.emit_kw_if(g.is_pub, "pub ");
+        self.emit_kw_if(g.visibility.is_public(), "pub ");
         self.output.push_str("global ");
         self.emit_kw_if(g.mutable, "mut ");
         self.output.push_str(&g.name);
@@ -4165,7 +4166,7 @@ impl<'a> TirUnparser<'a> {
 
     fn unparse_struct(&mut self, s: &TirStruct) {
         self.write_indent();
-        self.emit_kw_if(s.is_pub, "pub ");
+        self.emit_kw_if(s.visibility.is_public(), "pub ");
         self.output.push_str("struct ");
         self.output.push_str(&Self::quote_if_needed(&s.name));
 
@@ -4188,7 +4189,7 @@ impl<'a> TirUnparser<'a> {
         self.emit_indented_block(|this| {
             for field in &s.fields {
                 this.write_indent();
-                this.emit_kw_if(field.is_pub, "pub ");
+                this.emit_kw_if(field.visibility.is_public(), "pub ");
                 this.output.push_str(&field.name);
                 this.output.push_str(": ");
                 this.output
@@ -4201,7 +4202,7 @@ impl<'a> TirUnparser<'a> {
 
     fn unparse_enum(&mut self, e: &TirEnum) {
         self.write_indent();
-        self.emit_kw_if(e.is_pub, "pub ");
+        self.emit_kw_if(e.visibility.is_public(), "pub ");
         self.output.push_str("enum ");
         self.output.push_str(&e.name);
         self.emit_indented_block(|this| {
@@ -4217,7 +4218,7 @@ impl<'a> TirUnparser<'a> {
 
     fn unparse_flags_tir(&mut self, f: &TirFlags) {
         self.write_indent();
-        self.emit_kw_if(f.is_pub, "pub ");
+        self.emit_kw_if(f.visibility.is_public(), "pub ");
         self.output.push_str("flags ");
         self.output.push_str(&f.name);
         self.emit_indented_block(|this| {
@@ -4242,7 +4243,7 @@ impl<'a> TirUnparser<'a> {
         if f.is_export {
             self.output.push_str("export ");
         } else {
-            self.emit_kw_if(f.is_pub, "pub ");
+            self.emit_kw_if(f.visibility.is_public(), "pub ");
         }
         self.output.push_str("fn ");
         self.output.push_str(&Self::quote_if_needed(&f.name));

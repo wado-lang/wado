@@ -194,7 +194,7 @@ fn generate_copy_function(
     TirFunction {
         name,
         module_source,
-        is_pub: false,
+        visibility: crate::ast::Visibility::Private,
         is_export: false,
         is_async: false,
         type_params: vec![],
@@ -548,7 +548,7 @@ fn build_list_wrapper_copy(
     let raw_array_ty = type_table.borrow_mut().make_builtin_array(elem_type);
     let repr_field = TirField {
         name: SeqField::Backing.field_name().to_string(),
-        is_pub: false,
+        visibility: crate::ast::Visibility::Private,
         type_id: raw_array_ty,
         index: 0,
         span,
@@ -560,7 +560,7 @@ fn build_list_wrapper_copy(
     };
     let used_field = TirField {
         name: SeqField::Len.field_name().to_string(),
-        is_pub: false,
+        visibility: crate::ast::Visibility::Private,
         type_id: TypeTable::I32,
         index: 1,
         span,
@@ -607,7 +607,7 @@ fn build_tuple_copy(
         .map(|(idx, elem_ty)| {
             let field = TirField {
                 name: idx.to_string(),
-                is_pub: true,
+                visibility: crate::ast::Visibility::Public,
                 type_id: *elem_ty,
                 index: idx as u32,
                 span,
@@ -658,7 +658,7 @@ fn build_struct_copy_with_substitution(
                 .substitute_type_params(field.type_id, &substitution);
             let concrete_field = TirField {
                 name: field.name.clone(),
-                is_pub: field.is_pub,
+                visibility: field.visibility,
                 type_id: concrete_field_ty,
                 index: field.index,
                 span: field.span,

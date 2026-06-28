@@ -1174,8 +1174,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Look up field visibility
         if let Some(struct_info) = self.lookup_struct_fields_in(&struct_name, &module_source) {
-            for (fname, _, is_pub) in &struct_info.fields {
-                if fname == field_name && !is_pub {
+            for (fname, _, is_public) in &struct_info.fields {
+                if fname == field_name && !is_public {
                     let _ = self.logger.error(TypeError::PrivateFieldAccess {
                         struct_name: struct_name.clone(),
                         field_name: field_name.to_string(),
@@ -3219,8 +3219,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(struct_info) =
                 self.lookup_struct_fields_in(&struct_name, &struct_module_source)
         {
-            for (fname, _, is_pub) in &struct_info.fields {
-                if !is_pub && provided_names.contains(fname) {
+            for (fname, _, is_public) in &struct_info.fields {
+                if !is_public && provided_names.contains(fname) {
                     let _ = self.logger.error(TypeError::PrivateFieldAccess {
                         struct_name: struct_name.clone(),
                         field_name: fname.clone(),
@@ -3453,7 +3453,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .enumerate()
             .map(|(i, f)| TirField {
                 name: f.name.clone(),
-                is_pub: true,
+                visibility: crate::ast::Visibility::Public,
                 type_id: f.value.type_id,
                 index: i as u32,
                 span: struct_lit.span,
@@ -3468,7 +3468,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.sem.decls.pending_anonymous_structs.push(TirStruct {
             name: anon_name.clone(),
             module_source: self.current_module_source.clone(),
-            is_pub: false,
+            visibility: crate::ast::Visibility::Private,
             type_params: Vec::new(),
             monomorph_info: None,
             fields: tir_fields,

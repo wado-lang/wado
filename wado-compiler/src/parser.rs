@@ -1006,7 +1006,7 @@ impl Parser {
         } else {
             false
         };
-        let is_pub = if self.check(&TokenKind::Pub) {
+        let is_public = if self.check(&TokenKind::Pub) {
             self.advance();
             true
         } else {
@@ -1021,7 +1021,7 @@ impl Parser {
             false
         };
 
-        if is_internal && (is_pub || is_export) {
+        if is_internal && (is_public || is_export) {
             return Err(ParseError {
                 message: "`internal` cannot combine with `pub` or `export` \
                     (`export` already implies `pub`)"
@@ -1030,7 +1030,7 @@ impl Parser {
             });
         }
 
-        let visibility = if is_pub || is_export {
+        let visibility = if is_public || is_export {
             Visibility::Public
         } else if is_internal {
             Visibility::Internal
@@ -5363,11 +5363,11 @@ impl Parser {
                         "`export` is not allowed on impl members; methods cannot be exported at the Component Model boundary",
                     ));
                 }
-                let is_pub = if self.check(&TokenKind::Pub) {
+                let member_vis = if self.check(&TokenKind::Pub) {
                     self.advance();
-                    true
+                    Visibility::Public
                 } else {
-                    false
+                    Visibility::Private
                 };
 
                 // Check if this is an associated constant: `[pub] const NAME: Type = expr;`
@@ -5386,19 +5386,13 @@ impl Parser {
                     constants.push(AssociatedConst {
                         id: const_id,
                         name: const_name,
-                        is_pub,
+                        visibility: member_vis,
                         ty: const_ty,
                         value: const_value,
                         span: const_span.merge(&end),
                     });
                 } else {
-                    // Methods cannot be exported at the CM boundary.
-                    let method_vis = if is_pub {
-                        Visibility::Public
-                    } else {
-                        Visibility::Private
-                    };
-                    methods.push(self.parse_function(method_vis, false, false, attrs)?);
+                    methods.push(self.parse_function(member_vis, false, false, attrs)?);
                 }
             }
         }

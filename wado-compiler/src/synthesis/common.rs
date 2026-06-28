@@ -434,7 +434,7 @@ pub fn make_synthetic_method(
     TirFunction {
         module_source: ModuleSource::default(),
         name,
-        is_pub: true,
+        visibility: crate::ast::Visibility::Public,
         is_export: false,
         is_async: false,
         type_params: Vec::new(),

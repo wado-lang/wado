@@ -675,7 +675,9 @@ impl Semantics {
                     names.extend(
                         b.constants
                             .iter()
-                            .filter(|c| member_visible(public_only, inherent, c.is_pub))
+                            .filter(|c| {
+                                member_visible(public_only, inherent, c.visibility.is_public())
+                            })
                             .map(|c| c.name.clone()),
                     );
                 }
@@ -723,7 +725,7 @@ impl Semantics {
         let mut names: Vec<String> = Vec::new();
         if let Some(ast) = self.modules.get(module) {
             for item in &ast.items {
-                let (is_pub, name) = match item {
+                let (is_public, name) = match item {
                     Item::Function(d) => (d.visibility.is_public(), &d.name),
                     Item::Struct(d) => (d.visibility.is_public(), &d.name),
                     Item::Enum(d) => (d.visibility.is_public(), &d.name),
@@ -736,7 +738,7 @@ impl Semantics {
                     Item::Interface(d) => (d.visibility.is_public(), &d.name),
                     _ => continue,
                 };
-                if !public_only || is_pub {
+                if !public_only || is_public {
                     names.push(name.clone());
                 }
             }
@@ -1318,6 +1320,6 @@ fn receiver_matches_impl(
 /// Whether a type member is shown in the public-API view. Inherent-`impl`
 /// members need `pub`; trait-`impl` members are always shown (they are the
 /// trait's public surface). Shared with `unparse::unparse_impl_block_signature`.
-pub(crate) fn member_visible(public_only: bool, inherent: bool, is_pub: bool) -> bool {
-    !public_only || !inherent || is_pub
+pub(crate) fn member_visible(public_only: bool, inherent: bool, is_public: bool) -> bool {
+    !public_only || !inherent || is_public
 }

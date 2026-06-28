@@ -3283,8 +3283,10 @@ A `pub`-only item reaches Wado consumers only (source dependency or
 provider-tagged `.wasm`); a non-Wado CM consumer sees `export` items only.
 
 The ladder applies to top-level items. Members of an `impl` block (methods,
-associated constants) and struct fields carry a binary `pub` / file-private
-visibility instead; `internal` or `export` on a member is a compile error.
+associated constants) carry a binary `pub` / file-private visibility; `internal`
+or `export` on a member is a compile error. A struct field accepts `pub` or
+`internal` (only `pub` widens access beyond the defining module; `internal`
+currently behaves like file-private).
 
 #### Re-export visibility
 
