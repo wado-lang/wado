@@ -1707,7 +1707,7 @@ The socket can be in one of the following states:
 - `connecting`
 - `connected`
 - `closed`
-  See <https://github.com/WebAssembly/WASI/blob/main/proposals/sockets/TcpSocketOperationalSemantics-0.3.0-draft.md>
+  See <https://github.com/WebAssembly/WASI/blob/main/proposals/sockets/TcpSocketOperationalSemantics-0.3.0.md>
   for more information.
 
 Note: Except where explicitly mentioned, whenever this documentation uses
