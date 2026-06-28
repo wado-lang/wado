@@ -472,7 +472,10 @@ fn retarget_wrapper_call(
     shallow_name: &IndexMap<FuncKey, String>,
 ) {
     if let ExprKind::Call {
-        func, func_id, args, ..
+        func,
+        func_id,
+        args,
+        ..
     } = &mut body.exprs[value].kind
         && args.len() == 1
     {

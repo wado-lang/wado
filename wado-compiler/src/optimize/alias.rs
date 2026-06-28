@@ -534,7 +534,11 @@ fn compute_receiver_mutating(
         };
         let (direct, pending) =
             summarize_receiver_writes(body, p0, &has_body, first_param_types, type_table);
-        summaries.push(Summary { id, direct, pending });
+        summaries.push(Summary {
+            id,
+            direct,
+            pending,
+        });
     }
     let mut mutating: SecondaryMap<FuncId, bool> = SecondaryMap::new();
     for s in &summaries {
@@ -618,7 +622,8 @@ fn summarize_receiver_writes(
                     match func_id {
                         Some(fid) if has_body[*fid] => pending.push(*fid),
                         _ => {
-                            let inner_mut = match (*func_id).and_then(|fid| first_param_types[fid]) {
+                            let inner_mut = match (*func_id).and_then(|fid| first_param_types[fid])
+                            {
                                 Some(tp) => matches!(type_table.get(tp), ResolvedType::MutRef(_)),
                                 None => true,
                             };

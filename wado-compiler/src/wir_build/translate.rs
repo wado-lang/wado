@@ -2092,7 +2092,10 @@ impl FunctionTranslator<'_, '_> {
             },
 
             ExprKind::Call {
-                func, func_id, args, ..
+                func,
+                func_id,
+                args,
+                ..
             } => {
                 // Check for instruction-builtins first
                 let builtin = func
