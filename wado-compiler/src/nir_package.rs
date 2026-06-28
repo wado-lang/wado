@@ -16,9 +16,10 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::LocalMethodName;
 use crate::nir::{
-    ClosureFunctor, NirEnum, NirFlags, NirFunction, NirGlobal, NirImport, NirStruct, NirTest,
-    NirVariantDecl,
+    ClosureFunctor, FuncId, FunctionRef, NirEnum, NirFlags, NirFunction, NirGlobal, NirImport,
+    NirStruct, NirTest, NirVariantDecl,
 };
+use crate::nir_arena::ExprKind;
 use crate::tir::{TypeId, TypeTable};
 use crate::wir_build::component_plan::ComponentPlan;
 use crate::world_registry::{self, WorldRegistry};
@@ -121,6 +122,51 @@ impl NirPackage {
     /// paths that skip `optimize` (e.g. `wado dump --nir-lowered`). `optimize`
     /// overrides it per opt level.
     pub const DEFAULT_STRING_INLINE_MAX_BYTES: usize = 4;
+
+    /// Mint a [`FuncId`] for every function and stamp each call node's callee
+    /// reference with it ("born resolved"; see
+    /// `docs/wep-2026-06-28-function-identity.md`). Run once at the end of
+    /// `lower` over the post-monomorphization function set; the optimizer
+    /// maintains the stamps from there. `full_name()` is materialized here, once
+    /// per call, so no downstream analysis recomputes it.
+    ///
+    /// The id is the function's index at this point — intrinsic from here on, so
+    /// later `dce` compaction does not change a stamped call's id. An extern /
+    /// builtin callee resolves to `None`, which every analysis treats
+    /// conservatively.
+    pub fn assign_func_ids(&mut self) {
+        use cranelift_entity::EntityRef;
+        let mut ids: IndexMap<(ModuleSource, String), FuncId> = IndexMap::default();
+        for (i, func_rc) in self.functions.iter().enumerate() {
+            let func = func_rc.borrow();
+            let key = (
+                func.module_source.clone(),
+                FunctionRef::from_resolved(&func, func.module_source.clone()).full_name(),
+            );
+            let prev = ids.insert(key, FuncId::new(i));
+            // Load-bearing invariant: two functions sharing a canonical key would
+            // share a FuncId (a miscompile). The check is O(1); keep it always-on.
+            assert!(
+                prev.is_none(),
+                "duplicate canonical function key: full_name must be unique"
+            );
+        }
+        for func_rc in &self.functions {
+            let mut func = func_rc.borrow_mut();
+            let Some(body) = func.body.as_mut() else {
+                continue;
+            };
+            for expr in body.exprs.values_mut() {
+                if let ExprKind::Call { func, .. } | ExprKind::MethodCall { func, .. } =
+                    &mut expr.kind
+                {
+                    func.resolved = ids
+                        .get(&(func.module_source.clone(), func.full_name()))
+                        .copied();
+                }
+            }
+        }
+    }
 
     /// Check if the project targets the synthetic test world.
     pub fn is_test_world(&self) -> bool {
