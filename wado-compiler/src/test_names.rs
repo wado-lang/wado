@@ -1,4 +1,4 @@
-//! Encoding of the `wado:test-names` custom section.
+//! Encoding of the `org.wado-lang.test-names` custom section.
 //!
 //! Component Model export names must be ASCII kebab-case, so the test export
 //! name (`test-0-hello-world`) is an ASCII-folded, lowercased rendering of the
@@ -23,7 +23,7 @@
 //! ```
 
 /// Name of the custom section embedded in test-world components.
-pub const SECTION_NAME: &str = "wado:test-names";
+pub const SECTION_NAME: &str = "org.wado-lang.test-names";
 
 /// Encode `(export_name, original_name)` pairs into the section payload.
 pub fn encode<'a>(entries: impl IntoIterator<Item = (&'a str, Option<&'a str>)>) -> Vec<u8> {
@@ -62,7 +62,7 @@ pub fn decode(data: &[u8]) -> Option<Vec<(String, Option<String>)>> {
     Some(entries)
 }
 
-/// Find and decode the `wado:test-names` custom section in a component binary.
+/// Find and decode the `org.wado-lang.test-names` custom section in a component binary.
 ///
 /// Returns `None` when the section is absent or malformed. Callers that expect
 /// the section (test-world components) should treat `None` as "no name

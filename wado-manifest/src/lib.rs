@@ -1,5 +1,6 @@
 mod lockfile;
 mod manifest;
+mod metadata;
 mod provider;
 mod resolve;
 mod validate;
@@ -9,6 +10,9 @@ pub use lockfile::{LockFile, LockFileError, LockedPackage};
 pub use manifest::{
     Dependency, DependencySource, FormatSettings, GitPin, Manifest, ManifestError, ManifestWarning,
     Package, TestSettings, Workspace, WorkspacePackage, resolve_member,
+};
+pub use metadata::{
+    MetadataSection, REPOSITORY_DIRECTORY_SECTION, license_ref_id, metadata_sections,
 };
 pub use provider::{
     DependencyProvider, GitTagInfo, InMemoryDependencyProvider, ProviderError, RegistryPackageInfo,
