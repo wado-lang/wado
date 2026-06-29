@@ -14,12 +14,31 @@ use {
     Option,
     Result,
     Future,
+    FutureWritable,
+    Stream,
     StreamWritable,
     Subtask,
     WaitEvent,
     Waitable,
     WaitableSet,
 } from "core:prelude/types.wado";
+
+/// Split a packed `future.new` result (`readable | writable << 32`) into the
+/// `[Future<T>, FutureWritable<T>]` pair. The parameterized canonical call is
+/// emitted by CM-binding synthesis; this is the Wado-level handle split.
+internal fn cm_future_pair<T>(packed: i64) -> [Future<T>, FutureWritable<T>] {
+    let rx = packed as i32;
+    let tx = (packed >> 32) as i32;
+    return [rx as Future<T>, tx as FutureWritable<T>];
+}
+
+/// Split a packed `stream.new` result into the `[Stream<T>, StreamWritable<T>]`
+/// pair. See [`cm_future_pair`].
+internal fn cm_stream_pair<T>(packed: i64) -> [Stream<T>, StreamWritable<T>] {
+    let rx = packed as i32;
+    let tx = (packed >> 32) as i32;
+    return [rx as Stream<T>, tx as StreamWritable<T>];
+}
 
 /// Returns the smaller of two i32 values (branchless).
 internal fn i32_min(a: i32, b: i32) -> i32 {

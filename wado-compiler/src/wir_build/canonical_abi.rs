@@ -8,9 +8,7 @@
 use crate::nir::FunctionRef;
 use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, Operand};
 use crate::tir::TypeId;
-use crate::wir::{
-    CanonicalIntrinsic, CmFuturePayload, CmStreamPayload, WirFuncId, WirInstr, WirType,
-};
+use crate::wir::{CanonicalIntrinsic, CmFuturePayload, WirFuncId, WirInstr, WirType};
 
 use super::translate::FunctionTranslator;
 
@@ -73,32 +71,6 @@ impl FunctionTranslator<'_, '_> {
     // Canonical resource method dispatch
     // =========================================================================
 
-    /// Get the CM future payload type from `MonomorphInfo` (for static methods like `Future::new`).
-    fn cm_future_payload_from_monomorph(&self, func: &FunctionRef) -> CmFuturePayload {
-        if let Some(ref info) = func.monomorph_info
-            && !info.impl_type_args.is_empty()
-        {
-            return crate::component_model::classify_future_payload(
-                self.type_table,
-                info.impl_type_args[0],
-            );
-        }
-        CmFuturePayload::Trailers
-    }
-
-    /// Get the CM stream payload from `MonomorphInfo` (for `Stream::new`).
-    fn cm_stream_payload_from_monomorph(&self, func: &FunctionRef) -> CmStreamPayload {
-        if let Some(ref info) = func.monomorph_info
-            && !info.impl_type_args.is_empty()
-        {
-            return crate::component_model::classify_stream_payload(
-                self.type_table,
-                info.impl_type_args[0],
-            );
-        }
-        CmStreamPayload::U8
-    }
-
     /// Dispatch canonical resource methods based on `#[cm("...")]` attribute.
     /// Returns `Some(WirInstr)` if the method has a canonical name and was handled.
     ///
@@ -139,143 +111,6 @@ impl FunctionTranslator<'_, '_> {
             }
             other => panic!("[WIR] unhandled canonical method: {other}"),
         }
-    }
-
-    /// Dispatch canonical resource static methods (e.g., `Stream::new`, `Future::new`).
-    /// Returns `Some(WirInstr)` if the canonical name was handled.
-    ///
-    /// Most static CM methods are now handled by synthesis. Only stream/future-new
-    /// remain here because they require i64→tuple splitting with proper GC type casting.
-    pub(super) fn try_translate_canonical_static_method(
-        &mut self,
-        canonical: &str,
-        func: &FunctionRef,
-        _args: &[ArenaCallArg],
-        result_type_id: TypeId,
-    ) -> Option<WirInstr> {
-        match canonical {
-            "stream-new" => {
-                let stream_payload = self.cm_stream_payload_from_monomorph(func);
-                Some(self.emit_stream_or_future_new(
-                    false,
-                    CmFuturePayload::Trailers,
-                    stream_payload,
-                    result_type_id,
-                ))
-            }
-            "future-new" => {
-                let payload = self.cm_future_payload_from_monomorph(func);
-                Some(self.emit_stream_or_future_new(
-                    true,
-                    payload,
-                    CmStreamPayload::U8,
-                    result_type_id,
-                ))
-            }
-            _ => None,
-        }
-    }
-
-    /// Emit `stream-new()` or `future-new()` → split i64 into [`rx_i32`, `tx_i32`] tuple.
-    ///
-    /// Captures the two i32s into freshly declared locals, then builds a
-    /// plain `StructNew` reading those locals. When the result is
-    /// destructured at the call site (the typical case:
-    /// `let [rx, tx] = Future::<T>::new();`),
-    /// `wir_optimize::elide_struct::elide_multi_field_struct_locals`
-    /// recognises `LocalSet __tmp = StructNew { fields: [LocalGet, LocalGet] }`
-    /// followed by `StructGet × N` and substitutes each field access
-    /// directly — eliminating the heap allocation. When only one of
-    /// rx/tx is read, the same pass still fires and drops the unused
-    /// `LocalGet`.
-    fn emit_stream_or_future_new(
-        &mut self,
-        is_future: bool,
-        payload: CmFuturePayload,
-        stream_payload: CmStreamPayload,
-        result_type_id: TypeId,
-    ) -> WirInstr {
-        let intrinsic = if is_future {
-            CanonicalIntrinsic::FutureNew(payload)
-        } else {
-            CanonicalIntrinsic::StreamNew(stream_payload)
-        };
-        let func_id = self
-            .ctx
-            .ensure_canonical(intrinsic, vec![], vec![WirType::I64]);
-
-        // Resolve the result tuple type for StructNew.
-        let wir_type = self
-            .ctx
-            .type_id_to_wir_type(self.type_table, result_type_id);
-        let type_id = match wir_type {
-            WirType::Ref { type_id, .. } => type_id,
-            _ => panic!(
-                "[WIR] emit_stream_or_future_new expected Ref result type, got {wir_type:?} (result_type_id={result_type_id:?})"
-            ),
-        };
-
-        // Declare a temp i64 local, call import → i64, then push low/high
-        // i32 onto the stack as the multi-value producer for the
-        // MultiValueLocalBind below.
-        self.local_counter += 1;
-        let n = self.local_counter;
-        let temp = format!("__pair_temp_{n}");
-        let lo = format!("__mv_lo_{n}");
-        let hi = format!("__mv_hi_{n}");
-        let declare_temp = WirInstr::DeclareLocal {
-            name: temp.clone(),
-            ty: WirType::I64,
-        };
-        let call = WirInstr::Call {
-            func_id,
-            args: vec![],
-        };
-        let set_temp = WirInstr::LocalSet {
-            name: temp.clone(),
-            value: Box::new(call),
-        };
-        let get_low = WirInstr::I32WrapI64(Box::new(WirInstr::LocalGet {
-            name: temp.clone(),
-            result_ty: WirType::I64,
-        }));
-        let get_high = WirInstr::I32WrapI64(Box::new(WirInstr::I64ShrU(
-            Box::new(WirInstr::LocalGet {
-                name: temp,
-                result_ty: WirType::I64,
-            }),
-            Box::new(WirInstr::I64Const(32)),
-        )));
-
-        WirInstr::Seq(vec![
-            declare_temp,
-            set_temp,
-            WirInstr::DeclareLocal {
-                name: lo.clone(),
-                ty: WirType::I32,
-            },
-            WirInstr::DeclareLocal {
-                name: hi.clone(),
-                ty: WirType::I32,
-            },
-            WirInstr::MultiValueLocalBind {
-                instr: Box::new(WirInstr::Seq(vec![get_low, get_high])),
-                locals: vec![Some(lo.clone()), Some(hi.clone())],
-            },
-            WirInstr::StructNew {
-                type_id,
-                fields: vec![
-                    WirInstr::LocalGet {
-                        name: lo,
-                        result_ty: WirType::I32,
-                    },
-                    WirInstr::LocalGet {
-                        name: hi,
-                        result_ty: WirType::I32,
-                    },
-                ],
-            },
-        ])
     }
 
     /// Emit the BLOCKED handling pattern for `future-write`.

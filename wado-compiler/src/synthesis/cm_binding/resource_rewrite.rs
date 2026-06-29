@@ -1704,9 +1704,11 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             return;
         };
 
-        // stream-new / future-new remain handled by WIR translate (they need
-        // i64→tuple splitting with proper GC type casting).
-        if matches!(cm_name.as_str(), "stream-new" | "future-new") {
+        // future-new / stream-new: emit the payload-parameterized canonical as a
+        // `CmRawCall` (returns the packed i64) and pass it to the `core:rt` pair
+        // splitter, which casts the two halves to the readable/writable handles.
+        if matches!(cm_name.as_str(), "future-new" | "stream-new") {
+            rewrite_cm_new(expr, self.tt, cm_name == "future-new");
             return;
         }
         // Value future writes (scalar + aggregate) call a generated per-payload
@@ -1861,6 +1863,51 @@ fn is_stream_cm_method(cm_name: &str) -> bool {
             | "stream-cancel-read"
             | "stream-cancel-write"
     )
+}
+
+/// Rewrite a `Future::<T>::new()` / `Stream::<T>::new()` static call into
+/// `rt::cm_{future,stream}_pair::<T>(<canonical-new CmRawCall>)`. The canonical
+/// name is parameterized by the payload (computed here from the call's concrete
+/// type arg); the i64 handle split lives in `core:rt`.
+fn rewrite_cm_new(expr: &mut TirExpr, tt: &TypeTable, is_future: bool) {
+    let TirExprKind::Call { func, .. } = &expr.kind else {
+        return;
+    };
+    let Some(payload_tid) = func
+        .monomorph_info
+        .as_ref()
+        .and_then(|m| m.impl_type_args.first().copied())
+    else {
+        return;
+    };
+    let (canonical_name, helper) = if is_future {
+        let payload = crate::component_model::classify_future_payload(tt, payload_tid);
+        (CanonicalIntrinsic::FutureNew(payload).import_name(), "cm_future_pair")
+    } else {
+        let payload = crate::component_model::classify_stream_payload(tt, payload_tid);
+        (CanonicalIntrinsic::StreamNew(payload).import_name(), "cm_stream_pair")
+    };
+    let result_type = expr.type_id;
+    let packed = cm_raw_call(&canonical_name, vec![], TypeTable::I64);
+    *expr = TirExpr::new(
+        TirExprKind::Call {
+            func: FunctionRef {
+                module_source: ModuleSource::rt(),
+                name: helper.to_string(),
+                monomorph_info: Some(MonomorphInfo {
+                    generic_name: helper.to_string(),
+                    impl_type_args: vec![payload_tid],
+                    method_type_args: vec![],
+                    is_blanket: false,
+                }),
+                method_info: None,
+            },
+            type_args: vec![payload_tid],
+            args: vec![CallArg::new(packed, false)],
+        },
+        result_type,
+        synth_span(),
+    );
 }
 
 fn is_future_drop_cancel(cm_name: &str) -> bool {
