@@ -13,10 +13,10 @@ use crate::version::VersionSpecifier;
 pub struct Manifest {
     pub package: Option<Package>,
     /// The `[world]` table: CM world FQ name (e.g. `"wasi:cli/command"`,
-    /// `"core:kiln/generator"`) → entry-point path, one entry per hosted
-    /// world the package targets. The library world is declared separately by
-    /// `[package].lib` (its world name is the package name).
-    pub world: IndexMap<String, String>,
+    /// `"core:kiln/generator"`) → entry, one entry per hosted world the package
+    /// targets. The library world is declared separately by `[package].lib`
+    /// (its world name is the package name).
+    pub world: IndexMap<String, WorldEntry>,
     pub registries: IndexMap<String, String>,
     pub dependencies: IndexMap<String, Dependency>,
     pub dev_dependencies: IndexMap<String, Dependency>,
@@ -33,12 +33,26 @@ pub struct Manifest {
     pub inherited_unknown_fields: Vec<String>,
 }
 
+/// A `[world]` table entry: the world's entry-point path and whether it is
+/// published. A bare string value (`"world" = "src/x.wado"`) means `publish =
+/// true`; the table form (`{ entry = "…", publish = false }`) opts the single
+/// world out of `wado publish`.
+#[derive(Debug, Clone)]
+pub struct WorldEntry {
+    pub entry: String,
+    pub publish: bool,
+    /// Unknown keys in the table form (typos, unsupported). Reported as
+    /// warnings so an opt-out typo like `publsh = false` is not silently
+    /// ignored.
+    pub unknown_fields: Vec<String>,
+}
+
 impl Manifest {
     /// Entry-point source path for the given CM world FQ name, if declared in
     /// the `[world]` table.
     #[must_use]
     pub fn world_entry(&self, world_fq: &str) -> Option<&str> {
-        self.world.get(world_fq).map(String::as_str)
+        self.world.get(world_fq).map(|w| w.entry.as_str())
     }
 
     /// Deterministic `sha256:` hash of `[dependencies]` + `[dev-dependencies]`
@@ -110,6 +124,14 @@ impl Manifest {
                 section: Some("workspace.package".to_string()),
                 field: field.clone(),
             });
+        }
+        for (fq, entry) in &self.world {
+            for field in &entry.unknown_fields {
+                warnings.push(ManifestWarning::UnknownField {
+                    section: Some(format!("world.{fq:?}")),
+                    field: field.clone(),
+                });
+            }
         }
         warnings
     }
@@ -357,6 +379,8 @@ pub enum ManifestError {
     WorkspaceConflictingLicense,
     /// `[workspace.package].license` is not a valid SPDX expression.
     WorkspaceInvalidLicense { value: String, reason: String },
+    /// A `[world]` value is neither an entry-path string nor a valid table.
+    InvalidWorldEntry { world: String, reason: String },
 }
 
 impl fmt::Display for ManifestError {
@@ -421,6 +445,9 @@ impl fmt::Display for ManifestError {
                 f,
                 "[workspace.package].license {value:?} is not a valid SPDX expression: {reason}"
             ),
+            ManifestError::InvalidWorldEntry { world, reason } => {
+                write!(f, "[world].{world:?}: {reason}")
+            }
         }
     }
 }
@@ -429,10 +456,48 @@ impl std::error::Error for ManifestError {}
 
 // --- Raw serde types for TOML deserialization ---
 
+/// Convert one `[world]` value — a bare entry-path string, or a table with
+/// `entry` and an optional `publish` flag (default `true`) — into a
+/// [`WorldEntry`]. A table's unknown keys are collected (not dropped) so a typo
+/// like `publsh = false` surfaces as a warning instead of silently leaving the
+/// world published. Done by hand rather than via an untagged enum so type
+/// mismatches give a clear error and extra keys are recoverable.
+fn convert_world_entry(world: &str, value: toml::Value) -> Result<WorldEntry, ManifestError> {
+    let invalid = |reason: &str| ManifestError::InvalidWorldEntry {
+        world: world.to_string(),
+        reason: reason.to_string(),
+    };
+    let (entry, publish, unknown_fields) = match value {
+        toml::Value::String(entry) => (entry, true, Vec::new()),
+        toml::Value::Table(mut table) => {
+            let entry = match table.remove("entry") {
+                Some(toml::Value::String(s)) => s,
+                Some(_) => return Err(invalid("`entry` must be a string")),
+                None => return Err(invalid("table form requires an `entry` path")),
+            };
+            let publish = match table.remove("publish") {
+                Some(toml::Value::Boolean(b)) => b,
+                Some(_) => return Err(invalid("`publish` must be a boolean")),
+                None => true,
+            };
+            (entry, publish, table.keys().cloned().collect())
+        }
+        _ => return Err(invalid("must be an entry-path string or a table")),
+    };
+    if entry.is_empty() {
+        return Err(invalid("entry path must not be empty"));
+    }
+    Ok(WorldEntry {
+        entry,
+        publish,
+        unknown_fields,
+    })
+}
+
 #[derive(Deserialize)]
 struct RawManifest {
     package: Option<RawPackage>,
-    world: Option<IndexMap<String, String>>,
+    world: Option<IndexMap<String, toml::Value>>,
     registries: Option<IndexMap<String, String>>,
     dependencies: Option<IndexMap<String, RawDependency>>,
     #[serde(rename = "dev-dependencies")]
@@ -526,7 +591,11 @@ struct RawDependency {
 fn convert_raw(raw: RawManifest) -> Result<Manifest, ManifestError> {
     let unknown_sections = unknown_keys(&raw.unknown);
     let package = raw.package.map(convert_package).transpose()?;
-    let world = raw.world.unwrap_or_default();
+    let mut world = IndexMap::new();
+    for (fq, value) in raw.world.unwrap_or_default() {
+        let entry = convert_world_entry(&fq, value)?;
+        world.insert(fq, entry);
+    }
     let registries = raw.registries.unwrap_or_default();
     let dependencies = convert_deps(raw.dependencies.unwrap_or_default())?;
     let dev_dependencies = convert_deps(raw.dev_dependencies.unwrap_or_default())?;
@@ -905,6 +974,68 @@ version = "0.1.0"
         assert_eq!(pkg.version, "0.1.0");
         assert_eq!(m.world_entry("wasi:cli/command"), Some("src/main.wado"));
         assert!(pkg.namespace.is_none());
+    }
+
+    #[test]
+    fn world_entry_publish_defaults_true_and_opts_out_via_table() {
+        let toml = r#"
+[package]
+name = "tool"
+version = "0.1.0"
+
+[world]
+"wasi:cli/command" = "src/main.wado"
+"core:kiln/generator" = { entry = "src/gen.wado" }
+"wasi:http/service" = { entry = "src/server.wado", publish = false }
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        // Bare string and table-without-publish both default to published.
+        assert!(m.world["wasi:cli/command"].publish);
+        assert_eq!(m.world["core:kiln/generator"].entry, "src/gen.wado");
+        assert!(m.world["core:kiln/generator"].publish);
+        // Explicit publish = false opts the single world out.
+        assert!(!m.world["wasi:http/service"].publish);
+        assert_eq!(m.world_entry("wasi:http/service"), Some("src/server.wado"));
+    }
+
+    #[test]
+    fn unknown_key_in_world_table_warns_instead_of_silently_dropping() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+
+[world]
+"wasi:http/service" = { entry = "src/server.wado", publsh = false }
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        // The typo'd key must not silently opt the world out.
+        assert!(m.world["wasi:http/service"].publish);
+        let warnings = m.warnings();
+        assert!(
+            warnings.iter().any(|w| matches!(w,
+                ManifestWarning::UnknownField { section: Some(s), field }
+                if s == "world.\"wasi:http/service\"" && field == "publsh")),
+            "expected an unknown-field warning for the typo, got {warnings:?}"
+        );
+    }
+
+    #[test]
+    fn world_table_with_non_string_entry_is_a_clear_error() {
+        let toml = "[package]\nname = \"a\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = { entry = 123 }\n";
+        let err = toml.parse::<Manifest>().unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("wasi:cli/command") && msg.contains("entry"),
+            "expected a clear [world] error, got {msg:?}"
+        );
+    }
+
+    #[test]
+    fn world_entry_with_empty_path_is_rejected() {
+        let toml = "[package]\nname = \"a\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"\"\n";
+        let err = toml.parse::<Manifest>().unwrap_err();
+        assert!(err.to_string().contains("empty"), "{err}");
     }
 
     #[test]

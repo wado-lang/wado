@@ -131,8 +131,8 @@ standalone target and embeds nothing. `--no-embed-metadata` opts out, and `-Os`
 the WIT section; `--embed-metadata` forces it back on under `-Os` (mirroring
 `--embed-wit`).
 
-`wado publish` builds through the same compile path and shells out to `wkg`
-(wasm-pkg-tools), which derives the OCI annotations. There is no `wkg.toml` —
+`wado publish` builds each publishable world through the same compile path and
+shells out to `wkg` (wasm-pkg-tools), which derives the OCI annotations. There is no `wkg.toml` —
 `wado.toml` is the only source of truth, and `wkg` is an implementation detail
 (a missing `wkg` errors with install guidance). Authentication is delegated to
 the ambient OCI credential store (`docker login`), with an env-var token
@@ -242,7 +242,7 @@ A registry dependency with no `registry` field requires `default` to be set. If 
 
 ### Registry backend
 
-Registry resolution and publishing use OCI (the OCI Distribution Spec): a component is an OCI artifact in a container registry (e.g. `ghcr.io`), and the content digest provides integrity. A registry URL takes the form `oci://<host>/<prefix>`; an open coordinate `ns:pkg` resolves to the repository `<host>/<prefix>/<ns>/<pkg>`, with the version as an image tag.
+Registry resolution and publishing use OCI (the OCI Distribution Spec): a component is an OCI artifact in a container registry (e.g. `ghcr.io`), and the content digest provides integrity. A registry URL takes the form `oci://<host>/<prefix>`; an open coordinate `ns:pkg` resolves to the repository `<host>/<prefix>/<ns>/<pkg>`, with the version as an image tag. That repository holds the library world; a package's other worlds get a `/<world>` sub-path (see [Publishable Worlds and OCI Layout](#publishable-worlds-and-oci-layout)).
 
 The earlier warg protocol is dropped. Its registry (`bytecodealliance/registry`) is archived and the ecosystem (`wasm-pkg-tools`) defaults to OCI. A warg-only registry such as wa.dev is reachable only through the external `wkg` tool, not natively; Wado neither implements nor wraps warg. Publishing is likewise done with `wkg`, not a Wado subcommand.
 
@@ -785,10 +785,11 @@ See [WEP: CLI Subcommands for Package Management](./wep-2026-02-22-cli-subcomman
 
 ### Publishing
 
-`wado publish` builds the component, embeds the `[package]` metadata, and
-delegates the OCI upload to `wkg` (see [Metadata embedding and the publish
-backend](#metadata-embedding-and-the-publish-backend)). The following
-validations apply:
+`wado publish` builds each publishable world's component, embeds the
+`[package]` metadata, and delegates the OCI upload to `wkg` (see [Metadata
+embedding and the publish backend](#metadata-embedding-and-the-publish-backend)
+and [Publishable Worlds and OCI Layout](#publishable-worlds-and-oci-layout)).
+The following validations apply:
 
 - `namespace` and `name` must be present
 - `version` must be present and valid semver
@@ -800,15 +801,64 @@ validations apply:
 The descriptive fields are required because a published package must carry its metadata. The rest stay optional: `homepage`/`documentation` default to `repository`, `repository-directory` is monorepo-only, and `wado-version` is a build constraint.
 
 `wado publish --dry-run` runs these checks and reports every problem at once
-(it does not upload). The OCI upload itself is not yet implemented, so a bare
-`wado publish` errors rather than pretending to publish.
+(it does not build or upload). A bare `wado publish` builds each publishable
+world's component (metadata embedded), resolves the OCI reference from
+`[registries].default` — the only supported publish destination; a missing or
+non-`oci://` default is an error — and uploads each via `wkg oci push`. A
+package with no publishable world has nothing to publish and is rejected.
+
+#### Publishable Worlds and OCI Layout
+
+A package can target several worlds (`[package].lib` plus the `[world]` table),
+and each is a distinct behavior — a library, a Kiln generator, a CLI tool — so
+each is published as its own OCI artifact. A world is not selectable inside a
+component (it is the component's whole import/export signature) and one OCI tag
+holds one component, so multi-world packages cannot collapse into a single
+artifact.
+
+The world is encoded as an OCI repository **path segment**, keeping the
+`namespace:name` coordinate clean (the `use` / `module:` reference never carries
+a world) and leaving the version as the sole image tag:
+
+| World                     | OCI repository                        |
+| ------------------------- | ------------------------------------- |
+| `[package].lib` (library) | `<host>/<prefix>/<ns>/<name>`         |
+| any `[world]` entry       | `<host>/<prefix>/<ns>/<name>/<world>` |
+
+`<world>` is the world FQ sanitized to one path segment (`wasi:cli/command` →
+`wasi-cli-command`, `core:kiln/generator` → `core-kiln-generator`). The library
+world stays at the bare repository so the common library case matches the
+[Registry backend](#registry-backend) mapping; other worlds get a sub-path. The
+resolver derives the same path from the world it needs — a `use` import resolves
+the bare repository, a `module:` generator reference appends
+`core-kiln-generator` — so push and pull share one `world → repository` rule.
+
+Example: `wado-lang:gale@0.1.0` (a CLI tool and a Kiln generator) publishes two
+artifacts, `…/wado-lang/gale/wasi-cli-command:0.1.0` and
+`…/wado-lang/gale/core-kiln-generator:0.1.0`; `wado-lang:cm-catalog@0.1.0` (a
+library) publishes one at `…/wado-lang/cm-catalog:0.1.0`.
+
+By default every declared world is published. A single world opts out with
+`publish = false` on its `[world]` entry, which then takes the table form:
+
+```toml
+[world]
+"wasi:cli/command" = "src/main.wado"                                 # published
+"core:kiln/generator" = "src/generator.wado"                         # published
+"wasi:http/service" = { entry = "src/server.wado", publish = false } # not published
+```
+
+`[package].publish = false` still opts the whole package out, overriding any
+per-world setting.
 
 In a workspace, `wado publish` is gated to the workspace root: it publishes every
 publishable member (and the root's own `[package]`, if any) together at the
-shared version. Members that are not publishable (`publish = false` or no
-`namespace`) are skipped, and any member with unmet requirements aborts the whole
-publish. Running `wado publish` from a member directory is an error pointing at
-the root. This is the registry half of the [Lockstep Contract](#lockstep-contract).
+shared version, all against the root's `[registries]` (a member's own
+`[registries]` is not consulted, since publish is a root-only operation).
+Members that are not publishable (`publish = false` or no `namespace`) are
+skipped, and any member with unmet requirements aborts the whole publish.
+Running `wado publish` from a member directory is an error pointing at the root.
+This is the registry half of the [Lockstep Contract](#lockstep-contract).
 
 #### Path Dependency Replacement
 

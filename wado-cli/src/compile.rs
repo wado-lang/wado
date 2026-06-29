@@ -1169,6 +1169,51 @@ pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
     Ok(())
 }
 
+/// The `<root>/build/<segment>.wasm` artifact path for a publish build, where
+/// `<segment>` is `"lib"` or a [`world_path_segment`].
+#[must_use]
+pub fn build_output_path(root: &Path, segment: &str) -> std::path::PathBuf {
+    root.join(BUILD_DIR).join(format!("{segment}.wasm"))
+}
+
+/// Build one of a package's worlds for publishing.
+///
+/// Compiles `entry` for the selected world and embeds the WIT and `[package]`
+/// metadata exactly like a default `wado compile`, writing the component to
+/// `output`. Exactly one of `lib_world` / `target_world` is `Some`, selecting
+/// the world as `--lib` / `--world` do.
+pub async fn build_publish_world(
+    entry: &Path,
+    output: &Path,
+    lib_world: Option<String>,
+    target_world: Option<String>,
+) -> Result<(), CliExit> {
+    let opts = CompileOptions {
+        input: entry.to_string_lossy().into_owned(),
+        output: Some(output.to_string_lossy().into_owned()),
+        format: Some(OutputFormat::Wasm),
+        opt_level: OptLevel::default(),
+        wat_to_stdout: false,
+        log_level: LogLevel::default(),
+        target_world,
+        skip_validation: false,
+        inline_threshold: None,
+        opt_iterations: None,
+        allocator: None,
+        no_cache: false,
+        codegen_flags: Vec::new(),
+        lib_world,
+        param_overrides: wado_compiler::hashmap::IndexMap::default(),
+        param_policy: wado_compiler::param_resolution::ParamPolicy::default(),
+        no_embed_wit: false,
+        embed_wit: false,
+        no_embed_metadata: false,
+        embed_metadata: false,
+        manifest_driven: true,
+    };
+    run(opts).await
+}
+
 /// The default output path when `-o` is absent. A manifest-driven build writes
 /// `<manifest_root>/build/<world>.<ext>` — keeping artifacts out of the source
 /// tree and giving each world its own file, mirroring kiln's `build/` layout.
@@ -1199,7 +1244,7 @@ fn default_output_path(
 /// Sanitize a Component Model world FQ name into a single path segment: drop the
 /// `@version`, then replace every character outside `[A-Za-z0-9._-]` with `-`
 /// (e.g. `wasi:cli/command` → `wasi-cli-command`).
-fn world_path_segment(world_fq: &str) -> String {
+pub fn world_path_segment(world_fq: &str) -> String {
     let base = world_fq.split('@').next().unwrap_or(world_fq);
     base.chars()
         .map(|c| {
