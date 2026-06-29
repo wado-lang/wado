@@ -487,7 +487,7 @@ impl NirFunction {
             is_dead: false,
             name: func_ref.name.clone(),
             module_source: func_ref.module_source.clone(),
-            is_pub: false,
+            visibility: crate::ast::Visibility::Private,
             is_export: false,
             is_async: false,
             type_params: Vec::new(),
