@@ -289,13 +289,7 @@ fn parse_value_offset(engine: &Engine, v: crate::nir_value_graph::ValueId) -> Op
 /// `break label tail`.
 fn block_tail_operand(body: &crate::nir_arena::Body, e: ExprId) -> Option<Operand> {
     match &body.exprs[e].kind {
-        ExprKind::Block(block) => {
-            let last = *body.blocks[*block].stmts.last()?;
-            match &body.stmts[last].kind {
-                StmtKind::Expr(op) => Some(*op),
-                _ => None,
-            }
-        }
+        ExprKind::Block(block) => block_id_tail(body, *block),
         ExprKind::LabeledBlock { label, block, .. } => {
             let last = *body.blocks[*block].stmts.last()?;
             let StmtKind::Break {
