@@ -520,6 +520,48 @@ pub struct Interpreter<'a> {
     call_stack: Vec<CalleeKey>,
 }
 
+/// The `(local, global)` an immutable reference-to-global binding (`let s = &G`)
+/// establishes, or `None`. The single source of truth for what
+/// [`Interpreter::record_ref_global_aliases`] records and what the consult-site
+/// debug assertion re-checks, so the two cannot drift.
+fn let_ref_global(body: &Body, stmt: &StmtKind) -> Option<(u32, GlobalKey)> {
+    let StmtKind::Let {
+        local_index,
+        value,
+        is_mut,
+        ..
+    } = stmt
+    else {
+        return None;
+    };
+    if *is_mut {
+        return None;
+    }
+    let ve = value.as_expr()?;
+    let ExprKind::Unary {
+        op: NirUnaryOp::Ref,
+        expr,
+    } = &body.exprs[ve].kind
+    else {
+        return None;
+    };
+    let ge = expr.as_expr()?;
+    let ExprKind::GlobalVarGet { module_source, name } = &body.exprs[ge].kind else {
+        return None;
+    };
+    Some((*local_index, (module_source.clone(), name.clone())))
+}
+
+/// Whether `body` binds `local` to `&key` (`let local = &key`). The invariant a
+/// recorded `ref_global_aliases[local] = key` must satisfy in the body being
+/// folded — a mismatch means per-function alias state leaked across a body
+/// boundary (e.g. a CTFE scratch reduction that forgot to save/clear it).
+fn local_binds_to_global_ref(body: &Body, local: u32, key: &GlobalKey) -> bool {
+    body.stmts
+        .iter()
+        .any(|(_, st)| let_ref_global(body, &st.kind) == Some((local, key.clone())))
+}
+
 impl<'a> Interpreter<'a> {
     #[must_use]
     pub fn new(type_table: &'a TypeTable) -> Self {
@@ -596,31 +638,8 @@ impl<'a> Interpreter<'a> {
     pub fn record_ref_global_aliases(&mut self, body: &Body) {
         self.ref_global_aliases.clear();
         for (_, st) in &body.stmts {
-            let StmtKind::Let {
-                local_index,
-                value,
-                is_mut,
-                ..
-            } = &st.kind
-            else {
-                continue;
-            };
-            if *is_mut {
-                continue;
-            }
-            if let Some(ve) = value.as_expr()
-                && let ExprKind::Unary {
-                    op: NirUnaryOp::Ref,
-                    expr,
-                } = &body.exprs[ve].kind
-                && let Some(ge) = expr.as_expr()
-                && let ExprKind::GlobalVarGet {
-                    module_source,
-                    name,
-                } = &body.exprs[ge].kind
-            {
-                self.ref_global_aliases
-                    .insert(*local_index, (module_source.clone(), name.clone()));
+            if let Some((local, key)) = let_ref_global(body, &st.kind) {
+                self.ref_global_aliases.insert(local, key);
             }
         }
     }
@@ -728,12 +747,19 @@ impl<'a> Interpreter<'a> {
                     name,
                 }) => self.global_field(&(module_source.clone(), name.clone()), field_name),
                 // A read through a local bound to `&G` (`let s = &G; s.used`).
-                Some(ExprKind::Local { index, .. }) => self
-                    .ref_global_aliases
-                    .get(index)
-                    .map_or(Lattice::Unevaluated, |key| {
+                Some(ExprKind::Local { index, .. }) => match self.ref_global_aliases.get(index) {
+                    Some(key) => {
+                        debug_assert!(
+                            local_binds_to_global_ref(body, *index, key),
+                            "ref_global_aliases[{index}] = {key:?} is stale: the body being \
+                             folded does not bind local {index} to that reference — per-function \
+                             alias state leaked across a body boundary (e.g. a CTFE scratch \
+                             reduction that did not save/clear it)",
+                        );
                         self.global_field(key, field_name)
-                    }),
+                    }
+                    None => Lattice::Unevaluated,
+                },
                 _ => Lattice::Unevaluated,
             },
             ExprKind::GlobalVarGet {
