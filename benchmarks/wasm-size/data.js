@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782659118179,
+  "lastUpdate": 1782695299975,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -36357,6 +36357,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ee36980749194e490b16b85b81d0bf292800ddc4"
         },
         "date": 1782659117531,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1845,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8434,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15339,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288458,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a5634828704825bdf68757d0253766731aa87c03",
+          "message": "Merge pull request #1467 from wado-lang/claude/manifest-metadata-embedding-l3oizl\n\nfeat(cli): embed package metadata into compiled components",
+          "timestamp": "2026-06-29T09:59:53+09:00",
+          "tree_id": "aa3ca7031b063f52b6ef484757b7f1fa2dd1c7ec",
+          "url": "https://github.com/wado-lang/wado/commit/a5634828704825bdf68757d0253766731aa87c03"
+        },
+        "date": 1782695299339,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
