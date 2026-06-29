@@ -711,8 +711,8 @@ fn structural_loop_guard(engine: &mut Engine, loop_body: BlockId, binds: &Binds)
             break;
         }
         changed |= match le_gbl {
-            None => eliminate_checks_in_node(engine, NodeRef::Stmt(s), var, goff, bound, &binds),
-            Some(gbl) => eliminate_le_checks_in_node(engine, NodeRef::Stmt(s), var, gbl, &binds),
+            None => eliminate_checks_in_node(engine, NodeRef::Stmt(s), var, goff, bound, binds),
+            Some(gbl) => eliminate_le_checks_in_node(engine, NodeRef::Stmt(s), var, gbl, binds),
         };
     }
     changed
