@@ -28,8 +28,7 @@ use crate::nir_package::NirPackage;
 /// Lower a [`FlatPackage`] and return a [`NirPackage`].
 pub fn lower(mut flat: FlatPackage) -> NirPackage {
     let plan = plan::plan(&mut flat);
-    let mut nir = translate::translate(flat, plan);
-    // Mint canonical FuncIds and stamp call nodes ("born resolved").
-    nir.assign_func_ids();
-    nir
+    // `translate` mints canonical FuncIds and stamps every call node at
+    // construction ("born resolved"); there is no post-pass id assignment.
+    translate::translate(flat, plan)
 }
