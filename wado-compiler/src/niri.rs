@@ -578,15 +578,6 @@ impl<'a> Interpreter<'a> {
         self
     }
 
-    /// Reset the per-function environment. The driving visitor must call
-    /// this before walking each function body; otherwise a previous
-    /// function's bindings would leak into the next one (local indices
-    /// are unique per function, not project-wide).
-    ///
-    /// Asserts the recursion guard is clear — a leaked entry would mean
-    /// a previous walk panicked mid-call. The step budget is
-    /// intentionally *not* touched: it caps total CTFE work across the
-    /// pass, not per-function.
     /// The constant value of an immutable global's field via [`global_fields`],
     /// or [`Lattice::Unevaluated`].
     ///
@@ -634,6 +625,15 @@ impl<'a> Interpreter<'a> {
         }
     }
 
+    /// Reset the per-function environment. The driving visitor must call
+    /// this before walking each function body; otherwise a previous
+    /// function's bindings would leak into the next one (local indices
+    /// are unique per function, not project-wide).
+    ///
+    /// Asserts the recursion guard is clear — a leaked entry would mean
+    /// a previous walk panicked mid-call. The step budget is
+    /// intentionally *not* touched: it caps total CTFE work across the
+    /// pass, not per-function.
     pub fn enter_function(&mut self) {
         self.env.clear();
         self.ref_global_aliases.clear();
@@ -732,7 +732,7 @@ impl<'a> Interpreter<'a> {
                     .ref_global_aliases
                     .get(index)
                     .map_or(Lattice::Unevaluated, |key| {
-                        self.global_field(&key.clone(), field_name)
+                        self.global_field(key, field_name)
                     }),
                 _ => Lattice::Unevaluated,
             },
@@ -1477,6 +1477,10 @@ impl<'a> Interpreter<'a> {
         // The scratch fold memo is scoped to this reduction; nested CTFE calls
         // get a fresh map and ids never cross scratch bodies.
         let saved_folds = std::mem::take(&mut self.scratch_folds);
+        // `ref_global_aliases` is keyed by the *caller's* local indices, which
+        // collide with the callee's; clear it for the scratch reduction so a
+        // callee field read is never folded through a caller `&G` alias.
+        let saved_aliases = std::mem::take(&mut self.ref_global_aliases);
         for (i, v) in bound.iter().enumerate() {
             #[allow(clippy::cast_possible_truncation)]
             self.env.insert(i as u32, Lattice::Const(*v));
@@ -1491,6 +1495,7 @@ impl<'a> Interpreter<'a> {
         let result = self.reduce_to_lattice_a(&scratch, tail);
         self.env = saved_env;
         self.scratch_folds = saved_folds;
+        self.ref_global_aliases = saved_aliases;
         self.call_stack.pop();
         match result {
             c @ Lattice::Const(_) => c,
