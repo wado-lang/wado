@@ -1065,7 +1065,7 @@ impl FunctionTranslator<'_, '_> {
             _ => return None,
         };
         let func = self.callee_descriptor(func_id);
-        let key = (func.name.clone(), func.module_source.clone());
+        let key = (func.name.clone(), func.module_source);
         let fields = self.ctx.multi_value_return_funcs.get(&key)?.clone();
 
         // Build per-field split locals: `<base>_mv_<field_name>`.

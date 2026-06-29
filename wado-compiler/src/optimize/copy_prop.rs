@@ -413,10 +413,10 @@ fn analyze_expr(
             for c in kids {
                 match c {
                     NodeRef::Expr(e) => {
-                        analyze_expr(body, e, result, type_table, fpt, copy_value_id)
+                        analyze_expr(body, e, result, type_table, fpt, copy_value_id);
                     }
                     NodeRef::Block(b) => {
-                        analyze_block(body, b, result, type_table, fpt, copy_value_id)
+                        analyze_block(body, b, result, type_table, fpt, copy_value_id);
                     }
                     _ => {}
                 }
