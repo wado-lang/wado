@@ -1,0 +1,40 @@
+// Absolute bounds-check elimination: an index clamped to a constant `<` an
+// immutable global sequence's length needs no runtime check. The chain is:
+//   - `const_folding` folds `(&TABLE).used` to the literal length (20) — even
+//     through the `&TABLE` method-receiver reference;
+//   - `condition_implication`'s `ConstBoundIndexEliminator` proves the clamped
+//     index `n = min(x, 18) <= 18 < 20`, so `n < 20` always holds;
+//   - `const_branch_prune` drops the now-`if false` panic statement.
+// This mirrors fpfmt's `POW10[n]` hot path. A regression here previously
+// mis-folded `TABLE.used` to the builder's initial `used: 0` (issue: a builder
+// block's length is dynamic), turning the check into an always-panic.
+
+global TABLE: List<u64> = [
+    1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000,
+    10000000000, 100000000000, 1000000000000, 10000000000000, 100000000000000,
+    1000000000000000, 10000000000000000, 100000000000000000, 1000000000000000000,
+    10000000000000000000,
+];
+
+#[inline("never")]
+fn lookup(x: i32) -> u64 {
+    let n = if x > 18 { 18 } else { x };
+    return TABLE[n];
+}
+
+export fn run() {
+    assert lookup(0) == 1;
+    assert lookup(5) == 100000;
+    assert lookup(19) == 1000000000000000000;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "array_get<u64>"
+    ],
+    "wir_not_expect:O2": [
+        "List::index_value"
+    ]
+}

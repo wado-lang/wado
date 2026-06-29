@@ -414,6 +414,15 @@ impl Body {
         }
     }
 
+    /// The value of a constant-bool `Operand::Value` (e.g. a condition driven to
+    /// a literal by `condition_implication`). `None` for any other operand.
+    pub fn operand_const_bool(&self, op: Operand) -> Option<bool> {
+        match self.values.kind(op.as_value()?) {
+            ValueKind::Bool(b) => Some(*b),
+            _ => None,
+        }
+    }
+
     /// An empty body: no nodes and a placeholder `root` (set by the caller once
     /// the root block is built). Used by `lower::translate` as the canonical
     /// builder it pushes nodes into, and as a scratch arena for passes that

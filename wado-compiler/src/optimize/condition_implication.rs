@@ -868,6 +868,7 @@ fn process_block(engine: &mut Engine, block: BlockId) -> bool {
         }
         changed |= apply_dominating_if(engine, s, &binds);
         changed |= BitmaskEliminator { binds: &binds }.visit_stmt(engine, s);
+        changed |= ConstBoundIndexEliminator { binds: &binds }.visit_stmt(engine, s);
         changed |= ShortCircuitEliminator { binds: &binds }.visit_stmt(engine, s);
         changed |= process_stmt(engine, s);
         seguards.retain(|&(var, _, bound)| !stmt_modifies(engine, s, var, bound));
@@ -1099,6 +1100,116 @@ impl ArenaOptVisitor for ShortCircuitEliminator<'_> {
             return changed;
         }
         arena_opt_walk(self, engine, NodeRef::Expr(e))
+    }
+}
+
+/// A sound static upper bound for an integer index: a literal, or the
+/// `min(var, K)` clamp `if (var > K) { K } else { var }` (and the `>=` form).
+/// The else arm must be exactly the compared `var`, so `!(var > K)` bounds it by
+/// `K`; the result is at most the max of the constant then-arm and that bound.
+fn index_upper_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64> {
+    if let Some(c) = parse_const_i64(engine, binds, op) {
+        return Some(c);
+    }
+    let Operand::Expr(e) = resolve(engine, binds, op) else {
+        return None;
+    };
+    let ExprKind::If {
+        condition,
+        then_branch,
+        else_branch: Some(else_branch),
+    } = &engine.body.exprs[e].kind
+    else {
+        return None;
+    };
+    let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
+    let Operand::Expr(ce) = resolve(engine, binds, condition) else {
+        return None;
+    };
+    let ExprKind::Binary {
+        left,
+        op: cmp,
+        right,
+    } = &engine.body.exprs[ce].kind
+    else {
+        return None;
+    };
+    let (left, cmp, right) = (*left, *cmp, *right);
+    let k = parse_const_i64(engine, binds, right)?;
+    let then_const = parse_const_i64(engine, binds, block_id_tail(engine.body, then_branch)?)?;
+    let else_tail = block_id_tail(engine.body, else_branch)?;
+    // The else arm (taken when `!(subject cmp K)`) must be exactly the compared
+    // subject, so `!(subject cmp K)` bounds it: `> K` ⟹ `<= K`, `>= K` ⟹ `<= K-1`.
+    if !operand_same(engine, binds, left, else_tail) {
+        return None;
+    }
+    let else_ub = match cmp {
+        NirBinaryOp::Gt => k,
+        NirBinaryOp::GtEq => k - 1,
+        _ => return None,
+    };
+    Some(then_const.max(else_ub))
+}
+
+/// Whether two operands denote the same value, through copy temps: equal after
+/// [`resolve`], or both bare locals of the same index. Used to confirm a clamp's
+/// else arm is the very subject the condition compares.
+fn operand_same(engine: &Engine, binds: &Binds, a: Operand, b: Operand) -> bool {
+    match (resolve(engine, binds, a), resolve(engine, binds, b)) {
+        (Operand::Expr(ea), Operand::Expr(eb)) => {
+            ea == eb
+                || matches!(
+                    (&engine.body.exprs[ea].kind, &engine.body.exprs[eb].kind),
+                    (
+                        ExprKind::Local { index: ia, .. },
+                        ExprKind::Local { index: ib, .. },
+                    ) if ia == ib
+                )
+        }
+        (Operand::Value(va), Operand::Value(vb)) => va == vb,
+        _ => false,
+    }
+}
+
+/// The tail value operand of a block by id: `{ …; tail }`.
+fn block_id_tail(body: &crate::nir_arena::Body, block: BlockId) -> Option<Operand> {
+    match &body.stmts[*body.blocks[block].stmts.last()?].kind {
+        StmtKind::Expr(op) => Some(*op),
+        _ => None,
+    }
+}
+
+/// Eliminates an absolute false bounds check `if !(idx < BOUND) { panic }` where
+/// `BOUND` is a constant and `idx`'s static upper bound is `< BOUND`. The bound
+/// reaches a literal via `const_folding` (which folds an immutable global's
+/// `used` length, even through a `&G` reference). Complements the relational
+/// guard recognizers, which need a dominating guard variable; here the index is
+/// bounded intrinsically (a clamp) against a constant bound.
+struct ConstBoundIndexEliminator<'a> {
+    binds: &'a Binds,
+}
+
+impl ArenaOptVisitor for ConstBoundIndexEliminator<'_> {
+    fn visit_stmt(&mut self, engine: &mut Engine, s: StmtId) -> bool {
+        let if_ids = match &engine.body.stmts[s].kind {
+            StmtKind::If {
+                condition,
+                then_block,
+                else_block: None,
+            } => Some((*condition, *then_block)),
+            _ => None,
+        };
+        if let Some((condition, then_block)) = if_ids
+            && is_panic_block(engine, then_block)
+            && let Some((idx, bound)) = ge_check_operands(engine, self.binds, condition)
+            && let Some(b) = parse_const_i64(engine, self.binds, bound)
+            && let Some(ub) = index_upper_bound(engine, self.binds, idx)
+            && ub < b
+        {
+            eliminate_condition(engine, NodeRef::Stmt(s), condition);
+            return true;
+        }
+        arena_opt_walk(self, engine, NodeRef::Stmt(s))
     }
 }
 

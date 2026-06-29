@@ -86,13 +86,13 @@ Scalar / dataflow passes:
 - `drve` — convert a function whose return value is dropped at every call site to void-returning.
 - `store_load_forward` — forward a stored literal to a later unmodified load.
 - `elide_local` — drop `let x = expr` where `x` is never read (keeping `expr` if impure).
-- `const_folding` — partial evaluation via `niri`. The env-free subset (literal arithmetic, pure CTFE, short-circuit identities) runs in the peephole session; the flow-sensitive half (env-bound locals, forwarded struct fields, immutable-global reads, constant-branch collapse) runs as a standalone per-function walker.
-- `const_branch_prune` — simplify trivial blocks: `{ expr }` → `expr`, empty blocks → `()`, tail-/single-break labeled blocks → their value, and dead statements after a terminator. `__tmpl:` blocks are preserved for `tmpl_hoist` until `branch_prune_final`.
+- `const_folding` — partial evaluation via `niri`. The env-free subset (literal arithmetic, pure CTFE, short-circuit identities) runs in the peephole session; the flow-sensitive half (env-bound locals, forwarded struct fields, immutable-global reads, constant-branch collapse) runs as a standalone per-function walker. Immutable-global field reads fold through a `&G` reference too (`let s = &G; s.used`), so a `(&G).used` length bound becomes a literal. A sequence global's length is read only from an unambiguous initializer (a literal, or a `{ let s = <literal>; s }` block); a builder block with intervening pushes has a dynamic length and folds to nothing rather than its stale initial `used`.
+- `const_branch_prune` — simplify trivial blocks: `{ expr }` → `expr`, empty blocks → `()`, tail-/single-break labeled blocks → their value, and dead statements after a terminator. Also folds a statement-level `if CONST { … } [else { … }]` (driven constant by the BCE) to its taken arm — niri only folds const-condition *expression* `if`s. `__tmpl:` blocks are preserved for `tmpl_hoist` until `branch_prune_final`.
 
 Loop and field passes:
 
 - `licm` — hoist loop-invariant field-access chains (one level per fixpoint round, with reference-field aliasing guards) and loop-invariant non-trapping arithmetic trees.
-- `condition_implication` — eliminate conditions implied false by a dominating loop guard, `if`, short-circuit `||`, or early-exit guard (subsumes WIR bounds-check elimination).
+- `condition_implication` — eliminate conditions implied false by a dominating loop guard, `if`, short-circuit `||`, or early-exit guard (subsumes WIR bounds-check elimination). Also an absolute recogniser (`ConstBoundIndexEliminator`): a check `idx < BOUND` with a constant `BOUND` and a statically upper-bounded index — a literal or a `min(var, K)` clamp (`if var > K { K } else { var }`) — drops when the bound exceeds the index's maximum. Pairs with `const_folding` folding `(&G).used` to a literal to remove a constant-index lookup's bounds check (e.g. fpfmt's `POW10[n]`).
 - `tmpl_hoist` — hoist a template string's backing buffer out of a loop and reuse it, when the result does not escape the iteration.
 - `field_scalarize` — Hot Field Scalarization: shadow hot GC fields in scalar locals across a loop, with dataflow-driven write-back/re-read sync. Runs once after the loop.
 

@@ -473,6 +473,14 @@ pub struct Interpreter<'a> {
     /// [`invalidate_local`]: Self::invalidate_local
     /// [`enter_function`]: Self::enter_function
     env: IndexMap<u32, Lattice>,
+    /// Per-function map of locals single-bound to a reference to an immutable
+    /// global: `let s = &G` → `s ↦ key(G)`. Lets a field read through the
+    /// reference (`s.used`) fold via [`global_fields`] exactly as a direct
+    /// `global:G.used` does. Reset per function by [`enter_function`].
+    ///
+    /// [`global_fields`]: Self::global_fields
+    /// [`enter_function`]: Self::enter_function
+    ref_global_aliases: IndexMap<u32, GlobalKey>,
     /// CTFE scratch-body fold memo: `expr → folded constant`. The scratch
     /// [`BodySink`] cannot promote a fold to an `Operand::Value` (no parent map)
     /// and pure scalars have no literal-node form, so a fold is recorded here and
@@ -518,6 +526,7 @@ impl<'a> Interpreter<'a> {
         Self {
             type_table,
             env: IndexMap::default(),
+            ref_global_aliases: IndexMap::default(),
             scratch_folds: IndexMap::default(),
             callees: None,
             globals: None,
@@ -578,8 +587,56 @@ impl<'a> Interpreter<'a> {
     /// a previous walk panicked mid-call. The step budget is
     /// intentionally *not* touched: it caps total CTFE work across the
     /// pass, not per-function.
+    /// The constant value of an immutable global's field via [`global_fields`],
+    /// or [`Lattice::Unevaluated`].
+    ///
+    /// [`global_fields`]: Self::global_fields
+    fn global_field(&self, key: &GlobalKey, field_name: &str) -> Lattice {
+        self.global_fields
+            .and_then(|m| m.get(key))
+            .and_then(|m| m.get(field_name))
+            .copied()
+            .map_or(Lattice::Unevaluated, Lattice::Const)
+    }
+
+    /// Record locals single-bound to a reference to a global (`let s = &G`), so
+    /// a field read through `s` folds. Conservative: only non-`mut` bindings,
+    /// which Wado value semantics never reassign or `&mut`-alias.
+    pub fn record_ref_global_aliases(&mut self, body: &Body) {
+        self.ref_global_aliases.clear();
+        for (_, st) in &body.stmts {
+            let StmtKind::Let {
+                local_index,
+                value,
+                is_mut,
+                ..
+            } = &st.kind
+            else {
+                continue;
+            };
+            if *is_mut {
+                continue;
+            }
+            if let Some(ve) = value.as_expr()
+                && let ExprKind::Unary {
+                    op: NirUnaryOp::Ref,
+                    expr,
+                } = &body.exprs[ve].kind
+                && let Some(ge) = expr.as_expr()
+                && let ExprKind::GlobalVarGet {
+                    module_source,
+                    name,
+                } = &body.exprs[ge].kind
+            {
+                self.ref_global_aliases
+                    .insert(*local_index, (module_source.clone(), name.clone()));
+            }
+        }
+    }
+
     pub fn enter_function(&mut self) {
         self.env.clear();
+        self.ref_global_aliases.clear();
         self.scratch_folds.clear();
         debug_assert!(
             self.call_stack.is_empty(),
@@ -669,12 +726,14 @@ impl<'a> Interpreter<'a> {
                 Some(ExprKind::GlobalVarGet {
                     module_source,
                     name,
-                }) => self
-                    .global_fields
-                    .and_then(|m| m.get(&(module_source.clone(), name.clone())))
-                    .and_then(|m| m.get(field_name.as_str()))
-                    .copied()
-                    .map_or(Lattice::Unevaluated, Lattice::Const),
+                }) => self.global_field(&(module_source.clone(), name.clone()), field_name),
+                // A read through a local bound to `&G` (`let s = &G; s.used`).
+                Some(ExprKind::Local { index, .. }) => self
+                    .ref_global_aliases
+                    .get(index)
+                    .map_or(Lattice::Unevaluated, |key| {
+                        self.global_field(&key.clone(), field_name)
+                    }),
                 _ => Lattice::Unevaluated,
             },
             ExprKind::GlobalVarGet {

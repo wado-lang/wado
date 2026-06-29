@@ -137,11 +137,8 @@ fn "wado-compiler/tests/fixtures/optimize_bitmask_bce.wado/run"() {
         l1: loop {
             break_if b0 i >= 100;
             idx = i & 32767;
-            sum = sum + __cond_15 = idx < 32768; block {
-            }; builtin::array_get<i32>(_licm_repr_27, idx);
+            sum = sum + __cond_15 = idx < 32768; builtin::array_get<i32>(_licm_repr_27, idx);
             value = i;
-            block {
-            };
             builtin::array_set<i32>(_licm_repr_27, idx, value);
             i = i + 1;
             continue l1;
@@ -176,12 +173,12 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b6: block {
-        l7: loop {
-            break_if b6 t <= 0_i64;
+    b4: block {
+        l5: loop {
+            break_if b4 t <= 0_i64;
             n = n + 1;
             t = t / 10_i64;
-            continue l7;
+            continue l5;
         };
     };
     return n;
@@ -195,13 +192,13 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b9: block {
-            l10: loop {
-                break_if b9 temp <= 0_i64;
+        b7: block {
+            l8: loop {
+                break_if b7 temp <= 0_i64;
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l10;
+                continue l8;
             };
         };
     }
@@ -210,12 +207,12 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
 fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b11: block {
-        l12: loop {
-            break_if b11 i >= len;
+    b9: block {
+        l10: loop {
+            break_if b9 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l12;
+            continue l10;
         };
     };
 }
@@ -397,12 +394,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b23: block {
-        l24: loop {
-            break_if b23 i >= n;
+    b21: block {
+        l22: loop {
+            break_if b21 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l24;
+            continue l22;
         };
     };
 }

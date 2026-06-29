@@ -106,6 +106,7 @@ fn fold_function(
     };
     // Local indices are per-function; reset the interpreter env at each boundary.
     visitor.interpreter.enter_function();
+    visitor.interpreter.record_ref_global_aliases(body);
     let mut engine = Engine::new(body, buffers, locals);
     let root = engine.body.root;
     visitor.visit_block(&mut engine, root)
@@ -276,15 +277,25 @@ fn const_seq_len_a(body: &Body, e: ExprId) -> Option<i32> {
         ExprKind::ArrayLiteral { elements } => i32::try_from(elements.len()).ok(),
         ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => {
             let block = *b;
-            body.blocks[block]
-                .stmts
+            let stmts = &body.blocks[block].stmts;
+            // A non-final `Expr` statement is a side-effecting builder push
+            // (`__b.push(..)`) that grows the sequence past its `let` init's
+            // `used`, so the length is dynamic — bail rather than read the
+            // stale initial `used`. Only `{ let __b = <literal>; …; __b }`,
+            // whose pre-tail statements are all `let`s, has a static length.
+            if stmts
                 .iter()
                 .rev()
-                .find_map(|s| match &body.stmts[*s].kind {
-                    StmtKind::Let { value, .. } => const_seq_len_operand_a(body, *value),
-                    StmtKind::Expr(ex) => const_seq_len_operand_a(body, *ex),
-                    _ => None,
-                })
+                .skip(1)
+                .any(|&s| matches!(body.stmts[s].kind, StmtKind::Expr(_)))
+            {
+                return None;
+            }
+            stmts.iter().rev().find_map(|s| match &body.stmts[*s].kind {
+                StmtKind::Let { value, .. } => const_seq_len_operand_a(body, *value),
+                StmtKind::Expr(ex) => const_seq_len_operand_a(body, *ex),
+                _ => None,
+            })
         }
         ExprKind::StructLiteral { fields, .. } => fields.iter().find_map(|f| {
             if f.name == SeqField::Len.field_name()
