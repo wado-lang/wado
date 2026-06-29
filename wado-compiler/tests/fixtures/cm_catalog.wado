@@ -1,17 +1,29 @@
-//! CM value-type catalog as a fixture: one `identity` export per Component
-//! Model value type, each returning its argument unchanged.
+//! CM type catalog: one `identity` export per Component Model value type.
 //!
-//! Two harnesses consume this file:
+//! Each function returns its argument unchanged, so the export exercises both
+//! lowering (the parameter) and lifting (the result) for that exact type. The
+//! function name encodes the type so the generated WIT is a self-describing
+//! enumeration of the value-type ABI surface.
 //!
-//! - `e2e.rs` discovers it as a `test`-world fixture (the empty `test` block
-//!   below). That run only confirms a library-shaped source — `export fn`s plus
-//!   a `test` block — compiles and instantiates under the test world; the
-//!   `export fn`s are dropped in the test world, so it does not exercise
-//!   lift/lower.
-//! - `cm_catalog.rs` compiles this same source as a `--lib` (library world) and
-//!   round-trips a crafted Component Model value through each `id_*` export,
-//!   asserting `lift(lower(x)) == x`. That is the lift/lower binding test for
-//!   value types outside any WASI world.
+//! Scope: value types plus the async handle types `future` and `stream`. A
+//! future/stream identity moves the readable end across the boundary unchanged,
+//! so it still exercises lowering (the parameter) and lifting (the result) for
+//! that exact handle — `cm_catalog.rs` round-trips it functionally rather than
+//! by handle equality, since the handle is single-use.
+//!
+//! Still TODO in this catalog: handles (`own`/`borrow` of resources), whose
+//! non-duplicable boundary semantics differ from the value types above.
+//!
+//! This file is the published package source, reused verbatim as a compiler
+//! test fixture (`wado-compiler/tests/fixtures/cm_catalog.wado` must stay
+//! byte-identical):
+//! - `cm_catalog.rs` compiles it as a `--lib` (library world) and round-trips a
+//!   crafted Component Model value through each `id_*` export, asserting
+//!   `lift(lower(x)) == x` — the real lift/lower test.
+//! - `e2e.rs` discovers it as a test-world fixture (the `test` block below, no
+//!   `__DATA__` section) to confirm a library-shaped source compiles and
+//!   instantiates; the `export fn`s are dropped in the test world, so that run
+//!   does not exercise lift/lower.
 
 // --- Named types referenced by the identity exports below ---
 
@@ -42,7 +54,7 @@ pub type Meters = f64;
 
 // A variant whose cases flatten to the same slot size but different core
 // classes (`u32`→i32 vs `f32`→f32). The CM flat-ABI join widens the shared
-// slot to one class, so the other case's payload must be bit-reinterpreted.
+// slot to one class, so the other case's payload is bit-reinterpreted.
 pub variant Mixed {
     AsInt(u32),
     AsFloat(f32),
@@ -337,6 +349,3 @@ export fn id_record_future(v: FutureCell) -> FutureCell {
 // world. The lift/lower round-trip lives in `cm_catalog.rs`.
 test "library shape compiles under the test world" {
 }
-
-__DATA__
-{"test": {}}

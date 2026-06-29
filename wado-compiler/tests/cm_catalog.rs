@@ -526,6 +526,24 @@ fn cm_lib_rejects_empty_record_boundary_type() {
     );
 }
 
+/// The fixture is the published package source reused verbatim, so it must stay
+/// byte-identical to `package-cm-catalog/src/lib.wado`; otherwise the test
+/// corpus and the shipped package could drift apart.
+#[test]
+fn cm_catalog_fixture_matches_package_source() {
+    const PACKAGE_SOURCE: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../package-cm-catalog/src/lib.wado"
+    );
+    let fixture = std::fs::read_to_string(FIXTURE).expect("read cm_catalog fixture");
+    let package = std::fs::read_to_string(PACKAGE_SOURCE).expect("read package source");
+    assert_eq!(
+        fixture, package,
+        "tests/fixtures/cm_catalog.wado must be byte-identical to \
+         package-cm-catalog/src/lib.wado"
+    );
+}
+
 #[test]
 fn cm_catalog_round_trip_o0() {
     run_round_trips(OptLevel::O0);

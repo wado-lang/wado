@@ -11,8 +11,19 @@
 //! that exact handle — `cm_catalog.rs` round-trips it functionally rather than
 //! by handle equality, since the handle is single-use.
 //!
-//! Still omitted: handles (`own`/`borrow` of resources) — a non-duplicable
-//! resource handle needs different boundary semantics and gets its own catalog.
+//! Still TODO in this catalog: handles (`own`/`borrow` of resources), whose
+//! non-duplicable boundary semantics differ from the value types above.
+//!
+//! This file is the published package source, reused verbatim as a compiler
+//! test fixture (`wado-compiler/tests/fixtures/cm_catalog.wado` must stay
+//! byte-identical):
+//! - `cm_catalog.rs` compiles it as a `--lib` (library world) and round-trips a
+//!   crafted Component Model value through each `id_*` export, asserting
+//!   `lift(lower(x)) == x` — the real lift/lower test.
+//! - `e2e.rs` discovers it as a test-world fixture (the `test` block below, no
+//!   `__DATA__` section) to confirm a library-shaped source compiles and
+//!   instantiates; the `export fn`s are dropped in the test world, so that run
+//!   does not exercise lift/lower.
 
 // --- Named types referenced by the identity exports below ---
 
@@ -151,7 +162,7 @@ export fn id_mixed(v: Mixed) -> Mixed {
     return v;
 }
 // `result` whose Ok/Err arms flatten to the same slot size but different core
-// classes (`f32` vs `u32`); exercises the join reinterpret on the Ok arm.
+// classes (`f32` vs `u32`); exercises the join reinterpret on the Err arm.
 export fn id_result_fu(v: Result<f32, u32>) -> Result<f32, u32> {
     return v;
 }
@@ -331,4 +342,10 @@ export fn id_tuple_future(v: [Future<u32>, u32]) -> [Future<u32>, u32] {
 }
 export fn id_record_future(v: FutureCell) -> FutureCell {
     return v;
+}
+
+// The empty test block makes `e2e.rs` accept this as a test-world fixture: it
+// confirms a library-shaped source compiles and instantiates under the test
+// world. The lift/lower round-trip lives in `cm_catalog.rs`.
+test "library shape compiles under the test world" {
 }

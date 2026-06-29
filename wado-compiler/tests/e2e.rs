@@ -737,13 +737,17 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
     let opt_name = common::opt_level_name(opt_level);
     let test_id = format!("{fixture_name} ({opt_name})");
 
-    // Get the __DATA__ section - required for all fixtures
-    let data_section = common::extract_data_section(source).unwrap_or_else(|| {
-        panic!("[{test_id}] missing __DATA__ section - all fixtures must have test expectations");
-    });
-
-    // Parse the test spec from JSON
-    let spec: TestSpec = common::parse_data_section(data_section, &test_id);
+    // A fixture with a `__DATA__` section carries explicit expectations; one
+    // without is a library-shaped source run under the test world (compile +
+    // instantiate, executing its `test` blocks). The latter lets a published
+    // library double as a fixture verbatim — see `cm_catalog.wado`.
+    let spec: TestSpec = match common::extract_data_section(source) {
+        Some(data_section) => common::parse_data_section(data_section, &test_id),
+        None => TestSpec {
+            test_world: Some(TestWorldSpec::default()),
+            ..Default::default()
+        },
+    };
 
     // Skip if the spec says skip_os and we're running -Os
     if spec.skip_os && opt_level == OptLevel::Os {
