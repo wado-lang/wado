@@ -45,7 +45,6 @@ use {
     short32,
     fixed_width,
     fixed_width_for_prec,
-    digits,
     format_decimal,
     format_exp,
     format_decimal_prec,
@@ -1165,7 +1164,7 @@ impl f32 {
         let result = short32(abs_f);
         let d = result.digits;
         let p = result.exponent;
-        let nd = digits(d);
+        let nd = result.nd;
         let mark = f.mark();
         fmt_float_sign(f, is_neg);
         write_decimal(f.buf, d, p, nd);
@@ -1186,7 +1185,7 @@ impl f32 {
         let result = short32(abs_f);
         let d = result.digits;
         let p = result.exponent;
-        let nd = digits(d);
+        let nd = result.nd;
         let exp = p + nd - 1;
         let mark = f.mark();
         fmt_float_sign(f, is_neg);
@@ -1462,7 +1461,7 @@ impl f64 {
         let result = short(abs_f);
         let d = result.digits;
         let p = result.exponent;
-        let nd = digits(d);
+        let nd = result.nd;
         let mark = f.mark();
         fmt_float_sign(f, is_neg);
         write_decimal(f.buf, d, p, nd);
@@ -1484,7 +1483,7 @@ impl f64 {
         let result = short(abs_f);
         let d = result.digits;
         let p = result.exponent;
-        let nd = digits(d);
+        let nd = result.nd;
         let exp = p + nd - 1;
         let mark = f.mark();
         fmt_float_sign(f, is_neg);
@@ -1521,7 +1520,7 @@ impl f64 {
         let result = fixed_width_for_prec(abs_f, precision);
         let d = result.digits;
         let p = result.exponent;
-        let nd = digits(d);
+        let nd = result.nd;
         let mark = f.mark();
         fmt_float_sign(f, is_neg);
         write_decimal_prec(f.buf, d, p, nd, precision);
@@ -1564,13 +1563,13 @@ impl f64 {
             let result = fixed_width(abs_f, clamped);
             let d = result.digits;
             let p = result.exponent;
-            let nd = digits(d);
+            let nd = result.nd;
             write_exp_prec(f.buf, d, p, nd, precision, upper_bool);
         } else {
             let result = short(abs_f);
             let d = result.digits;
             let p = result.exponent;
-            let nd = digits(d);
+            let nd = result.nd;
             write_exp(f.buf, d, p, nd, upper_bool);
         }
         f.apply_padding(mark);
