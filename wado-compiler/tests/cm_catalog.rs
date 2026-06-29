@@ -623,6 +623,7 @@ fn run_round_trips(opt_level: OptLevel) {
         check!(future_round_trip(&mut store, &instance, i, "id-future-result", Ok::<u32, String>(7)));
         check!(future_round_trip(&mut store, &instance, i, "id-future-list", vec![1u32, 2, 3]));
         check!(future_round_trip(&mut store, &instance, i, "id-future-tuple", (5u32, "x".to_string())));
+        check!(future_round_trip(&mut store, &instance, i, "id-future-record", Point { x: 1.5, y: -2.5 }));
 
         check!(stream_round_trip(&mut store, &instance, i, "id-stream-u8", vec![1u8, 2, 3, 4]));
         // Stream consume/produce: each element round-trips through CM memory.
@@ -630,6 +631,10 @@ fn run_round_trips(opt_level: OptLevel) {
         check!(stream_round_trip(
             &mut store, &instance, i, "id-stream-string",
             vec!["a".to_string(), "bb".to_string(), "céç".to_string()],
+        ));
+        check!(stream_round_trip(
+            &mut store, &instance, i, "id-stream-record",
+            vec![Point { x: 1.0, y: 2.0 }, Point { x: -3.5, y: 4.5 }],
         ));
 
         check!(embedded_future_round_trip(
@@ -1060,6 +1065,151 @@ fn cm_future_aggregate_identity_o0() {
 #[test]
 fn cm_future_aggregate_identity_o2() {
     run_future_identity_round_trips(OptLevel::O2);
+}
+
+/// Host mirror of the catalog `Point` record, for the `future<record>` /
+/// `stream<record>` round-trips. Field order and CM names must match the Wado
+/// `struct Point { x: f64, y: f64 }`.
+#[derive(
+    wasmtime::component::ComponentType,
+    wasmtime::component::Lower,
+    wasmtime::component::Lift,
+    Clone,
+    PartialEq,
+    Debug,
+)]
+#[component(record)]
+struct Point {
+    x: f64,
+    y: f64,
+}
+
+const RECORD_FUTURE_SOURCE: &str = r#"
+struct Point {
+    x: f64,
+    y: f64,
+}
+export async fn id_future_point(v: Future<Point>) -> Future<Point> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<Point>::new();
+    task return rx;
+    if let Some(x) = value {
+        tx.write(x);
+    }
+}
+"#;
+
+fn run_record_future_identity(opt_level: OptLevel) {
+    let wasm = compile_lib_source(RECORD_FUTURE_SOURCE, opt_level);
+    let engine = common::engine();
+    let rt = common::runtime();
+    let opt = common::opt_level_name(opt_level);
+
+    rt.block_on(async {
+        let component = Component::new(engine, &wasm).expect("instantiate component type");
+        let linker = common::linker(engine).expect("build linker");
+        let state = common::WasiState::new_with_pipes(
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+        );
+        let mut store = Store::new(engine, state);
+        store.set_epoch_deadline((common::DEFAULT_TIMEOUT_MS / 1000).max(1));
+        let instance = linker
+            .instantiate_async(&mut store, &component)
+            .await
+            .expect("instantiate record future component");
+        let iface = instance
+            .get_export(&mut store, None, LIB_WORLD_FQ)
+            .map(|(_, idx)| idx);
+        if let Err(e) = future_round_trip(
+            &mut store,
+            &instance,
+            iface.as_ref(),
+            "id-future-point",
+            Point { x: 1.5, y: -2.5 },
+        )
+        .await
+        {
+            panic!("[{opt}] {e}");
+        }
+    });
+}
+
+#[test]
+fn cm_future_record_identity_o0() {
+    run_record_future_identity(OptLevel::O0);
+}
+
+#[test]
+fn cm_future_record_identity_o2() {
+    run_record_future_identity(OptLevel::O2);
+}
+
+const RECORD_STREAM_SOURCE: &str = r#"
+struct Point {
+    x: f64,
+    y: f64,
+}
+export async fn id_stream_point(v: Stream<Point>) -> Stream<Point> {
+    let [rx, tx] = Stream::<Point>::new();
+    task return rx;
+    loop {
+        let chunk = v.read(16);
+        if chunk.len() == 0 {
+            break;
+        }
+        tx.write(chunk);
+    }
+    v.drop();
+    tx.drop();
+}
+"#;
+
+fn run_record_stream_identity(opt_level: OptLevel) {
+    let wasm = compile_lib_source(RECORD_STREAM_SOURCE, opt_level);
+    let engine = common::engine();
+    let rt = common::runtime();
+    let opt = common::opt_level_name(opt_level);
+
+    rt.block_on(async {
+        let component = Component::new(engine, &wasm).expect("instantiate component type");
+        let linker = common::linker(engine).expect("build linker");
+        let state = common::WasiState::new_with_pipes(
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+        );
+        let mut store = Store::new(engine, state);
+        store.set_epoch_deadline((common::DEFAULT_TIMEOUT_MS / 1000).max(1));
+        let instance = linker
+            .instantiate_async(&mut store, &component)
+            .await
+            .expect("instantiate record stream component");
+        let iface = instance
+            .get_export(&mut store, None, LIB_WORLD_FQ)
+            .map(|(_, idx)| idx);
+        if let Err(e) = stream_round_trip(
+            &mut store,
+            &instance,
+            iface.as_ref(),
+            "id-stream-point",
+            vec![Point { x: 1.0, y: 2.0 }, Point { x: -3.5, y: 4.5 }],
+        )
+        .await
+        {
+            panic!("[{opt}] {e}");
+        }
+    });
+}
+
+#[test]
+fn cm_stream_record_identity_o0() {
+    run_record_stream_identity(OptLevel::O0);
+}
+
+#[test]
+fn cm_stream_record_identity_o2() {
+    run_record_stream_identity(OptLevel::O2);
 }
 
 /// A single-export `--lib` async identity over `stream<T>`: read the input

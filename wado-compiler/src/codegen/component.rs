@@ -121,6 +121,37 @@ pub fn build_component(
     let all_canonical_intrinsics: Vec<CanonicalIntrinsic> =
         wir_package.needed_canonicals.iter().cloned().collect();
 
+    // One CM type engine shared across `--lib` named-type building, so a record
+    // (e.g. `point`) referenced by both a future/stream payload and an export
+    // signature is defined once. The interface hint resolves lib-local named
+    // types against the package's own default-interface FQ.
+    let lib_iface_fq = component_plan
+        .world_exports
+        .iter()
+        .find(|e| e.is_lib)
+        .and_then(|e| e.from_interface_fq.clone());
+    let mut lib_type_gen = component_plan
+        .world_exports
+        .iter()
+        .any(|e| e.is_lib)
+        .then(|| match lib_iface_fq.as_deref() {
+            Some(fq) => crate::component_model::CmTypeGen::with_interface_hint(fq),
+            None => crate::component_model::CmTypeGen::new(),
+        });
+
+    // Define named record types referenced by `Value(Named)` future/stream
+    // payloads *before* the future/stream types that wrap them, so the wrapping
+    // type can reference the record's index. Shares `lib_type_gen` with
+    // `emit_world_exports`, so the export-signature record and the canonical
+    // record are one and the same.
+    prebuild_value_named_types(
+        &mut builder,
+        &mut ctx,
+        project,
+        &mut lib_type_gen,
+        &all_canonical_intrinsics,
+    );
+
     // Build stream types needed by canonical intrinsics.
     let stream_types: IndexMap<CmStreamPayload, u32> = {
         let mut payloads: Vec<CmStreamPayload> = Vec::new();
@@ -356,6 +387,7 @@ pub fn build_component(
         project,
         component_plan,
         result_unit_type,
+        &mut lib_type_gen,
     );
 
     // Test-name custom section: map each test export to its original (lossless)
@@ -1389,6 +1421,81 @@ fn payload_type_to_cm_key(payload: &CmPayloadType, ctx: &ComponentModelContext) 
     }
 }
 
+/// Collect the CM (kebab) names of every `Named` record nested in a payload.
+fn collect_named_payload_names(payload: &CmPayloadType, out: &mut Vec<String>) {
+    match payload {
+        CmPayloadType::Named(name) => {
+            if !out.contains(name) {
+                out.push(name.clone());
+            }
+        }
+        CmPayloadType::List(t) | CmPayloadType::Option(t) => {
+            collect_named_payload_names(t, out);
+        }
+        CmPayloadType::Result(ok, err) => {
+            if let Some(t) = ok {
+                collect_named_payload_names(t, out);
+            }
+            if let Some(t) = err {
+                collect_named_payload_names(t, out);
+            }
+        }
+        CmPayloadType::Tuple(elems) => {
+            for e in elems {
+                collect_named_payload_names(e, out);
+            }
+        }
+        CmPayloadType::Scalar(_) | CmPayloadType::String => {}
+    }
+}
+
+/// Define the named record types referenced by `Value(Named)` future/stream
+/// payloads, before the `future<T>` / `stream<T>` types that wrap them are
+/// built. Each record is defined top-level through the shared `lib_type_gen`
+/// (so the export-signature record and the canonical record are one type) and
+/// bound by its CM name in `ctx`, so `payload_type_to_cm_key`'s `type_idx`
+/// lookup resolves it.
+fn prebuild_value_named_types(
+    builder: &mut ComponentBuilder,
+    ctx: &mut ComponentModelContext,
+    project: &NirPackage,
+    lib_type_gen: &mut Option<CmTypeGen>,
+    canonical_intrinsics: &[CanonicalIntrinsic],
+) {
+    let Some(type_gen) = lib_type_gen.as_mut() else {
+        return;
+    };
+    let mut names: Vec<String> = Vec::new();
+    for intrinsic in canonical_intrinsics {
+        if let Some(CmFuturePayload::Value(p)) = intrinsic.future_payload() {
+            collect_named_payload_names(&p, &mut names);
+        }
+        if let Some(CmStreamPayload::Value(p)) = intrinsic.stream_payload() {
+            collect_named_payload_names(&p, &mut names);
+        }
+    }
+    let no_resources: IndexMap<&str, u32> = IndexMap::default();
+    for cm_name in names {
+        if ctx.has_type(&cm_name) {
+            continue;
+        }
+        let Some(wado_name) = project
+            .cm_interface_registry
+            .find_struct_wado_name_by_cm(&cm_name)
+            .map(str::to_string)
+        else {
+            continue;
+        };
+        let named = Type::Named(crate::ast::NamedType::new(
+            crate::ast::AstId::fresh(),
+            wado_name,
+            crate::token::Span::new(0, 0, 1, 1),
+        ));
+        let mut sink = TopLevelSink { builder, ctx };
+        type_gen.ast_type_to_cm(&mut sink, &named, &project.cm_interface_registry, &no_resources);
+    }
+}
+
 /// Build `future<T>` component types for general (`Value`) future payloads,
 /// returning a payload → type-index map for `resolve_future_type`.
 fn build_value_future_types(
@@ -1832,6 +1939,10 @@ impl crate::component_model::CmTypeSink for TopLevelSink<'_> {
     fn name(&mut self, cm_name: &str, idx: u32) -> u32 {
         // Top-level types are not aliased; the instance export names them.
         self.ctx.push_lib_export_type(cm_name.to_string(), idx);
+        // Also resolvable by `type_idx`, so a `CmPayloadType::Named(<cm-name>)`
+        // future/stream payload can reference this record (see
+        // `prebuild_value_named_types`).
+        self.ctx.bind_type_name(cm_name, idx);
         idx
     }
 }
@@ -1842,24 +1953,8 @@ fn emit_world_exports(
     project: &NirPackage,
     component_plan: &crate::wir_build::component_plan::ComponentPlan,
     result_unit_type: u32,
+    lib_type_gen: &mut Option<crate::component_model::CmTypeGen>,
 ) {
-    // Shared across all `--lib` exports so a named type (e.g. `point`) is
-    // defined once and reused. The interface hint resolves lib-local named
-    // types against the package's own default-interface FQ in the registry.
-    let is_lib_world = component_plan.world_exports.iter().any(|e| e.is_lib);
-    let lib_iface_fq = component_plan
-        .world_exports
-        .iter()
-        .find(|e| e.is_lib)
-        .and_then(|e| e.from_interface_fq.clone());
-    // One engine shared across all lib exports (dedups named types). The
-    // interface hint resolves lib-local named types against the package's
-    // default-interface FQ; a functions-only (direct-export) lib has no named
-    // types and needs no hint.
-    let mut lib_type_gen = is_lib_world.then(|| match lib_iface_fq.as_deref() {
-        Some(fq) => crate::component_model::CmTypeGen::with_interface_hint(fq),
-        None => crate::component_model::CmTypeGen::new(),
-    });
     let no_resources: IndexMap<&str, u32> = IndexMap::default();
 
     for export in &component_plan.world_exports {

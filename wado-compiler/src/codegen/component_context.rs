@@ -111,6 +111,13 @@ impl ComponentModelContext {
         idx
     }
 
+    /// Bind a name to an already-reserved component type index, without bumping
+    /// the type counter. Lets a type defined anonymously (e.g. via a
+    /// `CmTypeSink`) be resolved later by `type_idx`.
+    pub fn bind_type_name(&mut self, name: &str, idx: u32) {
+        self.type_names.insert(name.to_string(), idx);
+    }
+
     /// Reserve a component type index without binding a name.
     pub fn register_anon_type(&mut self) -> u32 {
         let idx = self.next_type_idx;

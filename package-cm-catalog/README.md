@@ -38,7 +38,7 @@ Full intended scope; checked items are implemented.
 
 - [x] Scalar payloads (`bool`, `u8`–`u64`, `s8`–`s64`, `f32`, `f64`, `char`)
 - [x] `string`
-- [ ] `record`
+- [x] `record`
 - [x] `option<_>`
 - [x] `result<_, _>`
 - [x] `list<_>`
@@ -48,7 +48,7 @@ Full intended scope; checked items are implemented.
 
 - [x] `stream<u8>` (pass-through)
 - [x] `stream<T>` consume/produce — scalar element payloads (`stream<u32>`)
-- [x] `stream<T>` consume/produce — aggregate element payloads (`stream<string>`)
+- [x] `stream<T>` consume/produce — aggregate element payloads (`stream<string>`, `stream<point>`)
 - `stream<char>` is intentionally out of scope (rejected by the Component Model)
 
 **Embedded handles (pass-through)**

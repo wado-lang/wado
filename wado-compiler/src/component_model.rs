@@ -111,7 +111,26 @@ pub fn cm_payload_type_from_type_id(
             };
             Some(CmPayloadType::Result(arm(type_args[0])?, arm(type_args[1])?))
         }
+        // A user/dependency record: lower/lift it as a named CM record. WASI and
+        // kiln records keep their own (registry-driven) paths, so they stay
+        // `None` here and fall through to the legacy classification.
+        ResolvedType::Struct {
+            name,
+            module_source,
+            ..
+        } if !is_cm_owned_source(&module_source) => Some(CmPayloadType::Named(to_kebab(&name))),
         _ => None,
+    }
+}
+
+/// Whether a type's module source already owns a CM lowering path (`wasi:*`
+/// interfaces and the `core:kiln/*` generator surface). User, local, and
+/// dependency records do not, so they route through the general `Named` payload.
+fn is_cm_owned_source(ms: &ModuleSource) -> bool {
+    match ms {
+        ModuleSource::Wasi { .. } => true,
+        ModuleSource::Core { name } => name.as_str().starts_with("kiln"),
+        _ => false,
     }
 }
 
@@ -146,7 +165,20 @@ pub fn cm_payload_type_from_ast(
     let resolved = registry.resolve_type(ty);
     match &resolved {
         Type::Named(n) if n.name == "String" => Some(CmPayloadType::String),
-        Type::Named(n) => cm_scalar_from_ast_name(&n.name).map(CmPayloadType::Scalar),
+        Type::Named(n) => {
+            if let Some(scalar) = cm_scalar_from_ast_name(&n.name) {
+                return Some(CmPayloadType::Scalar(scalar));
+            }
+            // A user/dependency record: a registered struct whose source is not
+            // a CM-owned (`wasi:*` / `core:kiln/*`) interface. Mirrors the
+            // `Named` arm of `cm_payload_type_from_type_id`.
+            let src = registry.resolve_cm_source_for(n, None)?;
+            if src.starts_with("wasi:") || src.starts_with("core:kiln") {
+                return None;
+            }
+            let cm = registry.get_struct_cm_name_by_source(src, &n.name)?;
+            Some(CmPayloadType::Named(cm.to_string()))
+        }
         Type::Tuple(elems) => elems
             .iter()
             .map(|e| cm_payload_type_from_ast(e, registry))
@@ -1659,6 +1691,22 @@ impl CmInterfaceRegistry {
         self.structs
             .get(&(interface.to_string(), name.to_string()))
             .map(|(cm_name, _, _)| cm_name.as_str())
+    }
+
+    /// Reverse-lookup a struct's Wado name from its CM (kebab) name, when
+    /// unambiguous across interfaces. Used by codegen to reconstruct the
+    /// declaring `Type::Named` for a `CmPayloadType::Named(<cm-name>)` payload.
+    pub fn find_struct_wado_name_by_cm(&self, cm_name: &str) -> Option<&str> {
+        let mut hit = None;
+        for ((_, wado_name), (cm, _, _)) in &self.structs {
+            if cm == cm_name {
+                if hit.is_some() {
+                    return None;
+                }
+                hit = Some(wado_name.as_str());
+            }
+        }
+        hit
     }
 
     /// Struct registered at `(interface, name)`; returns CM-kebab field

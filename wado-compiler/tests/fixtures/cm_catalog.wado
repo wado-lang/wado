@@ -369,6 +369,15 @@ export async fn id_future_tuple(v: Future<[u32, String]>) -> Future<[u32, String
         tx.write(x);
     }
 }
+export async fn id_future_record(v: Future<Point>) -> Future<Point> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<Point>::new();
+    task return rx;
+    if let Some(x) = value {
+        tx.write(x);
+    }
+}
 
 // `stream<u8>` pass-through: the readable end crosses the boundary unchanged.
 export fn id_stream_u8(v: Stream<u8>) -> Stream<u8> {
@@ -396,6 +405,19 @@ export async fn id_stream_u32(v: Stream<u32>) -> Stream<u32> {
 }
 export async fn id_stream_string(v: Stream<String>) -> Stream<String> {
     let [rx, tx] = Stream::<String>::new();
+    task return rx;
+    loop {
+        let chunk = v.read(16);
+        if chunk.len() == 0 {
+            break;
+        }
+        tx.write(chunk);
+    }
+    v.drop();
+    tx.drop();
+}
+export async fn id_stream_record(v: Stream<Point>) -> Stream<Point> {
+    let [rx, tx] = Stream::<Point>::new();
     task return rx;
     loop {
         let chunk = v.read(16);
