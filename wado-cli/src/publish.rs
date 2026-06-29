@@ -1,20 +1,24 @@
 //! `wado publish` — publish the package to a registry.
 //!
 //! A facade over the build path and `wkg`: it runs the publish-readiness checks
-//! ([`wado_manifest::validate_for_publish`]), builds the package's library-world
+//! ([`wado_manifest::validate_for_publish`]), builds each publishable world's
 //! component with `[package]` metadata embedded, then shells out to `wkg oci
-//! push` to upload it as an OCI artifact. `--dry-run` stops after the checks and
-//! reports any problems without building or uploading.
+//! push` to upload each as an OCI artifact. `--dry-run` stops after the checks
+//! and reports any problems without building or uploading.
 //!
-//! The push target is `[registries].default` (the only supported publish
-//! destination); a missing or non-`oci://` default registry is an error.
-//! Authentication is delegated to `wkg` and the ambient OCI credential store
-//! (`docker login`); Wado stores no credentials.
+//! Each world is a distinct artifact: the library world publishes to the bare
+//! repository `<prefix>/<ns>/<name>`, and every other `[world]` entry (unless
+//! `publish = false`) to a `/<world>` sub-path. The push target is the `default`
+//! registry; a missing or non-`oci://` default is an error. Authentication is
+//! delegated to `wkg` and the ambient OCI credential store (`docker login`) or
+//! its `WKG_OCI_USERNAME` / `WKG_OCI_PASSWORD` override; Wado stores no
+//! credentials.
 //!
 //! In a workspace, publishing is gated to the workspace root: it publishes every
-//! publishable member together at the shared (force-inherited) version, so the
-//! registry can never end up with members at mismatched versions. Running it
-//! from a member directory is an error pointing at the root.
+//! publishable member together at the shared (force-inherited) version against
+//! the root's `[registries]`, so the registry can never end up with members at
+//! mismatched versions. Running it from a member directory is an error pointing
+//! at the root.
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -126,7 +130,7 @@ async fn publish_single(project: &ProjectManifest, dry_run: bool) -> Result<(), 
                 eprintln!("{coord} is ready to publish");
                 Ok(())
             } else {
-                publish_package(project, &coord).await
+                publish_package(project, &coord, &project.manifest.registries).await
             }
         }
         Verdict::Failed(problems) => Err(problems_error(
@@ -211,8 +215,10 @@ async fn publish_workspace(root: &ProjectManifest, dry_run: bool) -> Result<(), 
         return Ok(());
     }
 
+    // Publish is a root-only operation, so every member resolves against the
+    // workspace root's `[registries]`, not its own.
     for (coord, project) in &ready {
-        publish_package(project, coord).await?;
+        publish_package(project, coord, &root.manifest.registries).await?;
     }
     Ok(())
 }
@@ -264,7 +270,13 @@ fn publishable_worlds(project: &ProjectManifest) -> Result<Vec<PublishTarget>, C
 
 /// Build and push every publishable world of one ready package: build each
 /// world's component, resolve its OCI reference, then `wkg oci push` it.
-async fn publish_package(project: &ProjectManifest, coord: &str) -> Result<(), CliExit> {
+/// `registries` is the workspace root's (or the package's own, when standalone)
+/// `[registries]`, since publish is a root-only operation.
+async fn publish_package(
+    project: &ProjectManifest,
+    coord: &str,
+    registries: &indexmap::IndexMap<String, String>,
+) -> Result<(), CliExit> {
     let pkg = project
         .manifest
         .package
@@ -283,7 +295,7 @@ async fn publish_package(project: &ProjectManifest, coord: &str) -> Result<(), C
         );
     }
     for target in &targets {
-        let reference = resolve_push_target(&project.manifest, pkg, target.subpath.as_deref())?;
+        let reference = resolve_push_target(registries, pkg, target.subpath.as_deref())?;
         crate::compile::build_publish_world(
             &target.entry,
             &target.output,
@@ -302,16 +314,18 @@ async fn publish_package(project: &ProjectManifest, coord: &str) -> Result<(), C
 }
 
 /// The OCI reference `wkg oci push` targets:
-/// `<host>/<prefix>/<namespace>/<name>[/<world>]:<version>`, derived from
-/// `[registries].default` (the only supported publish destination) and the
-/// package coordinate. `subpath` is the world segment for a non-library world.
-/// Errors when no default registry is set or it is not an `oci://` URL.
+/// `<host>/<prefix>/<namespace>/<name>[/<world>]:<version>`, derived from the
+/// `default` registry (the only supported publish destination) and the package
+/// coordinate. `registries` comes from the workspace root when publishing a
+/// workspace, since `wado publish` is a root-only operation. `subpath` is the
+/// world segment for a non-library world. Errors when no default registry is
+/// set or it is not an `oci://` URL.
 fn resolve_push_target(
-    manifest: &Manifest,
+    registries: &indexmap::IndexMap<String, String>,
     pkg: &Package,
     subpath: Option<&str>,
 ) -> Result<String, CliExit> {
-    let registry = manifest.registries.get("default").ok_or_else(|| {
+    let registry = registries.get("default").ok_or_else(|| {
         CliExit::error(
             "publishing requires a default registry; set it in wado.toml:\n  \
              [registries]\n  default = \"oci://ghcr.io/yourorg\"",
@@ -442,30 +456,34 @@ mod tests {
     #[test]
     fn resolve_push_target_library_uses_bare_repository() {
         let m = ready_manifest_with_registry("oci://ghcr.io/acme");
-        let target = resolve_push_target(&m, m.package.as_ref().unwrap(), None).unwrap();
+        let target = resolve_push_target(&m.registries, m.package.as_ref().unwrap(), None).unwrap();
         assert_eq!(target, "ghcr.io/acme/org/app:0.1.0");
     }
 
     #[test]
     fn resolve_push_target_world_appends_subpath() {
         let m = ready_manifest_with_registry("oci://ghcr.io/acme");
-        let target =
-            resolve_push_target(&m, m.package.as_ref().unwrap(), Some("core-kiln-generator"))
-                .unwrap();
+        let target = resolve_push_target(
+            &m.registries,
+            m.package.as_ref().unwrap(),
+            Some("core-kiln-generator"),
+        )
+        .unwrap();
         assert_eq!(target, "ghcr.io/acme/org/app/core-kiln-generator:0.1.0");
     }
 
     #[test]
     fn resolve_push_target_trims_trailing_slash() {
         let m = ready_manifest_with_registry("oci://ghcr.io/acme/");
-        let target = resolve_push_target(&m, m.package.as_ref().unwrap(), None).unwrap();
+        let target = resolve_push_target(&m.registries, m.package.as_ref().unwrap(), None).unwrap();
         assert_eq!(target, "ghcr.io/acme/org/app:0.1.0");
     }
 
     #[test]
     fn resolve_push_target_errors_without_default_registry() {
         let m = manifest("[package]\nnamespace = \"org\"\nname = \"app\"\nversion = \"0.1.0\"\n");
-        let err = resolve_push_target(&m, m.package.as_ref().unwrap(), None).unwrap_err();
+        let err =
+            resolve_push_target(&m.registries, m.package.as_ref().unwrap(), None).unwrap_err();
         assert!(
             err.message.contains("default registry"),
             "{:?}",
@@ -476,7 +494,8 @@ mod tests {
     #[test]
     fn resolve_push_target_rejects_non_oci_registry() {
         let m = ready_manifest_with_registry("https://wa.dev");
-        let err = resolve_push_target(&m, m.package.as_ref().unwrap(), None).unwrap_err();
+        let err =
+            resolve_push_target(&m.registries, m.package.as_ref().unwrap(), None).unwrap_err();
         assert!(err.message.contains("oci://"), "{:?}", err.message);
     }
 

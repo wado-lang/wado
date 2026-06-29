@@ -853,10 +853,12 @@ per-world setting.
 
 In a workspace, `wado publish` is gated to the workspace root: it publishes every
 publishable member (and the root's own `[package]`, if any) together at the
-shared version. Members that are not publishable (`publish = false` or no
-`namespace`) are skipped, and any member with unmet requirements aborts the whole
-publish. Running `wado publish` from a member directory is an error pointing at
-the root. This is the registry half of the [Lockstep Contract](#lockstep-contract).
+shared version, all against the root's `[registries]` (a member's own
+`[registries]` is not consulted, since publish is a root-only operation).
+Members that are not publishable (`publish = false` or no `namespace`) are
+skipped, and any member with unmet requirements aborts the whole publish.
+Running `wado publish` from a member directory is an error pointing at the root.
+This is the registry half of the [Lockstep Contract](#lockstep-contract).
 
 #### Path Dependency Replacement
 
