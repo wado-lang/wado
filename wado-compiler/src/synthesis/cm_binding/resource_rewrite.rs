@@ -100,13 +100,21 @@ pub(super) fn synthesize_record_stream_reads(project: &mut Package) {
         let elem_align =
             crate::component_model::cm_align_with_registry(&ast_type, cm_interface_registry) as i32;
 
+        let cm_record_name = cm_interface_registry
+            .get_struct_cm_name(elem_name)
+            .unwrap_or(elem_name)
+            .to_string();
+        let _ = fields;
         let func = synthesize_stream_read_func(
+            format!("__cm_stream_read_{elem_name}"),
+            format!("stream-read:{cm_record_name}"),
             elem_name,
             *elem_type_id,
             *array_type_id,
-            fields,
             elem_size,
             elem_align,
+            &ast_type,
+            "filesystem",
             cm_interface_registry,
             &type_table,
             &project.interner,
@@ -366,6 +374,103 @@ impl TirRefVisitor for StreamWriteFinder<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
         if let Some(elem) = stream_write_value_element(self.tt, expr) {
             let name = stream_write_func_name(self.tt, elem);
+            self.results.entry(name).or_insert(elem);
+        }
+        self.walk_expr(expr);
+    }
+}
+
+/// Generate per-element `StreamReadable<T>::read()` binding functions for
+/// scalar / structural (non-`u8`, non-WASI-record) element types, mirroring
+/// [`synthesize_stream_writes`]. Each reads up to `max` elements into a CM
+/// buffer via the element-parameterized `stream-read` canonical, lifts each
+/// element with the shared `synthesize_lift`, and returns `List<T>`. An empty
+/// result signals EOF to the caller.
+pub(super) fn synthesize_stream_reads(project: &mut Package) {
+    let cm_interface_registry = &project.cm_interface_registry;
+    let mut needed: IndexMap<String, TypeId> = IndexMap::default();
+    for module in project.tir_modules.values() {
+        let tt = module.type_table.borrow();
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
+            if let Some(body) = &func.body {
+                StreamReadValueFinder {
+                    tt: &tt,
+                    results: &mut needed,
+                }
+                .visit_block(body);
+            }
+        }
+    }
+    if needed.is_empty() {
+        return;
+    }
+
+    let entry_source = project.entry_module_source.clone();
+    let type_table = project
+        .tir_modules
+        .get(&entry_source)
+        .expect("entry module must exist in tir_modules")
+        .type_table
+        .clone();
+
+    let mut new_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
+    for (_, elem_type_id) in &needed {
+        new_functions.push(Rc::new(RefCell::new(synthesize_stream_read_value_func(
+            *elem_type_id,
+            cm_interface_registry,
+            &type_table,
+            &project.interner,
+        ))));
+    }
+    let entry_module = project
+        .tir_modules
+        .get_mut(&entry_source)
+        .expect("entry module must exist in tir_modules");
+    for func in new_functions {
+        entry_module.functions.push(func);
+    }
+}
+
+/// The stream-read element type for a value-payload `stream-read`, or `None`
+/// for `u8` and WASI record streams (handled by their own paths).
+fn stream_read_value_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
+    let func = match &expr.kind {
+        TirExprKind::MethodCall { func, .. } | TirExprKind::Call { func, .. } => func,
+        _ => return None,
+    };
+    if func.method_info.as_ref().and_then(|m| m.cm_name.as_deref()) != Some("stream-read") {
+        return None;
+    }
+    if is_u8_array_type(expr.type_id, tt) {
+        return None;
+    }
+    let elem = *tt.generic_type_args(expr.type_id)?.first()?;
+    matches!(
+        crate::component_model::classify_stream_payload(tt, elem),
+        CmStreamPayload::Value(_)
+    )
+    .then_some(elem)
+}
+
+/// The `__cm_stream_read_val_*` helper name for an element type. Finder,
+/// rewriter, and synthesizer must agree on this mangle.
+fn stream_read_value_func_name(tt: &TypeTable, elem_type_id: TypeId) -> String {
+    format!(
+        "__cm_stream_read_val_{}",
+        tt.mangle_type_arg_for_generic(elem_type_id)
+    )
+}
+
+struct StreamReadValueFinder<'a> {
+    tt: &'a TypeTable,
+    results: &'a mut IndexMap<String, TypeId>,
+}
+
+impl TirRefVisitor for StreamReadValueFinder<'_> {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if let Some(elem) = stream_read_value_element(self.tt, expr) {
+            let name = stream_read_value_func_name(self.tt, elem);
             self.results.entry(name).or_insert(elem);
         }
         self.walk_expr(expr);
@@ -1054,6 +1159,12 @@ impl TirRefVisitor for RecordStreamReadFinder<'_> {
             // Extract element type from List<T>
             if let Some(type_args) = self.tt.generic_type_args(expr.type_id)
                 && let Some(&elem_type_id) = type_args.first()
+                // Value-payload elements are handled by `synthesize_stream_reads`;
+                // only true WASI records belong to this path.
+                && !matches!(
+                    crate::component_model::classify_stream_payload(self.tt, elem_type_id),
+                    CmStreamPayload::Value(_)
+                )
             {
                 let elem_name = self.tt.base_type_name(elem_type_id);
                 self.results
@@ -1073,13 +1184,23 @@ impl TirRefVisitor for RecordStreamReadFinder<'_> {
 /// 3. Append to result array
 /// 4. Free buffer
 /// 5. Return array
+/// Shared stream-read loop generator. `func_name` / `stream_read_name` /
+/// `payload_ast` / `cm_package` / `elem_inst_name` are precomputed by the
+/// caller so this body serves both the WASI-record path
+/// ([`synthesize_record_stream_reads`]) and the value-payload path
+/// ([`synthesize_stream_reads`]). `elem_inst_name` is the type name used to
+/// instantiate `List<…>` for the result builder.
+#[allow(clippy::too_many_arguments)]
 fn synthesize_stream_read_func(
-    elem_name: &str,
+    func_name: String,
+    stream_read_name: String,
+    elem_inst_name: &str,
     elem_type_id: TypeId,
     array_type_id: TypeId,
-    _fields: &[(String, Type)],
     elem_size: i32,
     elem_align: i32,
+    payload_ast: &Type,
+    cm_package: &str,
     cm_interface_registry: &CmInterfaceRegistry,
     type_table: &RefCell<TypeTable>,
     interner: &RefCell<ModuleSourceInterner>,
@@ -1087,7 +1208,6 @@ fn synthesize_stream_read_func(
     let list_struct_name =
         super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items())
             .array;
-    let func_name = format!("__cm_stream_read_{elem_name}");
     let _tuple_type_id = type_table
         .borrow_mut()
         .make_tuple(vec![TypeTable::I32, TypeTable::I32]);
@@ -1103,13 +1223,6 @@ fn synthesize_stream_read_func(
     let max_idx = next_local;
     next_local += 1;
     locals.push(TirLocal::synth(next_local, TypeTable::I32, false));
-
-    // Use the CM kebab-case name for the stream-read intrinsic
-    let cm_record_name = cm_interface_registry
-        .get_struct_cm_name(elem_name)
-        .unwrap_or(elem_name)
-        .to_string();
-    let stream_read_name = format!("stream-read:{cm_record_name}");
 
     // let byte_count = max * elem_size
     let byte_count_idx = next_local;
@@ -1212,7 +1325,7 @@ fn synthesize_stream_read_func(
         TirExprKind::Call {
             func: FunctionRef {
                 module_source: ModuleSource::list(),
-                name: format!("{list_struct_name}<{elem_name}>::with_capacity"),
+                name: format!("{list_struct_name}<{elem_inst_name}>::with_capacity"),
                 monomorph_info: Some(MonomorphInfo {
                     generic_name: "List::with_capacity".to_string(),
                     impl_type_args: vec![elem_type_id],
@@ -1220,7 +1333,7 @@ fn synthesize_stream_read_func(
                     is_blanket: false,
                 }),
                 method_info: Some(LocalMethodName {
-                    struct_name: format!("{list_struct_name}<{elem_name}>"),
+                    struct_name: format!("{list_struct_name}<{elem_inst_name}>"),
                     base_struct_name: list_struct_name.clone(),
                     trait_name: None,
                     base_trait_name: None,
@@ -1282,21 +1395,15 @@ fn synthesize_stream_read_func(
     let addr = binary_add(local_ref(ptr_idx, "ptr", TypeTable::I32), offset);
     loop_body_stmts.push(let_stmt("addr", addr_idx, TypeTable::I32, addr));
 
-    // Lift each field from linear memory at addr + field_offset
+    // Lift each element from linear memory at addr.
     let lift_ctx = LiftContext {
         cm_interface_registry,
         type_table,
-        cm_package: "filesystem",
+        cm_package,
         interner,
     };
-    let ast_type = Type::Named(NamedType {
-        id: AstId::fresh(),
-        name: elem_name.to_string(),
-        span: synth_span(),
-        source_interface: None,
-    });
     let lifted_elem = synthesize_lift(
-        &ast_type,
+        payload_ast,
         local_ref(addr_idx, "addr", TypeTable::I32),
         &mut next_local,
         &mut loop_body_stmts,
@@ -1316,7 +1423,7 @@ fn synthesize_stream_read_func(
             Box::new(local_ref(arr_idx, "arr", array_type_id)),
             FunctionRef {
                 module_source: ModuleSource::list(),
-                name: format!("{list_struct_name}<{elem_name}>::push"),
+                name: format!("{list_struct_name}<{elem_inst_name}>::push"),
                 monomorph_info: Some(MonomorphInfo {
                     generic_name: "List::push".to_string(),
                     impl_type_args: vec![elem_type_id],
@@ -1324,7 +1431,7 @@ fn synthesize_stream_read_func(
                     is_blanket: false,
                 }),
                 method_info: Some(LocalMethodName {
-                    struct_name: format!("{list_struct_name}<{elem_name}>"),
+                    struct_name: format!("{list_struct_name}<{elem_inst_name}>"),
                     base_struct_name: list_struct_name,
                     trait_name: None,
                     base_trait_name: None,
@@ -1430,6 +1537,54 @@ fn synthesize_stream_read_func(
 
         return_abi: crate::tir::ReturnAbi::default(),
     }
+}
+
+/// Synthesize `__cm_stream_read_val_<mangle>(handle, max) -> List<T>` for a
+/// value-payload element type, delegating the read loop to the shared
+/// [`synthesize_stream_read_func`]. The canonical name and CM layout come from
+/// the general `classify_stream_payload` / `cm_*_with_registry_scoped` path,
+/// matching the `val-` naming the codegen builds for `CmStreamPayload::Value`.
+fn synthesize_stream_read_value_func(
+    elem_type_id: TypeId,
+    cm_interface_registry: &CmInterfaceRegistry,
+    type_table: &RefCell<TypeTable>,
+    interner: &RefCell<ModuleSourceInterner>,
+) -> TirFunction {
+    let array_type_id = type_table.borrow_mut().make_list(elem_type_id);
+    let (func_name, read_name, elem_inst_name, payload_ast, elem_size, elem_align) = {
+        let tt = type_table.borrow();
+        let func_name = stream_read_value_func_name(&tt, elem_type_id);
+        let payload = crate::component_model::classify_stream_payload(&tt, elem_type_id);
+        let read_name = CanonicalIntrinsic::StreamRead(payload).import_name();
+        let elem_inst_name = tt.base_type_name(elem_type_id);
+        let payload_ast = type_id_to_ast_type(elem_type_id, &tt, cm_interface_registry);
+        let size = crate::component_model::cm_size_with_registry_scoped(
+            &payload_ast,
+            cm_interface_registry,
+            Some("cli"),
+        ) as i32;
+        let align = crate::component_model::cm_align_with_registry_scoped(
+            &payload_ast,
+            cm_interface_registry,
+            Some("cli"),
+        ) as i32;
+        (func_name, read_name, elem_inst_name, payload_ast, size, align)
+    };
+
+    synthesize_stream_read_func(
+        func_name,
+        read_name,
+        &elem_inst_name,
+        elem_type_id,
+        array_type_id,
+        elem_size,
+        elem_align,
+        &payload_ast,
+        "cli",
+        cm_interface_registry,
+        type_table,
+        interner,
+    )
 }
 
 /// Determine the internal binding function name for a CM resource method.
@@ -1582,7 +1737,14 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             }
             return;
         }
-        // Non-u8 stream reads call a generated binding function.
+        // Value-payload stream reads call a generated per-element binding;
+        // WASI-record reads fall through to the `__cm_stream_read_<record>` path.
+        if let Some(elem_type_id) = stream_read_value_element(self.tt, expr) {
+            let func_name = stream_read_value_func_name(self.tt, elem_type_id);
+            rewrite_cm_instance_method(expr, "entry", &func_name, self.entry_source);
+            return;
+        }
+        // Non-u8 (record) stream reads call a generated binding function.
         if cm_name == "stream-read" && !is_u8_array_type(expr.type_id, self.tt) {
             if let Some(type_args) = self.tt.generic_type_args(expr.type_id)
                 && let Some(&elem_type_id) = type_args.first()

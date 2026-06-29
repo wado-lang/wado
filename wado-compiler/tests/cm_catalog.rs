@@ -28,10 +28,43 @@ use futures::StreamExt;
 use futures::channel::{mpsc, oneshot};
 use wado_compiler::{CompilerOptions, OptLevel};
 use wasmtime::component::{
-    Component, ComponentExportIndex, FutureAny, FutureConsumer, FutureReader, Instance, Source,
-    StreamAny, StreamConsumer, StreamReader, StreamResult, Val,
+    Component, ComponentExportIndex, Destination, FutureAny, FutureConsumer, FutureReader, Instance,
+    Source, StreamAny, StreamConsumer, StreamProducer, StreamReader, StreamResult, Val, VecBuffer,
 };
 use wasmtime::{AsContextMut, Store, StoreContextMut};
+
+/// Stream producer that delivers a batch with `Completed`, then signals
+/// end-of-stream with a separate `Dropped` poll. Unlike the built-in `Vec`
+/// producer (which coalesces data and the drop into one `Dropped(n)` result),
+/// this models the common streaming shape — stdin, an HTTP body — where the
+/// final data and the close arrive on distinct reads. That lets a guest drive
+/// the idiomatic `loop { read; if empty break }` consume pattern without
+/// reading past the close.
+struct ChunkedStreamProducer<T>(Option<Vec<T>>);
+
+impl<D, T> StreamProducer<D> for ChunkedStreamProducer<T>
+where
+    T: wasmtime::component::Lower + Unpin + Send + Sync + 'static,
+{
+    type Item = T;
+    type Buffer = VecBuffer<T>;
+
+    fn poll_produce<'a>(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        _store: StoreContextMut<'a, D>,
+        mut destination: Destination<'a, T, VecBuffer<T>>,
+        _finish: bool,
+    ) -> Poll<wasmtime::Result<StreamResult>> {
+        match self.get_mut().0.take() {
+            Some(items) => {
+                destination.set_buffer(items.into());
+                Poll::Ready(Ok(StreamResult::Completed))
+            }
+            None => Poll::Ready(Ok(StreamResult::Dropped)),
+        }
+    }
+}
 
 /// Future consumer that forwards the single lifted payload to a oneshot channel,
 /// so the host can assert the value after driving the event loop — the oracle
@@ -349,7 +382,7 @@ where
 {
     let expected = payload.clone();
     let func = lookup_func(store, instance, iface, export)?;
-    let s = StreamReader::new(&mut *store, payload)
+    let s = StreamReader::new(&mut *store, ChunkedStreamProducer(Some(payload)))
         .map_err(|e| format!("`{export}`: host stream create failed: {e:#}"))?;
     let any = s
         .try_into_stream_any(&mut *store)
@@ -1021,6 +1054,91 @@ fn cm_future_aggregate_identity_o0() {
 #[test]
 fn cm_future_aggregate_identity_o2() {
     run_future_identity_round_trips(OptLevel::O2);
+}
+
+/// A single-export `--lib` async identity over `stream<T>`: read the input
+/// stream element-by-element, write each chunk into a fresh `stream<T>`, and
+/// deliver the readable end via `task return`. Exercises the general stream
+/// `read` (lift) and `write` (lower) lowering for scalar and aggregate element
+/// payloads. `async` because both halves block until the peer makes progress.
+fn stream_identity_source(ty: &str, name: &str) -> String {
+    format!(
+        "export async fn {name}(v: Stream<{ty}>) -> Stream<{ty}> {{\n\
+         \x20   let [rx, tx] = Stream::<{ty}>::new();\n\
+         \x20   task return rx;\n\
+         \x20   loop {{\n\
+         \x20       let chunk = v.read(16);\n\
+         \x20       if chunk.len() == 0 {{\n\
+         \x20           break;\n\
+         \x20       }}\n\
+         \x20       tx.write(chunk);\n\
+         \x20   }}\n\
+         \x20   v.drop();\n\
+         \x20   tx.drop();\n\
+         }}\n"
+    )
+}
+
+fn run_stream_identity<T>(opt_level: OptLevel, ty: &str, export: &'static str, payload: Vec<T>)
+where
+    T: wasmtime::component::Lower
+        + wasmtime::component::Lift
+        + Clone
+        + PartialEq
+        + std::fmt::Debug
+        + Send
+        + Sync
+        + Unpin
+        + 'static,
+{
+    let fn_name = export.replace('-', "_");
+    let wasm = compile_lib_source(&stream_identity_source(ty, &fn_name), opt_level);
+    let engine = common::engine();
+    let rt = common::runtime();
+    let opt = common::opt_level_name(opt_level);
+
+    rt.block_on(async {
+        let component = Component::new(engine, &wasm).expect("instantiate component type");
+        let linker = common::linker(engine).expect("build linker");
+        let state = common::WasiState::new_with_pipes(
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+        );
+        let mut store = Store::new(engine, state);
+        store.set_epoch_deadline((common::DEFAULT_TIMEOUT_MS / 1000).max(1));
+        let instance = linker
+            .instantiate_async(&mut store, &component)
+            .await
+            .expect("instantiate identity component");
+        let iface = instance
+            .get_export(&mut store, None, LIB_WORLD_FQ)
+            .map(|(_, idx)| idx);
+        if let Err(e) =
+            stream_round_trip(&mut store, &instance, iface.as_ref(), export, payload).await
+        {
+            panic!("[{opt}] {e}");
+        }
+    });
+}
+
+fn run_stream_identity_round_trips(opt_level: OptLevel) {
+    run_stream_identity(opt_level, "u32", "id-stream-u32", vec![1u32, 2, 3, 4]);
+    run_stream_identity(
+        opt_level,
+        "String",
+        "id-stream-string",
+        vec!["a".to_string(), "bb".to_string(), "céç".to_string()],
+    );
+}
+
+#[test]
+fn cm_stream_aggregate_identity_o0() {
+    run_stream_identity_round_trips(OptLevel::O0);
+}
+
+#[test]
+fn cm_stream_aggregate_identity_o2() {
+    run_stream_identity_round_trips(OptLevel::O2);
 }
 
 /// Compile an inline library source at O0, returning the compiler's result.
