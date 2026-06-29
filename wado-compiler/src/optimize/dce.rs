@@ -18,7 +18,7 @@ use crate::name::{
     FreeFunctionName, FunctionId, MethodName, mangle_generic_name, mangle_local_method,
     mangle_local_trait_method, mangle_method_generic,
 };
-use crate::nir::{NirFunction, NirImport};
+use crate::nir::{FuncId, FunctionRef, NirFunction, NirImport};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind, StmtNode,
 };
@@ -108,15 +108,47 @@ pub struct DceAnalysis {
 /// any new types, but the explicit ordering makes the invariant
 /// observable.
 pub fn analyze_dce(project: &mut NirPackage) -> DceAnalysis {
+    // The callee descriptor for every `FuncId`, materialized once from the
+    // function records (borrow-safe: a plain pass, no body walk). A call's
+    // callee is identified by its stamped `func_id` (born resolved, authoritative
+    // — `wir_build` never falls back to name resolution for a NIR call), and the
+    // record at that id carries the identical identity (name / module /
+    // method_info / monomorph_info) the call node's `FunctionRef` used to. Indexed
+    // by `func_id.index()` (== store position, Phase 4a), so the reachability
+    // walk reads identity by id without a self-borrowing `store[id]` deref.
+    let descriptors = build_callee_descriptors(project);
+
     // Single AST walk per function body: build the call graph and
     // collect per-function used-globals / used-types in one go.
-    let mut graph = build_analysis_graph(project);
+    let mut graph = build_analysis_graph(project, &descriptors);
 
     let mut analysis = DceAnalysis::empty();
-    analysis.functions = compute_function_reachability(project, &mut graph);
+    analysis.functions = compute_function_reachability(project, &descriptors, &mut graph);
     analysis.globals = compute_global_reachability(&graph, &analysis.functions);
-    populate_type_reachability(project, &graph, &mut analysis);
+    populate_type_reachability(project, &descriptors, &graph, &mut analysis);
     analysis
+}
+
+/// The callee [`FunctionRef`] descriptor for every function, indexed by
+/// `func_id.index()` (== store position). Used so a call site's identity is read
+/// by its stamped `func_id` rather than the call node's own `FunctionRef`.
+fn build_callee_descriptors(project: &NirPackage) -> Vec<FunctionRef> {
+    project
+        .functions
+        .iter()
+        .map(|f| {
+            let f = f.borrow();
+            FunctionRef::from_resolved(&f, f.module_source.clone())
+        })
+        .collect()
+}
+
+/// Resolve a call node's stamped `func_id` to its callee descriptor. `func_id`
+/// is total for every NIR call (born resolved); a missing entry would be a bug.
+fn callee_descriptor<'a>(descriptors: &'a [FunctionRef], func_id: Option<FuncId>) -> &'a FunctionRef {
+    use cranelift_entity::EntityRef;
+    let id = func_id.expect("every NIR call is born resolved with a func_id");
+    &descriptors[id.index()]
 }
 
 /// Function reachability via call-graph BFS. Implementation detail of
@@ -128,6 +160,7 @@ pub fn analyze_dce(project: &mut NirPackage) -> DceAnalysis {
 /// once the inspectable-signature set is known.
 fn compute_function_reachability(
     project: &mut NirPackage,
+    descriptors: &[FunctionRef],
     graph: &mut AnalysisGraph,
 ) -> IndexSet<usize> {
     // Phase 2a: compute the provisional reachable set from the raw graph
@@ -141,7 +174,8 @@ fn compute_function_reachability(
     // `Fn^Inspect[Alt]` calls (they just write per-literal strings), so
     // the inspectable set is stable under this expansion — no fixpoint
     // iteration is needed.
-    let inspectable = collect_inspectable_signatures_from_reachable(project, &reachable_v1);
+    let inspectable =
+        collect_inspectable_signatures_from_reachable(project, descriptors, &reachable_v1);
     apply_inspect_edges(&mut graph.call_graph, &graph.pending_inspects, &inspectable);
 
     // Phase 2c: re-compute the reachable set from the augmented graph.
@@ -154,7 +188,7 @@ fn compute_function_reachability(
     // synthesis target is gone and the rewrite cannot fire. The virtual
     // edges are gated by compiler-item markers so each rule names its
     // canonical pair (`string_push_str` → `string_push_char`, etc.).
-    extend_reachable_for_optimizer_passes(project, &graph.call_graph, &mut reachable);
+    extend_reachable_for_optimizer_passes(project, descriptors, &graph.call_graph, &mut reachable);
 
     // Phase 4: resolve imports and WASI features using reachable set.
     resolve_imports(project, &reachable, &graph.effect_usage);
@@ -188,6 +222,7 @@ fn compute_reachable_positions(
 /// is reachable.
 fn extend_reachable_for_optimizer_passes(
     project: &NirPackage,
+    descriptors: &[FunctionRef],
     call_graph: &CallGraph,
     reachable: &mut IndexSet<FunctionId>,
 ) {
@@ -257,7 +292,7 @@ fn extend_reachable_for_optimizer_passes(
             }
             if let Some(body) = func.body.as_ref() {
                 let mut needed: IndexSet<crate::tir::TypeId> = IndexSet::default();
-                collect_array_clone_element_types(body, &mut needed);
+                collect_array_clone_element_types(body, descriptors, &mut needed);
                 for type_id in needed {
                     if let Some(helper_id) = helpers_by_type_id.get(&type_id)
                         && !reachable.contains(helper_id)
@@ -278,17 +313,29 @@ fn extend_reachable_for_optimizer_passes(
 /// `builtin::array_clone::<T>(...)` appears as a NIR call. The
 /// corresponding `$value_copy$T<id>` helper has to survive DCE because
 /// codegen will reach it by *name* at WIR time.
-fn collect_array_clone_element_types(body: &Body, out: &mut IndexSet<crate::tir::TypeId>) {
+fn collect_array_clone_element_types(
+    body: &Body,
+    descriptors: &[FunctionRef],
+    out: &mut IndexSet<crate::tir::TypeId>,
+) {
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Expr(e) = node
-            && let ExprKind::Call { func, .. } = &body.exprs[e].kind
-            && func.module_source.is_core_builtin()
-            && func.name == "array_clone"
-            && let Some(mi) = func.monomorph_info.as_ref()
-            && let Some(elem) = mi.impl_type_args.first().copied()
+            && let ExprKind::Call {
+                func_id, type_args, ..
+            } = &body.exprs[e].kind
         {
-            out.insert(elem);
+            // Identity is the callee (by `func_id`); the element type `T` is
+            // call-site data carried on the node's `type_args` (a generic
+            // builtin like `array_clone` has no per-`T` record, so the
+            // descriptor's `monomorph_info` is generic — only the node knows `T`).
+            let func = callee_descriptor(descriptors, *func_id);
+            if func.module_source.is_core_builtin()
+                && func.name == "array_clone"
+                && let Some(elem) = type_args.first().copied()
+            {
+                out.insert(elem);
+            }
         }
         body.for_each_child(node, |c| stack.push(c));
     }
@@ -588,7 +635,7 @@ struct AnalysisGraph {
 /// `populate_type_reachability`) then union per-function facts for the
 /// reachable subset instead of re-walking bodies — three independent
 /// walks collapsed into one.
-fn build_analysis_graph(project: &NirPackage) -> AnalysisGraph {
+fn build_analysis_graph(project: &NirPackage, descriptors: &[FunctionRef]) -> AnalysisGraph {
     let n = project.functions.len();
     // `call_graph` and `func_positions` get exactly one entry per function,
     // so size them up front to avoid the incremental rehashing that an
@@ -609,7 +656,7 @@ fn build_analysis_graph(project: &NirPackage) -> AnalysisGraph {
         let module_source = &func.module_source;
         let func_id = function_id_for(&func);
 
-        let mut walker = DceWalker::new(type_table, module_source);
+        let mut walker = DceWalker::new(type_table, module_source, descriptors);
         walker.analyze(&func);
         let mut analysis = walker.analysis;
         // Promoted operands hold their source type in the body's value pool, not
@@ -708,6 +755,7 @@ struct InspectableSignatures {
 /// signature.
 fn collect_inspectable_signatures_from_reachable(
     project: &NirPackage,
+    descriptors: &[FunctionRef],
     reachable: &IndexSet<FunctionId>,
 ) -> InspectableSignatures {
     let mut sigs = InspectableSignatures::default();
@@ -719,7 +767,7 @@ fn collect_inspectable_signatures_from_reachable(
             continue;
         }
         if let Some(body) = func.body.as_ref() {
-            scan_inspect_signatures_block(body, type_table, &mut sigs);
+            scan_inspect_signatures_block(body, type_table, descriptors, &mut sigs);
         }
     }
     sigs
@@ -763,13 +811,14 @@ fn function_id_for(func: &NirFunction) -> FunctionId {
 fn scan_inspect_signatures_block(
     body: &Body,
     type_table: &TypeTable,
+    descriptors: &[FunctionRef],
     sigs: &mut InspectableSignatures,
 ) {
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Expr(e) = node
-            && let ExprKind::MethodCall { receiver, func, .. } = &body.exprs[e].kind
-            && let Some(info) = &func.method_info
+            && let ExprKind::MethodCall { receiver, func_id, .. } = &body.exprs[e].kind
+            && let Some(info) = &callee_descriptor(descriptors, *func_id).method_info
             && info.base_struct_name == "Fn"
             && let Some(trait_name) = info.base_trait_name.as_deref()
         {
@@ -809,14 +858,20 @@ fn scan_inspect_signatures_block(
 struct DceWalker<'a> {
     type_table: &'a TypeTable,
     current_module: &'a ModuleSource,
+    descriptors: &'a [FunctionRef],
     analysis: FunctionAnalysis,
 }
 
 impl<'a> DceWalker<'a> {
-    fn new(type_table: &'a TypeTable, current_module: &'a ModuleSource) -> Self {
+    fn new(
+        type_table: &'a TypeTable,
+        current_module: &'a ModuleSource,
+        descriptors: &'a [FunctionRef],
+    ) -> Self {
         Self {
             type_table,
             current_module,
+            descriptors,
             analysis: FunctionAnalysis::default(),
         }
     }
@@ -1317,9 +1372,15 @@ impl DceWalker<'_> {
                 // Every expression has a result type that needs to stay alive.
                 self.add_type(body.exprs[e].type_id);
                 match &body.exprs[e].kind {
-                    ExprKind::Call { func, .. } => self.record_call(func),
-                    ExprKind::MethodCall { receiver, func, .. } => {
-                        self.record_method_call(body.operand_type(*receiver), func);
+                    ExprKind::Call { func_id, .. } => {
+                        let d = self.descriptors;
+                        self.record_call(callee_descriptor(d, *func_id));
+                    }
+                    ExprKind::MethodCall {
+                        receiver, func_id, ..
+                    } => {
+                        let (d, recv_ty) = (self.descriptors, body.operand_type(*receiver));
+                        self.record_method_call(recv_ty, callee_descriptor(d, *func_id));
                     }
                     ExprKind::CmRawCall { local_name, .. } => self.record_cm_raw_call(local_name),
                     ExprKind::ClosureToCanonical {
@@ -1540,6 +1601,7 @@ impl DceAnalysis {
 /// mutate.
 fn populate_type_reachability(
     project: &NirPackage,
+    descriptors: &[FunctionRef],
     graph: &AnalysisGraph,
     analysis: &mut DceAnalysis,
 ) {
@@ -1593,7 +1655,7 @@ fn populate_type_reachability(
                 continue;
             }
             collect_type_transitive(global.ty, &type_table, &mut analysis.types);
-            let mut walker = DceWalker::new(&type_table, &global.module_source);
+            let mut walker = DceWalker::new(&type_table, &global.module_source, descriptors);
             let init_body = global.initializer.body();
             walker.walk_node(init_body, NodeRef::Block(init_body.root));
             for id in walker.analysis.used_types {
