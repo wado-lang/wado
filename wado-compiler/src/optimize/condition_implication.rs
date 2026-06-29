@@ -41,13 +41,8 @@ use crate::nir_value_graph::ValueKind;
 /// it still sees the hoisted body.
 pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
     let root = engine.body.root;
-    // Copy/CSE temp bindings depend only on the body's `let` / reassignment
-    // structure. Build them once per pass run and thread the snapshot down,
-    // instead of rebuilding (a full-body walk) at every nested block/loop —
-    // that was O(blocks × body) on branch-heavy code. Sound under the optimize
-    // fixpoint: eliminations never add reassignments, so the snapshot can only
-    // omit a binding a mid-traversal rebuild would add (recovered next
-    // iteration), never carry a stale one. See [`build_copy_bindings`].
+    // Built once and threaded down: sound because eliminations never add
+    // reassignments, so the snapshot only omits bindings, never holds a stale one.
     let binds = build_copy_bindings(engine.body);
     process_block(engine, root, &binds)
 }
