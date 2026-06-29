@@ -134,7 +134,10 @@ authors = ["Alice <alice@example.com>", "Bob"]
             value_of(&sections, "description"),
             Some("A fast widget toolkit")
         );
-        assert_eq!(value_of(&sections, "homepage"), Some("https://wado-lang.org"));
+        assert_eq!(
+            value_of(&sections, "homepage"),
+            Some("https://wado-lang.org")
+        );
         assert_eq!(
             value_of(&sections, "source"),
             Some("https://github.com/myorg/app")
