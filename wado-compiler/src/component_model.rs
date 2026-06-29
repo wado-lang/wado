@@ -14,7 +14,7 @@ use crate::ast::{Attribute, CmImport, GenericType, Type};
 use crate::module_source::ModuleSource;
 use crate::name::to_kebab;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
-use crate::wir::{CmFuturePayload, CmScalarType};
+use crate::wir::{CmFuturePayload, CmPayloadType, CmScalarType};
 
 /// Classify a future's type argument into the CM future payload category.
 /// The single source of truth shared by the future-read synthesis path and the
@@ -40,7 +40,58 @@ pub fn classify_future_payload(type_table: &TypeTable, type_arg: TypeId) -> CmFu
         }
         _ => {}
     }
+    // A general value payload (`future<string>`, `future<list<u32>>`, …). Named
+    // types (records / variants / enums / resources) currently return `None`,
+    // so the WASI trailers / transmission shapes fall through to the legacy
+    // `Trailers` classification unchanged.
+    if let Some(payload) = cm_payload_type_from_type_id(type_table, type_arg) {
+        return CmFuturePayload::Value(payload);
+    }
     CmFuturePayload::Trailers
+}
+
+/// Build a self-contained [`CmPayloadType`] from a resolved type, for use as a
+/// `future<T>` / `stream<T>` payload identity. Returns `None` for types not yet
+/// supported as general payloads (named records / variants / enums / resources,
+/// 128-bit and SIMD primitives), so callers fall back to legacy handling.
+pub fn cm_payload_type_from_type_id(
+    type_table: &TypeTable,
+    type_id: TypeId,
+) -> Option<CmPayloadType> {
+    if let Some(inner) = type_table.as_option(type_id) {
+        return Some(CmPayloadType::Option(Box::new(cm_payload_type_from_type_id(
+            type_table, inner,
+        )?)));
+    }
+    if let Some(inner) = type_table.as_list(type_id) {
+        return Some(CmPayloadType::List(Box::new(cm_payload_type_from_type_id(
+            type_table, inner,
+        )?)));
+    }
+    if let Some(elems) = type_table.as_tuple(type_id) {
+        let elems = elems
+            .iter()
+            .map(|&e| cm_payload_type_from_type_id(type_table, e))
+            .collect::<Option<Vec<_>>>()?;
+        return Some(CmPayloadType::Tuple(elems));
+    }
+    match type_table.get(type_id) {
+        ResolvedType::Primitive(prim) => primitive_to_cm_scalar(prim).map(CmPayloadType::Scalar),
+        ResolvedType::Struct { name, .. } if name == "String" => Some(CmPayloadType::String),
+        ResolvedType::GenericInstance {
+            name, type_args, ..
+        } if name == "Result" && type_args.len() == 2 => {
+            let arm = |id: TypeId| -> Option<Option<Box<CmPayloadType>>> {
+                if matches!(type_table.get(id), ResolvedType::Unit) {
+                    Some(None)
+                } else {
+                    Some(Some(Box::new(cm_payload_type_from_type_id(type_table, id)?)))
+                }
+            };
+            Some(CmPayloadType::Result(arm(type_args[0])?, arm(type_args[1])?))
+        }
+        _ => None,
+    }
 }
 
 /// Map a primitive type to its CM scalar type, or `None` for non-CM-scalars.

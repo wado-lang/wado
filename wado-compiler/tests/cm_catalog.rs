@@ -256,8 +256,12 @@ fn lookup_func(
     iface: Option<&ComponentExportIndex>,
     export: &str,
 ) -> Result<wasmtime::component::Func, String> {
+    // Named-type libraries group exports into a default interface; a library of
+    // only structural types exports them directly at the component root. Try the
+    // interface first, then fall back to the root.
     iface
         .and_then(|i| instance.get_export(&mut *store, Some(i), export))
+        .or_else(|| instance.get_export(&mut *store, None, export))
         .map(|(_, idx)| idx)
         .and_then(|idx| instance.get_func(&mut *store, idx))
         .ok_or_else(|| format!("export `{export}` not found"))
@@ -650,6 +654,167 @@ fn run_round_trips(opt_level: OptLevel) {
 
         assert!(failures.is_empty(), "\n{}", failures.join("\n"));
     });
+}
+
+/// A producer library: each `mk_future_*` lowers an aggregate value into a fresh
+/// `future<T>` and returns the readable end. Exercises `synthesize_future_writes`
+/// (the aggregate lower path) end to end — the guest writes, the host reads back
+/// and asserts the payload survived. The write is cross-component (the host reads
+/// it), so the BLOCKED write keeps its buffer alive without the guest blocking,
+/// which is why a plain `export fn` suffices here (unlike a consuming read, which
+/// would block and require an async task).
+const PRODUCER_SOURCE: &str = r#"
+export fn mk_future_string(s: String) -> Future<String> {
+    let [rx, tx] = Future::<String>::new();
+    tx.write(s);
+    return rx;
+}
+export fn mk_future_option(v: Option<u32>) -> Future<Option<u32>> {
+    let [rx, tx] = Future::<Option<u32>>::new();
+    tx.write(v);
+    return rx;
+}
+export fn mk_future_result(v: Result<u32, String>) -> Future<Result<u32, String>> {
+    let [rx, tx] = Future::<Result<u32, String>>::new();
+    tx.write(v);
+    return rx;
+}
+export fn mk_future_list(v: List<u32>) -> Future<List<u32>> {
+    let [rx, tx] = Future::<List<u32>>::new();
+    tx.write(v);
+    return rx;
+}
+export fn mk_future_tuple(v: [u32, String]) -> Future<[u32, String]> {
+    let [rx, tx] = Future::<[u32, String]>::new();
+    tx.write(v);
+    return rx;
+}
+"#;
+
+/// Compile an inline library source to a component, with the debug allocator.
+fn compile_lib_source(source: &str, opt_level: OptLevel) -> Vec<u8> {
+    let options = CompilerOptions {
+        opt_level,
+        lib_world: Some(LIB_WORLD_FQ.to_string()),
+        allocator: Some("debug".to_string()),
+        ..Default::default()
+    };
+    common::compile_source_with_compiler_options(Path::new("lib.wado"), source, options)
+        .expect("inline library failed to compile")
+        .wasm
+}
+
+/// Call a `mk_future_*` producer with `input`, then read its produced future back
+/// on the host and assert the lifted value equals `expected`.
+async fn produce_and_read_back<T>(
+    store: &mut Store<common::WasiState>,
+    instance: &Instance,
+    iface: Option<&ComponentExportIndex>,
+    export: &'static str,
+    input: Val,
+    expected: T,
+) -> Result<(), String>
+where
+    T: wasmtime::component::Lift + PartialEq + std::fmt::Debug + Send + 'static,
+{
+    let func = lookup_func(store, instance, iface, export)?;
+    let mut results = vec![Val::Bool(false); 1];
+    func.call_async(&mut *store, &[input], &mut results)
+        .await
+        .map_err(|e| format!("`{export}`: call trapped: {e:#}"))?;
+    let any = match results.into_iter().next() {
+        Some(Val::Future(a)) => a,
+        other => return Err(format!("`{export}`: expected a future result, got {other:?}")),
+    };
+    let reader = any.try_into_future_reader::<T>().map_err(|e| {
+        format!(
+            "`{export}`: result is not future<{}>: {e:#}",
+            std::any::type_name::<T>()
+        )
+    })?;
+    let (tx, rx) = oneshot::channel::<T>();
+    reader
+        .pipe(&mut *store, OneshotConsumer::new(tx))
+        .map_err(|e| format!("`{export}`: pipe failed: {e:#}"))?;
+    let got = store
+        .run_concurrent(async move |_| rx.await)
+        .await
+        .map_err(|e| format!("`{export}`: run_concurrent failed: {e:#}"))?
+        .map_err(|_| format!("`{export}`: future closed without a value"))?;
+    if got != expected {
+        return Err(format!(
+            "`{export}`: produced payload mismatch\n  in:  {expected:?}\n  out: {got:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn run_producer_round_trips(opt_level: OptLevel) {
+    let wasm = compile_lib_source(PRODUCER_SOURCE, opt_level);
+    let engine = common::engine();
+    let rt = common::runtime();
+    let opt = common::opt_level_name(opt_level);
+
+    rt.block_on(async {
+        let component = Component::new(engine, &wasm).expect("instantiate component type");
+        let linker = common::linker(engine).expect("build linker");
+        let state = common::WasiState::new_with_pipes(
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+        );
+        let mut store = Store::new(engine, state);
+        store.set_epoch_deadline((common::DEFAULT_TIMEOUT_MS / 1000).max(1));
+        let instance = linker
+            .instantiate_async(&mut store, &component)
+            .await
+            .expect("instantiate producer component");
+        let iface = instance
+            .get_export(&mut store, None, LIB_WORLD_FQ)
+            .map(|(_, idx)| idx);
+        let i = iface.as_ref();
+
+        let mut failures = Vec::new();
+        macro_rules! check {
+            ($call:expr) => {
+                if let Err(e) = $call.await {
+                    failures.push(format!("[{opt}] {e}"));
+                }
+            };
+        }
+
+        check!(produce_and_read_back(
+            &mut store, &instance, i, "mk-future-string",
+            Val::String("héllo, wörld".into()), "héllo, wörld".to_string(),
+        ));
+        check!(produce_and_read_back(
+            &mut store, &instance, i, "mk-future-option",
+            Val::Option(b(Val::U32(42))), Some(42u32),
+        ));
+        check!(produce_and_read_back(
+            &mut store, &instance, i, "mk-future-result",
+            Val::Result(Ok(b(Val::U32(7)))), Ok::<u32, String>(7),
+        ));
+        check!(produce_and_read_back(
+            &mut store, &instance, i, "mk-future-list",
+            Val::List(vec![Val::U32(1), Val::U32(2), Val::U32(3)]), vec![1u32, 2, 3],
+        ));
+        check!(produce_and_read_back(
+            &mut store, &instance, i, "mk-future-tuple",
+            Val::Tuple(vec![Val::U32(5), Val::String("x".into())]), (5u32, "x".to_string()),
+        ));
+
+        assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+    });
+}
+
+#[test]
+fn cm_future_aggregate_producer_o0() {
+    run_producer_round_trips(OptLevel::O0);
+}
+
+#[test]
+fn cm_future_aggregate_producer_o2() {
+    run_producer_round_trips(OptLevel::O2);
 }
 
 /// Compile an inline library source at O0, returning the compiler's result.

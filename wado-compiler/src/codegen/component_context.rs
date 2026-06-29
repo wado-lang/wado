@@ -4,6 +4,8 @@
 //! (types, instances, core functions, modules) to eliminate hardcoded magic
 //! numbers when building Wasm Components with wasm-encoder.
 
+use wasm_encoder::PrimitiveValType;
+
 use crate::hashmap::IndexMap;
 
 /// Structural key for a defined Component Model type, so a given structure
@@ -14,6 +16,8 @@ use crate::hashmap::IndexMap;
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum CmTypeKey {
     Leaf(u32),
+    /// A primitive value type (or `string`), emitted inline — never a defined type.
+    Primitive(PrimitiveValType),
     Own(Box<CmTypeKey>),
     Option(Box<CmTypeKey>),
     Result {
@@ -21,6 +25,9 @@ pub enum CmTypeKey {
         err: Option<Box<CmTypeKey>>,
     },
     Future(Box<CmTypeKey>),
+    Stream(Box<CmTypeKey>),
+    List(Box<CmTypeKey>),
+    Tuple(Vec<CmTypeKey>),
 }
 
 /// Tracks component-level indices for types, instances, and core functions.

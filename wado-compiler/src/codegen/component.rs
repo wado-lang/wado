@@ -16,7 +16,9 @@ use crate::ast::Type;
 use crate::component_model::{CmFunctionInfo, CmTypeGen, CmVariantCase};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir_package::NirPackage;
-use crate::wir::{CanonicalIntrinsic, CmFuturePayload, CmScalarType, CmStreamPayload, WirPackage};
+use crate::wir::{
+    CanonicalIntrinsic, CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload, WirPackage,
+};
 use wasm_encoder::{
     Alias, CanonicalOption, ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind,
     ComponentValType, ExportKind, InstanceType, ModuleArg, PrimitiveValType, TypeBounds,
@@ -131,11 +133,20 @@ pub fn build_component(
         }
         let mut map = IndexMap::default();
         for payload in payloads {
+            // General (`Value`) element types intern structurally (primitives
+            // inline, aggregates as defined types), keyed by the stream key.
+            if let CmStreamPayload::Value(t) = &payload {
+                let key = CmTypeKey::Stream(Box::new(payload_type_to_cm_key(t, &ctx)));
+                let idx = intern_cm_type(&mut builder, &mut ctx, &key, None);
+                map.insert(payload, idx);
+                continue;
+            }
             let (type_key, val_type) = match &payload {
                 CmStreamPayload::U8 => (
                     "stream-u8".to_string(),
                     ComponentValType::Primitive(PrimitiveValType::U8),
                 ),
+                CmStreamPayload::Value(_) => unreachable!("handled above"),
                 CmStreamPayload::Record(name) => {
                     // Alias the record type from the WASI interface that defines it.
                     // WASI imports are already generated (generate_cm_imports runs first),
@@ -228,6 +239,10 @@ pub fn build_component(
     let scalar_future_types =
         build_scalar_future_types(&mut builder, &mut ctx, &all_canonical_intrinsics);
 
+    // Build general future types (e.g., future<string>, future<list<u32>>).
+    let value_future_types =
+        build_value_future_types(&mut builder, &mut ctx, &all_canonical_intrinsics);
+
     // Canonical intrinsics
     emit_canonical_intrinsics(
         project,
@@ -239,6 +254,7 @@ pub fn build_component(
         trailers_future_type,
         &transmission_future_types,
         &scalar_future_types,
+        &value_future_types,
         component_plan,
     );
 
@@ -1149,6 +1165,21 @@ fn emit_kiln_world_types(builder: &mut ComponentBuilder, ctx: &mut ComponentMode
 /// Repeated calls with an equal key return the cached index without re-emitting.
 /// `debug_name`, when given, names the emitted type and registers the name so
 /// existing `ctx.type_idx(name)` lookups still resolve.
+/// Resolve a [`CmTypeKey`] to a [`ComponentValType`], emitting any defined type
+/// inline. Primitives (and `string`) are returned as `Primitive` without a
+/// defined-type slot; everything else interns to a `Type(idx)`.
+fn intern_cm_valtype(
+    builder: &mut ComponentBuilder,
+    ctx: &mut ComponentModelContext,
+    key: &CmTypeKey,
+) -> ComponentValType {
+    match key {
+        CmTypeKey::Leaf(idx) => ComponentValType::Type(*idx),
+        CmTypeKey::Primitive(p) => ComponentValType::Primitive(*p),
+        _ => ComponentValType::Type(intern_cm_type(builder, ctx, key, None)),
+    }
+}
+
 fn intern_cm_type(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -1163,18 +1194,31 @@ fn intern_cm_type(
     }
     let resolved = match key {
         CmTypeKey::Leaf(_) => unreachable!("Leaf handled above"),
+        CmTypeKey::Primitive(_) => {
+            panic!("CmTypeKey::Primitive has no defined-type slot; use intern_cm_valtype")
+        }
         CmTypeKey::Own(inner) => ResolvedCmType::Own(intern_cm_type(builder, ctx, inner, None)),
         CmTypeKey::Option(inner) => {
-            ResolvedCmType::Option(intern_cm_type(builder, ctx, inner, None))
+            ResolvedCmType::Option(intern_cm_valtype(builder, ctx, inner))
         }
         CmTypeKey::Future(inner) => {
-            ResolvedCmType::Future(intern_cm_type(builder, ctx, inner, None))
+            ResolvedCmType::Future(intern_cm_valtype(builder, ctx, inner))
         }
+        CmTypeKey::Stream(inner) => {
+            ResolvedCmType::Stream(intern_cm_valtype(builder, ctx, inner))
+        }
+        CmTypeKey::List(inner) => ResolvedCmType::List(intern_cm_valtype(builder, ctx, inner)),
         CmTypeKey::Result { ok, err } => {
-            let ok = ok.as_ref().map(|k| intern_cm_type(builder, ctx, k, None));
-            let err = err.as_ref().map(|k| intern_cm_type(builder, ctx, k, None));
+            let ok = ok.as_ref().map(|k| intern_cm_valtype(builder, ctx, k));
+            let err = err.as_ref().map(|k| intern_cm_valtype(builder, ctx, k));
             ResolvedCmType::Result { ok, err }
         }
+        CmTypeKey::Tuple(elems) => ResolvedCmType::Tuple(
+            elems
+                .iter()
+                .map(|k| intern_cm_valtype(builder, ctx, k))
+                .collect(),
+        ),
     };
 
     let idx = match debug_name {
@@ -1187,17 +1231,22 @@ fn intern_cm_type(
             enc.defined_type().own(resource);
         }
         ResolvedCmType::Option(inner) => {
-            enc.defined_type().option(ComponentValType::Type(inner));
+            enc.defined_type().option(inner);
         }
         ResolvedCmType::Future(inner) => {
-            enc.defined_type()
-                .future(Some(ComponentValType::Type(inner)));
+            enc.defined_type().future(Some(inner));
+        }
+        ResolvedCmType::Stream(inner) => {
+            enc.defined_type().stream(Some(inner));
+        }
+        ResolvedCmType::List(inner) => {
+            enc.defined_type().list(inner);
         }
         ResolvedCmType::Result { ok, err } => {
-            enc.defined_type().result(
-                ok.map(ComponentValType::Type),
-                err.map(ComponentValType::Type),
-            );
+            enc.defined_type().result(ok, err);
+        }
+        ResolvedCmType::Tuple(elems) => {
+            enc.defined_type().tuple(elems);
         }
     }
     ctx.intern_record(key.clone(), idx);
@@ -1206,9 +1255,15 @@ fn intern_cm_type(
 
 enum ResolvedCmType {
     Own(u32),
-    Option(u32),
-    Future(u32),
-    Result { ok: Option<u32>, err: Option<u32> },
+    Option(ComponentValType),
+    Future(ComponentValType),
+    Stream(ComponentValType),
+    List(ComponentValType),
+    Result {
+        ok: Option<ComponentValType>,
+        err: Option<ComponentValType>,
+    },
+    Tuple(Vec<ComponentValType>),
 }
 
 fn build_future_intrinsic_types(
@@ -1311,6 +1366,53 @@ fn build_scalar_future_types(
 }
 
 /// Convert a `CmScalarType` to `wasm_encoder::PrimitiveValType`.
+/// Convert a [`CmPayloadType`] to a structural [`CmTypeKey`] for interning.
+/// Named types resolve to the component type index already registered for the
+/// world's signatures (records / variants / enums / flags).
+fn payload_type_to_cm_key(payload: &CmPayloadType, ctx: &ComponentModelContext) -> CmTypeKey {
+    match payload {
+        CmPayloadType::Scalar(s) => CmTypeKey::Primitive(cm_scalar_to_primitive(*s)),
+        CmPayloadType::String => CmTypeKey::Primitive(PrimitiveValType::String),
+        CmPayloadType::List(t) => CmTypeKey::List(Box::new(payload_type_to_cm_key(t, ctx))),
+        CmPayloadType::Option(t) => CmTypeKey::Option(Box::new(payload_type_to_cm_key(t, ctx))),
+        CmPayloadType::Result(ok, err) => CmTypeKey::Result {
+            ok: ok.as_ref().map(|t| Box::new(payload_type_to_cm_key(t, ctx))),
+            err: err.as_ref().map(|t| Box::new(payload_type_to_cm_key(t, ctx))),
+        },
+        CmPayloadType::Tuple(elems) => CmTypeKey::Tuple(
+            elems
+                .iter()
+                .map(|t| payload_type_to_cm_key(t, ctx))
+                .collect(),
+        ),
+        CmPayloadType::Named(name) => CmTypeKey::Leaf(ctx.type_idx(name)),
+    }
+}
+
+/// Build `future<T>` component types for general (`Value`) future payloads,
+/// returning a payload → type-index map for `resolve_future_type`.
+fn build_value_future_types(
+    builder: &mut ComponentBuilder,
+    ctx: &mut ComponentModelContext,
+    canonical_intrinsics: &[CanonicalIntrinsic],
+) -> IndexMap<CmPayloadType, u32> {
+    let mut payloads: Vec<CmPayloadType> = Vec::new();
+    for intrinsic in canonical_intrinsics {
+        if let Some(CmFuturePayload::Value(t)) = intrinsic.future_payload()
+            && !payloads.contains(&t)
+        {
+            payloads.push(t);
+        }
+    }
+    let mut map = IndexMap::default();
+    for payload in payloads {
+        let key = CmTypeKey::Future(Box::new(payload_type_to_cm_key(&payload, ctx)));
+        let idx = intern_cm_type(builder, ctx, &key, None);
+        map.insert(payload, idx);
+    }
+    map
+}
+
 fn cm_scalar_to_primitive(scalar: CmScalarType) -> PrimitiveValType {
     match scalar {
         CmScalarType::S8 => PrimitiveValType::S8,
@@ -1338,6 +1440,7 @@ fn emit_canonical_intrinsics(
     trailers_future_type: u32,
     transmission_future_types: &IndexMap<String, u32>,
     scalar_future_types: &IndexSet<(CmScalarType, u32)>,
+    value_future_types: &IndexMap<CmPayloadType, u32>,
     component_plan: &crate::wir_build::component_plan::ComponentPlan,
 ) {
     // The `task.return` canon needs the export's CM-resolved result type.
@@ -1395,6 +1498,7 @@ fn emit_canonical_intrinsics(
                     trailers_future_type,
                     transmission_future_types,
                     scalar_future_types,
+                    value_future_types,
                 );
                 builder.future_new(ft);
             }
@@ -1404,6 +1508,7 @@ fn emit_canonical_intrinsics(
                     trailers_future_type,
                     transmission_future_types,
                     scalar_future_types,
+                    value_future_types,
                 );
                 builder.future_write(
                     ft,
@@ -1420,6 +1525,7 @@ fn emit_canonical_intrinsics(
                     trailers_future_type,
                     transmission_future_types,
                     scalar_future_types,
+                    value_future_types,
                 );
                 builder.future_read(
                     ft,
@@ -1436,6 +1542,7 @@ fn emit_canonical_intrinsics(
                     trailers_future_type,
                     transmission_future_types,
                     scalar_future_types,
+                    value_future_types,
                 );
                 builder.future_cancel_read(ft, false);
             }
@@ -1445,6 +1552,7 @@ fn emit_canonical_intrinsics(
                     trailers_future_type,
                     transmission_future_types,
                     scalar_future_types,
+                    value_future_types,
                 );
                 builder.future_cancel_write(ft, false);
             }
@@ -1454,6 +1562,7 @@ fn emit_canonical_intrinsics(
                     trailers_future_type,
                     transmission_future_types,
                     scalar_future_types,
+                    value_future_types,
                 );
                 builder.future_drop_writable(ft);
             }
@@ -1463,6 +1572,7 @@ fn emit_canonical_intrinsics(
                     trailers_future_type,
                     transmission_future_types,
                     scalar_future_types,
+                    value_future_types,
                 );
                 builder.future_drop_readable(ft);
             }
@@ -1554,6 +1664,7 @@ fn resolve_future_type(
     trailers_future_type: u32,
     transmission_future_types: &IndexMap<String, u32>,
     scalar_future_types: &IndexSet<(CmScalarType, u32)>,
+    value_future_types: &IndexMap<CmPayloadType, u32>,
 ) -> u32 {
     match payload {
         CmFuturePayload::Trailers => trailers_future_type,
@@ -1567,6 +1678,9 @@ fn resolve_future_type(
             .find(|(s, _)| *s == scalar)
             .map(|(_, idx)| *idx)
             .expect("scalar future type not registered"),
+        CmFuturePayload::Value(ref t) => *value_future_types.get(t).unwrap_or_else(|| {
+            panic!("value future type not registered for: {}", t.name_suffix())
+        }),
     }
 }
 

@@ -377,17 +377,132 @@ impl CmScalarType {
     }
 }
 
+/// A general Component Model value type carried as a `future<T>` / `stream<T>`
+/// payload. Self-contained (built from the type table, no registry needed), so
+/// it is both a stable dedup key and a structural descriptor codegen turns into
+/// a component-level type. Named types (record / variant / enum / flags /
+/// resource) are referenced by their CM kebab name, already registered at the
+/// component level because they appear in the world's export/import signatures.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum CmPayloadType {
+    /// A primitive scalar (`bool`, integers, floats, `char`).
+    Scalar(CmScalarType),
+    String,
+    List(Box<CmPayloadType>),
+    Option(Box<CmPayloadType>),
+    /// `result<ok?, err?>` — either arm absent (`None`) for the unit case.
+    Result(Option<Box<CmPayloadType>>, Option<Box<CmPayloadType>>),
+    Tuple(Vec<CmPayloadType>),
+    /// A named CM type by kebab name (record / variant / enum / flags / resource).
+    Named(String),
+}
+
+impl CmPayloadType {
+    /// Encode as a canonical kebab suffix used in the core import name (and the
+    /// component type's debug name). Injective, so distinct CM types get
+    /// distinct intrinsic imports. Inverse of [`Self::parse_suffix`].
+    pub fn name_suffix(&self) -> String {
+        match self {
+            Self::Scalar(s) => s.to_string(),
+            Self::String => "string".to_string(),
+            Self::List(t) => format!("list<{}>", t.name_suffix()),
+            Self::Option(t) => format!("option<{}>", t.name_suffix()),
+            Self::Result(ok, err) => format!(
+                "result<{},{}>",
+                ok.as_ref().map_or("_".to_string(), |t| t.name_suffix()),
+                err.as_ref().map_or("_".to_string(), |t| t.name_suffix()),
+            ),
+            Self::Tuple(elems) => format!(
+                "tuple<{}>",
+                elems
+                    .iter()
+                    .map(Self::name_suffix)
+                    .collect::<Vec<_>>()
+                    .join(","),
+            ),
+            Self::Named(name) => name.clone(),
+        }
+    }
+
+    /// Parse the kebab suffix produced by [`Self::name_suffix`].
+    pub fn parse_suffix(s: &str) -> Option<Self> {
+        let s = s.trim();
+        if let Some(inner) = s.strip_prefix("list<").and_then(|r| r.strip_suffix('>')) {
+            return Some(Self::List(Box::new(Self::parse_suffix(inner)?)));
+        }
+        if let Some(inner) = s.strip_prefix("option<").and_then(|r| r.strip_suffix('>')) {
+            return Some(Self::Option(Box::new(Self::parse_suffix(inner)?)));
+        }
+        if let Some(inner) = s.strip_prefix("result<").and_then(|r| r.strip_suffix('>')) {
+            let parts = split_top_level(inner);
+            if parts.len() != 2 {
+                return None;
+            }
+            let arm = |p: &str| -> Option<Option<Box<Self>>> {
+                if p == "_" {
+                    Some(None)
+                } else {
+                    Some(Some(Box::new(Self::parse_suffix(p)?)))
+                }
+            };
+            return Some(Self::Result(arm(&parts[0])?, arm(&parts[1])?));
+        }
+        if let Some(inner) = s.strip_prefix("tuple<").and_then(|r| r.strip_suffix('>')) {
+            let elems = split_top_level(inner)
+                .iter()
+                .map(|p| Self::parse_suffix(p))
+                .collect::<Option<Vec<_>>>()?;
+            return Some(Self::Tuple(elems));
+        }
+        if s == "string" {
+            return Some(Self::String);
+        }
+        if let Some(scalar) = CmScalarType::from_cm_name(s) {
+            return Some(Self::Scalar(scalar));
+        }
+        // A bare kebab identifier names a record / variant / enum / flags.
+        if !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+            return Some(Self::Named(s.to_string()));
+        }
+        None
+    }
+}
+
+/// Split a comma-separated type list at the top nesting level only, so that
+/// `result<u32, string>, list<u32>` splits into the two intended parts.
+fn split_top_level(s: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut depth = 0i32;
+    let mut start = 0usize;
+    for (i, c) in s.char_indices() {
+        match c {
+            '<' => depth += 1,
+            '>' => depth -= 1,
+            ',' if depth == 0 => {
+                parts.push(s[start..i].trim().to_string());
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push(s[start..].trim().to_string());
+    parts
+}
+
 /// The element type of a CM `stream<T>` canonical intrinsic.
 ///
 /// Distinguishes between distinct stream types at the Component Model level:
 /// - `U8` = `stream<u8>` (default for file I/O, stdin/stdout)
 /// - `Record(name)` = `stream<T>` where T is a CM record type (e.g., directory-entry)
+/// - `Value(t)` = `stream<T>` for a general scalar / aggregate element type
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CmStreamPayload {
     /// `stream<u8>` — the default stream type
     U8,
     /// `stream<T>` where T is a CM record type, identified by CM kebab-case name
     Record(String),
+    /// `stream<T>` for a general scalar or aggregate element type
+    Value(CmPayloadType),
 }
 
 /// The element type of a CM `future<T>` canonical intrinsic.
@@ -407,6 +522,9 @@ pub enum CmFuturePayload {
     Transmission(String),
     /// A scalar value type like `future<s32>`
     Scalar(CmScalarType),
+    /// A general scalar or aggregate value type like `future<string>` or
+    /// `future<list<u32>>`.
+    Value(CmPayloadType),
 }
 
 /// A canonical intrinsic needed by the compiled module.
@@ -548,7 +666,12 @@ fn parse_stream_intrinsic(name: &str) -> Option<CanonicalIntrinsic> {
     // Parse "stream-read:directory-entry" → StreamRead(Record("directory-entry"))
     // Parse "stream-read" → StreamRead(U8)
     let (base, payload) = if let Some((b, suffix)) = name.split_once(':') {
-        (b, CmStreamPayload::Record(suffix.to_string()))
+        let payload = if let Some(val) = suffix.strip_prefix("val-") {
+            CmStreamPayload::Value(CmPayloadType::parse_suffix(val)?)
+        } else {
+            CmStreamPayload::Record(suffix.to_string())
+        };
+        (b, payload)
     } else {
         (name, CmStreamPayload::U8)
     };
@@ -574,6 +697,8 @@ fn parse_future_intrinsic(name: &str) -> Option<CanonicalIntrinsic> {
         Some((b, suffix)) => {
             let payload = if let Some(source) = suffix.strip_prefix("transmission-") {
                 CmFuturePayload::Transmission(source.to_string())
+            } else if let Some(val) = suffix.strip_prefix("val-") {
+                CmFuturePayload::Value(CmPayloadType::parse_suffix(val)?)
             } else {
                 CmFuturePayload::Scalar(CmScalarType::from_cm_name(suffix)?)
             };
@@ -596,6 +721,7 @@ fn format_stream_name(base: &str, payload: &CmStreamPayload) -> String {
     match payload {
         CmStreamPayload::U8 => base.to_string(),
         CmStreamPayload::Record(name) => format!("{base}:{name}"),
+        CmStreamPayload::Value(t) => format!("{base}:val-{}", t.name_suffix()),
     }
 }
 
@@ -604,6 +730,7 @@ fn format_future_name(base: &str, payload: CmFuturePayload) -> String {
         CmFuturePayload::Trailers => base.to_string(),
         CmFuturePayload::Transmission(ref source) => format!("{base}:transmission-{source}"),
         CmFuturePayload::Scalar(scalar) => format!("{base}:{scalar}"),
+        CmFuturePayload::Value(ref t) => format!("{base}:val-{}", t.name_suffix()),
     }
 }
 

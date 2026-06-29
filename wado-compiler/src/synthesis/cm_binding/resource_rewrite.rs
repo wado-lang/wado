@@ -181,6 +181,251 @@ pub(super) fn synthesize_future_reads(project: &mut Package) {
     }
 }
 
+/// Generate the per-payload `FutureWritable<T>::write()` binding functions for
+/// general (aggregate) payloads, mirroring [`synthesize_future_reads`].
+///
+/// For each distinct aggregate payload `T` written, synthesizes
+/// `__cm_future_write_<mangle(T)>(handle: i32, value: T)` which allocates a CM
+/// buffer (sized via `cm_abi`), lowers `value` into it with the shared
+/// `synthesize_lower_wasi_type_to_memory`, and calls the payload-parameterized
+/// `future-write` canonical. As with the scalar WIR path, the buffer is
+/// intentionally left alive: the `async` canonical option returns BLOCKED until
+/// the reader copies the value, so freeing here (or waiting) would be wrong.
+pub(super) fn synthesize_future_writes(project: &mut Package) {
+    let cm_interface_registry = &project.cm_interface_registry;
+    // payload mangle -> payload_type_id
+    let mut needed: IndexMap<String, TypeId> = IndexMap::default();
+    for module in project.tir_modules.values() {
+        let tt = module.type_table.borrow();
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
+            if let Some(body) = &func.body {
+                FutureWriteFinder {
+                    tt: &tt,
+                    results: &mut needed,
+                }
+                .visit_block(body);
+            }
+        }
+    }
+    if needed.is_empty() {
+        return;
+    }
+
+    let entry_source = project.entry_module_source.clone();
+    let type_table = project
+        .tir_modules
+        .get(&entry_source)
+        .expect("entry module must exist in tir_modules")
+        .type_table
+        .clone();
+
+    let mut new_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
+    for (_, payload_type_id) in &needed {
+        let func = synthesize_future_write_func(
+            *payload_type_id,
+            cm_interface_registry,
+            &type_table,
+        );
+        new_functions.push(Rc::new(RefCell::new(func)));
+    }
+
+    let entry_module = project
+        .tir_modules
+        .get_mut(&entry_source)
+        .expect("entry module must exist in tir_modules");
+    for func in new_functions {
+        entry_module.functions.push(func);
+    }
+}
+
+/// The future-write payload type for an aggregate `future-write` method call,
+/// or `None` if it is not a future-write or its payload is a scalar / WASI shape
+/// (which the WIR-build path handles directly).
+fn future_write_value_payload(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
+    let (func, receiver) = match &expr.kind {
+        TirExprKind::MethodCall { func, receiver, .. } => (func, receiver),
+        _ => return None,
+    };
+    if func.method_info.as_ref().and_then(|m| m.cm_name.as_deref()) != Some("future-write") {
+        return None;
+    }
+    let mut recv = receiver.type_id;
+    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(recv) {
+        recv = *inner;
+    }
+    let payload = *tt.generic_type_args(recv)?.first()?;
+    matches!(
+        crate::component_model::classify_future_payload(tt, payload),
+        CmFuturePayload::Value(_)
+    )
+    .then_some(payload)
+}
+
+/// The `__cm_future_write_*` helper name for a payload type. Finder, rewriter,
+/// and synthesizer must agree on this mangle.
+fn future_write_func_name(tt: &TypeTable, payload_type_id: TypeId) -> String {
+    format!(
+        "__cm_future_write_{}",
+        tt.mangle_type_arg_for_generic(payload_type_id)
+    )
+}
+
+struct FutureWriteFinder<'a> {
+    tt: &'a TypeTable,
+    results: &'a mut IndexMap<String, TypeId>,
+}
+
+impl TirRefVisitor for FutureWriteFinder<'_> {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if let Some(payload_type_id) = future_write_value_payload(self.tt, expr) {
+            let name = future_write_func_name(self.tt, payload_type_id);
+            self.results.entry(name).or_insert(payload_type_id);
+        }
+        self.walk_expr(expr);
+    }
+}
+
+fn synthesize_future_write_func(
+    payload_type_id: TypeId,
+    cm_interface_registry: &CmInterfaceRegistry,
+    type_table: &RefCell<TypeTable>,
+) -> TirFunction {
+    let (func_name, write_name, cm_package, payload_ast, size, align) = {
+        let tt = type_table.borrow();
+        let func_name = future_write_func_name(&tt, payload_type_id);
+        let payload = crate::component_model::classify_future_payload(&tt, payload_type_id);
+        let write_name = CanonicalIntrinsic::FutureWrite(payload.clone()).import_name();
+        let cm_package = future_payload_package(&payload);
+        let payload_ast = type_id_to_ast_type(payload_type_id, &tt, cm_interface_registry);
+        let size = crate::component_model::cm_size_with_registry_scoped(
+            &payload_ast,
+            cm_interface_registry,
+            Some(&cm_package),
+        ) as i32;
+        let align = crate::component_model::cm_align_with_registry_scoped(
+            &payload_ast,
+            cm_interface_registry,
+            Some(&cm_package),
+        ) as i32;
+        (func_name, write_name, cm_package, payload_ast, size, align)
+    };
+
+    let mut next_local: u32 = 0;
+    let mut locals: Vec<TirLocal> = Vec::new();
+    let mut stmts: Vec<TirStmt> = Vec::new();
+
+    let alloc = |next: &mut u32, locals: &mut Vec<TirLocal>, ty: TypeId, is_mut: bool| -> u32 {
+        let idx = *next;
+        *next += 1;
+        locals.push(TirLocal::synth(*next, ty, is_mut));
+        idx
+    };
+
+    // Params: handle (i32), value (T).
+    let handle_idx = alloc(&mut next_local, &mut locals, TypeTable::I32, false);
+    let value_idx = alloc(&mut next_local, &mut locals, payload_type_id, false);
+
+    // let ptr = realloc(0, 0, align, size)
+    let ptr_idx = alloc(&mut next_local, &mut locals, TypeTable::I32, false);
+    stmts.push(let_stmt(
+        "ptr",
+        ptr_idx,
+        TypeTable::I32,
+        builtin_call(
+            "realloc",
+            vec![
+                i32_const(0),
+                i32_const(0),
+                i32_const(align),
+                i32_const(size),
+            ],
+            TypeTable::I32,
+        ),
+    ));
+
+    // Lower `value` into the buffer using the shared registry-backed lowerer.
+    stmts.extend(super::lower::synthesize_lower_wasi_type_to_memory(
+        &payload_ast,
+        local_ref(value_idx, "value", payload_type_id),
+        local_ref(ptr_idx, "ptr", TypeTable::I32),
+        &mut next_local,
+        &mut locals,
+        cm_interface_registry,
+        &cm_package,
+        type_table,
+    ));
+
+    // let __written = future-write:<payload>(handle, ptr)
+    // The result is intentionally ignored and the buffer left alive (see above).
+    let written_idx = alloc(&mut next_local, &mut locals, TypeTable::I32, false);
+    stmts.push(let_stmt(
+        "__written",
+        written_idx,
+        TypeTable::I32,
+        cm_raw_call(
+            &write_name,
+            vec![
+                local_ref(handle_idx, "handle", TypeTable::I32),
+                local_ref(ptr_idx, "ptr", TypeTable::I32),
+            ],
+            TypeTable::I32,
+        ),
+    ));
+
+    TirFunction {
+        module_source: ModuleSource::default(),
+        name: func_name,
+        visibility: crate::ast::Visibility::Private,
+        is_export: false,
+        is_async: false,
+        type_params: vec![],
+        impl_type_params: vec![],
+        monomorph_info: None,
+        method_info: None,
+        params: vec![
+            TirParam {
+                name: "handle".to_string(),
+                local_index: handle_idx,
+                type_id: TypeTable::I32,
+                is_mut: false,
+                span: synth_span(),
+            },
+            TirParam {
+                name: "value".to_string(),
+                local_index: value_idx,
+                type_id: payload_type_id,
+                is_mut: false,
+                span: synth_span(),
+            },
+        ],
+        return_type: TypeTable::UNIT,
+        task_return_type: None,
+        effects: vec![],
+        stores: vec![],
+        body: Some(TirBlock {
+            stmts,
+            span: synth_span(),
+        }),
+        span: synth_span(),
+        local_count: next_local,
+        locals,
+        address_taken_locals: IndexSet::default(),
+        stores_aliased_locals: IndexSet::default(),
+        is_cm_binding: true,
+        is_dispatch_wrapper: false,
+        is_cm_export: false,
+        is_ambient: false,
+        benign_effects: Vec::new(),
+        inline_hint: InlineHint::Auto,
+        compiler_item: None,
+        export_name: None,
+        allocator_tag: None,
+        kind: FunctionKind::Regular,
+        return_abi: crate::tir::ReturnAbi::default(),
+    }
+}
+
 struct FutureReadFinder<'a> {
     tt: &'a TypeTable,
     results: &'a mut IndexMap<String, (TypeId, TypeId)>,
@@ -223,6 +468,9 @@ fn future_payload_package(payload: &CmFuturePayload) -> String {
         CmFuturePayload::Transmission(src) => src.clone(),
         CmFuturePayload::Trailers => "http".to_string(),
         CmFuturePayload::Scalar(_) => "cli".to_string(),
+        // General value payloads carry no WASI scope; named types in the
+        // payload resolve through the registry against the entry package.
+        CmFuturePayload::Value(_) => "cli".to_string(),
     }
 }
 
@@ -973,6 +1221,15 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
         // stream-new / future-new remain handled by WIR translate (they need
         // i64→tuple splitting with proper GC type casting).
         if matches!(cm_name.as_str(), "stream-new" | "future-new") {
+            return;
+        }
+        // Aggregate future writes call a generated per-payload binding function;
+        // scalar / WASI shapes fall through to the WIR-build path.
+        if cm_name == "future-write"
+            && let Some(payload_type_id) = future_write_value_payload(self.tt, expr)
+        {
+            let func_name = future_write_func_name(self.tt, payload_type_id);
+            rewrite_cm_instance_method(expr, "entry", &func_name, self.entry_source);
             return;
         }
         // Future reads call a generated per-payload binding function.
