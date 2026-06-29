@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782695299975,
+  "lastUpdate": 1782727246332,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -36401,6 +36401,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a5634828704825bdf68757d0253766731aa87c03"
         },
         "date": 1782695299339,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1845,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8434,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15339,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288458,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "05f57c788c040c91f41795cd6b55ce987a4c9734",
+          "message": "Merge pull request #1468 from wado-lang/claude/wado-publish-checklist-fokmnh\n\nfeat(cli): implement `wado publish` to build and push components via wkg",
+          "timestamp": "2026-06-29T18:52:18+09:00",
+          "tree_id": "75bd753082bd710a14233c7c43aeec81927aa019",
+          "url": "https://github.com/wado-lang/wado/commit/05f57c788c040c91f41795cd6b55ce987a4c9734"
+        },
+        "date": 1782727245918,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
