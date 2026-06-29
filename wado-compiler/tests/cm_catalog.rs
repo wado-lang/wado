@@ -625,6 +625,12 @@ fn run_round_trips(opt_level: OptLevel) {
         check!(future_round_trip(&mut store, &instance, i, "id-future-tuple", (5u32, "x".to_string())));
 
         check!(stream_round_trip(&mut store, &instance, i, "id-stream-u8", vec![1u8, 2, 3, 4]));
+        // Stream consume/produce: each element round-trips through CM memory.
+        check!(stream_round_trip(&mut store, &instance, i, "id-stream-u32", vec![10u32, 20, 30, 40]));
+        check!(stream_round_trip(
+            &mut store, &instance, i, "id-stream-string",
+            vec!["a".to_string(), "bb".to_string(), "céç".to_string()],
+        ));
 
         check!(embedded_future_round_trip(
             &mut store, &instance, i, "id-option-future",

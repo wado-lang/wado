@@ -370,9 +370,42 @@ export async fn id_future_tuple(v: Future<[u32, String]>) -> Future<[u32, String
     }
 }
 
-// `stream<u8>` pass-through; consume/produce streaming is a follow-up.
+// `stream<u8>` pass-through: the readable end crosses the boundary unchanged.
 export fn id_stream_u8(v: Stream<u8>) -> Stream<u8> {
     return v;
+}
+
+// --- Stream consume/produce ---
+// Unlike the pass-through above, these read every element off the input stream
+// and write it into a fresh `stream<T>`, so each element round-trips through CM
+// linear memory (lift on read, lower on write). `async` because both halves
+// block until the peer makes progress; the readable end is delivered with
+// `task return` and the copy loop runs after.
+export async fn id_stream_u32(v: Stream<u32>) -> Stream<u32> {
+    let [rx, tx] = Stream::<u32>::new();
+    task return rx;
+    loop {
+        let chunk = v.read(16);
+        if chunk.len() == 0 {
+            break;
+        }
+        tx.write(chunk);
+    }
+    v.drop();
+    tx.drop();
+}
+export async fn id_stream_string(v: Stream<String>) -> Stream<String> {
+    let [rx, tx] = Stream::<String>::new();
+    task return rx;
+    loop {
+        let chunk = v.read(16);
+        if chunk.len() == 0 {
+            break;
+        }
+        tx.write(chunk);
+    }
+    v.drop();
+    tx.drop();
 }
 
 // Handles embedded in aggregates: lift/lower of a handle at a composite offset.

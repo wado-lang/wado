@@ -47,8 +47,8 @@ Full intended scope; checked items are implemented.
 **`stream<T>`**
 
 - [x] `stream<u8>` (pass-through)
-- [ ] `stream<T>` consume/produce — scalar element payloads
-- [ ] `stream<T>` consume/produce — aggregate element payloads
+- [x] `stream<T>` consume/produce — scalar element payloads (`stream<u32>`)
+- [x] `stream<T>` consume/produce — aggregate element payloads (`stream<string>`)
 - `stream<char>` is intentionally out of scope (rejected by the Component Model)
 
 **Embedded handles (pass-through)**
