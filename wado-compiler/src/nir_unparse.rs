@@ -1040,9 +1040,15 @@ pub fn unparse_nir_package(package: &crate::nir_package::NirPackage) -> String {
         unparser.output.push('\n');
     }
 
-    // Functions
+    // Functions. Skip DCE-dead records: they linger bodyless in `functions`
+    // (`dce` marks dead in place to keep `FuncId == position`) and their
+    // signatures can reference types that type-table compaction has pruned, so
+    // rendering them would fail. `wir_build` skips them for the same reason.
     for f_rc in &package.functions {
         let f = f_rc.borrow();
+        if f.is_dead {
+            continue;
+        }
         unparser.unparse_function(&f);
         unparser.output.push('\n');
     }
