@@ -159,6 +159,14 @@ impl NirPackage {
     /// intrinsics. Resolved by `func_id` off the callee's arena record now that
     /// the call node carries no `FunctionRef`. O(functions); a pass computes it
     /// once before its per-function loop.
+    ///
+    /// Deliberately kept as a per-pass rescan, not a maintained `FuncId`-indexed
+    /// index. The rescan looks redundant (8 passes recompute it each round), but
+    /// replacing it with a dense index grown in lockstep with `functions`
+    /// measured perf-neutral (the value graph is built once per function and
+    /// consumes this only there, so the scan is never hot) while adding a
+    /// maintenance burden — the index must stay in sync at every `functions`
+    /// append site. The simpler structure wins. Don't "optimize" this away.
     pub fn pure_builtin_callee_ids(&self) -> IndexSet<FuncId> {
         self.functions
             .iter()
