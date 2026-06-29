@@ -21,12 +21,90 @@ mod common;
 
 use std::path::Path;
 
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
+use futures::StreamExt;
+use futures::channel::{mpsc, oneshot};
 use wado_compiler::{CompilerOptions, OptLevel};
-use wasmtime::Store;
 use wasmtime::component::{
-    Component, ComponentExportIndex, FutureAny, FutureReader, Instance, StreamAny, StreamReader,
-    Val,
+    Component, ComponentExportIndex, FutureAny, FutureConsumer, FutureReader, Instance, Source,
+    StreamAny, StreamConsumer, StreamReader, StreamResult, Val,
 };
+use wasmtime::{AsContextMut, Store, StoreContextMut};
+
+/// Future consumer that forwards the single lifted payload to a oneshot channel,
+/// so the host can assert the value after driving the event loop — the oracle
+/// for "the payload survived", not just "the handle re-typed".
+struct OneshotConsumer<T>(Option<oneshot::Sender<T>>);
+
+impl<T> OneshotConsumer<T> {
+    fn new(tx: oneshot::Sender<T>) -> Self {
+        Self(Some(tx))
+    }
+}
+
+impl<D, T> FutureConsumer<D> for OneshotConsumer<T>
+where
+    T: wasmtime::component::Lift + Send + 'static,
+{
+    type Item = T;
+
+    fn poll_consume(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        store: StoreContextMut<D>,
+        mut source: Source<'_, T>,
+        _finish: bool,
+    ) -> Poll<wasmtime::Result<()>> {
+        let value = &mut None;
+        source.read(store, value)?;
+        let _ = self
+            .get_mut()
+            .0
+            .take()
+            .expect("future consumed once")
+            .send(value.take().expect("future value lifted"));
+        Poll::Ready(Ok(()))
+    }
+}
+
+/// Stream consumer that forwards each lifted element to an unbounded channel.
+/// The channel closes when the stream ends, letting the host collect the whole
+/// payload and compare it against the input.
+struct StreamCollectConsumer<T>(mpsc::UnboundedSender<T>);
+
+impl<T> StreamCollectConsumer<T> {
+    fn new(tx: mpsc::UnboundedSender<T>) -> Self {
+        Self(tx)
+    }
+}
+
+impl<D, T> StreamConsumer<D> for StreamCollectConsumer<T>
+where
+    T: wasmtime::component::Lift + Send + 'static,
+{
+    type Item = T;
+
+    fn poll_consume(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        mut store: StoreContextMut<D>,
+        mut source: Source<'_, T>,
+        _finish: bool,
+    ) -> Poll<wasmtime::Result<StreamResult>> {
+        if source.remaining(store.as_context_mut()) == 0 {
+            return Poll::Ready(Ok(StreamResult::Completed));
+        }
+        let item = &mut None;
+        source.read(store, item)?;
+        let _ = self
+            .get_mut()
+            .0
+            .unbounded_send(item.take().expect("stream item lifted"));
+        Poll::Ready(Ok(StreamResult::Completed))
+    }
+}
 
 /// FQ of the synthesized library world. Mirrors `lib_world_fq` in
 /// `wado-cli`: `namespace:name/name@version`.
@@ -185,9 +263,9 @@ fn lookup_func(
         .ok_or_else(|| format!("export `{export}` not found"))
 }
 
-/// A future handle is single-use, so the oracle is functional, not `Val`
-/// equality: lower a host-created future in, assert the result re-types to
-/// `future<T>` and closes cleanly.
+/// Round-trip a future's payload and assert it survived, not just the handle:
+/// lower a host-created `future<T>` carrying `payload`, then pipe the returned
+/// future into a oneshot and assert the lifted value equals `payload`.
 async fn future_round_trip<T>(
     store: &mut Store<common::WasiState>,
     instance: &Instance,
@@ -196,8 +274,16 @@ async fn future_round_trip<T>(
     payload: T,
 ) -> Result<(), String>
 where
-    T: wasmtime::component::Lower + wasmtime::component::Lift + Send + Sync + 'static,
+    T: wasmtime::component::Lower
+        + wasmtime::component::Lift
+        + Clone
+        + PartialEq
+        + std::fmt::Debug
+        + Send
+        + Sync
+        + 'static,
 {
+    let expected = payload.clone();
     let func = lookup_func(store, instance, iface, export)?;
     let f = FutureReader::new(&mut *store, async move { wasmtime::error::Ok(payload) })
         .map_err(|e| format!("`{export}`: host future create failed: {e:#}"))?;
@@ -216,15 +302,27 @@ where
             ));
         }
     };
-    let mut reader = out.try_into_future_reader::<T>().map_err(|e| {
+    let reader = out.try_into_future_reader::<T>().map_err(|e| {
         format!(
             "`{export}`: result is not future<{}>: {e:#}",
             std::any::type_name::<T>()
         )
     })?;
+    let (tx, rx) = oneshot::channel::<T>();
     reader
-        .close(&mut *store)
-        .map_err(|e| format!("`{export}`: result handle close failed: {e:#}"))
+        .pipe(&mut *store, OneshotConsumer::new(tx))
+        .map_err(|e| format!("`{export}`: pipe failed: {e:#}"))?;
+    let got = store
+        .run_concurrent(async move |_| rx.await)
+        .await
+        .map_err(|e| format!("`{export}`: run_concurrent failed: {e:#}"))?
+        .map_err(|_| format!("`{export}`: future closed without a value"))?;
+    if got != expected {
+        return Err(format!(
+            "`{export}`: future payload mismatch\n  in:  {expected:?}\n  out: {got:?}"
+        ));
+    }
+    Ok(())
 }
 
 async fn stream_round_trip<T>(
@@ -235,8 +333,17 @@ async fn stream_round_trip<T>(
     payload: Vec<T>,
 ) -> Result<(), String>
 where
-    T: wasmtime::component::Lower + wasmtime::component::Lift + Send + Sync + Unpin + 'static,
+    T: wasmtime::component::Lower
+        + wasmtime::component::Lift
+        + Clone
+        + PartialEq
+        + std::fmt::Debug
+        + Send
+        + Sync
+        + Unpin
+        + 'static,
 {
+    let expected = payload.clone();
     let func = lookup_func(store, instance, iface, export)?;
     let s = StreamReader::new(&mut *store, payload)
         .map_err(|e| format!("`{export}`: host stream create failed: {e:#}"))?;
@@ -255,15 +362,32 @@ where
             ));
         }
     };
-    let mut reader = out.try_into_stream_reader::<T>().map_err(|e| {
+    let reader = out.try_into_stream_reader::<T>().map_err(|e| {
         format!(
             "`{export}`: result is not stream<{}>: {e:#}",
             std::any::type_name::<T>()
         )
     })?;
+    let (tx, mut rx) = mpsc::unbounded::<T>();
     reader
-        .close(&mut *store)
-        .map_err(|e| format!("`{export}`: result handle close failed: {e:#}"))
+        .pipe(&mut *store, StreamCollectConsumer::new(tx))
+        .map_err(|e| format!("`{export}`: pipe failed: {e:#}"))?;
+    let got = store
+        .run_concurrent(async move |_| {
+            let mut items = Vec::new();
+            while let Some(item) = rx.next().await {
+                items.push(item);
+            }
+            items
+        })
+        .await
+        .map_err(|e| format!("`{export}`: run_concurrent failed: {e:#}"))?;
+    if got != expected {
+        return Err(format!(
+            "`{export}`: stream payload mismatch\n  in:  {expected:?}\n  out: {got:?}"
+        ));
+    }
+    Ok(())
 }
 
 /// `wrap` builds the input `Val` around a `future<u32>`; `unwrap` extracts the
@@ -287,14 +411,26 @@ async fn embedded_future_round_trip(
         .await
         .map_err(|e| format!("`{export}`: call trapped: {e:#}"))?;
     let result = results.into_iter().next().unwrap_or(Val::Bool(false));
-    let any = unwrap(result)
+    let inner = unwrap(result)
         .ok_or_else(|| format!("`{export}`: result did not carry the inner future"))?;
-    let mut reader = any
+    let reader = inner
         .try_into_future_reader::<u32>()
         .map_err(|e| format!("`{export}`: inner handle is not future<u32>: {e:#}"))?;
+    let (tx, rx) = oneshot::channel::<u32>();
     reader
-        .close(&mut *store)
-        .map_err(|e| format!("`{export}`: inner handle close failed: {e:#}"))
+        .pipe(&mut *store, OneshotConsumer::new(tx))
+        .map_err(|e| format!("`{export}`: pipe failed: {e:#}"))?;
+    let got = store
+        .run_concurrent(async move |_| rx.await)
+        .await
+        .map_err(|e| format!("`{export}`: run_concurrent failed: {e:#}"))?
+        .map_err(|_| format!("`{export}`: inner future closed without a value"))?;
+    if got != 0xFEED_u32 {
+        return Err(format!(
+            "`{export}`: inner future payload mismatch: expected 0xFEED, got {got:#x}"
+        ));
+    }
+    Ok(())
 }
 
 async fn embedded_stream_round_trip(
@@ -316,14 +452,31 @@ async fn embedded_stream_round_trip(
         .await
         .map_err(|e| format!("`{export}`: call trapped: {e:#}"))?;
     let result = results.into_iter().next().unwrap_or(Val::Bool(false));
-    let any = unwrap(result)
+    let inner = unwrap(result)
         .ok_or_else(|| format!("`{export}`: result did not carry the inner stream"))?;
-    let mut reader = any
+    let reader = inner
         .try_into_stream_reader::<u8>()
         .map_err(|e| format!("`{export}`: inner handle is not stream<u8>: {e:#}"))?;
+    let (tx, mut rx) = mpsc::unbounded::<u8>();
     reader
-        .close(&mut *store)
-        .map_err(|e| format!("`{export}`: inner handle close failed: {e:#}"))
+        .pipe(&mut *store, StreamCollectConsumer::new(tx))
+        .map_err(|e| format!("`{export}`: pipe failed: {e:#}"))?;
+    let got = store
+        .run_concurrent(async move |_| {
+            let mut items = Vec::new();
+            while let Some(item) = rx.next().await {
+                items.push(item);
+            }
+            items
+        })
+        .await
+        .map_err(|e| format!("`{export}`: run_concurrent failed: {e:#}"))?;
+    if got != vec![1u8, 2, 3] {
+        return Err(format!(
+            "`{export}`: inner stream payload mismatch: expected [1, 2, 3], got {got:?}"
+        ));
+    }
+    Ok(())
 }
 
 /// Compile the catalog fixture as a library world at `opt_level`.

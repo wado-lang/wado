@@ -58,7 +58,7 @@ Full intended scope; checked items are implemented.
 
 **Test oracle**
 
-- [ ] Async value read-back — assert the payload survives the round-trip, not
+- [x] Async value read-back — assert the payload survives the round-trip, not
       only the handle
 
 **Handles**
