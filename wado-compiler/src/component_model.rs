@@ -94,6 +94,87 @@ pub fn cm_payload_type_from_type_id(
     }
 }
 
+/// CM scalar for a primitive type's Wado name (`"u32"`, `"i8"`, `"f64"`, …).
+fn cm_scalar_from_ast_name(name: &str) -> Option<CmScalarType> {
+    Some(match name {
+        "bool" => CmScalarType::Bool,
+        "char" => CmScalarType::Char,
+        "u8" => CmScalarType::U8,
+        "u16" => CmScalarType::U16,
+        "u32" => CmScalarType::U32,
+        "u64" => CmScalarType::U64,
+        "i8" => CmScalarType::S8,
+        "i16" => CmScalarType::S16,
+        "i32" => CmScalarType::S32,
+        "i64" => CmScalarType::S64,
+        "f32" => CmScalarType::F32,
+        "f64" => CmScalarType::F64,
+        _ => return None,
+    })
+}
+
+/// AST-`Type` analogue of [`cm_payload_type_from_type_id`], for codegen (which
+/// works off the export's raw Wado return type). Returns `None` for named
+/// records / variants / enums and other unsupported shapes.
+pub fn cm_payload_type_from_ast(
+    ty: &crate::ast::Type,
+    registry: &CmInterfaceRegistry,
+) -> Option<crate::wir::CmPayloadType> {
+    use crate::ast::Type;
+    use crate::wir::CmPayloadType;
+    let resolved = registry.resolve_type(ty);
+    match &resolved {
+        Type::Named(n) if n.name == "String" => Some(CmPayloadType::String),
+        Type::Named(n) => cm_scalar_from_ast_name(&n.name).map(CmPayloadType::Scalar),
+        Type::Tuple(elems) => elems
+            .iter()
+            .map(|e| cm_payload_type_from_ast(e, registry))
+            .collect::<Option<Vec<_>>>()
+            .map(CmPayloadType::Tuple),
+        Type::Generic(g) => match g.name.as_str() {
+            "Option" if g.args.len() == 1 => {
+                Some(CmPayloadType::Option(Box::new(cm_payload_type_from_ast(
+                    &g.args[0], registry,
+                )?)))
+            }
+            "List" if g.args.len() == 1 => Some(CmPayloadType::List(Box::new(
+                cm_payload_type_from_ast(&g.args[0], registry)?,
+            ))),
+            "Result" if g.args.len() == 2 => {
+                let arm = |t: &Type| -> Option<Option<Box<CmPayloadType>>> {
+                    if is_unit_type(t) {
+                        Some(None)
+                    } else {
+                        Some(Some(Box::new(cm_payload_type_from_ast(t, registry)?)))
+                    }
+                };
+                Some(CmPayloadType::Result(arm(&g.args[0])?, arm(&g.args[1])?))
+            }
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// Classify an AST-`Type` future payload (codegen's `task.return` resolver),
+/// mirroring [`classify_future_payload`] on resolved types.
+pub fn classify_future_payload_from_ast(
+    ty: &crate::ast::Type,
+    registry: &CmInterfaceRegistry,
+) -> CmFuturePayload {
+    use crate::ast::Type;
+    let resolved = registry.resolve_type(ty);
+    if let Type::Named(n) = &resolved
+        && let Some(scalar) = cm_scalar_from_ast_name(&n.name)
+    {
+        return CmFuturePayload::Scalar(scalar);
+    }
+    if let Some(payload) = cm_payload_type_from_ast(ty, registry) {
+        return CmFuturePayload::Value(payload);
+    }
+    CmFuturePayload::Trailers
+}
+
 /// Map a primitive type to its CM scalar type, or `None` for non-CM-scalars.
 pub fn primitive_to_cm_scalar(prim: &PrimitiveType) -> Option<CmScalarType> {
     Some(match prim {

@@ -1447,11 +1447,6 @@ fn emit_canonical_intrinsics(
     // Worlds with one boundary export (HTTP service `handle`, kiln
     // `generate`, CLI `Command::run`) all share this single-task assumption;
     // the test world emits zero world exports so we fall back to `result<>`.
-    let task_return_type: ComponentValType = component_plan
-        .world_exports
-        .first()
-        .map(|export| cm_export_type_to_valtype(ctx, &export.cm_result, result_unit_type))
-        .unwrap_or(ComponentValType::Type(result_unit_type));
     for intrinsic in canonical_intrinsics {
         ctx.register_core_func(&intrinsic.import_name());
 
@@ -1576,26 +1571,20 @@ fn emit_canonical_intrinsics(
                 );
                 builder.future_drop_readable(ft);
             }
-            CanonicalIntrinsic::TaskReturn => {
-                // The `task.return` result shape is the active world
-                // export's CM-resolved return type — `result<response,
-                // error>` for the kiln generator and HTTP service,
-                // `result<>` for CLI and the test
-                // world. Computed once at function entry from
-                // `component_plan.world_exports[0].cm_result` so the
-                // code path here is uniform across worlds. The flat
-                // decomposition must match the core module's task-return
-                // import signature (computed via
-                // `compute_export_flat_return_types`) or component
-                // validation fails at instantiation.
-                // task.return lifts payloads from linear memory into
-                // component values; it does not allocate, so `realloc`
-                // must not appear in the option list (wasm-tools
-                // rejects it).
-                builder.task_return(
-                    Some(task_return_type),
-                    [CanonicalOption::Memory(ctx.memory_idx())],
+            CanonicalIntrinsic::TaskReturn(key) => {
+                let memory_idx = ctx.memory_idx();
+                let result_ty = resolve_task_return_valtype(
+                    key,
+                    component_plan,
+                    project,
+                    ctx,
+                    result_unit_type,
+                    trailers_future_type,
+                    transmission_future_types,
+                    scalar_future_types,
+                    value_future_types,
                 );
+                builder.task_return(Some(result_ty), [CanonicalOption::Memory(memory_idx)]);
             }
             CanonicalIntrinsic::WaitableSetNew => {
                 builder.waitable_set_new();
@@ -1656,6 +1645,50 @@ fn emit_canonical_intrinsics(
             }
         }
     }
+}
+
+/// Resolve the `task.return` result type for an `async` export, keyed by its
+/// name. A `--lib` `future<T>` result resolves to the interned `future<T>`
+/// type; everything else (WASI handler results, unit) resolves through
+/// `cm_result`. An unmatched/empty key falls back to the first export.
+fn resolve_task_return_valtype(
+    key: &str,
+    component_plan: &crate::wir_build::component_plan::ComponentPlan,
+    project: &NirPackage,
+    ctx: &ComponentModelContext,
+    result_unit_type: u32,
+    trailers_future_type: u32,
+    transmission_future_types: &IndexMap<String, u32>,
+    scalar_future_types: &IndexSet<(CmScalarType, u32)>,
+    value_future_types: &IndexMap<CmPayloadType, u32>,
+) -> ComponentValType {
+    let export = component_plan
+        .world_exports
+        .iter()
+        .find(|e| e.name == key)
+        .or_else(|| component_plan.world_exports.first());
+    let Some(export) = export else {
+        return ComponentValType::Type(result_unit_type);
+    };
+    if export.is_lib
+        && let Some(crate::ast::Type::Generic(g)) = &export.result_type
+        && g.name == "Future"
+        && g.args.len() == 1
+    {
+        let payload = crate::component_model::classify_future_payload_from_ast(
+            &g.args[0],
+            &project.cm_interface_registry,
+        );
+        let idx = resolve_future_type(
+            payload,
+            trailers_future_type,
+            transmission_future_types,
+            scalar_future_types,
+            value_future_types,
+        );
+        return ComponentValType::Type(idx);
+    }
+    cm_export_type_to_valtype(ctx, &export.cm_result, result_unit_type)
 }
 
 /// Resolve the component-level type index for a future canonical intrinsic.
@@ -1800,11 +1833,11 @@ fn emit_world_exports(
     // Shared across all `--lib` exports so a named type (e.g. `point`) is
     // defined once and reused. The interface hint resolves lib-local named
     // types against the package's own default-interface FQ in the registry.
-    let is_lib_world = component_plan.world_exports.iter().any(|e| e.sync_lift);
+    let is_lib_world = component_plan.world_exports.iter().any(|e| e.is_lib);
     let lib_iface_fq = component_plan
         .world_exports
         .iter()
-        .find(|e| e.sync_lift)
+        .find(|e| e.is_lib)
         .and_then(|e| e.from_interface_fq.clone());
     // One engine shared across all lib exports (dedups named types). The
     // interface hint resolves lib-local named types against the package's
@@ -1835,7 +1868,7 @@ fn emit_world_exports(
             ExportKind::Func,
         );
 
-        let func_type = if export.sync_lift {
+        let func_type = if export.is_lib {
             // `--lib` export: build the param/result CM value types (and any
             // named types they reference) top-level from the raw Wado types via
             // the shared engine, *before* the func type so their indices precede
@@ -4017,7 +4050,7 @@ fn append_interface_instance_exports(
     for (i, (&fq, group)) in groups.iter().enumerate() {
         let instance_idx = base_instance_idx + i as u32;
         let mut type_items: Vec<(String, u32)> = Vec::new();
-        if group.iter().any(|e| e.sync_lift) {
+        if group.iter().any(|e| e.is_lib) {
             // `--lib` default interface: its named types were defined top-level
             // by `emit_world_exports` and recorded on the context.
             type_items.extend(ctx.lib_export_types().iter().cloned());

@@ -319,6 +319,57 @@ export fn id_future_char(v: Future<char>) -> Future<char> {
     return rx;
 }
 
+// --- Future consume/produce with aggregate payloads ---
+// The payload itself round-trips through CM linear memory (lower + lift), not
+// just the handle. A scalar future read completes synchronously via the CM
+// number-type guard, but an aggregate read blocks, so these are `async`: the
+// readable end is delivered with `task return` and the payload written after.
+export async fn id_future_string(v: Future<String>) -> Future<String> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<String>::new();
+    task return rx;
+    if let Some(x) = value {
+        tx.write(x);
+    }
+}
+export async fn id_future_option(v: Future<Option<u32>>) -> Future<Option<u32>> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<Option<u32>>::new();
+    task return rx;
+    if let Some(x) = value {
+        tx.write(x);
+    }
+}
+export async fn id_future_result(v: Future<Result<u32, String>>) -> Future<Result<u32, String>> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<Result<u32, String>>::new();
+    task return rx;
+    if let Some(x) = value {
+        tx.write(x);
+    }
+}
+export async fn id_future_list(v: Future<List<u32>>) -> Future<List<u32>> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<List<u32>>::new();
+    task return rx;
+    if let Some(x) = value {
+        tx.write(x);
+    }
+}
+export async fn id_future_tuple(v: Future<[u32, String]>) -> Future<[u32, String]> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<[u32, String]>::new();
+    task return rx;
+    if let Some(x) = value {
+        tx.write(x);
+    }
+}
+
 // `stream<u8>` pass-through; consume/produce streaming is a follow-up.
 export fn id_stream_u8(v: Stream<u8>) -> Stream<u8> {
     return v;

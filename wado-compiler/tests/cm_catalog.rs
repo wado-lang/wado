@@ -583,6 +583,14 @@ fn run_round_trips(opt_level: OptLevel) {
         check!(future_round_trip(&mut store, &instance, i, "id-future-f64", -7.25f64));
         check!(future_round_trip(&mut store, &instance, i, "id-future-char", 'λ'));
 
+        // Aggregate future consume/produce (async exports; the payload
+        // round-trips through CM linear memory, not just the handle).
+        check!(future_round_trip(&mut store, &instance, i, "id-future-string", "héllo, wörld".to_string()));
+        check!(future_round_trip(&mut store, &instance, i, "id-future-option", Some(42u32)));
+        check!(future_round_trip(&mut store, &instance, i, "id-future-result", Ok::<u32, String>(7)));
+        check!(future_round_trip(&mut store, &instance, i, "id-future-list", vec![1u32, 2, 3]));
+        check!(future_round_trip(&mut store, &instance, i, "id-future-tuple", (5u32, "x".to_string())));
+
         check!(stream_round_trip(&mut store, &instance, i, "id-stream-u8", vec![1u8, 2, 3, 4]));
 
         check!(embedded_future_round_trip(
@@ -815,6 +823,95 @@ fn cm_future_aggregate_producer_o0() {
 #[test]
 fn cm_future_aggregate_producer_o2() {
     run_producer_round_trips(OptLevel::O2);
+}
+
+/// A single-export `--lib` async identity over `future<T>`: read the input
+/// future's payload, write it into a fresh future, and deliver that future via
+/// `task return`. The full aggregate consume/produce round-trip — the guest
+/// both lifts (read) and lowers (write) the payload across the boundary. It is
+/// `async` because an aggregate future read blocks (unlike a scalar, via the CM
+/// number-type guard).
+fn future_identity_source(ty: &str, name: &str) -> String {
+    format!(
+        "export async fn {name}(v: Future<{ty}>) -> Future<{ty}> {{\n\
+         \x20   let value = v.read();\n\
+         \x20   v.drop();\n\
+         \x20   let [rx, tx] = Future::<{ty}>::new();\n\
+         \x20   task return rx;\n\
+         \x20   if let Some(x) = value {{\n\
+         \x20       tx.write(x);\n\
+         \x20   }}\n\
+         }}\n"
+    )
+}
+
+fn run_future_identity<T>(opt_level: OptLevel, ty: &str, export: &'static str, payload: T)
+where
+    T: wasmtime::component::Lower
+        + wasmtime::component::Lift
+        + Clone
+        + PartialEq
+        + std::fmt::Debug
+        + Send
+        + Sync
+        + 'static,
+{
+    let fn_name = export.replace('-', "_");
+    let wasm = compile_lib_source(&future_identity_source(ty, &fn_name), opt_level);
+    let engine = common::engine();
+    let rt = common::runtime();
+    let opt = common::opt_level_name(opt_level);
+
+    rt.block_on(async {
+        let component = Component::new(engine, &wasm).expect("instantiate component type");
+        let linker = common::linker(engine).expect("build linker");
+        let state = common::WasiState::new_with_pipes(
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+        );
+        let mut store = Store::new(engine, state);
+        store.set_epoch_deadline((common::DEFAULT_TIMEOUT_MS / 1000).max(1));
+        let instance = linker
+            .instantiate_async(&mut store, &component)
+            .await
+            .expect("instantiate identity component");
+        let iface = instance
+            .get_export(&mut store, None, LIB_WORLD_FQ)
+            .map(|(_, idx)| idx);
+        if let Err(e) =
+            future_round_trip(&mut store, &instance, iface.as_ref(), export, payload).await
+        {
+            panic!("[{opt}] {e}");
+        }
+    });
+}
+
+fn run_future_identity_round_trips(opt_level: OptLevel) {
+    run_future_identity(opt_level, "String", "id-future-string", "héllo, wörld".to_string());
+    run_future_identity(opt_level, "Option<u32>", "id-future-option", Some(42u32));
+    run_future_identity(
+        opt_level,
+        "Result<u32, String>",
+        "id-future-result",
+        Ok::<u32, String>(7),
+    );
+    run_future_identity(opt_level, "List<u32>", "id-future-list", vec![1u32, 2, 3]);
+    run_future_identity(
+        opt_level,
+        "[u32, String]",
+        "id-future-tuple",
+        (5u32, "x".to_string()),
+    );
+}
+
+#[test]
+fn cm_future_aggregate_identity_o0() {
+    run_future_identity_round_trips(OptLevel::O0);
+}
+
+#[test]
+fn cm_future_aggregate_identity_o2() {
+    run_future_identity_round_trips(OptLevel::O2);
 }
 
 /// Compile an inline library source at O0, returning the compiler's result.

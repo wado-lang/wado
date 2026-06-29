@@ -33,11 +33,13 @@ use super::types::{
 /// Expand `TaskReturn` stmts in an `export async fn` user function into inline CM calls.
 ///
 /// Walks the function body and replaces each `TirStmtKind::TaskReturn { value }` with
-/// the flat lowering + `cm_raw_call("task-return", flat_args)` sequence.
+/// the flat lowering + `cm_raw_call(task_return_name, flat_args)` sequence, where
+/// `task_return_name` is this export's `task-return:<name>` import.
 /// New locals are appended to the function's `locals` and `local_count` is updated.
 pub(super) fn expand_task_returns_in_func(
     user_func: &Rc<RefCell<TirFunction>>,
     flat_return_types: &[cm_abi::CmValType],
+    task_return_name: &str,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
     cm_interface_registry: &CmInterfaceRegistry,
@@ -51,6 +53,7 @@ pub(super) fn expand_task_returns_in_func(
     };
     let mut expander = TaskReturnExpander {
         flat_return_types,
+        task_return_name,
         next_local: func.local_count,
         extra_locals: Vec::new(),
         tir_modules,
@@ -86,6 +89,8 @@ pub(super) fn strip_task_returns_in_func(user_func: &Rc<RefCell<TirFunction>>) {
 /// statement list because one `task return` expands to several statements.
 struct TaskReturnExpander<'a> {
     flat_return_types: &'a [cm_abi::CmValType],
+    /// The `task.return` core import name for this export (`task-return:<name>`).
+    task_return_name: &'a str,
     next_local: u32,
     extra_locals: Vec<TirLocal>,
     tir_modules: &'a IndexMap<ModuleSource, TirModule>,
@@ -107,6 +112,7 @@ impl TirOptVisitor for TaskReturnExpander<'_> {
                     new_stmts.extend(generate_inline_task_return(
                         value,
                         self.flat_return_types,
+                        self.task_return_name,
                         &mut self.next_local,
                         &mut self.extra_locals,
                         self.tir_modules,
@@ -154,6 +160,7 @@ impl TirOptVisitor for TaskReturnStripper {
 fn generate_inline_task_return(
     value: TirExpr,
     flat_return_types: &[cm_abi::CmValType],
+    task_return_name: &str,
     next_local: &mut u32,
     locals: &mut Vec<TirLocal>,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
@@ -264,7 +271,7 @@ fn generate_inline_task_return(
             }
         }
         ok_stmts.push(expr_stmt(cm_raw_call(
-            "task-return",
+            task_return_name,
             task_return_args.clone(),
             TypeTable::UNIT,
         )));
@@ -334,7 +341,7 @@ fn generate_inline_task_return(
             }
         }
         err_stmts.push(expr_stmt(cm_raw_call(
-            "task-return",
+            task_return_name,
             task_return_args,
             TypeTable::UNIT,
         )));
@@ -408,7 +415,7 @@ fn generate_inline_task_return(
             // with no flat payload.
             stmts.push(expr_stmt(value));
             stmts.push(expr_stmt(cm_raw_call(
-                "task-return",
+            task_return_name,
                 vec![],
                 TypeTable::UNIT,
             )));
@@ -440,7 +447,7 @@ fn generate_inline_task_return(
                 task_return_args.push(arg);
             }
             stmts.push(expr_stmt(cm_raw_call(
-                "task-return",
+            task_return_name,
                 task_return_args,
                 TypeTable::UNIT,
             )));

@@ -134,7 +134,10 @@ struct Emitter<'a> {
 struct ExportedFn {
     name: String,
     params: Vec<(String, TypeId)>,
+    /// The CM result type. For `async` exports this is the `task return` type
+    /// (the declared `return_type` is erased to unit by reify).
     return_type: TypeId,
+    is_async: bool,
 }
 
 /// Name-indexed view of the user-authored type declarations.
@@ -259,7 +262,7 @@ impl<'a> Emitter<'a> {
     /// Render one exported function to a WIT `StandaloneFunc`, seeding `pending`
     /// with any user types it references.
     fn render_function(&mut self, export: &ExportedFn) -> Result<StandaloneFunc, WitEmitError> {
-        let mut func = StandaloneFunc::new(to_kebab(&export.name), false);
+        let mut func = StandaloneFunc::new(to_kebab(&export.name), export.is_async);
         let mut wit_params = Params::empty();
         for (pname, pty) in &export.params {
             wit_params.push(to_kebab(pname), self.map_type(*pty)?);
@@ -291,10 +294,18 @@ impl<'a> Emitter<'a> {
                     .iter()
                     .map(|p| (p.name.clone(), p.type_id))
                     .collect();
+                // `async` exports erase `return_type` to unit; the real CM
+                // result travels via `task_return_type`.
+                let return_type = if func.is_async {
+                    func.task_return_type.unwrap_or(func.return_type)
+                } else {
+                    func.return_type
+                };
                 out.push(ExportedFn {
                     name: func.name.clone(),
                     params,
-                    return_type: func.return_type,
+                    return_type,
+                    is_async: func.is_async,
                 });
             }
         }

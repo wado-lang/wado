@@ -393,9 +393,15 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                 &tt,
                             );
                             drop(tt);
+                            // Per-export `task.return` import, so codegen can type
+                            // the canon to this export's own result (a `--lib`
+                            // world may have several async exports of distinct
+                            // result types).
+                            let task_return_name = format!("task-return:{}", export.name);
                             expand_task_returns_in_func(
                                 &user_func_rc,
                                 &flat_types,
+                                &task_return_name,
                                 &project.tir_modules,
                                 &entry_type_table,
                                 &project.cm_interface_registry,

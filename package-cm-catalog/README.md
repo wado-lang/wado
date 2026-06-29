@@ -37,12 +37,12 @@ Full intended scope; checked items are implemented.
 **`future<T>` (consume/produce)**
 
 - [x] Scalar payloads (`bool`, `u8`–`u64`, `s8`–`s64`, `f32`, `f64`, `char`)
-- [ ] `string`
+- [x] `string`
 - [ ] `record`
-- [ ] `option<_>`
-- [ ] `result<_, _>`
-- [ ] `list<_>`
-- [ ] `tuple<…>`
+- [x] `option<_>`
+- [x] `result<_, _>`
+- [x] `list<_>`
+- [x] `tuple<…>`
 
 **`stream<T>`**
 

@@ -66,10 +66,16 @@ pub struct WorldExportPlan {
     pub from_interface_fq: Option<String>,
     /// Use a synchronous canonical lift (no `CanonicalOption::Async`): the core
     /// function returns the lowered value(s) directly instead of delivering them
-    /// via `task.return`. Set for `--lib` world exports, whose adapters are
-    /// synthesized as value-returning functions. The existing WASI worlds (CLI,
-    /// HTTP, kiln) keep the async lift, so this is `false` for them.
+    /// via `task.return`. Set for non-`async` `--lib` world exports, whose
+    /// adapters are synthesized as value-returning functions. The WASI worlds
+    /// (CLI, HTTP, kiln) and `async` `--lib` exports keep the async lift.
     pub sync_lift: bool,
+    /// This is a `--lib` world export: codegen builds its CM param/result types
+    /// from the raw Wado types in [`Self::param_types`] / [`Self::result_type`]
+    /// (via [`crate::component_model::CmTypeGen`]) rather than the WASI-only
+    /// [`Self::cm_params`]. Independent of [`Self::sync_lift`]: an `async` lib
+    /// export uses this lib type path but the async (`task.return`) lift.
+    pub is_lib: bool,
 }
 
 /// CM-level type at the world export boundary.
@@ -298,9 +304,10 @@ fn build_world_export_plans(
                 cm_result,
                 param_types,
                 result_type,
-                // Library exports use a synchronous lift; the WASI worlds keep
-                // the async/task-return lift.
-                sync_lift: is_lib_world,
+                // Non-async library exports use a synchronous lift; WASI worlds
+                // and `async` lib exports deliver results via `task.return`.
+                sync_lift: is_lib_world && !export.is_async,
+                is_lib: is_lib_world,
             }
         })
         .collect()

@@ -558,7 +558,11 @@ pub enum CanonicalIntrinsic {
     ErrorContextNew,
     ErrorContextDebugMessage,
     ErrorContextDrop,
-    TaskReturn,
+    /// `task.return` for an `async` world export, keyed by the export's name so
+    /// each export gets a `task.return` canon typed to its own result. A `--lib`
+    /// world may carry several `async` exports with distinct result types; one
+    /// shared canon could not type them all.
+    TaskReturn(String),
     /// `resource.drop` for an imported Component Model resource.
     /// The payload is the resource's CM name (e.g. `"request"`).
     ResourceDrop(String),
@@ -596,7 +600,8 @@ impl CanonicalIntrinsic {
             Self::ErrorContextNew => "error-context-new".to_string(),
             Self::ErrorContextDebugMessage => "error-context-debug-message".to_string(),
             Self::ErrorContextDrop => "error-context-drop".to_string(),
-            Self::TaskReturn => "task-return".to_string(),
+            Self::TaskReturn(key) if key.is_empty() => "task-return".to_string(),
+            Self::TaskReturn(key) => format!("task-return:{key}"),
             Self::ResourceDrop(name) => format!("resource-drop:{name}"),
         }
     }
@@ -628,7 +633,10 @@ impl CanonicalIntrinsic {
             "error-context-new" => Self::ErrorContextNew,
             "error-context-debug-message" => Self::ErrorContextDebugMessage,
             "error-context-drop" => Self::ErrorContextDrop,
-            "task-return" => Self::TaskReturn,
+            "task-return" => Self::TaskReturn(String::new()),
+            _ if name.starts_with("task-return:") => {
+                Self::TaskReturn(name["task-return:".len()..].to_string())
+            }
             _ => return None,
         })
     }
