@@ -30,7 +30,7 @@ static PLACEHOLDER_NAME: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from(
 
 static CORE_PRELUDE: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("prelude"));
 static CORE_BUILTIN: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("builtin"));
-static CORE_INTERNAL: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("internal"));
+static CORE_RT: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("rt"));
 static CORE_ALLOCATOR: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("allocator"));
 /// Shared between [`ModuleSource::cli`] (core:cli) and
 /// [`ModuleSource::wasi_cli`] (wasi:cli) — both literal contents are
@@ -74,7 +74,7 @@ fn well_known_arcs() -> Vec<Arc<str>> {
         PLACEHOLDER_NAME.clone(),
         CORE_PRELUDE.clone(),
         CORE_BUILTIN.clone(),
-        CORE_INTERNAL.clone(),
+        CORE_RT.clone(),
         CORE_ALLOCATOR.clone(),
         NAME_CLI.clone(),
         CORE_PRELUDE_STRING.clone(),
@@ -300,9 +300,9 @@ impl WasmAssetKind {
 /// are consistent across different compilation phases.
 #[derive(Debug, Clone)]
 pub enum ModuleSource {
-    /// Core library module (e.g., `core:prelude`, `core:cli`, `core:internal`, `core:builtin`)
+    /// Core library module (e.g., `core:prelude`, `core:cli`, `core:rt`, `core:builtin`)
     Core {
-        /// Module name within core (e.g., "prelude", "cli", "internal", "builtin")
+        /// Module name within core (e.g., "prelude", "cli", "rt", "builtin")
         name: InternedStr,
     },
     /// WASI module (e.g., `wasi:cli`, `wasi:io`)
@@ -375,6 +375,44 @@ pub enum ModuleSource {
         /// `wat` or `wasm` source format.
         kind: WasmAssetKind,
     },
+}
+
+/// The package a [`ModuleSource`] belongs to. Visibility enforcement keys on
+/// this: `internal` items reach any module with the same `PackageId`; `pub`
+/// items reach across package boundaries. `core` and `wasi` are each their own
+/// independent package; the entry point and its local modules form the `Root`
+/// package being compiled.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum PackageId {
+    Core,
+    Wasi,
+    /// Entry point, its local modules, Kiln redirects, and wasm assets bundled
+    /// into the same component.
+    Root,
+    Dependency(InternedStr),
+    Remote(InternedStr),
+}
+
+impl ModuleSource {
+    #[must_use]
+    pub fn package_id(&self) -> PackageId {
+        match self {
+            Self::Core { .. } => PackageId::Core,
+            Self::Wasi { .. } => PackageId::Wasi,
+            Self::Local { .. }
+            | Self::EntryPoint { .. }
+            | Self::Redirected { .. }
+            | Self::Wasm { .. } => PackageId::Root,
+            Self::Dependency { path } => PackageId::Dependency(path.clone()),
+            Self::Remote { url } => PackageId::Remote(url.clone()),
+        }
+    }
+
+    /// The reach test for `internal` visibility.
+    #[must_use]
+    pub fn same_package(&self, other: &Self) -> bool {
+        self.package_id() == other.package_id()
+    }
 }
 
 impl PartialEq for ModuleSource {
@@ -477,8 +515,8 @@ impl ModuleSource {
         pub fn traits() = Core { name: CORE_PRELUDE_TRAITS },
         /// `core:prelude/range` — range types.
         pub fn range() = Core { name: CORE_PRELUDE_RANGE },
-        /// `core:internal` — compiler internal functions.
-        pub fn internal() = Core { name: CORE_INTERNAL },
+        /// `core:rt` — runtime support helpers (panic, assert, CM ABI glue).
+        pub fn rt() = Core { name: CORE_RT },
         /// `core:allocator` — linear memory allocator (compiled into "mem" Wasm module).
         pub fn allocator() = Core { name: CORE_ALLOCATOR },
         /// `core:builtin` — builtin wasm instruction mappings.
@@ -563,10 +601,10 @@ impl ModuleSource {
         matches!(self, Self::Remote { .. })
     }
 
-    /// Check if this is the core/internal module.
+    /// Check if this is the core/rt module.
     #[must_use]
-    pub fn is_core_internal(&self) -> bool {
-        matches!(self, Self::Core { name } if name == "internal")
+    pub fn is_core_rt(&self) -> bool {
+        matches!(self, Self::Core { name } if name == "rt")
     }
 
     /// Check if this is the core/builtin module.
@@ -734,8 +772,8 @@ mod tests {
         let source = interner.from_path(&["core".to_string(), "cli".to_string()]);
         assert!(matches!(source, ModuleSource::Core { ref name } if name == "cli"));
 
-        let source = interner.from_path(&["core".to_string(), "internal".to_string()]);
-        assert!(source.is_core_internal());
+        let source = interner.from_path(&["core".to_string(), "rt".to_string()]);
+        assert!(source.is_core_rt());
     }
 
     #[test]
@@ -798,9 +836,9 @@ mod tests {
     #[test]
     fn test_module_source_helpers() {
         let mut interner = ModuleSourceInterner::new();
-        let core = ModuleSource::internal();
+        let core = ModuleSource::rt();
         assert!(core.is_core());
-        assert!(core.is_core_internal());
+        assert!(core.is_core_rt());
         assert!(!core.is_wasi());
         assert!(!core.is_local());
 
@@ -817,6 +855,38 @@ mod tests {
         let local = interner.local("./file.wado");
         assert!(local.is_local());
         assert!(!local.is_core());
+    }
+
+    #[test]
+    fn test_package_id_and_same_package() {
+        let mut interner = ModuleSourceInterner::new();
+
+        let rt = ModuleSource::rt();
+        let cli = ModuleSource::cli();
+        assert_eq!(rt.package_id(), PackageId::Core);
+        assert!(rt.same_package(&cli), "all core:* share the core package");
+
+        let wasi = interner.wasi("cli");
+        assert_eq!(wasi.package_id(), PackageId::Wasi);
+        assert!(
+            !rt.same_package(&wasi),
+            "core and wasi are separate packages"
+        );
+
+        let entry = ModuleSource::entry_point_uninitialized();
+        let local_a = interner.local("./a.wado");
+        let local_b = interner.local("./b.wado");
+        assert_eq!(local_a.package_id(), PackageId::Root);
+        assert!(local_a.same_package(&local_b));
+        assert!(local_a.same_package(&entry));
+        assert!(!local_a.same_package(&rt), "root and core are separate");
+
+        let dep_a = interner.dependency("dep_a/lib.wado");
+        let dep_a2 = interner.dependency("dep_a/lib.wado");
+        let dep_b = interner.dependency("dep_b/lib.wado");
+        assert!(dep_a.same_package(&dep_a2));
+        assert!(!dep_a.same_package(&dep_b));
+        assert!(!dep_a.same_package(&local_a));
     }
 
     #[test]
@@ -869,7 +939,7 @@ mod tests {
         let cases: Vec<(ModuleSource, ModuleSource)> = vec![
             (ModuleSource::prelude(), i.core("prelude")),
             (ModuleSource::builtin(), i.core("builtin")),
-            (ModuleSource::internal(), i.core("internal")),
+            (ModuleSource::rt(), i.core("rt")),
             (ModuleSource::allocator(), i.core("allocator")),
             (ModuleSource::cli(), i.core("cli")),
             (ModuleSource::string(), i.core("prelude/string.wado")),

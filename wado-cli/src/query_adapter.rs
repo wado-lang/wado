@@ -10,14 +10,13 @@ use wado_compiler::kiln::InvocationIndex;
 
 use crate::args::CliExit;
 use crate::compiler_host::FilesystemCompilerHost;
+use crate::manifest::ProjectManifest;
 
 struct PreparedQuery {
     uri: String,
     engine: wado_lsp::Engine,
     host: FilesystemCompilerHost,
 }
-
-type ManifestPair = (wado_manifest::Manifest, std::path::PathBuf);
 
 async fn prepare_query(filename: &str) -> Result<PreparedQuery, CliExit> {
     let path = Path::new(filename);
@@ -50,7 +49,10 @@ async fn prepare_query(filename: &str) -> Result<PreparedQuery, CliExit> {
 /// identically on the query path. `manifest_pair` must be the one
 /// [`run_generators_for`] is given, so the host's dependency index and the
 /// pipeline share a single manifest root.
-fn entry_host(entry_file: &Path, manifest_pair: Option<&ManifestPair>) -> FilesystemCompilerHost {
+fn entry_host(
+    entry_file: &Path,
+    manifest_pair: Option<&ProjectManifest>,
+) -> FilesystemCompilerHost {
     let base = entry_file
         .parent()
         .map(std::path::Path::to_path_buf)
@@ -73,7 +75,7 @@ fn entry_host(entry_file: &Path, manifest_pair: Option<&ManifestPair>) -> Filesy
 async fn run_generators_for(
     entry_file: &Path,
     host: &FilesystemCompilerHost,
-    manifest_pair: Option<ManifestPair>,
+    manifest_pair: Option<ProjectManifest>,
 ) -> Option<InvocationIndex> {
     match crate::compile::maybe_run_pipeline(entry_file, host, false, manifest_pair).await {
         Ok(outcome) => Some(outcome.invocations),

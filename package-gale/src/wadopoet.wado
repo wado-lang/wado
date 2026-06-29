@@ -214,6 +214,44 @@ impl Display for CharLit {
     }
 }
 
+pub type CharRangePat = RangeInclusive<char>;
+
+pub fn char_range_pat(range: RangeInclusive<char>) -> CharRangePat {
+    return range as CharRangePat;
+}
+
+impl Display for CharRangePat {
+    pub fn fmt(&self, f: &mut Formatter) {
+        let range = *self as RangeInclusive<char>;
+        char_lit(range.start).fmt(f);
+        if range.start != range.end {
+            f.write_str(&"..=");
+            char_lit(range.end).fmt(f);
+        }
+    }
+}
+
+/// Visibility modifier for an emitted Wado declaration — the scope ladder
+/// (file-private / `internal` / `pub`). Passed to the spec builders as a
+/// defaulted argument, so the common file-private case stays implicit.
+pub enum Vis {
+    Private,
+    Internal,
+    Pub,
+}
+
+impl Vis {
+    /// Source keyword with a trailing space (`""`, `"internal "`, `"pub "`).
+    pub fn prefix(&self) -> String {
+        let p = match *self {
+            Vis::Private => "",
+            Vis::Internal => "internal ",
+            Vis::Pub => "pub ",
+        };
+        return p;
+    }
+}
+
 pub struct FieldSpec {
     pub name: String,
     pub type_str: String,
@@ -233,17 +271,12 @@ impl FieldSpec {
 pub struct StructSpec {
     pub name: String,
     fields: List<FieldSpec>,
-    is_pub: bool,
+    visibility: Vis,
 }
 
 impl StructSpec {
-    pub fn new(name: &String) -> StructSpec {
-        return StructSpec { name: *name, fields: [], is_pub: false };
-    }
-
-    pub fn set_pub(&mut self) -> &mut StructSpec with stores[self] {
-        self.is_pub = true;
-        return self;
+    pub fn new(name: &String, visibility: Vis = Vis::Private) -> StructSpec {
+        return StructSpec { name: *name, fields: [], visibility };
     }
 
     pub fn add_field(&mut self, name: &String, type_str: &String) -> &mut StructSpec with stores[self] {
@@ -262,8 +295,7 @@ impl StructSpec {
     }
 
     pub fn emit(&self, w: &mut CodeWriter) {
-        let prefix = if self.is_pub { "pub " } else { "" };
-        w.begin(&`{prefix}struct {self.name}`);
+        w.begin(&`{self.visibility.prefix()}struct {self.name}`);
         for let field of &self.fields {
             let vis = if field.is_pub { "pub " } else { "" };
             w.line(&`{vis}{field.name}: {field.type_str},`);
@@ -280,17 +312,12 @@ pub struct VariantCase {
 pub struct VariantSpec {
     pub name: String,
     cases: List<VariantCase>,
-    is_pub: bool,
+    visibility: Vis,
 }
 
 impl VariantSpec {
-    pub fn new(name: &String) -> VariantSpec {
-        return VariantSpec { name: *name, cases: [], is_pub: false };
-    }
-
-    pub fn set_pub(&mut self) -> &mut VariantSpec with stores[self] {
-        self.is_pub = true;
-        return self;
+    pub fn new(name: &String, visibility: Vis = Vis::Private) -> VariantSpec {
+        return VariantSpec { name: *name, cases: [], visibility };
     }
 
     pub fn add_case(&mut self, name: &String) -> &mut VariantSpec with stores[self] {
@@ -307,8 +334,7 @@ impl VariantSpec {
     }
 
     pub fn emit(&self, w: &mut CodeWriter) {
-        let prefix = if self.is_pub { "pub " } else { "" };
-        w.begin(&`{prefix}variant {self.name}`);
+        w.begin(&`{self.visibility.prefix()}variant {self.name}`);
         for let case of &self.cases {
             if let Some(p) = &case.payload {
                 w.line(&`{case.name}({*p}),`);
@@ -328,17 +354,12 @@ pub struct EnumMember {
 pub struct EnumSpec {
     pub name: String,
     members: List<EnumMember>,
-    is_pub: bool,
+    visibility: Vis,
 }
 
 impl EnumSpec {
-    pub fn new(name: &String) -> EnumSpec {
-        return EnumSpec { name: *name, members: [], is_pub: false };
-    }
-
-    pub fn set_pub(&mut self) -> &mut EnumSpec with stores[self] {
-        self.is_pub = true;
-        return self;
+    pub fn new(name: &String, visibility: Vis = Vis::Private) -> EnumSpec {
+        return EnumSpec { name: *name, members: [], visibility };
     }
 
     pub fn add_member(&mut self, name: &String) -> &mut EnumSpec with stores[self] {
@@ -355,8 +376,7 @@ impl EnumSpec {
     }
 
     pub fn emit(&self, w: &mut CodeWriter) {
-        let prefix = if self.is_pub { "pub " } else { "" };
-        w.begin(&`{prefix}enum {self.name}`);
+        w.begin(&`{self.visibility.prefix()}enum {self.name}`);
         for let member of &self.members {
             if let Some(c) = &member.trailing_comment {
                 w.line(&`{member.name},  // {*c}`);
@@ -398,7 +418,7 @@ pub struct FnSpec {
     pub name: String,
     params: List<ParamSpec>,
     return_type: Option<String>,
-    is_pub: bool,
+    visibility: Vis,
     is_export: bool,
     /// Generic type parameters, each rendered verbatim between the name
     /// and the parameter list (e.g. `"V: Visitor"` → `fn walk<V: Visitor>(`).
@@ -410,12 +430,12 @@ pub struct FnSpec {
 }
 
 impl FnSpec {
-    pub fn new(name: &String) -> FnSpec {
+    pub fn new(name: &String, visibility: Vis = Vis::Private) -> FnSpec {
         return FnSpec {
             name: *name,
             params: [],
             return_type: null,
-            is_pub: false,
+            visibility,
             is_export: false,
             generics: [],
             effects: [],
@@ -423,13 +443,8 @@ impl FnSpec {
         };
     }
 
-    pub fn set_pub(&mut self) -> &mut FnSpec with stores[self] {
-        self.is_pub = true;
-        return self;
-    }
-
-    /// Mark the function `export` (component-model export). Mutually
-    /// exclusive with `pub`; `export` wins if both are set.
+    /// Mark the function `export` (component-model export). `export` implies
+    /// `pub`; the signature emits just `export`, never `pub export`.
     pub fn set_export(&mut self) -> &mut FnSpec with stores[self] {
         self.is_export = true;
         return self;
@@ -476,8 +491,8 @@ impl FnSpec {
         let mut sig = String::with_capacity(64);
         if self.is_export {
             sig.push_str(&"export ");
-        } else if self.is_pub {
-            sig.push_str(&"pub ");
+        } else {
+            sig.push_str(&self.visibility.prefix());
         }
         sig.push_str(&`fn {self.name}`);
         if self.generics.len() > 0 {
@@ -517,26 +532,21 @@ pub struct GlobalSpec {
     pub name: String,
     type_str: String,
     initializer: String,
-    is_pub: bool,
+    visibility: Vis,
     is_mut: bool,
     trailing_comment: Option<String>,
 }
 
 impl GlobalSpec {
-    pub fn new(name: &String, type_str: &String, initializer: &String) -> GlobalSpec {
+    pub fn new(name: &String, type_str: &String, initializer: &String, visibility: Vis = Vis::Private) -> GlobalSpec {
         return GlobalSpec {
             name: *name,
             type_str: *type_str,
             initializer: *initializer,
-            is_pub: false,
+            visibility,
             is_mut: false,
             trailing_comment: null,
         };
-    }
-
-    pub fn set_pub(&mut self) -> &mut GlobalSpec with stores[self] {
-        self.is_pub = true;
-        return self;
     }
 
     pub fn set_trailing_comment(&mut self, comment: &String) -> &mut GlobalSpec with stores[self] {
@@ -545,7 +555,7 @@ impl GlobalSpec {
     }
 
     pub fn emit(&self, w: &mut CodeWriter) {
-        let vis = if self.is_pub { "pub " } else { "" };
+        let vis = self.visibility.prefix();
         let mutability = if self.is_mut { "mut " } else { "" };
         let trailer = if let Some(c) = &self.trailing_comment {
             `  // {*c}`;

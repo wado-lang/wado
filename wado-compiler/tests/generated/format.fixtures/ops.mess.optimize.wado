@@ -24,7 +24,7 @@ fn grow_memory(new_offset: i32) {
     core::builtin::memory_grow(grow_pages);
 }
 
-export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
+pub export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
     if (newsize == 0) {
         if ((oldptr + oldsize) == core::allocator::heap_offset) {
             core::allocator::heap_offset = oldptr;
@@ -41,7 +41,7 @@ export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i
     return aligned;
 }
 
-export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
+pub export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
     if (newsize == 0) {
         if (oldsize > 0) {
             core::builtin::memory_fill(oldptr, 255, oldsize);
@@ -119,7 +119,7 @@ fn fl_carve(block: i32, block_size: i32, size: i32) {
     }
 }
 
-export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32) -> i32 {
+pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32) -> i32 {
     if (core::allocator::heap_offset < 152) {
         core::allocator::heap_offset = 152;
     }

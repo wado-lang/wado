@@ -189,7 +189,7 @@ impl<'a> NirUnparser<'a> {
 
     fn unparse_nir_global(&mut self, g: &NirGlobal) {
         self.write_indent();
-        self.emit_kw_if(g.is_pub, "pub ");
+        self.emit_kw_if(g.visibility.is_public(), "pub ");
         self.output.push_str("global ");
         self.emit_kw_if(g.mutable, "mut ");
         self.output.push_str(&g.name);
@@ -202,7 +202,7 @@ impl<'a> NirUnparser<'a> {
 
     fn unparse_struct(&mut self, s: &NirStruct) {
         self.write_indent();
-        self.emit_kw_if(s.is_pub, "pub ");
+        self.emit_kw_if(s.visibility.is_public(), "pub ");
         self.output.push_str("struct ");
         self.output.push_str(&Self::quote_if_needed(&s.name));
 
@@ -225,7 +225,7 @@ impl<'a> NirUnparser<'a> {
         self.emit_indented_block(|this| {
             for field in &s.fields {
                 this.write_indent();
-                this.emit_kw_if(field.is_pub, "pub ");
+                this.output.push_str(field.visibility.keyword());
                 this.output.push_str(&field.name);
                 this.output.push_str(": ");
                 this.output
@@ -238,7 +238,7 @@ impl<'a> NirUnparser<'a> {
 
     fn unparse_enum(&mut self, e: &NirEnum) {
         self.write_indent();
-        self.emit_kw_if(e.is_pub, "pub ");
+        self.emit_kw_if(e.visibility.is_public(), "pub ");
         self.output.push_str("enum ");
         self.output.push_str(&e.name);
         self.emit_indented_block(|this| {
@@ -254,7 +254,7 @@ impl<'a> NirUnparser<'a> {
 
     fn unparse_flags_tir(&mut self, f: &NirFlags) {
         self.write_indent();
-        self.emit_kw_if(f.is_pub, "pub ");
+        self.emit_kw_if(f.visibility.is_public(), "pub ");
         self.output.push_str("flags ");
         self.output.push_str(&f.name);
         self.emit_indented_block(|this| {
@@ -276,7 +276,7 @@ impl<'a> NirUnparser<'a> {
             self.output.push('\n');
         }
         self.write_indent();
-        self.emit_kw_if(f.is_pub, "pub ");
+        self.emit_kw_if(f.visibility.is_public(), "pub ");
         self.emit_kw_if(f.is_export, "export ");
         self.output.push_str("fn ");
         self.output.push_str(&Self::quote_if_needed(&f.name));

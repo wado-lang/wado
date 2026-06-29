@@ -12,7 +12,7 @@ use crate::ast::{AstId, AstIdSpace};
 use crate::ast::{
     AttrArg, Attribute, CmBoundary, CmImport, EnumCase, EnumDecl, FlagsDecl, FlagsVariant,
     GenericType, InterfaceDecl, InterfaceMethod, Item, Module, NamedType, Newtype, Param, SelfKind,
-    StructDecl, StructField, Type, VariantCase, VariantDecl,
+    StructDecl, StructField, Type, VariantCase, VariantDecl, Visibility,
 };
 use crate::token::Span;
 use crate::wit_emit::CmShape;
@@ -191,7 +191,7 @@ impl Builder {
             id,
             name,
             name_span: syn(),
-            is_pub: true,
+            visibility: Visibility::Public,
             attrs,
             methods,
             span: syn(),
@@ -215,7 +215,7 @@ impl Builder {
                         id: self.id(),
                         name: f.name.to_snake_case(),
                         name_span: syn(),
-                        is_pub: true,
+                        visibility: Visibility::Public,
                         ty: self.map_type(resolve, f.ty, fq),
                         attrs: vec![self.cm_name_attr(&f.name)],
                         default: None,
@@ -227,7 +227,7 @@ impl Builder {
                     id,
                     name: wado_name,
                     name_span: syn(),
-                    is_pub: true,
+                    visibility: Visibility::Public,
                     type_params: Vec::new(),
                     fields,
                     attrs: vec![cm],
@@ -251,7 +251,7 @@ impl Builder {
                     id,
                     name: wado_name,
                     name_span: syn(),
-                    is_pub: true,
+                    visibility: Visibility::Public,
                     type_params: Vec::new(),
                     cases,
                     attrs: vec![cm],
@@ -276,7 +276,7 @@ impl Builder {
                     id,
                     name: wado_name,
                     name_span: syn(),
-                    is_pub: true,
+                    visibility: Visibility::Public,
                     type_params: Vec::new(),
                     cases,
                     attrs: vec![cm],
@@ -300,7 +300,7 @@ impl Builder {
                     id,
                     name: wado_name,
                     name_span: syn(),
-                    is_pub: true,
+                    visibility: Visibility::Public,
                     attributes: Some(vec![cm]),
                     flags,
                     span: syn(),
@@ -313,7 +313,7 @@ impl Builder {
                     id,
                     name: wado_name,
                     name_span: syn(),
-                    is_pub: true,
+                    visibility: Visibility::Public,
                     type_params: Vec::new(),
                     ty,
                     attrs: vec![cm],
@@ -506,7 +506,10 @@ mod tests {
     fn builds_catalog_bindings() {
         let (resolve, world) = decode_fixture();
         let b = build_bindings(&resolve, world).expect("build bindings");
-        assert_eq!(b.interface_fqs, vec!["wado:cm-catalog/cm-catalog@0.1.0"]);
+        assert_eq!(
+            b.interface_fqs,
+            vec!["wado-lang:cm-catalog/cm-catalog@0.1.0"]
+        );
 
         let mut iface = None;
         let mut type_names = Vec::new();
@@ -527,7 +530,7 @@ mod tests {
         // A primitive identity and a named-type identity, with cm metadata.
         let id_u32 = iface.methods.iter().find(|m| m.name == "id_u32").unwrap();
         let cm = id_u32.attrs[0].as_cm_import().unwrap();
-        assert_eq!(cm.interface_path(), "wado:cm-catalog/cm-catalog@0.1.0");
+        assert_eq!(cm.interface_path(), "wado-lang:cm-catalog/cm-catalog@0.1.0");
         assert_eq!(cm.function.as_deref(), Some("id-u32"));
 
         let id_record = iface
@@ -540,7 +543,7 @@ mod tests {
                 assert_eq!(n.name, "Point");
                 assert_eq!(
                     n.source_interface.as_deref(),
-                    Some("wado:cm-catalog/cm-catalog@0.1.0")
+                    Some("wado-lang:cm-catalog/cm-catalog@0.1.0")
                 );
             }
             other => panic!("expected Named Point, got {other:?}"),

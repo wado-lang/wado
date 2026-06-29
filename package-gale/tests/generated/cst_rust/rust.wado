@@ -821,7 +821,7 @@ fn tree_build_node(events: &List<BuildEvent>, pos: &mut i32) -> CstNode {
         let kind = info.0;
         let start = info.1;
         *pos += 1;
-        let mut children: List<CstChild> = [];
+        let mut children: List<CstChild> = List::with_capacity(4);
         let mut flags = if kind == K_ERROR { NODE_ERROR } else { 0 };
         let mut alt = -1;
         let mut end = start;
@@ -1237,16 +1237,9 @@ pub struct AtnSim {
     pub rule_first: List<List<i32>>,
     pub rule_first_neg: List<List<i32>>,
     pub rule_first_open: List<bool>,
-    /// Per-state continuation FIRST / nullability, precomputed once from the
-    /// decoded ATN (after the rule-level fixpoint converges). These are pure
-    /// functions of the constant ATN — `state_cont_nullable[s]` is
-    /// `atn_cont_nullable(s)`, the `state_cont_first*` triple is
-    /// `atn_cont_first(s)` — so caching them turns the per-decision
-    /// caller-mandatory walk (`atn_caller_mandates`) and the loop-entry FIRST
-    /// check (`atn_lr_loop_decision`) into allocation-free array lookups
-    /// instead of an input-independent DFS rerun on every loop iteration.
-    /// Filled only when the ATN has precedence edges (see `atn_decode`); empty
-    /// otherwise (the lexer ATN reuse never reads them).
+    /// Per-state continuation FIRST / nullability: the per-state analogue of
+    /// `rule_*`, cached at decode so the LR loop-entry decision is array
+    /// lookups, not a DFS per call. Empty unless the ATN has precedence edges.
     pub state_cont_nullable: List<bool>,
     pub state_cont_first: List<List<i32>>,
     pub state_cont_first_neg: List<List<i32>>,
@@ -1569,12 +1562,9 @@ pub fn atn_decode(data: &List<i32>) -> AtnSim {
     return sim;
 }
 
-/// Cache each state's continuation FIRST / nullability into the
-/// `state_cont_*` arrays. Runs once at decode, after the rule-level fixpoint
-/// has converged (it reads `rule_first` / `rule_nullable` through
-/// `atn_cont_first` / `atn_cont_nullable`). The grammar (ATN) is constant, so
-/// this is O(1) w.r.t. input; it pays for itself by removing the per-decision
-/// DFS-and-allocate from `atn_caller_mandates` / `atn_lr_loop_decision`.
+/// Cache `state_cont_*` after the rule fixpoint converges (it reads
+/// `rule_first` / `rule_nullable`). Per-state analogue of
+/// `atn_compute_first_nullable`.
 #[allow(dead_code)]
 fn atn_compute_state_cont(sim: &mut AtnSim) {
     let nstates = sim.state_kind.len();
@@ -2597,138 +2587,138 @@ pub enum TokenKind {
     Error,
 }
 
-global TK_KW_AS: i32 = 0;
-global TK_KW_BREAK: i32 = 1;
-global TK_KW_CONST: i32 = 2;
-global TK_KW_CONTINUE: i32 = 3;
-global TK_KW_CRATE: i32 = 4;
-global TK_KW_ELSE: i32 = 5;
-global TK_KW_ENUM: i32 = 6;
-global TK_KW_EXTERN: i32 = 7;
-global TK_KW_FALSE: i32 = 8;
-global TK_KW_FN: i32 = 9;
-global TK_KW_FOR: i32 = 10;
-global TK_KW_IF: i32 = 11;
-global TK_KW_IMPL: i32 = 12;
-global TK_KW_IN: i32 = 13;
-global TK_KW_LET: i32 = 14;
-global TK_KW_LOOP: i32 = 15;
-global TK_KW_MATCH: i32 = 16;
-global TK_KW_MOD: i32 = 17;
-global TK_KW_MOVE: i32 = 18;
-global TK_KW_MUT: i32 = 19;
-global TK_KW_PUB: i32 = 20;
-global TK_KW_REF: i32 = 21;
-global TK_KW_RETURN: i32 = 22;
-global TK_KW_SELFVALUE: i32 = 23;
-global TK_KW_SELFTYPE: i32 = 24;
-global TK_KW_STATIC: i32 = 25;
-global TK_KW_STRUCT: i32 = 26;
-global TK_KW_SUPER: i32 = 27;
-global TK_KW_TRAIT: i32 = 28;
-global TK_KW_TRUE: i32 = 29;
-global TK_KW_TYPE: i32 = 30;
-global TK_KW_UNSAFE: i32 = 31;
-global TK_KW_USE: i32 = 32;
-global TK_KW_WHERE: i32 = 33;
-global TK_KW_WHILE: i32 = 34;
-global TK_KW_ASYNC: i32 = 35;
-global TK_KW_AWAIT: i32 = 36;
-global TK_KW_DYN: i32 = 37;
-global TK_KW_ABSTRACT: i32 = 38;
-global TK_KW_BECOME: i32 = 39;
-global TK_KW_BOX: i32 = 40;
-global TK_KW_DO: i32 = 41;
-global TK_KW_FINAL: i32 = 42;
-global TK_KW_MACRO: i32 = 43;
-global TK_KW_OVERRIDE: i32 = 44;
-global TK_KW_PRIV: i32 = 45;
-global TK_KW_TYPEOF: i32 = 46;
-global TK_KW_UNSIZED: i32 = 47;
-global TK_KW_VIRTUAL: i32 = 48;
-global TK_KW_YIELD: i32 = 49;
-global TK_KW_TRY: i32 = 50;
-global TK_KW_UNION: i32 = 51;
-global TK_KW_STATICLIFETIME: i32 = 52;
-global TK_KW_MACRORULES: i32 = 53;
-global TK_KW_UNDERLINELIFETIME: i32 = 54;
-global TK_KW_DOLLARCRATE: i32 = 55;
-global TK_NON_KEYWORD_IDENTIFIER: i32 = 56;
-global TK_RAW_IDENTIFIER: i32 = 57;
-global TK_LINE_COMMENT: i32 = 58;
-global TK_BLOCK_COMMENT: i32 = 59;
-global TK_INNER_LINE_DOC: i32 = 60;
-global TK_INNER_BLOCK_DOC: i32 = 61;
-global TK_OUTER_LINE_DOC: i32 = 62;
-global TK_OUTER_BLOCK_DOC: i32 = 63;
-global TK_BLOCK_COMMENT_OR_DOC: i32 = 64;
-global TK_SHEBANG: i32 = 65;
-global TK_WHITESPACE: i32 = 66;
-global TK_NEWLINE: i32 = 67;
-global TK_CHAR_LITERAL: i32 = 68;
-global TK_STRING_LITERAL: i32 = 69;
-global TK_RAW_STRING_LITERAL: i32 = 70;
-global TK_BYTE_LITERAL: i32 = 71;
-global TK_BYTE_STRING_LITERAL: i32 = 72;
-global TK_RAW_BYTE_STRING_LITERAL: i32 = 73;
-global TK_INTEGER_LITERAL: i32 = 74;
-global TK_DEC_LITERAL: i32 = 75;
-global TK_HEX_LITERAL: i32 = 76;
-global TK_OCT_LITERAL: i32 = 77;
-global TK_BIN_LITERAL: i32 = 78;
-global TK_FLOAT_LITERAL: i32 = 79;
-global TK_LIFETIME_OR_LABEL: i32 = 80;
-global TK_PLUS: i32 = 81;
-global TK_MINUS: i32 = 82;
-global TK_STAR: i32 = 83;
-global TK_SLASH: i32 = 84;
-global TK_PERCENT: i32 = 85;
-global TK_CARET: i32 = 86;
-global TK_NOT: i32 = 87;
-global TK_AND: i32 = 88;
-global TK_OR: i32 = 89;
-global TK_ANDAND: i32 = 90;
-global TK_OROR: i32 = 91;
-global TK_PLUSEQ: i32 = 92;
-global TK_MINUSEQ: i32 = 93;
-global TK_STAREQ: i32 = 94;
-global TK_SLASHEQ: i32 = 95;
-global TK_PERCENTEQ: i32 = 96;
-global TK_CARETEQ: i32 = 97;
-global TK_ANDEQ: i32 = 98;
-global TK_OREQ: i32 = 99;
-global TK_SHLEQ: i32 = 100;
-global TK_SHREQ: i32 = 101;
-global TK_EQ: i32 = 102;
-global TK_EQEQ: i32 = 103;
-global TK_NE: i32 = 104;
-global TK_GT: i32 = 105;
-global TK_LT: i32 = 106;
-global TK_GE: i32 = 107;
-global TK_LE: i32 = 108;
-global TK_AT: i32 = 109;
-global TK_UNDERSCORE: i32 = 110;
-global TK_DOT: i32 = 111;
-global TK_DOTDOT: i32 = 112;
-global TK_DOTDOTDOT: i32 = 113;
-global TK_DOTDOTEQ: i32 = 114;
-global TK_COMMA: i32 = 115;
-global TK_SEMI: i32 = 116;
-global TK_COLON: i32 = 117;
-global TK_PATHSEP: i32 = 118;
-global TK_RARROW: i32 = 119;
-global TK_FATARROW: i32 = 120;
-global TK_POUND: i32 = 121;
-global TK_DOLLAR: i32 = 122;
-global TK_QUESTION: i32 = 123;
-global TK_LCURLYBRACE: i32 = 124;
-global TK_RCURLYBRACE: i32 = 125;
-global TK_LSQUAREBRACKET: i32 = 126;
-global TK_RSQUAREBRACKET: i32 = 127;
-global TK_LPAREN: i32 = 128;
-global TK_RPAREN: i32 = 129;
-global TK_EOF: i32 = 130;
-global TK_ERROR: i32 = 131;
+pub global TK_KW_AS: i32 = 0;
+pub global TK_KW_BREAK: i32 = 1;
+pub global TK_KW_CONST: i32 = 2;
+pub global TK_KW_CONTINUE: i32 = 3;
+pub global TK_KW_CRATE: i32 = 4;
+pub global TK_KW_ELSE: i32 = 5;
+pub global TK_KW_ENUM: i32 = 6;
+pub global TK_KW_EXTERN: i32 = 7;
+pub global TK_KW_FALSE: i32 = 8;
+pub global TK_KW_FN: i32 = 9;
+pub global TK_KW_FOR: i32 = 10;
+pub global TK_KW_IF: i32 = 11;
+pub global TK_KW_IMPL: i32 = 12;
+pub global TK_KW_IN: i32 = 13;
+pub global TK_KW_LET: i32 = 14;
+pub global TK_KW_LOOP: i32 = 15;
+pub global TK_KW_MATCH: i32 = 16;
+pub global TK_KW_MOD: i32 = 17;
+pub global TK_KW_MOVE: i32 = 18;
+pub global TK_KW_MUT: i32 = 19;
+pub global TK_KW_PUB: i32 = 20;
+pub global TK_KW_REF: i32 = 21;
+pub global TK_KW_RETURN: i32 = 22;
+pub global TK_KW_SELFVALUE: i32 = 23;
+pub global TK_KW_SELFTYPE: i32 = 24;
+pub global TK_KW_STATIC: i32 = 25;
+pub global TK_KW_STRUCT: i32 = 26;
+pub global TK_KW_SUPER: i32 = 27;
+pub global TK_KW_TRAIT: i32 = 28;
+pub global TK_KW_TRUE: i32 = 29;
+pub global TK_KW_TYPE: i32 = 30;
+pub global TK_KW_UNSAFE: i32 = 31;
+pub global TK_KW_USE: i32 = 32;
+pub global TK_KW_WHERE: i32 = 33;
+pub global TK_KW_WHILE: i32 = 34;
+pub global TK_KW_ASYNC: i32 = 35;
+pub global TK_KW_AWAIT: i32 = 36;
+pub global TK_KW_DYN: i32 = 37;
+pub global TK_KW_ABSTRACT: i32 = 38;
+pub global TK_KW_BECOME: i32 = 39;
+pub global TK_KW_BOX: i32 = 40;
+pub global TK_KW_DO: i32 = 41;
+pub global TK_KW_FINAL: i32 = 42;
+pub global TK_KW_MACRO: i32 = 43;
+pub global TK_KW_OVERRIDE: i32 = 44;
+pub global TK_KW_PRIV: i32 = 45;
+pub global TK_KW_TYPEOF: i32 = 46;
+pub global TK_KW_UNSIZED: i32 = 47;
+pub global TK_KW_VIRTUAL: i32 = 48;
+pub global TK_KW_YIELD: i32 = 49;
+pub global TK_KW_TRY: i32 = 50;
+pub global TK_KW_UNION: i32 = 51;
+pub global TK_KW_STATICLIFETIME: i32 = 52;
+pub global TK_KW_MACRORULES: i32 = 53;
+pub global TK_KW_UNDERLINELIFETIME: i32 = 54;
+pub global TK_KW_DOLLARCRATE: i32 = 55;
+pub global TK_NON_KEYWORD_IDENTIFIER: i32 = 56;
+pub global TK_RAW_IDENTIFIER: i32 = 57;
+pub global TK_LINE_COMMENT: i32 = 58;
+pub global TK_BLOCK_COMMENT: i32 = 59;
+pub global TK_INNER_LINE_DOC: i32 = 60;
+pub global TK_INNER_BLOCK_DOC: i32 = 61;
+pub global TK_OUTER_LINE_DOC: i32 = 62;
+pub global TK_OUTER_BLOCK_DOC: i32 = 63;
+pub global TK_BLOCK_COMMENT_OR_DOC: i32 = 64;
+pub global TK_SHEBANG: i32 = 65;
+pub global TK_WHITESPACE: i32 = 66;
+pub global TK_NEWLINE: i32 = 67;
+pub global TK_CHAR_LITERAL: i32 = 68;
+pub global TK_STRING_LITERAL: i32 = 69;
+pub global TK_RAW_STRING_LITERAL: i32 = 70;
+pub global TK_BYTE_LITERAL: i32 = 71;
+pub global TK_BYTE_STRING_LITERAL: i32 = 72;
+pub global TK_RAW_BYTE_STRING_LITERAL: i32 = 73;
+pub global TK_INTEGER_LITERAL: i32 = 74;
+pub global TK_DEC_LITERAL: i32 = 75;
+pub global TK_HEX_LITERAL: i32 = 76;
+pub global TK_OCT_LITERAL: i32 = 77;
+pub global TK_BIN_LITERAL: i32 = 78;
+pub global TK_FLOAT_LITERAL: i32 = 79;
+pub global TK_LIFETIME_OR_LABEL: i32 = 80;
+pub global TK_PLUS: i32 = 81;
+pub global TK_MINUS: i32 = 82;
+pub global TK_STAR: i32 = 83;
+pub global TK_SLASH: i32 = 84;
+pub global TK_PERCENT: i32 = 85;
+pub global TK_CARET: i32 = 86;
+pub global TK_NOT: i32 = 87;
+pub global TK_AND: i32 = 88;
+pub global TK_OR: i32 = 89;
+pub global TK_ANDAND: i32 = 90;
+pub global TK_OROR: i32 = 91;
+pub global TK_PLUSEQ: i32 = 92;
+pub global TK_MINUSEQ: i32 = 93;
+pub global TK_STAREQ: i32 = 94;
+pub global TK_SLASHEQ: i32 = 95;
+pub global TK_PERCENTEQ: i32 = 96;
+pub global TK_CARETEQ: i32 = 97;
+pub global TK_ANDEQ: i32 = 98;
+pub global TK_OREQ: i32 = 99;
+pub global TK_SHLEQ: i32 = 100;
+pub global TK_SHREQ: i32 = 101;
+pub global TK_EQ: i32 = 102;
+pub global TK_EQEQ: i32 = 103;
+pub global TK_NE: i32 = 104;
+pub global TK_GT: i32 = 105;
+pub global TK_LT: i32 = 106;
+pub global TK_GE: i32 = 107;
+pub global TK_LE: i32 = 108;
+pub global TK_AT: i32 = 109;
+pub global TK_UNDERSCORE: i32 = 110;
+pub global TK_DOT: i32 = 111;
+pub global TK_DOTDOT: i32 = 112;
+pub global TK_DOTDOTDOT: i32 = 113;
+pub global TK_DOTDOTEQ: i32 = 114;
+pub global TK_COMMA: i32 = 115;
+pub global TK_SEMI: i32 = 116;
+pub global TK_COLON: i32 = 117;
+pub global TK_PATHSEP: i32 = 118;
+pub global TK_RARROW: i32 = 119;
+pub global TK_FATARROW: i32 = 120;
+pub global TK_POUND: i32 = 121;
+pub global TK_DOLLAR: i32 = 122;
+pub global TK_QUESTION: i32 = 123;
+pub global TK_LCURLYBRACE: i32 = 124;
+pub global TK_RCURLYBRACE: i32 = 125;
+pub global TK_LSQUAREBRACKET: i32 = 126;
+pub global TK_RSQUAREBRACKET: i32 = 127;
+pub global TK_LPAREN: i32 = 128;
+pub global TK_RPAREN: i32 = 129;
+pub global TK_EOF: i32 = 130;
+pub global TK_ERROR: i32 = 131;
 
 struct Lexer {
     chars: List<char>,
@@ -2737,7 +2727,7 @@ struct Lexer {
 
 impl Lexer {
     fn new(input: &String) -> Lexer {
-        return Lexer { chars: input.chars().collect(), pos: 0 };
+        return Lexer { chars: input.to_chars(), pos: 0 };
     }
 
     fn at_end(&self) -> bool {
@@ -3562,7 +3552,7 @@ fn try_NON_KEYWORD_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
         alts_1_0: {
             pos = alts_saved_1;
             if pos >= chars.len() { break alts_1_0; }
-            if !('A' <= chars[pos] <= 'Z' || 'a' <= chars[pos] <= 'z' || 'À' <= chars[pos] <= 'Ö' || 'Ø' <= chars[pos] <= 'ö' || 'ø' <= chars[pos] <= 'ÿ' || 'Ā' <= chars[pos] <= 'ɏ' || 'Ͱ' <= chars[pos] <= 'Ͽ' || 'Ѐ' <= chars[pos] <= 'ӿ' || '؀' <= chars[pos] <= 'ۿ' || 'ऀ' <= chars[pos] <= 'ॿ' || '一' <= chars[pos] <= '鿿' || '぀' <= chars[pos] <= 'ゟ' || '゠' <= chars[pos] <= 'ヿ' || '가' <= chars[pos] <= '힯' || 'Ⅰ' <= chars[pos] <= 'ↈ' || 'ᛮ' <= chars[pos] <= 'ᛰ') { break alts_1_0; }
+            if !((chars[pos] matches { 'A'..='Z' | 'a'..='z' | 'À'..='Ö' | 'Ø'..='ö' | 'ø'..='ÿ' | 'Ā'..='ɏ' | 'Ͱ'..='Ͽ' | 'Ѐ'..='ӿ' | '؀'..='ۿ' | 'ऀ'..='ॿ' | '一'..='鿿' | '぀'..='ゟ' | '゠'..='ヿ' | '가'..='힯' | 'Ⅰ'..='ↈ' | 'ᛮ'..='ᛰ' })) { break alts_1_0; }
             pos += 1;
             alts_ok_1 = true;
         }
@@ -3573,7 +3563,7 @@ fn try_NON_KEYWORD_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
                 let mut alts_ok_2 = false;
                 alts_2_0: {
                     pos = alts_saved_2;
-                    if pos >= chars.len() || !('ᢅ' <= chars[pos] <= 'ᢆ') { break alts_2_0; }
+                    if pos >= chars.len() || !(chars[pos] matches { 'ᢅ'..='ᢆ' }) { break alts_2_0; }
                     pos += 1;
                     alts_ok_2 = true;
                 }
@@ -3594,7 +3584,7 @@ fn try_NON_KEYWORD_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
                         if !alts_ok_2 {
                             alts_2_3: {
                                 pos = alts_saved_2;
-                                if pos >= chars.len() || !('゛' <= chars[pos] <= '゜') { break alts_2_3; }
+                                if pos >= chars.len() || !(chars[pos] matches { '゛'..='゜' }) { break alts_2_3; }
                                 pos += 1;
                                 alts_ok_2 = true;
                             }
@@ -3618,7 +3608,7 @@ fn try_NON_KEYWORD_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
                     alts_5_0: {
                         pos = alts_saved_5;
                         if pos >= chars.len() { break alts_5_0; }
-                        if !('A' <= chars[pos] <= 'Z' || 'a' <= chars[pos] <= 'z' || 'À' <= chars[pos] <= 'Ö' || 'Ø' <= chars[pos] <= 'ö' || 'ø' <= chars[pos] <= 'ÿ' || 'Ā' <= chars[pos] <= 'ɏ' || 'Ͱ' <= chars[pos] <= 'Ͽ' || 'Ѐ' <= chars[pos] <= 'ӿ' || '؀' <= chars[pos] <= 'ۿ' || 'ऀ' <= chars[pos] <= 'ॿ' || '一' <= chars[pos] <= '鿿' || '぀' <= chars[pos] <= 'ゟ' || '゠' <= chars[pos] <= 'ヿ' || '가' <= chars[pos] <= '힯' || 'Ⅰ' <= chars[pos] <= 'ↈ' || 'ᛮ' <= chars[pos] <= 'ᛰ') { break alts_5_0; }
+                        if !((chars[pos] matches { 'A'..='Z' | 'a'..='z' | 'À'..='Ö' | 'Ø'..='ö' | 'ø'..='ÿ' | 'Ā'..='ɏ' | 'Ͱ'..='Ͽ' | 'Ѐ'..='ӿ' | '؀'..='ۿ' | 'ऀ'..='ॿ' | '一'..='鿿' | '぀'..='ゟ' | '゠'..='ヿ' | '가'..='힯' | 'Ⅰ'..='ↈ' | 'ᛮ'..='ᛰ' })) { break alts_5_0; }
                         pos += 1;
                         alts_ok_5 = true;
                     }
@@ -3629,7 +3619,7 @@ fn try_NON_KEYWORD_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
                             let mut alts_ok_6 = false;
                             alts_6_0: {
                                 pos = alts_saved_6;
-                                if pos >= chars.len() || !('ᢅ' <= chars[pos] <= 'ᢆ') { break alts_6_0; }
+                                if pos >= chars.len() || !(chars[pos] matches { 'ᢅ'..='ᢆ' }) { break alts_6_0; }
                                 pos += 1;
                                 alts_ok_6 = true;
                             }
@@ -3650,7 +3640,7 @@ fn try_NON_KEYWORD_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
                                     if !alts_ok_6 {
                                         alts_6_3: {
                                             pos = alts_saved_6;
-                                            if pos >= chars.len() || !('゛' <= chars[pos] <= '゜') { break alts_6_3; }
+                                            if pos >= chars.len() || !(chars[pos] matches { '゛'..='゜' }) { break alts_6_3; }
                                             pos += 1;
                                             alts_ok_6 = true;
                                         }
@@ -3668,7 +3658,7 @@ fn try_NON_KEYWORD_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
                     alts_4_1: {
                         pos = alts_saved_4;
                         if pos >= chars.len() { break alts_4_1; }
-                        if !('̀' <= chars[pos] <= 'ͯ' || '᪰' <= chars[pos] <= '᫿' || 'ँ' <= chars[pos] <= 'ं' || chars[pos] == '़' || 'ु' <= chars[pos] <= 'ै' || chars[pos] == '्' || chars[pos] == 'ः' || 'ा' <= chars[pos] <= 'ी' || 'ॉ' <= chars[pos] <= 'ौ' || '0' <= chars[pos] <= '9' || '٠' <= chars[pos] <= '٩' || '۰' <= chars[pos] <= '۹' || '०' <= chars[pos] <= '९' || chars[pos] == '_' || '‿' <= chars[pos] <= '⁀' || chars[pos] == '⁔' || '︳' <= chars[pos] <= '︴' || '﹍' <= chars[pos] <= '﹏' || chars[pos] == '＿') { break alts_4_1; }
+                        if !((chars[pos] matches { '̀'..='ͯ' | '᪰'..='᫿' | 'ँ'..='ं' | '़' | 'ु'..='ै' | '्' | 'ः' | 'ा'..='ी' | 'ॉ'..='ौ' | '0'..='9' | '٠'..='٩' | '۰'..='۹' | '०'..='९' | '_' | '‿'..='⁀' | '⁔' | '︳'..='︴' | '﹍'..='﹏' | '＿' })) { break alts_4_1; }
                         pos += 1;
                         alts_ok_4 = true;
                     }
@@ -3693,7 +3683,7 @@ fn try_NON_KEYWORD_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
                                 if !alts_ok_7 {
                                     alts_7_2: {
                                         pos = alts_saved_7;
-                                        if pos >= chars.len() || !('፩' <= chars[pos] <= '፱') { break alts_7_2; }
+                                        if pos >= chars.len() || !(chars[pos] matches { '፩'..='፱' }) { break alts_7_2; }
                                         pos += 1;
                                         alts_ok_7 = true;
                                     }
@@ -3734,7 +3724,7 @@ fn try_NON_KEYWORD_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
                 alts_10_0: {
                     pos = alts_saved_10;
                     if pos >= chars.len() { break alts_10_0; }
-                    if !('A' <= chars[pos] <= 'Z' || 'a' <= chars[pos] <= 'z' || 'À' <= chars[pos] <= 'Ö' || 'Ø' <= chars[pos] <= 'ö' || 'ø' <= chars[pos] <= 'ÿ' || 'Ā' <= chars[pos] <= 'ɏ' || 'Ͱ' <= chars[pos] <= 'Ͽ' || 'Ѐ' <= chars[pos] <= 'ӿ' || '؀' <= chars[pos] <= 'ۿ' || 'ऀ' <= chars[pos] <= 'ॿ' || '一' <= chars[pos] <= '鿿' || '぀' <= chars[pos] <= 'ゟ' || '゠' <= chars[pos] <= 'ヿ' || '가' <= chars[pos] <= '힯' || 'Ⅰ' <= chars[pos] <= 'ↈ' || 'ᛮ' <= chars[pos] <= 'ᛰ') { break alts_10_0; }
+                    if !((chars[pos] matches { 'A'..='Z' | 'a'..='z' | 'À'..='Ö' | 'Ø'..='ö' | 'ø'..='ÿ' | 'Ā'..='ɏ' | 'Ͱ'..='Ͽ' | 'Ѐ'..='ӿ' | '؀'..='ۿ' | 'ऀ'..='ॿ' | '一'..='鿿' | '぀'..='ゟ' | '゠'..='ヿ' | '가'..='힯' | 'Ⅰ'..='ↈ' | 'ᛮ'..='ᛰ' })) { break alts_10_0; }
                     pos += 1;
                     alts_ok_10 = true;
                 }
@@ -3745,7 +3735,7 @@ fn try_NON_KEYWORD_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
                         let mut alts_ok_11 = false;
                         alts_11_0: {
                             pos = alts_saved_11;
-                            if pos >= chars.len() || !('ᢅ' <= chars[pos] <= 'ᢆ') { break alts_11_0; }
+                            if pos >= chars.len() || !(chars[pos] matches { 'ᢅ'..='ᢆ' }) { break alts_11_0; }
                             pos += 1;
                             alts_ok_11 = true;
                         }
@@ -3766,7 +3756,7 @@ fn try_NON_KEYWORD_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
                                 if !alts_ok_11 {
                                     alts_11_3: {
                                         pos = alts_saved_11;
-                                        if pos >= chars.len() || !('゛' <= chars[pos] <= '゜') { break alts_11_3; }
+                                        if pos >= chars.len() || !(chars[pos] matches { '゛'..='゜' }) { break alts_11_3; }
                                         pos += 1;
                                         alts_ok_11 = true;
                                     }
@@ -3784,7 +3774,7 @@ fn try_NON_KEYWORD_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
                 alts_9_1: {
                     pos = alts_saved_9;
                     if pos >= chars.len() { break alts_9_1; }
-                    if !('̀' <= chars[pos] <= 'ͯ' || '᪰' <= chars[pos] <= '᫿' || 'ँ' <= chars[pos] <= 'ं' || chars[pos] == '़' || 'ु' <= chars[pos] <= 'ै' || chars[pos] == '्' || chars[pos] == 'ः' || 'ा' <= chars[pos] <= 'ी' || 'ॉ' <= chars[pos] <= 'ौ' || '0' <= chars[pos] <= '9' || '٠' <= chars[pos] <= '٩' || '۰' <= chars[pos] <= '۹' || '०' <= chars[pos] <= '९' || chars[pos] == '_' || '‿' <= chars[pos] <= '⁀' || chars[pos] == '⁔' || '︳' <= chars[pos] <= '︴' || '﹍' <= chars[pos] <= '﹏' || chars[pos] == '＿') { break alts_9_1; }
+                    if !((chars[pos] matches { '̀'..='ͯ' | '᪰'..='᫿' | 'ँ'..='ं' | '़' | 'ु'..='ै' | '्' | 'ः' | 'ा'..='ी' | 'ॉ'..='ौ' | '0'..='9' | '٠'..='٩' | '۰'..='۹' | '०'..='९' | '_' | '‿'..='⁀' | '⁔' | '︳'..='︴' | '﹍'..='﹏' | '＿' })) { break alts_9_1; }
                     pos += 1;
                     alts_ok_9 = true;
                 }
@@ -3809,7 +3799,7 @@ fn try_NON_KEYWORD_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
                             if !alts_ok_12 {
                                 alts_12_2: {
                                     pos = alts_saved_12;
-                                    if pos >= chars.len() || !('፩' <= chars[pos] <= '፱') { break alts_12_2; }
+                                    if pos >= chars.len() || !(chars[pos] matches { '፩'..='፱' }) { break alts_12_2; }
                                     pos += 1;
                                     alts_ok_12 = true;
                                 }
@@ -3841,7 +3831,7 @@ fn try_NON_KEYWORD_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
                         alts_14_0: {
                             pos = alts_saved_14;
                             if pos >= chars.len() { break alts_14_0; }
-                            if !('A' <= chars[pos] <= 'Z' || 'a' <= chars[pos] <= 'z' || 'À' <= chars[pos] <= 'Ö' || 'Ø' <= chars[pos] <= 'ö' || 'ø' <= chars[pos] <= 'ÿ' || 'Ā' <= chars[pos] <= 'ɏ' || 'Ͱ' <= chars[pos] <= 'Ͽ' || 'Ѐ' <= chars[pos] <= 'ӿ' || '؀' <= chars[pos] <= 'ۿ' || 'ऀ' <= chars[pos] <= 'ॿ' || '一' <= chars[pos] <= '鿿' || '぀' <= chars[pos] <= 'ゟ' || '゠' <= chars[pos] <= 'ヿ' || '가' <= chars[pos] <= '힯' || 'Ⅰ' <= chars[pos] <= 'ↈ' || 'ᛮ' <= chars[pos] <= 'ᛰ') { break alts_14_0; }
+                            if !((chars[pos] matches { 'A'..='Z' | 'a'..='z' | 'À'..='Ö' | 'Ø'..='ö' | 'ø'..='ÿ' | 'Ā'..='ɏ' | 'Ͱ'..='Ͽ' | 'Ѐ'..='ӿ' | '؀'..='ۿ' | 'ऀ'..='ॿ' | '一'..='鿿' | '぀'..='ゟ' | '゠'..='ヿ' | '가'..='힯' | 'Ⅰ'..='ↈ' | 'ᛮ'..='ᛰ' })) { break alts_14_0; }
                             pos += 1;
                             alts_ok_14 = true;
                         }
@@ -3852,7 +3842,7 @@ fn try_NON_KEYWORD_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
                                 let mut alts_ok_15 = false;
                                 alts_15_0: {
                                     pos = alts_saved_15;
-                                    if pos >= chars.len() || !('ᢅ' <= chars[pos] <= 'ᢆ') { break alts_15_0; }
+                                    if pos >= chars.len() || !(chars[pos] matches { 'ᢅ'..='ᢆ' }) { break alts_15_0; }
                                     pos += 1;
                                     alts_ok_15 = true;
                                 }
@@ -3873,7 +3863,7 @@ fn try_NON_KEYWORD_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
                                         if !alts_ok_15 {
                                             alts_15_3: {
                                                 pos = alts_saved_15;
-                                                if pos >= chars.len() || !('゛' <= chars[pos] <= '゜') { break alts_15_3; }
+                                                if pos >= chars.len() || !(chars[pos] matches { '゛'..='゜' }) { break alts_15_3; }
                                                 pos += 1;
                                                 alts_ok_15 = true;
                                             }
@@ -3891,7 +3881,7 @@ fn try_NON_KEYWORD_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
                         alts_13_1: {
                             pos = alts_saved_13;
                             if pos >= chars.len() { break alts_13_1; }
-                            if !('̀' <= chars[pos] <= 'ͯ' || '᪰' <= chars[pos] <= '᫿' || 'ँ' <= chars[pos] <= 'ं' || chars[pos] == '़' || 'ु' <= chars[pos] <= 'ै' || chars[pos] == '्' || chars[pos] == 'ः' || 'ा' <= chars[pos] <= 'ी' || 'ॉ' <= chars[pos] <= 'ौ' || '0' <= chars[pos] <= '9' || '٠' <= chars[pos] <= '٩' || '۰' <= chars[pos] <= '۹' || '०' <= chars[pos] <= '९' || chars[pos] == '_' || '‿' <= chars[pos] <= '⁀' || chars[pos] == '⁔' || '︳' <= chars[pos] <= '︴' || '﹍' <= chars[pos] <= '﹏' || chars[pos] == '＿') { break alts_13_1; }
+                            if !((chars[pos] matches { '̀'..='ͯ' | '᪰'..='᫿' | 'ँ'..='ं' | '़' | 'ु'..='ै' | '्' | 'ः' | 'ा'..='ी' | 'ॉ'..='ौ' | '0'..='9' | '٠'..='٩' | '۰'..='۹' | '०'..='९' | '_' | '‿'..='⁀' | '⁔' | '︳'..='︴' | '﹍'..='﹏' | '＿' })) { break alts_13_1; }
                             pos += 1;
                             alts_ok_13 = true;
                         }
@@ -3916,7 +3906,7 @@ fn try_NON_KEYWORD_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
                                     if !alts_ok_16 {
                                         alts_16_2: {
                                             pos = alts_saved_16;
-                                            if pos >= chars.len() || !('፩' <= chars[pos] <= '፱') { break alts_16_2; }
+                                            if pos >= chars.len() || !(chars[pos] matches { '፩'..='፱' }) { break alts_16_2; }
                                             pos += 1;
                                             alts_ok_16 = true;
                                         }
@@ -3974,7 +3964,7 @@ fn try_LINE_COMMENT(chars: &List<char>, start: i32) -> i32 {
         alts_18_0: {
             pos = alts_saved_18;
             if pos >= chars.len() { break alts_18_0; }
-            if chars[pos] == '/' || chars[pos] == '!' { break alts_18_0; }
+            if (chars[pos] matches { '/' | '!' }) { break alts_18_0; }
             pos += 1;
             alts_ok_18 = true;
         }
@@ -3993,7 +3983,7 @@ fn try_LINE_COMMENT(chars: &List<char>, start: i32) -> i32 {
             let rep_saved_19 = pos;
             rep_19: {
                 if pos >= chars.len() { break rep_19; }
-                if chars[pos] == '\r' || chars[pos] == '\n' { break rep_19; }
+                if (chars[pos] matches { '\r' | '\n' }) { break rep_19; }
                 pos += 1;
                 continue;
             }
@@ -4032,7 +4022,7 @@ fn try_INNER_LINE_DOC(chars: &List<char>, start: i32) -> i32 {
         let rep_saved_20 = pos;
         rep_20: {
             if pos >= chars.len() { break rep_20; }
-            if chars[pos] == '\n' || chars[pos] == '\r' { break rep_20; }
+            if (chars[pos] matches { '\n' | '\r' }) { break rep_20; }
             pos += 1;
             continue;
         }
@@ -4058,13 +4048,13 @@ fn try_OUTER_LINE_DOC(chars: &List<char>, start: i32) -> i32 {
     let mut opt_ok_21 = false;
     rep_21: {
         if pos >= chars.len() { break rep_21; }
-        if chars[pos] == '/' { break rep_21; }
+        if (chars[pos] matches { '/' }) { break rep_21; }
         pos += 1;
         loop {
             let rep_saved_22 = pos;
             rep_22: {
                 if pos >= chars.len() { break rep_22; }
-                if chars[pos] == '\n' || chars[pos] == '\r' { break rep_22; }
+                if (chars[pos] matches { '\n' | '\r' }) { break rep_22; }
                 pos += 1;
                 continue;
             }
@@ -4129,7 +4119,7 @@ fn try_SHEBANG(chars: &List<char>, start: i32) -> i32 {
         let rep_saved_25 = pos;
         rep_25: {
             if pos >= chars.len() { break rep_25; }
-            if chars[pos] == '\r' || chars[pos] == '\n' { break rep_25; }
+            if (chars[pos] matches { '\r' | '\n' }) { break rep_25; }
             pos += 1;
             continue;
         }
@@ -4142,7 +4132,7 @@ fn try_SHEBANG(chars: &List<char>, start: i32) -> i32 {
 fn try_WHITESPACE(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(chars[pos] == ' ' || chars[pos] == ' ' || chars[pos] == ' ' || ' ' <= chars[pos] <= ' ' || chars[pos] == ' ' || chars[pos] == ' ' || chars[pos] == '　') { return -1; }
+    if !((chars[pos] matches { ' ' | ' ' | ' ' | ' '..=' ' | ' ' | ' ' | '　' })) { return -1; }
     pos += 1;
     return pos;
 }
@@ -4163,7 +4153,7 @@ fn try_NEWLINE(chars: &List<char>, start: i32) -> i32 {
         alts_26_1: {
             pos = alts_saved_26;
             if pos >= chars.len() { break alts_26_1; }
-            if !(chars[pos] == '\r' || chars[pos] == '\n') { break alts_26_1; }
+            if !((chars[pos] matches { '\r' | '\n' })) { break alts_26_1; }
             pos += 1;
             alts_ok_26 = true;
         }
@@ -4181,7 +4171,7 @@ fn try_CHAR_LITERAL(chars: &List<char>, start: i32) -> i32 {
     alts_27_0: {
         pos = alts_saved_27;
         if pos >= chars.len() { break alts_27_0; }
-        if chars[pos] == '\'' || chars[pos] == '\\' || chars[pos] == '\n' || chars[pos] == '\r' || chars[pos] == '\t' { break alts_27_0; }
+        if (chars[pos] matches { '\'' | '\\' | '\n' | '\r' | '\t' }) { break alts_27_0; }
         pos += 1;
         alts_ok_27 = true;
     }
@@ -4191,7 +4181,7 @@ fn try_CHAR_LITERAL(chars: &List<char>, start: i32) -> i32 {
             if pos >= chars.len() || chars[pos] != '\\' { break alts_27_1; }
             pos += 1;
             if pos >= chars.len() { break alts_27_1; }
-            if !(chars[pos] == '\'' || chars[pos] == '"') { break alts_27_1; }
+            if !((chars[pos] matches { '\'' | '"' })) { break alts_27_1; }
             pos += 1;
             alts_ok_27 = true;
         }
@@ -4207,10 +4197,10 @@ fn try_CHAR_LITERAL(chars: &List<char>, start: i32) -> i32 {
                     if pos >= chars.len() || chars[pos] != 'x' { break alts_28_0; }
                     pos += 1;
                     if pos >= chars.len() { break alts_28_0; }
-                    if !('0' <= chars[pos] <= '7') { break alts_28_0; }
+                    if !((chars[pos] matches { '0'..='7' })) { break alts_28_0; }
                     pos += 1;
                     if pos >= chars.len() { break alts_28_0; }
-                    if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_28_0; }
+                    if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_28_0; }
                     pos += 1;
                     alts_ok_28 = true;
                 }
@@ -4220,7 +4210,7 @@ fn try_CHAR_LITERAL(chars: &List<char>, start: i32) -> i32 {
                         if pos >= chars.len() || chars[pos] != '\\' { break alts_28_1; }
                         pos += 1;
                         if pos >= chars.len() { break alts_28_1; }
-                        if !(chars[pos] == 'n' || chars[pos] == 'r' || chars[pos] == 't' || chars[pos] == '\\' || chars[pos] == '0') { break alts_28_1; }
+                        if !((chars[pos] matches { 'n' | 'r' | 't' | '\\' | '0' })) { break alts_28_1; }
                         pos += 1;
                         alts_ok_28 = true;
                     }
@@ -4238,13 +4228,13 @@ fn try_CHAR_LITERAL(chars: &List<char>, start: i32) -> i32 {
                     if pos >= chars.len() || chars[pos] != '{' { break alts_27_3; }
                     pos += 1;
                     if pos >= chars.len() { break alts_27_3; }
-                    if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_27_3; }
+                    if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_27_3; }
                     pos += 1;
                     let opt_saved_29 = pos;
                     let mut opt_ok_29 = false;
                     rep_29: {
                         if pos >= chars.len() { break rep_29; }
-                        if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_29; }
+                        if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_29; }
                         pos += 1;
                         opt_ok_29 = true;
                     }
@@ -4253,7 +4243,7 @@ fn try_CHAR_LITERAL(chars: &List<char>, start: i32) -> i32 {
                     let mut opt_ok_30 = false;
                     rep_30: {
                         if pos >= chars.len() { break rep_30; }
-                        if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_30; }
+                        if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_30; }
                         pos += 1;
                         opt_ok_30 = true;
                     }
@@ -4262,7 +4252,7 @@ fn try_CHAR_LITERAL(chars: &List<char>, start: i32) -> i32 {
                     let mut opt_ok_31 = false;
                     rep_31: {
                         if pos >= chars.len() { break rep_31; }
-                        if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_31; }
+                        if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_31; }
                         pos += 1;
                         opt_ok_31 = true;
                     }
@@ -4271,7 +4261,7 @@ fn try_CHAR_LITERAL(chars: &List<char>, start: i32) -> i32 {
                     let mut opt_ok_32 = false;
                     rep_32: {
                         if pos >= chars.len() { break rep_32; }
-                        if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_32; }
+                        if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_32; }
                         pos += 1;
                         opt_ok_32 = true;
                     }
@@ -4280,7 +4270,7 @@ fn try_CHAR_LITERAL(chars: &List<char>, start: i32) -> i32 {
                     let mut opt_ok_33 = false;
                     rep_33: {
                         if pos >= chars.len() { break rep_33; }
-                        if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_33; }
+                        if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_33; }
                         pos += 1;
                         opt_ok_33 = true;
                     }
@@ -4310,7 +4300,7 @@ fn try_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
             alts_35_0: {
                 pos = alts_saved_35;
                 if pos >= chars.len() { break alts_35_0; }
-                if chars[pos] == '"' { break alts_35_0; }
+                if (chars[pos] matches { '"' }) { break alts_35_0; }
                 pos += 1;
                 alts_ok_35 = true;
             }
@@ -4320,7 +4310,7 @@ fn try_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
                     if pos >= chars.len() || chars[pos] != '\\' { break alts_35_1; }
                     pos += 1;
                     if pos >= chars.len() { break alts_35_1; }
-                    if !(chars[pos] == '\'' || chars[pos] == '"') { break alts_35_1; }
+                    if !((chars[pos] matches { '\'' | '"' })) { break alts_35_1; }
                     pos += 1;
                     alts_ok_35 = true;
                 }
@@ -4336,10 +4326,10 @@ fn try_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
                             if pos >= chars.len() || chars[pos] != 'x' { break alts_36_0; }
                             pos += 1;
                             if pos >= chars.len() { break alts_36_0; }
-                            if !('0' <= chars[pos] <= '7') { break alts_36_0; }
+                            if !((chars[pos] matches { '0'..='7' })) { break alts_36_0; }
                             pos += 1;
                             if pos >= chars.len() { break alts_36_0; }
-                            if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_36_0; }
+                            if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_36_0; }
                             pos += 1;
                             alts_ok_36 = true;
                         }
@@ -4349,7 +4339,7 @@ fn try_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
                                 if pos >= chars.len() || chars[pos] != '\\' { break alts_36_1; }
                                 pos += 1;
                                 if pos >= chars.len() { break alts_36_1; }
-                                if !(chars[pos] == 'n' || chars[pos] == 'r' || chars[pos] == 't' || chars[pos] == '\\' || chars[pos] == '0') { break alts_36_1; }
+                                if !((chars[pos] matches { 'n' | 'r' | 't' | '\\' | '0' })) { break alts_36_1; }
                                 pos += 1;
                                 alts_ok_36 = true;
                             }
@@ -4367,13 +4357,13 @@ fn try_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
                             if pos >= chars.len() || chars[pos] != '{' { break alts_35_3; }
                             pos += 1;
                             if pos >= chars.len() { break alts_35_3; }
-                            if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_35_3; }
+                            if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_35_3; }
                             pos += 1;
                             let opt_saved_37 = pos;
                             let mut opt_ok_37 = false;
                             rep_37: {
                                 if pos >= chars.len() { break rep_37; }
-                                if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_37; }
+                                if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_37; }
                                 pos += 1;
                                 opt_ok_37 = true;
                             }
@@ -4382,7 +4372,7 @@ fn try_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
                             let mut opt_ok_38 = false;
                             rep_38: {
                                 if pos >= chars.len() { break rep_38; }
-                                if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_38; }
+                                if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_38; }
                                 pos += 1;
                                 opt_ok_38 = true;
                             }
@@ -4391,7 +4381,7 @@ fn try_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
                             let mut opt_ok_39 = false;
                             rep_39: {
                                 if pos >= chars.len() { break rep_39; }
-                                if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_39; }
+                                if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_39; }
                                 pos += 1;
                                 opt_ok_39 = true;
                             }
@@ -4400,7 +4390,7 @@ fn try_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
                             let mut opt_ok_40 = false;
                             rep_40: {
                                 if pos >= chars.len() { break rep_40; }
-                                if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_40; }
+                                if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_40; }
                                 pos += 1;
                                 opt_ok_40 = true;
                             }
@@ -4409,7 +4399,7 @@ fn try_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
                             let mut opt_ok_41 = false;
                             rep_41: {
                                 if pos >= chars.len() { break rep_41; }
-                                if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_41; }
+                                if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_41; }
                                 pos += 1;
                                 opt_ok_41 = true;
                             }
@@ -4512,7 +4502,7 @@ fn try_BYTE_LITERAL(chars: &List<char>, start: i32) -> i32 {
             if pos >= chars.len() || chars[pos] != '\\' { break alts_44_1; }
             pos += 1;
             if pos >= chars.len() { break alts_44_1; }
-            if !(chars[pos] == '\'' || chars[pos] == '"') { break alts_44_1; }
+            if !((chars[pos] matches { '\'' | '"' })) { break alts_44_1; }
             pos += 1;
             alts_ok_44 = true;
         }
@@ -4528,10 +4518,10 @@ fn try_BYTE_LITERAL(chars: &List<char>, start: i32) -> i32 {
                     if pos >= chars.len() || chars[pos] != 'x' { break alts_45_0; }
                     pos += 1;
                     if pos >= chars.len() { break alts_45_0; }
-                    if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_45_0; }
+                    if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_45_0; }
                     pos += 1;
                     if pos >= chars.len() { break alts_45_0; }
-                    if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_45_0; }
+                    if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_45_0; }
                     pos += 1;
                     alts_ok_45 = true;
                 }
@@ -4541,7 +4531,7 @@ fn try_BYTE_LITERAL(chars: &List<char>, start: i32) -> i32 {
                         if pos >= chars.len() || chars[pos] != '\\' { break alts_45_1; }
                         pos += 1;
                         if pos >= chars.len() { break alts_45_1; }
-                        if !(chars[pos] == 'n' || chars[pos] == 'r' || chars[pos] == 't' || chars[pos] == '\\' || chars[pos] == '0') { break alts_45_1; }
+                        if !((chars[pos] matches { 'n' | 'r' | 't' | '\\' | '0' })) { break alts_45_1; }
                         pos += 1;
                         alts_ok_45 = true;
                     }
@@ -4571,7 +4561,7 @@ fn try_BYTE_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
             alts_47_0: {
                 pos = alts_saved_47;
                 if pos >= chars.len() { break alts_47_0; }
-                if chars[pos] == '"' { break alts_47_0; }
+                if (chars[pos] matches { '"' }) { break alts_47_0; }
                 pos += 1;
                 alts_ok_47 = true;
             }
@@ -4581,7 +4571,7 @@ fn try_BYTE_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
                     if pos >= chars.len() || chars[pos] != '\\' { break alts_47_1; }
                     pos += 1;
                     if pos >= chars.len() { break alts_47_1; }
-                    if !(chars[pos] == '\'' || chars[pos] == '"') { break alts_47_1; }
+                    if !((chars[pos] matches { '\'' | '"' })) { break alts_47_1; }
                     pos += 1;
                     alts_ok_47 = true;
                 }
@@ -4597,10 +4587,10 @@ fn try_BYTE_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
                             if pos >= chars.len() || chars[pos] != 'x' { break alts_48_0; }
                             pos += 1;
                             if pos >= chars.len() { break alts_48_0; }
-                            if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_48_0; }
+                            if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_48_0; }
                             pos += 1;
                             if pos >= chars.len() { break alts_48_0; }
-                            if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_48_0; }
+                            if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_48_0; }
                             pos += 1;
                             alts_ok_48 = true;
                         }
@@ -4610,7 +4600,7 @@ fn try_BYTE_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
                                 if pos >= chars.len() || chars[pos] != '\\' { break alts_48_1; }
                                 pos += 1;
                                 if pos >= chars.len() { break alts_48_1; }
-                                if !(chars[pos] == 'n' || chars[pos] == 'r' || chars[pos] == 't' || chars[pos] == '\\' || chars[pos] == '0') { break alts_48_1; }
+                                if !((chars[pos] matches { 'n' | 'r' | 't' | '\\' | '0' })) { break alts_48_1; }
                                 pos += 1;
                                 alts_ok_48 = true;
                             }
@@ -4842,7 +4832,7 @@ fn try_INTEGER_LITERAL(chars: &List<char>, start: i32) -> i32 {
 fn try_DEC_LITERAL(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !('0' <= chars[pos] <= '9') { return -1; }
+    if !((chars[pos] matches { '0'..='9' })) { return -1; }
     pos += 1;
     loop {
         let rep_saved_52 = pos;
@@ -4852,7 +4842,7 @@ fn try_DEC_LITERAL(chars: &List<char>, start: i32) -> i32 {
             alts_53_0: {
                 pos = alts_saved_53;
                 if pos >= chars.len() { break alts_53_0; }
-                if !('0' <= chars[pos] <= '9') { break alts_53_0; }
+                if !((chars[pos] matches { '0'..='9' })) { break alts_53_0; }
                 pos += 1;
                 alts_ok_53 = true;
             }
@@ -4890,7 +4880,7 @@ fn try_HEX_LITERAL(chars: &List<char>, start: i32) -> i32 {
         break;
     }
     if pos >= chars.len() { return -1; }
-    if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { return -1; }
+    if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { return -1; }
     pos += 1;
     loop {
         let rep_saved_55 = pos;
@@ -4900,7 +4890,7 @@ fn try_HEX_LITERAL(chars: &List<char>, start: i32) -> i32 {
             alts_56_0: {
                 pos = alts_saved_56;
                 if pos >= chars.len() { break alts_56_0; }
-                if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_56_0; }
+                if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_56_0; }
                 pos += 1;
                 alts_ok_56 = true;
             }
@@ -4938,7 +4928,7 @@ fn try_OCT_LITERAL(chars: &List<char>, start: i32) -> i32 {
         break;
     }
     if pos >= chars.len() { return -1; }
-    if !('0' <= chars[pos] <= '7') { return -1; }
+    if !((chars[pos] matches { '0'..='7' })) { return -1; }
     pos += 1;
     loop {
         let rep_saved_58 = pos;
@@ -4948,7 +4938,7 @@ fn try_OCT_LITERAL(chars: &List<char>, start: i32) -> i32 {
             alts_59_0: {
                 pos = alts_saved_59;
                 if pos >= chars.len() { break alts_59_0; }
-                if !('0' <= chars[pos] <= '7') { break alts_59_0; }
+                if !((chars[pos] matches { '0'..='7' })) { break alts_59_0; }
                 pos += 1;
                 alts_ok_59 = true;
             }
@@ -4986,13 +4976,13 @@ fn try_BIN_LITERAL(chars: &List<char>, start: i32) -> i32 {
         break;
     }
     if pos >= chars.len() { return -1; }
-    if !(chars[pos] == '0' || chars[pos] == '1') { return -1; }
+    if !((chars[pos] matches { '0' | '1' })) { return -1; }
     pos += 1;
     loop {
         let rep_saved_61 = pos;
         rep_61: {
             if pos >= chars.len() { break rep_61; }
-            if !(chars[pos] == '0' || chars[pos] == '1' || chars[pos] == '_') { break rep_61; }
+            if !((chars[pos] matches { '0' | '1' | '_' })) { break rep_61; }
             pos += 1;
             continue;
         }
@@ -5033,13 +5023,13 @@ fn try_FLOAT_LITERAL(chars: &List<char>, start: i32) -> i32 {
             let mut opt_ok_64 = false;
             rep_64: {
                 if pos >= chars.len() { break rep_64; }
-                if !(chars[pos] == 'e' || chars[pos] == 'E') { break rep_64; }
+                if !((chars[pos] matches { 'e' | 'E' })) { break rep_64; }
                 pos += 1;
                 let opt_saved_65 = pos;
                 let mut opt_ok_65 = false;
                 rep_65: {
                     if pos >= chars.len() { break rep_65; }
-                    if !(chars[pos] == '+' || chars[pos] == '-') { break rep_65; }
+                    if !((chars[pos] matches { '+' | '-' })) { break rep_65; }
                     pos += 1;
                     opt_ok_65 = true;
                 }

@@ -1,0 +1,40 @@
+//! Regression: omitting a defaulted trailing argument on an associated
+//! function (`Type::method()`) must materialize the default. Previously the
+//! static-method dispatch padded no defaults at reify time, so codegen emitted
+//! a call missing the argument and the WIR pipeline produced invalid Wasm
+//! ("expected i32 but nothing on stack"). Both the instance / free-function
+//! paths already padded; the static path did not.
+
+struct Counter {
+    start: i32,
+    step: i32,
+}
+
+impl Counter {
+    fn make(start: i32 = 5, step: i32 = start + 1) -> Counter {
+        return Counter { start, step };
+    }
+
+    fn sum(&self) -> i32 {
+        return self.start + self.step;
+    }
+}
+
+test "static method fills omitted defaults" {
+    // Both omitted: start = 5, step = start + 1 = 6.
+    let a = Counter::make();
+    assert a.start == 5;
+    assert a.step == 6;
+
+    // First provided, second defaulted from the first: step = 10 + 1 = 11.
+    let b = Counter::make(10);
+    assert b.start == 10;
+    assert b.step == 11;
+
+    // Both provided.
+    let c = Counter::make(1, 2);
+    assert c.sum() == 3;
+}
+
+__DATA__
+{"test": {}}

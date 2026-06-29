@@ -217,6 +217,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut trait_impl_module_source: Option<ModuleSource> = None;
         let mut blanket_type_param: Option<String> = None;
         let mut trait_impl_struct_name: Option<String> = None;
+        let mut matched_impl_struct_name: Option<String> = None;
 
         // If receiver is a reference type, try ref-type trait impls first.
         // e.g., impl IntoIterator for &List<T> takes priority over impl IntoIterator for List<T>.
@@ -248,6 +249,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some(trait_match) = result
                     && !trait_match.is_blanket_ref_impl
                 {
+                    matched_impl_struct_name = Some(trait_match.impl_struct_name.clone());
                     trait_impl_struct_name = Some(trait_match.impl_struct_name);
                     trait_name = Some(trait_match.trait_name);
                     let mut info = trait_match.method_info;
@@ -274,6 +276,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(base_type_id),
             )
         {
+            matched_impl_struct_name = Some(trait_match.impl_struct_name.clone());
             if trait_match.impl_struct_name != struct_name {
                 trait_impl_struct_name = Some(trait_match.impl_struct_name);
             }
@@ -801,6 +804,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     Some(vec![elem]),
                 )
             }
+            ResolvedType::Newtype { name, .. }
+                if matched_impl_struct_name.as_deref() == Some(name.as_str()) =>
+            {
+                (name.clone(), name, vec![], None)
+            }
             _ => {
                 let name = self
                     .tysys
@@ -1007,35 +1015,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // lookup (follow newtypes to base). The canonical key disambiguates
         // two modules' same-named structs whose static methods both live in
         // the global `StaticMethodIndex`.
-        let struct_key_for_lookup: Option<crate::elaborator::trait_env::DeclKey> = {
-            let mut current_type = target_type_id;
-            loop {
-                match self.tysys.type_table.borrow().get(current_type).clone() {
-                    ResolvedType::Struct {
-                        name,
-                        module_source,
-                        ..
-                    }
-                    | ResolvedType::GenericInstance {
-                        name,
-                        module_source,
-                        ..
-                    } => break Some((module_source, name)),
-                    ResolvedType::Newtype { base_type, .. } => current_type = base_type,
-                    ResolvedType::Flags { .. } => {
-                        current_type = TypeTable::U32;
-                    }
-                    ResolvedType::BuiltinArray(_) => {
-                        break Some((
-                            ModuleSource::array(),
-                            TypeTable::ARRAY_TYPE_NAME.to_string(),
-                        ));
-                    }
-                    _ => break None,
-                }
-            }
-        };
-        let struct_name_for_lookup = struct_key_for_lookup.as_ref().map(|(_, n)| n.clone());
+        let (struct_name_for_lookup, struct_key_for_lookup) =
+            self.static_receiver_struct_key(target_type_id);
 
         // Look up parameter types for coercion. Thread the canonical
         // receiver key (from the resolved target type) so that two
@@ -1044,6 +1025,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .as_ref()
             .map(|name| {
                 self.lookup_static_method_param_types_keyed(
+                    name,
+                    &static_call.method,
+                    struct_key_for_lookup.as_ref(),
+                )
+            })
+            .unwrap_or_default();
+
+        // Looked up once, reused for arg padding and the recorded dispatch fact.
+        let static_method_defaults: Vec<(String, Option<ast::Expr>)> = struct_name_for_lookup
+            .as_ref()
+            .map(|name| {
+                self.lookup_static_method_param_defaults_keyed(
                     name,
                     &static_call.method,
                     struct_key_for_lookup.as_ref(),
@@ -1164,7 +1157,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Resolve arguments with expected types for coercion
-        let args: Vec<TirExpr> = static_call
+        let mut args: Vec<TirExpr> = static_call
             .args
             .iter()
             .enumerate()
@@ -1173,6 +1166,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 placeholder(self.resolve_expr(a, ctx, expected_type), a.span())
             })
             .collect();
+
+        // Pad omitted trailing arguments with declared parameter defaults.
+        // Variant / flags constructors carry no defaults, so the arg-count
+        // checks below are unaffected.
+        if args.len() < param_types.len() && !static_method_defaults.is_empty() {
+            let defaults = &static_method_defaults;
+            let mut subs: crate::hashmap::IndexMap<String, ast::Expr> =
+                crate::hashmap::IndexMap::default();
+            for (i, arg_ast) in static_call.args.iter().enumerate() {
+                if let Some((pname, _)) = defaults.get(i) {
+                    subs.insert(pname.clone(), arg_ast.clone());
+                }
+            }
+            for i in args.len()..param_types.len() {
+                let Some((pname, Some(default_ast))) = defaults.get(i) else {
+                    break;
+                };
+                let expected_type = param_types[i];
+                let mut default_expr = default_ast.clone();
+                default_expr.substitute_idents(&subs);
+                let resolved = self.resolve_expr(&default_expr, ctx, Some(expected_type));
+                args.push(placeholder(resolved, default_expr.span()));
+                subs.insert(pname.clone(), default_expr);
+            }
+        }
 
         // Option::Some and Option::None are handled by the generic variant
         // construction path below (line ~686). No special case needed.
@@ -1701,6 +1719,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 function_ref: func_ref,
                 param_is_mut,
                 type_args: method_type_args,
+                param_defaults: static_method_defaults,
             },
         );
 
@@ -2193,7 +2212,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Resolve `Self` to the concrete type at the call site.
                 // `resolve_named_type` maps primitives to their canonical
                 // TypeTable id rather than a struct wrapper.
-                let self_type_id = scope.resolve_named_type(struct_name, Span::default());
+                let self_type_id = scope.resolve_named_type(struct_name, Span::default(), false);
                 let old_self = scope.annotate_ctx.trait_ctx.self_type;
                 scope.annotate_ctx.trait_ctx.self_type = Some(self_type_id);
                 let result = default_method
@@ -2332,6 +2351,105 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         if let Some((impl_module, impl_ty, method)) = indexed {
             return self.resolve_static_method_params_in_scope(&impl_module, &impl_ty, &method);
+        }
+
+        Vec::new()
+    }
+
+    /// Resolve a static-method receiver `TypeId` to its `(struct_name,
+    /// decl_key)` for impl / parameter lookups: follow newtypes to the base,
+    /// map flags to `u32` and builtin arrays to `core:array`.
+    pub(super) fn static_receiver_struct_key(
+        &self,
+        target_type_id: TypeId,
+    ) -> (
+        Option<String>,
+        Option<crate::elaborator::trait_env::DeclKey>,
+    ) {
+        let key: Option<crate::elaborator::trait_env::DeclKey> = {
+            let mut current_type = target_type_id;
+            loop {
+                match self.tysys.type_table.borrow().get(current_type).clone() {
+                    ResolvedType::Struct {
+                        name,
+                        module_source,
+                        ..
+                    }
+                    | ResolvedType::GenericInstance {
+                        name,
+                        module_source,
+                        ..
+                    } => break Some((module_source, name)),
+                    ResolvedType::Newtype { base_type, .. } => current_type = base_type,
+                    ResolvedType::Flags { .. } => {
+                        current_type = TypeTable::U32;
+                    }
+                    ResolvedType::BuiltinArray(_) => {
+                        break Some((
+                            ModuleSource::array(),
+                            TypeTable::ARRAY_TYPE_NAME.to_string(),
+                        ));
+                    }
+                    _ => break None,
+                }
+            }
+        };
+        let name = key.as_ref().map(|(_, n)| n.clone());
+        (name, key)
+    }
+
+    /// Default-value expressions for a static method's non-self parameters, in
+    /// the same order as [`Self::lookup_static_method_param_types_keyed`].
+    /// Returns `(param_name, default_expr)` pairs; `default_expr` is `None` for
+    /// parameters without a declared default.
+    pub(super) fn lookup_static_method_param_defaults_keyed(
+        &mut self,
+        struct_name: &str,
+        method_name: &str,
+        static_key_hint: Option<&crate::elaborator::trait_env::DeclKey>,
+    ) -> Vec<(String, Option<ast::Expr>)> {
+        fn extract(method: &ast::Function) -> Vec<(String, Option<ast::Expr>)> {
+            method
+                .params
+                .iter()
+                .filter(|p| p.self_kind == ast::SelfKind::None)
+                .map(|p| (p.name.clone(), p.default.clone()))
+                .collect()
+        }
+
+        // Current module's impl blocks take priority over the global index.
+        let found: Option<ast::Function> = self.current_module_items.iter().find_map(|item| {
+            if let Item::Impl(impl_block) = item
+                && self.get_type_name(&impl_block.ty) == struct_name
+            {
+                for method in &impl_block.methods {
+                    let has_self = method
+                        .params
+                        .iter()
+                        .any(|p| p.self_kind != ast::SelfKind::None);
+                    if method.name == method_name && !has_self {
+                        return Some(method.clone());
+                    }
+                }
+            }
+            None
+        });
+        if let Some(method) = found {
+            return extract(&method);
+        }
+
+        let static_key = static_key_hint
+            .cloned()
+            .unwrap_or_else(|| self.canonical_decl_key(struct_name));
+        if let Some(methods) = self.tysys.trait_env.static_method_index.get(&static_key) {
+            for (name, module_source, item_idx, method_idx) in methods {
+                if name == method_name
+                    && let Some(module) = self.loaded_modules.get(module_source)
+                    && let Item::Impl(impl_block) = &module.items[*item_idx]
+                {
+                    return extract(&impl_block.methods[*method_idx]);
+                }
+            }
         }
 
         Vec::new()
@@ -3008,6 +3126,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let param_is_mut = self.lookup_static_method_param_is_mut(&actual_struct_name, method_name);
 
+        let param_defaults =
+            self.lookup_static_method_param_defaults_keyed(&actual_struct_name, method_name, None);
+
         // Propagate #[cm("...")] from resource static methods
         let cm_name =
             self.lookup_resource_static_cm(&actual_struct_name, &method_ref.module, method_name);
@@ -3049,6 +3170,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 function_ref: func_ref,
                 param_is_mut,
                 type_args: vec![],
+                param_defaults,
             },
         );
 

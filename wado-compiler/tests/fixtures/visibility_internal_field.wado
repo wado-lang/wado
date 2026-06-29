@@ -1,0 +1,19 @@
+//! `internal` on a struct field widens its reach to the whole package (see
+//! `visibility_internal_field_cross_module.wado` for the cross-module case).
+//! Within the defining module every field is accessible regardless of modifier.
+
+struct Point {
+    pub x: i32,
+    internal y: i32,
+    z: i32,
+}
+
+test "internal field is usable within the defining module" {
+    let p = Point { x: 1, y: 2, z: 3 };
+    assert p.x == 1;
+    assert p.y == 2;
+    assert p.z == 3;
+}
+
+__DATA__
+{"test": {}}

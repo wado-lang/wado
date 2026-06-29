@@ -210,7 +210,12 @@ pub async fn resolve(
                 resolved_ref: None,
                 integrity: Some(info.integrity.clone()),
                 dev: frame.dev,
-                world: info.manifest.world.clone(),
+                world: info
+                    .manifest
+                    .world
+                    .iter()
+                    .map(|(fq, w)| (fq.clone(), w.entry.clone()))
+                    .collect(),
                 deps: Vec::new(),
             },
         );

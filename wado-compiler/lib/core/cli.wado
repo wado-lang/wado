@@ -18,8 +18,8 @@
 use { Stdout, Stderr, Environment, Exit } from "wasi:cli";
 // Re-export commonly used effects for convenience
 pub use { Stdout, Stderr, Environment, Exit } from "wasi:cli";
-pub use { log_stdout, log_stderr } from "core:internal";
-use { drop_cli_write_future } from "core:internal";
+pub use { log_stdout, log_stderr } from "core:rt";
+use { drop_cli_write_future } from "core:rt";
 /// Writes a string to a StreamWritable<u8> with an optional newline, then drops it.
 pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool) {
     let bytes = message.internal_raw_bytes();

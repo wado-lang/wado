@@ -1,11 +1,7 @@
-// `_` is scoped to turbofish type arguments. In a plain type annotation it has
-// no call to infer from, so it is rejected with a clear message rather than
-// leaving an unresolved `unknown` to reach codegen.
-
 export fn run() {
     let x: Array<_> = Array::new(3);
     x[0] = 1;
 }
 
 __DATA__
-{"compile_error": "`_` type placeholder is only allowed as a turbofish type argument"}
+{"compile_error": "type inference placeholder `_` in a `let` annotation is not yet supported"}

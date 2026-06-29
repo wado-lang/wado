@@ -48,7 +48,7 @@ pub fn internal_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> Tir
     TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef {
-                module_source: ModuleSource::internal(),
+                module_source: ModuleSource::rt(),
                 name: name.to_string(),
                 monomorph_info: None,
                 method_info: None,
@@ -434,7 +434,7 @@ pub fn make_synthetic_method(
     TirFunction {
         module_source: ModuleSource::default(),
         name,
-        is_pub: true,
+        visibility: crate::ast::Visibility::Public,
         is_export: false,
         is_async: false,
         type_params: Vec::new(),

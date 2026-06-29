@@ -80,6 +80,27 @@ scope-parameterized `pub(...)` forms have nothing to scope to. Unlike Rust,
 `pub` is absolute: a `pub` item is library-public, never gated by an enclosing
 private module.
 
+### Re-export visibility
+
+The same ladder applies to re-exports. A `use` declaration may carry a
+visibility modifier, re-exporting the imported names at that reach:
+
+- `pub use { x } from "M"` — `x` joins this module's public API.
+- `internal use { x } from "M"` — `x` is re-exported package-internal.
+- plain `use { x } from "M"` — a file-private import; nothing is re-exported.
+
+A re-export's reach is the re-export keyword's, **not** the original item's
+visibility. So a `pub use` of an `internal` symbol publishes it: this is the
+canonical "internal implementation, public facade" pattern, where a package's
+entry module re-exports its internal submodules' items as the library API
+(`core:prelude` and `core:kiln` are built this way — their submodule
+definitions are `internal`, surfaced as `pub` through the facade's `pub use`).
+The only constraint is that the re-export must itself be a legal import: you can
+`pub use { x }` only a name visible at the re-export site (`x` is `pub`, or `x`
+is `internal` and `M` is in this package). `wado doc` and the public-API query
+view present such re-exports at the re-export's visibility, so a `pub use`-d
+`internal` item appears as part of the facade module's public API.
+
 ## Consequences
 
 - Generic / higher-order / trait libraries are publishable across packages
@@ -91,8 +112,38 @@ private module.
   package's public API and were also `export`ed need no change. `pub use`
   re-exports gain an `internal use` counterpart for package-internal
   re-exports.
-- Enforcing "a consumer may import only `pub`/`export` items of a dependency"
-  for Wado-to-Wado source dependencies remains unimplemented, as before.
+
+## Implementation
+
+- [x] Parse `internal` (the keyword was previously reserved as a no-op).
+      `internal` and `pub` are mutually exclusive; `export` implies `pub` (no
+      `pub export`). The AST carries a `Visibility { Private, Internal, Public }`
+      enum on every top-level declaration, orthogonal to the `is_export` flag.
+- [x] Package identity: `ModuleSource::package_id()` groups modules into
+      packages. `core:*` is one package, `wasi:*` another (independent), the entry
+      point and its local modules the `Root` package, and each resolved dependency
+      / remote URL its own package.
+- [x] Enforcement at import resolution (analyze phase): file-private symbols are
+      never importable; `internal` reaches only same-package importers; `pub` /
+      `export` reach anywhere. A violation is a `PRIVATE_SYMBOL` compile error. The
+      `Symbol` and re-export entries carry their declared visibility; namespace
+      imports register only the visible members. The reachability ladder is a
+      single predicate, `Visibility::reachable_from(same_package)`, shared by the
+      analyze-phase symbol registration and the elaborator's namespace-global
+      collection so the two never disagree (a same-package `internal` global is
+      reachable through `use ns from "..."; ns::FOO` as well as a named import).
+- [x] `internal use` re-exports (the package-internal counterpart to `pub use`).
+- The ladder applies to top-level items and to struct fields. A struct field's
+  `internal` reaches other files in the same package; `pub` reaches other
+  packages; no modifier is file-private. Reading, setting, or binding a field
+  beyond its reach (field access, struct literal, or destructuring pattern) is a
+  `PRIVATE_SYMBOL` compile error, checked via the same
+  `Visibility::reachable_from(same_package)` predicate as item imports.
+- Impl members (methods, associated constants) carry a binary `pub` /
+  file-private visibility; `internal` and `export` on an impl member are a
+  compile error with a targeted diagnostic.
+- The bundled `core:internal` module was renamed to `core:rt` so the module
+  name no longer collides with the `internal` visibility keyword.
 
 ## References
 

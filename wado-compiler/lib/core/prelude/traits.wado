@@ -11,7 +11,7 @@ use { List } from "core:prelude/list.wado";
 
 /// Result of a comparison between two values.
 #[compiler_item("ordering")]
-pub enum Ordering {
+internal enum Ordering {
     /// The first value is less than the second.
     #[compiler_item("ordering_less")]
     Less,
@@ -26,7 +26,7 @@ pub enum Ordering {
 /// Trait for equality comparisons.
 /// Types implementing this trait can be compared with `==` and `!=` operators.
 #[compiler_item("eq")]
-pub trait Eq {
+internal trait Eq {
     /// Returns true if self equals other.
     fn eq(&self, other: &Self) -> bool;
 }
@@ -46,21 +46,21 @@ impl<T> Eq for &mut T {
 /// Trait for ordering comparisons.
 /// Types implementing this trait can be compared with `<`, `<=`, `>`, `>=` operators.
 #[compiler_item("ord")]
-pub trait Ord {
+internal trait Ord {
     /// Compares self with other and returns an Ordering.
     fn cmp(&self, other: &Self) -> Ordering;
 }
 /// Trait for providing a default value for a type.
 /// Types implementing this trait can produce a sensible "zero" or "empty" value.
 #[compiler_item("default")]
-pub trait Default {
+internal trait Default {
     /// Returns the default value for this type.
     fn default() -> Self;
 }
 
 /// Trait for immutable indexing operations.
 /// Types implementing this trait can be indexed with the `[]` operator for reading.
-pub trait Index<IndexType> {
+internal trait Index<IndexType> {
     type Output;
 
     /// Returns a reference to the element at the given index.
@@ -71,7 +71,7 @@ pub trait Index<IndexType> {
 /// Types implementing this trait can be indexed with the `[]` operator to get
 /// a mutable reference: `container[i].mutating_method()`.
 /// Note: Requires Index to be implemented (supertrait relationship).
-pub trait IndexMut<IndexType> {
+internal trait IndexMut<IndexType> {
     type Output;
 
     /// Returns a mutable reference to the element at the given index.
@@ -82,7 +82,7 @@ pub trait IndexMut<IndexType> {
 /// Types implementing this trait can be assigned via the `[]` operator: `arr[i] = value`.
 /// This is separate from `IndexMut` because in Wasm GC, you cannot get a mutable reference
 /// to primitive array elements - reading and writing are fundamentally different operations.
-pub trait IndexAssign<IndexType> {
+internal trait IndexAssign<IndexType> {
     type Input;
 
     /// Assigns a value to the element at the given index.
@@ -92,7 +92,7 @@ pub trait IndexAssign<IndexType> {
 /// Trait for value-returning indexing operations.
 /// Use this for containers of primitives where references cannot be returned.
 /// Unlike `Index` which returns `&Output`, this returns `Output` by value (copy).
-pub trait IndexValue<IndexType> {
+internal trait IndexValue<IndexType> {
     type Output;
 
     /// Returns a copy of the element at the given index.
@@ -100,7 +100,7 @@ pub trait IndexValue<IndexType> {
 }
 /// Trait for the `+` operator.
 /// Types implementing this trait can use the `+` operator for addition.
-pub trait Add {
+internal trait Add {
     type Output;
 
     /// Adds two values and returns the result.
@@ -109,7 +109,7 @@ pub trait Add {
 
 /// Trait for the `-` operator (binary subtraction).
 /// Types implementing this trait can use the `-` operator for subtraction.
-pub trait Sub {
+internal trait Sub {
     type Output;
 
     /// Subtracts rhs from self and returns the result.
@@ -118,7 +118,7 @@ pub trait Sub {
 
 /// Trait for the `*` operator.
 /// Types implementing this trait can use the `*` operator for multiplication.
-pub trait Mul {
+internal trait Mul {
     type Output;
 
     /// Multiplies two values and returns the result.
@@ -127,7 +127,7 @@ pub trait Mul {
 
 /// Trait for the `/` operator.
 /// Types implementing this trait can use the `/` operator for division.
-pub trait Div {
+internal trait Div {
     type Output;
 
     /// Divides self by rhs and returns the result.
@@ -136,7 +136,7 @@ pub trait Div {
 
 /// Trait for the `%` operator.
 /// Types implementing this trait can use the `%` operator for remainder.
-pub trait Rem {
+internal trait Rem {
     type Output;
 
     /// Returns the remainder of dividing self by rhs.
@@ -145,14 +145,14 @@ pub trait Rem {
 
 /// Trait for the unary `-` operator (negation).
 /// Types implementing this trait can use the `-` prefix operator.
-pub trait Neg {
+internal trait Neg {
     type Output;
 
     /// Returns the negation of self.
     fn neg(&self) -> Self::Output;
 }
 /// Trait for the `&` operator (bitwise AND).
-pub trait BitAnd {
+internal trait BitAnd {
     type Output;
 
     /// Returns the bitwise AND of self and rhs.
@@ -160,7 +160,7 @@ pub trait BitAnd {
 }
 
 /// Trait for the `|` operator (bitwise OR).
-pub trait BitOr {
+internal trait BitOr {
     type Output;
 
     /// Returns the bitwise OR of self and rhs.
@@ -168,7 +168,7 @@ pub trait BitOr {
 }
 
 /// Trait for the `^` operator (bitwise XOR).
-pub trait BitXor {
+internal trait BitXor {
     type Output;
 
     /// Returns the bitwise XOR of self and rhs.
@@ -176,7 +176,7 @@ pub trait BitXor {
 }
 
 /// Trait for the `~` operator (bitwise NOT).
-pub trait BitNot {
+internal trait BitNot {
     type Output;
 
     /// Returns the bitwise NOT of self.
@@ -184,7 +184,7 @@ pub trait BitNot {
 }
 
 /// Trait for the `<<` operator (left shift).
-pub trait Shl {
+internal trait Shl {
     type Output;
 
     /// Returns self shifted left by rhs bits.
@@ -192,7 +192,7 @@ pub trait Shl {
 }
 
 /// Trait for the `>>` operator (right shift).
-pub trait Shr {
+internal trait Shr {
     type Output;
 
     /// Returns self shifted right by rhs bits.
@@ -202,7 +202,7 @@ pub trait Shr {
 /// Types implementing this trait can be formatted with `{x}` in template strings.
 /// All format traits write to a `Formatter` that wraps `&mut String`.
 #[compiler_item("display")]
-pub trait Display {
+internal trait Display {
     /// Formats the value and writes to the given formatter.
     fn fmt(&self, f: &mut Formatter);
 }
@@ -215,7 +215,7 @@ pub trait Display {
 /// - Structs show field names: `Point { x: 10, y: 20 }`
 /// - Enums/Variants show type-qualified names: `Color::Red`
 #[compiler_item("inspect")]
-pub trait Inspect {
+internal trait Inspect {
     /// Formats the value as a debug representation and writes to the given formatter.
     fn inspect(&self, f: &mut Formatter);
 }
@@ -223,7 +223,7 @@ pub trait Inspect {
 /// Trait for formatting values as binary integers.
 /// Used with the `{x:b}` format specifier.
 #[compiler_item("binary")]
-pub trait Binary {
+internal trait Binary {
     /// Formats the value as binary and writes to the given formatter.
     fn fmt(&self, f: &mut Formatter);
 }
@@ -231,7 +231,7 @@ pub trait Binary {
 /// Trait for formatting values as octal integers.
 /// Used with the `{x:o}` format specifier.
 #[compiler_item("octal")]
-pub trait Octal {
+internal trait Octal {
     /// Formats the value as octal and writes to the given formatter.
     fn fmt(&self, f: &mut Formatter);
 }
@@ -239,7 +239,7 @@ pub trait Octal {
 /// Trait for formatting values as lowercase hexadecimal.
 /// Used with the `{x:x}` format specifier.
 #[compiler_item("lower_hex")]
-pub trait LowerHex {
+internal trait LowerHex {
     /// Formats the value as lowercase hex and writes to the given formatter.
     fn fmt(&self, f: &mut Formatter);
 }
@@ -247,7 +247,7 @@ pub trait LowerHex {
 /// Trait for formatting values as uppercase hexadecimal.
 /// Used with the `{x:X}` format specifier.
 #[compiler_item("upper_hex")]
-pub trait UpperHex {
+internal trait UpperHex {
     /// Formats the value as uppercase hex and writes to the given formatter.
     fn fmt(&self, f: &mut Formatter);
 }
@@ -255,7 +255,7 @@ pub trait UpperHex {
 /// Trait for formatting values in lowercase exponential notation.
 /// Used with the `{x:e}` format specifier.
 #[compiler_item("lower_exp")]
-pub trait LowerExp {
+internal trait LowerExp {
     /// Formats the value in lowercase exponential notation and writes to the given formatter.
     fn fmt(&self, f: &mut Formatter);
 }
@@ -263,7 +263,7 @@ pub trait LowerExp {
 /// Trait for formatting values in uppercase exponential notation.
 /// Used with the `{x:E}` format specifier.
 #[compiler_item("upper_exp")]
-pub trait UpperExp {
+internal trait UpperExp {
     /// Formats the value in uppercase exponential notation and writes to the given formatter.
     fn fmt(&self, f: &mut Formatter);
 }
@@ -273,7 +273,7 @@ pub trait UpperExp {
 /// Produces multi-line indented output for composite types.
 /// Primitive types delegate to `Inspect::inspect`.
 #[compiler_item("inspect_alt")]
-pub trait InspectAlt {
+internal trait InspectAlt {
     fn inspect_alt(&self, f: &mut Formatter);
 }
 
@@ -281,40 +281,40 @@ pub trait InspectAlt {
 /// Used with the `{x:#}` format specifier.
 /// If not explicitly implemented, auto-generated to delegate to `InspectAlt::inspect_alt`.
 #[compiler_item("display_alt")]
-pub trait DisplayAlt {
+internal trait DisplayAlt {
     fn fmt_alt(&self, f: &mut Formatter);
 }
 
 /// Trait for alternate binary formatting (with `0b` prefix).
 /// Used with the `{x:#b}` format specifier.
 #[compiler_item("binary_alt")]
-pub trait BinaryAlt {
+internal trait BinaryAlt {
     fn fmt_alt(&self, f: &mut Formatter);
 }
 
 /// Trait for alternate octal formatting (with `0o` prefix).
 /// Used with the `{x:#o}` format specifier.
 #[compiler_item("octal_alt")]
-pub trait OctalAlt {
+internal trait OctalAlt {
     fn fmt_alt(&self, f: &mut Formatter);
 }
 
 /// Trait for alternate lowercase hex formatting (with `0x` prefix).
 /// Used with the `{x:#x}` format specifier.
 #[compiler_item("lower_hex_alt")]
-pub trait LowerHexAlt {
+internal trait LowerHexAlt {
     fn fmt_alt(&self, f: &mut Formatter);
 }
 
 /// Trait for alternate uppercase hex formatting (with `0X` prefix).
 /// Used with the `{x:#X}` format specifier.
 #[compiler_item("upper_hex_alt")]
-pub trait UpperHexAlt {
+internal trait UpperHexAlt {
     fn fmt_alt(&self, f: &mut Formatter);
 }
 /// The core iterator trait for sequences of values.
 /// Types implementing this trait can be iterated over using `for-of` loops.
-pub trait Iterator {
+internal trait Iterator {
     type Item;
 
     /// Advances the iterator and returns the next value.
@@ -471,7 +471,7 @@ pub trait Iterator {
 }
 
 /// Generic map iterator adapter that wraps any Iterator.
-pub struct IterMap<I: Iterator, U> {
+internal struct IterMap<I: Iterator, U> {
     pub inner: I,
     pub f: fn mut(I::Item) -> U,
 }
@@ -497,7 +497,7 @@ impl<I: Iterator, U> IntoIterator for IterMap<I, U> {
 }
 
 /// Generic filter iterator adapter that wraps any Iterator.
-pub struct IterFilter<I: Iterator> {
+internal struct IterFilter<I: Iterator> {
     pub inner: I,
     pub pred: fn mut(I::Item) -> bool,
 }
@@ -528,7 +528,7 @@ impl<I: Iterator> IntoIterator for IterFilter<I> {
 }
 
 /// Generic enumerate iterator adapter that yields (index, element) pairs.
-pub struct IterEnumerate<I: Iterator> {
+internal struct IterEnumerate<I: Iterator> {
     pub inner: I,
     pub count: i32,
 }
@@ -556,7 +556,7 @@ impl<I: Iterator> IntoIterator for IterEnumerate<I> {
 }
 
 /// Generic take iterator adapter that limits elements from any Iterator.
-pub struct IterTake<I: Iterator> {
+internal struct IterTake<I: Iterator> {
     pub inner: I,
     pub remaining: i32,
 }
@@ -587,7 +587,7 @@ impl<I: Iterator> IntoIterator for IterTake<I> {
 }
 
 /// Generic skip iterator adapter that skips elements from any Iterator.
-pub struct IterSkip<I: Iterator> {
+internal struct IterSkip<I: Iterator> {
     pub inner: I,
     pub remaining: i32,
 }
@@ -617,7 +617,7 @@ impl<I: Iterator> IntoIterator for IterSkip<I> {
 }
 
 /// Generic chain iterator adapter that chains two iterators of the same item type.
-pub struct IterChain<I: Iterator, J: Iterator> {
+internal struct IterChain<I: Iterator, J: Iterator> {
     pub first: I,
     pub second: J,
     pub first_done: bool,
@@ -647,7 +647,7 @@ impl<I: Iterator, J: Iterator<Item = I::Item>> IntoIterator for IterChain<I, J> 
 }
 
 /// Generic zip iterator adapter that pairs elements from two iterators.
-pub struct IterZip<I: Iterator, J: Iterator> {
+internal struct IterZip<I: Iterator, J: Iterator> {
     pub first: I,
     pub second: J,
 }
@@ -676,7 +676,7 @@ impl<I: Iterator, J: Iterator> IntoIterator for IterZip<I, J> {
 
 /// Conversion into an Iterator.
 /// Types implementing this trait can be used in `for-of` loops directly.
-pub trait IntoIterator {
+internal trait IntoIterator {
     type Item;
     type Iter: Iterator<Item = Self::Item>;
 
@@ -702,14 +702,14 @@ impl<I: Iterator> IntoIterator for I {
 ///
 /// The compiler provides a reflexive blanket impl `From<T> for T` for all types.
 #[compiler_item("from")]
-pub trait From<T> {
+internal trait From<T> {
     /// Converts a value of type `T` into `Self`.
     fn from(value: T) -> Self;
 }
 
 /// Fallible conversion trait.
 /// Returns `Result<Self, Self::Error>` so callers can handle conversion failures.
-pub trait TryFrom<T> {
+internal trait TryFrom<T> {
     type Error;
 
     /// Attempts to convert a value of type `T` into `Self`.
@@ -717,7 +717,7 @@ pub trait TryFrom<T> {
 }
 
 /// Error type returned by fallible conversions.
-pub struct ConvertError {
+internal struct ConvertError {
     pub message: String,
 }
 
@@ -731,7 +731,7 @@ impl ConvertError {
 /// Trait for creating a collection from an iterator.
 /// This is a simplified version - the full Rust-style trait requires `impl Iterator`
 /// syntax which is not yet supported.
-pub trait FromIterator<T> {
+internal trait FromIterator<T> {
     type Iter;
     fn from_iter(iter: Self::Iter) -> Self;
 }
@@ -740,7 +740,7 @@ pub trait FromIterator<T> {
 /// Implement this to make a type constructible from `{ key: value, ... }` literals.
 /// Keys are always String (from field names); `Value` is the element type.
 /// `Output` is the finished value (often `Self` for mutable types).
-pub trait KeyValueLiteralBuilder {
+internal trait KeyValueLiteralBuilder {
     type Value;
     type Output;
     /// Create an empty builder pre-allocated for `capacity` entries.
@@ -755,7 +755,7 @@ pub trait KeyValueLiteralBuilder {
 /// Implemented automatically for any `T: KeyValueLiteralBuilder<Output = T>`.
 /// For immutable output types, implement this explicitly and set `type Builder`
 /// to the mutable builder struct that builds this type.
-pub trait KeyValueLiteral {
+internal trait KeyValueLiteral {
     type Value;
     type Builder;
 }
@@ -769,7 +769,7 @@ impl<T: KeyValueLiteralBuilder<Output = T>> KeyValueLiteral for T {
 /// Builder trait for constructing a value from a sequence literal `[e0, e1, ...]`.
 /// Implement this to make a type constructible from sequence literals.
 /// `Element` is the element type; `Output` is the finished value.
-pub trait SequenceLiteralBuilder {
+internal trait SequenceLiteralBuilder {
     type Element;
     type Output;
     /// Create an empty builder pre-allocated for `capacity` elements.
@@ -784,7 +784,7 @@ pub trait SequenceLiteralBuilder {
 /// Implemented automatically for any `T: SequenceLiteralBuilder<Output = T>`.
 /// For immutable output types, implement this explicitly and set `type Builder`
 /// to the mutable builder struct that builds this type.
-pub trait SequenceLiteral {
+internal trait SequenceLiteral {
     type Element;
     type Builder;
 }
@@ -801,7 +801,7 @@ impl<T: SequenceLiteralBuilder<Output = T>> SequenceLiteral for T {
 /// without allocating a substring. Implementors must provide it. The
 /// `from_str` convenience method is a thin wrapper that parses the entire
 /// string and is provided as a default.
-pub trait FromStr {
+internal trait FromStr {
     type Err;
 
     /// Parse the byte range `s[start..end)` as `Self`. Takes `s` by
@@ -822,7 +822,7 @@ pub trait FromStr {
 /// Error returned by the lenient string parsers (`LenientFromStr`). All
 /// built-in impls share this single type, carrying a short human-readable
 /// reason. See `docs/wep-2026-06-22-lenient-from-str.md`.
-pub struct LenientParseError {
+internal struct LenientParseError {
     reason: String,
 }
 
@@ -843,7 +843,7 @@ impl LenientParseError {
 /// spellings only — an undenotable value still yields `Err`, and whitespace
 /// is never trimmed (that is the caller's concern). See
 /// `docs/wep-2026-06-22-lenient-from-str.md`.
-pub trait LenientFromStr {
+internal trait LenientFromStr {
     type Err;
 
     /// Parse the entire string as `Self`, accepting forgiving spellings.

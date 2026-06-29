@@ -152,7 +152,7 @@ pub fn extract_options_descriptor(
         return Err(diagnostics);
     };
 
-    if !options_struct.is_pub {
+    if !options_struct.visibility.is_public() {
         diagnostics.push(Diagnostic {
             severity: Severity::Error,
             code: Code::GeneratorOptionsUnsupported,

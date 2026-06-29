@@ -3,7 +3,7 @@
 
 use { ErrorCode } from "wasi:cli/types.wado";
 
-#[cm("wasi:cli/stdout@0.3.0-rc-2026-03-15")]
+#[cm("wasi:cli/stdout@0.3.0")]
 pub interface Stdout {
     /// Write the given stream to stdout.
     /// 
@@ -13,7 +13,7 @@ pub interface Stdout {
     /// 
     /// Otherwise if there is an error the readable end of the stream will be
     /// dropped and this function will return an error-code.
-    #[cm("wasi:cli/stdout@0.3.0-rc-2026-03-15#write-via-stream")]
+    #[cm("wasi:cli/stdout@0.3.0#write-via-stream")]
     #[cm_params("data")]
     fn write_via_stream(data: Stream<u8>) -> Future<Result<(), ErrorCode>>;
 }

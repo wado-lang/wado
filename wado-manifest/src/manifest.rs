@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fmt;
 use std::str::FromStr;
 
@@ -12,10 +13,10 @@ use crate::version::VersionSpecifier;
 pub struct Manifest {
     pub package: Option<Package>,
     /// The `[world]` table: CM world FQ name (e.g. `"wasi:cli/command"`,
-    /// `"core:kiln/generator"`) → entry-point path, one entry per hosted
-    /// world the package targets. The library world is declared separately by
-    /// `[package].lib` (its world name is the package name).
-    pub world: IndexMap<String, String>,
+    /// `"core:kiln/generator"`) → entry, one entry per hosted world the package
+    /// targets. The library world is declared separately by `[package].lib`
+    /// (its world name is the package name).
+    pub world: IndexMap<String, WorldEntry>,
     pub registries: IndexMap<String, String>,
     pub dependencies: IndexMap<String, Dependency>,
     pub dev_dependencies: IndexMap<String, Dependency>,
@@ -23,6 +24,27 @@ pub struct Manifest {
     pub workspace: Option<Workspace>,
     pub test: TestSettings,
     pub format: FormatSettings,
+    /// Unknown top-level keys/sections (typos, unsupported). Reported as
+    /// warnings, never errors.
+    pub unknown_sections: Vec<String>,
+    /// Unknown `[workspace.package]` keys inherited from the workspace root
+    /// during member resolution. Surfaced as `workspace.package` warnings on the
+    /// member (whose own `workspace` is `None`). Empty otherwise.
+    pub inherited_unknown_fields: Vec<String>,
+}
+
+/// A `[world]` table entry: the world's entry-point path and whether it is
+/// published. A bare string value (`"world" = "src/x.wado"`) means `publish =
+/// true`; the table form (`{ entry = "…", publish = false }`) opts the single
+/// world out of `wado publish`.
+#[derive(Debug, Clone)]
+pub struct WorldEntry {
+    pub entry: String,
+    pub publish: bool,
+    /// Unknown keys in the table form (typos, unsupported). Reported as
+    /// warnings so an opt-out typo like `publsh = false` is not silently
+    /// ignored.
+    pub unknown_fields: Vec<String>,
 }
 
 impl Manifest {
@@ -30,7 +52,7 @@ impl Manifest {
     /// the `[world]` table.
     #[must_use]
     pub fn world_entry(&self, world_fq: &str) -> Option<&str> {
-        self.world.get(world_fq).map(String::as_str)
+        self.world.get(world_fq).map(|w| w.entry.as_str())
     }
 
     /// Deterministic `sha256:` hash of `[dependencies]` + `[dev-dependencies]`
@@ -71,9 +93,47 @@ impl Manifest {
             .keys()
             .chain(self.dev_dependencies.keys())
             .chain(self.build_dependencies.keys());
-        keys.filter(|k| !k.contains(':'))
+        let mut warnings: Vec<ManifestWarning> = keys
+            .filter(|k| !k.contains(':'))
             .map(|k| ManifestWarning::BareDependencyKey { key: k.clone() })
-            .collect()
+            .collect();
+        for field in &self.unknown_sections {
+            warnings.push(ManifestWarning::UnknownField {
+                section: None,
+                field: field.clone(),
+            });
+        }
+        if let Some(pkg) = &self.package {
+            for field in &pkg.unknown_fields {
+                warnings.push(ManifestWarning::UnknownField {
+                    section: Some("package".to_string()),
+                    field: field.clone(),
+                });
+            }
+        }
+        let workspace_pkg_unknowns = self
+            .workspace
+            .as_ref()
+            .and_then(|ws| ws.package.as_ref())
+            .map(|p| p.unknown_fields.as_slice())
+            .unwrap_or_default()
+            .iter()
+            .chain(&self.inherited_unknown_fields);
+        for field in workspace_pkg_unknowns {
+            warnings.push(ManifestWarning::UnknownField {
+                section: Some("workspace.package".to_string()),
+                field: field.clone(),
+            });
+        }
+        for (fq, entry) in &self.world {
+            for field in &entry.unknown_fields {
+                warnings.push(ManifestWarning::UnknownField {
+                    section: Some(format!("world.{fq:?}")),
+                    field: field.clone(),
+                });
+            }
+        }
+        warnings
     }
 }
 
@@ -81,6 +141,12 @@ impl Manifest {
 pub enum ManifestWarning {
     /// Bare key (no `:`); deprecated in favor of `ns:pkg` / `lib:nick` (WEP).
     BareDependencyKey { key: String },
+    /// Unknown key not recognized by the schema. `section` is the table it
+    /// appeared in (`None` for a top-level key/section).
+    UnknownField {
+        section: Option<String>,
+        field: String,
+    },
 }
 
 impl std::fmt::Display for ManifestWarning {
@@ -91,6 +157,14 @@ impl std::fmt::Display for ManifestWarning {
                 "dependency key {key:?} is a bare name (deprecated); use a coordinate \
                  like \"ns:{key}\" or a \"lib:{key}\" indirection",
             ),
+            ManifestWarning::UnknownField {
+                section: Some(section),
+                field,
+            } => write!(f, "unknown field {field:?} in [{section}] (ignored)"),
+            ManifestWarning::UnknownField {
+                section: None,
+                field,
+            } => write!(f, "unknown top-level key {field:?} (ignored)"),
         }
     }
 }
@@ -138,6 +212,50 @@ pub struct Package {
     /// dependency (`use { … } from "<dep-name>"`). Only `export` items are
     /// visible to consumers.
     pub lib: Option<String>,
+    /// Short, human-readable summary (→ `org.opencontainers.image.description`).
+    pub description: Option<String>,
+    /// Project home page URL (→ `org.opencontainers.image.url`). Falls back to
+    /// `repository` when unset; see [`Package::effective_homepage`].
+    pub homepage: Option<String>,
+    /// Source repository URL, bare (no subdirectory)
+    /// (→ `org.opencontainers.image.source`).
+    pub repository: Option<String>,
+    /// Subdirectory holding the package within a monorepo. Wado-custom; not an
+    /// OCI annotation.
+    pub repository_directory: Option<String>,
+    /// Documentation URL (→ `org.opencontainers.image.documentation`). Falls
+    /// back to `repository`; see [`Package::effective_documentation`].
+    pub documentation: Option<String>,
+    /// SPDX License Expression (→ `org.opencontainers.image.licenses`).
+    /// Mutually exclusive with `license_file`.
+    pub license: Option<String>,
+    /// Path to a non-standard license file. Mutually exclusive with `license`.
+    pub license_file: Option<String>,
+    /// Contact details of the people/organization responsible
+    /// (→ `org.opencontainers.image.authors`).
+    pub authors: Vec<String>,
+    /// Minimum Wado compiler version required to build (a semver requirement,
+    /// e.g. `">=0.5"`).
+    pub wado_version: Option<String>,
+    /// Whether the package may be published. `false` opts out even when a
+    /// `namespace` is present. Defaults to `true`.
+    pub publish: bool,
+    /// Unknown `[package]` keys (typos, unsupported). Reported as warnings.
+    pub unknown_fields: Vec<String>,
+}
+
+impl Package {
+    /// Homepage, falling back to the repository URL when unset.
+    #[must_use]
+    pub fn effective_homepage(&self) -> Option<&str> {
+        self.homepage.as_deref().or(self.repository.as_deref())
+    }
+
+    /// Documentation URL, falling back to the repository URL when unset.
+    #[must_use]
+    pub fn effective_documentation(&self) -> Option<&str> {
+        self.documentation.as_deref().or(self.repository.as_deref())
+    }
 }
 
 /// The `[workspace]` section of `wado.toml`.
@@ -146,6 +264,25 @@ pub struct Workspace {
     pub members: Vec<String>,
     pub dependencies: IndexMap<String, Dependency>,
     pub dev_dependencies: IndexMap<String, Dependency>,
+    /// The `[workspace.package]` table: metadata members inherit.
+    pub package: Option<WorkspacePackage>,
+}
+
+/// The `[workspace.package]` table: package metadata shared by members.
+/// `version`/`repository`/`namespace` are force-inherited; the rest are
+/// overridable defaults. See [`resolve_member`].
+#[derive(Debug, Clone, Default)]
+pub struct WorkspacePackage {
+    pub version: Option<String>,
+    pub repository: Option<String>,
+    pub namespace: Option<String>,
+    pub license: Option<String>,
+    pub license_file: Option<String>,
+    pub authors: Vec<String>,
+    pub wado_version: Option<String>,
+    /// Unknown keys in `[workspace.package]` (typos, or non-inheritable fields).
+    /// Reported as warnings.
+    pub unknown_fields: Vec<String>,
 }
 
 /// A single dependency declaration.
@@ -229,6 +366,21 @@ pub enum ManifestError {
     },
     /// Registry dependency without a default registry defined.
     NoDefaultRegistry { dep_name: String },
+    /// `[package]` set both `license` and `license-file` (mutually exclusive).
+    ConflictingLicense,
+    /// `[package].license` is not a valid SPDX license expression.
+    InvalidLicense { value: String, reason: String },
+    /// `[package].wado-version` is not a valid semver requirement.
+    InvalidWadoVersion { value: String, reason: String },
+    /// A workspace member set a field that is force-inherited from
+    /// `[workspace.package]` (`version`, `repository`, or `namespace`).
+    WorkspaceFieldOverride { field: String },
+    /// `[workspace.package]` set both `license` and `license-file`.
+    WorkspaceConflictingLicense,
+    /// `[workspace.package].license` is not a valid SPDX expression.
+    WorkspaceInvalidLicense { value: String, reason: String },
+    /// A `[world]` value is neither an entry-path string nor a valid table.
+    InvalidWorldEntry { world: String, reason: String },
 }
 
 impl fmt::Display for ManifestError {
@@ -269,6 +421,33 @@ impl fmt::Display for ManifestError {
                     "dependency {dep_name:?}: registry dependency requires [registries].default"
                 )
             }
+            ManifestError::ConflictingLicense => write!(
+                f,
+                "[package]: `license` and `license-file` are mutually exclusive"
+            ),
+            ManifestError::InvalidLicense { value, reason } => write!(
+                f,
+                "[package].license {value:?} is not a valid SPDX expression: {reason}"
+            ),
+            ManifestError::InvalidWadoVersion { value, reason } => write!(
+                f,
+                "[package].wado-version {value:?} is not a valid version requirement: {reason}"
+            ),
+            ManifestError::WorkspaceFieldOverride { field } => write!(
+                f,
+                "[package].{field} is inherited from [workspace.package]; remove it from this member"
+            ),
+            ManifestError::WorkspaceConflictingLicense => write!(
+                f,
+                "[workspace.package]: `license` and `license-file` are mutually exclusive"
+            ),
+            ManifestError::WorkspaceInvalidLicense { value, reason } => write!(
+                f,
+                "[workspace.package].license {value:?} is not a valid SPDX expression: {reason}"
+            ),
+            ManifestError::InvalidWorldEntry { world, reason } => {
+                write!(f, "[world].{world:?}: {reason}")
+            }
         }
     }
 }
@@ -277,10 +456,48 @@ impl std::error::Error for ManifestError {}
 
 // --- Raw serde types for TOML deserialization ---
 
+/// Convert one `[world]` value — a bare entry-path string, or a table with
+/// `entry` and an optional `publish` flag (default `true`) — into a
+/// [`WorldEntry`]. A table's unknown keys are collected (not dropped) so a typo
+/// like `publsh = false` surfaces as a warning instead of silently leaving the
+/// world published. Done by hand rather than via an untagged enum so type
+/// mismatches give a clear error and extra keys are recoverable.
+fn convert_world_entry(world: &str, value: toml::Value) -> Result<WorldEntry, ManifestError> {
+    let invalid = |reason: &str| ManifestError::InvalidWorldEntry {
+        world: world.to_string(),
+        reason: reason.to_string(),
+    };
+    let (entry, publish, unknown_fields) = match value {
+        toml::Value::String(entry) => (entry, true, Vec::new()),
+        toml::Value::Table(mut table) => {
+            let entry = match table.remove("entry") {
+                Some(toml::Value::String(s)) => s,
+                Some(_) => return Err(invalid("`entry` must be a string")),
+                None => return Err(invalid("table form requires an `entry` path")),
+            };
+            let publish = match table.remove("publish") {
+                Some(toml::Value::Boolean(b)) => b,
+                Some(_) => return Err(invalid("`publish` must be a boolean")),
+                None => true,
+            };
+            (entry, publish, table.keys().cloned().collect())
+        }
+        _ => return Err(invalid("must be an entry-path string or a table")),
+    };
+    if entry.is_empty() {
+        return Err(invalid("entry path must not be empty"));
+    }
+    Ok(WorldEntry {
+        entry,
+        publish,
+        unknown_fields,
+    })
+}
+
 #[derive(Deserialize)]
 struct RawManifest {
     package: Option<RawPackage>,
-    world: Option<IndexMap<String, String>>,
+    world: Option<IndexMap<String, toml::Value>>,
     registries: Option<IndexMap<String, String>>,
     dependencies: Option<IndexMap<String, RawDependency>>,
     #[serde(rename = "dev-dependencies")]
@@ -290,6 +507,12 @@ struct RawManifest {
     workspace: Option<RawWorkspace>,
     test: Option<RawTestSettings>,
     format: Option<RawFormatSettings>,
+    #[serde(flatten)]
+    unknown: BTreeMap<String, toml::Value>,
+}
+
+fn unknown_keys(captured: &BTreeMap<String, toml::Value>) -> Vec<String> {
+    captured.keys().cloned().collect()
 }
 
 #[derive(Deserialize)]
@@ -310,14 +533,47 @@ struct RawPackage {
     name: Option<String>,
     version: Option<String>,
     lib: Option<String>,
+    description: Option<String>,
+    homepage: Option<String>,
+    repository: Option<String>,
+    #[serde(rename = "repository-directory")]
+    repository_directory: Option<String>,
+    documentation: Option<String>,
+    license: Option<String>,
+    #[serde(rename = "license-file")]
+    license_file: Option<String>,
+    authors: Option<Vec<String>>,
+    #[serde(rename = "wado-version")]
+    wado_version: Option<String>,
+    publish: Option<bool>,
+    #[serde(flatten)]
+    unknown: BTreeMap<String, toml::Value>,
 }
 
 #[derive(Deserialize)]
 struct RawWorkspace {
     members: Option<Vec<String>>,
+    package: Option<RawWorkspacePackage>,
     dependencies: Option<IndexMap<String, RawDependency>>,
     #[serde(rename = "dev-dependencies")]
     dev_dependencies: Option<IndexMap<String, RawDependency>>,
+}
+
+/// The `[workspace.package]` table: shared metadata inherited by members. Only
+/// the inheritable fields are accepted; other keys are reported as warnings.
+#[derive(Deserialize, Default)]
+struct RawWorkspacePackage {
+    version: Option<String>,
+    repository: Option<String>,
+    namespace: Option<String>,
+    license: Option<String>,
+    #[serde(rename = "license-file")]
+    license_file: Option<String>,
+    authors: Option<Vec<String>>,
+    #[serde(rename = "wado-version")]
+    wado_version: Option<String>,
+    #[serde(flatten)]
+    unknown: BTreeMap<String, toml::Value>,
 }
 
 #[derive(Deserialize)]
@@ -333,8 +589,13 @@ struct RawDependency {
 }
 
 fn convert_raw(raw: RawManifest) -> Result<Manifest, ManifestError> {
+    let unknown_sections = unknown_keys(&raw.unknown);
     let package = raw.package.map(convert_package).transpose()?;
-    let world = raw.world.unwrap_or_default();
+    let mut world = IndexMap::new();
+    for (fq, value) in raw.world.unwrap_or_default() {
+        let entry = convert_world_entry(&fq, value)?;
+        world.insert(fq, entry);
+    }
     let registries = raw.registries.unwrap_or_default();
     let dependencies = convert_deps(raw.dependencies.unwrap_or_default())?;
     let dev_dependencies = convert_deps(raw.dev_dependencies.unwrap_or_default())?;
@@ -353,7 +614,83 @@ fn convert_raw(raw: RawManifest) -> Result<Manifest, ManifestError> {
         workspace,
         test,
         format,
+        unknown_sections,
+        inherited_unknown_fields: Vec::new(),
     })
+}
+
+/// Parse a workspace member's manifest, inheriting metadata from the workspace
+/// root's `[workspace.package]`.
+///
+/// `version`/`repository`/`namespace` are force-inherited: if the member sets
+/// one (and the workspace defines it) it is a [`ManifestError::WorkspaceFieldOverride`].
+/// `license`/`license-file`/`authors`/`wado-version` are defaults the member may
+/// override. The merge runs before conversion, so required fields (e.g.
+/// `version`) may be supplied by the workspace.
+///
+/// # Errors
+/// Propagates TOML, inheritance, and validation errors for the merged member,
+/// including problems in the root's `[workspace.package]` itself.
+pub fn resolve_member(member_toml: &str, root_toml: &str) -> Result<Manifest, ManifestError> {
+    let mut member_raw: RawManifest =
+        toml::from_str(member_toml).map_err(|e| ManifestError::Toml(e.to_string()))?;
+    let root_raw: RawManifest =
+        toml::from_str(root_toml).map_err(|e| ManifestError::Toml(e.to_string()))?;
+
+    let ws_pkg = root_raw
+        .workspace
+        .and_then(|w| w.package)
+        .map(convert_workspace_package);
+    let inherited_unknown_fields = ws_pkg
+        .as_ref()
+        .map(|p| p.unknown_fields.clone())
+        .unwrap_or_default();
+
+    if let (Some(pkg), Some(ws)) = (member_raw.package.as_mut(), ws_pkg.as_ref()) {
+        validate::validate_workspace_package(ws)?;
+        inherit_workspace_package(pkg, ws)?;
+    }
+
+    let mut manifest = convert_raw(member_raw)?;
+    manifest.inherited_unknown_fields = inherited_unknown_fields;
+    validate::validate(&manifest)?;
+    Ok(manifest)
+}
+
+fn inherit_workspace_package(
+    pkg: &mut RawPackage,
+    ws: &WorkspacePackage,
+) -> Result<(), ManifestError> {
+    inherit_forced(&mut pkg.version, ws.version.as_ref(), "version")?;
+    inherit_forced(&mut pkg.repository, ws.repository.as_ref(), "repository")?;
+    inherit_forced(&mut pkg.namespace, ws.namespace.as_ref(), "namespace")?;
+    if pkg.license.is_none() && pkg.license_file.is_none() {
+        pkg.license.clone_from(&ws.license);
+        pkg.license_file.clone_from(&ws.license_file);
+    }
+    if pkg.authors.is_none() && !ws.authors.is_empty() {
+        pkg.authors = Some(ws.authors.clone());
+    }
+    if pkg.wado_version.is_none() {
+        pkg.wado_version.clone_from(&ws.wado_version);
+    }
+    Ok(())
+}
+
+fn inherit_forced(
+    field: &mut Option<String>,
+    ws_value: Option<&String>,
+    name: &'static str,
+) -> Result<(), ManifestError> {
+    if let Some(ws_value) = ws_value {
+        if field.is_some() {
+            return Err(ManifestError::WorkspaceFieldOverride {
+                field: name.to_string(),
+            });
+        }
+        *field = Some(ws_value.clone());
+    }
+    Ok(())
 }
 
 fn convert_test(raw: RawTestSettings) -> TestSettings {
@@ -384,6 +721,17 @@ fn convert_package(raw: RawPackage) -> Result<Package, ManifestError> {
         name,
         version,
         lib: raw.lib,
+        description: raw.description,
+        homepage: raw.homepage,
+        repository: raw.repository,
+        repository_directory: raw.repository_directory,
+        documentation: raw.documentation,
+        license: raw.license,
+        license_file: raw.license_file,
+        authors: raw.authors.unwrap_or_default(),
+        wado_version: raw.wado_version,
+        publish: raw.publish.unwrap_or(true),
+        unknown_fields: unknown_keys(&raw.unknown),
     })
 }
 
@@ -398,7 +746,21 @@ fn convert_workspace(raw: RawWorkspace) -> Result<Workspace, ManifestError> {
         members,
         dependencies,
         dev_dependencies,
+        package: raw.package.map(convert_workspace_package),
     })
+}
+
+fn convert_workspace_package(raw: RawWorkspacePackage) -> WorkspacePackage {
+    WorkspacePackage {
+        version: raw.version,
+        repository: raw.repository,
+        namespace: raw.namespace,
+        license: raw.license,
+        license_file: raw.license_file,
+        authors: raw.authors.unwrap_or_default(),
+        wado_version: raw.wado_version,
+        unknown_fields: unknown_keys(&raw.unknown),
+    }
 }
 
 fn convert_deps(
@@ -612,6 +974,68 @@ version = "0.1.0"
         assert_eq!(pkg.version, "0.1.0");
         assert_eq!(m.world_entry("wasi:cli/command"), Some("src/main.wado"));
         assert!(pkg.namespace.is_none());
+    }
+
+    #[test]
+    fn world_entry_publish_defaults_true_and_opts_out_via_table() {
+        let toml = r#"
+[package]
+name = "tool"
+version = "0.1.0"
+
+[world]
+"wasi:cli/command" = "src/main.wado"
+"core:kiln/generator" = { entry = "src/gen.wado" }
+"wasi:http/service" = { entry = "src/server.wado", publish = false }
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        // Bare string and table-without-publish both default to published.
+        assert!(m.world["wasi:cli/command"].publish);
+        assert_eq!(m.world["core:kiln/generator"].entry, "src/gen.wado");
+        assert!(m.world["core:kiln/generator"].publish);
+        // Explicit publish = false opts the single world out.
+        assert!(!m.world["wasi:http/service"].publish);
+        assert_eq!(m.world_entry("wasi:http/service"), Some("src/server.wado"));
+    }
+
+    #[test]
+    fn unknown_key_in_world_table_warns_instead_of_silently_dropping() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+
+[world]
+"wasi:http/service" = { entry = "src/server.wado", publsh = false }
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        // The typo'd key must not silently opt the world out.
+        assert!(m.world["wasi:http/service"].publish);
+        let warnings = m.warnings();
+        assert!(
+            warnings.iter().any(|w| matches!(w,
+                ManifestWarning::UnknownField { section: Some(s), field }
+                if s == "world.\"wasi:http/service\"" && field == "publsh")),
+            "expected an unknown-field warning for the typo, got {warnings:?}"
+        );
+    }
+
+    #[test]
+    fn world_table_with_non_string_entry_is_a_clear_error() {
+        let toml = "[package]\nname = \"a\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = { entry = 123 }\n";
+        let err = toml.parse::<Manifest>().unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("wasi:cli/command") && msg.contains("entry"),
+            "expected a clear [world] error, got {msg:?}"
+        );
+    }
+
+    #[test]
+    fn world_entry_with_empty_path_is_rejected() {
+        let toml = "[package]\nname = \"a\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"\"\n";
+        let err = toml.parse::<Manifest>().unwrap_err();
+        assert!(err.to_string().contains("empty"), "{err}");
     }
 
     #[test]
@@ -1030,5 +1454,368 @@ json = { workspace = true }
             m.dependencies["json"].source,
             DependencySource::Workspace
         ));
+    }
+
+    #[test]
+    fn parse_package_metadata() {
+        let toml = r#"
+[package]
+namespace = "myorg"
+name = "my-app"
+version = "0.1.0"
+description = "A fast widget toolkit"
+homepage = "https://wado-lang.org"
+repository = "https://github.com/myorg/my-app"
+repository-directory = "packages/foo"
+documentation = "https://docs.wado-lang.org"
+license = "MIT OR Apache-2.0"
+authors = ["Alice <a@example.com>", "Bob"]
+wado-version = ">=0.5"
+publish = false
+"#;
+        let pkg = toml.parse::<Manifest>().unwrap().package.unwrap();
+        assert_eq!(pkg.description.as_deref(), Some("A fast widget toolkit"));
+        assert_eq!(pkg.homepage.as_deref(), Some("https://wado-lang.org"));
+        assert_eq!(
+            pkg.repository.as_deref(),
+            Some("https://github.com/myorg/my-app")
+        );
+        assert_eq!(pkg.repository_directory.as_deref(), Some("packages/foo"));
+        assert_eq!(
+            pkg.documentation.as_deref(),
+            Some("https://docs.wado-lang.org")
+        );
+        assert_eq!(pkg.license.as_deref(), Some("MIT OR Apache-2.0"));
+        assert_eq!(pkg.authors, vec!["Alice <a@example.com>", "Bob"]);
+        assert_eq!(pkg.wado_version.as_deref(), Some(">=0.5"));
+        assert!(!pkg.publish);
+    }
+
+    #[test]
+    fn metadata_defaults_when_omitted() {
+        let toml = "[package]\nname = \"app\"\nversion = \"0.1.0\"\n";
+        let pkg = toml.parse::<Manifest>().unwrap().package.unwrap();
+        assert!(pkg.description.is_none());
+        assert!(pkg.authors.is_empty());
+        assert!(pkg.wado_version.is_none());
+        assert!(pkg.publish, "publish defaults to true");
+        assert!(pkg.repository_directory.is_none());
+    }
+
+    #[test]
+    fn homepage_and_documentation_fall_back_to_repository() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+repository = "https://github.com/org/app"
+"#;
+        let pkg = toml.parse::<Manifest>().unwrap().package.unwrap();
+        assert_eq!(pkg.effective_homepage(), Some("https://github.com/org/app"));
+        assert_eq!(
+            pkg.effective_documentation(),
+            Some("https://github.com/org/app")
+        );
+    }
+
+    #[test]
+    fn explicit_homepage_overrides_repository_fallback() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+homepage = "https://app.example"
+repository = "https://github.com/org/app"
+"#;
+        let pkg = toml.parse::<Manifest>().unwrap().package.unwrap();
+        assert_eq!(pkg.effective_homepage(), Some("https://app.example"));
+    }
+
+    #[test]
+    fn unknown_package_field_warns_but_parses() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+descshunption = "typo"
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        let warnings = m.warnings();
+        assert!(
+            warnings.iter().any(|w| matches!(
+                w,
+                ManifestWarning::UnknownField { section: Some(s), field }
+                    if s == "package" && field == "descshunption"
+            )),
+            "got {warnings:?}"
+        );
+    }
+
+    #[test]
+    fn unknown_top_level_section_warns_but_parses() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+
+[dependancies]
+"ns:x" = { version = "^1.0.0" }
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        let warnings = m.warnings();
+        assert!(
+            warnings.iter().any(|w| matches!(
+                w,
+                ManifestWarning::UnknownField { section: None, field } if field == "dependancies"
+            )),
+            "got {warnings:?}"
+        );
+    }
+
+    #[test]
+    fn license_and_license_file_conflict_rejected() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+license = "MIT"
+license-file = "LICENSE"
+"#;
+        let err = toml.parse::<Manifest>().unwrap_err();
+        assert!(matches!(err, ManifestError::ConflictingLicense), "{err:?}");
+    }
+
+    #[test]
+    fn invalid_wado_version_rejected() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+wado-version = "not a req"
+"#;
+        let err = toml.parse::<Manifest>().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::InvalidWadoVersion { .. }),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn valid_spdx_license_accepted() {
+        for license in ["MIT", "MIT OR Apache-2.0", "Apache-2.0 WITH LLVM-exception"] {
+            let toml = format!(
+                "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"{license}\"\n"
+            );
+            assert!(
+                toml.parse::<Manifest>().is_ok(),
+                "expected {license:?} to be accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn license_ref_for_nonstandard_license_accepted() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+license = "LicenseRef-Commercial"
+"#;
+        assert!(toml.parse::<Manifest>().is_ok());
+    }
+
+    #[test]
+    fn invalid_spdx_license_rejected() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+license = "Definitely Not A License"
+"#;
+        let err = toml.parse::<Manifest>().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::InvalidLicense { .. }),
+            "{err:?}"
+        );
+    }
+
+    const ROOT_WS: &str = r#"
+[workspace]
+members = ["packages/*"]
+
+[workspace.package]
+version = "0.2.0"
+repository = "https://github.com/org/monorepo"
+namespace = "org"
+license = "MIT"
+authors = ["Alice <a@example.com>"]
+"#;
+
+    #[test]
+    fn member_inherits_workspace_metadata() {
+        let member = r#"
+[package]
+name = "core"
+description = "Shared core"
+lib = "src/lib.wado"
+"#;
+        let pkg = resolve_member(member, ROOT_WS).unwrap().package.unwrap();
+        assert_eq!(pkg.version, "0.2.0");
+        assert_eq!(
+            pkg.repository.as_deref(),
+            Some("https://github.com/org/monorepo")
+        );
+        assert_eq!(pkg.namespace.as_deref(), Some("org"));
+        assert_eq!(pkg.license.as_deref(), Some("MIT"));
+        assert_eq!(pkg.authors, vec!["Alice <a@example.com>"]);
+        assert_eq!(pkg.name, "core");
+        assert_eq!(pkg.description.as_deref(), Some("Shared core"));
+    }
+
+    #[test]
+    fn member_overriding_forced_field_is_error() {
+        for (field, line) in [
+            ("version", "version = \"9.9.9\""),
+            ("repository", "repository = \"https://example.com/other\""),
+            ("namespace", "namespace = \"other\""),
+        ] {
+            let member = format!("[package]\nname = \"core\"\nlib = \"src/lib.wado\"\n{line}\n");
+            let err = resolve_member(&member, ROOT_WS).unwrap_err();
+            assert!(
+                matches!(&err, ManifestError::WorkspaceFieldOverride { field: f } if f == field),
+                "field {field}: {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn member_may_override_default_fields() {
+        let member = r#"
+[package]
+name = "core"
+lib = "src/lib.wado"
+license = "Apache-2.0"
+authors = ["Bob"]
+"#;
+        let pkg = resolve_member(member, ROOT_WS).unwrap().package.unwrap();
+        assert_eq!(pkg.license.as_deref(), Some("Apache-2.0"));
+        assert_eq!(pkg.authors, vec!["Bob"]);
+        assert_eq!(pkg.version, "0.2.0");
+    }
+
+    #[test]
+    fn member_license_file_overrides_inherited_license_slot() {
+        let member = r#"
+[package]
+name = "core"
+lib = "src/lib.wado"
+license-file = "LICENSE-CUSTOM"
+"#;
+        let pkg = resolve_member(member, ROOT_WS).unwrap().package.unwrap();
+        assert_eq!(pkg.license_file.as_deref(), Some("LICENSE-CUSTOM"));
+        assert!(pkg.license.is_none(), "inherited license must not coexist");
+    }
+
+    #[test]
+    fn member_missing_version_without_workspace_version_errors() {
+        let root = r#"
+[workspace]
+members = ["packages/*"]
+
+[workspace.package]
+repository = "https://github.com/org/monorepo"
+"#;
+        let member = "[package]\nname = \"core\"\nlib = \"src/lib.wado\"\n";
+        let err = resolve_member(member, root).unwrap_err();
+        assert!(
+            matches!(&err, ManifestError::MissingField { field, .. } if field == "version"),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn member_resolution_surfaces_root_workspace_package_typo() {
+        let root = r#"
+[workspace]
+members = ["packages/*"]
+
+[workspace.package]
+version = "0.1.0"
+licence = "MIT"
+"#;
+        let member = "[package]\nname = \"core\"\nlib = \"src/lib.wado\"\n";
+        let m = resolve_member(member, root).unwrap();
+        let warnings = m.warnings();
+        assert!(
+            warnings.iter().any(|w| matches!(
+                w,
+                ManifestWarning::UnknownField { section: Some(s), field }
+                    if s == "workspace.package" && field == "licence"
+            )),
+            "got {warnings:?}"
+        );
+    }
+
+    #[test]
+    fn workspace_package_conflicting_license_attributed_to_workspace() {
+        let root = r#"
+[workspace]
+members = ["packages/*"]
+
+[workspace.package]
+version = "0.1.0"
+license = "MIT"
+license-file = "LICENSE"
+"#;
+        let member = "[package]\nname = \"core\"\nlib = \"src/lib.wado\"\n";
+        let err = resolve_member(member, root).unwrap_err();
+        assert!(
+            matches!(err, ManifestError::WorkspaceConflictingLicense),
+            "{err:?}"
+        );
+        let err = root.parse::<Manifest>().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::WorkspaceConflictingLicense),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn workspace_package_invalid_spdx_rejected() {
+        let root = r#"
+[workspace]
+members = ["packages/*"]
+
+[workspace.package]
+version = "0.1.0"
+license = "Not A License"
+"#;
+        let err = root.parse::<Manifest>().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::WorkspaceInvalidLicense { .. }),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn unknown_workspace_package_field_warns() {
+        let toml = r#"
+[workspace]
+members = ["packages/*"]
+
+[workspace.package]
+version = "0.1.0"
+description = "not inheritable"
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        let warnings = m.warnings();
+        assert!(
+            warnings.iter().any(|w| matches!(
+                w,
+                ManifestWarning::UnknownField { section: Some(s), field }
+                    if s == "workspace.package" && field == "description"
+            )),
+            "got {warnings:?}"
+        );
     }
 }

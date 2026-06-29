@@ -23,7 +23,7 @@ use { parse_text_range } from "core:prelude/fpfmt.wado";
 ///
 /// Whitespace is not touched. An empty input, a lone sign, a lone radix
 /// prefix, or a stray underscore-only body yields `Err`.
-pub fn lenient_int_preprocess(s: &String) -> Result<[String, u32], LenientParseError> {
+internal fn lenient_int_preprocess(s: &String) -> Result<[String, u32], LenientParseError> {
     let len = s.len();
     if len == 0 {
         return Result::Err(LenientParseError::new("empty integer string"));
@@ -69,7 +69,7 @@ pub fn lenient_int_preprocess(s: &String) -> Result<[String, u32], LenientParseE
 }
 
 /// Render a `ParseIntError` as a `LenientParseError` reason.
-pub fn lenient_int_error(e: ParseIntError) -> LenientParseError {
+internal fn lenient_int_error(e: ParseIntError) -> LenientParseError {
     let reason = match e.kind() {
         Empty => "empty integer string",
         InvalidDigit => "invalid digit in integer string",
@@ -80,7 +80,7 @@ pub fn lenient_int_error(e: ParseIntError) -> LenientParseError {
 }
 
 /// Render a `ParseFloatError` as a `LenientParseError` reason.
-pub fn lenient_float_error(e: ParseFloatError) -> LenientParseError {
+internal fn lenient_float_error(e: ParseFloatError) -> LenientParseError {
     let reason = match e.kind() {
         Empty => "empty float string",
         Invalid => "invalid float string",
@@ -97,7 +97,7 @@ pub fn lenient_float_error(e: ParseFloatError) -> LenientParseError {
 /// token is numeric (starts, after an optional sign, with a digit or `.`).
 /// A special word like `inf` / `nan` starts with a letter and is handed
 /// through unchanged, so a `_` inside it (`i_nf`) stays invalid.
-pub fn lenient_float_preprocess(s: &String) -> String {
+internal fn lenient_float_preprocess(s: &String) -> String {
     let len = s.len();
     let head = if len > 0 && (s.get_byte_unchecked(0) == '+' as u8 || s.get_byte_unchecked(0) == '-' as u8) {
         1;
@@ -124,7 +124,7 @@ pub fn lenient_float_preprocess(s: &String) -> String {
 }
 
 /// Kind of failure returned by integer parsing.
-pub enum IntErrorKind {
+internal enum IntErrorKind {
     /// The input string was empty.
     Empty,
     /// The input contained a character that is not a valid digit in the radix.
@@ -136,7 +136,7 @@ pub enum IntErrorKind {
 }
 
 /// Error returned by integer parsing.
-pub struct ParseIntError {
+internal struct ParseIntError {
     pub kind: IntErrorKind,
 }
 
@@ -152,7 +152,7 @@ impl ParseIntError {
 }
 
 /// Kind of failure returned by float parsing.
-pub enum FloatErrorKind {
+internal enum FloatErrorKind {
     /// The input string was empty.
     Empty,
     /// The input was malformed.
@@ -160,7 +160,7 @@ pub enum FloatErrorKind {
 }
 
 /// Error returned by float parsing.
-pub struct ParseFloatError {
+internal struct ParseFloatError {
     pub kind: FloatErrorKind,
 }
 
@@ -204,7 +204,7 @@ fn range_in_bounds(s: &String, start: i32, end: i32) -> bool {
 /// Returns `Err(Empty)` if the range is empty or out of bounds,
 /// `Err(InvalidDigit)` on bad characters, or `Err(PosOverflow)` if the
 /// accumulator exceeds `u64::MAX`.
-pub fn parse_u64_digits(s: &String, start: i32, end: i32, radix: u32) -> Result<u64, IntErrorKind> {
+internal fn parse_u64_digits(s: &String, start: i32, end: i32, radix: u32) -> Result<u64, IntErrorKind> {
     if !range_in_bounds(s, start, end) || start == end {
         return Result::Err(IntErrorKind::Empty);
     }
@@ -229,7 +229,7 @@ pub fn parse_u64_digits(s: &String, start: i32, end: i32, radix: u32) -> Result<
 
 /// Parse the bytes `s[start..end)` as an unsigned integer in the given radix,
 /// accumulating into a `u128`. Caller strips any sign.
-pub fn parse_u128_digits(s: &String, start: i32, end: i32, radix: u32) -> Result<u128, IntErrorKind> {
+internal fn parse_u128_digits(s: &String, start: i32, end: i32, radix: u32) -> Result<u128, IntErrorKind> {
     if !range_in_bounds(s, start, end) || start == end {
         return Result::Err(IntErrorKind::Empty);
     }
@@ -261,7 +261,7 @@ pub fn parse_u128_digits(s: &String, start: i32, end: i32, radix: u32) -> Result
 /// Rejects empty or out-of-bounds input as `Empty` and a sign with no
 /// following digits (e.g. lone `"+"` or `"-"`) as `InvalidDigit`. Per-type
 /// bound checks are reserved for the caller.
-pub fn parse_signed_prefix_range(s: &String, start: i32, end: i32) -> Result<[bool, i32], IntErrorKind> {
+internal fn parse_signed_prefix_range(s: &String, start: i32, end: i32) -> Result<[bool, i32], IntErrorKind> {
     if !range_in_bounds(s, start, end) || start == end {
         return Result::Err(IntErrorKind::Empty);
     }
@@ -281,7 +281,7 @@ pub fn parse_signed_prefix_range(s: &String, start: i32, end: i32) -> Result<[bo
 ///
 /// Rejects empty or out-of-bounds input as `Empty` and `-`-prefixed input
 /// as `InvalidDigit` per Rust's behaviour.
-pub fn parse_unsigned_prefix_range(s: &String, start: i32, end: i32) -> Result<i32, IntErrorKind> {
+internal fn parse_unsigned_prefix_range(s: &String, start: i32, end: i32) -> Result<i32, IntErrorKind> {
     if !range_in_bounds(s, start, end) || start == end {
         return Result::Err(IntErrorKind::Empty);
     }
@@ -296,7 +296,7 @@ pub fn parse_unsigned_prefix_range(s: &String, start: i32, end: i32) -> Result<i
 }
 
 /// Check that the radix is supported (2..=36); panic otherwise.
-pub fn assert_radix(radix: u32) {
+internal fn assert_radix(radix: u32) {
     if radix < 2 || radix > 36 {
         panic("from_str_radix: radix must be in 2..=36");
     }
@@ -306,12 +306,12 @@ pub fn assert_radix(radix: u32) {
 /// parsing a full string (no extracted slice). Both forms take
 /// `&String`, so this is a naming distinction — picking the non-range
 /// entry communicates "no range" at the call site.
-pub fn parse_signed_prefix(s: &String) -> Result<[bool, i32], IntErrorKind> {
+internal fn parse_signed_prefix(s: &String) -> Result<[bool, i32], IntErrorKind> {
     return parse_signed_prefix_range(s, 0, s.len());
 }
 
 /// Non-range variant of `parse_unsigned_prefix_range`.
-pub fn parse_unsigned_prefix(s: &String) -> Result<i32, IntErrorKind> {
+internal fn parse_unsigned_prefix(s: &String) -> Result<i32, IntErrorKind> {
     return parse_unsigned_prefix_range(s, 0, s.len());
 }
 
@@ -320,7 +320,7 @@ pub fn parse_unsigned_prefix(s: &String) -> Result<i32, IntErrorKind> {
 /// `min_abs` is the absolute value of the most negative representable value
 /// (e.g. for i32, `max = 2147483647`, `min_abs = 2147483648`). Handles the
 /// optional leading `+`/`-` sign.
-pub fn parse_i64_radix_range(
+internal fn parse_i64_radix_range(
     s: &String,
     start: i32,
     end: i32,
@@ -357,7 +357,7 @@ pub fn parse_i64_radix_range(
 
 /// Parse an unsigned integer in the given radix from `s[start..end)`,
 /// clamped to `[0, max]`.
-pub fn parse_u64_radix_range(s: &String, start: i32, end: i32, radix: u32, max: u64) -> Result<u64, ParseIntError> {
+internal fn parse_u64_radix_range(s: &String, start: i32, end: i32, radix: u32, max: u64) -> Result<u64, ParseIntError> {
     assert_radix(radix);
     let digit_start = match parse_unsigned_prefix_range(s, start, end) {
         Ok(i) => i,
@@ -372,19 +372,19 @@ pub fn parse_u64_radix_range(s: &String, start: i32, end: i32, radix: u32, max: 
 }
 
 /// Non-range variant of `parse_i64_radix_range`.
-pub fn parse_i64_radix(s: &String, radix: u32, max: i64, min_abs: u64) -> Result<i64, ParseIntError> {
+internal fn parse_i64_radix(s: &String, radix: u32, max: i64, min_abs: u64) -> Result<i64, ParseIntError> {
     return parse_i64_radix_range(s, 0, s.len(), radix, max, min_abs);
 }
 
 /// Non-range variant of `parse_u64_radix_range`.
-pub fn parse_u64_radix(s: &String, radix: u32, max: u64) -> Result<u64, ParseIntError> {
+internal fn parse_u64_radix(s: &String, radix: u32, max: u64) -> Result<u64, ParseIntError> {
     return parse_u64_radix_range(s, 0, s.len(), radix, max);
 }
 
 /// Parse a `f64` from the byte range `s[start..end)` without allocating
 /// a substring. Out-of-bounds or empty ranges return `Err(Empty)` so the
 /// public surface stays total (no trap on a bad index).
-pub fn parse_f64_from_str_range(s: &String, start: i32, end: i32) -> Result<f64, ParseFloatError> {
+internal fn parse_f64_from_str_range(s: &String, start: i32, end: i32) -> Result<f64, ParseFloatError> {
     if !range_in_bounds(s, start, end) || start == end {
         return Result::Err(ParseFloatError::new(FloatErrorKind::Empty));
     }
@@ -395,6 +395,6 @@ pub fn parse_f64_from_str_range(s: &String, start: i32, end: i32) -> Result<f64,
 }
 
 /// Non-range variant of `parse_f64_from_str_range`.
-pub fn parse_f64_from_str(s: &String) -> Result<f64, ParseFloatError> {
+internal fn parse_f64_from_str(s: &String) -> Result<f64, ParseFloatError> {
     return parse_f64_from_str_range(s, 0, s.len());
 }

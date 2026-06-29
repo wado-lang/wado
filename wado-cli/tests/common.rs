@@ -46,3 +46,15 @@ pub fn runtime() -> tokio::runtime::Runtime {
         .build()
         .unwrap()
 }
+
+/// The custom sections `(name, payload)` of a compiled component at `wasm_path`.
+pub fn custom_sections(wasm_path: &Path) -> Vec<(String, Vec<u8>)> {
+    let bytes = std::fs::read(wasm_path).unwrap();
+    let mut out = Vec::new();
+    for payload in wasmparser::Parser::new(0).parse_all(&bytes) {
+        if let Ok(wasmparser::Payload::CustomSection(reader)) = payload {
+            out.push((reader.name().to_string(), reader.data().to_vec()));
+        }
+    }
+    out
+}

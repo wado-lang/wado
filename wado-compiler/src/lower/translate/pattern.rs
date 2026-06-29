@@ -5,9 +5,9 @@ use crate::module_source::ModuleSource;
 use crate::name::LocalMethodName;
 use crate::tir::FunctionRef;
 use crate::tir::{
-    CallArg, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirField, TirFunction,
-    TirLiteralPattern, TirLocal, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
-    TypeTable,
+    CallArg, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirField,
+    TirFunction, TirLiteralPattern, TirLocal, TirMatchArm, TirPattern, TirStmt, TirStmtKind,
+    TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -145,6 +145,8 @@ pub struct Lowering {
     eq_trait_name: String,
     /// Canonical stdlib name of the `String` struct.
     string_struct_name: String,
+    /// Immutable globals with a bare integer-literal initializer, keyed by `(module, name)`.
+    const_int_globals: IndexMap<(ModuleSource, String), i128>,
 }
 
 impl Lowering {
@@ -168,6 +170,18 @@ impl Lowering {
             struct_fields_map.insert((s.name.clone(), s.module_source.clone()), s.fields.clone());
         }
 
+        let mut const_int_globals: IndexMap<(ModuleSource, String), i128> = IndexMap::default();
+        for g in &flat.globals {
+            if !g.mutable
+                && let TirExprKind::IntLiteral { value, .. } = &g.initializer.kind
+            {
+                const_int_globals.insert(
+                    (g.module_source.clone(), g.name.clone()),
+                    i128::from(*value),
+                );
+            }
+        }
+
         let type_table = flat.type_table.borrow();
         let eq_trait_name = type_table
             .compiler_trait_name(crate::compiler_item::CompilerItem::Eq)
@@ -180,6 +194,7 @@ impl Lowering {
             struct_fields_map,
             eq_trait_name,
             string_struct_name,
+            const_int_globals,
         }
     }
 
@@ -199,6 +214,7 @@ impl Lowering {
             self.string_struct_name.clone(),
             &self.variant_case_map,
             &self.struct_fields_map,
+            &self.const_int_globals,
         );
         lowerer.lower_block(&mut body, type_table);
 
@@ -232,6 +248,8 @@ struct PatternLowerer<'a> {
     variant_case_map: &'a IndexMap<(String, ModuleSource), Vec<(String, u32)>>,
     /// Map from (`struct_name`, `module_source`) to field definitions
     struct_fields_map: &'a IndexMap<(String, ModuleSource), Vec<TirField>>,
+    /// Immutable integer-literal globals; see `Lowering::const_int_globals`.
+    const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
 }
 
 impl<'a> PatternLowerer<'a> {
@@ -242,6 +260,7 @@ impl<'a> PatternLowerer<'a> {
         string_struct_name: String,
         variant_case_map: &'a IndexMap<(String, ModuleSource), Vec<(String, u32)>>,
         struct_fields_map: &'a IndexMap<(String, ModuleSource), Vec<TirField>>,
+        const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
     ) -> Self {
         Self {
             local_count,
@@ -251,6 +270,7 @@ impl<'a> PatternLowerer<'a> {
             string_struct_name,
             variant_case_map,
             struct_fields_map,
+            const_int_globals,
         }
     }
 
@@ -2021,6 +2041,42 @@ impl<'a> PatternLowerer<'a> {
                             None => cond,
                         });
                     }
+                }
+
+                for arm in arms.iter_mut() {
+                    if arm.guard.is_some() {
+                        continue;
+                    }
+                    let TirPattern::ConstantValue { expr: const_expr } = &arm.pattern else {
+                        continue;
+                    };
+                    let TirExprKind::GlobalVarGet {
+                        module_source,
+                        name,
+                    } = &const_expr.kind
+                    else {
+                        continue;
+                    };
+                    let Some(&value) = self
+                        .const_int_globals
+                        .get(&(module_source.clone(), name.clone()))
+                    else {
+                        continue;
+                    };
+                    let unsigned = matches!(
+                        type_table.get(scrutinee_type_id),
+                        ResolvedType::Primitive(
+                            PrimitiveType::U8
+                                | PrimitiveType::U16
+                                | PrimitiveType::U32
+                                | PrimitiveType::U64
+                        )
+                    );
+                    arm.pattern = if unsigned {
+                        TirPattern::Literal(TirLiteralPattern::U128(value as u128))
+                    } else {
+                        TirPattern::Literal(TirLiteralPattern::I128(value))
+                    };
                 }
 
                 // Lower top-level constant value patterns into binding + guard

@@ -175,7 +175,7 @@ pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) ->
         let mut shallow = project.functions[deep_key.index()].borrow().clone();
         shallow.name.clone_from(&new_name);
         shallow.kind = FunctionKind::Regular;
-        shallow.is_pub = false;
+        shallow.visibility = crate::ast::Visibility::Private;
         shallow.is_export = false;
         let id = FuncId::new(next);
         next += 1;

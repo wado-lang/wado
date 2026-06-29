@@ -3403,6 +3403,10 @@ Returns an iterator over the UTF-8 bytes of the string.
 
 Returns an iterator over the Unicode scalar values (chars) of the string.
 
+#### `pub fn to_chars(&self) -> List<char>`
+
+Decode the whole string into an owned `List<char>`.
+
 #### `pub fn char_at_byte(&self, byte_index: i32) -> Option<char>`
 
 Decodes the UTF-8 character starting at the given byte index.

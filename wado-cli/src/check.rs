@@ -130,7 +130,7 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
 
     let manifest_root = manifest_pair
         .as_ref()
-        .map(|(_, root)| root.clone())
+        .map(|p| p.root.clone())
         .unwrap_or_else(|| {
             path.parent()
                 .map(std::path::Path::to_path_buf)
@@ -156,7 +156,7 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
         CheckOutcome::default()
     } else {
         let manifest = manifest_pair
-            .map(|(m, _)| m)
+            .map(|p| p.manifest)
             .unwrap_or_else(crate::compile::empty_manifest);
         crate::compile::rewrite_build_dep_modules(&mut inline, &manifest, &manifest_root);
         crate::compile::rewrite_local_dir_modules(&mut inline, &manifest_root);

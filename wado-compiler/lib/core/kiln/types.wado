@@ -5,7 +5,7 @@
 /// The file is always supplied by value so that the initial input
 /// set is fully determined by the invocation declaration.
 #[cm("core:kiln/types@0.1.0#input-file")]
-pub struct InputFile {
+internal struct InputFile {
     #[cm("path")]
     pub path: String,
     #[cm("content")]
@@ -27,7 +27,7 @@ pub struct InputFile {
 /// numeric representation) lets the cache key hash the wire bytes
 /// directly.
 #[cm("core:kiln/types@0.1.0#raw-request")]
-pub struct RawRequest {
+internal struct RawRequest {
     #[cm("primary")]
     pub primary: InputFile,
     #[cm("inputs")]
@@ -41,7 +41,7 @@ pub struct RawRequest {
 /// Exactly one output file must be the entry module; supplementary
 /// files are referenced from the entry via ordinary Wado `use`.
 #[cm("core:kiln/types@0.1.0#output-file")]
-pub struct OutputFile {
+internal struct OutputFile {
     #[cm("path")]
     pub path: String,
     #[cm("content")]
@@ -51,13 +51,13 @@ pub struct OutputFile {
 }
 
 #[cm("core:kiln/types@0.1.0#response")]
-pub struct Response {
+internal struct Response {
     #[cm("files")]
     pub files: List<OutputFile>,
 }
 
 #[cm("core:kiln/types@0.1.0#error")]
-pub variant Error {
+internal variant Error {
     #[cm("invalid-schema")]
     InvalidSchema(String),
     #[cm("unsupported")]

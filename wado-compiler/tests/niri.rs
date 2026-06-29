@@ -3436,7 +3436,7 @@ fn make_pure_fn(
         is_dead: false,
         name: name.to_string(),
         module_source: ModuleSource::default(),
-        is_pub: true,
+        visibility: wado_compiler::ast::Visibility::Public,
         is_export: false,
         is_async: false,
         type_params: Vec::new(),

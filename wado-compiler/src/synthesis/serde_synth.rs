@@ -1163,7 +1163,7 @@ fn generate_struct_serialize(
     Some(TirFunction {
         module_source: ModuleSource::default(),
         name: qualified_name,
-        is_pub: true,
+        visibility: crate::ast::Visibility::Public,
         is_export: false,
         is_cm_export: false,
         is_ambient: false,
@@ -1697,7 +1697,7 @@ fn generate_struct_deserialize(
     let deser_func = TirFunction {
         module_source: ModuleSource::default(),
         name: qualified_name,
-        is_pub: true,
+        visibility: crate::ast::Visibility::Public,
         is_export: false,
         is_cm_export: false,
         is_ambient: false,
@@ -1881,7 +1881,7 @@ fn field_schema_method_fn(
     TirFunction {
         module_source: ModuleSource::default(),
         name: MethodName::format_local(type_name, Some(field_schema_trait), method),
-        is_pub: true,
+        visibility: crate::ast::Visibility::Public,
         is_export: false,
         is_cm_export: false,
         is_ambient: false,
@@ -2178,7 +2178,7 @@ fn generate_enum_serialize(
     Some(TirFunction {
         module_source: ModuleSource::default(),
         name: qualified_name,
-        is_pub: true,
+        visibility: crate::ast::Visibility::Public,
         is_export: false,
         is_cm_export: false,
         is_ambient: false,
@@ -2706,7 +2706,7 @@ fn generate_variant_family_deserialize(
     TirFunction {
         module_source: ModuleSource::default(),
         name: qualified_name,
-        is_pub: true,
+        visibility: crate::ast::Visibility::Public,
         is_export: false,
         is_cm_export: false,
         is_ambient: false,
@@ -2994,7 +2994,7 @@ fn generate_variant_serialize(
     Some(TirFunction {
         module_source: ModuleSource::default(),
         name: qualified_name,
-        is_pub: true,
+        visibility: crate::ast::Visibility::Public,
         is_export: false,
         is_cm_export: false,
         is_ambient: false,
@@ -3305,7 +3305,7 @@ fn generate_flags_serialize(
     Some(TirFunction {
         module_source: ModuleSource::default(),
         name: qualified_name,
-        is_pub: true,
+        visibility: crate::ast::Visibility::Public,
         is_export: false,
         is_cm_export: false,
         is_ambient: false,
@@ -3695,7 +3695,7 @@ fn generate_flags_deserialize(
     Some(TirFunction {
         module_source: ModuleSource::default(),
         name: qualified_name,
-        is_pub: true,
+        visibility: crate::ast::Visibility::Public,
         is_export: false,
         is_cm_export: false,
         is_ambient: false,

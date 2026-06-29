@@ -3,7 +3,10 @@
 Performance comparison of Wado (Wasm/wasmtime) against native compilers.
 
 Environment: Wado 2026-06-25, wasmtime 46.0.0, gcc 13.3.0, rustc 1.96.0,
-Node.js v26.3.1, Bun 1.3.11, Linux x86_64.
+Node.js v26.3.1, Bun 1.3.11, Linux x86_64. SQL Parse and Syntax Highlight were
+re-measured 2026-06-28 on a slower host (Node.js v24.14.1); their rows are
+internally consistent (Wado and every reference re-run together) but not
+directly comparable in absolute MB/s to the other sections — read `vs best`.
 
 All figures report **throughput** (work per second; higher is better) with
 the per-iteration time in parentheses. Each phase warms up once, then
@@ -123,8 +126,8 @@ Parse 81 SQL statements (13366 bytes). Gale-generated parser vs sqlparser-rs.
 
 | Implementation      | Throughput | ms/iter  | vs best |
 | ------------------- | ---------- | -------- | ------- |
-| Rust (sqlparser-rs) | 7.64 MB/s  | 1.749 ms | 1.00x   |
-| **Wado** (Gale)     | 5.53 MB/s  | 2.417 ms | 1.38x   |
+| Rust (sqlparser-rs) | 6.86 MB/s  | 1.947 ms | 1.00x   |
+| **Wado** (Gale)     | 4.81 MB/s  | 2.777 ms | 1.43x   |
 
 ## Syntax Highlight
 
@@ -142,12 +145,12 @@ four reference SQL highlighters:
 
 | Implementation               | Throughput  | ms/iter   | vs best |
 | ---------------------------- | ----------- | --------- | ------- |
-| JavaScript (Prism)           | 8.99 MB/s   | 1.486 ms  | 1.00x   |
-| **Wado** (Gale)              | 3.09 MB/s   | 4.330 ms  | 2.91x   |
-| JavaScript (Lezer)           | 2.69 MB/s   | 4.970 ms  | 3.34x   |
-| Rust (tree-sitter)           | 2.67 MB/s   | 5.006 ms  | 3.37x   |
-| JavaScript (web-tree-sitter) | 1.58 MB/s   | 8.441 ms  | 5.68x   |
-| JavaScript (Shiki)           | 663.36 KB/s | 20.149 ms | 13.56x  |
+| JavaScript (Prism)           | 6.54 MB/s   | 2.044 ms  | 1.00x   |
+| **Wado** (Gale)              | 2.66 MB/s   | 5.020 ms  | 2.46x   |
+| JavaScript (Lezer)           | 2.30 MB/s   | 5.807 ms  | 2.84x   |
+| Rust (tree-sitter)           | 2.25 MB/s   | 5.944 ms  | 2.91x   |
+| JavaScript (web-tree-sitter) | 1.34 MB/s   | 9.944 ms  | 4.88x   |
+| JavaScript (Shiki)           | 576.71 KB/s | 23.176 ms | 11.34x  |
 
 Notes:
 

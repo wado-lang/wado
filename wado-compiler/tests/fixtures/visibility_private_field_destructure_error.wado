@@ -1,0 +1,11 @@
+//! Destructuring a file-private field from another module is a compile error,
+//! just like reading it through field access.
+use { Secret, make_secret } from "./sub/internal_field_module.wado";
+
+export fn run() {
+    let s = make_secret("x", 5);
+    let Secret { label, hidden } = s;
+}
+
+__DATA__
+{"compile_error": "field `hidden` of struct `Secret` is private to its defining file; mark it `internal`"}

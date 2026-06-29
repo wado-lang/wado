@@ -22,6 +22,8 @@ pub mod kiln_provider;
 pub mod kiln_runtime;
 pub mod lsp;
 pub mod manifest;
+pub mod metadata_embed;
+pub mod publish;
 pub mod query;
 pub mod query_adapter;
 pub mod registry;

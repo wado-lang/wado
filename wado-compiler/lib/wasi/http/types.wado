@@ -4,7 +4,7 @@
 use { Duration } from "wasi:clocks/types.wado";
 
 /// This type corresponds to HTTP standard Methods.
-#[cm("wasi:http/types@0.3.0-rc-2026-03-15#method")]
+#[cm("wasi:http/types@0.3.0#method")]
 pub variant Method {
     #[cm("get")]
     Get,
@@ -29,7 +29,7 @@ pub variant Method {
 }
 
 /// This type corresponds to HTTP standard Related Schemes.
-#[cm("wasi:http/types@0.3.0-rc-2026-03-15#scheme")]
+#[cm("wasi:http/types@0.3.0#scheme")]
 pub variant Scheme {
     #[cm("HTTP")]
     Http,
@@ -40,7 +40,7 @@ pub variant Scheme {
 }
 
 /// Defines the case payload type for `DNS-error` above:
-#[cm("wasi:http/types@0.3.0-rc-2026-03-15#DNS-error-payload")]
+#[cm("wasi:http/types@0.3.0#DNS-error-payload")]
 pub struct DnsErrorPayload {
     #[cm("rcode")]
     pub rcode: Option<String>,
@@ -49,7 +49,7 @@ pub struct DnsErrorPayload {
 }
 
 /// Defines the case payload type for `TLS-alert-received` above:
-#[cm("wasi:http/types@0.3.0-rc-2026-03-15#TLS-alert-received-payload")]
+#[cm("wasi:http/types@0.3.0#TLS-alert-received-payload")]
 pub struct TlsAlertReceivedPayload {
     #[cm("alert-id")]
     pub alert_id: Option<u8>,
@@ -58,7 +58,7 @@ pub struct TlsAlertReceivedPayload {
 }
 
 /// Defines the case payload type for `HTTP-response-{header,trailer}-size` above:
-#[cm("wasi:http/types@0.3.0-rc-2026-03-15#field-size-payload")]
+#[cm("wasi:http/types@0.3.0#field-size-payload")]
 pub struct FieldSizePayload {
     #[cm("field-name")]
     pub field_name: Option<String>,
@@ -68,7 +68,7 @@ pub struct FieldSizePayload {
 
 /// These cases are inspired by the IANA HTTP Proxy Error Types:
 ///   <https://www.iana.org/assignments/http-proxy-status/http-proxy-status.xhtml#table-http-proxy-error-types>
-#[cm("wasi:http/types@0.3.0-rc-2026-03-15#error-code")]
+#[cm("wasi:http/types@0.3.0#error-code")]
 pub variant ErrorCode {
     #[cm("DNS-timeout")]
     DnsTimeout,
@@ -157,7 +157,7 @@ pub variant ErrorCode {
 
 /// This type enumerates the different kinds of errors that may occur when
 /// setting or appending to a `fields` resource.
-#[cm("wasi:http/types@0.3.0-rc-2026-03-15#header-error")]
+#[cm("wasi:http/types@0.3.0#header-error")]
 pub variant HeaderError {
     /// This error indicates that a `field-name` or `field-value` was
     /// syntactically invalid when used with an operation that sets headers in a
@@ -190,7 +190,7 @@ pub variant HeaderError {
 
 /// This type enumerates the different kinds of errors that may occur when
 /// setting fields of a `request-options` resource.
-#[cm("wasi:http/types@0.3.0-rc-2026-03-15#request-options-error")]
+#[cm("wasi:http/types@0.3.0#request-options-error")]
 pub variant RequestOptionsError {
     /// Indicates the specified field is not supported by this implementation.
     #[cm("not-supported")]
@@ -209,19 +209,19 @@ pub variant RequestOptionsError {
     Other(Option<String>),
 }
 
-#[cm("wasi:http/types@0.3.0-rc-2026-03-15#field-name")]
+#[cm("wasi:http/types@0.3.0#field-name")]
 pub type FieldName = String;
 
-#[cm("wasi:http/types@0.3.0-rc-2026-03-15#field-value")]
+#[cm("wasi:http/types@0.3.0#field-value")]
 pub type FieldValue = List<u8>;
 
-#[cm("wasi:http/types@0.3.0-rc-2026-03-15#headers")]
+#[cm("wasi:http/types@0.3.0#headers")]
 pub type Headers = Fields;
 
-#[cm("wasi:http/types@0.3.0-rc-2026-03-15#trailers")]
+#[cm("wasi:http/types@0.3.0#trailers")]
 pub type Trailers = Fields;
 
-#[cm("wasi:http/types@0.3.0-rc-2026-03-15#status-code")]
+#[cm("wasi:http/types@0.3.0#status-code")]
 pub type StatusCode = u16;
 
 /// This following block defines the `fields` resource which corresponds to
@@ -243,12 +243,12 @@ pub type StatusCode = u16;
 /// Implementations may impose limits on individual field values and on total
 /// aggregate field section size. Operations that would exceed these limits
 /// fail with `header-error.size-exceeded`
-#[cm("wasi:http/types@0.3.0-rc-2026-03-15#fields")]
+#[cm("wasi:http/types@0.3.0#fields")]
 pub resource Fields {
     /// Construct an empty HTTP Fields.
     /// 
     /// The resulting `fields` is mutable.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[constructor]fields")]
+    #[cm("wasi:http/types@0.3.0#[constructor]fields")]
     fn new() -> Fields;
     /// Construct an HTTP Fields.
     /// 
@@ -266,19 +266,19 @@ pub resource Fields {
     /// An error result will be returned if any header or value was
     /// syntactically invalid, if a header was forbidden, or if the
     /// entries would exceed an implementation size limit.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[static]fields.from-list")]
+    #[cm("wasi:http/types@0.3.0#[static]fields.from-list")]
     #[cm_params("entries")]
     fn from_list(entries: List<[FieldName, FieldValue]>) -> Result<Fields, HeaderError>;
     /// Get all of the values corresponding to a name. If the name is not present
     /// in this `fields`, an empty list is returned. However, if the name is
     /// present but empty, this is represented by a list with one or more
     /// empty field-values present.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]fields.get")]
+    #[cm("wasi:http/types@0.3.0#[method]fields.get")]
     #[cm_params("self", "name")]
     fn get(self: &Fields, name: FieldName) -> List<FieldValue>;
     /// Returns `true` when the name is present in this `fields`. If the name is
     /// syntactically invalid, `false` is returned.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]fields.has")]
+    #[cm("wasi:http/types@0.3.0#[method]fields.has")]
     #[cm_params("self", "name")]
     fn has(self: &Fields, name: FieldName) -> bool;
     /// Set all of the values for a name. Clears any existing values for that
@@ -288,14 +288,14 @@ pub resource Fields {
     /// 
     /// Fails with `header-error.size-exceeded` if the name or values would
     /// exceed an implementation-defined size limit.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]fields.set")]
+    #[cm("wasi:http/types@0.3.0#[method]fields.set")]
     #[cm_params("self", "name", "value")]
     fn set(self: &Fields, name: FieldName, value: List<FieldValue>) -> Result<(), HeaderError>;
     /// Delete all values for a name. Does nothing if no values for the name
     /// exist.
     /// 
     /// Fails with `header-error.immutable` if the `fields` are immutable.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]fields.delete")]
+    #[cm("wasi:http/types@0.3.0#[method]fields.delete")]
     #[cm_params("self", "name")]
     fn delete(self: &Fields, name: FieldName) -> Result<(), HeaderError>;
     /// Delete all values for a name. Does nothing if no values for the name
@@ -304,7 +304,7 @@ pub resource Fields {
     /// Returns all values previously corresponding to the name, if any.
     /// 
     /// Fails with `header-error.immutable` if the `fields` are immutable.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]fields.get-and-delete")]
+    #[cm("wasi:http/types@0.3.0#[method]fields.get-and-delete")]
     #[cm_params("self", "name")]
     fn get_and_delete(self: &Fields, name: FieldName) -> Result<List<FieldValue>, HeaderError>;
     /// Append a value for a name. Does not change or delete any existing
@@ -314,7 +314,7 @@ pub resource Fields {
     /// 
     /// Fails with `header-error.size-exceeded` if the value would exceed
     /// an implementation-defined size limit.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]fields.append")]
+    #[cm("wasi:http/types@0.3.0#[method]fields.append")]
     #[cm_params("self", "name", "value")]
     fn append(self: &Fields, name: FieldName, value: FieldValue) -> Result<(), HeaderError>;
     /// Retrieve the full set of names and values in the Fields. Like the
@@ -326,19 +326,19 @@ pub resource Fields {
     /// 
     /// The names and values are always returned in the original casing and in
     /// the order in which they will be serialized for transport.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]fields.copy-all")]
+    #[cm("wasi:http/types@0.3.0#[method]fields.copy-all")]
     #[cm_params("self")]
     fn copy_all(self: &Fields) -> List<[FieldName, FieldValue]>;
     /// Make a deep copy of the Fields. Equivalent in behavior to calling the
     /// `fields` constructor on the return value of `copy-all`. The resulting
     /// `fields` is mutable.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]fields.clone")]
+    #[cm("wasi:http/types@0.3.0#[method]fields.clone")]
     #[cm_params("self")]
     fn clone(self: &Fields) -> Fields;
 }
 
 /// Represents an HTTP Request.
-#[cm("wasi:http/types@0.3.0-rc-2026-03-15#request")]
+#[cm("wasi:http/types@0.3.0#request")]
 pub resource Request {
     /// Construct a new `request` with a default `method` of `GET`, and
     /// `none` values for `path-with-query`, `scheme`, and `authority`.
@@ -361,7 +361,7 @@ pub resource Request {
     /// to reject invalid constructions of `request`.
     /// 
     /// The returned future resolves to result of transmission of this request.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[static]request.new")]
+    #[cm("wasi:http/types@0.3.0#[static]request.new")]
     #[cm_params("headers", "contents", "trailers", "options")]
     fn new(
         headers: Headers,
@@ -370,47 +370,47 @@ pub resource Request {
         options: Option<RequestOptions>,
     ) -> [Request, Future<Result<(), ErrorCode>>];
     /// Get the Method for the Request.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]request.get-method")]
+    #[cm("wasi:http/types@0.3.0#[method]request.get-method")]
     #[cm_params("self")]
     fn get_method(self: &Request) -> Method;
     /// Set the Method for the Request. Fails if the string present in a
     /// `method.other` argument is not a syntactically valid method.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]request.set-method")]
+    #[cm("wasi:http/types@0.3.0#[method]request.set-method")]
     #[cm_params("self", "method")]
     fn set_method(self: &Request, method: Method) -> Result<(), ()>;
     /// Get the combination of the HTTP Path and Query for the Request.  When
     /// `none`, this represents an empty Path and empty Query.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]request.get-path-with-query")]
+    #[cm("wasi:http/types@0.3.0#[method]request.get-path-with-query")]
     #[cm_params("self")]
     fn get_path_with_query(self: &Request) -> Option<String>;
     /// Set the combination of the HTTP Path and Query for the Request.  When
     /// `none`, this represents an empty Path and empty Query. Fails is the
     /// string given is not a syntactically valid path and query uri component.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]request.set-path-with-query")]
+    #[cm("wasi:http/types@0.3.0#[method]request.set-path-with-query")]
     #[cm_params("self", "path-with-query")]
     fn set_path_with_query(self: &Request, path_with_query: Option<String>) -> Result<(), ()>;
     /// Get the HTTP Related Scheme for the Request. When `none`, the
     /// implementation may choose an appropriate default scheme.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]request.get-scheme")]
+    #[cm("wasi:http/types@0.3.0#[method]request.get-scheme")]
     #[cm_params("self")]
     fn get_scheme(self: &Request) -> Option<Scheme>;
     /// Set the HTTP Related Scheme for the Request. When `none`, the
     /// implementation may choose an appropriate default scheme. Fails if the
     /// string given is not a syntactically valid uri scheme.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]request.set-scheme")]
+    #[cm("wasi:http/types@0.3.0#[method]request.set-scheme")]
     #[cm_params("self", "scheme")]
     fn set_scheme(self: &Request, scheme: Option<Scheme>) -> Result<(), ()>;
     /// Get the authority of the Request's target URI. A value of `none` may be used
     /// with Related Schemes which do not require an authority. The HTTP and
     /// HTTPS schemes always require an authority.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]request.get-authority")]
+    #[cm("wasi:http/types@0.3.0#[method]request.get-authority")]
     #[cm_params("self")]
     fn get_authority(self: &Request) -> Option<String>;
     /// Set the authority of the Request's target URI. A value of `none` may be used
     /// with Related Schemes which do not require an authority. The HTTP and
     /// HTTPS schemes always require an authority. Fails if the string given is
     /// not a syntactically valid URI authority.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]request.set-authority")]
+    #[cm("wasi:http/types@0.3.0#[method]request.set-authority")]
     #[cm_params("self", "authority")]
     fn set_authority(self: &Request, authority: Option<String>) -> Result<(), ()>;
     /// Get the `request-options` to be associated with this request
@@ -421,14 +421,14 @@ pub resource Request {
     /// This `request-options` resource is a child: it must be dropped before
     /// the parent `request` is dropped, or its ownership is transferred to
     /// another component by e.g. `handler.handle`.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]request.get-options")]
+    #[cm("wasi:http/types@0.3.0#[method]request.get-options")]
     #[cm_params("self")]
     fn get_options(self: &Request) -> Option<RequestOptions>;
     /// Get the headers associated with the Request.
     /// 
     /// The returned `headers` resource is immutable: `set`, `append`, and
     /// `delete` operations will fail with `header-error.immutable`.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]request.get-headers")]
+    #[cm("wasi:http/types@0.3.0#[method]request.get-headers")]
     #[cm_params("self")]
     fn get_headers(self: &Request) -> Headers;
     /// Get body of the Request.
@@ -443,7 +443,7 @@ pub resource Request {
     /// 
     /// Note that function will move the `request`, but references to headers or
     /// request options acquired from it previously will remain valid.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[static]request.consume-body")]
+    #[cm("wasi:http/types@0.3.0#[static]request.consume-body")]
     #[cm_params("this", "res")]
     fn consume_body(
         this: Request,
@@ -457,51 +457,51 @@ pub resource Request {
 /// 
 /// These timeouts are separate from any the user may use to bound an
 /// asynchronous call.
-#[cm("wasi:http/types@0.3.0-rc-2026-03-15#request-options")]
+#[cm("wasi:http/types@0.3.0#request-options")]
 pub resource RequestOptions {
     /// Construct a default `request-options` value.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[constructor]request-options")]
+    #[cm("wasi:http/types@0.3.0#[constructor]request-options")]
     fn new() -> RequestOptions;
     /// The timeout for the initial connect to the HTTP Server.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]request-options.get-connect-timeout")]
+    #[cm("wasi:http/types@0.3.0#[method]request-options.get-connect-timeout")]
     #[cm_params("self")]
     fn get_connect_timeout(self: &RequestOptions) -> Option<Duration>;
     /// Set the timeout for the initial connect to the HTTP Server. An error
     /// return value indicates that this timeout is not supported or that this
     /// handle is immutable.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]request-options.set-connect-timeout")]
+    #[cm("wasi:http/types@0.3.0#[method]request-options.set-connect-timeout")]
     #[cm_params("self", "duration")]
     fn set_connect_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>;
     /// The timeout for receiving the first byte of the Response body.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]request-options.get-first-byte-timeout")]
+    #[cm("wasi:http/types@0.3.0#[method]request-options.get-first-byte-timeout")]
     #[cm_params("self")]
     fn get_first_byte_timeout(self: &RequestOptions) -> Option<Duration>;
     /// Set the timeout for receiving the first byte of the Response body. An
     /// error return value indicates that this timeout is not supported or that
     /// this handle is immutable.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]request-options.set-first-byte-timeout")]
+    #[cm("wasi:http/types@0.3.0#[method]request-options.set-first-byte-timeout")]
     #[cm_params("self", "duration")]
     fn set_first_byte_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>;
     /// The timeout for receiving subsequent chunks of bytes in the Response
     /// body stream.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]request-options.get-between-bytes-timeout")]
+    #[cm("wasi:http/types@0.3.0#[method]request-options.get-between-bytes-timeout")]
     #[cm_params("self")]
     fn get_between_bytes_timeout(self: &RequestOptions) -> Option<Duration>;
     /// Set the timeout for receiving subsequent chunks of bytes in the Response
     /// body stream. An error return value indicates that this timeout is not
     /// supported or that this handle is immutable.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]request-options.set-between-bytes-timeout")]
+    #[cm("wasi:http/types@0.3.0#[method]request-options.set-between-bytes-timeout")]
     #[cm_params("self", "duration")]
     fn set_between_bytes_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>;
     /// Make a deep copy of the `request-options`.
     /// The resulting `request-options` is mutable.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]request-options.clone")]
+    #[cm("wasi:http/types@0.3.0#[method]request-options.clone")]
     #[cm_params("self")]
     fn clone(self: &RequestOptions) -> RequestOptions;
 }
 
 /// Represents an HTTP Response.
-#[cm("wasi:http/types@0.3.0-rc-2026-03-15#response")]
+#[cm("wasi:http/types@0.3.0#response")]
 pub resource Response {
     /// Construct a new `response`, with a default `status-code` of `200`.
     /// If a different `status-code` is needed, it must be set via the
@@ -516,7 +516,7 @@ pub resource Response {
     /// will be closed immediately.
     /// 
     /// The returned future resolves to result of transmission of this response.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[static]response.new")]
+    #[cm("wasi:http/types@0.3.0#[static]response.new")]
     #[cm_params("headers", "contents", "trailers")]
     fn new(
         headers: Headers,
@@ -524,19 +524,19 @@ pub resource Response {
         trailers: Future<Result<Option<Trailers>, ErrorCode>>,
     ) -> [Response, Future<Result<(), ErrorCode>>];
     /// Get the HTTP Status Code for the Response.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]response.get-status-code")]
+    #[cm("wasi:http/types@0.3.0#[method]response.get-status-code")]
     #[cm_params("self")]
     fn get_status_code(self: &Response) -> StatusCode;
     /// Set the HTTP Status Code for the Response. Fails if the status-code
     /// given is not a valid http status code.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]response.set-status-code")]
+    #[cm("wasi:http/types@0.3.0#[method]response.set-status-code")]
     #[cm_params("self", "status-code")]
     fn set_status_code(self: &Response, status_code: StatusCode) -> Result<(), ()>;
     /// Get the headers associated with the Response.
     /// 
     /// The returned `headers` resource is immutable: `set`, `append`, and
     /// `delete` operations will fail with `header-error.immutable`.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]response.get-headers")]
+    #[cm("wasi:http/types@0.3.0#[method]response.get-headers")]
     #[cm_params("self")]
     fn get_headers(self: &Response) -> Headers;
     /// Get body of the Response.
@@ -551,7 +551,7 @@ pub resource Response {
     /// 
     /// Note that function will move the `response`, but references to headers
     /// acquired from it previously will remain valid.
-    #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[static]response.consume-body")]
+    #[cm("wasi:http/types@0.3.0#[static]response.consume-body")]
     #[cm_params("this", "res")]
     fn consume_body(
         this: Response,

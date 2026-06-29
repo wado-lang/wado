@@ -397,7 +397,7 @@ pub struct CmInterfaceRegistry {
     /// Newtypes collected from WASI modules (e.g., Instant -> u64).
     /// Key: `(source_interface, wado_name)` where `source_interface` is the
     /// `#[cm("...")]` fragment before the `#` (e.g.
-    /// `"wasi:clocks/types@0.3.0-rc-2026-03-15"`). Keying by interface makes
+    /// `"wasi:clocks/types@0.3.0"`). Keying by interface makes
     /// same-named types from distinct interfaces structurally distinct.
     newtypes: IndexMap<(String, String), Type>,
 
@@ -637,7 +637,7 @@ fn collect_interface_decls(modules: &[(&'static str, crate::ast::Module)]) -> In
             };
             // The interface's CM FQ is the full `#[cm("...")]` argument on the
             // interface declaration itself (e.g.
-            // `"wasi:http/handler@0.3.0-rc-2026-03-15"`). Skip anonymous
+            // `"wasi:http/handler@0.3.0"`). Skip anonymous
             // interfaces without a CM attribute — they are not boundary-
             // visible and cannot back a world export.
             let Some(cm_fq) = iface.attrs.iter().find_map(Attribute::cm_identifier) else {
@@ -690,7 +690,7 @@ fn collect_interface_decls(modules: &[(&'static str, crate::ast::Module)]) -> In
 
 /// The returned map is keyed by the Wado-side identifier (e.g. `Response`)
 /// and points at the interface prefix before the `#` fragment (e.g.
-/// `"wasi:http/types@0.3.0-rc-2026-03-15"`). Effects, structs, variants,
+/// `"wasi:http/types@0.3.0"`). Effects, structs, variants,
 /// enums, flags, resources, and newtypes are all included.
 fn collect_cm_definitions(module: &crate::ast::Module) -> IndexMap<String, String> {
     use crate::ast::Item;
@@ -902,7 +902,7 @@ impl CmInterfaceRegistry {
 
     /// Return the canonical source interface that owns `(kind, name)` — i.e.
     /// the `#[cm("...")]` fragment before the `#` (e.g.
-    /// `"wasi:filesystem/types@0.3.0-rc-2026-03-15"`). `kind` is one of
+    /// `"wasi:filesystem/types@0.3.0"`). `kind` is one of
     /// `"variants"`, `"enums"`, `"resources"`, `"structs"`, `"flags"`, or
     /// `"newtypes"`.
     ///
@@ -953,7 +953,7 @@ impl CmInterfaceRegistry {
     }
 
     /// Extract the source interface (the part before the `#` fragment,
-    /// e.g. `"wasi:cli/stdout@0.3.0-rc-2026-03-15"`) from the
+    /// e.g. `"wasi:cli/stdout@0.3.0"`) from the
     /// first `#[cm("...")]` attribute on a stdlib item. Returns an
     /// empty string if no attribute is present (user-authored items
     /// don't carry this).
@@ -1805,7 +1805,7 @@ impl CmInterfaceRegistry {
     }
 
     /// Get the CM enum variant names scoped to a specific source interface
-    /// (e.g. `"wasi:cli/types@0.3.0-rc-2026-03-15"`). Disambiguates enums
+    /// (e.g. `"wasi:cli/types@0.3.0"`). Disambiguates enums
     /// sharing a Wado name across interfaces. Falls back to the unique WASI
     /// cross-package registrant when the scoped interface does not define the
     /// name. The fallback is limited to the `wasi:` namespace.

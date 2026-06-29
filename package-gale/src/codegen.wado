@@ -13,7 +13,7 @@ use { gen_parser, gen_kind_set_helpers, gen_follow_mask_globals, gen_sync_set_gl
 use { gen_node_kinds, gen_alt_enums, gen_string_tree_helper } from "./cst_gen.wado";
 use { gen_highlight } from "./highlight_gen.wado";
 use { GenContext, sets_overlap } from "./gen_context.wado";
-use { CodeWriter, StructSpec, VariantSpec, EnumSpec } from "./wadopoet.wado";
+use { CodeWriter, StructSpec, VariantSpec, EnumSpec, Vis } from "./wadopoet.wado";
 use { lower } from "./lower.wado";
 use { build_atn_with, serialize_atn, Atn, empty_atn, lr_loop_entry_decision } from "./atn.wado";
 use { build_latn, grammar_needs_latn, LatnResult } from "./latn.wado";
@@ -131,7 +131,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     gen_header(&mut w, grammar);
     if options.trace {
         // Trace logging writes to stderr via the ambient logger.
-        w.line(&"use { log_stderr } from \"core:internal\";");
+        w.line(&"use { log_stderr } from \"core:rt\";");
         w.blank();
     }
     gen_grammar_metadata(&mut w, grammar);
@@ -389,8 +389,7 @@ fn format_option_value(v: &OptionValue) -> String {
 
 
 fn gen_token_kind(w: &mut CodeWriter, lexer_rules: &List<LexerRule>) {
-    let mut e = EnumSpec::new("TokenKind");
-    e.set_pub();
+    let mut e = EnumSpec::new("TokenKind", Vis::Pub);
     for let rule of lexer_rules {
         if !rule.is_fragment {
             if rule.is_virtual {

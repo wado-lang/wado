@@ -590,7 +590,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Check if it's a prelude function (panic, unreachable)
-        // These are defined in core:internal and re-exported by core:prelude
+        // These are defined in core:rt and re-exported by core:prelude
         if matches!(ident.name.as_str(), "panic" | "unreachable") {
             // Stage 7-B: reify rebuilds the prelude `FuncRef`.
             return TypeTable::UNKNOWN;
@@ -1141,9 +1141,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (0, TypeTable::UNKNOWN)
     }
 
-    /// Check if a struct field is accessible from the current module.
-    /// Non-pub fields are private to the module that defines them.
-    fn check_field_visibility(&mut self, struct_type: TypeId, field_name: &str, span: Span) {
+    pub(super) fn check_field_visibility(
+        &mut self,
+        struct_type: TypeId,
+        field_name: &str,
+        span: Span,
+    ) {
         let resolved = self.tysys.type_table.borrow().get(struct_type).clone();
         let (struct_name, module_source) = match resolved {
             ResolvedType::Struct {
@@ -1172,13 +1175,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
 
-        // Look up field visibility
+        let same_package = module_source.same_package(&self.current_module_source);
         if let Some(struct_info) = self.lookup_struct_fields_in(&struct_name, &module_source) {
-            for (fname, _, is_pub) in &struct_info.fields {
-                if fname == field_name && !is_pub {
+            for (fname, _, vis) in &struct_info.fields {
+                if fname == field_name && !vis.reachable_from(same_package) {
                     let _ = self.logger.error(TypeError::PrivateFieldAccess {
                         struct_name: struct_name.clone(),
                         field_name: field_name.to_string(),
+                        visibility: *vis,
                         span,
                     });
                     return;
@@ -3219,11 +3223,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(struct_info) =
                 self.lookup_struct_fields_in(&struct_name, &struct_module_source)
         {
-            for (fname, _, is_pub) in &struct_info.fields {
-                if !is_pub && provided_names.contains(fname) {
+            let same_package = struct_module_source.same_package(&self.current_module_source);
+            for (fname, _, vis) in &struct_info.fields {
+                if !vis.reachable_from(same_package) && provided_names.contains(fname) {
                     let _ = self.logger.error(TypeError::PrivateFieldAccess {
                         struct_name: struct_name.clone(),
                         field_name: fname.clone(),
+                        visibility: *vis,
                         span: struct_lit.span,
                     });
                 }
@@ -3435,7 +3441,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             module_source,
             fields: resolved_fields
                 .iter()
-                .map(|f| (f.name.clone(), f.value.type_id, true))
+                .map(|f| {
+                    (
+                        f.name.clone(),
+                        f.value.type_id,
+                        crate::ast::Visibility::Public,
+                    )
+                })
                 .collect(),
             field_ast_ids: Vec::new(),
             field_defaults: vec![None; resolved_fields.len()],
@@ -3453,7 +3465,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .enumerate()
             .map(|(i, f)| TirField {
                 name: f.name.clone(),
-                is_pub: true,
+                visibility: crate::ast::Visibility::Public,
                 type_id: f.value.type_id,
                 index: i as u32,
                 span: struct_lit.span,
@@ -3468,7 +3480,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.sem.decls.pending_anonymous_structs.push(TirStruct {
             name: anon_name.clone(),
             module_source: self.current_module_source.clone(),
-            is_pub: false,
+            visibility: crate::ast::Visibility::Private,
             type_params: Vec::new(),
             monomorph_info: None,
             fields: tir_fields,

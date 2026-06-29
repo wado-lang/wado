@@ -1,0 +1,24 @@
+//! `internal` struct fields are accessible from other files in the same
+//! package: reading, constructing in a struct literal, and destructuring all
+//! work across same-package module boundaries.
+use { Widget, make_widget } from "./sub/internal_field_module.wado";
+
+test "read an internal field across same-package files" {
+    let w = make_widget("a", 7);
+    assert w.id == 7;
+}
+
+test "set an internal field in a cross-module struct literal" {
+    let w = Widget { name: "b", id: 9 };
+    assert w.id == 9;
+}
+
+test "destructure an internal field across same-package files" {
+    let w = make_widget("c", 11);
+    let Widget { name, id } = w;
+    assert name == "c";
+    assert id == 11;
+}
+
+__DATA__
+{"test": {}}

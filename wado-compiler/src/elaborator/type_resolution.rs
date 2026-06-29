@@ -55,7 +55,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match ty {
             Type::Named(named) => {
                 self.record_type_name_reference(named.id, &named.name);
-                self.resolve_named_type(&named.name, named.span)
+                self.resolve_named_type(&named.name, named.span, true)
             }
             Type::Generic(generic) => {
                 self.record_type_name_reference(generic.id, &generic.name);
@@ -234,7 +234,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let alias =
                 crate::name::namespace_member_alias(&namespaced.namespace, &namespaced.name);
             if namespaced.args.is_empty() {
-                self.resolve_named_type(&alias, namespaced.span)
+                self.resolve_named_type(&alias, namespaced.span, true)
             } else {
                 self.resolve_generic_type(&alias, &namespaced.args, namespaced.span)
             }
@@ -248,7 +248,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve a named type
-    pub(super) fn resolve_named_type(&mut self, name: &str, _span: Span) -> TypeId {
+    pub(super) fn resolve_named_type(
+        &mut self,
+        name: &str,
+        span: Span,
+        enforce_arity: bool,
+    ) -> TypeId {
         // Handle `Self` type reference in impl blocks
         if name == "Self" {
             if let Some(self_type) = self.annotate_ctx.trait_ctx.self_type {
@@ -283,6 +288,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // Check newtypes, struct definitions, and variants
             _ => {
+                if enforce_arity && let Some(expected) = self.bare_generic_type_arity(name) {
+                    let _ = self.logger.error(TypeError::MissingTypeArguments {
+                        name: name.to_string(),
+                        expected,
+                        span,
+                    });
+                    return TypeTable::ERROR;
+                }
                 if let Some(type_id) = self.lookup_newtype(name) {
                     type_id
                 } else if let Some(struct_info) = self.lookup_struct_fields(name) {
@@ -310,6 +323,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
         }
+    }
+
+    fn bare_generic_type_arity(&self, name: &str) -> Option<usize> {
+        if self.sem.decls.generic_struct_names.contains(name)
+            && let Some(info) = self.lookup_struct_fields(name)
+            && !info.type_param_bounds.is_empty()
+        {
+            return Some(info.type_param_bounds.len());
+        }
+        if let Some(info) = self.lookup_variant_case(name)
+            && !info.type_params.is_empty()
+        {
+            return Some(info.type_params.len());
+        }
+        if let Some(info) = self.lookup_generic_newtype(name)
+            && !info.type_params.is_empty()
+        {
+            return Some(info.type_params.len());
+        }
+        None
     }
 
     /// Resolve a generic type

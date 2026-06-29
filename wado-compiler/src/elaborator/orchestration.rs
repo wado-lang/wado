@@ -570,7 +570,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     &type_params,
                                 )
                             };
-                            fields.push((field.name.clone(), type_id, field.is_pub));
+                            fields.push((field.name.clone(), type_id, field.visibility));
                             field_ast_ids.push(field.id);
                             field_defaults.push(field.default.clone());
                         }
@@ -906,11 +906,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // The prelude is auto-imported into every module, so its types are
             // visible everywhere.
             let is_auto_visible = |ms: &ModuleSource| {
-                matches!(ms, ModuleSource::Core { name }
-                    if name.as_str() == "prelude"
-                        || name.as_str().starts_with("prelude/")
-                        || name.as_str() == "internal"
-                        || name.as_str() == "builtin")
+                ms.is_core_prelude()
+                    || ms.is_core_rt()
+                    || ms.is_core_builtin()
+                    || matches!(ms, ModuleSource::Core { name }
+                        if name.as_str().starts_with("prelude/"))
             };
             let mut prelude_types: IndexSet<String> = IndexSet::default();
             for (ms, names) in &local {
@@ -2020,13 +2020,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         match stmt {
             ast::Stmt::Let(let_stmt) => {
                 if let Some(ty) = &let_stmt.ty {
-                    Self::validate_ast_type_names(
-                        ty,
-                        known_type_names,
-                        resource_type_names,
-                        type_params,
-                        logger,
-                    )?;
+                    if let Some(span) = Self::first_infer_span(ty) {
+                        Self::validate_ast_type_names_inner(
+                            ty,
+                            known_type_names,
+                            resource_type_names,
+                            type_params,
+                            logger,
+                            true,
+                        )?;
+                        logger.error(TypeError::InferInLetAnnotation { span })?;
+                    } else {
+                        Self::validate_ast_type_names(
+                            ty,
+                            known_type_names,
+                            resource_type_names,
+                            type_params,
+                            logger,
+                        )?;
+                    }
                 }
                 if let Some(value) = &let_stmt.value {
                     Self::validate_expr_type_names(
@@ -2698,6 +2710,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         Ok(())
     }
 
+    pub(super) fn first_infer_span(ty: &Type) -> Option<crate::token::Span> {
+        match ty {
+            Type::Infer(span) => Some(*span),
+            Type::Generic(g) => g.args.iter().find_map(Self::first_infer_span),
+            Type::NamespacedGeneric(ng) => ng.args.iter().find_map(Self::first_infer_span),
+            Type::Reference(inner) | Type::MutReference(inner) => Self::first_infer_span(inner),
+            Type::Tuple(elems) => elems.iter().find_map(Self::first_infer_span),
+            Type::Function(ft) => ft
+                .params
+                .iter()
+                .find_map(Self::first_infer_span)
+                .or_else(|| Self::first_infer_span(&ft.return_type)),
+            Type::Named(_) | Type::TypePackSpread(_, _) | Type::Error(_) => None,
+        }
+    }
+
     /// Walk an AST type expression and emit errors for unknown Named types.
     /// Generic type names (List, Result, etc.) are not checked here since they
     /// may be builtins not present in the type name registry; only their type
@@ -2708,6 +2736,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         resource_type_names: &IndexSet<String>,
         type_params: &[&str],
         logger: &Logger<'_, H>,
+    ) -> Result<(), Bail> {
+        Self::validate_ast_type_names_inner(
+            ty,
+            known_type_names,
+            resource_type_names,
+            type_params,
+            logger,
+            false,
+        )
+    }
+
+    fn validate_ast_type_names_inner(
+        ty: &Type,
+        known_type_names: &IndexSet<String>,
+        resource_type_names: &IndexSet<String>,
+        type_params: &[&str],
+        logger: &Logger<'_, H>,
+        allow_infer: bool,
     ) -> Result<(), Bail> {
         match ty {
             Type::Named(named) => {
@@ -2731,71 +2777,77 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             Type::Generic(generic) => {
                 for arg in &generic.args {
-                    Self::validate_ast_type_names(
+                    Self::validate_ast_type_names_inner(
                         arg,
                         known_type_names,
                         resource_type_names,
                         type_params,
                         logger,
+                        allow_infer,
                     )?;
                 }
                 Ok(())
             }
             Type::NamespacedGeneric(ng) => {
                 for arg in &ng.args {
-                    Self::validate_ast_type_names(
+                    Self::validate_ast_type_names_inner(
                         arg,
                         known_type_names,
                         resource_type_names,
                         type_params,
                         logger,
+                        allow_infer,
                     )?;
                 }
                 Ok(())
             }
-            Type::Reference(inner) | Type::MutReference(inner) => Self::validate_ast_type_names(
-                inner,
-                known_type_names,
-                resource_type_names,
-                type_params,
-                logger,
-            ),
+            Type::Reference(inner) | Type::MutReference(inner) => {
+                Self::validate_ast_type_names_inner(
+                    inner,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                    allow_infer,
+                )
+            }
             Type::Tuple(elems) => {
                 for elem in elems {
-                    Self::validate_ast_type_names(
+                    Self::validate_ast_type_names_inner(
                         elem,
                         known_type_names,
                         resource_type_names,
                         type_params,
                         logger,
+                        allow_infer,
                     )?;
                 }
                 Ok(())
             }
             Type::Function(ft) => {
                 for param in &ft.params {
-                    Self::validate_ast_type_names(
+                    Self::validate_ast_type_names_inner(
                         param,
                         known_type_names,
                         resource_type_names,
                         type_params,
                         logger,
+                        allow_infer,
                     )?;
                 }
-                Self::validate_ast_type_names(
+                Self::validate_ast_type_names_inner(
                     &ft.return_type,
                     known_type_names,
                     resource_type_names,
                     type_params,
                     logger,
+                    allow_infer,
                 )
             }
-            // `_` is only meaningful as a top-level turbofish type argument
-            // (handled by `validate_turbofish_type_arg`); in an annotation or
-            // nested position it cannot be inferred, so reject it here rather
-            // than let an unresolved `unknown` reach codegen.
             Type::Infer(span) => {
-                logger.error(TypeError::InferPlaceholderNotAllowed { span: *span })?;
+                if !allow_infer {
+                    logger.error(TypeError::InferPlaceholderNotAllowed { span: *span })?;
+                }
                 Ok(())
             }
             Type::TypePackSpread(_, _) | Type::Error(_) => Ok(()),

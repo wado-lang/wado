@@ -1,11 +1,11 @@
-//! `--test-name` compile-time filtering and the `wado:test-names` section.
+//! `--test-name` compile-time filtering and the `org.wado-lang.test-names` section.
 //!
 //! `wado test --test-name <pattern>` is implemented by passing the substring
 //! filters into `CompilerOptions::test_name_filters`. Only `test "name"` blocks
 //! whose name contains a filter are exported from the test-world component; the
 //! rest lose their `is_cm_export` adapter and are removed by early DCE, so they
 //! are never present in the output. The compiler also writes a
-//! `wado:test-names` custom section mapping each surviving export to its
+//! `org.wado-lang.test-names` custom section mapping each surviving export to its
 //! original (lossless) name for the runner to display.
 //!
 //! These tests inspect the compiled component bytes to hold both contracts
@@ -35,7 +35,7 @@ test "日本語 ok" {
 
 /// Compile `SOURCE` to the test world with the given `--test-name` filters and
 /// return the `(export_name, original_name)` pairs recorded in the
-/// `wado:test-names` custom section. The section enumerates exactly the test
+/// `org.wado-lang.test-names` custom section. The section enumerates exactly the test
 /// exports that survived DCE, so it doubles as the surviving-export set.
 fn compiled_test_names(filters: &[&str]) -> Vec<(String, Option<String>)> {
     let options = wado_compiler::CompilerOptions {

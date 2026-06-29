@@ -57,8 +57,8 @@ pub struct WorldExportPlan {
     pub result_type: Option<Type>,
     /// Fully-qualified CM interface name this export was synthesized from
     /// (`WorldExportInfo::from_interface_fq`), e.g.
-    /// `"wasi:http/handler@0.3.0-rc-2026-03-15"` or
-    /// `"wasi:cli/run@0.3.0-rc-2026-03-15"`. `Some` marks the export as an
+    /// `"wasi:http/handler@0.3.0"` or
+    /// `"wasi:cli/run@0.3.0"`. `Some` marks the export as an
     /// interface-instance export: codegen wraps it (and the named CM types its
     /// signature references) in an instance export under this FQ. `None` is a
     /// freestanding world function export (the kiln generator's `generate`,
@@ -135,7 +135,7 @@ pub struct TestExportPlan {
     pub export_name: String,
     /// Original, lossless `test "name"` string (`None` for unnamed tests).
     /// `export_name` is ASCII-folded and lowercased, so this is the only
-    /// faithful record of the name. Emitted into the `wado:test-names` custom
+    /// faithful record of the name. Emitted into the `org.wado-lang.test-names` custom
     /// section so the runner can display what the user actually wrote.
     pub original_name: Option<String>,
     /// Whether this test is expected to trap (derived from the `#[expect_trap]` attribute)

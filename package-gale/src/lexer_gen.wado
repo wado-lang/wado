@@ -17,7 +17,7 @@ use {
     LabelElement,
 } from "./ir.wado";
 use { literal_const_name, gen_visibility_comment } from "./gen_util.wado";
-use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec, char_lit } from "./wadopoet.wado";
+use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec, Vis, char_lit, char_range_pat } from "./wadopoet.wado";
 use { TreeMap } from "core:collections";
 
 pub struct LitToken {
@@ -219,15 +219,15 @@ pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, li
             Rule(ri) => {
                 let rule = &lexer_rules[ri];
                 let name = `TK_{rule.name}`;
-                let mut g = GlobalSpec::new(&name, "i32", &init);
+                let mut g = GlobalSpec::new(&name, "i32", &init, Vis::Pub);
                 if rule.is_virtual {
                     g.set_trailing_comment(&"virtual");
                 }
                 g.emit(w);
             },
-            Eof => GlobalSpec::new("TK_EOF", "i32", &init).emit(w),
-            Error => GlobalSpec::new("TK_ERROR", "i32", &init).emit(w),
-            Lit(li) => GlobalSpec::new(&lit_tokens[li].const_name, "i32", &init).emit(w),
+            Eof => GlobalSpec::new("TK_EOF", "i32", &init, Vis::Pub).emit(w),
+            Error => GlobalSpec::new("TK_ERROR", "i32", &init, Vis::Pub).emit(w),
+            Lit(li) => GlobalSpec::new(&lit_tokens[li].const_name, "i32", &init, Vis::Pub).emit(w),
         }
         idx += 1;
     }
@@ -253,7 +253,7 @@ pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, li
                 if emitted_numeric.contains(&n) {
                     continue;
                 }
-                GlobalSpec::new(&`TK_{n}`, "i32", &`{n - 1}`).emit(w);
+                GlobalSpec::new(&`TK_{n}`, "i32", &`{n - 1}`, Vis::Pub).emit(w);
                 emitted_numeric.push(n);
             }
         }
@@ -316,7 +316,7 @@ fn gen_lexer_struct(w: &mut CodeWriter) {
     f.add_param(&"input", &"&String");
     f.set_return_type(&"Lexer");
     f.emit_begin(w);
-    w.line(&"return Lexer { chars: input.chars().collect(), pos: 0 };");
+    w.line(&"return Lexer { chars: input.to_chars(), pos: 0 };");
     w.end();
     w.blank();
 
@@ -742,7 +742,7 @@ fn gen_lexer_elem(w: &mut CodeWriter, elem: &LexerElement, all_rules: &List<Lexe
                 gen_char_class(w, &cc, fail_action);
             } else {
                 w.line(
-                    &`if pos >= chars.len() || !({char_lit(pair.0)} <= chars[pos] <= {char_lit(pair.1)}) \{ {fail_action}; \}`,
+                    &`if pos >= chars.len() || !(chars[pos] matches \{ {char_range_pat(pair.0..=pair.1)} \}) \{ {fail_action}; \}`,
                 );
                 w.line(&"pos += 1;");
             }
@@ -811,26 +811,22 @@ fn gen_char_class(w: &mut CodeWriter, cc: &CharClass, fail_action: &String) {
     w.line(&"pos += 1;");
 }
 
-/// Build the `chars[pos] == X || lo <= chars[pos] <= hi || ...` disjunction for
-/// a char class (no leading `false ||` seed). Empty class lowers to `false`
-/// (negated: matches any char; positive: always fails).
+/// Build `(chars[pos] matches { 'x' | 'lo'..='hi' | ... })` for a char class.
 fn char_class_disjunction(cc: &CharClass) -> String {
     if cc.ranges.len() == 0 {
-        return "false";
+        return "(false)";
     }
     let mut s = String::with_capacity(64);
+    s.push_str(&"(chars[pos] matches { ");
     let mut first = true;
     for let range of &cc.ranges {
         if !first {
-            s.push_str(&" || ");
+            s.push_str(&" | ");
         }
         first = false;
-        if range.start == range.end {
-            s.push_str(&`chars[pos] == {char_lit(range.start)}`);
-        } else {
-            s.push_str(&`{char_lit(range.start)} <= chars[pos] <= {char_lit(range.end)}`);
-        }
+        s.push_str(&`{char_range_pat(range.start..=range.end)}`);
     }
+    s.push_str(&" })");
     return s;
 }
 
@@ -1894,8 +1890,7 @@ fn gen_tokenize_fn(
     let empty_opts: List<GrammarOption> = [];
     let grammar_ci = resolve_ci(grammar_opts, &empty_opts);
 
-    let mut f = FnSpec::new("tokenize");
-    f.set_pub();
+    let mut f = FnSpec::new("tokenize", Vis::Pub);
     f.add_param(&"input", &"&String");
     f.set_return_type(&"TokenStream");
     f.emit_begin(w);
@@ -2172,8 +2167,7 @@ fn emit_token_commit(w: &mut CodeWriter, kind: &String, start: &String, end: &St
 }
 
 fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) {
-    let mut f = FnSpec::new("token_kind_name");
-    f.set_pub();
+    let mut f = FnSpec::new("token_kind_name", Vis::Pub);
     f.add_param(&"kind", &"i32");
     f.set_return_type(&"String");
     f.emit_begin(w);

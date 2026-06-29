@@ -746,7 +746,7 @@ enum LoadOutcome {
 struct ParsedTest {
     export_name: String,
     parsed: TestExportName,
-    /// Original `test "name"` string recovered from the `wado:test-names`
+    /// Original `test "name"` string recovered from the `org.wado-lang.test-names`
     /// custom section (`None` for unnamed tests). Preferred over
     /// `parsed.display` for output because it is lossless.
     original_name: Option<String>,

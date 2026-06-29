@@ -80,6 +80,15 @@ pub fn shadow_params(flat: &mut FlatPackage, plan: &BoxPlan) {
     }
 }
 
+pub fn shadow_new_functions(flat: &mut FlatPackage, plan: &BoxPlan, start: usize) {
+    let type_table = flat.type_table.clone();
+    let type_table = type_table.borrow();
+    for func_rc in &flat.functions[start..] {
+        let mut func = func_rc.borrow_mut();
+        shadow_one_function(&mut func, plan, &type_table);
+    }
+}
+
 fn shadow_one_function(func: &mut crate::tir::TirFunction, plan: &BoxPlan, type_table: &TypeTable) {
     let address_taken = func.address_taken_locals.clone();
     let param_count = u32::try_from(func.params.len()).unwrap();
@@ -229,7 +238,7 @@ impl TypeBuilder {
         let tir_struct = TirStruct {
             name: struct_name,
             module_source: self.box_module_source.clone(),
-            is_pub: true,
+            visibility: crate::ast::Visibility::Public,
             type_params: Vec::new(),
             monomorph_info: Some(MonomorphInfo {
                 generic_name: "Box".to_string(),
@@ -239,7 +248,7 @@ impl TypeBuilder {
             }),
             fields: vec![TirField {
                 name: "value".to_string(),
-                is_pub: false,
+                visibility: crate::ast::Visibility::Private,
                 type_id: inner_type_id,
                 index: 0,
                 span: Span::new(0, 0, 0, 0),

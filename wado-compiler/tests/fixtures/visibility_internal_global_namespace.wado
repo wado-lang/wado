@@ -1,0 +1,13 @@
+//! Regression: an `internal` global imported through a namespace import must be
+//! reachable from a same-package file. The analyze pass admitted the symbol via
+//! `import_reachable`, but the elaborator collected only `pub` globals into
+//! `imported_globals`, so `g::ANSWER` failed with "unknown identifier 'g$ANSWER'".
+
+use g from "./sub/visibility_internal_global_lib.wado";
+
+test "internal global is reachable via namespace import" {
+    assert g::ANSWER == 42;
+}
+
+__DATA__
+{"test": {}}

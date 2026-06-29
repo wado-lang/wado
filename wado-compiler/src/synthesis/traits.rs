@@ -261,7 +261,7 @@ fn make_trait_method(
     TirFunction {
         module_source: ModuleSource::default(),
         name,
-        is_pub: true,
+        visibility: crate::ast::Visibility::Public,
         is_export: false,
         is_async: false,
         type_params: Vec::new(),
@@ -2827,7 +2827,7 @@ fn generate_display_fallback(
     TirFunction {
         module_source: ModuleSource::default(),
         name: qualified_name,
-        is_pub: true,
+        visibility: crate::ast::Visibility::Public,
         is_export: false,
         is_async: false,
         type_params: Vec::new(),

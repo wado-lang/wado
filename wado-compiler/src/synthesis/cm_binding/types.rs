@@ -352,7 +352,7 @@ pub fn cm_type_to_type_id(
 }
 
 /// Extract the WASI package (e.g. `"filesystem"`) from a CM source string like
-/// `"wasi:filesystem/types@0.3.0-rc-2026-03-15"`. Returns `None` for
+/// `"wasi:filesystem/types@0.3.0"`. Returns `None` for
 /// non-`wasi:` sources or malformed strings.
 pub(super) fn wasi_package_from_cm_source(source: &str) -> Option<&str> {
     let after_colon = source.strip_prefix("wasi:")?;

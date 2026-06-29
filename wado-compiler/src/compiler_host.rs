@@ -106,6 +106,9 @@ pub enum Code {
     CircularDependency,
     /// Failed to parse module
     ModuleParseError,
+    /// Import of a symbol that is not visible at the import site
+    /// (file-private, or `internal` reached from another package).
+    PrivateSymbol,
 
     // I/O errors
     /// File read error
@@ -209,6 +212,7 @@ impl std::fmt::Display for Code {
             Code::ModuleNotFound => "MODULE_NOT_FOUND",
             Code::CircularDependency => "CIRCULAR_DEPENDENCY",
             Code::ModuleParseError => "MODULE_PARSE_ERROR",
+            Code::PrivateSymbol => "PRIVATE_SYMBOL",
             Code::FileReadError => "FILE_READ_ERROR",
             Code::NetworkError => "NETWORK_ERROR",
             Code::OrphanRule => "ORPHAN_RULE",

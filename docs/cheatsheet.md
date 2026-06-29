@@ -802,22 +802,37 @@ Rules:
 
 ## Visibility
 
-Wado has three levels of visibility:
+Visibility has two orthogonal axes: a scope ladder (`internal` / `pub`) and a
+CM-surface flag (`export`). `core:*` and `wasi:*` are each their own package.
 
-| Keyword  | Term             | Scope                                 |
-| -------- | ---------------- | ------------------------------------- |
-| (none)   | private          | Within the module                     |
-| `pub`    | module public    | Other modules within the same project |
-| `export` | component export | CM boundary (package's public API)    |
+| Keyword    | Axis    | Reach                                     |
+| ---------- | ------- | ----------------------------------------- |
+| (none)     | scope   | The defining file (private)               |
+| `internal` | scope   | Other files in the same package           |
+| `pub`      | scope   | Other Wado packages — the library API     |
+| `export`   | CM flag | Also lowered at the CM boundary (`⟹ pub`) |
 
 ```wado
-fn private_fn() { }           // module-private (default)
-pub fn public_fn() { }        // project-internal
-export fn run() { }           // component export
-pub export fn both() { }      // both
+fn helper() { }               // file-private (default)
+internal fn build_ast() { }   // package-internal
+pub fn map() { }              // library API (Wado-native)
+export fn run() { }           // library API + CM boundary
 ```
 
-All entity definitions can have `pub` visibility, including struct fields.
+`internal` and `pub` are mutually exclusive; `export` already implies `pub`, so
+`pub export` is just `export`. Importing a symbol that is not visible at the
+import site (file-private, or `internal` from another package) is a compile
+error. Struct fields take the same modifiers.
+
+A `use` with a visibility modifier re-exports at that reach, independent of the
+original's visibility — so `pub use { x }` can publish an `internal` `x` (the
+"internal impl, public facade" pattern):
+
+```wado
+internal fn compute() { }                  // package-internal
+pub use { compute } from "./impl.wado";    // re-exported as public API
+internal use { helper } from "./impl.wado"; // re-exported package-internal
+```
 
 ## Traits
 

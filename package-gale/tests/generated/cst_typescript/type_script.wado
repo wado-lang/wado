@@ -821,7 +821,7 @@ fn tree_build_node(events: &List<BuildEvent>, pos: &mut i32) -> CstNode {
         let kind = info.0;
         let start = info.1;
         *pos += 1;
-        let mut children: List<CstChild> = [];
+        let mut children: List<CstChild> = List::with_capacity(4);
         let mut flags = if kind == K_ERROR { NODE_ERROR } else { 0 };
         let mut alt = -1;
         let mut end = start;
@@ -1278,215 +1278,215 @@ pub enum TokenKind {
     Error,
 }
 
-global TK_MultiLineComment: i32 = 0;
-global TK_SingleLineComment: i32 = 1;
-global TK_RegularExpressionLiteral: i32 = 2;
-global TK_OpenBracket: i32 = 3;
-global TK_CloseBracket: i32 = 4;
-global TK_OpenParen: i32 = 5;
-global TK_CloseParen: i32 = 6;
-global TK_OpenBrace: i32 = 7;
-global TK_TemplateCloseBrace: i32 = 8;
-global TK_CloseBrace: i32 = 9;
-global TK_SemiColon: i32 = 10;
-global TK_Comma: i32 = 11;
-global TK_Assign: i32 = 12;
-global TK_QuestionMark: i32 = 13;
-global TK_QuestionMarkDot: i32 = 14;
-global TK_Colon: i32 = 15;
-global TK_Ellipsis: i32 = 16;
-global TK_Dot: i32 = 17;
-global TK_PlusPlus: i32 = 18;
-global TK_MinusMinus: i32 = 19;
-global TK_Plus: i32 = 20;
-global TK_Minus: i32 = 21;
-global TK_BitNot: i32 = 22;
-global TK_Not: i32 = 23;
-global TK_Multiply: i32 = 24;
-global TK_Divide: i32 = 25;
-global TK_Modulus: i32 = 26;
-global TK_Power: i32 = 27;
-global TK_NullCoalesce: i32 = 28;
-global TK_Hashtag: i32 = 29;
-global TK_LeftShiftArithmetic: i32 = 30;
-global TK_LessThan: i32 = 31;
-global TK_MoreThan: i32 = 32;
-global TK_LessThanEquals: i32 = 33;
-global TK_GreaterThanEquals: i32 = 34;
-global TK_Equals_: i32 = 35;
-global TK_NotEquals: i32 = 36;
-global TK_IdentityEquals: i32 = 37;
-global TK_IdentityNotEquals: i32 = 38;
-global TK_BitAnd: i32 = 39;
-global TK_BitXOr: i32 = 40;
-global TK_BitOr: i32 = 41;
-global TK_And: i32 = 42;
-global TK_Or: i32 = 43;
-global TK_MultiplyAssign: i32 = 44;
-global TK_DivideAssign: i32 = 45;
-global TK_ModulusAssign: i32 = 46;
-global TK_PlusAssign: i32 = 47;
-global TK_MinusAssign: i32 = 48;
-global TK_LeftShiftArithmeticAssign: i32 = 49;
-global TK_RightShiftArithmeticAssign: i32 = 50;
-global TK_RightShiftLogicalAssign: i32 = 51;
-global TK_BitAndAssign: i32 = 52;
-global TK_BitXorAssign: i32 = 53;
-global TK_BitOrAssign: i32 = 54;
-global TK_PowerAssign: i32 = 55;
-global TK_NullishCoalescingAssign: i32 = 56;
-global TK_ARROW: i32 = 57;
-global TK_NullLiteral: i32 = 58;
-global TK_BooleanLiteral: i32 = 59;
-global TK_DecimalLiteral: i32 = 60;
-global TK_HexIntegerLiteral: i32 = 61;
-global TK_OctalIntegerLiteral: i32 = 62;
-global TK_OctalIntegerLiteral2: i32 = 63;
-global TK_BinaryIntegerLiteral: i32 = 64;
-global TK_BigHexIntegerLiteral: i32 = 65;
-global TK_BigOctalIntegerLiteral: i32 = 66;
-global TK_BigBinaryIntegerLiteral: i32 = 67;
-global TK_BigDecimalIntegerLiteral: i32 = 68;
-global TK_Break: i32 = 69;
-global TK_Do: i32 = 70;
-global TK_Instanceof: i32 = 71;
-global TK_Typeof: i32 = 72;
-global TK_Case: i32 = 73;
-global TK_Else: i32 = 74;
-global TK_New: i32 = 75;
-global TK_Var: i32 = 76;
-global TK_Catch: i32 = 77;
-global TK_Finally: i32 = 78;
-global TK_Return: i32 = 79;
-global TK_Void: i32 = 80;
-global TK_Continue: i32 = 81;
-global TK_For: i32 = 82;
-global TK_Switch: i32 = 83;
-global TK_While: i32 = 84;
-global TK_Debugger: i32 = 85;
-global TK_Function_: i32 = 86;
-global TK_This: i32 = 87;
-global TK_With: i32 = 88;
-global TK_Default: i32 = 89;
-global TK_If: i32 = 90;
-global TK_Throw: i32 = 91;
-global TK_Delete: i32 = 92;
-global TK_In: i32 = 93;
-global TK_Try: i32 = 94;
-global TK_As: i32 = 95;
-global TK_From: i32 = 96;
-global TK_ReadOnly: i32 = 97;
-global TK_Async: i32 = 98;
-global TK_Await: i32 = 99;
-global TK_Yield: i32 = 100;
-global TK_YieldStar: i32 = 101;
-global TK_Class: i32 = 102;
-global TK_Enum: i32 = 103;
-global TK_Extends: i32 = 104;
-global TK_Super: i32 = 105;
-global TK_Const: i32 = 106;
-global TK_Export: i32 = 107;
-global TK_Import: i32 = 108;
-global TK_Implements: i32 = 109;
-global TK_Let: i32 = 110;
-global TK_Private: i32 = 111;
-global TK_Public: i32 = 112;
-global TK_Interface: i32 = 113;
-global TK_Package: i32 = 114;
-global TK_Protected: i32 = 115;
-global TK_Static: i32 = 116;
-global TK_Any: i32 = 117;
-global TK_Number: i32 = 118;
-global TK_Never: i32 = 119;
-global TK_Boolean: i32 = 120;
-global TK_String: i32 = 121;
-global TK_Unique: i32 = 122;
-global TK_Symbol: i32 = 123;
-global TK_Undefined: i32 = 124;
-global TK_Object: i32 = 125;
-global TK_Of: i32 = 126;
-global TK_KeyOf: i32 = 127;
-global TK_TypeAlias: i32 = 128;
-global TK_Constructor: i32 = 129;
-global TK_Namespace: i32 = 130;
-global TK_Require: i32 = 131;
-global TK_Module: i32 = 132;
-global TK_Declare: i32 = 133;
-global TK_Abstract: i32 = 134;
-global TK_Is: i32 = 135;
-global TK_At: i32 = 136;
-global TK_Identifier: i32 = 137;
-global TK_StringLiteral: i32 = 138;
-global TK_BackTick: i32 = 139;
-global TK_WhiteSpaces: i32 = 140;
-global TK_LineTerminator: i32 = 141;
-global TK_HtmlComment: i32 = 142;
-global TK_CDataComment: i32 = 143;
-global TK_UnexpectedCharacter: i32 = 144;
-global TK_TemplateStringEscapeAtom: i32 = 145;
-global TK_TemplateStringStartExpression: i32 = 146;
-global TK_TemplateStringAtom: i32 = 147;
-global TK_BackTickInside: i32 = 148;
-global TK_EOF: i32 = 149;
-global TK_ERROR: i32 = 150;
-global TK_LIT_EQ: i32 = 151;
-global TK_LIT_LT: i32 = 152;
-global TK_LIT_GT: i32 = 153;
-global TK_LIT_COMMA: i32 = 154;
-global TK_LIT_EXTENDS: i32 = 155;
-global TK_LIT_PIPE: i32 = 156;
-global TK_LIT_AMP: i32 = 157;
-global TK_LIT_LPAREN: i32 = 158;
-global TK_LIT_RPAREN: i32 = 159;
-global TK_LIT_LBRACKET: i32 = 160;
-global TK_LIT_RBRACKET: i32 = 161;
-global TK_LIT_LBRACE: i32 = 162;
-global TK_LIT_RBRACE: i32 = 163;
-global TK_LIT_EQGT: i32 = 164;
-global TK_LIT_NEW: i32 = 165;
-global TK_LIT_TYPEOF: i32 = 166;
-global TK_LIT_DOT: i32 = 167;
-global TK_LIT_QUESTION: i32 = 168;
-global TK_LIT_COLON: i32 = 169;
-global TK_LIT_DOTDOTDOT: i32 = 170;
-global TK_LIT_TYPE: i32 = 171;
-global TK_LIT_AT: i32 = 172;
-global TK_LIT_STAR: i32 = 173;
-global TK_LIT_HASH: i32 = 174;
-global TK_LIT_QUESTIONDOT: i32 = 175;
-global TK_LIT_BANG: i32 = 176;
-global TK_LIT_PLUSPLUS: i32 = 177;
-global TK_LIT_MINUSMINUS: i32 = 178;
-global TK_LIT_PLUS: i32 = 179;
-global TK_LIT_MINUS: i32 = 180;
-global TK_LIT_TILDE: i32 = 181;
-global TK_LIT_STARSTAR: i32 = 182;
-global TK_LIT_SLASH: i32 = 183;
-global TK_LIT_PERCENT: i32 = 184;
-global TK_LIT_QUESTIONQUESTION: i32 = 185;
-global TK_LIT_LTLT: i32 = 186;
-global TK_LIT_LTEQ: i32 = 187;
-global TK_LIT_GTEQ: i32 = 188;
-global TK_LIT_EQEQ: i32 = 189;
-global TK_LIT_BANGEQ: i32 = 190;
-global TK_LIT_EQEQEQ: i32 = 191;
-global TK_LIT_BANGEQEQ: i32 = 192;
-global TK_LIT_CARET: i32 = 193;
-global TK_LIT_AMPAMP: i32 = 194;
-global TK_LIT_PIPEPIPE: i32 = 195;
-global TK_LIT_STAREQ: i32 = 196;
-global TK_LIT_SLASHEQ: i32 = 197;
-global TK_LIT_PERCENTEQ: i32 = 198;
-global TK_LIT_PLUSEQ: i32 = 199;
-global TK_LIT_MINUSEQ: i32 = 200;
-global TK_LIT_LTLTEQ: i32 = 201;
-global TK_LIT_GTGTEQ: i32 = 202;
-global TK_LIT_GTGTGTEQ: i32 = 203;
-global TK_LIT_AMPEQ: i32 = 204;
-global TK_LIT_CARETEQ: i32 = 205;
-global TK_LIT_PIPEEQ: i32 = 206;
-global TK_LIT_STARSTAREQ: i32 = 207;
-global TK_LIT_QUESTIONQUESTIONEQ: i32 = 208;
+pub global TK_MultiLineComment: i32 = 0;
+pub global TK_SingleLineComment: i32 = 1;
+pub global TK_RegularExpressionLiteral: i32 = 2;
+pub global TK_OpenBracket: i32 = 3;
+pub global TK_CloseBracket: i32 = 4;
+pub global TK_OpenParen: i32 = 5;
+pub global TK_CloseParen: i32 = 6;
+pub global TK_OpenBrace: i32 = 7;
+pub global TK_TemplateCloseBrace: i32 = 8;
+pub global TK_CloseBrace: i32 = 9;
+pub global TK_SemiColon: i32 = 10;
+pub global TK_Comma: i32 = 11;
+pub global TK_Assign: i32 = 12;
+pub global TK_QuestionMark: i32 = 13;
+pub global TK_QuestionMarkDot: i32 = 14;
+pub global TK_Colon: i32 = 15;
+pub global TK_Ellipsis: i32 = 16;
+pub global TK_Dot: i32 = 17;
+pub global TK_PlusPlus: i32 = 18;
+pub global TK_MinusMinus: i32 = 19;
+pub global TK_Plus: i32 = 20;
+pub global TK_Minus: i32 = 21;
+pub global TK_BitNot: i32 = 22;
+pub global TK_Not: i32 = 23;
+pub global TK_Multiply: i32 = 24;
+pub global TK_Divide: i32 = 25;
+pub global TK_Modulus: i32 = 26;
+pub global TK_Power: i32 = 27;
+pub global TK_NullCoalesce: i32 = 28;
+pub global TK_Hashtag: i32 = 29;
+pub global TK_LeftShiftArithmetic: i32 = 30;
+pub global TK_LessThan: i32 = 31;
+pub global TK_MoreThan: i32 = 32;
+pub global TK_LessThanEquals: i32 = 33;
+pub global TK_GreaterThanEquals: i32 = 34;
+pub global TK_Equals_: i32 = 35;
+pub global TK_NotEquals: i32 = 36;
+pub global TK_IdentityEquals: i32 = 37;
+pub global TK_IdentityNotEquals: i32 = 38;
+pub global TK_BitAnd: i32 = 39;
+pub global TK_BitXOr: i32 = 40;
+pub global TK_BitOr: i32 = 41;
+pub global TK_And: i32 = 42;
+pub global TK_Or: i32 = 43;
+pub global TK_MultiplyAssign: i32 = 44;
+pub global TK_DivideAssign: i32 = 45;
+pub global TK_ModulusAssign: i32 = 46;
+pub global TK_PlusAssign: i32 = 47;
+pub global TK_MinusAssign: i32 = 48;
+pub global TK_LeftShiftArithmeticAssign: i32 = 49;
+pub global TK_RightShiftArithmeticAssign: i32 = 50;
+pub global TK_RightShiftLogicalAssign: i32 = 51;
+pub global TK_BitAndAssign: i32 = 52;
+pub global TK_BitXorAssign: i32 = 53;
+pub global TK_BitOrAssign: i32 = 54;
+pub global TK_PowerAssign: i32 = 55;
+pub global TK_NullishCoalescingAssign: i32 = 56;
+pub global TK_ARROW: i32 = 57;
+pub global TK_NullLiteral: i32 = 58;
+pub global TK_BooleanLiteral: i32 = 59;
+pub global TK_DecimalLiteral: i32 = 60;
+pub global TK_HexIntegerLiteral: i32 = 61;
+pub global TK_OctalIntegerLiteral: i32 = 62;
+pub global TK_OctalIntegerLiteral2: i32 = 63;
+pub global TK_BinaryIntegerLiteral: i32 = 64;
+pub global TK_BigHexIntegerLiteral: i32 = 65;
+pub global TK_BigOctalIntegerLiteral: i32 = 66;
+pub global TK_BigBinaryIntegerLiteral: i32 = 67;
+pub global TK_BigDecimalIntegerLiteral: i32 = 68;
+pub global TK_Break: i32 = 69;
+pub global TK_Do: i32 = 70;
+pub global TK_Instanceof: i32 = 71;
+pub global TK_Typeof: i32 = 72;
+pub global TK_Case: i32 = 73;
+pub global TK_Else: i32 = 74;
+pub global TK_New: i32 = 75;
+pub global TK_Var: i32 = 76;
+pub global TK_Catch: i32 = 77;
+pub global TK_Finally: i32 = 78;
+pub global TK_Return: i32 = 79;
+pub global TK_Void: i32 = 80;
+pub global TK_Continue: i32 = 81;
+pub global TK_For: i32 = 82;
+pub global TK_Switch: i32 = 83;
+pub global TK_While: i32 = 84;
+pub global TK_Debugger: i32 = 85;
+pub global TK_Function_: i32 = 86;
+pub global TK_This: i32 = 87;
+pub global TK_With: i32 = 88;
+pub global TK_Default: i32 = 89;
+pub global TK_If: i32 = 90;
+pub global TK_Throw: i32 = 91;
+pub global TK_Delete: i32 = 92;
+pub global TK_In: i32 = 93;
+pub global TK_Try: i32 = 94;
+pub global TK_As: i32 = 95;
+pub global TK_From: i32 = 96;
+pub global TK_ReadOnly: i32 = 97;
+pub global TK_Async: i32 = 98;
+pub global TK_Await: i32 = 99;
+pub global TK_Yield: i32 = 100;
+pub global TK_YieldStar: i32 = 101;
+pub global TK_Class: i32 = 102;
+pub global TK_Enum: i32 = 103;
+pub global TK_Extends: i32 = 104;
+pub global TK_Super: i32 = 105;
+pub global TK_Const: i32 = 106;
+pub global TK_Export: i32 = 107;
+pub global TK_Import: i32 = 108;
+pub global TK_Implements: i32 = 109;
+pub global TK_Let: i32 = 110;
+pub global TK_Private: i32 = 111;
+pub global TK_Public: i32 = 112;
+pub global TK_Interface: i32 = 113;
+pub global TK_Package: i32 = 114;
+pub global TK_Protected: i32 = 115;
+pub global TK_Static: i32 = 116;
+pub global TK_Any: i32 = 117;
+pub global TK_Number: i32 = 118;
+pub global TK_Never: i32 = 119;
+pub global TK_Boolean: i32 = 120;
+pub global TK_String: i32 = 121;
+pub global TK_Unique: i32 = 122;
+pub global TK_Symbol: i32 = 123;
+pub global TK_Undefined: i32 = 124;
+pub global TK_Object: i32 = 125;
+pub global TK_Of: i32 = 126;
+pub global TK_KeyOf: i32 = 127;
+pub global TK_TypeAlias: i32 = 128;
+pub global TK_Constructor: i32 = 129;
+pub global TK_Namespace: i32 = 130;
+pub global TK_Require: i32 = 131;
+pub global TK_Module: i32 = 132;
+pub global TK_Declare: i32 = 133;
+pub global TK_Abstract: i32 = 134;
+pub global TK_Is: i32 = 135;
+pub global TK_At: i32 = 136;
+pub global TK_Identifier: i32 = 137;
+pub global TK_StringLiteral: i32 = 138;
+pub global TK_BackTick: i32 = 139;
+pub global TK_WhiteSpaces: i32 = 140;
+pub global TK_LineTerminator: i32 = 141;
+pub global TK_HtmlComment: i32 = 142;
+pub global TK_CDataComment: i32 = 143;
+pub global TK_UnexpectedCharacter: i32 = 144;
+pub global TK_TemplateStringEscapeAtom: i32 = 145;
+pub global TK_TemplateStringStartExpression: i32 = 146;
+pub global TK_TemplateStringAtom: i32 = 147;
+pub global TK_BackTickInside: i32 = 148;
+pub global TK_EOF: i32 = 149;
+pub global TK_ERROR: i32 = 150;
+pub global TK_LIT_EQ: i32 = 151;
+pub global TK_LIT_LT: i32 = 152;
+pub global TK_LIT_GT: i32 = 153;
+pub global TK_LIT_COMMA: i32 = 154;
+pub global TK_LIT_EXTENDS: i32 = 155;
+pub global TK_LIT_PIPE: i32 = 156;
+pub global TK_LIT_AMP: i32 = 157;
+pub global TK_LIT_LPAREN: i32 = 158;
+pub global TK_LIT_RPAREN: i32 = 159;
+pub global TK_LIT_LBRACKET: i32 = 160;
+pub global TK_LIT_RBRACKET: i32 = 161;
+pub global TK_LIT_LBRACE: i32 = 162;
+pub global TK_LIT_RBRACE: i32 = 163;
+pub global TK_LIT_EQGT: i32 = 164;
+pub global TK_LIT_NEW: i32 = 165;
+pub global TK_LIT_TYPEOF: i32 = 166;
+pub global TK_LIT_DOT: i32 = 167;
+pub global TK_LIT_QUESTION: i32 = 168;
+pub global TK_LIT_COLON: i32 = 169;
+pub global TK_LIT_DOTDOTDOT: i32 = 170;
+pub global TK_LIT_TYPE: i32 = 171;
+pub global TK_LIT_AT: i32 = 172;
+pub global TK_LIT_STAR: i32 = 173;
+pub global TK_LIT_HASH: i32 = 174;
+pub global TK_LIT_QUESTIONDOT: i32 = 175;
+pub global TK_LIT_BANG: i32 = 176;
+pub global TK_LIT_PLUSPLUS: i32 = 177;
+pub global TK_LIT_MINUSMINUS: i32 = 178;
+pub global TK_LIT_PLUS: i32 = 179;
+pub global TK_LIT_MINUS: i32 = 180;
+pub global TK_LIT_TILDE: i32 = 181;
+pub global TK_LIT_STARSTAR: i32 = 182;
+pub global TK_LIT_SLASH: i32 = 183;
+pub global TK_LIT_PERCENT: i32 = 184;
+pub global TK_LIT_QUESTIONQUESTION: i32 = 185;
+pub global TK_LIT_LTLT: i32 = 186;
+pub global TK_LIT_LTEQ: i32 = 187;
+pub global TK_LIT_GTEQ: i32 = 188;
+pub global TK_LIT_EQEQ: i32 = 189;
+pub global TK_LIT_BANGEQ: i32 = 190;
+pub global TK_LIT_EQEQEQ: i32 = 191;
+pub global TK_LIT_BANGEQEQ: i32 = 192;
+pub global TK_LIT_CARET: i32 = 193;
+pub global TK_LIT_AMPAMP: i32 = 194;
+pub global TK_LIT_PIPEPIPE: i32 = 195;
+pub global TK_LIT_STAREQ: i32 = 196;
+pub global TK_LIT_SLASHEQ: i32 = 197;
+pub global TK_LIT_PERCENTEQ: i32 = 198;
+pub global TK_LIT_PLUSEQ: i32 = 199;
+pub global TK_LIT_MINUSEQ: i32 = 200;
+pub global TK_LIT_LTLTEQ: i32 = 201;
+pub global TK_LIT_GTGTEQ: i32 = 202;
+pub global TK_LIT_GTGTGTEQ: i32 = 203;
+pub global TK_LIT_AMPEQ: i32 = 204;
+pub global TK_LIT_CARETEQ: i32 = 205;
+pub global TK_LIT_PIPEEQ: i32 = 206;
+pub global TK_LIT_STARSTAREQ: i32 = 207;
+pub global TK_LIT_QUESTIONQUESTIONEQ: i32 = 208;
 
 struct Lexer {
     chars: List<char>,
@@ -1495,7 +1495,7 @@ struct Lexer {
 
 impl Lexer {
     fn new(input: &String) -> Lexer {
-        return Lexer { chars: input.chars().collect(), pos: 0 };
+        return Lexer { chars: input.to_chars(), pos: 0 };
     }
 
     fn at_end(&self) -> bool {
@@ -1543,7 +1543,7 @@ fn try_SingleLineComment(chars: &List<char>, start: i32) -> i32 {
         let rep_saved_1 = pos;
         rep_1: {
             if pos >= chars.len() { break rep_1; }
-            if chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == ' ' || chars[pos] == ' ' { break rep_1; }
+            if (chars[pos] matches { '\r' | '\n' | ' ' | ' ' }) { break rep_1; }
             pos += 1;
             continue;
         }
@@ -1562,7 +1562,7 @@ fn try_RegularExpressionLiteral(chars: &List<char>, start: i32) -> i32 {
     alts_2_0: {
         pos = alts_saved_2;
         if pos >= chars.len() { break alts_2_0; }
-        if chars[pos] == '*' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == ' ' || chars[pos] == ' ' || chars[pos] == '\\' || chars[pos] == '/' || chars[pos] == '[' { break alts_2_0; }
+        if (chars[pos] matches { '*' | '\r' | '\n' | ' ' | ' ' | '\\' | '/' | '[' }) { break alts_2_0; }
         pos += 1;
         alts_ok_2 = true;
     }
@@ -1572,7 +1572,7 @@ fn try_RegularExpressionLiteral(chars: &List<char>, start: i32) -> i32 {
             if pos >= chars.len() || chars[pos] != '\\' { break alts_2_1; }
             pos += 1;
             if pos >= chars.len() { break alts_2_1; }
-            if chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == ' ' || chars[pos] == ' ' { break alts_2_1; }
+            if (chars[pos] matches { '\r' | '\n' | ' ' | ' ' }) { break alts_2_1; }
             pos += 1;
             alts_ok_2 = true;
         }
@@ -1589,7 +1589,7 @@ fn try_RegularExpressionLiteral(chars: &List<char>, start: i32) -> i32 {
                         alts_4_0: {
                             pos = alts_saved_4;
                             if pos >= chars.len() { break alts_4_0; }
-                            if chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == ' ' || chars[pos] == ' ' || chars[pos] == ']' || chars[pos] == '\\' { break alts_4_0; }
+                            if (chars[pos] matches { '\r' | '\n' | ' ' | ' ' | ']' | '\\' }) { break alts_4_0; }
                             pos += 1;
                             alts_ok_4 = true;
                         }
@@ -1599,7 +1599,7 @@ fn try_RegularExpressionLiteral(chars: &List<char>, start: i32) -> i32 {
                                 if pos >= chars.len() || chars[pos] != '\\' { break alts_4_1; }
                                 pos += 1;
                                 if pos >= chars.len() { break alts_4_1; }
-                                if chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == ' ' || chars[pos] == ' ' { break alts_4_1; }
+                                if (chars[pos] matches { '\r' | '\n' | ' ' | ' ' }) { break alts_4_1; }
                                 pos += 1;
                                 alts_ok_4 = true;
                             }
@@ -1625,7 +1625,7 @@ fn try_RegularExpressionLiteral(chars: &List<char>, start: i32) -> i32 {
             alts_6_0: {
                 pos = alts_saved_6;
                 if pos >= chars.len() { break alts_6_0; }
-                if chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == ' ' || chars[pos] == ' ' || chars[pos] == '\\' || chars[pos] == '/' || chars[pos] == '[' { break alts_6_0; }
+                if (chars[pos] matches { '\r' | '\n' | ' ' | ' ' | '\\' | '/' | '[' }) { break alts_6_0; }
                 pos += 1;
                 alts_ok_6 = true;
             }
@@ -1635,7 +1635,7 @@ fn try_RegularExpressionLiteral(chars: &List<char>, start: i32) -> i32 {
                     if pos >= chars.len() || chars[pos] != '\\' { break alts_6_1; }
                     pos += 1;
                     if pos >= chars.len() { break alts_6_1; }
-                    if chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == ' ' || chars[pos] == ' ' { break alts_6_1; }
+                    if (chars[pos] matches { '\r' | '\n' | ' ' | ' ' }) { break alts_6_1; }
                     pos += 1;
                     alts_ok_6 = true;
                 }
@@ -1652,7 +1652,7 @@ fn try_RegularExpressionLiteral(chars: &List<char>, start: i32) -> i32 {
                                 alts_8_0: {
                                     pos = alts_saved_8;
                                     if pos >= chars.len() { break alts_8_0; }
-                                    if chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == ' ' || chars[pos] == ' ' || chars[pos] == ']' || chars[pos] == '\\' { break alts_8_0; }
+                                    if (chars[pos] matches { '\r' | '\n' | ' ' | ' ' | ']' | '\\' }) { break alts_8_0; }
                                     pos += 1;
                                     alts_ok_8 = true;
                                 }
@@ -1662,7 +1662,7 @@ fn try_RegularExpressionLiteral(chars: &List<char>, start: i32) -> i32 {
                                         if pos >= chars.len() || chars[pos] != '\\' { break alts_8_1; }
                                         pos += 1;
                                         if pos >= chars.len() { break alts_8_1; }
-                                        if chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == ' ' || chars[pos] == ' ' { break alts_8_1; }
+                                        if (chars[pos] matches { '\r' | '\n' | ' ' | ' ' }) { break alts_8_1; }
                                         pos += 1;
                                         alts_ok_8 = true;
                                     }
@@ -1699,7 +1699,7 @@ fn try_RegularExpressionLiteral(chars: &List<char>, start: i32) -> i32 {
                 alts_11_0: {
                     pos = alts_saved_11;
                     if pos >= chars.len() { break alts_11_0; }
-                    if !('A' <= chars[pos] <= 'Z' || 'a' <= chars[pos] <= 'z' || 'À' <= chars[pos] <= 'Ö' || 'Ø' <= chars[pos] <= 'ö' || 'ø' <= chars[pos] <= 'ÿ' || 'Ā' <= chars[pos] <= 'ɏ' || 'Ͱ' <= chars[pos] <= 'Ͽ' || 'Ѐ' <= chars[pos] <= 'ӿ' || '؀' <= chars[pos] <= 'ۿ' || 'ऀ' <= chars[pos] <= 'ॿ' || '一' <= chars[pos] <= '鿿' || '぀' <= chars[pos] <= 'ゟ' || '゠' <= chars[pos] <= 'ヿ' || '가' <= chars[pos] <= '힯') { break alts_11_0; }
+                    if !((chars[pos] matches { 'A'..='Z' | 'a'..='z' | 'À'..='Ö' | 'Ø'..='ö' | 'ø'..='ÿ' | 'Ā'..='ɏ' | 'Ͱ'..='Ͽ' | 'Ѐ'..='ӿ' | '؀'..='ۿ' | 'ऀ'..='ॿ' | '一'..='鿿' | '぀'..='ゟ' | '゠'..='ヿ' | '가'..='힯' })) { break alts_11_0; }
                     pos += 1;
                     alts_ok_11 = true;
                 }
@@ -1707,7 +1707,7 @@ fn try_RegularExpressionLiteral(chars: &List<char>, start: i32) -> i32 {
                     alts_11_1: {
                         pos = alts_saved_11;
                         if pos >= chars.len() { break alts_11_1; }
-                        if !(chars[pos] == '$' || chars[pos] == '_') { break alts_11_1; }
+                        if !((chars[pos] matches { '$' | '_' })) { break alts_11_1; }
                         pos += 1;
                         alts_ok_11 = true;
                     }
@@ -1723,16 +1723,16 @@ fn try_RegularExpressionLiteral(chars: &List<char>, start: i32) -> i32 {
                                 if pos >= chars.len() || chars[pos] != 'u' { break alts_12_0; }
                                 pos += 1;
                                 if pos >= chars.len() { break alts_12_0; }
-                                if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_12_0; }
+                                if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_12_0; }
                                 pos += 1;
                                 if pos >= chars.len() { break alts_12_0; }
-                                if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_12_0; }
+                                if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_12_0; }
                                 pos += 1;
                                 if pos >= chars.len() { break alts_12_0; }
-                                if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_12_0; }
+                                if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_12_0; }
                                 pos += 1;
                                 if pos >= chars.len() { break alts_12_0; }
-                                if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_12_0; }
+                                if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_12_0; }
                                 pos += 1;
                                 alts_ok_12 = true;
                             }
@@ -1744,16 +1744,16 @@ fn try_RegularExpressionLiteral(chars: &List<char>, start: i32) -> i32 {
                                     if pos >= chars.len() || chars[pos] != '{' { break alts_12_1; }
                                     pos += 1;
                                     if pos >= chars.len() { break alts_12_1; }
-                                    if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_12_1; }
+                                    if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_12_1; }
                                     pos += 1;
                                     if pos >= chars.len() { break alts_12_1; }
-                                    if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_12_1; }
+                                    if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_12_1; }
                                     pos += 1;
                                     loop {
                                         let rep_saved_13 = pos;
                                         rep_13: {
                                             if pos >= chars.len() { break rep_13; }
-                                            if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_13; }
+                                            if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_13; }
                                             pos += 1;
                                             continue;
                                         }
@@ -1777,7 +1777,7 @@ fn try_RegularExpressionLiteral(chars: &List<char>, start: i32) -> i32 {
                 alts_10_1: {
                     pos = alts_saved_10;
                     if pos >= chars.len() { break alts_10_1; }
-                    if !('̀' <= chars[pos] <= 'ͯ' || '᪰' <= chars[pos] <= '᫿' || 'ँ' <= chars[pos] <= 'ं' || chars[pos] == '़' || 'ु' <= chars[pos] <= 'ै' || chars[pos] == '्') { break alts_10_1; }
+                    if !((chars[pos] matches { '̀'..='ͯ' | '᪰'..='᫿' | 'ँ'..='ं' | '़' | 'ु'..='ै' | '्' })) { break alts_10_1; }
                     pos += 1;
                     alts_ok_10 = true;
                 }
@@ -1785,7 +1785,7 @@ fn try_RegularExpressionLiteral(chars: &List<char>, start: i32) -> i32 {
                     alts_10_2: {
                         pos = alts_saved_10;
                         if pos >= chars.len() { break alts_10_2; }
-                        if !('0' <= chars[pos] <= '9' || '٠' <= chars[pos] <= '٩' || '۰' <= chars[pos] <= '۹' || '०' <= chars[pos] <= '९') { break alts_10_2; }
+                        if !((chars[pos] matches { '0'..='9' | '٠'..='٩' | '۰'..='۹' | '०'..='९' })) { break alts_10_2; }
                         pos += 1;
                         alts_ok_10 = true;
                     }
@@ -1793,7 +1793,7 @@ fn try_RegularExpressionLiteral(chars: &List<char>, start: i32) -> i32 {
                         alts_10_3: {
                             pos = alts_saved_10;
                             if pos >= chars.len() { break alts_10_3; }
-                            if !(chars[pos] == '_' || '‿' <= chars[pos] <= '⁀' || chars[pos] == '⁔' || '︳' <= chars[pos] <= '︴' || '﹍' <= chars[pos] <= '﹏' || chars[pos] == '＿') { break alts_10_3; }
+                            if !((chars[pos] matches { '_' | '‿'..='⁀' | '⁔' | '︳'..='︴' | '﹍'..='﹏' | '＿' })) { break alts_10_3; }
                             pos += 1;
                             alts_ok_10 = true;
                         }
@@ -1899,13 +1899,13 @@ fn try_DecimalLiteral(chars: &List<char>, start: i32) -> i32 {
             alts_16_1: {
                 pos = alts_saved_16;
                 if pos >= chars.len() { break alts_16_1; }
-                if !('1' <= chars[pos] <= '9') { break alts_16_1; }
+                if !((chars[pos] matches { '1'..='9' })) { break alts_16_1; }
                 pos += 1;
                 loop {
                     let rep_saved_17 = pos;
                     rep_17: {
                         if pos >= chars.len() { break rep_17; }
-                        if !('0' <= chars[pos] <= '9' || chars[pos] == '_') { break rep_17; }
+                        if !((chars[pos] matches { '0'..='9' | '_' })) { break rep_17; }
                         pos += 1;
                         continue;
                     }
@@ -1919,13 +1919,13 @@ fn try_DecimalLiteral(chars: &List<char>, start: i32) -> i32 {
         if pos >= chars.len() || chars[pos] != '.' { break alts_15_0; }
         pos += 1;
         if pos >= chars.len() { break alts_15_0; }
-        if !('0' <= chars[pos] <= '9') { break alts_15_0; }
+        if !((chars[pos] matches { '0'..='9' })) { break alts_15_0; }
         pos += 1;
         loop {
             let rep_saved_18 = pos;
             rep_18: {
                 if pos >= chars.len() { break rep_18; }
-                if !('0' <= chars[pos] <= '9' || chars[pos] == '_') { break rep_18; }
+                if !((chars[pos] matches { '0'..='9' | '_' })) { break rep_18; }
                 pos += 1;
                 continue;
             }
@@ -1936,25 +1936,25 @@ fn try_DecimalLiteral(chars: &List<char>, start: i32) -> i32 {
         let mut opt_ok_19 = false;
         rep_19: {
             if pos >= chars.len() { break rep_19; }
-            if !(chars[pos] == 'e' || chars[pos] == 'E') { break rep_19; }
+            if !((chars[pos] matches { 'e' | 'E' })) { break rep_19; }
             pos += 1;
             let opt_saved_20 = pos;
             let mut opt_ok_20 = false;
             rep_20: {
                 if pos >= chars.len() { break rep_20; }
-                if !(chars[pos] == '+' || chars[pos] == '-') { break rep_20; }
+                if !((chars[pos] matches { '+' | '-' })) { break rep_20; }
                 pos += 1;
                 opt_ok_20 = true;
             }
             if !opt_ok_20 { pos = opt_saved_20; }
             if pos >= chars.len() { break rep_19; }
-            if !('0' <= chars[pos] <= '9' || chars[pos] == '_') { break rep_19; }
+            if !((chars[pos] matches { '0'..='9' | '_' })) { break rep_19; }
             pos += 1;
             loop {
                 let rep_saved_21 = pos;
                 rep_21: {
                     if pos >= chars.len() { break rep_21; }
-                    if !('0' <= chars[pos] <= '9' || chars[pos] == '_') { break rep_21; }
+                    if !((chars[pos] matches { '0'..='9' | '_' })) { break rep_21; }
                     pos += 1;
                     continue;
                 }
@@ -1972,13 +1972,13 @@ fn try_DecimalLiteral(chars: &List<char>, start: i32) -> i32 {
             if pos >= chars.len() || chars[pos] != '.' { break alts_15_1; }
             pos += 1;
             if pos >= chars.len() { break alts_15_1; }
-            if !('0' <= chars[pos] <= '9') { break alts_15_1; }
+            if !((chars[pos] matches { '0'..='9' })) { break alts_15_1; }
             pos += 1;
             loop {
                 let rep_saved_22 = pos;
                 rep_22: {
                     if pos >= chars.len() { break rep_22; }
-                    if !('0' <= chars[pos] <= '9' || chars[pos] == '_') { break rep_22; }
+                    if !((chars[pos] matches { '0'..='9' | '_' })) { break rep_22; }
                     pos += 1;
                     continue;
                 }
@@ -1989,25 +1989,25 @@ fn try_DecimalLiteral(chars: &List<char>, start: i32) -> i32 {
             let mut opt_ok_23 = false;
             rep_23: {
                 if pos >= chars.len() { break rep_23; }
-                if !(chars[pos] == 'e' || chars[pos] == 'E') { break rep_23; }
+                if !((chars[pos] matches { 'e' | 'E' })) { break rep_23; }
                 pos += 1;
                 let opt_saved_24 = pos;
                 let mut opt_ok_24 = false;
                 rep_24: {
                     if pos >= chars.len() { break rep_24; }
-                    if !(chars[pos] == '+' || chars[pos] == '-') { break rep_24; }
+                    if !((chars[pos] matches { '+' | '-' })) { break rep_24; }
                     pos += 1;
                     opt_ok_24 = true;
                 }
                 if !opt_ok_24 { pos = opt_saved_24; }
                 if pos >= chars.len() { break rep_23; }
-                if !('0' <= chars[pos] <= '9' || chars[pos] == '_') { break rep_23; }
+                if !((chars[pos] matches { '0'..='9' | '_' })) { break rep_23; }
                 pos += 1;
                 loop {
                     let rep_saved_25 = pos;
                     rep_25: {
                         if pos >= chars.len() { break rep_25; }
-                        if !('0' <= chars[pos] <= '9' || chars[pos] == '_') { break rep_25; }
+                        if !((chars[pos] matches { '0'..='9' | '_' })) { break rep_25; }
                         pos += 1;
                         continue;
                     }
@@ -2034,13 +2034,13 @@ fn try_DecimalLiteral(chars: &List<char>, start: i32) -> i32 {
                     alts_26_1: {
                         pos = alts_saved_26;
                         if pos >= chars.len() { break alts_26_1; }
-                        if !('1' <= chars[pos] <= '9') { break alts_26_1; }
+                        if !((chars[pos] matches { '1'..='9' })) { break alts_26_1; }
                         pos += 1;
                         loop {
                             let rep_saved_27 = pos;
                             rep_27: {
                                 if pos >= chars.len() { break rep_27; }
-                                if !('0' <= chars[pos] <= '9' || chars[pos] == '_') { break rep_27; }
+                                if !((chars[pos] matches { '0'..='9' | '_' })) { break rep_27; }
                                 pos += 1;
                                 continue;
                             }
@@ -2055,25 +2055,25 @@ fn try_DecimalLiteral(chars: &List<char>, start: i32) -> i32 {
                 let mut opt_ok_28 = false;
                 rep_28: {
                     if pos >= chars.len() { break rep_28; }
-                    if !(chars[pos] == 'e' || chars[pos] == 'E') { break rep_28; }
+                    if !((chars[pos] matches { 'e' | 'E' })) { break rep_28; }
                     pos += 1;
                     let opt_saved_29 = pos;
                     let mut opt_ok_29 = false;
                     rep_29: {
                         if pos >= chars.len() { break rep_29; }
-                        if !(chars[pos] == '+' || chars[pos] == '-') { break rep_29; }
+                        if !((chars[pos] matches { '+' | '-' })) { break rep_29; }
                         pos += 1;
                         opt_ok_29 = true;
                     }
                     if !opt_ok_29 { pos = opt_saved_29; }
                     if pos >= chars.len() { break rep_28; }
-                    if !('0' <= chars[pos] <= '9' || chars[pos] == '_') { break rep_28; }
+                    if !((chars[pos] matches { '0'..='9' | '_' })) { break rep_28; }
                     pos += 1;
                     loop {
                         let rep_saved_30 = pos;
                         rep_30: {
                             if pos >= chars.len() { break rep_30; }
-                            if !('0' <= chars[pos] <= '9' || chars[pos] == '_') { break rep_30; }
+                            if !((chars[pos] matches { '0'..='9' | '_' })) { break rep_30; }
                             pos += 1;
                             continue;
                         }
@@ -2096,16 +2096,16 @@ fn try_HexIntegerLiteral(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != '0' { return -1; }
     pos += 1;
     if pos >= chars.len() { return -1; }
-    if !(chars[pos] == 'x' || chars[pos] == 'X') { return -1; }
+    if !((chars[pos] matches { 'x' | 'X' })) { return -1; }
     pos += 1;
     if pos >= chars.len() { return -1; }
-    if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { return -1; }
+    if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { return -1; }
     pos += 1;
     loop {
         let rep_saved_31 = pos;
         rep_31: {
             if pos >= chars.len() { break rep_31; }
-            if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_31; }
+            if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_31; }
             pos += 1;
             continue;
         }
@@ -2120,13 +2120,13 @@ fn try_OctalIntegerLiteral(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != '0' { return -1; }
     pos += 1;
     if pos >= chars.len() { return -1; }
-    if !('0' <= chars[pos] <= '7') { return -1; }
+    if !((chars[pos] matches { '0'..='7' })) { return -1; }
     pos += 1;
     loop {
         let rep_saved_32 = pos;
         rep_32: {
             if pos >= chars.len() { break rep_32; }
-            if !('0' <= chars[pos] <= '7') { break rep_32; }
+            if !((chars[pos] matches { '0'..='7' })) { break rep_32; }
             pos += 1;
             continue;
         }
@@ -2141,16 +2141,16 @@ fn try_OctalIntegerLiteral2(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != '0' { return -1; }
     pos += 1;
     if pos >= chars.len() { return -1; }
-    if !(chars[pos] == 'o' || chars[pos] == 'O') { return -1; }
+    if !((chars[pos] matches { 'o' | 'O' })) { return -1; }
     pos += 1;
     if pos >= chars.len() { return -1; }
-    if !('0' <= chars[pos] <= '7') { return -1; }
+    if !((chars[pos] matches { '0'..='7' })) { return -1; }
     pos += 1;
     loop {
         let rep_saved_33 = pos;
         rep_33: {
             if pos >= chars.len() { break rep_33; }
-            if !(chars[pos] == '_' || '0' <= chars[pos] <= '7') { break rep_33; }
+            if !((chars[pos] matches { '_' | '0'..='7' })) { break rep_33; }
             pos += 1;
             continue;
         }
@@ -2165,16 +2165,16 @@ fn try_BinaryIntegerLiteral(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != '0' { return -1; }
     pos += 1;
     if pos >= chars.len() { return -1; }
-    if !(chars[pos] == 'b' || chars[pos] == 'B') { return -1; }
+    if !((chars[pos] matches { 'b' | 'B' })) { return -1; }
     pos += 1;
     if pos >= chars.len() { return -1; }
-    if !(chars[pos] == '0' || chars[pos] == '1') { return -1; }
+    if !((chars[pos] matches { '0' | '1' })) { return -1; }
     pos += 1;
     loop {
         let rep_saved_34 = pos;
         rep_34: {
             if pos >= chars.len() { break rep_34; }
-            if !(chars[pos] == '_' || chars[pos] == '0' || chars[pos] == '1') { break rep_34; }
+            if !((chars[pos] matches { '_' | '0' | '1' })) { break rep_34; }
             pos += 1;
             continue;
         }
@@ -2189,16 +2189,16 @@ fn try_BigHexIntegerLiteral(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != '0' { return -1; }
     pos += 1;
     if pos >= chars.len() { return -1; }
-    if !(chars[pos] == 'x' || chars[pos] == 'X') { return -1; }
+    if !((chars[pos] matches { 'x' | 'X' })) { return -1; }
     pos += 1;
     if pos >= chars.len() { return -1; }
-    if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { return -1; }
+    if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { return -1; }
     pos += 1;
     loop {
         let rep_saved_35 = pos;
         rep_35: {
             if pos >= chars.len() { break rep_35; }
-            if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_35; }
+            if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_35; }
             pos += 1;
             continue;
         }
@@ -2215,10 +2215,10 @@ fn try_BigOctalIntegerLiteral(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != '0' { return -1; }
     pos += 1;
     if pos >= chars.len() { return -1; }
-    if !(chars[pos] == 'o' || chars[pos] == 'O') { return -1; }
+    if !((chars[pos] matches { 'o' | 'O' })) { return -1; }
     pos += 1;
     if pos >= chars.len() { return -1; }
-    if !('0' <= chars[pos] <= '7') { return -1; }
+    if !((chars[pos] matches { '0'..='7' })) { return -1; }
     pos += 1;
     let mut accept_36: i32 = -1;
     let peek_save_37 = pos;
@@ -2236,7 +2236,7 @@ fn try_BigOctalIntegerLiteral(chars: &List<char>, start: i32) -> i32 {
         let la_saved_36 = pos;
         la_rep_36: {
             if pos >= chars.len() { break la_rep_36; }
-            if !(chars[pos] == '_' || '0' <= chars[pos] <= '7') { break la_rep_36; }
+            if !((chars[pos] matches { '_' | '0'..='7' })) { break la_rep_36; }
             pos += 1;
             let peek_save_38 = pos;
             let mut peek_ok_38 = false;
@@ -2268,10 +2268,10 @@ fn try_BigBinaryIntegerLiteral(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != '0' { return -1; }
     pos += 1;
     if pos >= chars.len() { return -1; }
-    if !(chars[pos] == 'b' || chars[pos] == 'B') { return -1; }
+    if !((chars[pos] matches { 'b' | 'B' })) { return -1; }
     pos += 1;
     if pos >= chars.len() { return -1; }
-    if !(chars[pos] == '0' || chars[pos] == '1') { return -1; }
+    if !((chars[pos] matches { '0' | '1' })) { return -1; }
     pos += 1;
     let mut accept_39: i32 = -1;
     let peek_save_40 = pos;
@@ -2289,7 +2289,7 @@ fn try_BigBinaryIntegerLiteral(chars: &List<char>, start: i32) -> i32 {
         let la_saved_39 = pos;
         la_rep_39: {
             if pos >= chars.len() { break la_rep_39; }
-            if !(chars[pos] == '_' || chars[pos] == '0' || chars[pos] == '1') { break la_rep_39; }
+            if !((chars[pos] matches { '_' | '0' | '1' })) { break la_rep_39; }
             pos += 1;
             let peek_save_41 = pos;
             let mut peek_ok_41 = false;
@@ -2330,13 +2330,13 @@ fn try_BigDecimalIntegerLiteral(chars: &List<char>, start: i32) -> i32 {
         alts_42_1: {
             pos = alts_saved_42;
             if pos >= chars.len() { break alts_42_1; }
-            if !('1' <= chars[pos] <= '9') { break alts_42_1; }
+            if !((chars[pos] matches { '1'..='9' })) { break alts_42_1; }
             pos += 1;
             loop {
                 let rep_saved_43 = pos;
                 rep_43: {
                     if pos >= chars.len() { break rep_43; }
-                    if !('0' <= chars[pos] <= '9' || chars[pos] == '_') { break rep_43; }
+                    if !((chars[pos] matches { '0'..='9' | '_' })) { break rep_43; }
                     pos += 1;
                     continue;
                 }
@@ -3384,7 +3384,7 @@ fn try_Identifier(chars: &List<char>, start: i32) -> i32 {
     alts_44_0: {
         pos = alts_saved_44;
         if pos >= chars.len() { break alts_44_0; }
-        if !('A' <= chars[pos] <= 'Z' || 'a' <= chars[pos] <= 'z' || 'À' <= chars[pos] <= 'Ö' || 'Ø' <= chars[pos] <= 'ö' || 'ø' <= chars[pos] <= 'ÿ' || 'Ā' <= chars[pos] <= 'ɏ' || 'Ͱ' <= chars[pos] <= 'Ͽ' || 'Ѐ' <= chars[pos] <= 'ӿ' || '؀' <= chars[pos] <= 'ۿ' || 'ऀ' <= chars[pos] <= 'ॿ' || '一' <= chars[pos] <= '鿿' || '぀' <= chars[pos] <= 'ゟ' || '゠' <= chars[pos] <= 'ヿ' || '가' <= chars[pos] <= '힯') { break alts_44_0; }
+        if !((chars[pos] matches { 'A'..='Z' | 'a'..='z' | 'À'..='Ö' | 'Ø'..='ö' | 'ø'..='ÿ' | 'Ā'..='ɏ' | 'Ͱ'..='Ͽ' | 'Ѐ'..='ӿ' | '؀'..='ۿ' | 'ऀ'..='ॿ' | '一'..='鿿' | '぀'..='ゟ' | '゠'..='ヿ' | '가'..='힯' })) { break alts_44_0; }
         pos += 1;
         alts_ok_44 = true;
     }
@@ -3392,7 +3392,7 @@ fn try_Identifier(chars: &List<char>, start: i32) -> i32 {
         alts_44_1: {
             pos = alts_saved_44;
             if pos >= chars.len() { break alts_44_1; }
-            if !(chars[pos] == '$' || chars[pos] == '_') { break alts_44_1; }
+            if !((chars[pos] matches { '$' | '_' })) { break alts_44_1; }
             pos += 1;
             alts_ok_44 = true;
         }
@@ -3408,16 +3408,16 @@ fn try_Identifier(chars: &List<char>, start: i32) -> i32 {
                     if pos >= chars.len() || chars[pos] != 'u' { break alts_45_0; }
                     pos += 1;
                     if pos >= chars.len() { break alts_45_0; }
-                    if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_45_0; }
+                    if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_45_0; }
                     pos += 1;
                     if pos >= chars.len() { break alts_45_0; }
-                    if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_45_0; }
+                    if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_45_0; }
                     pos += 1;
                     if pos >= chars.len() { break alts_45_0; }
-                    if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_45_0; }
+                    if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_45_0; }
                     pos += 1;
                     if pos >= chars.len() { break alts_45_0; }
-                    if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_45_0; }
+                    if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_45_0; }
                     pos += 1;
                     alts_ok_45 = true;
                 }
@@ -3429,16 +3429,16 @@ fn try_Identifier(chars: &List<char>, start: i32) -> i32 {
                         if pos >= chars.len() || chars[pos] != '{' { break alts_45_1; }
                         pos += 1;
                         if pos >= chars.len() { break alts_45_1; }
-                        if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_45_1; }
+                        if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_45_1; }
                         pos += 1;
                         if pos >= chars.len() { break alts_45_1; }
-                        if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_45_1; }
+                        if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_45_1; }
                         pos += 1;
                         loop {
                             let rep_saved_46 = pos;
                             rep_46: {
                                 if pos >= chars.len() { break rep_46; }
-                                if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_46; }
+                                if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_46; }
                                 pos += 1;
                                 continue;
                             }
@@ -3468,7 +3468,7 @@ fn try_Identifier(chars: &List<char>, start: i32) -> i32 {
                 alts_49_0: {
                     pos = alts_saved_49;
                     if pos >= chars.len() { break alts_49_0; }
-                    if !('A' <= chars[pos] <= 'Z' || 'a' <= chars[pos] <= 'z' || 'À' <= chars[pos] <= 'Ö' || 'Ø' <= chars[pos] <= 'ö' || 'ø' <= chars[pos] <= 'ÿ' || 'Ā' <= chars[pos] <= 'ɏ' || 'Ͱ' <= chars[pos] <= 'Ͽ' || 'Ѐ' <= chars[pos] <= 'ӿ' || '؀' <= chars[pos] <= 'ۿ' || 'ऀ' <= chars[pos] <= 'ॿ' || '一' <= chars[pos] <= '鿿' || '぀' <= chars[pos] <= 'ゟ' || '゠' <= chars[pos] <= 'ヿ' || '가' <= chars[pos] <= '힯') { break alts_49_0; }
+                    if !((chars[pos] matches { 'A'..='Z' | 'a'..='z' | 'À'..='Ö' | 'Ø'..='ö' | 'ø'..='ÿ' | 'Ā'..='ɏ' | 'Ͱ'..='Ͽ' | 'Ѐ'..='ӿ' | '؀'..='ۿ' | 'ऀ'..='ॿ' | '一'..='鿿' | '぀'..='ゟ' | '゠'..='ヿ' | '가'..='힯' })) { break alts_49_0; }
                     pos += 1;
                     alts_ok_49 = true;
                 }
@@ -3476,7 +3476,7 @@ fn try_Identifier(chars: &List<char>, start: i32) -> i32 {
                     alts_49_1: {
                         pos = alts_saved_49;
                         if pos >= chars.len() { break alts_49_1; }
-                        if !(chars[pos] == '$' || chars[pos] == '_') { break alts_49_1; }
+                        if !((chars[pos] matches { '$' | '_' })) { break alts_49_1; }
                         pos += 1;
                         alts_ok_49 = true;
                     }
@@ -3492,16 +3492,16 @@ fn try_Identifier(chars: &List<char>, start: i32) -> i32 {
                                 if pos >= chars.len() || chars[pos] != 'u' { break alts_50_0; }
                                 pos += 1;
                                 if pos >= chars.len() { break alts_50_0; }
-                                if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_50_0; }
+                                if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_50_0; }
                                 pos += 1;
                                 if pos >= chars.len() { break alts_50_0; }
-                                if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_50_0; }
+                                if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_50_0; }
                                 pos += 1;
                                 if pos >= chars.len() { break alts_50_0; }
-                                if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_50_0; }
+                                if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_50_0; }
                                 pos += 1;
                                 if pos >= chars.len() { break alts_50_0; }
-                                if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_50_0; }
+                                if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_50_0; }
                                 pos += 1;
                                 alts_ok_50 = true;
                             }
@@ -3513,16 +3513,16 @@ fn try_Identifier(chars: &List<char>, start: i32) -> i32 {
                                     if pos >= chars.len() || chars[pos] != '{' { break alts_50_1; }
                                     pos += 1;
                                     if pos >= chars.len() { break alts_50_1; }
-                                    if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_50_1; }
+                                    if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_50_1; }
                                     pos += 1;
                                     if pos >= chars.len() { break alts_50_1; }
-                                    if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_50_1; }
+                                    if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_50_1; }
                                     pos += 1;
                                     loop {
                                         let rep_saved_51 = pos;
                                         rep_51: {
                                             if pos >= chars.len() { break rep_51; }
-                                            if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_51; }
+                                            if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_51; }
                                             pos += 1;
                                             continue;
                                         }
@@ -3546,7 +3546,7 @@ fn try_Identifier(chars: &List<char>, start: i32) -> i32 {
                 alts_48_1: {
                     pos = alts_saved_48;
                     if pos >= chars.len() { break alts_48_1; }
-                    if !('̀' <= chars[pos] <= 'ͯ' || '᪰' <= chars[pos] <= '᫿' || 'ँ' <= chars[pos] <= 'ं' || chars[pos] == '़' || 'ु' <= chars[pos] <= 'ै' || chars[pos] == '्') { break alts_48_1; }
+                    if !((chars[pos] matches { '̀'..='ͯ' | '᪰'..='᫿' | 'ँ'..='ं' | '़' | 'ु'..='ै' | '्' })) { break alts_48_1; }
                     pos += 1;
                     alts_ok_48 = true;
                 }
@@ -3554,7 +3554,7 @@ fn try_Identifier(chars: &List<char>, start: i32) -> i32 {
                     alts_48_2: {
                         pos = alts_saved_48;
                         if pos >= chars.len() { break alts_48_2; }
-                        if !('0' <= chars[pos] <= '9' || '٠' <= chars[pos] <= '٩' || '۰' <= chars[pos] <= '۹' || '०' <= chars[pos] <= '९') { break alts_48_2; }
+                        if !((chars[pos] matches { '0'..='9' | '٠'..='٩' | '۰'..='۹' | '०'..='९' })) { break alts_48_2; }
                         pos += 1;
                         alts_ok_48 = true;
                     }
@@ -3562,7 +3562,7 @@ fn try_Identifier(chars: &List<char>, start: i32) -> i32 {
                         alts_48_3: {
                             pos = alts_saved_48;
                             if pos >= chars.len() { break alts_48_3; }
-                            if !(chars[pos] == '_' || '‿' <= chars[pos] <= '⁀' || chars[pos] == '⁔' || '︳' <= chars[pos] <= '︴' || '﹍' <= chars[pos] <= '﹏' || chars[pos] == '＿') { break alts_48_3; }
+                            if !((chars[pos] matches { '_' | '‿'..='⁀' | '⁔' | '︳'..='︴' | '﹍'..='﹏' | '＿' })) { break alts_48_3; }
                             pos += 1;
                             alts_ok_48 = true;
                         }
@@ -3610,7 +3610,7 @@ fn try_StringLiteral(chars: &List<char>, start: i32) -> i32 {
                 alts_54_0: {
                     pos = alts_saved_54;
                     if pos >= chars.len() { break alts_54_0; }
-                    if chars[pos] == '"' || chars[pos] == '\\' || chars[pos] == '\r' || chars[pos] == '\n' { break alts_54_0; }
+                    if (chars[pos] matches { '"' | '\\' | '\r' | '\n' }) { break alts_54_0; }
                     pos += 1;
                     alts_ok_54 = true;
                 }
@@ -3628,7 +3628,7 @@ fn try_StringLiteral(chars: &List<char>, start: i32) -> i32 {
                             alts_56_0: {
                                 pos = alts_saved_56;
                                 if pos >= chars.len() { break alts_56_0; }
-                                if !(chars[pos] == '\'' || chars[pos] == '"' || chars[pos] == '\\' || chars[pos] == 'b' || chars[pos] == 'f' || chars[pos] == 'n' || chars[pos] == 'r' || chars[pos] == 't' || chars[pos] == 'v') { break alts_56_0; }
+                                if !((chars[pos] matches { '\'' | '"' | '\\' | 'b' | 'f' | 'n' | 'r' | 't' | 'v' })) { break alts_56_0; }
                                 pos += 1;
                                 alts_ok_56 = true;
                             }
@@ -3636,7 +3636,7 @@ fn try_StringLiteral(chars: &List<char>, start: i32) -> i32 {
                                 alts_56_1: {
                                     pos = alts_saved_56;
                                     if pos >= chars.len() { break alts_56_1; }
-                                    if chars[pos] == '\'' || chars[pos] == '"' || chars[pos] == '\\' || chars[pos] == 'b' || chars[pos] == 'f' || chars[pos] == 'n' || chars[pos] == 'r' || chars[pos] == 't' || chars[pos] == 'v' || '0' <= chars[pos] <= '9' || chars[pos] == 'x' || chars[pos] == 'u' || chars[pos] == '\r' || chars[pos] == '\n' { break alts_56_1; }
+                                    if (chars[pos] matches { '\'' | '"' | '\\' | 'b' | 'f' | 'n' | 'r' | 't' | 'v' | '0'..='9' | 'x' | 'u' | '\r' | '\n' }) { break alts_56_1; }
                                     pos += 1;
                                     alts_ok_56 = true;
                                 }
@@ -3657,10 +3657,10 @@ fn try_StringLiteral(chars: &List<char>, start: i32) -> i32 {
                                     if pos >= chars.len() || chars[pos] != 'x' { break alts_55_2; }
                                     pos += 1;
                                     if pos >= chars.len() { break alts_55_2; }
-                                    if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_55_2; }
+                                    if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_55_2; }
                                     pos += 1;
                                     if pos >= chars.len() { break alts_55_2; }
-                                    if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_55_2; }
+                                    if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_55_2; }
                                     pos += 1;
                                     alts_ok_55 = true;
                                 }
@@ -3674,16 +3674,16 @@ fn try_StringLiteral(chars: &List<char>, start: i32) -> i32 {
                                             if pos >= chars.len() || chars[pos] != 'u' { break alts_57_0; }
                                             pos += 1;
                                             if pos >= chars.len() { break alts_57_0; }
-                                            if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_57_0; }
+                                            if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_57_0; }
                                             pos += 1;
                                             if pos >= chars.len() { break alts_57_0; }
-                                            if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_57_0; }
+                                            if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_57_0; }
                                             pos += 1;
                                             if pos >= chars.len() { break alts_57_0; }
-                                            if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_57_0; }
+                                            if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_57_0; }
                                             pos += 1;
                                             if pos >= chars.len() { break alts_57_0; }
-                                            if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_57_0; }
+                                            if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_57_0; }
                                             pos += 1;
                                             alts_ok_57 = true;
                                         }
@@ -3695,16 +3695,16 @@ fn try_StringLiteral(chars: &List<char>, start: i32) -> i32 {
                                                 if pos >= chars.len() || chars[pos] != '{' { break alts_57_1; }
                                                 pos += 1;
                                                 if pos >= chars.len() { break alts_57_1; }
-                                                if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_57_1; }
+                                                if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_57_1; }
                                                 pos += 1;
                                                 if pos >= chars.len() { break alts_57_1; }
-                                                if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_57_1; }
+                                                if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_57_1; }
                                                 pos += 1;
                                                 loop {
                                                     let rep_saved_58 = pos;
                                                     rep_58: {
                                                         if pos >= chars.len() { break rep_58; }
-                                                        if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_58; }
+                                                        if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_58; }
                                                         pos += 1;
                                                         continue;
                                                     }
@@ -3727,13 +3727,13 @@ fn try_StringLiteral(chars: &List<char>, start: i32) -> i32 {
                                             if pos >= chars.len() || chars[pos] != '{' { break alts_55_4; }
                                             pos += 1;
                                             if pos >= chars.len() { break alts_55_4; }
-                                            if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_55_4; }
+                                            if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_55_4; }
                                             pos += 1;
                                             loop {
                                                 let rep_saved_59 = pos;
                                                 rep_59: {
                                                     if pos >= chars.len() { break rep_59; }
-                                                    if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_59; }
+                                                    if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_59; }
                                                     pos += 1;
                                                     continue;
                                                 }
@@ -3757,13 +3757,13 @@ fn try_StringLiteral(chars: &List<char>, start: i32) -> i32 {
                             if pos >= chars.len() || chars[pos] != '\\' { break alts_54_2; }
                             pos += 1;
                             if pos >= chars.len() { break alts_54_2; }
-                            if !(chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == ' ' || chars[pos] == ' ') { break alts_54_2; }
+                            if !((chars[pos] matches { '\r' | '\n' | ' ' | ' ' })) { break alts_54_2; }
                             pos += 1;
                             loop {
                                 let rep_saved_60 = pos;
                                 rep_60: {
                                     if pos >= chars.len() { break rep_60; }
-                                    if !(chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == ' ' || chars[pos] == ' ') { break rep_60; }
+                                    if !((chars[pos] matches { '\r' | '\n' | ' ' | ' ' })) { break rep_60; }
                                     pos += 1;
                                     continue;
                                 }
@@ -3797,7 +3797,7 @@ fn try_StringLiteral(chars: &List<char>, start: i32) -> i32 {
                     alts_62_0: {
                         pos = alts_saved_62;
                         if pos >= chars.len() { break alts_62_0; }
-                        if chars[pos] == '\'' || chars[pos] == '\\' || chars[pos] == '\r' || chars[pos] == '\n' { break alts_62_0; }
+                        if (chars[pos] matches { '\'' | '\\' | '\r' | '\n' }) { break alts_62_0; }
                         pos += 1;
                         alts_ok_62 = true;
                     }
@@ -3815,7 +3815,7 @@ fn try_StringLiteral(chars: &List<char>, start: i32) -> i32 {
                                 alts_64_0: {
                                     pos = alts_saved_64;
                                     if pos >= chars.len() { break alts_64_0; }
-                                    if !(chars[pos] == '\'' || chars[pos] == '"' || chars[pos] == '\\' || chars[pos] == 'b' || chars[pos] == 'f' || chars[pos] == 'n' || chars[pos] == 'r' || chars[pos] == 't' || chars[pos] == 'v') { break alts_64_0; }
+                                    if !((chars[pos] matches { '\'' | '"' | '\\' | 'b' | 'f' | 'n' | 'r' | 't' | 'v' })) { break alts_64_0; }
                                     pos += 1;
                                     alts_ok_64 = true;
                                 }
@@ -3823,7 +3823,7 @@ fn try_StringLiteral(chars: &List<char>, start: i32) -> i32 {
                                     alts_64_1: {
                                         pos = alts_saved_64;
                                         if pos >= chars.len() { break alts_64_1; }
-                                        if chars[pos] == '\'' || chars[pos] == '"' || chars[pos] == '\\' || chars[pos] == 'b' || chars[pos] == 'f' || chars[pos] == 'n' || chars[pos] == 'r' || chars[pos] == 't' || chars[pos] == 'v' || '0' <= chars[pos] <= '9' || chars[pos] == 'x' || chars[pos] == 'u' || chars[pos] == '\r' || chars[pos] == '\n' { break alts_64_1; }
+                                        if (chars[pos] matches { '\'' | '"' | '\\' | 'b' | 'f' | 'n' | 'r' | 't' | 'v' | '0'..='9' | 'x' | 'u' | '\r' | '\n' }) { break alts_64_1; }
                                         pos += 1;
                                         alts_ok_64 = true;
                                     }
@@ -3844,10 +3844,10 @@ fn try_StringLiteral(chars: &List<char>, start: i32) -> i32 {
                                         if pos >= chars.len() || chars[pos] != 'x' { break alts_63_2; }
                                         pos += 1;
                                         if pos >= chars.len() { break alts_63_2; }
-                                        if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_63_2; }
+                                        if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_63_2; }
                                         pos += 1;
                                         if pos >= chars.len() { break alts_63_2; }
-                                        if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_63_2; }
+                                        if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_63_2; }
                                         pos += 1;
                                         alts_ok_63 = true;
                                     }
@@ -3861,16 +3861,16 @@ fn try_StringLiteral(chars: &List<char>, start: i32) -> i32 {
                                                 if pos >= chars.len() || chars[pos] != 'u' { break alts_65_0; }
                                                 pos += 1;
                                                 if pos >= chars.len() { break alts_65_0; }
-                                                if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_65_0; }
+                                                if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_65_0; }
                                                 pos += 1;
                                                 if pos >= chars.len() { break alts_65_0; }
-                                                if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_65_0; }
+                                                if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_65_0; }
                                                 pos += 1;
                                                 if pos >= chars.len() { break alts_65_0; }
-                                                if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_65_0; }
+                                                if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_65_0; }
                                                 pos += 1;
                                                 if pos >= chars.len() { break alts_65_0; }
-                                                if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_65_0; }
+                                                if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_65_0; }
                                                 pos += 1;
                                                 alts_ok_65 = true;
                                             }
@@ -3882,16 +3882,16 @@ fn try_StringLiteral(chars: &List<char>, start: i32) -> i32 {
                                                     if pos >= chars.len() || chars[pos] != '{' { break alts_65_1; }
                                                     pos += 1;
                                                     if pos >= chars.len() { break alts_65_1; }
-                                                    if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_65_1; }
+                                                    if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_65_1; }
                                                     pos += 1;
                                                     if pos >= chars.len() { break alts_65_1; }
-                                                    if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_65_1; }
+                                                    if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_65_1; }
                                                     pos += 1;
                                                     loop {
                                                         let rep_saved_66 = pos;
                                                         rep_66: {
                                                             if pos >= chars.len() { break rep_66; }
-                                                            if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_66; }
+                                                            if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_66; }
                                                             pos += 1;
                                                             continue;
                                                         }
@@ -3914,13 +3914,13 @@ fn try_StringLiteral(chars: &List<char>, start: i32) -> i32 {
                                                 if pos >= chars.len() || chars[pos] != '{' { break alts_63_4; }
                                                 pos += 1;
                                                 if pos >= chars.len() { break alts_63_4; }
-                                                if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_63_4; }
+                                                if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_63_4; }
                                                 pos += 1;
                                                 loop {
                                                     let rep_saved_67 = pos;
                                                     rep_67: {
                                                         if pos >= chars.len() { break rep_67; }
-                                                        if !(chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_67; }
+                                                        if !((chars[pos] matches { '_' | '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_67; }
                                                         pos += 1;
                                                         continue;
                                                     }
@@ -3944,13 +3944,13 @@ fn try_StringLiteral(chars: &List<char>, start: i32) -> i32 {
                                 if pos >= chars.len() || chars[pos] != '\\' { break alts_62_2; }
                                 pos += 1;
                                 if pos >= chars.len() { break alts_62_2; }
-                                if !(chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == ' ' || chars[pos] == ' ') { break alts_62_2; }
+                                if !((chars[pos] matches { '\r' | '\n' | ' ' | ' ' })) { break alts_62_2; }
                                 pos += 1;
                                 loop {
                                     let rep_saved_68 = pos;
                                     rep_68: {
                                         if pos >= chars.len() { break rep_68; }
-                                        if !(chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == ' ' || chars[pos] == ' ') { break rep_68; }
+                                        if !((chars[pos] matches { '\r' | '\n' | ' ' | ' ' })) { break rep_68; }
                                         pos += 1;
                                         continue;
                                     }
@@ -3986,13 +3986,13 @@ fn try_BackTick(chars: &List<char>, start: i32) -> i32 {
 fn try_WhiteSpaces(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(chars[pos] == '\t' || chars[pos] == '\u{b}' || chars[pos] == '\u{c}' || chars[pos] == ' ' || chars[pos] == ' ') { return -1; }
+    if !((chars[pos] matches { '\t' | '\u{b}' | '\u{c}' | ' ' | ' ' })) { return -1; }
     pos += 1;
     loop {
         let rep_saved_69 = pos;
         rep_69: {
             if pos >= chars.len() { break rep_69; }
-            if !(chars[pos] == '\t' || chars[pos] == '\u{b}' || chars[pos] == '\u{c}' || chars[pos] == ' ' || chars[pos] == ' ') { break rep_69; }
+            if !((chars[pos] matches { '\t' | '\u{b}' | '\u{c}' | ' ' | ' ' })) { break rep_69; }
             pos += 1;
             continue;
         }
@@ -4005,7 +4005,7 @@ fn try_WhiteSpaces(chars: &List<char>, start: i32) -> i32 {
 fn try_LineTerminator(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == ' ' || chars[pos] == ' ') { return -1; }
+    if !((chars[pos] matches { '\r' | '\n' | ' ' | ' ' })) { return -1; }
     pos += 1;
     return pos;
 }
@@ -4119,7 +4119,7 @@ fn try_TemplateStringStartExpression(chars: &List<char>, start: i32) -> i32 {
 fn try_TemplateStringAtom(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if chars[pos] == '`' || chars[pos] == '\\' { return -1; }
+    if (chars[pos] matches { '`' | '\\' }) { return -1; }
     pos += 1;
     return pos;
 }

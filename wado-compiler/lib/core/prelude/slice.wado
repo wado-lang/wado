@@ -18,12 +18,12 @@ use { IndexValue, Iterator, IntoIterator, Add, Ord, Ordering } from "core:prelud
 use { IterMap, IterFilter, IterEnumerate, IterTake, IterSkip, IterChain, IterZip } from "core:prelude/traits.wado";
 use { Option } from "core:prelude/types.wado";
 use { List } from "core:prelude/list.wado";
-use { panic, i32_min, i32_max, i32_clamp } from "core:internal";
+use { panic, i32_min, i32_max, i32_clamp } from "core:rt";
 
 /// A contiguous view into a backing `Array<T>` over the half-open range
 /// `[start, end)`. Holds a reference to the whole array, so creating a slice
 /// never copies elements.
-pub struct ArraySlice<T> {
+internal struct ArraySlice<T> {
     repr: &Array<T>,
     start: i32,
     end: i32,
@@ -138,7 +138,7 @@ impl<T> IntoIterator for ArraySlice<T> {
 }
 
 /// A by-value forward iterator over a backing `Array<T>` range `[index, end)`.
-pub struct ArrayIter<T> {
+internal struct ArrayIter<T> {
     repr: &Array<T>,
     index: i32,
     end: i32,
@@ -227,7 +227,7 @@ impl<T: Ord> ArrayIter<T> {
 /// `&T`. The yielded reference points to a fresh copy of each element (Wasm GC
 /// has no interior references), so it is a read-only view and cannot mutate the
 /// backing array. Backs `for x of &list`.
-pub struct ArrayRefIter<T> {
+internal struct ArrayRefIter<T> {
     repr: &Array<T>,
     index: i32,
     end: i32,
@@ -256,7 +256,7 @@ impl<T> Iterator for ArrayRefIter<T> {
 
 /// An iterator over overlapping windows of `size` consecutive elements. Each
 /// item is a `ArraySlice<T>` viewing the backing array.
-pub struct ArrayWindows<T> {
+internal struct ArrayWindows<T> {
     repr: &Array<T>,
     index: i32,
     end: i32,
@@ -299,7 +299,7 @@ impl<T> IntoIterator for ArrayWindows<T> {
 
 /// An iterator over non-overlapping chunks of up to `size` elements. The last
 /// chunk may be shorter. Each item is a `ArraySlice<T>` viewing the backing array.
-pub struct ArrayChunks<T> {
+internal struct ArrayChunks<T> {
     repr: &Array<T>,
     index: i32,
     end: i32,

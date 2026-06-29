@@ -817,7 +817,7 @@ fn tree_build_node(events: &List<BuildEvent>, pos: &mut i32) -> CstNode {
         let kind = info.0;
         let start = info.1;
         *pos += 1;
-        let mut children: List<CstChild> = [];
+        let mut children: List<CstChild> = List::with_capacity(4);
         let mut flags = if kind == K_ERROR { NODE_ERROR } else { 0 };
         let mut alt = -1;
         let mut end = start;
@@ -1128,11 +1128,11 @@ pub enum TokenKind {
     Error,
 }
 
-global TK_X: i32 = 0;
-global TK_Y: i32 = 1;
-global TK_WS: i32 = 2;
-global TK_EOF: i32 = 3;
-global TK_ERROR: i32 = 4;
+pub global TK_X: i32 = 0;
+pub global TK_Y: i32 = 1;
+pub global TK_WS: i32 = 2;
+pub global TK_EOF: i32 = 3;
+pub global TK_ERROR: i32 = 4;
 
 struct Lexer {
     chars: List<char>,
@@ -1141,7 +1141,7 @@ struct Lexer {
 
 impl Lexer {
     fn new(input: &String) -> Lexer {
-        return Lexer { chars: input.chars().collect(), pos: 0 };
+        return Lexer { chars: input.to_chars(), pos: 0 };
     }
 
     fn at_end(&self) -> bool {
@@ -1170,13 +1170,13 @@ fn try_Y(chars: &List<char>, start: i32) -> i32 {
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(chars[pos] == ' ' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\t') { return -1; }
+    if !((chars[pos] matches { ' ' | '\r' | '\n' | '\t' })) { return -1; }
     pos += 1;
     loop {
         let rep_saved_0 = pos;
         rep_0: {
             if pos >= chars.len() { break rep_0; }
-            if !(chars[pos] == ' ' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\t') { break rep_0; }
+            if !((chars[pos] matches { ' ' | '\r' | '\n' | '\t' })) { break rep_0; }
             pos += 1;
             continue;
         }

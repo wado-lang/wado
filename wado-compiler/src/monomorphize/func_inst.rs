@@ -1266,7 +1266,7 @@ impl Monomorphizer {
             module_source: key.module_source.clone(),
             is_async: generic.is_async,
             name: mangled_name,
-            is_pub: generic.is_pub,
+            visibility: generic.visibility,
             is_export: generic.is_export, // Inherit from generic
             type_params: vec![],          // Concrete function has no type params
             impl_type_params: vec![],     // Already monomorphized, no impl type params
@@ -2456,20 +2456,7 @@ impl Monomorphizer {
         // the receiver IS that newtype, keep the name as-is. The
         // `receiver_is_generic` path below would otherwise peel the newtype to
         // its erased base (`List<u8>`) and retarget at the inherited base impl.
-        //
-        // `newtype_own_struct_name_with_impl` returns `Some` only for a genuine
-        // newtype with its own non-blanket impl, so this never fires for blanket
-        // impls keyed by a type-param name (e.g. `impl<I: Iterator> IntoIterator
-        // for I`, where `info.struct_name` is the type param `"I"`), nor for
-        // inherited dispatch (the method names the base, so `own != struct_name`).
-        if let Some(trait_name) = info.trait_name.as_deref()
-            && let Some(own) = self.newtype_own_struct_name_with_impl(
-                receiver_type_id,
-                type_table,
-                Some(trait_name),
-            )
-            && own == info.struct_name
-        {
+        if self.receiver_keeps_newtype_own_impl(receiver_type_id, type_table, &info) {
             return;
         }
 

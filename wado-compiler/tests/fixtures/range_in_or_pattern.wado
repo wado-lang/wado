@@ -1,0 +1,22 @@
+// Range patterns are usable as or-pattern alternatives (`a..=b | c..=d`).
+use { println, Stdout } from "core:cli";
+
+fn classify(c: char) -> i32 {
+    return match c {
+        '0'..='9' | 'a'..='f' => 1,
+        _ => 0,
+    };
+}
+
+export fn run() with Stdout {
+    println(`{classify('3')}`);
+    println(`{classify('c')}`);
+    println(`{classify('x')}`);
+    let ok = 'B' matches { 'A'..='Z' | '_' };
+    println(`{ok}`);
+}
+
+__DATA__
+{
+    "stdout": "1\n1\n0\ntrue\n"
+}

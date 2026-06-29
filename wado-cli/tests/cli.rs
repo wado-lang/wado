@@ -6,7 +6,7 @@
 use predicates::prelude::*;
 
 mod common;
-use common::wado;
+use common::{custom_sections, wado, wado_in};
 
 /// A project under a directory whose name contains a space must compile. The
 /// entry is passed by ABSOLUTE path so the Kiln harvest uses an absolute
@@ -40,6 +40,177 @@ fn test_compile_project_under_path_with_space() {
         .assert()
         .success();
     assert!(out.exists(), "expected out.wasm to be written");
+}
+
+/// Write a minimal manifest-driven CLI package under `dir` and return the
+/// output path to compile to.
+fn write_metadata_project(dir: &std::path::Path) {
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\n\
+         namespace = \"acme\"\n\
+         name = \"app\"\n\
+         version = \"0.3.0\"\n\
+         description = \"A demo\"\n\
+         repository = \"https://github.com/acme/app\"\n\
+         license = \"MIT\"\n\
+         authors = [\"Alice\"]\n\
+         repository-directory = \"sub/app\"\n\n\
+         [world]\n\
+         \"wasi:cli/command\" = \"src/main.wado\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(dir.join("src").join("main.wado"), "export fn run() {}\n").unwrap();
+}
+
+#[test]
+fn test_compile_embeds_package_metadata_in_manifest_mode() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    write_metadata_project(dir);
+    let out = dir.join("out.wasm");
+
+    wado_in(dir)
+        .arg("compile")
+        .arg("-o")
+        .arg(&out)
+        .assert()
+        .success();
+
+    let sections = custom_sections(&out);
+    let value = |name: &str| {
+        sections
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, d)| String::from_utf8_lossy(d).into_owned())
+    };
+    assert_eq!(value("description").as_deref(), Some("A demo"));
+    assert_eq!(value("version").as_deref(), Some("0.3.0"));
+    assert_eq!(
+        value("source").as_deref(),
+        Some("https://github.com/acme/app")
+    );
+    assert_eq!(value("licenses").as_deref(), Some("MIT"));
+    assert_eq!(value("authors").as_deref(), Some("Alice"));
+    assert_eq!(
+        value("org.wado-lang.package.repository-directory").as_deref(),
+        Some("sub/app")
+    );
+}
+
+#[test]
+fn test_compile_manifest_mode_default_output_to_build_dir() {
+    // Without -o, a manifest-driven build writes build/<world>.wasm at the
+    // manifest root, not into the source tree.
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    write_metadata_project(dir);
+
+    wado_in(dir).arg("compile").assert().success();
+
+    assert!(
+        dir.join("build").join("wasi-cli-command.wasm").exists(),
+        "expected build/wasi-cli-command.wasm"
+    );
+    assert!(
+        !dir.join("src").join("main.wasm").exists(),
+        "must not write into the source tree"
+    );
+}
+
+#[test]
+fn test_compile_file_arg_does_not_embed_metadata() {
+    // The same project, but the entry passed as an explicit file: a standalone
+    // target, so no package metadata is embedded.
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    write_metadata_project(dir);
+    let out = dir.join("out.wasm");
+
+    wado_in(dir)
+        .arg("compile")
+        .arg("-o")
+        .arg(&out)
+        .arg("src/main.wado")
+        .assert()
+        .success();
+
+    let sections = custom_sections(&out);
+    assert!(
+        !sections.iter().any(|(n, _)| n == "description"),
+        "file-arg compile must not embed metadata, got {sections:?}"
+    );
+}
+
+#[test]
+fn test_compile_os_skips_metadata() {
+    // -Os strips symbols for minimal frontend delivery; package metadata is
+    // dropped too, matching the WIT section.
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    write_metadata_project(dir);
+    let out = dir.join("out.wasm");
+
+    wado_in(dir)
+        .arg("compile")
+        .arg("-Os")
+        .arg("-o")
+        .arg(&out)
+        .assert()
+        .success();
+
+    let sections = custom_sections(&out);
+    assert!(
+        !sections.iter().any(|(n, _)| n == "description"),
+        "-Os must not embed metadata, got {sections:?}"
+    );
+}
+
+#[test]
+fn test_compile_os_embed_metadata_forces_on() {
+    // --embed-metadata overrides the -Os default-off, mirroring --embed-wit.
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    write_metadata_project(dir);
+    let out = dir.join("out.wasm");
+
+    wado_in(dir)
+        .arg("compile")
+        .arg("-Os")
+        .arg("--embed-metadata")
+        .arg("-o")
+        .arg(&out)
+        .assert()
+        .success();
+
+    let sections = custom_sections(&out);
+    assert!(
+        sections.iter().any(|(n, _)| n == "description"),
+        "--embed-metadata must force metadata on under -Os, got {sections:?}"
+    );
+}
+
+#[test]
+fn test_compile_no_embed_metadata_opts_out() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    write_metadata_project(dir);
+    let out = dir.join("out.wasm");
+
+    wado_in(dir)
+        .arg("compile")
+        .arg("--no-embed-metadata")
+        .arg("-o")
+        .arg(&out)
+        .assert()
+        .success();
+
+    let sections = custom_sections(&out);
+    assert!(
+        !sections.iter().any(|(n, _)| n == "description"),
+        "--no-embed-metadata must opt out, got {sections:?}"
+    );
 }
 
 #[test]
@@ -97,7 +268,7 @@ fn test_compile_wat_to_stdout() {
 fn test_compile_world_test_exports_tests() {
     // `--world test` targets the synthetic test world: the entry module's
     // `test` blocks become component exports (kebab-cased, plus a
-    // `wado:test-names` custom section), and no `run` entry point is required.
+    // `org.wado-lang.test-names` custom section), and no `run` entry point is required.
     wado()
         .args([
             "compile",
@@ -109,7 +280,7 @@ fn test_compile_world_test_exports_tests() {
         .assert()
         .success()
         .stdout(predicate::str::contains("test-0-simple"))
-        .stdout(predicate::str::contains("wado:test-names"));
+        .stdout(predicate::str::contains("org.wado-lang.test-names"));
 }
 
 #[test]

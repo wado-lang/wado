@@ -180,7 +180,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Check for tuple literal to array coercion when type annotation is present
         let (value_type, type_id) = if let Some(annotated_type) = &let_stmt.ty {
-            let target_type = self.resolve_type(annotated_type);
+            let resolved = self.resolve_type(annotated_type);
+            let target_type = if Self::first_infer_span(annotated_type).is_some() {
+                TypeTable::ERROR
+            } else {
+                resolved
+            };
             // Publish the resolved whole-pattern annotation so reify reads it
             // instead of re-running `resolve_type` against the AST.
             let key = let_stmt.id;
@@ -244,11 +249,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         if module_source != self.current_module_source
                             && let Some(struct_info) = self.lookup_struct_fields(&name)
                         {
-                            for (fname, _, is_pub) in &struct_info.fields {
-                                if !is_pub && struct_lit.fields.iter().any(|f| f.name == *fname) {
+                            let same_package =
+                                module_source.same_package(&self.current_module_source);
+                            for (fname, _, vis) in &struct_info.fields {
+                                if !vis.reachable_from(same_package)
+                                    && struct_lit.fields.iter().any(|f| f.name == *fname)
+                                {
                                     let _ = self.logger.error(TypeError::PrivateFieldAccess {
                                         struct_name: name.clone(),
                                         field_name: fname.clone(),
+                                        visibility: *vis,
                                         span: struct_lit.span,
                                     });
                                 }
@@ -323,8 +333,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // trait impls legitimately use TypeParam-vs-concrete (monomorphized later).
         if let_stmt.ty.is_some()
             && value_type != type_id
-            && value_type != TypeTable::UNKNOWN
-            && value_type != TypeTable::NEVER
+            && !matches!(
+                value_type,
+                TypeTable::UNKNOWN | TypeTable::NEVER | TypeTable::ERROR
+            )
+            && type_id != TypeTable::ERROR
         {
             // Allow null (Option<unknown>) to be assigned to Option<T>
             let is_null_to_option = {
@@ -800,7 +813,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
 
                 // If named pattern, verify the type matches
-                if let Some(expected_name) = type_name
+                let type_name_matches = if let Some(expected_name) = type_name
                     && let Some(actual_name) = &struct_name
                 {
                     // Compare the short name (strip module prefix if needed,
@@ -809,14 +822,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .strip_ns_prefix(expected_name)
                         .unwrap_or(expected_name.as_str());
                     let actual_short = actual_name.rsplit("::").next().unwrap_or(actual_name);
-                    if actual_short != expected_short {
+                    let matches = actual_short == expected_short;
+                    if !matches {
                         let _ = self.logger.error(TypeError::PatternTypeMismatch {
                             expected: expected_name.clone(),
                             found: self.tysys.type_table.borrow().type_name(type_id),
                             span: *pat_span,
                         });
                     }
-                }
+                    matches
+                } else {
+                    true
+                };
 
                 if struct_name.is_none() {
                     let _ = self.logger.error(TypeError::PatternTypeMismatch {
@@ -831,6 +848,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 for field in fields {
                     let (_field_index, field_type) =
                         self.lookup_field_type(type_id, &field.field_name, field.span);
+                    if type_name_matches {
+                        self.check_field_visibility(type_id, &field.field_name, field.span);
+                    }
                     self.resolve_let_pattern_inner(
                         &field.pattern,
                         field_type,
@@ -1477,6 +1497,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: pat_span,
             } => {
                 // Verify type if named
+                let mut type_name_matches = true;
                 if let Some(expected_name) = type_name {
                     let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
                     if let ResolvedType::Struct { ref name, .. } = resolved {
@@ -1490,6 +1511,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 found: self.tysys.type_table.borrow().type_name(scrutinee_type),
                                 span: *pat_span,
                             });
+                            type_name_matches = false;
                         }
                     }
                 }
@@ -1498,6 +1520,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 for field in fields {
                     let (_field_index, field_type) =
                         self.lookup_field_type(scrutinee_type, &field.field_name, field.span);
+                    if type_name_matches {
+                        self.check_field_visibility(scrutinee_type, &field.field_name, field.span);
+                    }
                     field_bindings.extend(self.resolve_if_pattern_inner(
                         &field.pattern,
                         field_type,

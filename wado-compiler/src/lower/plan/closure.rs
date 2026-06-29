@@ -491,7 +491,7 @@ impl ClosureLowerer {
                 .enumerate()
                 .map(|(i, cap)| TirField {
                     name: format!("__capture_{i}"),
-                    is_pub: false,
+                    visibility: crate::ast::Visibility::Private,
                     type_id: cap.type_id,
                     index: i as u32,
                     span: collected.span,
@@ -506,7 +506,7 @@ impl ClosureLowerer {
             self.generated_structs.push(TirStruct {
                 name: struct_name.clone(),
                 module_source: self.module_source.clone(),
-                is_pub: false,
+                visibility: crate::ast::Visibility::Private,
                 type_params: Vec::new(),
                 monomorph_info: None,
                 fields,
@@ -621,7 +621,7 @@ impl ClosureLowerer {
                 module_source: self.module_source.clone(),
                 is_async: false,
                 name: qualified_method_name,
-                is_pub: false,
+                visibility: crate::ast::Visibility::Private,
                 is_export: false, // Closure method, not a world export
                 type_params: Vec::new(),
                 impl_type_params: Vec::new(),
@@ -848,7 +848,7 @@ impl ClosureLowerer {
             module_source: self.module_source.clone(),
             is_async: false,
             name: qualified_name,
-            is_pub: false,
+            visibility: crate::ast::Visibility::Private,
             is_export: false,
             type_params: Vec::new(),
             impl_type_params: Vec::new(),
@@ -1047,7 +1047,7 @@ impl ClosureLowerer {
             module_source: self.module_source.clone(),
             is_async: false,
             name: specialized_name.clone(),
-            is_pub: false,    // Specialized functions are always private
+            visibility: crate::ast::Visibility::Private, // Specialized functions are always private
             is_export: false, // Specialized functions are not world exports
             type_params: callee.type_params.clone(),
             impl_type_params: callee.impl_type_params.clone(),

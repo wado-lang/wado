@@ -46,9 +46,9 @@ impl CalleeRef {
         Self::new(symbol.module_source().clone(), symbol.name.clone())
     }
 
-    /// A callee in `core:internal` (prelude functions like `panic`, `unreachable`).
-    pub fn internal_prelude(name: impl Into<String>) -> Self {
-        Self::new(ModuleSource::internal(), name)
+    /// A callee in `core:rt` (prelude functions like `panic`, `unreachable`).
+    pub fn rt_prelude(name: impl Into<String>) -> Self {
+        Self::new(ModuleSource::rt(), name)
     }
 
     /// A callee reached through a namespace-qualified call `Prefix::name`

@@ -15,8 +15,8 @@ pub(crate) struct StructFieldInfo {
     /// Canonical type name (original declaration name, not import alias).
     pub(super) name: String,
     pub(super) module_source: ModuleSource,
-    /// Field definitions: (name, `type_id`, `is_pub`) triples
-    pub(super) fields: Vec<(String, TypeId, bool)>,
+    /// Field definitions: (name, `type_id`, visibility) triples
+    pub(super) fields: Vec<(String, TypeId, crate::ast::Visibility)>,
     /// Parallel array to `fields` holding each field's defining `AstId`.
     /// Used for recording use→def references (e.g. field access → field def).
     pub(super) field_ast_ids: Vec<AstId>,
@@ -142,16 +142,37 @@ pub enum TypeError {
     },
 
     /// Unknown type name
-    UnknownType { name: String, span: Span },
+    UnknownType {
+        name: String,
+        span: Span,
+    },
 
     /// `_` inference placeholder used outside a turbofish type argument.
-    InferPlaceholderNotAllowed { span: Span },
+    InferPlaceholderNotAllowed {
+        span: Span,
+    },
+
+    InferInLetAnnotation {
+        span: Span,
+    },
+
+    MissingTypeArguments {
+        name: String,
+        expected: usize,
+        span: Span,
+    },
 
     /// Unknown function
-    UnknownFunction { name: String, span: Span },
+    UnknownFunction {
+        name: String,
+        span: Span,
+    },
 
     /// Unknown variable
-    UnknownIdentifier { name: String, span: Span },
+    UnknownIdentifier {
+        name: String,
+        span: Span,
+    },
 
     /// Wrong number of arguments
     ArgumentCountMismatch {
@@ -161,17 +182,29 @@ pub enum TypeError {
     },
 
     /// Expression in callee position whose type is not a function.
-    CalleeNotCallable { type_name: String, span: Span },
+    CalleeNotCallable {
+        type_name: String,
+        span: Span,
+    },
 
     /// Invalid numeric literal
-    InvalidLiteral { message: String, span: Span },
+    InvalidLiteral {
+        message: String,
+        span: Span,
+    },
 
     /// A type could not be inferred and needs an explicit annotation
     /// (e.g. a bare `null` whose `Option<...>` inner is undetermined).
-    CannotInferType { message: String, span: Span },
+    CannotInferType {
+        message: String,
+        span: Span,
+    },
 
     /// Invalid assignment target (not a valid l-value)
-    CannotAssign { message: String, span: Span },
+    CannotAssign {
+        message: String,
+        span: Span,
+    },
 
     /// Trait bound not satisfied
     TraitBoundNotSatisfied {
@@ -188,7 +221,10 @@ pub enum TypeError {
     },
 
     /// Invalid pattern in context
-    InvalidPattern { message: String, span: Span },
+    InvalidPattern {
+        message: String,
+        span: Span,
+    },
 
     /// A unary or binary operator cannot be applied to its operand type(s).
     ///
@@ -229,10 +265,16 @@ pub enum TypeError {
     },
 
     /// Duplicate field name in struct literal
-    DuplicateField { name: String, span: Span },
+    DuplicateField {
+        name: String,
+        span: Span,
+    },
 
     /// Function/method/closure with return type but no return statement
-    MissingReturn { return_type: String, span: Span },
+    MissingReturn {
+        return_type: String,
+        span: Span,
+    },
 
     /// Orphan rule violation: impl of a foreign trait for a foreign type
     OrphanViolation {
@@ -245,15 +287,21 @@ pub enum TypeError {
     /// (one defined outside this package — a primitive, `Array<T>`, `String`,
     /// or any other stdlib type). Inherent impls may only extend types owned by
     /// the current package; use a trait for cross-package extension.
-    InherentImplOnForeignType { self_type_name: String, span: Span },
+    InherentImplOnForeignType {
+        self_type_name: String,
+        span: Span,
+    },
 
     /// Invalid stores declaration
-    InvalidStores { message: String, span: Span },
+    InvalidStores {
+        message: String,
+        span: Span,
+    },
 
-    /// Private field access from outside the declaring module
     PrivateFieldAccess {
         struct_name: String,
         field_name: String,
+        visibility: crate::ast::Visibility,
         span: Span,
     },
 
@@ -266,7 +314,10 @@ pub enum TypeError {
     },
 
     /// Invalid use of ? operator
-    InvalidQuestionMark { message: String, span: Span },
+    InvalidQuestionMark {
+        message: String,
+        span: Span,
+    },
 
     /// Type does not implement required trait in usage context
     MissingTraitImpl {
@@ -302,11 +353,17 @@ pub enum TypeError {
     /// Closures cannot declare default parameter values. Closures erase
     /// defaults when assigned to a `fn(...)` type, so allowing them would
     /// be misleading — the default only ever applies to direct calls.
-    DefaultInClosure { param: String, span: Span },
+    DefaultInClosure {
+        param: String,
+        span: Span,
+    },
 
     /// Calling a `fn mut` closure requires its binding to be `let mut` (for
     /// locals) or `mut name:` (for parameters). Mirrors Rust's `FnMut` rule.
-    ClosureMutBindingRequired { name: String, span: Span },
+    ClosureMutBindingRequired {
+        name: String,
+        span: Span,
+    },
 
     /// Closures cannot cross the Component Model boundary. Triggered when an
     /// `export` (or imported) function has a closure-typed parameter, return
@@ -328,12 +385,17 @@ pub enum TypeError {
 
     /// `#[serde(default)]` is removed: a struct field default value is the
     /// single mechanism for an optional field. Guides to `field: T = <value>`.
-    SerdeDefaultAttr { field: String, span: Span },
+    SerdeDefaultAttr {
+        field: String,
+        span: Span,
+    },
 
     /// `resume` expression appeared outside an effect handler method body.
     /// `resume value` is only valid inside the body of a method belonging
     /// to an `impl Effect for Type` block (see WEP 2026-04-11).
-    ResumeOutsideHandler { span: Span },
+    ResumeOutsideHandler {
+        span: Span,
+    },
 
     /// `with E => h do { ... }` clause where the handler value's type
     /// does not implement effect `E`.
@@ -347,7 +409,10 @@ pub enum TypeError {
     /// underlying type does not implement any effect. There is nothing for
     /// `with h do` to install in this case — the user almost certainly meant
     /// to write `with E => h do` instead.
-    BundledHandlerImplementsNoEffect { type_name: String, span: Span },
+    BundledHandlerImplementsNoEffect {
+        type_name: String,
+        span: Span,
+    },
 
     /// Bundled-handler form `with &mut h do { ... }` where the handler value's
     /// underlying type cannot be index-keyed by name (type parameters,
@@ -365,20 +430,29 @@ pub enum TypeError {
     /// declaration (it might be a regular trait, an unrelated type, or an
     /// unknown name). Both kinds are installable as handlers; see WEP
     /// 2026-04-11.
-    NotAnEffect { name: String, span: Span },
+    NotAnEffect {
+        name: String,
+        span: Span,
+    },
 
     /// `with E => h do` where `E` is a generic effect parameter
     /// (`<effect E>`). Generic effect parameters are propagation-only:
     /// the compiler does not know `E`'s operation list at effect-check
     /// time, so it cannot generate dispatch infrastructure. See WEP
     /// 2026-01-27 § Generic Effect Parameters Are Propagation-Only.
-    GenericEffectParamNotInstallable { name: String, span: Span },
+    GenericEffectParamNotInstallable {
+        name: String,
+        span: Span,
+    },
 
     /// `#[compiler_item("...")]` attribute that failed validation —
     /// unknown name, kind mismatch (e.g. `#[compiler_item("option")]`
     /// on a struct), or used outside a `core::*` module. The
     /// `message` carries the specific problem.
-    CompilerItemAttr { message: String, span: Span },
+    CompilerItemAttr {
+        message: String,
+        span: Span,
+    },
 
     /// A bare generic function name was used as a value with no expected
     /// `fn(...)` type to drive inference. The function type depends on
@@ -386,7 +460,10 @@ pub enum TypeError {
     /// pin them with turbofish (`name::<T, ...>`) or wrap the call in a
     /// closure (`|x| name(x)`) so the inner call site provides the
     /// inference context.
-    BareGenericFunctionRef { name: String, span: Span },
+    BareGenericFunctionRef {
+        name: String,
+        span: Span,
+    },
 
     /// Turbofish (`name::<T, ...>`) supplied the wrong number of type
     /// arguments for a generic function reference. The function declares
@@ -477,6 +554,26 @@ impl TypeError {
             TypeError::InferPlaceholderNotAllowed { span } => (
                 Code::UnknownType,
                 "`_` type placeholder is only allowed as a turbofish type argument".to_string(),
+                *span,
+            ),
+            TypeError::InferInLetAnnotation { span } => (
+                Code::UnknownType,
+                "type inference placeholder `_` in a `let` annotation is not yet supported; \
+                 write the type explicitly (e.g. `Option<u32>`) or omit the annotation"
+                    .to_string(),
+                *span,
+            ),
+            TypeError::MissingTypeArguments {
+                name,
+                expected,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "missing type arguments for `{name}`: expected {expected} type argument{}; \
+                     supply them (e.g. `{name}<...>`) or drop the annotation to infer from the initializer",
+                    if *expected == 1 { "" } else { "s" },
+                ),
                 *span,
             ),
             TypeError::UnknownFunction { name, span } => (
@@ -612,10 +709,22 @@ impl TypeError {
             TypeError::PrivateFieldAccess {
                 struct_name,
                 field_name,
+                visibility,
                 span,
             } => (
-                Code::ImmutableAssignment,
-                format!("field `{field_name}` of struct `{struct_name}` is private"),
+                Code::PrivateSymbol,
+                match visibility {
+                    crate::ast::Visibility::Internal => format!(
+                        "field `{field_name}` of struct `{struct_name}` is `internal` to its \
+                         package and cannot be accessed from another package; mark it `pub` to \
+                         expose it across packages"
+                    ),
+                    crate::ast::Visibility::Private | crate::ast::Visibility::Public => format!(
+                        "field `{field_name}` of struct `{struct_name}` is private to its defining \
+                         file; mark it `internal` (same package) or `pub` (cross package) to widen \
+                         access"
+                    ),
+                },
                 *span,
             ),
             TypeError::MethodNotFound {

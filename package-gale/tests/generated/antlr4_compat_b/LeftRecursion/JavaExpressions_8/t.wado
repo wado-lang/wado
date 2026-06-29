@@ -817,7 +817,7 @@ fn tree_build_node(events: &List<BuildEvent>, pos: &mut i32) -> CstNode {
         let kind = info.0;
         let start = info.1;
         *pos += 1;
-        let mut children: List<CstChild> = [];
+        let mut children: List<CstChild> = List::with_capacity(4);
         let mut flags = if kind == K_ERROR { NODE_ERROR } else { 0 };
         let mut alt = -1;
         let mut end = start;
@@ -1128,60 +1128,60 @@ pub enum TokenKind {
     Error,
 }
 
-global TK_ID: i32 = 0;
-global TK_INT: i32 = 1;
-global TK_WS: i32 = 2;
-global TK_EOF: i32 = 3;
-global TK_ERROR: i32 = 4;
-global TK_LIT_COMMA: i32 = 5;
-global TK_LIT_LPAREN: i32 = 6;
-global TK_LIT_RPAREN: i32 = 7;
-global TK_LIT_THIS: i32 = 8;
-global TK_LIT_SUPER: i32 = 9;
-global TK_LIT_DOT: i32 = 10;
-global TK_LIT_CLASS: i32 = 11;
-global TK_LIT_NEW: i32 = 12;
-global TK_LIT_LBRACKET: i32 = 13;
-global TK_LIT_RBRACKET: i32 = 14;
-global TK_LIT_PLUSPLUS: i32 = 15;
-global TK_LIT_MINUSMINUS: i32 = 16;
-global TK_LIT_PLUS: i32 = 17;
-global TK_LIT_MINUS: i32 = 18;
-global TK_LIT_TILDE: i32 = 19;
-global TK_LIT_BANG: i32 = 20;
-global TK_LIT_STAR: i32 = 21;
-global TK_LIT_SLASH: i32 = 22;
-global TK_LIT_PERCENT: i32 = 23;
-global TK_LIT_LTLT: i32 = 24;
-global TK_LIT_GTGTGT: i32 = 25;
-global TK_LIT_GTGT: i32 = 26;
-global TK_LIT_LTEQ: i32 = 27;
-global TK_LIT_GTEQ: i32 = 28;
-global TK_LIT_GT: i32 = 29;
-global TK_LIT_LT: i32 = 30;
-global TK_LIT_INSTANCEOF: i32 = 31;
-global TK_LIT_EQEQ: i32 = 32;
-global TK_LIT_BANGEQ: i32 = 33;
-global TK_LIT_AMP: i32 = 34;
-global TK_LIT_CARET: i32 = 35;
-global TK_LIT_PIPE: i32 = 36;
-global TK_LIT_AMPAMP: i32 = 37;
-global TK_LIT_PIPEPIPE: i32 = 38;
-global TK_LIT_QUESTION: i32 = 39;
-global TK_LIT_COLON: i32 = 40;
-global TK_LIT_EQ: i32 = 41;
-global TK_LIT_PLUSEQ: i32 = 42;
-global TK_LIT_MINUSEQ: i32 = 43;
-global TK_LIT_STAREQ: i32 = 44;
-global TK_LIT_SLASHEQ: i32 = 45;
-global TK_LIT_AMPEQ: i32 = 46;
-global TK_LIT_PIPEEQ: i32 = 47;
-global TK_LIT_CARETEQ: i32 = 48;
-global TK_LIT_GTGTEQ: i32 = 49;
-global TK_LIT_GTGTGTEQ: i32 = 50;
-global TK_LIT_LTLTEQ: i32 = 51;
-global TK_LIT_PERCENTEQ: i32 = 52;
-global TK_LIT_INT: i32 = 53;
+pub global TK_ID: i32 = 0;
+pub global TK_INT: i32 = 1;
+pub global TK_WS: i32 = 2;
+pub global TK_EOF: i32 = 3;
+pub global TK_ERROR: i32 = 4;
+pub global TK_LIT_COMMA: i32 = 5;
+pub global TK_LIT_LPAREN: i32 = 6;
+pub global TK_LIT_RPAREN: i32 = 7;
+pub global TK_LIT_THIS: i32 = 8;
+pub global TK_LIT_SUPER: i32 = 9;
+pub global TK_LIT_DOT: i32 = 10;
+pub global TK_LIT_CLASS: i32 = 11;
+pub global TK_LIT_NEW: i32 = 12;
+pub global TK_LIT_LBRACKET: i32 = 13;
+pub global TK_LIT_RBRACKET: i32 = 14;
+pub global TK_LIT_PLUSPLUS: i32 = 15;
+pub global TK_LIT_MINUSMINUS: i32 = 16;
+pub global TK_LIT_PLUS: i32 = 17;
+pub global TK_LIT_MINUS: i32 = 18;
+pub global TK_LIT_TILDE: i32 = 19;
+pub global TK_LIT_BANG: i32 = 20;
+pub global TK_LIT_STAR: i32 = 21;
+pub global TK_LIT_SLASH: i32 = 22;
+pub global TK_LIT_PERCENT: i32 = 23;
+pub global TK_LIT_LTLT: i32 = 24;
+pub global TK_LIT_GTGTGT: i32 = 25;
+pub global TK_LIT_GTGT: i32 = 26;
+pub global TK_LIT_LTEQ: i32 = 27;
+pub global TK_LIT_GTEQ: i32 = 28;
+pub global TK_LIT_GT: i32 = 29;
+pub global TK_LIT_LT: i32 = 30;
+pub global TK_LIT_INSTANCEOF: i32 = 31;
+pub global TK_LIT_EQEQ: i32 = 32;
+pub global TK_LIT_BANGEQ: i32 = 33;
+pub global TK_LIT_AMP: i32 = 34;
+pub global TK_LIT_CARET: i32 = 35;
+pub global TK_LIT_PIPE: i32 = 36;
+pub global TK_LIT_AMPAMP: i32 = 37;
+pub global TK_LIT_PIPEPIPE: i32 = 38;
+pub global TK_LIT_QUESTION: i32 = 39;
+pub global TK_LIT_COLON: i32 = 40;
+pub global TK_LIT_EQ: i32 = 41;
+pub global TK_LIT_PLUSEQ: i32 = 42;
+pub global TK_LIT_MINUSEQ: i32 = 43;
+pub global TK_LIT_STAREQ: i32 = 44;
+pub global TK_LIT_SLASHEQ: i32 = 45;
+pub global TK_LIT_AMPEQ: i32 = 46;
+pub global TK_LIT_PIPEEQ: i32 = 47;
+pub global TK_LIT_CARETEQ: i32 = 48;
+pub global TK_LIT_GTGTEQ: i32 = 49;
+pub global TK_LIT_GTGTGTEQ: i32 = 50;
+pub global TK_LIT_LTLTEQ: i32 = 51;
+pub global TK_LIT_PERCENTEQ: i32 = 52;
+pub global TK_LIT_INT: i32 = 53;
 
 struct Lexer {
     chars: List<char>,
@@ -1190,7 +1190,7 @@ struct Lexer {
 
 impl Lexer {
     fn new(input: &String) -> Lexer {
-        return Lexer { chars: input.chars().collect(), pos: 0 };
+        return Lexer { chars: input.to_chars(), pos: 0 };
     }
 
     fn at_end(&self) -> bool {
@@ -1208,14 +1208,14 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
     let mut alts_ok_1 = false;
     alts_1_0: {
         pos = alts_saved_1;
-        if pos >= chars.len() || !('a' <= chars[pos] <= 'z') { break alts_1_0; }
+        if pos >= chars.len() || !(chars[pos] matches { 'a'..='z' }) { break alts_1_0; }
         pos += 1;
         alts_ok_1 = true;
     }
     if !alts_ok_1 {
         alts_1_1: {
             pos = alts_saved_1;
-            if pos >= chars.len() || !('A' <= chars[pos] <= 'Z') { break alts_1_1; }
+            if pos >= chars.len() || !(chars[pos] matches { 'A'..='Z' }) { break alts_1_1; }
             pos += 1;
             alts_ok_1 = true;
         }
@@ -1244,14 +1244,14 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
             let mut alts_ok_2 = false;
             alts_2_0: {
                 pos = alts_saved_2;
-                if pos >= chars.len() || !('a' <= chars[pos] <= 'z') { break alts_2_0; }
+                if pos >= chars.len() || !(chars[pos] matches { 'a'..='z' }) { break alts_2_0; }
                 pos += 1;
                 alts_ok_2 = true;
             }
             if !alts_ok_2 {
                 alts_2_1: {
                     pos = alts_saved_2;
-                    if pos >= chars.len() || !('A' <= chars[pos] <= 'Z') { break alts_2_1; }
+                    if pos >= chars.len() || !(chars[pos] matches { 'A'..='Z' }) { break alts_2_1; }
                     pos += 1;
                     alts_ok_2 = true;
                 }
@@ -1283,12 +1283,12 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
 
 fn try_INT(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || !('0' <= chars[pos] <= '9') { return -1; }
+    if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { return -1; }
     pos += 1;
     loop {
         let rep_saved_3 = pos;
         rep_3: {
-            if pos >= chars.len() || !('0' <= chars[pos] <= '9') { break rep_3; }
+            if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break rep_3; }
             pos += 1;
             continue;
         }

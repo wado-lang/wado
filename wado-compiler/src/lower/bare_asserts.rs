@@ -4,11 +4,11 @@
 //! `if !cond { cold_path(); assert_failed(<template>) }`, where `<template>`
 //! formats the asserted operands through the whole `Formatter` / `Inspect` /
 //! `String` stack (see `elaborator::reify::reify_assert`). The reify-emitted
-//! `core:internal::assert_failed` is a distinct callee — a marker — so this
+//! `core:rt::assert_failed` is a distinct callee — a marker — so this
 //! lowering can treat assertion failures differently from explicit
 //! `panic(...)` calls:
 //!
-//! - default: rewrite the call back to `core:internal::panic`, so the marker
+//! - default: rewrite the call back to `core:rt::panic`, so the marker
 //!   never reaches codegen and the output is identical to a direct `panic` —
 //!   no `assert_failed` wrapper frame, no codegen drift.
 //! - `-f bare-asserts` (on by default at `-Os`): replace the whole cold block
@@ -25,7 +25,7 @@ use crate::synthesis::common::builtin_call;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TypeTable};
 use crate::tir_visitor::TirMutVisitor;
 
-/// The reify-emitted assert-failure callee (`core:internal::assert_failed`).
+/// The reify-emitted assert-failure callee (`core:rt::assert_failed`).
 pub const ASSERT_FAILED: &str = "assert_failed";
 
 /// The real trap-with-message routine `assert_failed` wraps.

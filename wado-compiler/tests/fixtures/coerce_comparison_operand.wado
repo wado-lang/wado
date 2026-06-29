@@ -1,0 +1,39 @@
+test "rhs compound literal coerces to lhs type" {
+    let xs: List<u8> = [1, 2, 3];
+    assert xs == [1, 2, 3];
+    let empty: List<u8> = [];
+    assert empty == [];
+    let o: Option<u32> = Option::Some(5);
+    assert o == Option::Some(5);
+    let r: Result<u32, String> = Result::Ok(7);
+    assert r == Result::Ok(7);
+}
+
+test "lhs compound literal coerces to rhs type" {
+    let xs: List<u8> = [1, 2, 3];
+    assert [1, 2, 3] == xs;
+    let empty: List<u8> = [];
+    assert [] == empty;
+    let o: Option<u32> = Option::Some(5);
+    assert Option::Some(5) == o;
+    let r: Result<u32, String> = Result::Ok(7);
+    assert Result::Ok(7) == r;
+}
+
+test "call result type flows into the literal operand" {
+    assert id_list([10, 20]) == [10, 20];
+    assert [10, 20] == id_list([10, 20]);
+    assert id_opt(Option::Some(3)) == Option::Some(3);
+    assert Option::Some(3) == id_opt(Option::Some(3));
+}
+
+fn id_list(v: List<u16>) -> List<u16> {
+    return v;
+}
+
+fn id_opt(v: Option<u64>) -> Option<u64> {
+    return v;
+}
+
+__DATA__
+{"test": {}}

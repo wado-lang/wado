@@ -653,7 +653,7 @@ b : 'y' ;
     let traced = generate(&mut grammar, &GenerateOptions { highlight: false, trace: true }).source;
     // The ambient logger import, the trace helpers, the depth field, and the
     // per-rule calls are all present.
-    assert str_contains(&traced, &"use { log_stderr } from \"core:internal\";");
+    assert str_contains(&traced, &"use { log_stderr } from \"core:rt\";");
     assert str_contains(&traced, &"fn trace_enter(p: &Parser, rule: &String)");
     assert str_contains(&traced, &"trace_depth: i32,");
     assert str_contains(&traced, &"trace_enter(p, &\"a\");");
@@ -835,7 +835,7 @@ ID : [a-z]+ ;";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     // A case-insensitive [a-z] must also accept [A-Z].
-    assert str_contains(&output, &"'A' <= chars[pos] <= 'Z'");
+    assert str_contains(&output, &"'A'..='Z'");
 }
 
 test "lexer rule caseInsensitive=false overrides grammar-level true" {
@@ -862,7 +862,7 @@ ID : [a-z]+ ;";
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, &"!chars[pos].eq_ignore_ascii_case(&'g')");
     // ID is not CI; its range must stay [a-z] without a mirrored [A-Z].
-    assert !str_contains(&output, &"'A' <= chars[pos] <= 'Z'");
+    assert !str_contains(&output, &"'A'..='Z'");
 }
 
 test "virtual tokens are marked and not match-generated" {
@@ -893,7 +893,7 @@ SEMI : ';' ;";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     // Digit range must not be duplicated.
-    assert str_contains(&output, &"'0' <= chars[pos] <= '9'");
+    assert str_contains(&output, &"'0'..='9'");
     // Non-letter literal must not be duplicated — plain mismatch form.
     assert str_contains(&output, &"chars[pos] != ';'");
     assert !str_contains(&output, &"chars[pos].eq_ignore_ascii_case(");

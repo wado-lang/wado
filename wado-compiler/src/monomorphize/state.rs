@@ -420,6 +420,20 @@ impl Monomorphizer {
         }
     }
 
+    pub fn receiver_keeps_newtype_own_impl(
+        &self,
+        receiver_type_id: TypeId,
+        type_table: &TypeTable,
+        info: &LocalMethodName,
+    ) -> bool {
+        let Some(trait_name) = info.trait_name.as_deref() else {
+            return false;
+        };
+        self.newtype_own_struct_name_with_impl(receiver_type_id, type_table, Some(trait_name))
+            .as_deref()
+            == Some(info.struct_name.as_str())
+    }
+
     /// Build the ordered list of `(mangled_method_name, trait_name)` formats to
     /// probe when resolving a generic method call on `receiver_type_id`.
     ///

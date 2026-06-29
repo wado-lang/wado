@@ -246,7 +246,7 @@ pub struct NirGlobal {
     /// Preserved across lowering so the optimizer can promote lazy-init globals
     /// back to immutable when their initializers fold to constants.
     pub wado_mutable: bool,
-    pub is_pub: bool,
+    pub visibility: crate::ast::Visibility,
     /// Module where this global is defined
     pub module_source: ModuleSource,
     pub span: Span,
@@ -297,7 +297,7 @@ pub struct NirFunction {
     /// per-module body data into flat lists; before link, the `module_source` is
     /// carried implicitly by the parent `NirModule`.
     pub module_source: ModuleSource,
-    pub is_pub: bool,
+    pub visibility: crate::ast::Visibility,
     /// Whether this function is exported at the Component Model boundary (world export)
     pub is_export: bool,
     /// Whether this is an async function (`export async fn`).
@@ -639,7 +639,7 @@ pub struct NirParam {
 pub struct NirStruct {
     pub name: String,
     pub module_source: ModuleSource,
-    pub is_pub: bool,
+    pub visibility: crate::ast::Visibility,
     /// Generic type parameters (empty for non-generic structs)
     pub type_params: Vec<NirTypeParam>,
     /// If this struct was created by monomorphization, contains the origin info
@@ -653,7 +653,7 @@ pub struct NirStruct {
 #[derive(Debug, Clone)]
 pub struct NirField {
     pub name: String,
-    pub is_pub: bool,
+    pub visibility: crate::ast::Visibility,
     pub type_id: TypeId,
     pub index: u32,
     pub span: Span,
@@ -669,7 +669,7 @@ pub struct NirField {
 pub struct NirEnum {
     pub name: String,
     pub module_source: ModuleSource,
-    pub is_pub: bool,
+    pub visibility: crate::ast::Visibility,
     /// Generic type parameters (empty for non-generic enums)
     pub type_params: Vec<NirTypeParam>,
     /// If this enum was created by monomorphization, contains the origin info
@@ -694,7 +694,7 @@ pub struct NirEnumCase {
 pub struct NirFlags {
     pub name: String,
     pub module_source: ModuleSource,
-    pub is_pub: bool,
+    pub visibility: crate::ast::Visibility,
     /// The newtype `TypeId` (base type is u32)
     pub type_id: TypeId,
     pub members: Vec<NirFlagsMember>,
@@ -716,7 +716,7 @@ pub struct NirFlagsMember {
 pub struct NirVariantDecl {
     pub name: String,
     pub module_source: ModuleSource,
-    pub is_pub: bool,
+    pub visibility: crate::ast::Visibility,
     /// Generic type parameters (e.g., `T` in `variant Option<T>`)
     pub type_params: Vec<NirTypeParam>,
     /// Cases of the variant (e.g., Some, None for Option)
@@ -745,7 +745,7 @@ pub struct NirVariantCase {
 pub struct NirNewtype {
     pub name: String,
     pub module_source: ModuleSource,
-    pub is_pub: bool,
+    pub visibility: crate::ast::Visibility,
     pub type_id: TypeId,
     pub span: Span,
 }
@@ -776,7 +776,7 @@ pub struct NirTest {
 #[derive(Debug, Clone)]
 pub struct NirEffect {
     pub name: String,
-    pub is_pub: bool,
+    pub visibility: crate::ast::Visibility,
     pub operations: Vec<NirEffectOp>,
     pub span: Span,
 }
@@ -805,7 +805,7 @@ pub struct NirEffectOp {
 #[derive(Debug, Clone)]
 pub struct NirResource {
     pub name: String,
-    pub is_pub: bool,
+    pub visibility: crate::ast::Visibility,
     pub operations: Vec<NirEffectOp>,
     pub span: Span,
 }
@@ -814,7 +814,7 @@ pub struct NirResource {
 #[derive(Debug, Clone)]
 pub struct NirTrait {
     pub name: String,
-    pub is_pub: bool,
+    pub visibility: crate::ast::Visibility,
     pub type_params: Vec<NirTypeParam>,
     pub methods: Vec<NirTraitMethod>,
     pub span: Span,

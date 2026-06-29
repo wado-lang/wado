@@ -73,7 +73,7 @@ impl Monomorphizer {
                 let new_type_id = self.substitute_type(field.type_id, &substitution, type_table);
                 TirField {
                     name: field.name.clone(),
-                    is_pub: field.is_pub,
+                    visibility: field.visibility,
                     type_id: new_type_id,
                     index: field.index,
                     span: field.span,
@@ -89,7 +89,7 @@ impl Monomorphizer {
         let concrete = TirStruct {
             name: mangled_name,
             module_source: key.module_source.clone(),
-            is_pub: generic.is_pub,
+            visibility: generic.visibility,
             type_params: vec![], // Concrete struct has no type params
             monomorph_info: Some(MonomorphInfo {
                 generic_name: generic.name.clone(),
