@@ -41,6 +41,10 @@ pub struct Manifest {
 pub struct WorldEntry {
     pub entry: String,
     pub publish: bool,
+    /// Unknown keys in the table form (typos, unsupported). Reported as
+    /// warnings so an opt-out typo like `publsh = false` is not silently
+    /// ignored.
+    pub unknown_fields: Vec<String>,
 }
 
 impl Manifest {
@@ -120,6 +124,14 @@ impl Manifest {
                 section: Some("workspace.package".to_string()),
                 field: field.clone(),
             });
+        }
+        for (fq, entry) in &self.world {
+            for field in &entry.unknown_fields {
+                warnings.push(ManifestWarning::UnknownField {
+                    section: Some(format!("world.{fq:?}")),
+                    field: field.clone(),
+                });
+            }
         }
         warnings
     }
@@ -367,6 +379,8 @@ pub enum ManifestError {
     WorkspaceConflictingLicense,
     /// `[workspace.package].license` is not a valid SPDX expression.
     WorkspaceInvalidLicense { value: String, reason: String },
+    /// A `[world]` value is neither an entry-path string nor a valid table.
+    InvalidWorldEntry { world: String, reason: String },
 }
 
 impl fmt::Display for ManifestError {
@@ -431,6 +445,9 @@ impl fmt::Display for ManifestError {
                 f,
                 "[workspace.package].license {value:?} is not a valid SPDX expression: {reason}"
             ),
+            ManifestError::InvalidWorldEntry { world, reason } => {
+                write!(f, "[world].{world:?}: {reason}")
+            }
         }
     }
 }
@@ -439,39 +456,48 @@ impl std::error::Error for ManifestError {}
 
 // --- Raw serde types for TOML deserialization ---
 
-/// A `[world]` value: either a bare entry path or a table with `entry` and an
-/// optional `publish` flag (default `true`).
-#[derive(Deserialize)]
-#[serde(untagged)]
-enum RawWorldEntry {
-    Path(String),
-    Table {
-        entry: String,
-        #[serde(default = "default_true")]
-        publish: bool,
-    },
-}
-
-fn default_true() -> bool {
-    true
-}
-
-impl RawWorldEntry {
-    fn convert(self) -> WorldEntry {
-        match self {
-            RawWorldEntry::Path(entry) => WorldEntry {
-                entry,
-                publish: true,
-            },
-            RawWorldEntry::Table { entry, publish } => WorldEntry { entry, publish },
+/// Convert one `[world]` value — a bare entry-path string, or a table with
+/// `entry` and an optional `publish` flag (default `true`) — into a
+/// [`WorldEntry`]. A table's unknown keys are collected (not dropped) so a typo
+/// like `publsh = false` surfaces as a warning instead of silently leaving the
+/// world published. Done by hand rather than via an untagged enum so type
+/// mismatches give a clear error and extra keys are recoverable.
+fn convert_world_entry(world: &str, value: toml::Value) -> Result<WorldEntry, ManifestError> {
+    let invalid = |reason: &str| ManifestError::InvalidWorldEntry {
+        world: world.to_string(),
+        reason: reason.to_string(),
+    };
+    let (entry, publish, unknown_fields) = match value {
+        toml::Value::String(entry) => (entry, true, Vec::new()),
+        toml::Value::Table(mut table) => {
+            let entry = match table.remove("entry") {
+                Some(toml::Value::String(s)) => s,
+                Some(_) => return Err(invalid("`entry` must be a string")),
+                None => return Err(invalid("table form requires an `entry` path")),
+            };
+            let publish = match table.remove("publish") {
+                Some(toml::Value::Boolean(b)) => b,
+                Some(_) => return Err(invalid("`publish` must be a boolean")),
+                None => true,
+            };
+            (entry, publish, table.keys().cloned().collect())
         }
+        _ => return Err(invalid("must be an entry-path string or a table")),
+    };
+    if entry.is_empty() {
+        return Err(invalid("entry path must not be empty"));
     }
+    Ok(WorldEntry {
+        entry,
+        publish,
+        unknown_fields,
+    })
 }
 
 #[derive(Deserialize)]
 struct RawManifest {
     package: Option<RawPackage>,
-    world: Option<IndexMap<String, RawWorldEntry>>,
+    world: Option<IndexMap<String, toml::Value>>,
     registries: Option<IndexMap<String, String>>,
     dependencies: Option<IndexMap<String, RawDependency>>,
     #[serde(rename = "dev-dependencies")]
@@ -565,12 +591,11 @@ struct RawDependency {
 fn convert_raw(raw: RawManifest) -> Result<Manifest, ManifestError> {
     let unknown_sections = unknown_keys(&raw.unknown);
     let package = raw.package.map(convert_package).transpose()?;
-    let world = raw
-        .world
-        .unwrap_or_default()
-        .into_iter()
-        .map(|(fq, entry)| (fq, entry.convert()))
-        .collect();
+    let mut world = IndexMap::new();
+    for (fq, value) in raw.world.unwrap_or_default() {
+        let entry = convert_world_entry(&fq, value)?;
+        world.insert(fq, entry);
+    }
     let registries = raw.registries.unwrap_or_default();
     let dependencies = convert_deps(raw.dependencies.unwrap_or_default())?;
     let dev_dependencies = convert_deps(raw.dev_dependencies.unwrap_or_default())?;
@@ -971,6 +996,46 @@ version = "0.1.0"
         // Explicit publish = false opts the single world out.
         assert!(!m.world["wasi:http/service"].publish);
         assert_eq!(m.world_entry("wasi:http/service"), Some("src/server.wado"));
+    }
+
+    #[test]
+    fn unknown_key_in_world_table_warns_instead_of_silently_dropping() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+
+[world]
+"wasi:http/service" = { entry = "src/server.wado", publsh = false }
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        // The typo'd key must not silently opt the world out.
+        assert!(m.world["wasi:http/service"].publish);
+        let warnings = m.warnings();
+        assert!(
+            warnings.iter().any(|w| matches!(w,
+                ManifestWarning::UnknownField { section: Some(s), field }
+                if s == "world.\"wasi:http/service\"" && field == "publsh")),
+            "expected an unknown-field warning for the typo, got {warnings:?}"
+        );
+    }
+
+    #[test]
+    fn world_table_with_non_string_entry_is_a_clear_error() {
+        let toml = "[package]\nname = \"a\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = { entry = 123 }\n";
+        let err = toml.parse::<Manifest>().unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("wasi:cli/command") && msg.contains("entry"),
+            "expected a clear [world] error, got {msg:?}"
+        );
+    }
+
+    #[test]
+    fn world_entry_with_empty_path_is_rejected() {
+        let toml = "[package]\nname = \"a\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"\"\n";
+        let err = toml.parse::<Manifest>().unwrap_err();
+        assert!(err.to_string().contains("empty"), "{err}");
     }
 
     #[test]

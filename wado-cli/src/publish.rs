@@ -223,14 +223,24 @@ async fn publish_workspace(root: &ProjectManifest, dry_run: bool) -> Result<(), 
     Ok(())
 }
 
+/// Which world a publish target builds. The library world lives at the bare
+/// repository; a hosted world gets the `/<segment>` sub-path. Modeling it as an
+/// enum keeps "exactly one world kind" structural instead of a pair of
+/// `Option`s with an implicit invariant.
+enum BuildWorld {
+    /// Library world; the value is its FQ name (passed as `--lib`).
+    Lib(String),
+    /// Hosted `[world]` entry; the value is its FQ name (passed as `--world`).
+    Hosted(String),
+}
+
 /// One world to publish: where its component is built and the OCI sub-path it
 /// targets (`None` for the library world, which lives at the bare repository).
 struct PublishTarget {
     subpath: Option<String>,
     entry: std::path::PathBuf,
     output: std::path::PathBuf,
-    lib_world: Option<String>,
-    target_world: Option<String>,
+    world: BuildWorld,
 }
 
 /// Every world a package publishes: the library world (bare repository) plus
@@ -248,8 +258,7 @@ fn publishable_worlds(project: &ProjectManifest) -> Result<Vec<PublishTarget>, C
             subpath: None,
             entry: root.join(lib_rel),
             output: crate::compile::build_output_path(root, "lib"),
-            lib_world: Some(crate::manifest::lib_world_fq(pkg)?),
-            target_world: None,
+            world: BuildWorld::Lib(crate::manifest::lib_world_fq(pkg)?),
         });
     }
     for (world_fq, entry) in &project.manifest.world {
@@ -261,8 +270,7 @@ fn publishable_worlds(project: &ProjectManifest) -> Result<Vec<PublishTarget>, C
             entry: root.join(&entry.entry),
             output: crate::compile::build_output_path(root, &segment),
             subpath: Some(segment),
-            lib_world: None,
-            target_world: Some(world_fq.clone()),
+            world: BuildWorld::Hosted(world_fq.clone()),
         });
     }
     Ok(targets)
@@ -296,13 +304,12 @@ async fn publish_package(
     }
     for target in &targets {
         let reference = resolve_push_target(registries, pkg, target.subpath.as_deref())?;
-        crate::compile::build_publish_world(
-            &target.entry,
-            &target.output,
-            target.lib_world.clone(),
-            target.target_world.clone(),
-        )
-        .await?;
+        let (lib_world, target_world) = match &target.world {
+            BuildWorld::Lib(fq) => (Some(fq.clone()), None),
+            BuildWorld::Hosted(fq) => (None, Some(fq.clone())),
+        };
+        crate::compile::build_publish_world(&target.entry, &target.output, lib_world, target_world)
+            .await?;
         eprintln!(
             "Publishing {coord} ({}) -> {reference}",
             target.subpath.as_deref().unwrap_or("lib")
@@ -342,12 +349,63 @@ fn resolve_push_target(
         .namespace
         .as_deref()
         .ok_or_else(|| CliExit::error("[package].namespace is required to publish"))?;
+    // OCI repository components must be lowercase; Wado names allow uppercase, so
+    // catch a non-pushable coordinate here with a clear message rather than a
+    // cryptic `wkg` failure.
+    check_oci_path_component("[package].namespace", namespace)?;
+    check_oci_path_component("[package].name", &pkg.name)?;
+    if let Some(segment) = subpath {
+        check_oci_path_component("world", segment)?;
+    }
+    check_oci_tag(&pkg.version)?;
     let mut repo = format!("{base}/{namespace}/{name}", name = pkg.name);
     if let Some(segment) = subpath {
         repo.push('/');
         repo.push_str(segment);
     }
     Ok(format!("{repo}:{version}", version = pkg.version))
+}
+
+/// Reject an OCI repository path component that isn't pushable: components must
+/// be lowercase `[a-z0-9]` with single `.`/`_`/`-` separators (no leading or
+/// trailing separator).
+fn check_oci_path_component(field: &str, value: &str) -> Result<(), CliExit> {
+    let alnum = |b: u8| b.is_ascii_lowercase() || b.is_ascii_digit();
+    let valid = !value.is_empty()
+        && value
+            .bytes()
+            .all(|b| alnum(b) || matches!(b, b'.' | b'_' | b'-'))
+        && value.bytes().next().is_some_and(alnum)
+        && value.bytes().next_back().is_some_and(alnum);
+    if valid {
+        Ok(())
+    } else {
+        Err(CliExit::error(format!(
+            "{field} {value:?} cannot be published to an OCI registry: \
+             repository names must be lowercase letters, digits, and `.`/`_`/`-`"
+        )))
+    }
+}
+
+/// Reject a version that isn't a valid OCI image tag — notably a semver build
+/// metadata `+`, which OCI tags disallow.
+fn check_oci_tag(version: &str) -> Result<(), CliExit> {
+    let valid = (1..=128).contains(&version.len())
+        && version
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-'))
+        && version
+            .bytes()
+            .next()
+            .is_some_and(|b| b.is_ascii_alphanumeric() || b == b'_');
+    if valid {
+        Ok(())
+    } else {
+        Err(CliExit::error(format!(
+            "version {version:?} cannot be an OCI image tag: \
+             tags allow letters, digits, and `_`/`.`/`-` (no `+` build metadata)"
+        )))
+    }
 }
 
 const WKG_INSTALL_HINT: &str = "install wasm-pkg-tools: `cargo install wkg` (https://github.com/bytecodealliance/wasm-pkg-tools)";
@@ -497,6 +555,36 @@ mod tests {
         let err =
             resolve_push_target(&m.registries, m.package.as_ref().unwrap(), None).unwrap_err();
         assert!(err.message.contains("oci://"), "{:?}", err.message);
+    }
+
+    #[test]
+    fn resolve_push_target_rejects_uppercase_coordinate() {
+        let m = manifest(
+            "[package]\nnamespace = \"MyOrg\"\nname = \"app\"\nversion = \"0.1.0\"\n\
+             [registries]\ndefault = \"oci://ghcr.io\"\n",
+        );
+        let err =
+            resolve_push_target(&m.registries, m.package.as_ref().unwrap(), None).unwrap_err();
+        assert!(err.message.contains("lowercase"), "{:?}", err.message);
+    }
+
+    #[test]
+    fn resolve_push_target_rejects_uppercase_world_segment() {
+        let m = ready_manifest_with_registry("oci://ghcr.io/acme");
+        let err = resolve_push_target(&m.registries, m.package.as_ref().unwrap(), Some("Foo-Bar"))
+            .unwrap_err();
+        assert!(err.message.contains("lowercase"), "{:?}", err.message);
+    }
+
+    #[test]
+    fn resolve_push_target_rejects_build_metadata_version() {
+        let m = manifest(
+            "[package]\nnamespace = \"org\"\nname = \"app\"\nversion = \"1.0.0+build.5\"\n\
+             [registries]\ndefault = \"oci://ghcr.io\"\n",
+        );
+        let err =
+            resolve_push_target(&m.registries, m.package.as_ref().unwrap(), None).unwrap_err();
+        assert!(err.message.contains("tag"), "{:?}", err.message);
     }
 
     #[test]
