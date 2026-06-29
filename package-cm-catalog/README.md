@@ -43,12 +43,15 @@ Full intended scope; checked items are implemented.
 - [x] `result<_, _>`
 - [x] `list<_>`
 - [x] `tuple<…>`
+- [ ] `variant` / `enum` / `flags` payloads — the other named shapes still
+      route to the legacy WIR path (only `record` is wired through `Named`)
 
 **`stream<T>`**
 
 - [x] `stream<u8>` (pass-through)
 - [x] `stream<T>` consume/produce — scalar element payloads (`stream<u32>`)
 - [x] `stream<T>` consume/produce — aggregate element payloads (`stream<string>`, `stream<point>`)
+- [ ] `stream<T>` consume/produce — `variant` / `enum` / `flags` element payloads
 - `stream<char>` is intentionally out of scope (rejected by the Component Model)
 
 **Embedded handles (pass-through)**
