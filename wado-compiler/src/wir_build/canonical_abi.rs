@@ -7,7 +7,7 @@
 
 use crate::nir::FunctionRef;
 use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, Operand};
-use crate::tir::{ResolvedType, TypeId};
+use crate::tir::TypeId;
 use crate::wir::{
     CanonicalIntrinsic, CmFuturePayload, CmStreamPayload, WirFuncId, WirInstr, WirType,
 };
@@ -99,21 +99,6 @@ impl FunctionTranslator<'_, '_> {
         CmStreamPayload::U8
     }
 
-    /// Get the CM future payload type for a Future/FutureWritable receiver.
-    fn cm_future_payload(&self, receiver_type_id: TypeId) -> CmFuturePayload {
-        // Receiver is &Future<T> or &FutureWritable<T> — unwrap the reference
-        let inner_type_id = match self.type_table.get(receiver_type_id) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => receiver_type_id,
-        };
-        if let ResolvedType::GenericResource { type_args, .. } = self.type_table.get(inner_type_id)
-            && !type_args.is_empty()
-        {
-            return crate::component_model::classify_future_payload(self.type_table, type_args[0]);
-        }
-        CmFuturePayload::Trailers
-    }
-
     /// Dispatch canonical resource methods based on `#[cm("...")]` attribute.
     /// Returns `Some(WirInstr)` if the method has a canonical name and was handled.
     ///
@@ -152,23 +137,6 @@ impl FunctionTranslator<'_, '_> {
                      synthesis (`__cm_future_write_<T>`)"
                 );
             }
-            "future-cancel-read" => {
-                let payload = self.cm_future_payload(self.body.exprs[receiver].type_id);
-                Some(self.emit_drop_handle(CanonicalIntrinsic::FutureCancelRead(payload), handle))
-            }
-            "future-cancel-write" => {
-                let payload = self.cm_future_payload(self.body.exprs[receiver].type_id);
-                Some(self.emit_drop_handle(CanonicalIntrinsic::FutureCancelWrite(payload), handle))
-            }
-            "future-drop-readable" => {
-                let payload = self.cm_future_payload(self.body.exprs[receiver].type_id);
-                Some(self.emit_drop_handle(CanonicalIntrinsic::FutureDropReadable(payload), handle))
-            }
-            "future-drop-writable" => {
-                let payload = self.cm_future_payload(self.body.exprs[receiver].type_id);
-                Some(self.emit_drop_handle(CanonicalIntrinsic::FutureDropWritable(payload), handle))
-            }
-
             other => panic!("[WIR] unhandled canonical method: {other}"),
         }
     }
@@ -205,22 +173,6 @@ impl FunctionTranslator<'_, '_> {
                 ))
             }
             _ => None,
-        }
-    }
-
-    /// Emit a canonical drop call: `{canonical}(handle)`.
-    ///
-    /// Used for all CM resource drop operations:
-    /// `stream-drop-readable`, `stream-drop-writable`,
-    /// `future-drop-readable`, `future-drop-writable`,
-    /// `waitable-set-drop`, `subtask-drop`, `error-context-drop`.
-    fn emit_drop_handle(&mut self, intrinsic: CanonicalIntrinsic, handle: WirInstr) -> WirInstr {
-        let func_id = self
-            .ctx
-            .ensure_canonical(intrinsic, vec![WirType::I32], vec![]);
-        WirInstr::Call {
-            func_id,
-            args: vec![handle],
         }
     }
 

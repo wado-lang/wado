@@ -1766,6 +1766,14 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
                 return;
             }
         }
+        // Future drop / cancel: parameterize the canonical name by the future's
+        // payload and rewrite as a raw CmRawCall (mirrors the stream path above).
+        if is_future_drop_cancel(&cm_name)
+            && let Some(parameterized) = parameterize_future_cm_name(&cm_name, expr, self.tt)
+        {
+            rewrite_cm_instance_method(expr, "raw", &parameterized, self.entry_source);
+            return;
+        }
         // Look up the binding function for everything else.
         let Some((kind, func_name)) = cm_binding_function(&cm_name) else {
             // Not handled by synthesis yet — falls through to WIR translate.
@@ -1853,6 +1861,41 @@ fn is_stream_cm_method(cm_name: &str) -> bool {
             | "stream-cancel-read"
             | "stream-cancel-write"
     )
+}
+
+fn is_future_drop_cancel(cm_name: &str) -> bool {
+    matches!(
+        cm_name,
+        "future-drop-readable"
+            | "future-drop-writable"
+            | "future-cancel-read"
+            | "future-cancel-write"
+    )
+}
+
+/// Parameterize a future drop / cancel canonical name by the receiver's payload
+/// (`future-drop-readable` → `future-drop-readable:val-point`, …), matching the
+/// `import_name` codegen builds. Returns `None` if the receiver is not a
+/// `Future<T>` / `FutureWritable<T>` method call.
+fn parameterize_future_cm_name(cm_name: &str, expr: &TirExpr, tt: &TypeTable) -> Option<String> {
+    let receiver = match &expr.kind {
+        TirExprKind::MethodCall { receiver, .. } => receiver,
+        _ => return None,
+    };
+    let mut type_id = receiver.type_id;
+    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(type_id) {
+        type_id = *inner;
+    }
+    let payload_tid = *tt.generic_type_args(type_id)?.first()?;
+    let payload = crate::component_model::classify_future_payload(tt, payload_tid);
+    let intrinsic = match cm_name {
+        "future-drop-readable" => CanonicalIntrinsic::FutureDropReadable(payload),
+        "future-drop-writable" => CanonicalIntrinsic::FutureDropWritable(payload),
+        "future-cancel-read" => CanonicalIntrinsic::FutureCancelRead(payload),
+        "future-cancel-write" => CanonicalIntrinsic::FutureCancelWrite(payload),
+        _ => return None,
+    };
+    Some(intrinsic.import_name())
 }
 
 /// Parameterize a stream CM name based on the receiver type.
