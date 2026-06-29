@@ -55,7 +55,7 @@ pub struct WirContext<'a> {
     /// Map from a defined function's canonical [`crate::nir::FuncId`] to its
     /// `WirFuncId`. Lets a stamped call resolve its target by id, skipping the
     /// name reconstruction in `resolve_function_ref` (the name path stays for
-    /// extern / unstamped callees). See `docs/wep-2026-06-28-function-identity.md`.
+    /// extern / unstamped callees).
     pub funcid_map: IndexMap<crate::nir::FuncId, WirFuncId>,
     /// Function type index for each function (into types vec).
     pub func_type_ids: Vec<WirTypeId>,

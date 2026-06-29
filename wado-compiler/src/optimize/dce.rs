@@ -1497,8 +1497,7 @@ fn compute_reachable(
 /// `reachable_positions` (computed by [`analyze_dce`]) as dead by clearing
 /// its body. The function record stays in `project.functions` at its
 /// original position, so `FuncId == position` holds for the whole pipeline
-/// (`dce` never renumbers) — see `docs/wep-2026-06-28-function-identity.md`
-/// Phase 4. A dead function then lingers as an inert bodyless record,
+/// (`dce` never renumbers). A dead function then lingers as an inert bodyless record,
 /// indistinguishable from an extern declaration: every body-iterating pass
 /// and codegen already skip `body.is_none()`, and the type / global / string
 /// reachability is filtered by reachable *position* (not body presence), so

@@ -22,8 +22,7 @@ use crate::name::LocalMethodName;
 use crate::tir::{EffectRef, TypeId, TypeTable};
 use crate::token::Span;
 
-/// Canonical identity of a function entity (see
-/// `docs/wep-2026-06-28-function-identity.md`). Minted in `lower` over the
+/// Canonical identity of a function entity. Minted in `lower` over the
 /// post-monomorphization function set and intrinsic to the entity — not its
 /// storage position, so it is stable across `dce` compaction. The mangled
 /// `name` is a lookup attribute, never identity.
@@ -139,8 +138,7 @@ impl FunctionRef {
     /// is the one injective identity for a function — independent of whether a
     /// *call site* happens to carry `monomorph_info` (which flipped the older
     /// `Method`/`Free` split and made the same callee key two different ways).
-    /// Used to mint and stamp `FuncId`s in `lower`
-    /// (`docs/wep-2026-06-28-function-identity.md`).
+    /// Used to mint and stamp `FuncId`s in `lower`.
     pub fn function_id(&self) -> crate::name::FunctionId {
         use crate::name::{FreeFunctionName, FunctionId};
         FunctionId::Free(FreeFunctionName::from_module_source(
@@ -287,7 +285,7 @@ pub struct NirFunction {
     pub id: Option<FuncId>,
     /// Liveness bit. `dce` sets this `true` for an unreachable function instead
     /// of removing it from the store, so `FuncId == position` holds for the whole
-    /// pipeline (see `docs/wep-2026-06-28-function-identity.md` Phase 4). A dead
+    /// pipeline. A dead
     /// function lingers as an inert bodyless record; `wir_build` skips it. Distinct
     /// from a live-but-bodyless declaration (extern / `FnCanonicalDispatch`), which
     /// keeps `is_dead == false`.

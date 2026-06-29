@@ -43,8 +43,7 @@ pub struct NirPackage {
     /// and grown append-only by [`Self::intern_extern`] as the optimizer
     /// synthesizes calls to new builtins. Authoritative, never rebuilt or
     /// invalidated — the interner that keeps the "born resolved" invariant cheap
-    /// (O(1) per synthesis site, no per-pass walk). See
-    /// `docs/wep-2026-06-28-function-identity.md`.
+    /// (O(1) per synthesis site, no per-pass walk).
     pub func_index: IndexMap<crate::name::FunctionId, FuncId>,
     /// All struct declarations (each carries its own `module_source`)
     pub structs: Vec<NirStruct>,

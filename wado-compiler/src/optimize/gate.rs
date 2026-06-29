@@ -8,7 +8,7 @@
 //!
 //! # Identity
 //!
-//! The gate keys on the canonical [`FuncId`] (`docs/wep-2026-06-28-function-identity.md`),
+//! The gate keys on the canonical [`FuncId`],
 //! which equals a function's index in `NirPackage::functions`: `lower` mints
 //! `id = index`, and `dce` marks dead in place without renumbering (Phase 4), so
 //! `FuncId == position` holds for the whole pipeline. The call graph reads each
