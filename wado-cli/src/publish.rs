@@ -126,7 +126,7 @@ async fn publish_single(project: &ProjectManifest, dry_run: bool) -> Result<(), 
                 eprintln!("{coord} is ready to publish");
                 Ok(())
             } else {
-                publish_ready(project, &coord).await
+                publish_package(project, &coord).await
             }
         }
         Verdict::Failed(problems) => Err(problems_error(
@@ -212,39 +212,105 @@ async fn publish_workspace(root: &ProjectManifest, dry_run: bool) -> Result<(), 
     }
 
     for (coord, project) in &ready {
-        publish_ready(project, coord).await?;
+        publish_package(project, coord).await?;
     }
     Ok(())
 }
 
-/// Build and push one ready package: resolve the OCI reference, build the
-/// library-world component, then `wkg oci push` it.
-async fn publish_ready(project: &ProjectManifest, coord: &str) -> Result<(), CliExit> {
+/// One world to publish: where its component is built and the OCI sub-path it
+/// targets (`None` for the library world, which lives at the bare repository).
+struct PublishTarget {
+    subpath: Option<String>,
+    entry: std::path::PathBuf,
+    output: std::path::PathBuf,
+    lib_world: Option<String>,
+    target_world: Option<String>,
+}
+
+/// Every world a package publishes: the library world (bare repository) plus
+/// each `[world]` entry not opted out with `publish = false`.
+fn publishable_worlds(project: &ProjectManifest) -> Result<Vec<PublishTarget>, CliExit> {
     let pkg = project
         .manifest
         .package
         .as_ref()
         .ok_or_else(|| CliExit::error("no [package] to publish"))?;
-    let reference = resolve_push_target(&project.manifest, pkg)?;
+    let root = &project.root;
+    let mut targets = Vec::new();
+    if let Some(lib_rel) = pkg.lib.as_deref() {
+        targets.push(PublishTarget {
+            subpath: None,
+            entry: root.join(lib_rel),
+            output: crate::compile::build_output_path(root, "lib"),
+            lib_world: Some(crate::manifest::lib_world_fq(pkg)?),
+            target_world: None,
+        });
+    }
+    for (world_fq, entry) in &project.manifest.world {
+        if !entry.publish {
+            continue;
+        }
+        let segment = crate::compile::world_path_segment(world_fq);
+        targets.push(PublishTarget {
+            entry: root.join(&entry.entry),
+            output: crate::compile::build_output_path(root, &segment),
+            subpath: Some(segment),
+            lib_world: None,
+            target_world: Some(world_fq.clone()),
+        });
+    }
+    Ok(targets)
+}
+
+/// Build and push every publishable world of one ready package: build each
+/// world's component, resolve its OCI reference, then `wkg oci push` it.
+async fn publish_package(project: &ProjectManifest, coord: &str) -> Result<(), CliExit> {
+    let pkg = project
+        .manifest
+        .package
+        .as_ref()
+        .ok_or_else(|| CliExit::error("no [package] to publish"))?;
+    let targets = publishable_worlds(project)?;
+    if targets.is_empty() {
+        return Err(CliExit::error(format!(
+            "{coord} declares no publishable world; add `[package].lib` or a `[world]` entry"
+        )));
+    }
     if crate::metadata_embed::working_tree_dirty(&project.root) == Some(true) {
         eprintln!(
             "warning: working tree has uncommitted changes; publishing {coord} \
              without a `revision` annotation"
         );
     }
-    let component = crate::compile::build_lib_component(project).await?;
-    eprintln!("Publishing {coord} -> {reference}");
-    wkg_oci_push(&reference, &component)?;
-    eprintln!("Published {coord}");
+    for target in &targets {
+        let reference = resolve_push_target(&project.manifest, pkg, target.subpath.as_deref())?;
+        crate::compile::build_publish_world(
+            &target.entry,
+            &target.output,
+            target.lib_world.clone(),
+            target.target_world.clone(),
+        )
+        .await?;
+        eprintln!(
+            "Publishing {coord} ({}) -> {reference}",
+            target.subpath.as_deref().unwrap_or("lib")
+        );
+        wkg_oci_push(&reference, &target.output)?;
+    }
+    eprintln!("Published {coord} ({} artifact(s))", targets.len());
     Ok(())
 }
 
 /// The OCI reference `wkg oci push` targets:
-/// `<host>/<prefix>/<namespace>/<name>:<version>`, derived from
+/// `<host>/<prefix>/<namespace>/<name>[/<world>]:<version>`, derived from
 /// `[registries].default` (the only supported publish destination) and the
-/// package coordinate. Errors when no default registry is set or it is not an
-/// `oci://` URL.
-fn resolve_push_target(manifest: &Manifest, pkg: &Package) -> Result<String, CliExit> {
+/// package coordinate. `subpath` is the world segment for a non-library world.
+/// Errors when no default registry is set or it is not an `oci://` URL.
+fn resolve_push_target(
+    manifest: &Manifest,
+    pkg: &Package,
+    subpath: Option<&str>,
+) -> Result<String, CliExit> {
     let registry = manifest.registries.get("default").ok_or_else(|| {
         CliExit::error(
             "publishing requires a default registry; set it in wado.toml:\n  \
@@ -262,11 +328,12 @@ fn resolve_push_target(manifest: &Manifest, pkg: &Package) -> Result<String, Cli
         .namespace
         .as_deref()
         .ok_or_else(|| CliExit::error("[package].namespace is required to publish"))?;
-    Ok(format!(
-        "{base}/{namespace}/{name}:{version}",
-        name = pkg.name,
-        version = pkg.version
-    ))
+    let mut repo = format!("{base}/{namespace}/{name}", name = pkg.name);
+    if let Some(segment) = subpath {
+        repo.push('/');
+        repo.push_str(segment);
+    }
+    Ok(format!("{repo}:{version}", version = pkg.version))
 }
 
 const WKG_INSTALL_HINT: &str = "install wasm-pkg-tools: `cargo install wkg` (https://github.com/bytecodealliance/wasm-pkg-tools)";
@@ -373,23 +440,32 @@ mod tests {
     }
 
     #[test]
-    fn resolve_push_target_builds_oci_reference() {
+    fn resolve_push_target_library_uses_bare_repository() {
         let m = ready_manifest_with_registry("oci://ghcr.io/acme");
-        let target = resolve_push_target(&m, m.package.as_ref().unwrap()).unwrap();
+        let target = resolve_push_target(&m, m.package.as_ref().unwrap(), None).unwrap();
         assert_eq!(target, "ghcr.io/acme/org/app:0.1.0");
+    }
+
+    #[test]
+    fn resolve_push_target_world_appends_subpath() {
+        let m = ready_manifest_with_registry("oci://ghcr.io/acme");
+        let target =
+            resolve_push_target(&m, m.package.as_ref().unwrap(), Some("core-kiln-generator"))
+                .unwrap();
+        assert_eq!(target, "ghcr.io/acme/org/app/core-kiln-generator:0.1.0");
     }
 
     #[test]
     fn resolve_push_target_trims_trailing_slash() {
         let m = ready_manifest_with_registry("oci://ghcr.io/acme/");
-        let target = resolve_push_target(&m, m.package.as_ref().unwrap()).unwrap();
+        let target = resolve_push_target(&m, m.package.as_ref().unwrap(), None).unwrap();
         assert_eq!(target, "ghcr.io/acme/org/app:0.1.0");
     }
 
     #[test]
     fn resolve_push_target_errors_without_default_registry() {
         let m = manifest("[package]\nnamespace = \"org\"\nname = \"app\"\nversion = \"0.1.0\"\n");
-        let err = resolve_push_target(&m, m.package.as_ref().unwrap()).unwrap_err();
+        let err = resolve_push_target(&m, m.package.as_ref().unwrap(), None).unwrap_err();
         assert!(
             err.message.contains("default registry"),
             "{:?}",
@@ -400,7 +476,7 @@ mod tests {
     #[test]
     fn resolve_push_target_rejects_non_oci_registry() {
         let m = ready_manifest_with_registry("https://wa.dev");
-        let err = resolve_push_target(&m, m.package.as_ref().unwrap()).unwrap_err();
+        let err = resolve_push_target(&m, m.package.as_ref().unwrap(), None).unwrap_err();
         assert!(err.message.contains("oci://"), "{:?}", err.message);
     }
 

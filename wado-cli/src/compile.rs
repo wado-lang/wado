@@ -1169,29 +1169,25 @@ pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
     Ok(())
 }
 
-/// Build a package's library-world component for publishing.
+/// The `<root>/build/<segment>.wasm` artifact path for a publish build, where
+/// `<segment>` is `"lib"` or a [`world_path_segment`].
+#[must_use]
+pub fn build_output_path(root: &Path, segment: &str) -> std::path::PathBuf {
+    root.join(BUILD_DIR).join(format!("{segment}.wasm"))
+}
+
+/// Build one of a package's worlds for publishing.
 ///
-/// Compiles `[package].lib` against the library world and embeds the WIT and
-/// `[package]` metadata exactly like a default `wado compile`, writing the
-/// component to `<root>/build/lib.wasm`. Returns the output path. The library
-/// world is the registry artifact other packages depend on; a package without
-/// `[package].lib` has no such contract and is rejected.
-pub async fn build_lib_component(
-    project: &manifest::ProjectManifest,
-) -> Result<std::path::PathBuf, CliExit> {
-    let pkg = project
-        .manifest
-        .package
-        .as_ref()
-        .ok_or_else(|| CliExit::error("no [package] to build"))?;
-    let lib_rel = pkg.lib.as_deref().ok_or_else(|| {
-        CliExit::error(
-            "publishing requires `[package].lib`: the library world is the registry artifact",
-        )
-    })?;
-    let world_fq = manifest::lib_world_fq(pkg)?;
-    let entry = project.root.join(lib_rel);
-    let output = project.root.join(BUILD_DIR).join("lib.wasm");
+/// Compiles `entry` for the selected world and embeds the WIT and `[package]`
+/// metadata exactly like a default `wado compile`, writing the component to
+/// `output`. Exactly one of `lib_world` / `target_world` is `Some`, selecting
+/// the world as `--lib` / `--world` do.
+pub async fn build_publish_world(
+    entry: &Path,
+    output: &Path,
+    lib_world: Option<String>,
+    target_world: Option<String>,
+) -> Result<(), CliExit> {
     let opts = CompileOptions {
         input: entry.to_string_lossy().into_owned(),
         output: Some(output.to_string_lossy().into_owned()),
@@ -1199,14 +1195,14 @@ pub async fn build_lib_component(
         opt_level: OptLevel::default(),
         wat_to_stdout: false,
         log_level: LogLevel::default(),
-        target_world: None,
+        target_world,
         skip_validation: false,
         inline_threshold: None,
         opt_iterations: None,
         allocator: None,
         no_cache: false,
         codegen_flags: Vec::new(),
-        lib_world: Some(world_fq),
+        lib_world,
         param_overrides: wado_compiler::hashmap::IndexMap::default(),
         param_policy: wado_compiler::param_resolution::ParamPolicy::default(),
         no_embed_wit: false,
@@ -1215,8 +1211,7 @@ pub async fn build_lib_component(
         embed_metadata: false,
         manifest_driven: true,
     };
-    run(opts).await?;
-    Ok(output)
+    run(opts).await
 }
 
 /// The default output path when `-o` is absent. A manifest-driven build writes
@@ -1249,7 +1244,7 @@ fn default_output_path(
 /// Sanitize a Component Model world FQ name into a single path segment: drop the
 /// `@version`, then replace every character outside `[A-Za-z0-9._-]` with `-`
 /// (e.g. `wasi:cli/command` → `wasi-cli-command`).
-fn world_path_segment(world_fq: &str) -> String {
+pub fn world_path_segment(world_fq: &str) -> String {
     let base = world_fq.split('@').next().unwrap_or(world_fq);
     base.chars()
         .map(|c| {

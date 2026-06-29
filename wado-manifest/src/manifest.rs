@@ -13,10 +13,10 @@ use crate::version::VersionSpecifier;
 pub struct Manifest {
     pub package: Option<Package>,
     /// The `[world]` table: CM world FQ name (e.g. `"wasi:cli/command"`,
-    /// `"core:kiln/generator"`) → entry-point path, one entry per hosted
-    /// world the package targets. The library world is declared separately by
-    /// `[package].lib` (its world name is the package name).
-    pub world: IndexMap<String, String>,
+    /// `"core:kiln/generator"`) → entry, one entry per hosted world the package
+    /// targets. The library world is declared separately by `[package].lib`
+    /// (its world name is the package name).
+    pub world: IndexMap<String, WorldEntry>,
     pub registries: IndexMap<String, String>,
     pub dependencies: IndexMap<String, Dependency>,
     pub dev_dependencies: IndexMap<String, Dependency>,
@@ -33,12 +33,22 @@ pub struct Manifest {
     pub inherited_unknown_fields: Vec<String>,
 }
 
+/// A `[world]` table entry: the world's entry-point path and whether it is
+/// published. A bare string value (`"world" = "src/x.wado"`) means `publish =
+/// true`; the table form (`{ entry = "…", publish = false }`) opts the single
+/// world out of `wado publish`.
+#[derive(Debug, Clone)]
+pub struct WorldEntry {
+    pub entry: String,
+    pub publish: bool,
+}
+
 impl Manifest {
     /// Entry-point source path for the given CM world FQ name, if declared in
     /// the `[world]` table.
     #[must_use]
     pub fn world_entry(&self, world_fq: &str) -> Option<&str> {
-        self.world.get(world_fq).map(String::as_str)
+        self.world.get(world_fq).map(|w| w.entry.as_str())
     }
 
     /// Deterministic `sha256:` hash of `[dependencies]` + `[dev-dependencies]`
@@ -429,10 +439,39 @@ impl std::error::Error for ManifestError {}
 
 // --- Raw serde types for TOML deserialization ---
 
+/// A `[world]` value: either a bare entry path or a table with `entry` and an
+/// optional `publish` flag (default `true`).
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum RawWorldEntry {
+    Path(String),
+    Table {
+        entry: String,
+        #[serde(default = "default_true")]
+        publish: bool,
+    },
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl RawWorldEntry {
+    fn convert(self) -> WorldEntry {
+        match self {
+            RawWorldEntry::Path(entry) => WorldEntry {
+                entry,
+                publish: true,
+            },
+            RawWorldEntry::Table { entry, publish } => WorldEntry { entry, publish },
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct RawManifest {
     package: Option<RawPackage>,
-    world: Option<IndexMap<String, String>>,
+    world: Option<IndexMap<String, RawWorldEntry>>,
     registries: Option<IndexMap<String, String>>,
     dependencies: Option<IndexMap<String, RawDependency>>,
     #[serde(rename = "dev-dependencies")]
@@ -526,7 +565,12 @@ struct RawDependency {
 fn convert_raw(raw: RawManifest) -> Result<Manifest, ManifestError> {
     let unknown_sections = unknown_keys(&raw.unknown);
     let package = raw.package.map(convert_package).transpose()?;
-    let world = raw.world.unwrap_or_default();
+    let world = raw
+        .world
+        .unwrap_or_default()
+        .into_iter()
+        .map(|(fq, entry)| (fq, entry.convert()))
+        .collect();
     let registries = raw.registries.unwrap_or_default();
     let dependencies = convert_deps(raw.dependencies.unwrap_or_default())?;
     let dev_dependencies = convert_deps(raw.dev_dependencies.unwrap_or_default())?;
@@ -905,6 +949,28 @@ version = "0.1.0"
         assert_eq!(pkg.version, "0.1.0");
         assert_eq!(m.world_entry("wasi:cli/command"), Some("src/main.wado"));
         assert!(pkg.namespace.is_none());
+    }
+
+    #[test]
+    fn world_entry_publish_defaults_true_and_opts_out_via_table() {
+        let toml = r#"
+[package]
+name = "tool"
+version = "0.1.0"
+
+[world]
+"wasi:cli/command" = "src/main.wado"
+"core:kiln/generator" = { entry = "src/gen.wado" }
+"wasi:http/service" = { entry = "src/server.wado", publish = false }
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        // Bare string and table-without-publish both default to published.
+        assert!(m.world["wasi:cli/command"].publish);
+        assert_eq!(m.world["core:kiln/generator"].entry, "src/gen.wado");
+        assert!(m.world["core:kiln/generator"].publish);
+        // Explicit publish = false opts the single world out.
+        assert!(!m.world["wasi:http/service"].publish);
+        assert_eq!(m.world_entry("wasi:http/service"), Some("src/server.wado"));
     }
 
     #[test]
