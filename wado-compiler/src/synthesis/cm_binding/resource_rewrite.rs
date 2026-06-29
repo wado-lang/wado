@@ -247,9 +247,11 @@ pub(super) fn synthesize_future_writes(project: &mut Package) {
     }
 }
 
-/// The future-write payload type for an aggregate `future-write` method call,
-/// or `None` if it is not a future-write or its payload is a scalar / WASI shape
-/// (which the WIR-build path handles directly).
+/// The future-write payload type for a value `future-write` method call, or
+/// `None` if it is not a future-write or its payload is a transmission shape
+/// (`Result<(), E>`, `Result<Option<resource>, E>`) that the WIR-build path
+/// still lowers directly. Covers scalar and aggregate payloads alike — both go
+/// through the synthesized `__cm_future_write_<T>` helper.
 fn future_write_value_payload(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
     let (func, receiver) = match &expr.kind {
         TirExprKind::MethodCall { func, receiver, .. } => (func, receiver),
@@ -263,11 +265,9 @@ fn future_write_value_payload(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> 
         recv = *inner;
     }
     let payload = *tt.generic_type_args(recv)?.first()?;
-    matches!(
-        crate::component_model::classify_future_payload(tt, payload),
-        CmFuturePayload::Value(_)
-    )
-    .then_some(payload)
+    crate::component_model::cm_payload_type_from_type_id(tt, payload)
+        .is_some()
+        .then_some(payload)
 }
 
 /// The `__cm_future_write_*` helper name for a payload type. Finder, rewriter,
@@ -1709,8 +1709,9 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
         if matches!(cm_name.as_str(), "stream-new" | "future-new") {
             return;
         }
-        // Aggregate future writes call a generated per-payload binding function;
-        // scalar / WASI shapes fall through to the WIR-build path.
+        // Value future writes (scalar + aggregate) call a generated per-payload
+        // binding function; only the transmission shapes (`Result<(), E>`,
+        // `Result<Option<resource>, E>`) fall through to the WIR-build path.
         if cm_name == "future-write"
             && let Some(payload_type_id) = future_write_value_payload(self.tt, expr)
         {

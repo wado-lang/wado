@@ -7,7 +7,7 @@
 
 use crate::nir::FunctionRef;
 use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, Operand};
-use crate::tir::{PrimitiveType, ResolvedType, TypeId};
+use crate::tir::{ResolvedType, TypeId};
 use crate::wir::{
     CanonicalIntrinsic, CmFuturePayload, CmStreamPayload, WirFuncId, WirInstr, WirType,
 };
@@ -136,10 +136,10 @@ impl FunctionTranslator<'_, '_> {
             // path instead of the hand-rolled lift that used to live here.
             "future-write" => {
                 let value_expr = args[0].expr;
-                let value_type_id = self.operand_type_id(value_expr);
-                let payload = self.cm_future_payload(self.body.exprs[receiver].type_id);
-                // Variant-shaped futures (used for trailers): pattern-match on
-                // TIR because general variant→CM lowering is not yet implemented.
+                // Value payloads (scalar + aggregate) are rewritten to
+                // `__cm_future_write_<T>` by synthesis and never reach here. Only
+                // the variant-shaped transmission futures (HTTP trailers /
+                // write-completion) remain, dispatched by TIR pattern match.
                 if let Some(resource_expr) = match_ok_some_resource(self.body, value_expr) {
                     let resource_handle = self.translate_expr(resource_expr);
                     return Some(self.emit_future_write_ok_some_resource(handle, resource_handle));
@@ -147,9 +147,10 @@ impl FunctionTranslator<'_, '_> {
                 if match_ok_none(self.body, value_expr) {
                     return Some(self.emit_future_write_ok_none(handle));
                 }
-                // Scalar primitives are evaluated and lowered generically.
-                let value_arg = self.translate_operand(value_expr);
-                Some(self.emit_future_write(handle, value_arg, value_type_id, payload))
+                panic!(
+                    "[WIR] future-write: non-transmission payload should have been lowered by \
+                     synthesis (`__cm_future_write_<T>`)"
+                );
             }
             "future-cancel-read" => {
                 let payload = self.cm_future_payload(self.body.exprs[receiver].type_id);
@@ -323,189 +324,6 @@ impl FunctionTranslator<'_, '_> {
                 ],
             },
         ])
-    }
-
-    /// Emit WIR for `FutureWritable<T>::write(value)` for scalar value types.
-    ///
-    /// The variant-shaped futures (`Result<Option<R>, E>::Ok(None)` and
-    /// `::Ok(Some(<resource>))`) are dispatched at the call site in
-    /// `try_translate_canonical_method` because they require TIR-level
-    /// pattern matching. Anything else panics — silently writing `Ok(None)`
-    /// for an unrecognized shape produces wrong runtime behavior with no
-    /// diagnostic.
-    fn emit_future_write(
-        &mut self,
-        handle: WirInstr,
-        value: WirInstr,
-        value_type_id: TypeId,
-        payload: CmFuturePayload,
-    ) -> WirInstr {
-        if let ResolvedType::Primitive(
-            PrimitiveType::I8
-            | PrimitiveType::I16
-            | PrimitiveType::I32
-            | PrimitiveType::I64
-            | PrimitiveType::U8
-            | PrimitiveType::U16
-            | PrimitiveType::U32
-            | PrimitiveType::U64
-            | PrimitiveType::F32
-            | PrimitiveType::F64
-            | PrimitiveType::Bool
-            | PrimitiveType::Char,
-        ) = self.type_table.get(value_type_id)
-        {
-            return self.emit_future_write_scalar(handle, value, value_type_id, payload);
-        }
-
-        panic!(
-            "[WIR] FutureWritable::write: unsupported value of type_id={value_type_id:?}. \
-             Currently supported: scalar primitives (i8..i64, u8..u64, bool, char), \
-             Result::Ok(Option::None), Result::Ok(Option::Some(<resource>)). \
-             General variant→CM lowering is not yet implemented."
-        );
-    }
-
-    /// Emit WIR to write a scalar numeric value into a `FutureWritable` handle.
-    ///
-    /// Allocates a CM buffer, stores the value, and calls `future-write` with
-    /// `async` canonical option. If the operation returns BLOCKED, the buffer is
-    /// intentionally kept alive — the reader will copy the data and complete
-    /// the write on the same thread. The buffer is freed only on immediate
-    /// completion (non-BLOCKED).
-    fn emit_future_write_scalar(
-        &mut self,
-        handle: WirInstr,
-        value: WirInstr,
-        value_type_id: TypeId,
-        payload: CmFuturePayload,
-    ) -> WirInstr {
-        let Some(realloc_id) = self.ctx.func_map.get("builtin/realloc").cloned() else {
-            panic!("[WIR] emit_future_write_scalar: builtin/realloc not registered");
-        };
-        let future_write_id = self.ctx.ensure_canonical(
-            CanonicalIntrinsic::FutureWrite(payload),
-            vec![WirType::I32, WirType::I32],
-            vec![WirType::I32],
-        );
-
-        self.local_counter += 1;
-        let suffix = self.local_counter;
-        let ptr_name = format!("__fw_write_ptr_{suffix}");
-        let result_name = format!("__fw_result_{suffix}");
-
-        // Determine buffer size/alignment from the primitive type
-        let ResolvedType::Primitive(prim) = self.type_table.get(value_type_id) else {
-            panic!(
-                "[WIR] emit_future_write_scalar: expected primitive type, got type_id={value_type_id:?}"
-            );
-        };
-        let (buf_size, buf_align): (i32, i32) = match prim {
-            PrimitiveType::I8 | PrimitiveType::U8 | PrimitiveType::Bool => (1, 1),
-            PrimitiveType::I16 | PrimitiveType::U16 => (2, 2),
-            PrimitiveType::I32 | PrimitiveType::U32 | PrimitiveType::Char | PrimitiveType::F32 => {
-                (4, 4)
-            }
-            PrimitiveType::I64 | PrimitiveType::U64 | PrimitiveType::F64 => (8, 8),
-            other => panic!("[WIR] emit_future_write_scalar: unsupported primitive {other:?}"),
-        };
-
-        let mut seq = vec![];
-
-        // Declare locals
-        for (name, ty) in [(&ptr_name, WirType::I32), (&result_name, WirType::I32)] {
-            seq.push(WirInstr::DeclareLocal {
-                name: name.clone(),
-                ty,
-            });
-        }
-
-        // Allocate buffer
-        seq.push(WirInstr::LocalSet {
-            name: ptr_name.clone(),
-            value: Box::new(WirInstr::Call {
-                func_id: realloc_id,
-                args: vec![
-                    WirInstr::I32Const(0),
-                    WirInstr::I32Const(0),
-                    WirInstr::I32Const(buf_align),
-                    WirInstr::I32Const(buf_size),
-                ],
-            }),
-        });
-
-        // Store value at ptr
-        let ptr = || WirInstr::LocalGet {
-            name: ptr_name.clone(),
-            result_ty: WirType::I32,
-        };
-        let store_instr = match prim {
-            PrimitiveType::I8 | PrimitiveType::U8 | PrimitiveType::Bool => WirInstr::I32Store8 {
-                offset: 0,
-                align: 0,
-                addr: Box::new(ptr()),
-                value: Box::new(value),
-            },
-            PrimitiveType::I16 | PrimitiveType::U16 => WirInstr::I32Store16 {
-                offset: 0,
-                align: 1,
-                addr: Box::new(ptr()),
-                value: Box::new(value),
-            },
-            PrimitiveType::I32 | PrimitiveType::U32 | PrimitiveType::Char => WirInstr::I32Store {
-                offset: 0,
-                align: 2,
-                addr: Box::new(ptr()),
-                value: Box::new(value),
-            },
-            PrimitiveType::I64 | PrimitiveType::U64 => WirInstr::I64Store {
-                offset: 0,
-                align: 3,
-                addr: Box::new(ptr()),
-                value: Box::new(value),
-            },
-            // Floats have no dedicated WIR store; reinterpret to the same-width
-            // integer and reuse the integer store (byte-identical to `fN.store`),
-            // matching `builtin::fN_store` in `wir_build/calls.rs`.
-            PrimitiveType::F32 => WirInstr::I32Store {
-                offset: 0,
-                align: 2,
-                addr: Box::new(ptr()),
-                value: Box::new(WirInstr::I32ReinterpretF32(Box::new(value))),
-            },
-            PrimitiveType::F64 => WirInstr::I64Store {
-                offset: 0,
-                align: 3,
-                addr: Box::new(ptr()),
-                value: Box::new(WirInstr::I64ReinterpretF64(Box::new(value))),
-            },
-            other => {
-                panic!("[WIR] emit_future_write_scalar: unsupported store primitive {other:?}")
-            }
-        };
-        seq.push(store_instr);
-
-        // result = future_write(handle, ptr)
-        // With `async` canonical option, BLOCKED means the data is pending and
-        // the reader will pick it up. We drop the result — the buffer stays alive
-        // until the reader copies the data on the same thread.
-        seq.push(WirInstr::Drop(Box::new(WirInstr::Call {
-            func_id: future_write_id,
-            args: vec![
-                handle,
-                WirInstr::LocalGet {
-                    name: ptr_name,
-                    result_ty: WirType::I32,
-                },
-            ],
-        })));
-
-        // NOTE: We intentionally do NOT free the buffer here. When the canonical
-        // `async` option returns BLOCKED, the CM runtime holds a reference to the
-        // buffer. The reader will copy from it before this thread continues.
-        // The buffer is leaked but this is acceptable for small scalar payloads.
-
-        WirInstr::Seq(seq)
     }
 
     /// Emit the BLOCKED handling pattern for `future-write`.
