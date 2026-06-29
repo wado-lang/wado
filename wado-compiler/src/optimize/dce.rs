@@ -132,7 +132,7 @@ pub fn analyze_dce(project: &mut NirPackage) -> DceAnalysis {
 /// The callee [`FunctionRef`] descriptor for every function, indexed by
 /// `func_id.index()` (== store position). Used so a call site's identity is read
 /// by its stamped `func_id` rather than the call node's own `FunctionRef`.
-fn build_callee_descriptors(project: &NirPackage) -> Vec<FunctionRef> {
+pub(super) fn build_callee_descriptors(project: &NirPackage) -> Vec<FunctionRef> {
     project
         .functions
         .iter()
@@ -145,7 +145,10 @@ fn build_callee_descriptors(project: &NirPackage) -> Vec<FunctionRef> {
 
 /// Resolve a call node's stamped `func_id` to its callee descriptor. `func_id`
 /// is total for every NIR call (born resolved); a missing entry would be a bug.
-fn callee_descriptor<'a>(descriptors: &'a [FunctionRef], func_id: Option<FuncId>) -> &'a FunctionRef {
+pub(super) fn callee_descriptor<'a>(
+    descriptors: &'a [FunctionRef],
+    func_id: Option<FuncId>,
+) -> &'a FunctionRef {
     use cranelift_entity::EntityRef;
     let id = func_id.expect("every NIR call is born resolved with a func_id");
     &descriptors[id.index()]

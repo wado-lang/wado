@@ -9,7 +9,7 @@ use std::rc::Rc;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
-use crate::nir::{InlineHint, NirFunction, NirLocal, NirUnaryOp};
+use crate::nir::{FunctionRef, InlineHint, NirFunction, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,
     ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId, PatKind, PatNode, StmtId, StmtKind,
@@ -21,6 +21,7 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 use cranelift_entity::EntityRef;
 
 use super::arena_query;
+use super::dce::callee_descriptor;
 use super::gate::{FunctionGate, GatedPass};
 use crate::nir::FuncId;
 use crate::token::Span;
@@ -32,11 +33,12 @@ use crate::token::Span;
 // - Method calls, binary operations, field accesses all contribute
 
 /// True when an expression is a `builtin::cold_path()` marker call.
-fn is_cold_path_call(body: &Body, id: ExprId) -> bool {
+fn is_cold_path_call(body: &Body, id: ExprId, descriptors: &[FunctionRef]) -> bool {
     matches!(
         &body.exprs[id].kind,
-        ExprKind::Call { func, .. }
-            if func.builtin_name().as_deref() == Some("builtin::cold_path")
+        ExprKind::Call { func_id, .. }
+            if callee_descriptor(descriptors, *func_id).builtin_name().as_deref()
+                == Some("builtin::cold_path")
     )
 }
 
@@ -56,9 +58,9 @@ enum BlockCut {
 
 /// Classify whether a statement cuts off the rest of its block from the inline
 /// cost estimate.
-fn block_cut(body: &Body, stmt: StmtId, type_table: &TypeTable) -> BlockCut {
+fn block_cut(body: &Body, stmt: StmtId, type_table: &TypeTable, descriptors: &[FunctionRef]) -> BlockCut {
     match &body.stmts[stmt].kind {
-        StmtKind::Expr(e) if e.as_expr().is_some_and(|e| is_cold_path_call(body, e)) => {
+        StmtKind::Expr(e) if e.as_expr().is_some_and(|e| is_cold_path_call(body, e, descriptors)) => {
             BlockCut::Cold
         }
         StmtKind::Return { .. } | StmtKind::Break { .. } | StmtKind::Continue => BlockCut::Diverges,
@@ -73,69 +75,69 @@ fn block_cut(body: &Body, stmt: StmtId, type_table: &TypeTable) -> BlockCut {
 }
 
 /// Inline cost of a single statement (its own expression count).
-fn count_stmt(body: &Body, stmt: StmtId, type_table: &TypeTable) -> usize {
+fn count_stmt(body: &Body, stmt: StmtId, type_table: &TypeTable, descriptors: &[FunctionRef]) -> usize {
     match &body.stmts[stmt].kind {
-        StmtKind::Expr(expr) => count_operand(body, *expr, type_table),
-        StmtKind::Let { value, .. } => count_operand(body, *value, type_table),
-        StmtKind::LetDestructure { value, .. } => count_operand(body, *value, type_table),
-        StmtKind::Return { value } => value.map_or(0, |v| count_operand(body, v, type_table)),
+        StmtKind::Expr(expr) => count_operand(body, *expr, type_table, descriptors),
+        StmtKind::Let { value, .. } => count_operand(body, *value, type_table, descriptors),
+        StmtKind::LetDestructure { value, .. } => count_operand(body, *value, type_table, descriptors),
+        StmtKind::Return { value } => value.map_or(0, |v| count_operand(body, v, type_table, descriptors)),
         StmtKind::If {
             condition,
             then_block,
             else_block,
             ..
         } => {
-            count_operand(body, *condition, type_table)
-                + count_block_exprs(body, *then_block, type_table)
-                + else_block.map_or(0, |b| count_block_exprs(body, b, type_table))
+            count_operand(body, *condition, type_table, descriptors)
+                + count_block_exprs(body, *then_block, type_table, descriptors)
+                + else_block.map_or(0, |b| count_block_exprs(body, b, type_table, descriptors))
         }
         StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
-            count_block_exprs(body, *b, type_table)
+            count_block_exprs(body, *b, type_table, descriptors)
         }
         StmtKind::Break { .. } | StmtKind::Continue => 0,
     }
 }
 
 /// Count expressions reachable through an operand (recursive).
-fn count_operand(body: &Body, op: Operand, type_table: &TypeTable) -> usize {
+fn count_operand(body: &Body, op: Operand, type_table: &TypeTable, descriptors: &[FunctionRef]) -> usize {
     // A promoted constant counts as the one literal node it replaced.
-    op.as_expr().map_or(1, |e| count_expr(body, e, type_table))
+    op.as_expr().map_or(1, |e| count_expr(body, e, type_table, descriptors))
 }
 
-fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable) -> usize {
+fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable, descriptors: &[FunctionRef]) -> usize {
     1 + match &body.exprs[id].kind {
         ExprKind::Binary { left, right, .. } => {
-            count_operand(body, *left, type_table) + count_operand(body, *right, type_table)
+            count_operand(body, *left, type_table, descriptors) + count_operand(body, *right, type_table, descriptors)
         }
-        ExprKind::Unary { expr, .. } => count_operand(body, *expr, type_table),
+        ExprKind::Unary { expr, .. } => count_operand(body, *expr, type_table, descriptors),
         ExprKind::Call { args, .. } => args
             .iter()
-            .map(|a| count_operand(body, a.expr, type_table))
+            .map(|a| count_operand(body, a.expr, type_table, descriptors))
             .sum(),
         ExprKind::MethodCall { receiver, args, .. } => {
-            count_operand(body, *receiver, type_table)
+            count_operand(body, *receiver, type_table, descriptors)
                 + args
                     .iter()
-                    .map(|a| count_operand(body, a.expr, type_table))
+                    .map(|a| count_operand(body, a.expr, type_table, descriptors))
                     .sum::<usize>()
         }
-        ExprKind::FieldAccess { expr, .. } => count_operand(body, *expr, type_table),
+        ExprKind::FieldAccess { expr, .. } => count_operand(body, *expr, type_table, descriptors),
         ExprKind::Index { expr, index, .. } => {
-            count_operand(body, *expr, type_table) + count_operand(body, *index, type_table)
+            count_operand(body, *expr, type_table, descriptors) + count_operand(body, *index, type_table, descriptors)
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
             .iter()
-            .map(|e| count_operand(body, *e, type_table))
+            .map(|e| count_operand(body, *e, type_table, descriptors))
             .sum(),
         ExprKind::StructLiteral { fields, .. } => fields
             .iter()
-            .map(|f| count_operand(body, f.value, type_table))
+            .map(|f| count_operand(body, f.value, type_table, descriptors))
             .sum(),
         ExprKind::VariantConstruct { payload, .. } => {
-            payload.map_or(0, |p| count_operand(body, p, type_table))
+            payload.map_or(0, |p| count_operand(body, p, type_table, descriptors))
         }
         ExprKind::Assign { target, value } => {
-            count_expr(body, *target, type_table) + count_operand(body, *value, type_table)
+            count_expr(body, *target, type_table, descriptors) + count_operand(body, *value, type_table, descriptors)
         }
         ExprKind::If {
             condition,
@@ -144,23 +146,23 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable) -> usize {
         } => {
             // Cold branches contribute nothing: `count_block_exprs` stops at a
             // `cold_path()` marker or a diverging statement within each arm.
-            count_operand(body, *condition, type_table)
-                + count_block_exprs(body, *then_branch, type_table)
-                + else_branch.map_or(0, |b| count_block_exprs(body, b, type_table))
+            count_operand(body, *condition, type_table, descriptors)
+                + count_block_exprs(body, *then_branch, type_table, descriptors)
+                + else_branch.map_or(0, |b| count_block_exprs(body, b, type_table, descriptors))
         }
         ExprKind::Match { expr, arms } => {
-            count_operand(body, *expr, type_table)
+            count_operand(body, *expr, type_table, descriptors)
                 + arms
                     .iter()
                     .map(|arm| {
-                        arm.guard.map_or(0, |g| count_operand(body, g, type_table))
-                            + count_operand(body, arm.body, type_table)
+                        arm.guard.map_or(0, |g| count_operand(body, g, type_table, descriptors))
+                            + count_operand(body, arm.body, type_table, descriptors)
                     })
                     .sum::<usize>()
         }
-        ExprKind::Block(block) => count_block_exprs(body, *block, type_table),
-        ExprKind::Cast { expr, .. } => count_operand(body, *expr, type_table),
-        ExprKind::GlobalVarSet { value, .. } => count_operand(body, *value, type_table),
+        ExprKind::Block(block) => count_block_exprs(body, *block, type_table, descriptors),
+        ExprKind::Cast { expr, .. } => count_operand(body, *expr, type_table, descriptors),
+        ExprKind::GlobalVarSet { value, .. } => count_operand(body, *value, type_table, descriptors),
         // Leaf expressions (no children)
         ExprKind::PackedArray(_)
         | ExprKind::Dead
@@ -170,34 +172,34 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable) -> usize {
         ExprKind::EnumConstruct { .. } => 0,
         ExprKind::CmRawCall { args, .. } => args
             .iter()
-            .map(|a| count_operand(body, *a, type_table))
+            .map(|a| count_operand(body, *a, type_table, descriptors))
             .sum(),
         ExprKind::IndirectCall { callee, args } => {
-            count_operand(body, *callee, type_table)
+            count_operand(body, *callee, type_table, descriptors)
                 + args
                     .iter()
-                    .map(|a| count_operand(body, *a, type_table))
+                    .map(|a| count_operand(body, *a, type_table, descriptors))
                     .sum::<usize>()
         }
-        ExprKind::ClosureToCanonical { functor, .. } => count_operand(body, *functor, type_table),
+        ExprKind::ClosureToCanonical { functor, .. } => count_operand(body, *functor, type_table, descriptors),
         ExprKind::Switch {
             scrutinee,
             arms,
             default,
             ..
         } => {
-            count_operand(body, *scrutinee, type_table)
+            count_operand(body, *scrutinee, type_table, descriptors)
                 + arms
                     .iter()
-                    .map(|a| count_block_exprs(body, *a, type_table))
+                    .map(|a| count_block_exprs(body, *a, type_table, descriptors))
                     .sum::<usize>()
-                + count_block_exprs(body, *default, type_table)
+                + count_block_exprs(body, *default, type_table, descriptors)
         }
         // Lowered pattern matching nodes - count inner expressions
         ExprKind::VariantTag { expr }
         | ExprKind::VariantTest { expr, .. }
-        | ExprKind::VariantPayload { expr, .. } => count_operand(body, *expr, type_table),
-        ExprKind::LabeledBlock { block, .. } => count_block_exprs(body, *block, type_table),
+        | ExprKind::VariantPayload { expr, .. } => count_operand(body, *expr, type_table, descriptors),
+        ExprKind::LabeledBlock { block, .. } => count_block_exprs(body, *block, type_table, descriptors),
     }
 }
 
@@ -207,17 +209,17 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable) -> usize {
 /// after it, while a diverging statement (`return` / `break` / `continue` or a
 /// `-> !` call such as `panic`) is itself counted but cuts off its unreachable
 /// tail.
-fn count_block_exprs(body: &Body, block: BlockId, type_table: &TypeTable) -> usize {
+fn count_block_exprs(body: &Body, block: BlockId, type_table: &TypeTable, descriptors: &[FunctionRef]) -> usize {
     let mut total = 0;
     for i in 0..body.blocks[block].stmts.len() {
         let stmt = body.blocks[block].stmts[i];
-        match block_cut(body, stmt, type_table) {
+        match block_cut(body, stmt, type_table, descriptors) {
             BlockCut::Cold => break,
             BlockCut::Diverges => {
-                total += count_stmt(body, stmt, type_table);
+                total += count_stmt(body, stmt, type_table, descriptors);
                 break;
             }
-            BlockCut::None => total += count_stmt(body, stmt, type_table),
+            BlockCut::None => total += count_stmt(body, stmt, type_table, descriptors),
         }
     }
     total
@@ -301,6 +303,7 @@ fn is_inline_eligible(
     _module_source: &ModuleSource,
     type_table: &TypeTable,
     inline_threshold: usize,
+    descriptors: &[FunctionRef],
 ) -> bool {
     // #[inline(never)] unconditionally prevents inlining
     if func.inline_hint == InlineHint::Never {
@@ -352,11 +355,14 @@ fn is_inline_eligible(
     };
 
     // Small enough (based on expression count)
-    count_block_exprs(body, body.root, type_table) <= effective_threshold
+    count_block_exprs(body, body.root, type_table, descriptors) <= effective_threshold
 }
 
 /// Detect recursive functions using call graph analysis
-fn find_recursive_functions(functions: &[Rc<RefCell<NirFunction>>]) -> IndexSet<String> {
+fn find_recursive_functions(
+    functions: &[Rc<RefCell<NirFunction>>],
+    descriptors: &[FunctionRef],
+) -> IndexSet<String> {
     // Phase 1: Build fully-qualified-name→index mapping.  Keys come from
     // `tir_function_full_name` / `func_ref_inline_key`, both of which hash
     // `(module_source, func.name)`.  See `function_inline_key`'s docstring
@@ -385,7 +391,7 @@ fn find_recursive_functions(functions: &[Rc<RefCell<NirFunction>>]) -> IndexSet<
         if let Some(caller_idx) = name_to_idx.get(&full_name) {
             let mut callee_names: IndexSet<String> = IndexSet::default();
             if let Some(body) = &func.body {
-                collect_callees_from_block(body, body.root, &mut callee_names);
+                collect_callees_from_block(body, descriptors, body.root, &mut callee_names);
             }
             let callees: Vec<usize> = callee_names
                 .iter()
@@ -432,26 +438,28 @@ fn can_reach_idx(
     false
 }
 
-fn collect_callees_from_block(body: &Body, block: BlockId, callees: &mut IndexSet<String>) {
+fn collect_callees_from_block(body: &Body,
+    descriptors: &[FunctionRef], block: BlockId, callees: &mut IndexSet<String>) {
     for i in 0..body.blocks[block].stmts.len() {
         let sid = body.blocks[block].stmts[i];
-        collect_callees_from_stmt(body, sid, callees);
+        collect_callees_from_stmt(body, descriptors, sid, callees);
     }
 }
 
-fn collect_callees_from_stmt(body: &Body, stmt: StmtId, callees: &mut IndexSet<String>) {
+fn collect_callees_from_stmt(body: &Body,
+    descriptors: &[FunctionRef], stmt: StmtId, callees: &mut IndexSet<String>) {
     match &body.stmts[stmt].kind {
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            collect_callees_from_operand(body, *value, callees);
+            collect_callees_from_operand(body, descriptors, *value, callees);
         }
         StmtKind::Expr(value) => {
             if let Some(e) = value.as_expr() {
-                collect_callees_from_expr(body, e, callees);
+                collect_callees_from_expr(body, descriptors, e, callees);
             }
         }
         StmtKind::Return { value } => {
             if let Some(expr) = *value {
-                collect_callees_from_operand(body, expr, callees);
+                collect_callees_from_operand(body, descriptors, expr, callees);
             }
         }
         StmtKind::If {
@@ -460,76 +468,78 @@ fn collect_callees_from_stmt(body: &Body, stmt: StmtId, callees: &mut IndexSet<S
             else_block,
         } => {
             let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
-            collect_callees_from_operand(body, condition, callees);
-            collect_callees_from_block(body, then_block, callees);
+            collect_callees_from_operand(body, descriptors, condition, callees);
+            collect_callees_from_block(body, descriptors, then_block, callees);
             if let Some(else_blk) = else_block {
-                collect_callees_from_block(body, else_blk, callees);
+                collect_callees_from_block(body, descriptors, else_blk, callees);
             }
         }
         StmtKind::Loop { body: b } => {
-            collect_callees_from_block(body, *b, callees);
+            collect_callees_from_block(body, descriptors, *b, callees);
         }
         StmtKind::LabeledBlock { block, .. } => {
-            collect_callees_from_block(body, *block, callees);
+            collect_callees_from_block(body, descriptors, *block, callees);
         }
         StmtKind::Break { .. } | StmtKind::Continue => {}
     }
 }
 
-fn collect_callees_from_operand(body: &Body, op: Operand, callees: &mut IndexSet<String>) {
+fn collect_callees_from_operand(body: &Body,
+    descriptors: &[FunctionRef], op: Operand, callees: &mut IndexSet<String>) {
     if let Some(e) = op.as_expr() {
-        collect_callees_from_expr(body, e, callees);
+        collect_callees_from_expr(body, descriptors, e, callees);
     }
 }
 
-fn collect_callees_from_expr(body: &Body, id: ExprId, callees: &mut IndexSet<String>) {
+fn collect_callees_from_expr(body: &Body,
+    descriptors: &[FunctionRef], id: ExprId, callees: &mut IndexSet<String>) {
     match &body.exprs[id].kind {
-        ExprKind::Call { func, args, .. } => {
-            callees.insert(func_ref_inline_key(func));
+        ExprKind::Call { func_id, args, .. } => {
+            callees.insert(func_ref_inline_key(callee_descriptor(descriptors, *func_id)));
             for aid in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
-                collect_callees_from_operand(body, aid, callees);
+                collect_callees_from_operand(body, descriptors, aid, callees);
             }
         }
         ExprKind::MethodCall {
             receiver,
-            func,
+            func_id,
             args,
             ..
         } => {
-            callees.insert(func_ref_inline_key(func));
+            callees.insert(func_ref_inline_key(callee_descriptor(descriptors, *func_id)));
             let receiver = *receiver;
             let arg_ids: Vec<Operand> = args.iter().map(|a| a.expr).collect();
-            collect_callees_from_operand(body, receiver, callees);
+            collect_callees_from_operand(body, descriptors, receiver, callees);
             for aid in arg_ids {
-                collect_callees_from_operand(body, aid, callees);
+                collect_callees_from_operand(body, descriptors, aid, callees);
             }
         }
         ExprKind::Binary { left, right, .. } => {
             let (left, right) = (*left, *right);
-            collect_callees_from_operand(body, left, callees);
-            collect_callees_from_operand(body, right, callees);
+            collect_callees_from_operand(body, descriptors, left, callees);
+            collect_callees_from_operand(body, descriptors, right, callees);
         }
         ExprKind::Unary { expr, .. } => {
-            collect_callees_from_operand(body, *expr, callees);
+            collect_callees_from_operand(body, descriptors, *expr, callees);
         }
         ExprKind::Assign { target, value } => {
             let (target, value) = (*target, *value);
-            collect_callees_from_expr(body, target, callees);
-            collect_callees_from_operand(body, value, callees);
+            collect_callees_from_expr(body, descriptors, target, callees);
+            collect_callees_from_operand(body, descriptors, value, callees);
         }
         ExprKind::Cast { expr, .. } => {
-            collect_callees_from_operand(body, *expr, callees);
+            collect_callees_from_operand(body, descriptors, *expr, callees);
         }
         ExprKind::FieldAccess { expr, .. } => {
-            collect_callees_from_operand(body, *expr, callees);
+            collect_callees_from_operand(body, descriptors, *expr, callees);
         }
         ExprKind::Index { expr, index } => {
             let (expr, index) = (*expr, *index);
-            collect_callees_from_operand(body, expr, callees);
-            collect_callees_from_operand(body, index, callees);
+            collect_callees_from_operand(body, descriptors, expr, callees);
+            collect_callees_from_operand(body, descriptors, index, callees);
         }
         ExprKind::Block(block) => {
-            collect_callees_from_block(body, *block, callees);
+            collect_callees_from_block(body, descriptors, *block, callees);
         }
         ExprKind::If {
             condition,
@@ -537,64 +547,64 @@ fn collect_callees_from_expr(body: &Body, id: ExprId, callees: &mut IndexSet<Str
             else_branch,
         } => {
             let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
-            collect_callees_from_operand(body, condition, callees);
-            collect_callees_from_block(body, then_branch, callees);
+            collect_callees_from_operand(body, descriptors, condition, callees);
+            collect_callees_from_block(body, descriptors, then_branch, callees);
             if let Some(else_blk) = else_branch {
-                collect_callees_from_block(body, else_blk, callees);
+                collect_callees_from_block(body, descriptors, else_blk, callees);
             }
         }
         ExprKind::StructLiteral { fields, .. } => {
             for fid in fields.iter().map(|f| f.value).collect::<Vec<_>>() {
-                collect_callees_from_operand(body, fid, callees);
+                collect_callees_from_operand(body, descriptors, fid, callees);
             }
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             for eid in elements.clone() {
-                collect_callees_from_operand(body, eid, callees);
+                collect_callees_from_operand(body, descriptors, eid, callees);
             }
         }
         ExprKind::IndirectCall { callee, args } => {
             let callee = *callee;
             let arg_ids = args.clone();
-            collect_callees_from_operand(body, callee, callees);
+            collect_callees_from_operand(body, descriptors, callee, callees);
             for aid in arg_ids {
-                collect_callees_from_operand(body, aid, callees);
+                collect_callees_from_operand(body, descriptors, aid, callees);
             }
         }
         ExprKind::ClosureToCanonical { functor, .. } => {
-            collect_callees_from_operand(body, *functor, callees);
+            collect_callees_from_operand(body, descriptors, *functor, callees);
         }
         ExprKind::CmRawCall { args, .. } => {
             for aid in args.clone() {
-                collect_callees_from_operand(body, aid, callees);
+                collect_callees_from_operand(body, descriptors, aid, callees);
             }
         }
         ExprKind::Match { expr, arms } => {
             let expr = *expr;
             let arms = arms.clone();
-            collect_callees_from_operand(body, expr, callees);
+            collect_callees_from_operand(body, descriptors, expr, callees);
             for arm in &arms {
                 if let Some(guard) = arm.guard {
-                    collect_callees_from_operand(body, guard, callees);
+                    collect_callees_from_operand(body, descriptors, guard, callees);
                 }
-                collect_callees_from_operand(body, arm.body, callees);
+                collect_callees_from_operand(body, descriptors, arm.body, callees);
             }
         }
         ExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = *payload {
-                collect_callees_from_operand(body, payload_expr, callees);
+                collect_callees_from_operand(body, descriptors, payload_expr, callees);
             }
         }
         ExprKind::LabeledBlock { block, .. } => {
-            collect_callees_from_block(body, *block, callees);
+            collect_callees_from_block(body, descriptors, *block, callees);
         }
         ExprKind::GlobalVarSet { value, .. } => {
-            collect_callees_from_operand(body, *value, callees);
+            collect_callees_from_operand(body, descriptors, *value, callees);
         }
         ExprKind::VariantTag { expr }
         | ExprKind::VariantTest { expr, .. }
         | ExprKind::VariantPayload { expr, .. } => {
-            collect_callees_from_operand(body, *expr, callees);
+            collect_callees_from_operand(body, descriptors, *expr, callees);
         }
         ExprKind::Switch {
             scrutinee,
@@ -605,11 +615,11 @@ fn collect_callees_from_expr(body: &Body, id: ExprId, callees: &mut IndexSet<Str
             let scrutinee = *scrutinee;
             let default = *default;
             let arms = arms.clone();
-            collect_callees_from_operand(body, scrutinee, callees);
+            collect_callees_from_operand(body, descriptors, scrutinee, callees);
             for arm in arms {
-                collect_callees_from_block(body, arm, callees);
+                collect_callees_from_block(body, descriptors, arm, callees);
             }
-            collect_callees_from_block(body, default, callees);
+            collect_callees_from_block(body, descriptors, default, callees);
         }
         // Leaf nodes
         ExprKind::PackedArray(_)
@@ -629,7 +639,11 @@ pub fn inline_functions(
     inline_threshold: usize,
     gate: &mut FunctionGate,
 ) -> bool {
-    let recursive_functions = find_recursive_functions(&project.functions);
+    // Callee identity by `func_id` (descriptor table built once from the records,
+    // borrow-safe), so a call site is recognized by its stamped id rather than the
+    // call node's `FunctionRef`. Indexed by `func_id.index()` (== store position).
+    let descriptors = super::dce::build_callee_descriptors(project);
+    let recursive_functions = find_recursive_functions(&project.functions, &descriptors);
 
     // Collect inline candidates from all modules
     // Key: (module_source, func_name), Value: cloned function
@@ -649,6 +663,7 @@ pub fn inline_functions(
             module_source,
             &type_table,
             inline_threshold,
+            &descriptors,
         ) {
             inline_candidates.insert(key.clone(), func.clone());
             // Get the strings used by this function
@@ -717,6 +732,7 @@ pub fn inline_functions(
                     body,
                     root,
                     &inline_candidates,
+                    &descriptors,
                     &caller_module_source,
                     &mut local_count,
                     &mut locals,
@@ -811,6 +827,7 @@ fn inline_calls_in_block(
     body: &mut Body,
     block: BlockId,
     candidates: &IndexMap<(ModuleSource, String), NirFunction>,
+    descriptors: &[FunctionRef],
     current_module: &ModuleSource,
     local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
@@ -829,7 +846,7 @@ fn inline_calls_in_block(
     }
     for stmt_id in body.blocks[block].stmts.clone() {
         if let StmtKind::Expr(Operand::Expr(e)) = &body.stmts[stmt_id].kind
-            && is_cold_path_call(body, *e)
+            && is_cold_path_call(body, *e, descriptors)
         {
             cold = true;
         }
@@ -859,6 +876,7 @@ fn inline_calls_in_block(
                     body,
                     value,
                     candidates,
+                    descriptors,
                     current_module,
                     local_count,
                     locals,
@@ -879,6 +897,7 @@ fn inline_calls_in_block(
                 body,
                 value,
                 candidates,
+                descriptors,
                 current_module,
                 local_count,
                 locals,
@@ -894,6 +913,7 @@ fn inline_calls_in_block(
                         body,
                         cond,
                         candidates,
+                        descriptors,
                         current_module,
                         local_count,
                         locals,
@@ -908,6 +928,7 @@ fn inline_calls_in_block(
                     body,
                     tb,
                     candidates,
+                    descriptors,
                     current_module,
                     local_count,
                     locals,
@@ -922,6 +943,7 @@ fn inline_calls_in_block(
                         body,
                         eb,
                         candidates,
+                        descriptors,
                         current_module,
                         local_count,
                         locals,
@@ -937,6 +959,7 @@ fn inline_calls_in_block(
                 body,
                 b,
                 candidates,
+                descriptors,
                 current_module,
                 local_count,
                 locals,
@@ -959,6 +982,7 @@ fn inline_top_level(
     body: &mut Body,
     value: ExprId,
     candidates: &IndexMap<(ModuleSource, String), NirFunction>,
+    descriptors: &[FunctionRef],
     current_module: &ModuleSource,
     local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
@@ -972,6 +996,7 @@ fn inline_top_level(
         body,
         value,
         candidates,
+        descriptors,
         current_module,
         local_count,
         locals,
@@ -985,6 +1010,7 @@ fn inline_top_level(
             body,
             value,
             candidates,
+            descriptors,
             current_module,
             local_count,
             locals,
@@ -1002,6 +1028,7 @@ fn inline_top_level(
             body,
             new_id,
             candidates,
+            descriptors,
             current_module,
             local_count,
             locals,
@@ -1017,6 +1044,7 @@ fn inline_top_level(
             body,
             value,
             candidates,
+            descriptors,
             current_module,
             local_count,
             locals,
@@ -1332,6 +1360,7 @@ fn try_inline_call_expr(
     caller: &mut Body,
     call_id: ExprId,
     candidates: &IndexMap<(ModuleSource, String), NirFunction>,
+    descriptors: &[FunctionRef],
     current_module: &ModuleSource,
     local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
@@ -1342,11 +1371,14 @@ fn try_inline_call_expr(
 ) -> Option<(ExprId, (ModuleSource, String))> {
     let (module_source, func_name, arg_ops): (ModuleSource, String, Vec<Operand>) =
         match &caller.exprs[call_id].kind {
-            ExprKind::Call { func, args, .. } => (
-                func.module_source.clone(),
-                func.name.clone(),
-                args.iter().map(|a| a.expr).collect(),
-            ),
+            ExprKind::Call { func_id, args, .. } => {
+                let d = callee_descriptor(descriptors, *func_id);
+                (
+                    d.module_source.clone(),
+                    d.name.clone(),
+                    args.iter().map(|a| a.expr).collect(),
+                )
+            }
             _ => return None,
         };
     let (candidate, inlined_key) =
@@ -1396,6 +1428,7 @@ fn try_inline_method_call_expr(
     caller: &mut Body,
     call_id: ExprId,
     candidates: &IndexMap<(ModuleSource, String), NirFunction>,
+    descriptors: &[FunctionRef],
     current_module: &ModuleSource,
     local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
@@ -1412,15 +1445,18 @@ fn try_inline_method_call_expr(
     ) = match &caller.exprs[call_id].kind {
         ExprKind::MethodCall {
             receiver,
-            func,
+            func_id,
             args,
             ..
-        } => (
-            func.module_source.clone(),
-            func.name.clone(),
-            *receiver,
-            args.iter().map(|a| a.expr).collect(),
-        ),
+        } => {
+            let d = callee_descriptor(descriptors, *func_id);
+            (
+                d.module_source.clone(),
+                d.name.clone(),
+                *receiver,
+                args.iter().map(|a| a.expr).collect(),
+            )
+        }
         _ => return None,
     };
     let call_span = caller.exprs[call_id].span;
@@ -2172,6 +2208,7 @@ fn inline_calls_in_expr(
     body: &mut Body,
     e: ExprId,
     candidates: &IndexMap<(ModuleSource, String), NirFunction>,
+    descriptors: &[FunctionRef],
     current_module: &ModuleSource,
     local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
@@ -2204,6 +2241,7 @@ fn inline_calls_in_expr(
                     body,
                     a,
                     candidates,
+                    descriptors,
                     current_module,
                     local_count,
                     locals,
@@ -2218,6 +2256,7 @@ fn inline_calls_in_expr(
                 body,
                 e,
                 candidates,
+                descriptors,
                 current_module,
                 local_count,
                 locals,
@@ -2258,6 +2297,7 @@ fn inline_calls_in_expr(
                     body,
                     receiver,
                     candidates,
+                    descriptors,
                     current_module,
                     local_count,
                     locals,
@@ -2274,6 +2314,7 @@ fn inline_calls_in_expr(
                     body,
                     a,
                     candidates,
+                    descriptors,
                     current_module,
                     local_count,
                     locals,
@@ -2288,6 +2329,7 @@ fn inline_calls_in_expr(
                 body,
                 e,
                 candidates,
+                descriptors,
                 current_module,
                 local_count,
                 locals,
@@ -2323,6 +2365,7 @@ fn inline_calls_in_expr(
                     body,
                     ex,
                     candidates,
+                    descriptors,
                     current_module,
                     local_count,
                     locals,
@@ -2338,6 +2381,7 @@ fn inline_calls_in_expr(
                     body,
                     b,
                     candidates,
+                    descriptors,
                     current_module,
                     local_count,
                     locals,
