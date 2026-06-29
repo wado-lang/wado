@@ -9,8 +9,8 @@ use std::borrow::Cow;
 use std::path::Path;
 use std::process::Command;
 
-use wasm_encoder::{Encode, Section};
 use wado_manifest::MetadataSection;
+use wasm_encoder::{Encode, Section};
 
 /// Append each metadata section to `component` as a custom section. Returns the
 /// component unchanged when there is nothing to embed.

@@ -49,7 +49,10 @@ async fn prepare_query(filename: &str) -> Result<PreparedQuery, CliExit> {
 /// identically on the query path. `manifest_pair` must be the one
 /// [`run_generators_for`] is given, so the host's dependency index and the
 /// pipeline share a single manifest root.
-fn entry_host(entry_file: &Path, manifest_pair: Option<&ProjectManifest>) -> FilesystemCompilerHost {
+fn entry_host(
+    entry_file: &Path,
+    manifest_pair: Option<&ProjectManifest>,
+) -> FilesystemCompilerHost {
     let base = entry_file
         .parent()
         .map(std::path::Path::to_path_buf)

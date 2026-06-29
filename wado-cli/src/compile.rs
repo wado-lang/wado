@@ -121,7 +121,24 @@ impl CompileOptions {
     fn embed_decision(&self) -> Option<bool> {
         resolve_embed_decision(self.no_embed_wit, self.embed_wit, self.opt_level)
     }
+
+    /// The Component Model world FQ this build targets: the `--lib` world, then
+    /// `--world`, then the CLI default. Single source of truth for the WIT
+    /// embed and the default output path.
+    fn target_world_fq(&self) -> &str {
+        self.lib_world
+            .as_deref()
+            .or(self.target_world.as_deref())
+            .unwrap_or(DEFAULT_WORLD)
+    }
 }
+
+/// The world `wado compile` targets when neither `--world` nor `--lib` is given.
+const DEFAULT_WORLD: &str = "wasi:cli/command";
+
+/// The build-output directory at the manifest root, shared with kiln's
+/// `build/kiln/...` layout (see `kiln_provider`).
+const BUILD_DIR: &str = "build";
 
 /// Pure embedding-policy resolution, factored out of [`CompileOptions`] for
 /// testing. See [`CompileOptions::embed_decision`].
@@ -425,6 +442,15 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     // manifest; an explicit `.wado` file is a standalone target. Gates metadata
     // embedding (WEP `wep-2026-02-14-package-manifest.md`).
     let manifest_driven = input.as_deref().is_none_or(|s| Path::new(s).is_dir());
+
+    // Metadata embedding only happens for manifest-driven builds, so these flags
+    // would be silently ignored on a standalone file — reject the combination.
+    if (no_embed_metadata || embed_metadata) && !manifest_driven {
+        return Err(CliExit::error(
+            "`--embed-metadata` / `--no-embed-metadata` apply only to manifest-driven builds \
+             (no argument or a directory argument), not an explicit file",
+        ));
+    }
 
     let (input, lib_world) = if lib {
         let (entry, world_fq) = manifest::resolve_lib_input(input, &usage)?;
@@ -1003,13 +1029,7 @@ async fn embed_wit_section(
         return Ok(wasm);
     };
 
-    // The embedded world FQ mirrors what was compiled: the `--lib` world, then
-    // `--world`, then the CLI default.
-    let world = opts
-        .lib_world
-        .clone()
-        .or_else(|| opts.target_world.clone())
-        .unwrap_or_else(|| "wasi:cli/command".to_string());
+    let world = opts.target_world_fq().to_string();
 
     let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
     // Attach the manifest `[dependencies]` so a multi-package project's
@@ -1122,18 +1142,22 @@ pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
         default_output_path(&opts, project.as_ref(), format)
     };
 
-    let bytes = match (format, embed) {
-        (OutputFormat::Wasm, Some(explicit)) => {
-            let world_imports = result
-                .wir_package
-                .map(|p| p.imported_cm_interfaces)
-                .unwrap_or_default();
-            let embedded =
-                embed_wit_section(&opts, project.as_ref(), wasm, world_imports, explicit).await?;
-            embed_package_metadata(&opts, project.as_ref(), embedded)
+    let bytes = match format {
+        OutputFormat::Wat => wasm_to_wat(&wasm)?.into_bytes(),
+        OutputFormat::Wasm => {
+            // WIT first (if enabled), then the package metadata — both additive
+            // custom sections on the component.
+            let wasm = if let Some(explicit) = embed {
+                let world_imports = result
+                    .wir_package
+                    .map(|p| p.imported_cm_interfaces)
+                    .unwrap_or_default();
+                embed_wit_section(&opts, project.as_ref(), wasm, world_imports, explicit).await?
+            } else {
+                wasm
+            };
+            embed_package_metadata(&opts, project.as_ref(), wasm)
         }
-        (OutputFormat::Wasm, None) => embed_package_metadata(&opts, project.as_ref(), wasm),
-        (OutputFormat::Wat, _) => wasm_to_wat(&wasm)?.into_bytes(),
     };
     if let Some(parent) = output_path.parent().filter(|p| !p.as_os_str().is_empty()) {
         fs::create_dir_all(parent)
@@ -1164,9 +1188,9 @@ fn default_output_path(
             let world = if opts.lib_world.is_some() {
                 "lib".to_string()
             } else {
-                world_path_segment(opts.target_world.as_deref().unwrap_or("wasi:cli/command"))
+                world_path_segment(opts.target_world_fq())
             };
-            project.root.join("build").join(format!("{world}.{ext}"))
+            project.root.join(BUILD_DIR).join(format!("{world}.{ext}"))
         }
         None => Path::new(&opts.input).with_extension(ext),
     }
