@@ -1135,6 +1135,24 @@ fn run_stream_identity_round_trips(opt_level: OptLevel) {
         "id-stream-string",
         vec!["a".to_string(), "bb".to_string(), "céç".to_string()],
     );
+    run_stream_identity(
+        opt_level,
+        "Option<u32>",
+        "id-stream-option",
+        vec![Some(1u32), None, Some(3u32)],
+    );
+    run_stream_identity(
+        opt_level,
+        "List<u32>",
+        "id-stream-list",
+        vec![vec![1u32, 2], vec![], vec![3u32]],
+    );
+    run_stream_identity(
+        opt_level,
+        "[u32, String]",
+        "id-stream-tuple",
+        vec![(1u32, "a".to_string()), (2u32, "bb".to_string())],
+    );
 }
 
 #[test]
