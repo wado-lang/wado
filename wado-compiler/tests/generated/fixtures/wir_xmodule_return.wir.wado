@@ -303,7 +303,7 @@ type "functype//core:rt/wait_for_blocked" = fn(i32) -> i32;  // TypeId(73)
 
 type "functype//core:rt/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(74)
 
-type "functype//./sub/wir_xmodule_return_parser.wado/line_col" = fn(ref "core:prelude//List<char>", i32) -> ref "tuple//[i32, i32]";  // TypeId(75)
+type "functype//./sub/wir_xmodule_return_parser.wado/line_col" = fn(ref "core:prelude//List<char>", i32) -> [i32, i32];  // TypeId(75)
 
 type "functype//./sub/wir_xmodule_return_parser.wado/tree_build_node" = fn(ref "core:prelude//List<./sub/wir_xmodule_return_parser.wado/BuildEvent>", ref "core:prelude/types.wado//Box<i32>") -> ref "./sub/wir_xmodule_return_parser.wado//CstNode";  // TypeId(76)
 
@@ -501,7 +501,6 @@ fn "wado-compiler/tests/fixtures/wir_xmodule_return.wado/_run_parse_entry$__Clos
     let e_6: ref "./sub/wir_xmodule_return_parser.wado//ParseError";
     let _d: ref "./sub/wir_xmodule_return_parser.wado//ParseError";
     let e_8: ref "./sub/wir_xmodule_return_parser.wado//ParseError";
-    let lc: ref "tuple//[i32, i32]";
     let d: ref "./sub/wir_xmodule_return_parser.wado//Diagnostic";
     let self_14: ref "core:prelude//List<./sub/wir_xmodule_return_parser.wado/BuildEvent>";
     let pos: ref "core:prelude/types.wado//Box<i32>";
@@ -522,8 +521,10 @@ fn "wado-compiler/tests/fixtures/wir_xmodule_return.wado/_run_parse_entry$__Clos
         } else {
             e_6;
         });
-        lc = "./sub/wir_xmodule_return_parser.wado/line_col"(p_4.tokens.chars, e_8.span.start);
-        d = "./sub/wir_xmodule_return_parser.wado/Diagnostic::error"(0, e_8.message, e_8.span, lc.0, lc.1);
+        let lc_mv_0: i32;
+        let lc_mv_1: i32;
+        multivalue_bind [lc_mv_0, lc_mv_1] = "./sub/wir_xmodule_return_parser.wado/line_col"(p_4.tokens.chars, e_8.span.start);
+        d = "./sub/wir_xmodule_return_parser.wado/Diagnostic::error"(0, e_8.message, e_8.span, lc_mv_0, lc_mv_1);
         d.rule_stack = e_8.rule_stack;
         "core:prelude/list.wado/List<./sub/wir_xmodule_return_parser.wado/Diagnostic>::push"(p_4.diagnostics, d);
     } else {
@@ -823,7 +824,7 @@ condition: index < self.used
             continue l36;
         };
     };
-    return struct.new "tuple//[i32, i32]" { 0: line, 1: col };
+    return line, col;
 }
 
 fn "./sub/wir_xmodule_return_parser.wado/tree_build_node"(events, pos) {
@@ -1762,12 +1763,11 @@ fn "./sub/wir_xmodule_return_parser.wado/Parser::new"(tokens) {
 }
 
 fn "./sub/wir_xmodule_return_parser.wado/Parser::error"(self, message, span, expected) {
-    let lc: ref "tuple//[i32, i32]";
-    let line: i32;
-    let col: i32;
     let __b: ref "core:prelude//List<core:prelude/string.wado/String>";
-    lc = "./sub/wir_xmodule_return_parser.wado/line_col"(self.tokens.chars, span.start);
-    return line = lc.0, col = lc.1, struct.new "./sub/wir_xmodule_return_parser.wado//ParseError" { message: message, span: span, expected: expected, line: line, col: col, rule_stack: ref.as_non_null(__b = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 }; __b) };
+    let lc_mv_0: i32;
+    let lc_mv_1: i32;
+    multivalue_bind [lc_mv_0, lc_mv_1] = "./sub/wir_xmodule_return_parser.wado/line_col"(self.tokens.chars, span.start);
+    return struct.new "./sub/wir_xmodule_return_parser.wado//ParseError" { message: message, span: span, expected: expected, line: lc_mv_0, col: lc_mv_1, rule_stack: ref.as_non_null(__b = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 }; __b) };
 }
 
 fn "./sub/wir_xmodule_return_parser.wado/Parser::last_end"(self) {

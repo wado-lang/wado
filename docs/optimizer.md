@@ -103,7 +103,7 @@ Whole-program / backend passes:
 - `dce` — remove unreachable functions, types, string/bytes literals, and WASI imports by call-graph reachability; tracks feature usage. Runs around the loop.
 - `match_to_switch` — dense integer/enum `match` → `Switch` (Wasm `br_table`). Runs first each iteration and at `-O0`.
 - `select_lowering` — `if cond { a } else { b }` with leaf-pure arms → `builtin::select`. Post-loop, all levels.
-- `multi_value_return` — mark tuple/struct-returning functions whose returns are fresh literals and call sites destructure, so WIR build emits the multi-value ABI. Post-loop, all levels. (The variant case is the WIR-level `variant_return_sroa`.)
+- `multi_value_return` — mark tuple/struct-returning functions whose returns are fresh literals and call sites destructure, so WIR build emits the multi-value ABI. Post-loop, all levels. (The variant case is the WIR-level `variant_return_sroa`.) The shape check treats a non-expr `Operand::Value` (a value-graph-promoted pure `let` RHS) as carrying no nested return/break, so a pure `let` before the literal returns no longer disqualifies the function.
 - `const_object_globalization` — hoist constant read-only aggregate `let` bindings into shared immutable globals; see [WEP](./wep-2026-05-31-const-object-globalization.md).
 
 `nir_visitor.rs` provides the shared pre/post-order `*MutVisitor`/`*OptVisitor` traits; `arena_query.rs` holds shared arena queries (break-target search, mutation/place-root checks).
