@@ -825,6 +825,115 @@ fn cm_future_aggregate_producer_o2() {
     run_producer_round_trips(OptLevel::O2);
 }
 
+/// An async `--lib` stream producer: write the elements into a fresh
+/// `stream<T>` and deliver the readable end via `task return`. Exercises the
+/// general stream `new` / `write` lowering for scalar element types (the host
+/// reads the produced elements back). `async` because the write blocks until
+/// the reader (the host) consumes.
+const STREAM_PRODUCER_SOURCE: &str = r#"
+export async fn mk_stream_u32(data: List<u32>) -> Stream<u32> {
+    let [rx, tx] = Stream::<u32>::new();
+    task return rx;
+    tx.write(data);
+    tx.drop();
+}
+"#;
+
+async fn produce_stream_and_read_back<T>(
+    store: &mut Store<common::WasiState>,
+    instance: &Instance,
+    iface: Option<&ComponentExportIndex>,
+    export: &'static str,
+    input: Val,
+    expected: Vec<T>,
+) -> Result<(), String>
+where
+    T: wasmtime::component::Lift + PartialEq + std::fmt::Debug + Send + Sync + Unpin + 'static,
+{
+    let func = lookup_func(store, instance, iface, export)?;
+    let mut results = vec![Val::Bool(false); 1];
+    func.call_async(&mut *store, &[input], &mut results)
+        .await
+        .map_err(|e| format!("`{export}`: call trapped: {e:#}"))?;
+    let any = match results.into_iter().next() {
+        Some(Val::Stream(a)) => a,
+        other => return Err(format!("`{export}`: expected a stream result, got {other:?}")),
+    };
+    let reader = any.try_into_stream_reader::<T>().map_err(|e| {
+        format!(
+            "`{export}`: result is not stream<{}>: {e:#}",
+            std::any::type_name::<T>()
+        )
+    })?;
+    let (tx, mut rx) = mpsc::unbounded::<T>();
+    reader
+        .pipe(&mut *store, StreamCollectConsumer::new(tx))
+        .map_err(|e| format!("`{export}`: pipe failed: {e:#}"))?;
+    let got = store
+        .run_concurrent(async move |_| {
+            let mut items = Vec::new();
+            while let Some(item) = rx.next().await {
+                items.push(item);
+            }
+            items
+        })
+        .await
+        .map_err(|e| format!("`{export}`: run_concurrent failed: {e:#}"))?;
+    if got != expected {
+        return Err(format!(
+            "`{export}`: produced stream mismatch\n  in:  {expected:?}\n  out: {got:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn run_stream_producer_round_trips(opt_level: OptLevel) {
+    let wasm = compile_lib_source(STREAM_PRODUCER_SOURCE, opt_level);
+    let engine = common::engine();
+    let rt = common::runtime();
+    let opt = common::opt_level_name(opt_level);
+
+    rt.block_on(async {
+        let component = Component::new(engine, &wasm).expect("instantiate component type");
+        let linker = common::linker(engine).expect("build linker");
+        let state = common::WasiState::new_with_pipes(
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+        );
+        let mut store = Store::new(engine, state);
+        store.set_epoch_deadline((common::DEFAULT_TIMEOUT_MS / 1000).max(1));
+        let instance = linker
+            .instantiate_async(&mut store, &component)
+            .await
+            .expect("instantiate stream producer");
+        let iface = instance
+            .get_export(&mut store, None, LIB_WORLD_FQ)
+            .map(|(_, idx)| idx);
+        if let Err(e) = produce_stream_and_read_back(
+            &mut store,
+            &instance,
+            iface.as_ref(),
+            "mk-stream-u32",
+            Val::List(vec![Val::U32(1), Val::U32(2), Val::U32(3), Val::U32(4)]),
+            vec![1u32, 2, 3, 4],
+        )
+        .await
+        {
+            panic!("[{opt}] {e}");
+        }
+    });
+}
+
+#[test]
+fn cm_stream_scalar_producer_o0() {
+    run_stream_producer_round_trips(OptLevel::O0);
+}
+
+#[test]
+fn cm_stream_scalar_producer_o2() {
+    run_stream_producer_round_trips(OptLevel::O2);
+}
+
 /// A single-export `--lib` async identity over `future<T>`: read the input
 /// future's payload, write it into a fresh future, and deliver that future via
 /// `task return`. The full aggregate consume/produce round-trip — the guest

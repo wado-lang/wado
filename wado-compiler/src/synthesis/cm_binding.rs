@@ -40,7 +40,7 @@ pub use lift::synthesize_lift;
 pub use lower::synthesize_lower;
 use resource_rewrite::{
     rewrite_cm_resource_methods, synthesize_future_reads, synthesize_future_writes,
-    synthesize_record_stream_reads,
+    synthesize_record_stream_reads, synthesize_stream_writes,
 };
 use task_return::{expand_task_returns_in_func, strip_task_returns_in_func};
 use type_fixup::{
@@ -623,6 +623,11 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
     // Generate `__cm_future_write_<T>` binding functions for aggregate
     // `FutureWritable<T>::write()`. Must run before rewrite_cm_resource_methods.
     synthesize_future_writes(&mut project);
+
+    // ---- Stream Write Adapters ----
+    // Generate `__cm_stream_write_<T>` binding functions for scalar / structural
+    // `StreamWritable<T>::write()`. Must run before rewrite_cm_resource_methods.
+    synthesize_stream_writes(&mut project);
 
     // ---- CM Resource Method Adapters ----
     // Rewrite #[cm("...")] resource method calls to target internal/builtin binding functions.

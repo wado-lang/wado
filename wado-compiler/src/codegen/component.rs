@@ -1583,6 +1583,7 @@ fn emit_canonical_intrinsics(
                     transmission_future_types,
                     scalar_future_types,
                     value_future_types,
+                    stream_types,
                 );
                 builder.task_return(Some(result_ty), [CanonicalOption::Memory(memory_idx)]);
             }
@@ -1651,6 +1652,7 @@ fn emit_canonical_intrinsics(
 /// name. A `--lib` `future<T>` result resolves to the interned `future<T>`
 /// type; everything else (WASI handler results, unit) resolves through
 /// `cm_result`. An unmatched/empty key falls back to the first export.
+#[allow(clippy::too_many_arguments)]
 fn resolve_task_return_valtype(
     key: &str,
     component_plan: &crate::wir_build::component_plan::ComponentPlan,
@@ -1661,6 +1663,7 @@ fn resolve_task_return_valtype(
     transmission_future_types: &IndexMap<String, u32>,
     scalar_future_types: &IndexSet<(CmScalarType, u32)>,
     value_future_types: &IndexMap<CmPayloadType, u32>,
+    stream_types: &IndexMap<CmStreamPayload, u32>,
 ) -> ComponentValType {
     let export = component_plan
         .world_exports
@@ -1672,21 +1675,31 @@ fn resolve_task_return_valtype(
     };
     if export.is_lib
         && let Some(crate::ast::Type::Generic(g)) = &export.result_type
-        && g.name == "Future"
         && g.args.len() == 1
     {
-        let payload = crate::component_model::classify_future_payload_from_ast(
-            &g.args[0],
-            &project.cm_interface_registry,
-        );
-        let idx = resolve_future_type(
-            payload,
-            trailers_future_type,
-            transmission_future_types,
-            scalar_future_types,
-            value_future_types,
-        );
-        return ComponentValType::Type(idx);
+        if g.name == "Future" {
+            let payload = crate::component_model::classify_future_payload_from_ast(
+                &g.args[0],
+                &project.cm_interface_registry,
+            );
+            let idx = resolve_future_type(
+                payload,
+                trailers_future_type,
+                transmission_future_types,
+                scalar_future_types,
+                value_future_types,
+            );
+            return ComponentValType::Type(idx);
+        }
+        if g.name == "Stream" {
+            let payload = crate::component_model::classify_stream_payload_from_ast(
+                &g.args[0],
+                &project.cm_interface_registry,
+            );
+            if let Some(&idx) = stream_types.get(&payload) {
+                return ComponentValType::Type(idx);
+            }
+        }
     }
     cm_export_type_to_valtype(ctx, &export.cm_result, result_unit_type)
 }

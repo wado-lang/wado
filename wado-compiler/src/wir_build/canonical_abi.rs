@@ -86,6 +86,19 @@ impl FunctionTranslator<'_, '_> {
         CmFuturePayload::Trailers
     }
 
+    /// Get the CM stream payload from `MonomorphInfo` (for `Stream::new`).
+    fn cm_stream_payload_from_monomorph(&self, func: &FunctionRef) -> CmStreamPayload {
+        if let Some(ref info) = func.monomorph_info
+            && !info.impl_type_args.is_empty()
+        {
+            return crate::component_model::classify_stream_payload(
+                self.type_table,
+                info.impl_type_args[0],
+            );
+        }
+        CmStreamPayload::U8
+    }
+
     /// Get the CM future payload type for a Future/FutureWritable receiver.
     fn cm_future_payload(&self, receiver_type_id: TypeId) -> CmFuturePayload {
         // Receiver is &Future<T> or &FutureWritable<T> — unwrap the reference
@@ -172,14 +185,23 @@ impl FunctionTranslator<'_, '_> {
         result_type_id: TypeId,
     ) -> Option<WirInstr> {
         match canonical {
-            "stream-new" => Some(self.emit_stream_or_future_new(
-                false,
-                CmFuturePayload::Trailers,
-                result_type_id,
-            )),
+            "stream-new" => {
+                let stream_payload = self.cm_stream_payload_from_monomorph(func);
+                Some(self.emit_stream_or_future_new(
+                    false,
+                    CmFuturePayload::Trailers,
+                    stream_payload,
+                    result_type_id,
+                ))
+            }
             "future-new" => {
                 let payload = self.cm_future_payload_from_monomorph(func);
-                Some(self.emit_stream_or_future_new(true, payload, result_type_id))
+                Some(self.emit_stream_or_future_new(
+                    true,
+                    payload,
+                    CmStreamPayload::U8,
+                    result_type_id,
+                ))
             }
             _ => None,
         }
@@ -217,12 +239,13 @@ impl FunctionTranslator<'_, '_> {
         &mut self,
         is_future: bool,
         payload: CmFuturePayload,
+        stream_payload: CmStreamPayload,
         result_type_id: TypeId,
     ) -> WirInstr {
         let intrinsic = if is_future {
             CanonicalIntrinsic::FutureNew(payload)
         } else {
-            CanonicalIntrinsic::StreamNew(CmStreamPayload::U8)
+            CanonicalIntrinsic::StreamNew(stream_payload)
         };
         let func_id = self
             .ctx

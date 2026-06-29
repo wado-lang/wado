@@ -31,7 +31,7 @@ use crate::synthesis::common::{
     if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some,
     return_stmt, synth_span,
 };
-use crate::wir::{CanonicalIntrinsic, CmFuturePayload};
+use crate::wir::{CanonicalIntrinsic, CmFuturePayload, CmStreamPayload};
 
 use super::synthesize_lift;
 use super::types::{LiftContext, binary_add, type_id_to_ast_type};
@@ -274,6 +274,337 @@ fn future_write_func_name(tt: &TypeTable, payload_type_id: TypeId) -> String {
 struct FutureWriteFinder<'a> {
     tt: &'a TypeTable,
     results: &'a mut IndexMap<String, TypeId>,
+}
+
+/// Generate per-element `StreamWritable<T>::write()` binding functions for
+/// scalar / structural (non-`u8`, non-record) element types, mirroring
+/// [`synthesize_future_writes`]. Each lowers a `List<T>` into a CM element
+/// buffer (via `synthesize_lower_list_to_buffer`) and calls the
+/// element-parameterized `stream-write` canonical, waiting for the reader on
+/// BLOCKED (streams deliver element-by-element, so the buffer must survive the
+/// wait — the function runs in an `async` task).
+pub(super) fn synthesize_stream_writes(project: &mut Package) {
+    let cm_interface_registry = &project.cm_interface_registry;
+    let mut needed: IndexMap<String, TypeId> = IndexMap::default();
+    for module in project.tir_modules.values() {
+        let tt = module.type_table.borrow();
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
+            if let Some(body) = &func.body {
+                StreamWriteFinder {
+                    tt: &tt,
+                    results: &mut needed,
+                }
+                .visit_block(body);
+            }
+        }
+    }
+    if needed.is_empty() {
+        return;
+    }
+
+    let entry_source = project.entry_module_source.clone();
+    let type_table = project
+        .tir_modules
+        .get(&entry_source)
+        .expect("entry module must exist in tir_modules")
+        .type_table
+        .clone();
+
+    let mut new_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
+    for (_, elem_type_id) in &needed {
+        new_functions.push(Rc::new(RefCell::new(synthesize_stream_write_func(
+            *elem_type_id,
+            cm_interface_registry,
+            &type_table,
+        ))));
+    }
+    let entry_module = project
+        .tir_modules
+        .get_mut(&entry_source)
+        .expect("entry module must exist in tir_modules");
+    for func in new_functions {
+        entry_module.functions.push(func);
+    }
+}
+
+/// The stream-write element type for a scalar / structural `stream-write`, or
+/// `None` for `u8` and record streams (handled elsewhere).
+fn stream_write_value_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
+    let (func, receiver) = match &expr.kind {
+        TirExprKind::MethodCall { func, receiver, .. } => (func, receiver),
+        _ => return None,
+    };
+    if func.method_info.as_ref().and_then(|m| m.cm_name.as_deref()) != Some("stream-write") {
+        return None;
+    }
+    let mut recv = receiver.type_id;
+    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(recv) {
+        recv = *inner;
+    }
+    let elem = *tt.generic_type_args(recv)?.first()?;
+    matches!(
+        crate::component_model::classify_stream_payload(tt, elem),
+        CmStreamPayload::Value(_)
+    )
+    .then_some(elem)
+}
+
+fn stream_write_func_name(tt: &TypeTable, elem_type_id: TypeId) -> String {
+    format!(
+        "__cm_stream_write_{}",
+        tt.mangle_type_arg_for_generic(elem_type_id)
+    )
+}
+
+struct StreamWriteFinder<'a> {
+    tt: &'a TypeTable,
+    results: &'a mut IndexMap<String, TypeId>,
+}
+
+impl TirRefVisitor for StreamWriteFinder<'_> {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if let Some(elem) = stream_write_value_element(self.tt, expr) {
+            let name = stream_write_func_name(self.tt, elem);
+            self.results.entry(name).or_insert(elem);
+        }
+        self.walk_expr(expr);
+    }
+}
+
+fn synthesize_stream_write_func(
+    elem_type_id: TypeId,
+    cm_interface_registry: &CmInterfaceRegistry,
+    type_table: &RefCell<TypeTable>,
+) -> TirFunction {
+    let list_type_id = type_table.borrow_mut().make_list(elem_type_id);
+    let (func_name, write_name, elem_ast, elem_size, elem_align) = {
+        let tt = type_table.borrow();
+        let func_name = stream_write_func_name(&tt, elem_type_id);
+        let payload = crate::component_model::classify_stream_payload(&tt, elem_type_id);
+        let write_name = CanonicalIntrinsic::StreamWrite(payload).import_name();
+        let elem_ast = type_id_to_ast_type(elem_type_id, &tt, cm_interface_registry);
+        let size = crate::component_model::cm_size_with_registry(&elem_ast, cm_interface_registry)
+            as i32;
+        let align =
+            crate::component_model::cm_align_with_registry(&elem_ast, cm_interface_registry) as i32;
+        (func_name, write_name, elem_ast, size, align)
+    };
+
+    let mut next_local: u32 = 0;
+    let mut locals: Vec<TirLocal> = Vec::new();
+    let mut stmts: Vec<TirStmt> = Vec::new();
+
+    let alloc = |next: &mut u32, locals: &mut Vec<TirLocal>, ty: TypeId, is_mut: bool| -> u32 {
+        let idx = *next;
+        *next += 1;
+        locals.push(TirLocal::synth(*next, ty, is_mut));
+        idx
+    };
+
+    // Params: handle (i32), data (List<T>).
+    let handle_idx = alloc(&mut next_local, &mut locals, TypeTable::I32, false);
+    let data_idx = alloc(&mut next_local, &mut locals, list_type_id, false);
+
+    // Lower the list into a CM element buffer: (ptr, element count).
+    let (lower_stmts, ptr_local, count_local) = super::lower::synthesize_lower_list_to_buffer(
+        &elem_ast,
+        local_ref(data_idx, "data", list_type_id),
+        &mut next_local,
+        &mut locals,
+        cm_interface_registry,
+        "cli",
+        type_table,
+    );
+    stmts.extend(lower_stmts);
+
+    // A reader may take fewer elements than offered, so `stream.write` can copy
+    // only a prefix and report COMPLETED. Loop, advancing past the elements
+    // already written, until the whole buffer is sent or the reader drops.
+    let offset_idx = alloc(&mut next_local, &mut locals, TypeTable::I32, true);
+    stmts.push(let_mut_stmt(
+        "offset",
+        offset_idx,
+        TypeTable::I32,
+        i32_const(0),
+    ));
+    let result_idx = alloc(&mut next_local, &mut locals, TypeTable::I32, true);
+    stmts.push(let_mut_stmt("result", result_idx, TypeTable::I32, i32_const(0)));
+
+    let offset_ref = || local_ref(offset_idx, "offset", TypeTable::I32);
+    let result_ref = || local_ref(result_idx, "result", TypeTable::I32);
+    let count_ref = || local_ref(count_local, "__list_len", TypeTable::I32);
+
+    // cur_ptr = base + offset * elem_size
+    let cur_ptr = binary(
+        TirBinaryOp::Add,
+        local_ref(ptr_local, "__list_base", TypeTable::I32),
+        binary(
+            TirBinaryOp::Mul,
+            offset_ref(),
+            i32_const(elem_size),
+            TypeTable::I32,
+        ),
+        TypeTable::I32,
+    );
+    // remaining = count - offset
+    let remaining = binary(TirBinaryOp::Sub, count_ref(), offset_ref(), TypeTable::I32);
+
+    let loop_body = TirBlock {
+        stmts: vec![
+            // if offset >= count { break }
+            if_stmt(
+                binary(TirBinaryOp::GtEq, offset_ref(), count_ref(), TypeTable::BOOL),
+                TirBlock {
+                    stmts: vec![break_stmt()],
+                    span: synth_span(),
+                },
+                None,
+            ),
+            // result = stream-write:<elem>(handle, cur_ptr, remaining)
+            expr_stmt(assign(
+                result_ref(),
+                cm_raw_call(
+                    &write_name,
+                    vec![
+                        local_ref(handle_idx, "handle", TypeTable::I32),
+                        cur_ptr,
+                        remaining,
+                    ],
+                    TypeTable::I32,
+                ),
+            )),
+            // if result == -1 { result = wait_for_blocked(handle) }
+            if_stmt(
+                binary(TirBinaryOp::Eq, result_ref(), i32_const(-1), TypeTable::BOOL),
+                TirBlock {
+                    stmts: vec![expr_stmt(assign(
+                        result_ref(),
+                        internal_call(
+                            "wait_for_blocked",
+                            vec![local_ref(handle_idx, "handle", TypeTable::I32)],
+                            TypeTable::I32,
+                        ),
+                    ))],
+                    span: synth_span(),
+                },
+                None,
+            ),
+            // offset += result >> 4   (the copied-element count)
+            expr_stmt(assign(
+                offset_ref(),
+                binary(
+                    TirBinaryOp::Add,
+                    offset_ref(),
+                    binary(TirBinaryOp::Shr, result_ref(), i32_const(4), TypeTable::I32),
+                    TypeTable::I32,
+                ),
+            )),
+            // if (result >> 4) == 0 || (result & 0xf) != 0 { break }
+            // No progress, or the reader/stream closed (DROPPED/CANCELLED).
+            if_stmt(
+                binary(
+                    TirBinaryOp::Or,
+                    binary(
+                        TirBinaryOp::Eq,
+                        binary(TirBinaryOp::Shr, result_ref(), i32_const(4), TypeTable::I32),
+                        i32_const(0),
+                        TypeTable::BOOL,
+                    ),
+                    binary(
+                        TirBinaryOp::NotEq,
+                        binary(TirBinaryOp::BitAnd, result_ref(), i32_const(0xf), TypeTable::I32),
+                        i32_const(0),
+                        TypeTable::BOOL,
+                    ),
+                    TypeTable::BOOL,
+                ),
+                TirBlock {
+                    stmts: vec![break_stmt()],
+                    span: synth_span(),
+                },
+                None,
+            ),
+        ],
+        span: synth_span(),
+    };
+    stmts.push(loop_stmt(loop_body));
+
+    // Free the element buffer: realloc(ptr, count * elem_size, elem_align, 0).
+    let byte_count = binary(
+        TirBinaryOp::Mul,
+        local_ref(count_local, "__list_len", TypeTable::I32),
+        i32_const(elem_size),
+        TypeTable::I32,
+    );
+    let freed_idx = alloc(&mut next_local, &mut locals, TypeTable::I32, false);
+    stmts.push(let_stmt(
+        "__freed",
+        freed_idx,
+        TypeTable::I32,
+        builtin_call(
+            "realloc",
+            vec![
+                local_ref(ptr_local, "__list_base", TypeTable::I32),
+                byte_count,
+                i32_const(elem_align),
+                i32_const(0),
+            ],
+            TypeTable::I32,
+        ),
+    ));
+
+    TirFunction {
+        module_source: ModuleSource::default(),
+        name: func_name,
+        visibility: crate::ast::Visibility::Private,
+        is_export: false,
+        is_async: false,
+        type_params: vec![],
+        impl_type_params: vec![],
+        monomorph_info: None,
+        method_info: None,
+        params: vec![
+            TirParam {
+                name: "handle".to_string(),
+                local_index: handle_idx,
+                type_id: TypeTable::I32,
+                is_mut: false,
+                span: synth_span(),
+            },
+            TirParam {
+                name: "data".to_string(),
+                local_index: data_idx,
+                type_id: list_type_id,
+                is_mut: false,
+                span: synth_span(),
+            },
+        ],
+        return_type: TypeTable::UNIT,
+        task_return_type: None,
+        effects: vec![],
+        stores: vec![],
+        body: Some(TirBlock {
+            stmts,
+            span: synth_span(),
+        }),
+        span: synth_span(),
+        local_count: next_local,
+        locals,
+        address_taken_locals: IndexSet::default(),
+        stores_aliased_locals: IndexSet::default(),
+        is_cm_binding: true,
+        is_dispatch_wrapper: false,
+        is_cm_export: false,
+        is_ambient: false,
+        benign_effects: Vec::new(),
+        inline_hint: InlineHint::Auto,
+        compiler_item: None,
+        export_name: None,
+        allocator_tag: None,
+        kind: FunctionKind::Regular,
+        return_abi: crate::tir::ReturnAbi::default(),
+    }
 }
 
 impl TirRefVisitor for FutureWriteFinder<'_> {
@@ -1232,6 +1563,15 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             rewrite_cm_instance_method(expr, "entry", &func_name, self.entry_source);
             return;
         }
+        // Scalar / structural stream writes call a generated per-element binding;
+        // `u8` and record streams fall through to the existing paths.
+        if cm_name == "stream-write"
+            && let Some(elem_type_id) = stream_write_value_element(self.tt, expr)
+        {
+            let func_name = stream_write_func_name(self.tt, elem_type_id);
+            rewrite_cm_instance_method(expr, "entry", &func_name, self.entry_source);
+            return;
+        }
         // Future reads call a generated per-payload binding function.
         if cm_name == "future-read" {
             if let Some(type_args) = self.tt.generic_type_args(expr.type_id)
@@ -1383,6 +1723,11 @@ fn parameterize_stream_cm_name(
     {
         let elem_name = tt.base_type_name(elem);
         if elem_name != "u8" {
+            // Scalar / structural elements use the general `val-` payload name,
+            // matching `CmStreamPayload::Value`; named records keep their CM name.
+            if let Some(payload) = crate::component_model::cm_payload_type_from_type_id(tt, elem) {
+                return format!("{cm_name}:val-{}", payload.name_suffix());
+            }
             let cm_elem = registered_cm_name(&elem_name, cm_interface_registry)
                 .unwrap_or_else(|| pascal_to_kebab(&elem_name));
             return format!("{cm_name}:{cm_elem}");

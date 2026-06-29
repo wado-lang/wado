@@ -50,6 +50,27 @@ pub fn classify_future_payload(type_table: &TypeTable, type_arg: TypeId) -> CmFu
     CmFuturePayload::Trailers
 }
 
+/// Classify a `stream<T>` element type into its CM stream payload. `u8` keeps
+/// the default `U8` stream; scalar / structural elements use `Value`; anything
+/// else (named records / unsupported) falls back to `U8` so existing behaviour
+/// is unchanged.
+pub fn classify_stream_payload(
+    type_table: &TypeTable,
+    element: TypeId,
+) -> crate::wir::CmStreamPayload {
+    use crate::wir::CmStreamPayload;
+    if matches!(
+        type_table.get(element),
+        ResolvedType::Primitive(PrimitiveType::U8)
+    ) {
+        return CmStreamPayload::U8;
+    }
+    match cm_payload_type_from_type_id(type_table, element) {
+        Some(payload) => CmStreamPayload::Value(payload),
+        None => CmStreamPayload::U8,
+    }
+}
+
 /// Build a self-contained [`CmPayloadType`] from a resolved type, for use as a
 /// `future<T>` / `stream<T>` payload identity. Returns `None` for types not yet
 /// supported as general payloads (named records / variants / enums / resources,
@@ -153,6 +174,26 @@ pub fn cm_payload_type_from_ast(
             _ => None,
         },
         _ => None,
+    }
+}
+
+/// Classify an AST-`Type` stream element (codegen's `task.return` resolver),
+/// mirroring [`classify_stream_payload`] on resolved types.
+pub fn classify_stream_payload_from_ast(
+    ty: &crate::ast::Type,
+    registry: &CmInterfaceRegistry,
+) -> crate::wir::CmStreamPayload {
+    use crate::ast::Type;
+    use crate::wir::CmStreamPayload;
+    let resolved = registry.resolve_type(ty);
+    if let Type::Named(n) = &resolved
+        && n.name == "u8"
+    {
+        return CmStreamPayload::U8;
+    }
+    match cm_payload_type_from_ast(ty, registry) {
+        Some(payload) => CmStreamPayload::Value(payload),
+        None => CmStreamPayload::U8,
     }
 }
 
