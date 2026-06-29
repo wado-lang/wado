@@ -248,7 +248,7 @@ async fn dispatch() -> Result<(), CliExit> {
                 }
                 Cmd::Publish => {
                     let opts = wado_cli::publish::parse_args(parser)?;
-                    wado_cli::publish::run(opts)
+                    Box::pin(wado_cli::publish::run(opts)).await
                 }
             }
         }

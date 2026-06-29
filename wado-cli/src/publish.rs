@@ -1,10 +1,15 @@
 //! `wado publish` — publish the package to a registry.
 //!
-//! Only `--dry-run` is implemented: it runs the publish-readiness checks
-//! ([`wado_manifest::validate_for_publish`]) and reports any problems. The
-//! actual OCI upload (via `wkg`, with metadata embedded into the component) is
-//! not wired yet, so a non-dry-run invocation errors instead of pretending to
-//! publish.
+//! A facade over the build path and `wkg`: it runs the publish-readiness checks
+//! ([`wado_manifest::validate_for_publish`]), builds the package's library-world
+//! component with `[package]` metadata embedded, then shells out to `wkg oci
+//! push` to upload it as an OCI artifact. `--dry-run` stops after the checks and
+//! reports any problems without building or uploading.
+//!
+//! The push target is `[registries].default` (the only supported publish
+//! destination); a missing or non-`oci://` default registry is an error.
+//! Authentication is delegated to `wkg` and the ambient OCI credential store
+//! (`docker login`); Wado stores no credentials.
 //!
 //! In a workspace, publishing is gated to the workspace root: it publishes every
 //! publishable member together at the shared (force-inherited) version, so the
@@ -12,8 +17,10 @@
 //! from a member directory is an error pointing at the root.
 
 use std::fmt::Write as _;
+use std::path::Path;
+use std::process::Command;
 
-use wado_manifest::{Manifest, PublishError, validate_for_publish};
+use wado_manifest::{Manifest, Package, PublishError, validate_for_publish};
 
 use crate::args::{self, CliExit};
 use crate::manifest::{ProjectManifest, discover, emit_manifest_warnings};
@@ -27,12 +34,16 @@ fn format_usage() -> String {
     let mut buf = String::new();
     writeln!(buf, "Usage: wado publish [options]").unwrap();
     writeln!(buf).unwrap();
-    writeln!(buf, "Check whether the package can be published.").unwrap();
+    writeln!(
+        buf,
+        "Build the package and publish it to a registry via wkg."
+    )
+    .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Options:").unwrap();
     writeln!(
         buf,
-        "      --dry-run  Run publish-readiness checks without uploading"
+        "      --dry-run  Run publish-readiness checks without building or uploading"
     )
     .unwrap();
     writeln!(buf, "  -h, --help     Show this help message").unwrap();
@@ -54,14 +65,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<PublishOptions, CliExit>
     Ok(PublishOptions { dry_run })
 }
 
-pub fn run(opts: PublishOptions) -> Result<(), CliExit> {
-    if !opts.dry_run {
-        return Err(CliExit::error(
-            "wado publish: only --dry-run is supported for now \
-             (OCI upload via wkg is not yet implemented)",
-        ));
-    }
-
+pub async fn run(opts: PublishOptions) -> Result<(), CliExit> {
     let cwd = std::env::current_dir()
         .map_err(|e| CliExit::error(format!("cannot get current directory: {e}")))?;
     let project = discover(&cwd)
@@ -69,7 +73,7 @@ pub fn run(opts: PublishOptions) -> Result<(), CliExit> {
         .ok_or_else(|| CliExit::error("no wado.toml found"))?;
 
     if project.manifest.workspace.is_some() {
-        return publish_workspace_dry_run(&project);
+        return publish_workspace(&project, opts.dry_run).await;
     }
     if let Some(root) =
         crate::manifest::governing_workspace_root_dir(&project.root).map_err(CliExit::error)?
@@ -82,7 +86,7 @@ pub fn run(opts: PublishOptions) -> Result<(), CliExit> {
     }
 
     emit_manifest_warnings(&project);
-    publish_single_dry_run(&project.manifest)
+    publish_single(&project, opts.dry_run).await
 }
 
 /// One package's publish-readiness verdict.
@@ -115,11 +119,15 @@ fn classify(manifest: &Manifest) -> Verdict {
     }
 }
 
-fn publish_single_dry_run(manifest: &Manifest) -> Result<(), CliExit> {
-    match classify(manifest) {
+async fn publish_single(project: &ProjectManifest, dry_run: bool) -> Result<(), CliExit> {
+    match classify(&project.manifest) {
         Verdict::Ready(coord) => {
-            eprintln!("{coord} is ready to publish");
-            Ok(())
+            if dry_run {
+                eprintln!("{coord} is ready to publish");
+                Ok(())
+            } else {
+                publish_ready(project, &coord).await
+            }
         }
         Verdict::Failed(problems) => Err(problems_error(
             "package is not ready to publish:",
@@ -132,7 +140,7 @@ fn publish_single_dry_run(manifest: &Manifest) -> Result<(), CliExit> {
     }
 }
 
-fn publish_workspace_dry_run(root: &ProjectManifest) -> Result<(), CliExit> {
+async fn publish_workspace(root: &ProjectManifest, dry_run: bool) -> Result<(), CliExit> {
     emit_manifest_warnings(root);
     let members = root
         .manifest
@@ -142,11 +150,15 @@ fn publish_workspace_dry_run(root: &ProjectManifest) -> Result<(), CliExit> {
         .unwrap_or_default();
     let member_dirs = crate::manifest::workspace_member_dirs(&root.root, members);
 
-    let mut ready: Vec<String> = Vec::new();
-    let mut skipped: Vec<(String, String)> = Vec::new();
-    let mut failed: Vec<(String, Vec<PublishError>)> = Vec::new();
-
-    let mut candidates: Vec<(String, Manifest)> = vec![(".".to_string(), root.manifest.clone())];
+    // Keep each candidate's `ProjectManifest` so a non-dry-run publish can build
+    // it; the root's own `[package]` (if any) publishes alongside the members.
+    let mut candidates: Vec<(String, ProjectManifest)> = vec![(
+        ".".to_string(),
+        ProjectManifest {
+            manifest: root.manifest.clone(),
+            root: root.root.clone(),
+        },
+    )];
     for dir in member_dirs {
         let project = discover(&dir)
             .map_err(CliExit::error)?
@@ -157,14 +169,17 @@ fn publish_workspace_dry_run(root: &ProjectManifest) -> Result<(), CliExit> {
             .unwrap_or(&dir)
             .display()
             .to_string();
-        candidates.push((label, project.manifest));
+        candidates.push((label, project));
     }
 
-    for (label, manifest) in &candidates {
-        match classify(manifest) {
+    let mut ready: Vec<(String, &ProjectManifest)> = Vec::new();
+    let mut skipped: Vec<(String, String)> = Vec::new();
+    let mut failed: Vec<(String, Vec<PublishError>)> = Vec::new();
+    for (label, project) in &candidates {
+        match classify(&project.manifest) {
             Verdict::NotAPackage => {}
             Verdict::Skipped(reason) => skipped.push((label.clone(), reason)),
-            Verdict::Ready(coord) => ready.push(coord),
+            Verdict::Ready(coord) => ready.push((coord, project)),
             Verdict::Failed(problems) => failed.push((label.clone(), problems)),
         }
     }
@@ -185,11 +200,101 @@ fn publish_workspace_dry_run(root: &ProjectManifest) -> Result<(), CliExit> {
     if ready.is_empty() {
         return Err(CliExit::error("no publishable packages in this workspace"));
     }
-    eprintln!(
-        "{} package(s) ready to publish: {}",
-        ready.len(),
-        ready.join(", ")
-    );
+
+    if dry_run {
+        let coords: Vec<&str> = ready.iter().map(|(c, _)| c.as_str()).collect();
+        eprintln!(
+            "{} package(s) ready to publish: {}",
+            coords.len(),
+            coords.join(", ")
+        );
+        return Ok(());
+    }
+
+    for (coord, project) in &ready {
+        publish_ready(project, coord).await?;
+    }
+    Ok(())
+}
+
+/// Build and push one ready package: resolve the OCI reference, build the
+/// library-world component, then `wkg oci push` it.
+async fn publish_ready(project: &ProjectManifest, coord: &str) -> Result<(), CliExit> {
+    let pkg = project
+        .manifest
+        .package
+        .as_ref()
+        .ok_or_else(|| CliExit::error("no [package] to publish"))?;
+    let reference = resolve_push_target(&project.manifest, pkg)?;
+    if crate::metadata_embed::working_tree_dirty(&project.root) == Some(true) {
+        eprintln!(
+            "warning: working tree has uncommitted changes; publishing {coord} \
+             without a `revision` annotation"
+        );
+    }
+    let component = crate::compile::build_lib_component(project).await?;
+    eprintln!("Publishing {coord} -> {reference}");
+    wkg_oci_push(&reference, &component)?;
+    eprintln!("Published {coord}");
+    Ok(())
+}
+
+/// The OCI reference `wkg oci push` targets:
+/// `<host>/<prefix>/<namespace>/<name>:<version>`, derived from
+/// `[registries].default` (the only supported publish destination) and the
+/// package coordinate. Errors when no default registry is set or it is not an
+/// `oci://` URL.
+fn resolve_push_target(manifest: &Manifest, pkg: &Package) -> Result<String, CliExit> {
+    let registry = manifest.registries.get("default").ok_or_else(|| {
+        CliExit::error(
+            "publishing requires a default registry; set it in wado.toml:\n  \
+             [registries]\n  default = \"oci://ghcr.io/yourorg\"",
+        )
+    })?;
+    let base = registry.strip_prefix("oci://").ok_or_else(|| {
+        CliExit::error(format!(
+            "default registry {registry:?} is not an oci:// URL; \
+             only OCI registries are supported for publish"
+        ))
+    })?;
+    let base = base.trim_end_matches('/');
+    let namespace = pkg
+        .namespace
+        .as_deref()
+        .ok_or_else(|| CliExit::error("[package].namespace is required to publish"))?;
+    Ok(format!(
+        "{base}/{namespace}/{name}:{version}",
+        name = pkg.name,
+        version = pkg.version
+    ))
+}
+
+const WKG_INSTALL_HINT: &str = "install wasm-pkg-tools: `cargo install wkg` (https://github.com/bytecodealliance/wasm-pkg-tools)";
+
+fn wkg_oci_push(reference: &str, component: &Path) -> Result<(), CliExit> {
+    run_wkg_push("wkg", reference, component)
+}
+
+/// Run `<program> oci push <reference> <component>`, mapping a missing binary to
+/// install guidance. `program` is injectable so the missing-binary path is
+/// testable without depending on `wkg` being absent.
+fn run_wkg_push(program: &str, reference: &str, component: &Path) -> Result<(), CliExit> {
+    let status = Command::new(program)
+        .args(["oci", "push", reference])
+        .arg(component)
+        .status()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                CliExit::error(format!("`{program}` not found on PATH; {WKG_INSTALL_HINT}"))
+            } else {
+                CliExit::error(format!("failed to run `{program}`: {e}"))
+            }
+        })?;
+    if !status.success() {
+        return Err(CliExit::error(format!(
+            "`{program} oci push` failed for {reference}"
+        )));
+    }
     Ok(())
 }
 
@@ -258,5 +363,59 @@ mod tests {
     fn classify_not_a_package_for_workspace_only_manifest() {
         let m = manifest("[workspace]\nmembers = [\"packages/*\"]\n");
         assert!(matches!(classify(&m), Verdict::NotAPackage));
+    }
+
+    fn ready_manifest_with_registry(registry: &str) -> Manifest {
+        manifest(&format!(
+            "[package]\nnamespace = \"org\"\nname = \"app\"\nversion = \"0.1.0\"\n\
+             [registries]\ndefault = \"{registry}\"\n"
+        ))
+    }
+
+    #[test]
+    fn resolve_push_target_builds_oci_reference() {
+        let m = ready_manifest_with_registry("oci://ghcr.io/acme");
+        let target = resolve_push_target(&m, m.package.as_ref().unwrap()).unwrap();
+        assert_eq!(target, "ghcr.io/acme/org/app:0.1.0");
+    }
+
+    #[test]
+    fn resolve_push_target_trims_trailing_slash() {
+        let m = ready_manifest_with_registry("oci://ghcr.io/acme/");
+        let target = resolve_push_target(&m, m.package.as_ref().unwrap()).unwrap();
+        assert_eq!(target, "ghcr.io/acme/org/app:0.1.0");
+    }
+
+    #[test]
+    fn resolve_push_target_errors_without_default_registry() {
+        let m = manifest("[package]\nnamespace = \"org\"\nname = \"app\"\nversion = \"0.1.0\"\n");
+        let err = resolve_push_target(&m, m.package.as_ref().unwrap()).unwrap_err();
+        assert!(
+            err.message.contains("default registry"),
+            "{:?}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn resolve_push_target_rejects_non_oci_registry() {
+        let m = ready_manifest_with_registry("https://wa.dev");
+        let err = resolve_push_target(&m, m.package.as_ref().unwrap()).unwrap_err();
+        assert!(err.message.contains("oci://"), "{:?}", err.message);
+    }
+
+    #[test]
+    fn run_wkg_push_missing_binary_reports_install_hint() {
+        let err = run_wkg_push(
+            "wkg-definitely-not-on-path-xyz",
+            "ghcr.io/acme/org/app:0.1.0",
+            Path::new("/tmp/does-not-matter.wasm"),
+        )
+        .unwrap_err();
+        assert!(
+            err.message.contains("cargo install wkg"),
+            "{:?}",
+            err.message
+        );
     }
 }

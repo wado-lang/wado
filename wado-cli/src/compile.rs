@@ -1169,6 +1169,56 @@ pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
     Ok(())
 }
 
+/// Build a package's library-world component for publishing.
+///
+/// Compiles `[package].lib` against the library world and embeds the WIT and
+/// `[package]` metadata exactly like a default `wado compile`, writing the
+/// component to `<root>/build/lib.wasm`. Returns the output path. The library
+/// world is the registry artifact other packages depend on; a package without
+/// `[package].lib` has no such contract and is rejected.
+pub async fn build_lib_component(
+    project: &manifest::ProjectManifest,
+) -> Result<std::path::PathBuf, CliExit> {
+    let pkg = project
+        .manifest
+        .package
+        .as_ref()
+        .ok_or_else(|| CliExit::error("no [package] to build"))?;
+    let lib_rel = pkg.lib.as_deref().ok_or_else(|| {
+        CliExit::error(
+            "publishing requires `[package].lib`: the library world is the registry artifact",
+        )
+    })?;
+    let world_fq = manifest::lib_world_fq(pkg)?;
+    let entry = project.root.join(lib_rel);
+    let output = project.root.join(BUILD_DIR).join("lib.wasm");
+    let opts = CompileOptions {
+        input: entry.to_string_lossy().into_owned(),
+        output: Some(output.to_string_lossy().into_owned()),
+        format: Some(OutputFormat::Wasm),
+        opt_level: OptLevel::default(),
+        wat_to_stdout: false,
+        log_level: LogLevel::default(),
+        target_world: None,
+        skip_validation: false,
+        inline_threshold: None,
+        opt_iterations: None,
+        allocator: None,
+        no_cache: false,
+        codegen_flags: Vec::new(),
+        lib_world: Some(world_fq),
+        param_overrides: wado_compiler::hashmap::IndexMap::default(),
+        param_policy: wado_compiler::param_resolution::ParamPolicy::default(),
+        no_embed_wit: false,
+        embed_wit: false,
+        no_embed_metadata: false,
+        embed_metadata: false,
+        manifest_driven: true,
+    };
+    run(opts).await?;
+    Ok(output)
+}
+
 /// The default output path when `-o` is absent. A manifest-driven build writes
 /// `<manifest_root>/build/<world>.<ext>` — keeping artifacts out of the source
 /// tree and giving each world its own file, mirroring kiln's `build/` layout.

@@ -800,8 +800,12 @@ validations apply:
 The descriptive fields are required because a published package must carry its metadata. The rest stay optional: `homepage`/`documentation` default to `repository`, `repository-directory` is monorepo-only, and `wado-version` is a build constraint.
 
 `wado publish --dry-run` runs these checks and reports every problem at once
-(it does not upload). The OCI upload itself is not yet implemented, so a bare
-`wado publish` errors rather than pretending to publish.
+(it does not build or upload). A bare `wado publish` builds the package's
+library-world component (`build/lib.wasm`, metadata embedded), resolves the OCI
+reference from `[registries].default` — the only supported publish destination;
+a missing or non-`oci://` default is an error — and uploads it via `wkg oci
+push`. A package without `[package].lib` has no library contract to publish and
+is rejected.
 
 In a workspace, `wado publish` is gated to the workspace root: it publishes every
 publishable member (and the root's own `[package]`, if any) together at the

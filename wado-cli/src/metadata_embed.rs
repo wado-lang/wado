@@ -27,6 +27,24 @@ pub fn embed_metadata_sections(mut component: Vec<u8>, sections: &[MetadataSecti
     component
 }
 
+/// Whether `dir` is a git repo with uncommitted tracked changes. `None` when
+/// `dir` is not a git repo or git is unavailable, so the caller can tell "clean"
+/// (`Some(false)`) from "no signal" (`None`). Untracked files are ignored,
+/// matching what a commit actually captures.
+#[must_use]
+pub fn working_tree_dirty(dir: &Path) -> Option<bool> {
+    let status = Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(["status", "--porcelain", "--untracked-files=no"])
+        .output()
+        .ok()?;
+    if !status.status.success() {
+        return None;
+    }
+    Some(!status.stdout.is_empty())
+}
+
 /// The git commit SHA at `dir` (`HEAD`), but only when the working tree is
 /// clean. Returns `None` when `dir` is not a git repo, git is unavailable, or
 /// the tree has uncommitted tracked changes — so a dirty build silently omits
@@ -34,13 +52,7 @@ pub fn embed_metadata_sections(mut component: Vec<u8>, sections: &[MetadataSecti
 /// files are ignored, matching what the commit actually captures.
 #[must_use]
 pub fn clean_git_revision(dir: &Path) -> Option<String> {
-    let status = Command::new("git")
-        .arg("-C")
-        .arg(dir)
-        .args(["status", "--porcelain", "--untracked-files=no"])
-        .output()
-        .ok()?;
-    if !status.status.success() || !status.stdout.is_empty() {
+    if working_tree_dirty(dir)? {
         return None;
     }
     let rev = Command::new("git")
