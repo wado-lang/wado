@@ -339,10 +339,8 @@ pub fn optimize(
         extract::freeze_pure_arith(p, /* include_fields */ false, /* early */ false)
     });
 
-    // Born-resolved invariant: `lower` and every optimizer pass stamp each call's
-    // `func_id` at its synthesis site, so codegen always reads an integer. Guard
-    // it here rather than re-deriving identity with a post-loop re-scan.
-    project.assert_calls_resolved();
+    // The born-resolved invariant is now enforced by the type system: a call
+    // node's `func_id` is a non-optional `FuncId`, stamped at its synthesis site.
 
     project
 }

@@ -84,7 +84,7 @@ impl Rule for SelectLoweringRule<'_> {
         engine.replace_expr_kind(
             id,
             ExprKind::Call {
-                func_id: Some(self.select_id),
+                func_id: self.select_id,
                 type_args: vec![result_type],
                 args: vec![
                     ArenaCallArg {

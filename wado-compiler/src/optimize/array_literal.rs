@@ -103,10 +103,7 @@ pub(super) struct Collapser<'a> {
 }
 
 impl<'a> Collapser<'a> {
-    pub(super) fn new(
-        push_ids: &'a IndexSet<FuncId>,
-        array_new_ids: &'a IndexSet<FuncId>,
-    ) -> Self {
+    pub(super) fn new(push_ids: &'a IndexSet<FuncId>, array_new_ids: &'a IndexSet<FuncId>) -> Self {
         Self {
             push_ids,
             array_new_ids,
@@ -289,7 +286,7 @@ impl Collapser<'_> {
         else {
             return None;
         };
-        if !func_id.is_some_and(|id| self.push_ids.contains(&id)) || args.len() != 1 {
+        if !self.push_ids.contains(func_id) || args.len() != 1 {
             return None;
         }
         let path = place_path_operand(body, *receiver, local)?;
@@ -471,7 +468,7 @@ fn array_new_capacity(
     let ExprKind::Call { func_id, args, .. } = &body.exprs[expr].kind else {
         return None;
     };
-    if !func_id.is_some_and(|id| array_new_ids.contains(&id)) || args.len() != 1 {
+    if !array_new_ids.contains(func_id) || args.len() != 1 {
         return None;
     }
     usize::try_from(const_int(body, args[0].expr, const_env)?).ok()

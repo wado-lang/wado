@@ -134,7 +134,9 @@ impl<'t> MatchToSwitchRule<'t> {
 /// Intern the `cold_path` / `unreachable` builtins this pass synthesizes for the
 /// default arm of an exhaustive match, returning their `FuncId`s so the
 /// synthesized calls are born resolved.
-pub(super) fn intern_cold_markers(project: &mut NirPackage) -> (crate::nir::FuncId, crate::nir::FuncId) {
+pub(super) fn intern_cold_markers(
+    project: &mut NirPackage,
+) -> (crate::nir::FuncId, crate::nir::FuncId) {
     let cold_path_id = project.intern_extern(&FunctionRef {
         module_source: ModuleSource::builtin(),
         name: "cold_path".to_string(),
@@ -310,7 +312,7 @@ fn build_switch(
         // matching the other compiler-synthesized cold branches.
         let cold_call = engine.alloc_expr(
             ExprKind::Call {
-                func_id: Some(cold_path_id),
+                func_id: cold_path_id,
                 args: vec![],
                 type_args: vec![],
             },
@@ -326,7 +328,7 @@ fn build_switch(
         // synthesised callee being removed.
         let call = engine.alloc_expr(
             ExprKind::Call {
-                func_id: Some(unreachable_id),
+                func_id: unreachable_id,
                 args: vec![],
                 type_args: vec![],
             },

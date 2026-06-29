@@ -456,9 +456,9 @@ impl<'a> Engine<'a> {
     }
 
     /// Whether `func_id` is one of the supplied panic / `unreachable` callees.
-    /// `false` when no set was supplied or the call carries no id.
-    pub fn is_panic_callee(&self, func_id: Option<crate::nir::FuncId>) -> bool {
-        matches!((self.panic_callee_ids, func_id), (Some(s), Some(id)) if s.contains(&id))
+    /// `false` when no set was supplied.
+    pub fn is_panic_callee(&self, func_id: crate::nir::FuncId) -> bool {
+        self.panic_callee_ids.is_some_and(|s| s.contains(&func_id))
     }
 
     /// The type table supplied for value-graph folding, if any. Used by

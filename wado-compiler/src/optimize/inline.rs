@@ -58,9 +58,17 @@ enum BlockCut {
 
 /// Classify whether a statement cuts off the rest of its block from the inline
 /// cost estimate.
-fn block_cut(body: &Body, stmt: StmtId, type_table: &TypeTable, descriptors: &[FunctionRef]) -> BlockCut {
+fn block_cut(
+    body: &Body,
+    stmt: StmtId,
+    type_table: &TypeTable,
+    descriptors: &[FunctionRef],
+) -> BlockCut {
     match &body.stmts[stmt].kind {
-        StmtKind::Expr(e) if e.as_expr().is_some_and(|e| is_cold_path_call(body, e, descriptors)) => {
+        StmtKind::Expr(e)
+            if e.as_expr()
+                .is_some_and(|e| is_cold_path_call(body, e, descriptors)) =>
+        {
             BlockCut::Cold
         }
         StmtKind::Return { .. } | StmtKind::Break { .. } | StmtKind::Continue => BlockCut::Diverges,
@@ -75,12 +83,21 @@ fn block_cut(body: &Body, stmt: StmtId, type_table: &TypeTable, descriptors: &[F
 }
 
 /// Inline cost of a single statement (its own expression count).
-fn count_stmt(body: &Body, stmt: StmtId, type_table: &TypeTable, descriptors: &[FunctionRef]) -> usize {
+fn count_stmt(
+    body: &Body,
+    stmt: StmtId,
+    type_table: &TypeTable,
+    descriptors: &[FunctionRef],
+) -> usize {
     match &body.stmts[stmt].kind {
         StmtKind::Expr(expr) => count_operand(body, *expr, type_table, descriptors),
         StmtKind::Let { value, .. } => count_operand(body, *value, type_table, descriptors),
-        StmtKind::LetDestructure { value, .. } => count_operand(body, *value, type_table, descriptors),
-        StmtKind::Return { value } => value.map_or(0, |v| count_operand(body, v, type_table, descriptors)),
+        StmtKind::LetDestructure { value, .. } => {
+            count_operand(body, *value, type_table, descriptors)
+        }
+        StmtKind::Return { value } => {
+            value.map_or(0, |v| count_operand(body, v, type_table, descriptors))
+        }
         StmtKind::If {
             condition,
             then_block,
@@ -99,15 +116,27 @@ fn count_stmt(body: &Body, stmt: StmtId, type_table: &TypeTable, descriptors: &[
 }
 
 /// Count expressions reachable through an operand (recursive).
-fn count_operand(body: &Body, op: Operand, type_table: &TypeTable, descriptors: &[FunctionRef]) -> usize {
+fn count_operand(
+    body: &Body,
+    op: Operand,
+    type_table: &TypeTable,
+    descriptors: &[FunctionRef],
+) -> usize {
     // A promoted constant counts as the one literal node it replaced.
-    op.as_expr().map_or(1, |e| count_expr(body, e, type_table, descriptors))
+    op.as_expr()
+        .map_or(1, |e| count_expr(body, e, type_table, descriptors))
 }
 
-fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable, descriptors: &[FunctionRef]) -> usize {
+fn count_expr(
+    body: &Body,
+    id: ExprId,
+    type_table: &TypeTable,
+    descriptors: &[FunctionRef],
+) -> usize {
     1 + match &body.exprs[id].kind {
         ExprKind::Binary { left, right, .. } => {
-            count_operand(body, *left, type_table, descriptors) + count_operand(body, *right, type_table, descriptors)
+            count_operand(body, *left, type_table, descriptors)
+                + count_operand(body, *right, type_table, descriptors)
         }
         ExprKind::Unary { expr, .. } => count_operand(body, *expr, type_table, descriptors),
         ExprKind::Call { args, .. } => args
@@ -123,7 +152,8 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable, descriptors: &[Fu
         }
         ExprKind::FieldAccess { expr, .. } => count_operand(body, *expr, type_table, descriptors),
         ExprKind::Index { expr, index, .. } => {
-            count_operand(body, *expr, type_table, descriptors) + count_operand(body, *index, type_table, descriptors)
+            count_operand(body, *expr, type_table, descriptors)
+                + count_operand(body, *index, type_table, descriptors)
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
             .iter()
@@ -137,7 +167,8 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable, descriptors: &[Fu
             payload.map_or(0, |p| count_operand(body, p, type_table, descriptors))
         }
         ExprKind::Assign { target, value } => {
-            count_expr(body, *target, type_table, descriptors) + count_operand(body, *value, type_table, descriptors)
+            count_expr(body, *target, type_table, descriptors)
+                + count_operand(body, *value, type_table, descriptors)
         }
         ExprKind::If {
             condition,
@@ -155,14 +186,17 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable, descriptors: &[Fu
                 + arms
                     .iter()
                     .map(|arm| {
-                        arm.guard.map_or(0, |g| count_operand(body, g, type_table, descriptors))
+                        arm.guard
+                            .map_or(0, |g| count_operand(body, g, type_table, descriptors))
                             + count_operand(body, arm.body, type_table, descriptors)
                     })
                     .sum::<usize>()
         }
         ExprKind::Block(block) => count_block_exprs(body, *block, type_table, descriptors),
         ExprKind::Cast { expr, .. } => count_operand(body, *expr, type_table, descriptors),
-        ExprKind::GlobalVarSet { value, .. } => count_operand(body, *value, type_table, descriptors),
+        ExprKind::GlobalVarSet { value, .. } => {
+            count_operand(body, *value, type_table, descriptors)
+        }
         // Leaf expressions (no children)
         ExprKind::PackedArray(_)
         | ExprKind::Dead
@@ -181,7 +215,9 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable, descriptors: &[Fu
                     .map(|a| count_operand(body, *a, type_table, descriptors))
                     .sum::<usize>()
         }
-        ExprKind::ClosureToCanonical { functor, .. } => count_operand(body, *functor, type_table, descriptors),
+        ExprKind::ClosureToCanonical { functor, .. } => {
+            count_operand(body, *functor, type_table, descriptors)
+        }
         ExprKind::Switch {
             scrutinee,
             arms,
@@ -198,8 +234,12 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable, descriptors: &[Fu
         // Lowered pattern matching nodes - count inner expressions
         ExprKind::VariantTag { expr }
         | ExprKind::VariantTest { expr, .. }
-        | ExprKind::VariantPayload { expr, .. } => count_operand(body, *expr, type_table, descriptors),
-        ExprKind::LabeledBlock { block, .. } => count_block_exprs(body, *block, type_table, descriptors),
+        | ExprKind::VariantPayload { expr, .. } => {
+            count_operand(body, *expr, type_table, descriptors)
+        }
+        ExprKind::LabeledBlock { block, .. } => {
+            count_block_exprs(body, *block, type_table, descriptors)
+        }
     }
 }
 
@@ -209,7 +249,12 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable, descriptors: &[Fu
 /// after it, while a diverging statement (`return` / `break` / `continue` or a
 /// `-> !` call such as `panic`) is itself counted but cuts off its unreachable
 /// tail.
-fn count_block_exprs(body: &Body, block: BlockId, type_table: &TypeTable, descriptors: &[FunctionRef]) -> usize {
+fn count_block_exprs(
+    body: &Body,
+    block: BlockId,
+    type_table: &TypeTable,
+    descriptors: &[FunctionRef],
+) -> usize {
     let mut total = 0;
     for i in 0..body.blocks[block].stmts.len() {
         let stmt = body.blocks[block].stmts[i];
@@ -438,16 +483,24 @@ fn can_reach_idx(
     false
 }
 
-fn collect_callees_from_block(body: &Body,
-    descriptors: &[FunctionRef], block: BlockId, callees: &mut IndexSet<String>) {
+fn collect_callees_from_block(
+    body: &Body,
+    descriptors: &[FunctionRef],
+    block: BlockId,
+    callees: &mut IndexSet<String>,
+) {
     for i in 0..body.blocks[block].stmts.len() {
         let sid = body.blocks[block].stmts[i];
         collect_callees_from_stmt(body, descriptors, sid, callees);
     }
 }
 
-fn collect_callees_from_stmt(body: &Body,
-    descriptors: &[FunctionRef], stmt: StmtId, callees: &mut IndexSet<String>) {
+fn collect_callees_from_stmt(
+    body: &Body,
+    descriptors: &[FunctionRef],
+    stmt: StmtId,
+    callees: &mut IndexSet<String>,
+) {
     match &body.stmts[stmt].kind {
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
             collect_callees_from_operand(body, descriptors, *value, callees);
@@ -484,18 +537,29 @@ fn collect_callees_from_stmt(body: &Body,
     }
 }
 
-fn collect_callees_from_operand(body: &Body,
-    descriptors: &[FunctionRef], op: Operand, callees: &mut IndexSet<String>) {
+fn collect_callees_from_operand(
+    body: &Body,
+    descriptors: &[FunctionRef],
+    op: Operand,
+    callees: &mut IndexSet<String>,
+) {
     if let Some(e) = op.as_expr() {
         collect_callees_from_expr(body, descriptors, e, callees);
     }
 }
 
-fn collect_callees_from_expr(body: &Body,
-    descriptors: &[FunctionRef], id: ExprId, callees: &mut IndexSet<String>) {
+fn collect_callees_from_expr(
+    body: &Body,
+    descriptors: &[FunctionRef],
+    id: ExprId,
+    callees: &mut IndexSet<String>,
+) {
     match &body.exprs[id].kind {
         ExprKind::Call { func_id, args, .. } => {
-            callees.insert(func_ref_inline_key(callee_descriptor(descriptors, *func_id)));
+            callees.insert(func_ref_inline_key(callee_descriptor(
+                descriptors,
+                *func_id,
+            )));
             for aid in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
                 collect_callees_from_operand(body, descriptors, aid, callees);
             }
@@ -506,7 +570,10 @@ fn collect_callees_from_expr(body: &Body,
             args,
             ..
         } => {
-            callees.insert(func_ref_inline_key(callee_descriptor(descriptors, *func_id)));
+            callees.insert(func_ref_inline_key(callee_descriptor(
+                descriptors,
+                *func_id,
+            )));
             let receiver = *receiver;
             let arg_ids: Vec<Operand> = args.iter().map(|a| a.expr).collect();
             collect_callees_from_operand(body, descriptors, receiver, callees);

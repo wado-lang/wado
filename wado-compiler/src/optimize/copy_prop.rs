@@ -89,7 +89,7 @@ struct LocalUsage {
 /// identity is an integer compare against the call node's `func_id`.
 fn unwrap_copy_value(body: &Body, expr: ExprId, copy_value_id: Option<FuncId>) -> ExprId {
     if let ExprKind::Call { func_id, args, .. } = &body.exprs[expr].kind
-        && *func_id == copy_value_id
+        && copy_value_id == Some(*func_id)
         && args.len() == 1
     {
         return args[0].expr.as_expr().unwrap_or(expr);
@@ -412,8 +412,12 @@ fn analyze_expr(
             body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
             for c in kids {
                 match c {
-                    NodeRef::Expr(e) => analyze_expr(body, e, result, type_table, fpt, copy_value_id),
-                    NodeRef::Block(b) => analyze_block(body, b, result, type_table, fpt, copy_value_id),
+                    NodeRef::Expr(e) => {
+                        analyze_expr(body, e, result, type_table, fpt, copy_value_id)
+                    }
+                    NodeRef::Block(b) => {
+                        analyze_block(body, b, result, type_table, fpt, copy_value_id)
+                    }
                     _ => {}
                 }
             }

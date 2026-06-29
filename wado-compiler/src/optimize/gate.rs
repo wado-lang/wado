@@ -104,12 +104,13 @@ impl CallGraph {
             let mut seen: Vec<FuncId> = Vec::new();
             for node in body.exprs.values() {
                 let func_id = match &node.kind {
-                    ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => func_id,
+                    ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => {
+                        func_id
+                    }
                     _ => continue,
                 };
-                if let Some(callee) = *func_id
-                    && !seen.contains(&callee)
-                {
+                let callee = *func_id;
+                if !seen.contains(&callee) {
                     seen.push(callee);
                 }
             }

@@ -53,7 +53,7 @@ fn candidate_call_idx(
         ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => *func_id,
         _ => return None,
     };
-    candidate_ids.get(&func_id?).copied()
+    candidate_ids.get(&func_id).copied()
 }
 
 /// [`walk_call_args_for_uses`] for an operand.
@@ -462,14 +462,7 @@ fn validate_uses_in_block(
 ) {
     let mut tracked: IndexMap<u32, usize> = IndexMap::default();
     for &stmt in &body.blocks[block].stmts {
-        validate_stmt(
-            body,
-            stmt,
-            candidate_ids,
-            candidates,
-            invalid,
-            &mut tracked,
-        );
+        validate_stmt(body, stmt, candidate_ids, candidates, invalid, &mut tracked);
     }
 }
 
@@ -490,8 +483,7 @@ fn validate_stmt(
         } => {
             let (local_index, value, is_mut) = (*local_index, *value, *is_mut);
             if !is_mut
-                && let Some(candidate_idx) =
-                    candidate_call_idx_operand(body, value, candidate_ids)
+                && let Some(candidate_idx) = candidate_call_idx_operand(body, value, candidate_ids)
             {
                 tracked.insert(local_index, candidate_idx);
                 walk_call_args_for_uses_operand(
@@ -601,7 +593,7 @@ fn walk_expr_for_uses(
             }
         }
         ExprKind::Call { func_id, args, .. } => {
-            if let Some(&candidate_idx) = func_id.as_ref().and_then(|id| candidate_ids.get(id)) {
+            if let Some(&candidate_idx) = candidate_ids.get(func_id) {
                 invalid.insert(candidate_idx);
             }
             let args: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
@@ -615,19 +607,12 @@ fn walk_expr_for_uses(
             args,
             ..
         } => {
-            if let Some(&candidate_idx) = func_id.as_ref().and_then(|id| candidate_ids.get(id)) {
+            if let Some(&candidate_idx) = candidate_ids.get(func_id) {
                 invalid.insert(candidate_idx);
             }
             let receiver = *receiver;
             let args: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
-            walk_expr_for_uses_operand(
-                body,
-                receiver,
-                candidate_ids,
-                candidates,
-                invalid,
-                tracked,
-            );
+            walk_expr_for_uses_operand(body, receiver, candidate_ids, candidates, invalid, tracked);
             for a in args {
                 walk_expr_for_uses(body, a, candidate_ids, candidates, invalid, tracked);
             }

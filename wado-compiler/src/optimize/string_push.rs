@@ -131,7 +131,7 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
         else {
             return None;
         };
-        if *func_id != Some(ctx.push_str_id) || args.len() != 1 {
+        if *func_id != ctx.push_str_id || args.len() != 1 {
             return None;
         }
         (*receiver, args[0].expr)
@@ -188,7 +188,7 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
             engine.const_operand(crate::nir_value_graph::ValueKind::Char(ch), TypeTable::CHAR);
         let call = engine.alloc_expr(
             ExprKind::MethodCall {
-                func_id: Some(ctx.push_char_id),
+                func_id: ctx.push_char_id,
                 receiver: recv_clone.into(),
                 type_args: Vec::new(),
                 args: vec![ArenaCallArg {

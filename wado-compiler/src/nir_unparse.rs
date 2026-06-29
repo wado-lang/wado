@@ -56,9 +56,9 @@ impl<'a> NirUnparser<'a> {
     }
 
     /// Resolve a call's stamped `func_id` to its callee descriptor.
-    fn callee(&self, func_id: Option<crate::nir::FuncId>) -> Option<&crate::nir::FunctionRef> {
+    fn callee(&self, func_id: crate::nir::FuncId) -> Option<&crate::nir::FunctionRef> {
         use cranelift_entity::EntityRef;
-        self.callees.get(func_id?.index())
+        self.callees.get(func_id.index())
     }
 
     /// Quote an identifier if it contains characters that make it invalid Wado syntax.

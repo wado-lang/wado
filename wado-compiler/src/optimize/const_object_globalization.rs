@@ -320,9 +320,9 @@ impl Gate<'_> {
     /// `Some(true)` when `func`'s `self` parameter is `&mut self`,
     /// `Some(false)` when it is `&self` / by-value, `None` when unresolvable
     /// (conservatively treated as mutating).
-    fn callee_mutates_self(&self, func_id: Option<crate::nir::FuncId>) -> Option<bool> {
+    fn callee_mutates_self(&self, func_id: crate::nir::FuncId) -> Option<bool> {
         use cranelift_entity::EntityRef;
-        let f = self.funcs.get(func_id?.index())?.borrow();
+        let f = self.funcs.get(func_id.index())?.borrow();
         let p0 = f.params.first()?;
         Some(matches!(
             self.type_table.borrow().get(p0.type_id),

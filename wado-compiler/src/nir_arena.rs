@@ -193,10 +193,11 @@ pub enum ExprKind {
     },
     Call {
         /// The sole callee reference: the canonical [`FuncId`](crate::nir::FuncId),
-        /// stamped at `lower` ("born resolved"). The callee's name / module /
-        /// monomorph / method identity lives only in the function record at this
-        /// id (`store[id]`); the call node carries no `FunctionRef`.
-        func_id: Option<crate::nir::FuncId>,
+        /// stamped at `lower` ("born resolved"), non-optional so a call is never
+        /// transiently unresolved. The callee's name / module / monomorph / method
+        /// identity lives only in the function record at this id (`store[id]`); the
+        /// call node carries no `FunctionRef`.
+        func_id: crate::nir::FuncId,
         type_args: Vec<TypeId>,
         args: Vec<ArenaCallArg>,
     },
@@ -206,7 +207,7 @@ pub enum ExprKind {
     },
     MethodCall {
         receiver: Operand,
-        func_id: Option<crate::nir::FuncId>,
+        func_id: crate::nir::FuncId,
         type_args: Vec<TypeId>,
         args: Vec<ArenaCallArg>,
     },

@@ -1378,13 +1378,10 @@ impl<'a> Interpreter<'a> {
             return Lattice::Unevaluated;
         };
         let (key, args): (CalleeKey, Vec<Operand>) = match &body.exprs[e].kind {
-            ExprKind::Call {
-                func_id: Some(fid),
-                args,
-                ..
-            } => (*fid, args.iter().map(|a| a.expr).collect()),
-            // A call with no stamped id (extern / optimizer-synthesized) is not a
-            // CTFE-eligible in-package callee.
+            ExprKind::Call { func_id, args, .. } => {
+                (*func_id, args.iter().map(|a| a.expr).collect())
+            }
+            // Only a free `Call` is a CTFE-eligible in-package callee.
             _ => return Lattice::Unevaluated,
         };
         let Some(callee_rc) = callees.get(&key) else {

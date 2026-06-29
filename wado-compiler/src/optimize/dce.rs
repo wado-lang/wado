@@ -144,14 +144,11 @@ pub(super) fn build_callee_descriptors(project: &NirPackage) -> Vec<FunctionRef>
 }
 
 /// Resolve a call node's stamped `func_id` to its callee descriptor. `func_id`
-/// is total for every NIR call (born resolved); a missing entry would be a bug.
-pub(super) fn callee_descriptor<'a>(
-    descriptors: &'a [FunctionRef],
-    func_id: Option<FuncId>,
-) -> &'a FunctionRef {
+/// is total for every NIR call (born resolved): the field is a non-optional
+/// [`FuncId`].
+pub(super) fn callee_descriptor(descriptors: &[FunctionRef], func_id: FuncId) -> &FunctionRef {
     use cranelift_entity::EntityRef;
-    let id = func_id.expect("every NIR call is born resolved with a func_id");
-    &descriptors[id.index()]
+    &descriptors[func_id.index()]
 }
 
 /// Function reachability via call-graph BFS. Implementation detail of
@@ -820,7 +817,9 @@ fn scan_inspect_signatures_block(
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Expr(e) = node
-            && let ExprKind::MethodCall { receiver, func_id, .. } = &body.exprs[e].kind
+            && let ExprKind::MethodCall {
+                receiver, func_id, ..
+            } = &body.exprs[e].kind
             && let Some(info) = &callee_descriptor(descriptors, *func_id).method_info
             && info.base_struct_name == "Fn"
             && let Some(trait_name) = info.base_trait_name.as_deref()

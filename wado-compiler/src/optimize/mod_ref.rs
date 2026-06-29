@@ -844,10 +844,11 @@ mod tests {
                 is_mut: false,
             })
             .collect();
+        use cranelift_entity::EntityRef;
         pe(
             body,
             ExprKind::Call {
-                func_id: None,
+                func_id: crate::nir::FuncId::new(0),
                 type_args: vec![],
                 args,
             },

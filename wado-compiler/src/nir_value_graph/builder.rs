@@ -1925,9 +1925,9 @@ struct LoopHeapEffects {
 /// conservative (treat every call as an external write).
 fn is_builtin_pure_call(
     pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
-    func_id: Option<FuncId>,
+    func_id: FuncId,
 ) -> bool {
-    func_id.is_some_and(|id| pure_builtin_callees.contains(&id))
+    pure_builtin_callees.contains(&func_id)
 }
 
 /// Walk down a `local.f.g.…` field chain to its rooted local index, or `None`

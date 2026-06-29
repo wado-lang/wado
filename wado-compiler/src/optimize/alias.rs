@@ -313,11 +313,10 @@ impl<'a> CallImmutability<'a> {
     }
 
     /// Whether the callee `func_id` writes through its receiver. `None` for a
-    /// callee with no body (extern / builtin / unstamped) — the caller falls back
-    /// to its conservative default.
-    pub(super) fn method_writes_receiver(&self, func_id: Option<FuncId>) -> Option<bool> {
-        let fid = func_id?;
-        self.has_body[fid].then(|| self.receiver_mutating[fid])
+    /// callee with no body (extern / builtin) — the caller falls back to its
+    /// conservative default.
+    pub(super) fn method_writes_receiver(&self, func_id: FuncId) -> Option<bool> {
+        self.has_body[func_id].then(|| self.receiver_mutating[func_id])
     }
 
     pub(super) fn is_call_immutable(&self, type_id: TypeId) -> bool {
@@ -463,7 +462,7 @@ pub(super) fn pure_calls(
 pub(super) fn method_mutates_receiver(
     body: &Body,
     receiver: crate::nir_arena::ExprId,
-    func_id: Option<FuncId>,
+    func_id: FuncId,
     first_param_types: &FirstParamTypes,
     type_table: &TypeTable,
     conservative_on_unknown: bool,
@@ -482,7 +481,7 @@ pub(super) fn method_mutates_receiver(
     // copy-propagation caller, which keeps its own type-based receiver guard.
     let callee_mutates = match call_immutability.and_then(|ci| ci.method_writes_receiver(func_id)) {
         Some(writes) => writes,
-        None => match func_id.and_then(|fid| first_param_types[fid]) {
+        None => match first_param_types[func_id] {
             Some(tp) => matches!(type_table.get(tp), ResolvedType::MutRef(_)),
             None => conservative_on_unknown,
         },
@@ -619,17 +618,15 @@ fn summarize_receiver_writes(
                     // own receiver. A bodied callee (stamped id with a body) →
                     // defer to the fixpoint; an unstamped / bodyless callee →
                     // conservative via its declared first-param type.
-                    match func_id {
-                        Some(fid) if has_body[*fid] => pending.push(*fid),
-                        _ => {
-                            let inner_mut = match (*func_id).and_then(|fid| first_param_types[fid])
-                            {
-                                Some(tp) => matches!(type_table.get(tp), ResolvedType::MutRef(_)),
-                                None => true,
-                            };
-                            if inner_mut {
-                                direct = true;
-                            }
+                    if has_body[*func_id] {
+                        pending.push(*func_id);
+                    } else {
+                        let inner_mut = match first_param_types[*func_id] {
+                            Some(tp) => matches!(type_table.get(tp), ResolvedType::MutRef(_)),
+                            None => true,
+                        };
+                        if inner_mut {
+                            direct = true;
                         }
                     }
                 }

@@ -110,11 +110,9 @@ impl FunctionTranslator<'_, '_> {
     pub(super) fn resolve_call(
         &self,
         descriptor: &crate::nir::FunctionRef,
-        func_id: Option<crate::nir::FuncId>,
+        func_id: crate::nir::FuncId,
     ) -> Option<crate::wir::WirFuncId> {
-        if let Some(id) = func_id
-            && let Some(wid) = self.ctx.funcid_map.get(&id)
-        {
+        if let Some(wid) = self.ctx.funcid_map.get(&func_id) {
             return Some(wid.clone());
         }
         self.resolve_function_ref(descriptor)
@@ -125,13 +123,9 @@ impl FunctionTranslator<'_, '_> {
     /// diagnostics. Reads it from the function record by `func_id` — the single
     /// source of truth (`FuncId == store position`, Phase 4), and the sole callee
     /// reference now that the call node carries no `FunctionRef`.
-    pub(super) fn callee_descriptor(
-        &self,
-        func_id: Option<crate::nir::FuncId>,
-    ) -> crate::nir::FunctionRef {
+    pub(super) fn callee_descriptor(&self, func_id: crate::nir::FuncId) -> crate::nir::FunctionRef {
         use cranelift_entity::EntityRef;
-        let id = func_id.expect("every NIR call is born resolved with a func_id");
-        let rec = self.ctx.package.functions[id.index()].borrow();
+        let rec = self.ctx.package.functions[func_id.index()].borrow();
         crate::nir::FunctionRef::from_resolved(&rec, rec.module_source.clone())
     }
 

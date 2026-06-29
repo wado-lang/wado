@@ -342,7 +342,7 @@ fn check_expr(
 
 fn check_call_arg(
     body: &Body,
-    callee: Option<FnKey>,
+    callee: FnKey,
     pos: usize,
     arg: Operand,
     idx: u32,
@@ -354,9 +354,8 @@ fn check_call_arg(
     };
     if matches!(&body.exprs[arg].kind, ExprKind::Local { index, .. } if *index == idx) {
         // The candidate local is passed directly; safe only if the callee SROAs
-        // this position too. An unstamped callee (`func_id` None) is unknown, so
-        // conservatively an escape.
-        return callee.is_some_and(|c| candidates.contains_key(&(c, pos)));
+        // this position too.
+        return candidates.contains_key(&(callee, pos));
     }
     check_expr(body, arg, idx, candidates)
 }
@@ -524,7 +523,7 @@ fn rewrite_call_expr(
 ) -> bool {
     match &body.exprs[id].kind {
         ExprKind::Call { func_id, args, .. } => {
-            let Some(positions) = func_id.and_then(|k| sroa_positions.get(&k)).cloned() else {
+            let Some(positions) = sroa_positions.get(func_id).cloned() else {
                 return false;
             };
             let args: Vec<Option<ExprId>> = args.iter().map(|a| a.expr.as_expr()).collect();
@@ -536,7 +535,7 @@ fn rewrite_call_expr(
             true
         }
         ExprKind::MethodCall { func_id, .. } => {
-            let Some(positions) = func_id.and_then(|k| sroa_positions.get(&k)).cloned() else {
+            let Some(positions) = sroa_positions.get(func_id).cloned() else {
                 return false;
             };
             if positions.contains_key(&0) {

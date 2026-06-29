@@ -3471,7 +3471,7 @@ fn make_pure_fn(
 /// Build a `Call` expression targeting `func` with the given args.
 /// Mirrors what the elaborator emits for a free function call.
 fn call_expr(func: &NirFunction, args: Vec<Build>) -> Build {
-    let func_id = func.id;
+    let func_id = func.id.expect("test function must have an id");
     let return_type = func.return_type;
     Rc::new(move |b| {
         let call_args = args

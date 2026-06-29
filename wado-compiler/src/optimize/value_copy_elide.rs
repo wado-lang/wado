@@ -241,15 +241,11 @@ fn mark_root_field_mutated(body: &Body, expr: ExprId, usage: &mut IndexMap<u32, 
 // Wrapper stripping
 // ──────────────────────────────────────────────────────────────────────────────
 
-fn is_value_copy_call(
-    body: &Body,
-    expr: ExprId,
-    value_copy_ids: &IndexSet<FuncId>,
-) -> bool {
+fn is_value_copy_call(body: &Body, expr: ExprId, value_copy_ids: &IndexSet<FuncId>) -> bool {
     if let ExprKind::Call { func_id, args, .. } = &body.exprs[expr].kind
         && args.len() == 1
     {
-        func_id.is_some_and(|id| value_copy_ids.contains(&id))
+        value_copy_ids.contains(func_id)
     } else {
         false
     }

@@ -126,14 +126,16 @@ mutations — was rejected: it duplicates the arena record and risks drift, agai
       callees captured off the store record). No post-loop re-scan re-derives
       identity. `reintern_calls` is gone, replaced by `assert_calls_resolved` — an
       always-on guard that proved loop-time totality across the whole suite.
-- [ ] Phase 5d-ii — drop `FunctionRef` from the call node. Migrate the `node.func`
-      readers to read identity by `func_id` (`store[id]` descriptor, or compare to
-      a resolved builtin `FuncId`), then remove the field from the struct and the
-      construction sites; flip `Option<FuncId>` → `FuncId` last (folds the
-      `lower`-time minting so a call is never transiently `None`).
+- [x] Phase 5d-ii — drop `FunctionRef` from the call node. Every `node.func`
+      reader now resolves identity by `func_id` (a `store[id]` descriptor, or a
+      resolved builtin `FuncId` set — the value-graph builder classifies a call's
+      heap effect via `NirPackage::pure_builtin_callee_ids`). The field is removed
+      from the struct and every construction site, and `func_id` is flipped
+      `Option<FuncId>` → `FuncId`: a call is born resolved by type, so the
+      `assert_calls_resolved` guard is gone (the type system enforces it).
 
-Staging finding (2026-06-28): loop-time totality is cheapest as a *maintained*
-invariant (stamp at synthesis), not a *restored* one (re-scan). A per-pass
+Staging finding (2026-06-28): loop-time totality is cheapest as a _maintained_
+invariant (stamp at synthesis), not a _restored_ one (re-scan). A per-pass
 re-scan re-derives identity — the very smell this WEP removes — and a single
 post-loop re-scan still leaves calls `None` mid-loop, which blocks any in-loop
 `node.func` reader from migrating to `func_id`. Born-resolved-at-site is O(1) per

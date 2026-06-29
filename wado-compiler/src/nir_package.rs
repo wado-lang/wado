@@ -19,7 +19,6 @@ use crate::nir::{
     ClosureFunctor, FuncId, FunctionRef, NirEnum, NirFlags, NirFunction, NirGlobal, NirImport,
     NirStruct, NirTest, NirVariantDecl,
 };
-use crate::nir_arena::ExprKind;
 use crate::tir::{TypeId, TypeTable};
 use crate::wir_build::component_plan::ComponentPlan;
 use crate::world_registry::{self, WorldRegistry};
@@ -191,35 +190,6 @@ impl NirPackage {
         self.functions.push(Rc::new(RefCell::new(stub)));
         self.func_index.insert(key, id);
         id
-    }
-
-    /// Assert the born-resolved invariant: every call in every live body carries
-    /// a `func_id`. `lower` stamps in-package calls at construction and
-    /// every optimizer pass that synthesizes or retargets a call stamps it at the
-    /// synthesis site, so a call site is always an integer by the end of
-    /// `optimize` — no post-loop re-scan re-derives identity. Run once before
-    /// codegen as the load-bearing guard (cheap: O(calls), always on).
-    pub fn assert_calls_resolved(&self) {
-        for func_rc in &self.functions {
-            let func = func_rc.borrow();
-            let Some(body) = func.body.as_ref() else {
-                continue;
-            };
-            for expr in body.exprs.values() {
-                let resolved = match &expr.kind {
-                    ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => {
-                        func_id.is_some()
-                    }
-                    _ => true,
-                };
-                assert!(
-                    resolved,
-                    "unresolved call in `{}`: every synthesized call must stamp its func_id \
-                     at the synthesis site (born resolved)",
-                    func.name
-                );
-            }
-        }
     }
 
     /// The next free [`FuncId`] (one past the current maximum). Optimizer passes

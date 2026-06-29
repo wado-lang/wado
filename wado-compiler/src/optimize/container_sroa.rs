@@ -698,13 +698,8 @@ fn element_layout_of(
     None
 }
 
-fn recognize_init_operand(
-    body: &Body,
-    op: Operand,
-    sig: &MethodSig,
-) -> Option<CandidateInit> {
-    op.as_expr()
-        .and_then(|e| recognize_init(body, e, sig))
+fn recognize_init_operand(body: &Body, op: Operand, sig: &MethodSig) -> Option<CandidateInit> {
+    op.as_expr().and_then(|e| recognize_init(body, e, sig))
 }
 
 /// Recognize the supported initializer form for container-SROA candidates.
@@ -815,17 +810,14 @@ fn unwrap_builder_labeled_block(body: &Body, expr: ExprId) -> Option<ExprId> {
 /// Look up the `ListMethodKind` of a call target by signature, via the
 /// pre-built `SigKindIndex`. Returns `None` for non-method functions, non-List
 /// methods, or List methods whose signature didn't match any kind.
-fn list_method_kind(
-    func_id: Option<crate::nir::FuncId>,
-    sig: &MethodSig,
-) -> Option<ListMethodKind> {
-    sig.id_kinds.get(&func_id?).copied()
+fn list_method_kind(func_id: crate::nir::FuncId, sig: &MethodSig) -> Option<ListMethodKind> {
+    sig.id_kinds.get(&func_id).copied()
 }
 
 /// The callee's `SigKey` by its stamped `func_id` (the rewriter's catalog
-/// retarget key), or `None` for a non-`List`-method / unstamped callee.
-fn sig_key_of_id(sig: &MethodSig, func_id: Option<crate::nir::FuncId>) -> Option<SigKey> {
-    sig.id_sigkeys.get(&func_id?).cloned()
+/// retarget key), or `None` for a non-`List`-method callee.
+fn sig_key_of_id(sig: &MethodSig, func_id: crate::nir::FuncId) -> Option<SigKey> {
+    sig.id_sigkeys.get(&func_id).cloned()
 }
 
 /// Compute the set of safe (decomposable) candidate locals via whitelist escape
@@ -1587,7 +1579,8 @@ impl Rewriter<'_, '_> {
                 && let Some(rec_local) = receiver_local(engine.body, *receiver)
                 && ctx.decomposed.contains(&rec_local)
             {
-                sig_key_of_id(ctx.sig, *func_id).map(|sig| (rec_local, field_index, args[0].expr, sig))
+                sig_key_of_id(ctx.sig, *func_id)
+                    .map(|sig| (rec_local, field_index, args[0].expr, sig))
             } else {
                 None
             }
@@ -1670,7 +1663,7 @@ impl Rewriter<'_, '_> {
             engine.replace_expr_kind(
                 e,
                 ExprKind::MethodCall {
-                    func_id: Some(new_func_id),
+                    func_id: new_func_id,
                     receiver: new_receiver.into(),
                     type_args: Vec::new(),
                     args: Vec::new(),
@@ -1739,13 +1732,8 @@ fn build_with_capacity_call(
     span: Span,
     ctx: &RewriteCtx,
 ) -> ExprId {
-    let sig = find_sig_key_for_kind(
-        ctx.catalog,
-        ctx.sig,
-        elem_ty,
-        ListMethodKind::Constructor,
-    )
-    .expect("Constructor checked by required_methods_available");
+    let sig = find_sig_key_for_kind(ctx.catalog, ctx.sig, elem_ty, ListMethodKind::Constructor)
+        .expect("Constructor checked by required_methods_available");
     let (_, func_id) = ctx
         .catalog
         .get(&(elem_ty, sig))
@@ -1753,7 +1741,7 @@ fn build_with_capacity_call(
         .clone();
     engine.alloc_expr(
         ExprKind::Call {
-            func_id: Some(func_id),
+            func_id,
             type_args: Vec::new(),
             args: vec![ArenaCallArg {
                 expr: cap,
@@ -1786,7 +1774,7 @@ fn build_element_writer_call(
     let receiver = build_receiver(engine, field_local, field_name, arr_ty, true, span);
     engine.alloc_expr(
         ExprKind::MethodCall {
-            func_id: Some(func_id),
+            func_id,
             receiver: receiver.into(),
             type_args: Vec::new(),
             args: vec![ArenaCallArg {
@@ -1821,7 +1809,7 @@ fn build_index_writer_call(
     let receiver = build_receiver(engine, field_local, field_name, arr_ty, true, span);
     engine.alloc_expr(
         ExprKind::MethodCall {
-            func_id: Some(func_id),
+            func_id,
             receiver: receiver.into(),
             type_args: Vec::new(),
             args: vec![
@@ -1861,7 +1849,7 @@ fn build_index_reader_call(
     let receiver = build_receiver(engine, field_local, field_name, arr_ty, false, span);
     engine.alloc_expr(
         ExprKind::MethodCall {
-            func_id: Some(func_id),
+            func_id,
             receiver: receiver.into(),
             type_args: Vec::new(),
             args: vec![ArenaCallArg {

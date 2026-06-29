@@ -299,7 +299,7 @@ fn validate_call(
 ) {
     match &body.exprs[id].kind {
         ExprKind::Call { func_id, args, .. } => {
-            let Some(key) = *func_id else { return };
+            let key = *func_id;
             let Some(dead) = candidates.get(&key) else {
                 return;
             };
@@ -328,7 +328,7 @@ fn validate_call(
             args,
             ..
         } => {
-            let Some(key) = *func_id else { return };
+            let key = *func_id;
             let Some(dead) = candidates.get(&key) else {
                 return;
             };
@@ -432,7 +432,7 @@ fn rewrite_call(body: &mut Body, id: ExprId, confirmed: &IndexMap<FnKey, Vec<boo
         ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => *func_id,
         _ => return false,
     };
-    let Some(dead) = key.and_then(|k| confirmed.get(&k)).cloned() else {
+    let Some(dead) = confirmed.get(&key).cloned() else {
         return false;
     };
     match &mut body.exprs[id].kind {

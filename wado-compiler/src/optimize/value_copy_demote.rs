@@ -273,7 +273,7 @@ fn body_is_list_wrapper_copy(body: &Body, descriptors: &[FunctionRef]) -> bool {
 }
 
 /// Whether the call's stamped `func_id` resolves to `builtin::array_clone`.
-fn is_array_clone(func_id: Option<FuncId>, descriptors: &[FunctionRef]) -> bool {
+fn is_array_clone(func_id: FuncId, descriptors: &[FunctionRef]) -> bool {
     builtin_gname(super::dce::callee_descriptor(descriptors, func_id)).as_deref()
         == Some("builtin::array_clone")
 }
@@ -292,7 +292,7 @@ fn rewrite_array_clone_to_shallow(
             // Retarget to the shallow sibling by id; codegen reads the callee
             // descriptor from `func_id` (`store[id]`), so no node `FunctionRef`
             // rewrite is needed. The key ignores type args, so one id serves all.
-            *func_id = Some(array_clone_shallow_id);
+            *func_id = array_clone_shallow_id;
         }
     }
 }
@@ -306,10 +306,9 @@ fn rewrite_array_clone_to_shallow(
 fn wrapper_call_key(body: &Body, value: ExprId, wrappers: &IndexSet<FuncKey>) -> Option<FuncKey> {
     if let ExprKind::Call { func_id, args, .. } = &body.exprs[value].kind
         && args.len() == 1
-        && let Some(key) = *func_id
-        && wrappers.contains(&key)
+        && wrappers.contains(func_id)
     {
-        return Some(key);
+        return Some(*func_id);
     }
     None
 }
@@ -506,14 +505,13 @@ fn retarget_wrapper_call(
 ) {
     if let ExprKind::Call { func_id, args, .. } = &mut body.exprs[value].kind
         && args.len() == 1
-        && let Some(key) = *func_id
-        && wrappers.contains(&key)
-        && let Some(&shallow) = shallow_id.get(&key)
+        && wrappers.contains(func_id)
+        && let Some(&shallow) = shallow_id.get(func_id)
     {
         // Retarget to the shallow twin by id; codegen reads the callee descriptor
         // from `func_id` (`store[id]`), so no node `FunctionRef` rewrite is needed
         // (born resolved; the twin was interned in Phase 2a).
-        *func_id = Some(shallow);
+        *func_id = shallow;
     }
 }
 
@@ -557,7 +555,11 @@ impl Analyzer<'_> {
             return false; // recursion guard — conservative
         }
         let Some(func_rc) = self.funcs.get(key.index()) else {
-            crate::compiler_trace!("demote", "verify: callee {} not found in package", key.index());
+            crate::compiler_trace!(
+                "demote",
+                "verify: callee {} not found in package",
+                key.index()
+            );
             return false;
         };
         visiting.insert(key);
@@ -675,11 +677,9 @@ impl ElementClean<'_, '_> {
                     let recv = strip_refs(body, recv_e);
                     if is_local(body, recv, idx) {
                         // Receiver is the handle itself: `x.method()`.
-                        let safe = match callee.and_then(|k| self.analyzer.callee_mutates_self(k)) {
+                        let safe = match self.analyzer.callee_mutates_self(callee) {
                             Some(false) => true, // &self
-                            Some(true) => {
-                                callee.is_some_and(|k| self.analyzer.is_method_element_immutable(k))
-                            }
+                            Some(true) => self.analyzer.is_method_element_immutable(callee),
                             None => false,
                         };
                         if !safe {
@@ -695,7 +695,7 @@ impl ElementClean<'_, '_> {
                         // receiver. (`x[i]` lowers to an `List::index` method
                         // call, not a bare `Index`, so a structural root check
                         // is not enough — match on the handle appearing at all.)
-                        if callee.and_then(|k| self.analyzer.callee_mutates_self(k)) != Some(false) {
+                        if self.analyzer.callee_mutates_self(callee) != Some(false) {
                             self.clean = false;
                             return;
                         }
@@ -925,7 +925,13 @@ impl ElementImmutable<'_, '_, '_> {
                 if let Some(ve) = value.as_expr() {
                     self.visit_expr(body, ve);
                     if self.clean
-                        && is_self_derived(body, ve, &self.tainted, self.analyzer.type_table, self.analyzer.descriptors)
+                        && is_self_derived(
+                            body,
+                            ve,
+                            &self.tainted,
+                            self.analyzer.type_table,
+                            self.analyzer.descriptors,
+                        )
                     {
                         self.tainted.insert(local_index);
                     }
@@ -975,7 +981,13 @@ impl ElementImmutable<'_, '_, '_> {
                 expr: inner,
             } => {
                 let inner = *inner;
-                if is_self_derived_operand(body, inner, &self.tainted, tt, self.analyzer.descriptors) {
+                if is_self_derived_operand(
+                    body,
+                    inner,
+                    &self.tainted,
+                    tt,
+                    self.analyzer.descriptors,
+                ) {
                     crate::compiler_trace!("demote", "verify reject: &mut of self-derived");
                     self.clean = false;
                     return;
@@ -993,14 +1005,23 @@ impl ElementImmutable<'_, '_, '_> {
                         let base = *base;
                         // A promoted base is never self-derived, so the guard
                         // short-circuits before the node lookup.
-                        is_self_derived_operand(body, base, &self.tainted, tt, self.analyzer.descriptors)
-                            && base.as_expr().is_some_and(|be| {
-                                !matches!(&body.exprs[be].kind, ExprKind::Local { index: 0, .. })
-                            })
+                        is_self_derived_operand(
+                            body,
+                            base,
+                            &self.tainted,
+                            tt,
+                            self.analyzer.descriptors,
+                        ) && base.as_expr().is_some_and(|be| {
+                            !matches!(&body.exprs[be].kind, ExprKind::Local { index: 0, .. })
+                        })
                     }
-                    ExprKind::Index { expr: base, .. } => {
-                        is_self_derived_operand(body, *base, &self.tainted, tt, self.analyzer.descriptors)
-                    }
+                    ExprKind::Index { expr: base, .. } => is_self_derived_operand(
+                        body,
+                        *base,
+                        &self.tainted,
+                        tt,
+                        self.analyzer.descriptors,
+                    ),
                     _ => false,
                 };
                 if bad {
@@ -1029,19 +1050,23 @@ impl ElementImmutable<'_, '_, '_> {
                 // unless the callee is known `&self` (cannot mutate) or a
                 // verified element-immutable `&mut self` method. An
                 // unresolvable callee is conservatively unsafe.
-                if is_self_derived_operand(body, receiver, &self.tainted, tt, self.analyzer.descriptors) {
-                    let ok = match callee.and_then(|k| self.analyzer.callee_mutates_self(k)) {
+                if is_self_derived_operand(
+                    body,
+                    receiver,
+                    &self.tainted,
+                    tt,
+                    self.analyzer.descriptors,
+                ) {
+                    let ok = match self.analyzer.callee_mutates_self(callee) {
                         Some(false) => true,
-                        Some(true) => {
-                            callee.is_some_and(|k| self.analyzer.verify(k, self.visiting))
-                        }
+                        Some(true) => self.analyzer.verify(callee, self.visiting),
                         None => false,
                     };
                     if !ok {
                         crate::compiler_trace!(
                             "demote",
                             "verify reject: unsafe call on self-derived recv {}",
-                            callee.map_or(usize::MAX, |k| k.index())
+                            callee.index()
                         );
                         self.clean = false;
                         return;
@@ -1059,7 +1084,7 @@ impl ElementImmutable<'_, '_, '_> {
                         crate::compiler_trace!(
                             "demote",
                             "verify reject: bad arg to method {}",
-                            callee.map_or(usize::MAX, |k| k.index())
+                            callee.index()
                         );
                         return;
                     }
@@ -1110,7 +1135,13 @@ impl ElementImmutable<'_, '_, '_> {
                 // its (unverified) body with access to `self`'s elements.
                 let callee = *callee;
                 let args = args.clone();
-                if is_self_derived_operand(body, callee, &self.tainted, tt, self.analyzer.descriptors) {
+                if is_self_derived_operand(
+                    body,
+                    callee,
+                    &self.tainted,
+                    tt,
+                    self.analyzer.descriptors,
+                ) {
                     crate::compiler_trace!(
                         "demote",
                         "verify reject: indirect call of self-capturing closure"
@@ -1155,7 +1186,13 @@ impl ElementImmutable<'_, '_, '_> {
             self.visit_expr(body, arg);
             return;
         }
-        if is_self_derived(body, arg, &self.tainted, self.analyzer.type_table, self.analyzer.descriptors) {
+        if is_self_derived(
+            body,
+            arg,
+            &self.tainted,
+            self.analyzer.type_table,
+            self.analyzer.descriptors,
+        ) {
             self.clean = false;
             return;
         }
@@ -1211,7 +1248,9 @@ fn is_self_derived(
         ExprKind::FieldAccess { expr: inner, .. }
         | ExprKind::Index { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::Unary { expr: inner, .. } => is_self_derived_op(body, *inner, tainted, tt, descriptors),
+        | ExprKind::Unary { expr: inner, .. } => {
+            is_self_derived_op(body, *inner, tainted, tt, descriptors)
+        }
         ExprKind::Call { func_id, args, .. } => {
             // `array_get(spine, _)` yields an element of the spine; other
             // array builtins (`array_clone`, `array_new`) produce fresh

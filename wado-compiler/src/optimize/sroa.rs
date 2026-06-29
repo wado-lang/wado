@@ -863,17 +863,15 @@ fn soft_expr(
 }
 
 fn callee_stores_param_at(
-    func_id: Option<crate::nir::FuncId>,
+    func_id: crate::nir::FuncId,
     param_index: usize,
     stores_lookup: &StoresLookup,
 ) -> bool {
     // Born-resolved `func_id` names the callee directly — no entry-point module
     // remap needed (it resolved the real target at `lower`).
-    func_id.is_some_and(|id| {
-        stores_lookup
-            .get(&id)
-            .is_some_and(|stored_indices| stored_indices.contains(&param_index))
-    })
+    stores_lookup
+        .get(&func_id)
+        .is_some_and(|stored_indices| stored_indices.contains(&param_index))
 }
 
 // -----------------------------------------------------------------------

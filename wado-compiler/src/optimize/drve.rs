@@ -232,7 +232,7 @@ impl ValidateCtx<'_> {
             let e = *e;
             let (call_key, scan): (Option<FnKey>, Vec<ExprId>) = match &body.exprs[e].kind {
                 ExprKind::Call { func_id, args, .. } => (
-                    *func_id,
+                    Some(*func_id),
                     args.iter().filter_map(|a| a.expr.as_expr()).collect(),
                 ),
                 ExprKind::MethodCall {
@@ -243,7 +243,7 @@ impl ValidateCtx<'_> {
                 } => {
                     let mut scan: Vec<ExprId> = receiver.as_expr().into_iter().collect();
                     scan.extend(args.iter().filter_map(|a| a.expr.as_expr()));
-                    (*func_id, scan)
+                    (Some(*func_id), scan)
                 }
                 // Not a top-level call: the whole expression is a use.
                 _ => (None, vec![e]),
@@ -277,10 +277,9 @@ impl ValidateCtx<'_> {
         if let NodeRef::Expr(id) = node
             && let ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } =
                 &body.exprs[id].kind
-            && let Some(key) = *func_id
-            && self.candidates.contains(&key)
+            && self.candidates.contains(func_id)
         {
-            self.rejected.insert(key);
+            self.rejected.insert(*func_id);
         }
         let mut kids = Vec::new();
         body.for_each_child(node, |c| kids.push(c));
@@ -360,7 +359,7 @@ fn retype_calls(body: &mut Body, confirmed: &IndexSet<FnKey>) -> bool {
         if let NodeRef::Expr(id) = node
             && let ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } =
                 &body.exprs[id].kind
-            && func_id.is_some_and(|k| confirmed.contains(&k))
+            && confirmed.contains(func_id)
         {
             targets.push(id);
         }

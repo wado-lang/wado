@@ -97,8 +97,8 @@ impl TmplCalleeIds {
         }
     }
 
-    fn is(set: &IndexSet<FuncId>, func_id: Option<FuncId>) -> bool {
-        func_id.is_some_and(|id| set.contains(&id))
+    fn is(set: &IndexSet<FuncId>, func_id: FuncId) -> bool {
+        set.contains(&func_id)
     }
 }
 
@@ -548,7 +548,14 @@ fn transform_stmts_in_block(
     callee_ids: &TmplCalleeIds,
 ) {
     for s in engine.body.blocks[block].stmts.clone() {
-        transform_stmt(engine, s, escaping_locals, hoist_stmts, type_table, callee_ids);
+        transform_stmt(
+            engine,
+            s,
+            escaping_locals,
+            hoist_stmts,
+            type_table,
+            callee_ids,
+        );
     }
 }
 
@@ -597,7 +604,14 @@ fn transform_stmt(
             return;
         }
         // Recurse into the value expression
-        transform_expr(engine, ve, escaping_locals, hoist_stmts, type_table, callee_ids);
+        transform_expr(
+            engine,
+            ve,
+            escaping_locals,
+            hoist_stmts,
+            type_table,
+            callee_ids,
+        );
         return;
     }
 
@@ -623,19 +637,54 @@ fn transform_stmt(
     };
     match shape {
         Shape::Expr(e) | Shape::Break(e) => {
-            transform_expr(engine, e, escaping_locals, hoist_stmts, type_table, callee_ids);
+            transform_expr(
+                engine,
+                e,
+                escaping_locals,
+                hoist_stmts,
+                type_table,
+                callee_ids,
+            );
         }
         Shape::If(cond, tb, eb) => {
             if let Some(cond) = cond {
-                transform_expr(engine, cond, escaping_locals, hoist_stmts, type_table, callee_ids);
+                transform_expr(
+                    engine,
+                    cond,
+                    escaping_locals,
+                    hoist_stmts,
+                    type_table,
+                    callee_ids,
+                );
             }
-            transform_stmts_in_block(engine, tb, escaping_locals, hoist_stmts, type_table, callee_ids);
+            transform_stmts_in_block(
+                engine,
+                tb,
+                escaping_locals,
+                hoist_stmts,
+                type_table,
+                callee_ids,
+            );
             if let Some(eb) = eb {
-                transform_stmts_in_block(engine, eb, escaping_locals, hoist_stmts, type_table, callee_ids);
+                transform_stmts_in_block(
+                    engine,
+                    eb,
+                    escaping_locals,
+                    hoist_stmts,
+                    type_table,
+                    callee_ids,
+                );
             }
         }
         Shape::Labeled(b) => {
-            transform_stmts_in_block(engine, b, escaping_locals, hoist_stmts, type_table, callee_ids);
+            transform_stmts_in_block(
+                engine,
+                b,
+                escaping_locals,
+                hoist_stmts,
+                type_table,
+                callee_ids,
+            );
         }
         Shape::None => {}
     }
@@ -691,20 +740,55 @@ fn transform_expr(
     match walk {
         Walk::Exprs(v) => {
             for id in v {
-                transform_expr(engine, id, escaping_locals, hoist_stmts, type_table, callee_ids);
+                transform_expr(
+                    engine,
+                    id,
+                    escaping_locals,
+                    hoist_stmts,
+                    type_table,
+                    callee_ids,
+                );
             }
         }
         Walk::CondBlocks(cond, tb, eb) => {
             if let Some(cond) = cond {
-                transform_expr(engine, cond, escaping_locals, hoist_stmts, type_table, callee_ids);
+                transform_expr(
+                    engine,
+                    cond,
+                    escaping_locals,
+                    hoist_stmts,
+                    type_table,
+                    callee_ids,
+                );
             }
-            transform_stmts_in_block(engine, tb, escaping_locals, hoist_stmts, type_table, callee_ids);
+            transform_stmts_in_block(
+                engine,
+                tb,
+                escaping_locals,
+                hoist_stmts,
+                type_table,
+                callee_ids,
+            );
             if let Some(eb) = eb {
-                transform_stmts_in_block(engine, eb, escaping_locals, hoist_stmts, type_table, callee_ids);
+                transform_stmts_in_block(
+                    engine,
+                    eb,
+                    escaping_locals,
+                    hoist_stmts,
+                    type_table,
+                    callee_ids,
+                );
             }
         }
         Walk::Block(b) => {
-            transform_stmts_in_block(engine, b, escaping_locals, hoist_stmts, type_table, callee_ids);
+            transform_stmts_in_block(
+                engine,
+                b,
+                escaping_locals,
+                hoist_stmts,
+                type_table,
+                callee_ids,
+            );
         }
         Walk::None => {}
     }
@@ -1016,7 +1100,12 @@ fn extract_formatter_fields(
             struct_type,
         } => {
             let buf_field = fields.iter().find(|f| f.name == "buf")?;
-            if !buf_field_references_local_operand(body, buf_field.value, hoisted_buf_index, callee_ids) {
+            if !buf_field_references_local_operand(
+                body,
+                buf_field.value,
+                hoisted_buf_index,
+                callee_ids,
+            ) {
                 return None;
             }
             Some(FmtFields {
@@ -1335,7 +1424,8 @@ fn transform_tmpl_block(
     // After the String rename above, the block may contain one or more Formatter
     // creations (direct struct literals or inlined Formatter::new LabeledBlocks).
     // Each distinct Formatter is hoisted to its own local before the loop.
-    let fmt_candidates = extract_fmt_candidates(engine, block, buf_local_index, type_table, callee_ids);
+    let fmt_candidates =
+        extract_fmt_candidates(engine, block, buf_local_index, type_table, callee_ids);
     if !fmt_candidates.is_empty() {
         transform_fmts_in_tmpl_block(engine, block, &fmt_candidates, hoist_stmts);
     }
@@ -1706,9 +1796,10 @@ mod tests {
     /// alias of it.
     fn call_with(body: &mut Body, arg: ExprId) -> ExprId {
         use crate::nir_arena::ArenaCallArg;
+        use cranelift_entity::EntityRef;
         body.exprs.push(ExprNode {
             kind: ExprKind::Call {
-                func_id: None,
+                func_id: crate::nir::FuncId::new(0),
                 type_args: vec![],
                 args: vec![ArenaCallArg {
                     expr: arg.into(),

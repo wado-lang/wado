@@ -3014,7 +3014,7 @@ fn is_immut_ref_arg(body: &Body, e: ExprId, type_table: &TypeTable) -> bool {
 fn add_sync_fields_for_arg_operand(
     body: &Body,
     op: Operand,
-    callee_id: Option<crate::nir::FuncId>,
+    callee_id: crate::nir::FuncId,
     param_position: u32,
     candidates: &[ScalarizeCandidate],
     type_table: &TypeTable,
@@ -3042,7 +3042,7 @@ fn add_sync_fields_for_arg_operand(
 fn add_sync_fields_for_arg(
     body: &Body,
     arg_expr: ExprId,
-    callee_id: Option<crate::nir::FuncId>,
+    callee_id: crate::nir::FuncId,
     param_position: u32,
     candidates: &[ScalarizeCandidate],
     type_table: &TypeTable,
@@ -3058,7 +3058,7 @@ fn add_sync_fields_for_arg(
         return;
     }
 
-    let callee = callee_id.and_then(|id| cache.get(&id));
+    let callee = cache.get(&callee_id);
 
     // If the callee's parameter at this position is typed `&T` (not
     // `&mut T`), the callee cannot mutate through the reference — re-read

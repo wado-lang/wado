@@ -804,7 +804,7 @@ impl FunctionTranslator<'_, '_> {
             monomorph_info: None,
             method_info: None,
         };
-        let func_id = Some(self.base.interner.borrow_mut().resolve(&func));
+        let func_id = self.base.interner.borrow_mut().resolve(&func);
         self.alloc_expr(
             ExprKind::Call {
                 func_id,
@@ -1150,7 +1150,7 @@ impl FunctionTranslator<'_, '_> {
                 monomorph_info: None,
                 method_info: Some(call_method_info),
             };
-            let func_id = Some(self.base.interner.borrow_mut().resolve(&func));
+            let func_id = self.base.interner.borrow_mut().resolve(&func);
             return self.alloc_expr(
                 ExprKind::MethodCall {
                     func_id,
@@ -1300,7 +1300,7 @@ impl FunctionTranslator<'_, '_> {
                 ..
             } => {
                 let func = convert_function_ref(func);
-                let func_id = Some(self.base.interner.borrow_mut().resolve(&func));
+                let func_id = self.base.interner.borrow_mut().resolve(&func);
                 ExprKind::MethodCall {
                     func_id,
                     receiver: self.convert_operand(receiver),
@@ -1484,7 +1484,7 @@ impl FunctionTranslator<'_, '_> {
                 monomorph_info: None,
                 method_info: None,
             };
-            let func_id = Some(self.base.interner.borrow_mut().resolve(&func));
+            let func_id = self.base.interner.borrow_mut().resolve(&func);
             return ExprKind::Call {
                 func_id,
                 type_args: vec![],
@@ -1492,7 +1492,7 @@ impl FunctionTranslator<'_, '_> {
             };
         }
         let func = convert_function_ref(func);
-        let func_id = Some(self.base.interner.borrow_mut().resolve(&func));
+        let func_id = self.base.interner.borrow_mut().resolve(&func);
         ExprKind::Call {
             func_id,
             type_args: type_args.to_vec(),

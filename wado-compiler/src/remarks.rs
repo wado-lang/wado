@@ -105,7 +105,7 @@ impl Collector<'_> {
         let ExprKind::Call { func_id, args, .. } = &node.kind else {
             return None;
         };
-        let func = self.callees.get(func_id.as_ref()?.index())?;
+        let func = self.callees.get(func_id.index())?;
         // Deep `$value_copy$T` helper call.
         if args.len() == 1
             && let Some(&type_id) = self
