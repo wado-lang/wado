@@ -30,7 +30,7 @@
 //!   with `Opaque`.
 
 use crate::hashmap::IndexMap;
-use crate::nir::{FunctionRef, NirBinaryOp, NirUnaryOp};
+use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
@@ -251,6 +251,7 @@ pub fn build(
     untrackable: &crate::hashmap::IndexSet<u32>,
     mut_escaped: &crate::hashmap::IndexSet<u32>,
     pure_calls: &crate::hashmap::IndexSet<ExprId>,
+    pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
     type_table: Option<&crate::tir::TypeTable>,
 ) -> ValueGraphBuild {
     // Build into the body's own pool: take it out as the seed (so a promoted
@@ -261,6 +262,7 @@ pub fn build(
     let (pool, loop_entry_values) = {
         let mut b = Builder::new(&*body, aliased, untrackable, mut_escaped, type_table, seed);
         b.pure_calls.clone_from(pure_calls);
+        b.pure_builtin_callees.clone_from(pure_builtin_callees);
         b.seed_params(param_locals);
         b.walk_block(body.root);
         (b.pool, b.loop_entry_values)
@@ -298,6 +300,7 @@ pub(crate) fn build_scoped(
     untrackable: &crate::hashmap::IndexSet<u32>,
     mut_escaped: &crate::hashmap::IndexSet<u32>,
     type_table: Option<&crate::tir::TypeTable>,
+    pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
     scratch: &mut ValuePool,
     heap_seed: Option<&HeapSnapshot>,
     live_base: u32,
@@ -305,6 +308,7 @@ pub(crate) fn build_scoped(
     let scoped: Vec<(ExprId, ValueId)> = {
         let pool = std::mem::take(scratch);
         let mut b = Builder::new(&*body, aliased, untrackable, mut_escaped, type_table, pool);
+        b.pure_builtin_callees.clone_from(pure_builtin_callees);
         b.current_value.clone_from(seed);
         // Seed the heap with the caller's version state at the call site so a
         // spliced field read carries the version a fresh whole-function build
@@ -477,6 +481,11 @@ struct Builder<'a> {
     /// `ExprId` indices of calls that mutate no caller local. See
     /// [`BuildConfig::pure_calls`].
     pure_calls: crate::hashmap::IndexSet<ExprId>,
+    /// [`FuncId`]s of pure builtin intrinsics (`array_get`, `array_len`, …): a
+    /// call to one writes no heap, so a loop body that only calls such
+    /// intrinsics does not invalidate forwarded field versions. Empty is
+    /// conservative (every call is a heap write). See [`is_builtin_pure_call`].
+    pure_builtin_callees: crate::hashmap::IndexSet<FuncId>,
 }
 
 impl<'a> Builder<'a> {
@@ -503,6 +512,7 @@ impl<'a> Builder<'a> {
             loop_entry_values: IndexMap::default(),
             call_site_heap: IndexMap::default(),
             pure_calls: crate::hashmap::IndexSet::default(),
+            pure_builtin_callees: crate::hashmap::IndexSet::default(),
         }
     }
 
@@ -897,7 +907,11 @@ impl<'a> Builder<'a> {
                     // Invalidate only what the rhs writes, not a blanket
                     // `bump_all`: a pure rhs leaves unrelated fields intact.
                     if let Some(re) = right.as_expr() {
-                        let eff = collect_node_heap_effects(self.body, NodeRef::Expr(re));
+                        let eff = collect_node_heap_effects(
+                            self.body,
+                            &self.pure_builtin_callees,
+                            NodeRef::Expr(re),
+                        );
                         self.apply_loop_heap_effects(&eff);
                     }
                     rhs
@@ -1765,7 +1779,8 @@ impl<'a> Builder<'a> {
     fn walk_loop(&mut self, body_block: crate::nir_arena::BlockId) {
         let mut writes: crate::hashmap::IndexSet<u32> = crate::hashmap::IndexSet::default();
         collect_writes_in_block(self.body, body_block, &mut writes);
-        let heap_effects = collect_loop_heap_effects(self.body, body_block);
+        let heap_effects =
+            collect_loop_heap_effects(self.body, &self.pure_builtin_callees, body_block);
         // Snapshot before the reassigned-local opaques below overwrite the
         // written locals' pre-loop values.
         self.loop_entry_values
@@ -1903,11 +1918,16 @@ struct LoopHeapEffects {
     has_external_writes: bool,
 }
 
-/// True when `func` is a builtin / monomorphized-builtin intrinsic that
+/// True when `func_id` is a builtin / monomorphized-builtin intrinsic that
 /// operates below the struct-field layer (`array_set`, `memory_grow`, …) and
-/// so never mutates a tracked `(root, field)` slot.
-fn is_builtin_pure_call(func: &FunctionRef) -> bool {
-    func.builtin_name().is_some() || func.monomorphized_builtin_name().is_some()
+/// so never mutates a tracked `(root, field)` slot. Classified by the callee's
+/// `func_id` (the call node carries no `FunctionRef`); an empty set is
+/// conservative (treat every call as an external write).
+fn is_builtin_pure_call(
+    pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
+    func_id: Option<FuncId>,
+) -> bool {
+    func_id.is_some_and(|id| pure_builtin_callees.contains(&id))
 }
 
 /// Walk down a `local.f.g.…` field chain to its rooted local index, or `None`
@@ -1921,31 +1941,49 @@ fn root_local_of(body: &Body, op: Operand) -> Option<u32> {
     }
 }
 
-fn collect_loop_heap_effects(body: &Body, block: BlockId) -> LoopHeapEffects {
-    collect_node_heap_effects(body, NodeRef::Block(block))
+fn collect_loop_heap_effects(
+    body: &Body,
+    pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
+    block: BlockId,
+) -> LoopHeapEffects {
+    collect_node_heap_effects(body, pure_builtin_callees, NodeRef::Block(block))
 }
 
 /// The heap-write effects of a node's subtree, so a caller can invalidate
 /// exactly what it writes rather than `bump_all`. Used by `walk_loop` (body
 /// block) and the short-circuit arm (conditional rhs).
-fn collect_node_heap_effects(body: &Body, node: NodeRef) -> LoopHeapEffects {
+fn collect_node_heap_effects(
+    body: &Body,
+    pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
+    node: NodeRef,
+) -> LoopHeapEffects {
     let mut eff = LoopHeapEffects::default();
-    collect_loop_heap_node(body, node, &mut eff);
+    collect_loop_heap_node(body, pure_builtin_callees, node, &mut eff);
     eff
 }
 
-fn collect_loop_heap_node(body: &Body, node: NodeRef, eff: &mut LoopHeapEffects) {
+fn collect_loop_heap_node(
+    body: &Body,
+    pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
+    node: NodeRef,
+    eff: &mut LoopHeapEffects,
+) {
     if let NodeRef::Expr(e) = node {
-        record_loop_heap_write(body, e, eff);
+        record_loop_heap_write(body, pure_builtin_callees, e, eff);
     }
     let mut kids = Vec::new();
     body.for_each_child(node, |c| kids.push(c));
     for c in kids {
-        collect_loop_heap_node(body, c, eff);
+        collect_loop_heap_node(body, pure_builtin_callees, c, eff);
     }
 }
 
-fn record_loop_heap_write(body: &Body, e: ExprId, eff: &mut LoopHeapEffects) {
+fn record_loop_heap_write(
+    body: &Body,
+    pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
+    e: ExprId,
+    eff: &mut LoopHeapEffects,
+) {
     match &body.exprs[e].kind {
         ExprKind::Assign { target, .. } => match &body.exprs[*target].kind {
             // Reassigned locals are handled by `walk_loop`'s opaque reassign.
@@ -1989,7 +2027,7 @@ fn record_loop_heap_write(body: &Body, e: ExprId, eff: &mut LoopHeapEffects) {
             },
             _ => eff.has_external_writes = true,
         },
-        ExprKind::Call { func, args, .. } => {
+        ExprKind::Call { func_id, args, .. } => {
             for arg in args {
                 if arg.is_mut
                     && let Some(ExprKind::Local { index, .. }) =
@@ -1998,7 +2036,7 @@ fn record_loop_heap_write(body: &Body, e: ExprId, eff: &mut LoopHeapEffects) {
                     eff.mut_borrowed.insert(*index);
                 }
             }
-            if !is_builtin_pure_call(func) {
+            if !is_builtin_pure_call(pure_builtin_callees, *func_id) {
                 eff.has_external_writes = true;
             }
         }

@@ -1935,15 +1935,13 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
             }
         }
         ExprKind::Call {
-            func,
             func_id,
             type_args,
             args,
         } => {
-            let (func, func_id, type_args) = (func.clone(), *func_id, type_args.clone());
+            let (func_id, type_args) = (*func_id, type_args.clone());
             let arg_data: Vec<(Operand, bool)> = args.iter().map(|a| (a.expr, a.is_mut)).collect();
             ExprKind::Call {
-                func,
                 func_id,
                 type_args,
                 args: arg_data
@@ -1967,17 +1965,14 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
         }
         ExprKind::MethodCall {
             receiver,
-            func,
             func_id,
             type_args,
             args,
         } => {
-            let (rcv, func, func_id, type_args) =
-                (*receiver, func.clone(), *func_id, type_args.clone());
+            let (rcv, func_id, type_args) = (*receiver, *func_id, type_args.clone());
             let arg_data: Vec<(Operand, bool)> = args.iter().map(|a| (a.expr, a.is_mut)).collect();
             ExprKind::MethodCall {
                 receiver: splice_operand(caller, callee, rcv, ctx),
-                func,
                 func_id,
                 type_args,
                 args: arg_data

@@ -80,6 +80,7 @@ pub(super) fn eliminate_post_promote(project: &mut crate::nir_package::NirPackag
     let first_param_types = super::alias::first_param_types(project);
     let call_immutability = super::alias::CallImmutability::new(project, &type_table);
     let panic_ids = resolve_panic_ids(project);
+    let pure_builtin_callees = project.pure_builtin_callee_ids();
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
@@ -111,6 +112,7 @@ pub(super) fn eliminate_post_promote(project: &mut crate::nir_package::NirPackag
         engine.set_value_graph_type_table(&type_table);
         engine.set_param_locals(param_locals);
         engine.set_panic_callee_ids(&panic_ids);
+        engine.set_pure_builtin_callees(&pure_builtin_callees);
         changed |= eliminate_at_root(&mut engine);
     }
     changed

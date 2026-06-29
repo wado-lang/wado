@@ -1060,10 +1060,11 @@ impl FunctionTranslator<'_, '_> {
         // expects. `MethodCall` lowers to a single `WirInstr::Call` after
         // receiver / arg translation, so it's interchangeable with `Call`
         // for the multi-value-bind purpose.
-        let func = match &self.body.exprs[value].kind {
-            ExprKind::Call { func, .. } | ExprKind::MethodCall { func, .. } => func,
+        let func_id = match &self.body.exprs[value].kind {
+            ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => *func_id,
             _ => return None,
         };
+        let func = self.callee_descriptor(func_id);
         let key = (func.name.clone(), func.module_source.clone());
         let fields = self.ctx.multi_value_return_funcs.get(&key)?.clone();
 
@@ -2094,15 +2095,10 @@ impl FunctionTranslator<'_, '_> {
                 }
             },
 
-            ExprKind::Call {
-                func,
-                func_id,
-                args,
-                ..
-            } => {
-                // Read the callee descriptor from the function record (Phase 5);
-                // the node's own `FunctionRef` is used only as the extern fallback.
-                let func = &self.callee_descriptor(func, *func_id);
+            ExprKind::Call { func_id, args, .. } => {
+                // The callee descriptor comes from the function record by
+                // `func_id` (Phase 5); the call node carries no `FunctionRef`.
+                let func = &self.callee_descriptor(*func_id);
                 // Check for instruction-builtins first
                 let builtin = func
                     .builtin_name()
@@ -2151,14 +2147,14 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
             ExprKind::MethodCall {
-                func,
                 func_id,
                 receiver,
                 args,
                 ..
             } => {
-                // Read the callee descriptor from the function record (Phase 5).
-                let func = &self.callee_descriptor(func, *func_id);
+                // The callee descriptor comes from the function record by
+                // `func_id` (Phase 5); the call node carries no `FunctionRef`.
+                let func = &self.callee_descriptor(*func_id);
                 // Canonical resource method dispatch: uses #[canonical("...")] from types.wado
                 if let Some(re) = receiver.as_expr()
                     && let Some(instr) =

@@ -87,6 +87,7 @@ pub(super) fn run_peephole(
     // the flow-sensitive folds to the standalone `const_folding` walker.
     let type_table = project.type_table.borrow();
     let callees = build_callee_map(project);
+    let pure_builtin_callees = project.pure_builtin_callee_ids();
     let const_fold_rule = ConstFoldRule::new(&type_table, &callees);
     let branch_prune_rule = BranchPruneRule::new(PruneMode::Fixpoint);
     let match_rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
@@ -170,6 +171,7 @@ pub(super) fn run_peephole(
         // `MatchToSwitchRule` materializes promoted constant scrutinees / arm
         // bodies; the extractor reads `prim` from the type table for literal repr.
         engine.set_value_graph_type_table(&type_table);
+        engine.set_pure_builtin_callees(&pure_builtin_callees);
         engine.run(&rules)
     })
 }

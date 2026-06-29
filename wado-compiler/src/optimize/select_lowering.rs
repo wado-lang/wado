@@ -15,7 +15,7 @@
 //! produces the same result the old top-down visitor did.
 
 use crate::module_source::ModuleSource;
-use crate::nir::{FunctionRef, MonomorphInfo, NirBinaryOp, NirFunction, NirUnaryOp};
+use crate::nir::{FunctionRef, NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
@@ -81,22 +81,10 @@ impl Rule for SelectLoweringRule<'_> {
             return false;
         };
 
-        let func = FunctionRef {
-            module_source: ModuleSource::builtin(),
-            name: "select".to_string(),
-            monomorph_info: Some(MonomorphInfo {
-                generic_name: "select".to_string(),
-                impl_type_args: vec![result_type],
-                method_type_args: vec![],
-                is_blanket: false,
-            }),
-            method_info: None,
-        };
         engine.replace_expr_kind(
             id,
             ExprKind::Call {
                 func_id: Some(self.select_id),
-                func,
                 type_args: vec![result_type],
                 args: vec![
                     ArenaCallArg {

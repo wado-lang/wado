@@ -103,12 +103,13 @@ impl FunctionTranslator<'_, '_> {
 
     /// Resolve a call target, preferring the stamped canonical `func_id` (a
     /// direct id→`WirFuncId` lookup, no name reconstruction) and falling back to
-    /// [`Self::resolve_function_ref`] for an extern / unstamped callee. The
-    /// fast-path yields the same `WirFuncId` the name path would for an
-    /// in-package callee, so this is behavior-preserving.
+    /// [`Self::resolve_function_ref`] on the callee `descriptor` for an imported
+    /// callee — imports are not entered into `funcid_map`, so the name path
+    /// resolves them. `descriptor` is the record-derived [`Self::callee_descriptor`],
+    /// not a node field (the call node carries no `FunctionRef`).
     pub(super) fn resolve_call(
         &self,
-        func: &crate::nir::FunctionRef,
+        descriptor: &crate::nir::FunctionRef,
         func_id: Option<crate::nir::FuncId>,
     ) -> Option<crate::wir::WirFuncId> {
         if let Some(id) = func_id
@@ -116,29 +117,22 @@ impl FunctionTranslator<'_, '_> {
         {
             return Some(wid.clone());
         }
-        self.resolve_function_ref(func)
+        self.resolve_function_ref(descriptor)
     }
 
     /// The callee's identity descriptor (`module_source`, `name`,
     /// `monomorph_info`, `method_info`) used for builtin / canonical dispatch and
     /// diagnostics. Reads it from the function record by `func_id` — the single
-    /// source of truth (`FuncId == store position`, Phase 4) — and falls back to
-    /// the call node's own `FunctionRef` for an extern / unstamped callee. The
-    /// record's descriptor equals the stamped node `FunctionRef` for an in-package
-    /// callee, so this is behavior-preserving; it lets Phase 5 drop the node copy.
+    /// source of truth (`FuncId == store position`, Phase 4), and the sole callee
+    /// reference now that the call node carries no `FunctionRef`.
     pub(super) fn callee_descriptor(
         &self,
-        func: &crate::nir::FunctionRef,
         func_id: Option<crate::nir::FuncId>,
     ) -> crate::nir::FunctionRef {
         use cranelift_entity::EntityRef;
-        if let Some(id) = func_id
-            && let Some(rec) = self.ctx.package.functions.get(id.index())
-        {
-            let rec = rec.borrow();
-            return crate::nir::FunctionRef::from_resolved(&rec, rec.module_source.clone());
-        }
-        func.clone()
+        let id = func_id.expect("every NIR call is born resolved with a func_id");
+        let rec = self.ctx.package.functions[id.index()].borrow();
+        crate::nir::FunctionRef::from_resolved(&rec, rec.module_source.clone())
     }
 
     /// Try to resolve a method call on a newtype by substituting the base type name.

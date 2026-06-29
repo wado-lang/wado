@@ -451,7 +451,6 @@ fn rewrite_call(body: &mut Body, id: ExprId, confirmed: &IndexMap<FnKey, Vec<boo
                 // surviving_args)`. The receiver was verified pure, so dropping
                 // it (along with the dead `args`) is observation-free.
                 let ExprKind::MethodCall {
-                    func,
                     func_id,
                     type_args,
                     args,
@@ -470,7 +469,6 @@ fn rewrite_call(body: &mut Body, id: ExprId, confirmed: &IndexMap<FnKey, Vec<boo
                 }
                 body.exprs[id].kind = ExprKind::Call {
                     func_id,
-                    func,
                     type_args,
                     args: new_args,
                 };

@@ -132,6 +132,12 @@ pub struct Engine<'a> {
     /// default) means "no callee is a panic". Set via
     /// [`Engine::set_panic_callee_ids`].
     panic_callee_ids: Option<&'a IndexSet<crate::nir::FuncId>>,
+    /// [`FuncId`]s of pure builtin intrinsics (`array_get`, `array_len`, …),
+    /// supplied by a value-graph pass so the builder knows such a call writes no
+    /// heap — the call node no longer carries a `FunctionRef` to classify by.
+    /// `None` (the default) is conservative: every call is a heap write. Set via
+    /// [`Engine::set_pure_builtin_callees`] before the first value query.
+    pure_builtin_callees: Option<&'a IndexSet<crate::nir::FuncId>>,
 }
 
 impl<'a> Engine<'a> {
@@ -158,6 +164,7 @@ impl<'a> Engine<'a> {
             pure_calls: IndexSet::default(),
             vg_type_table: None,
             panic_callee_ids: None,
+            pure_builtin_callees: None,
         };
         // The value graph lives on `Body` and is built once, then maintained
         // through every edit (`maintain_value_after_edit` / `redirect_expr`, plus
@@ -325,6 +332,7 @@ impl<'a> Engine<'a> {
         // non-escaping, so the real sets leave it untouched by calls — exactly
         // the forwarding we need to recover. (`pure_calls` is left empty here:
         // bumping at every call is conservative — it only forgoes a forward.)
+        let empty_builtins = IndexSet::default();
         let vo = builder::build_scoped(
             self.body,
             root,
@@ -334,6 +342,7 @@ impl<'a> Engine<'a> {
             &self.untrackable_locals,
             &self.mut_escaped_locals,
             self.vg_type_table,
+            self.pure_builtin_callees.unwrap_or(&empty_builtins),
             &mut scratch,
             None,
             live_base,
@@ -438,6 +447,14 @@ impl<'a> Engine<'a> {
         self.panic_callee_ids = Some(ids);
     }
 
+    /// Supply the pure-builtin callee ids so the value-graph build classifies a
+    /// call's heap effect by `func_id`. See [`Engine::pure_builtin_callees`].
+    /// Must be set before the first value query to take effect (the graph is
+    /// built once and reused).
+    pub fn set_pure_builtin_callees(&mut self, ids: &'a IndexSet<crate::nir::FuncId>) {
+        self.pure_builtin_callees = Some(ids);
+    }
+
     /// Whether `func_id` is one of the supplied panic / `unreachable` callees.
     /// `false` when no set was supplied or the call carries no id.
     pub fn is_panic_callee(&self, func_id: Option<crate::nir::FuncId>) -> bool {
@@ -464,6 +481,7 @@ impl<'a> Engine<'a> {
         if self.body.exprs.len() > VG_MAX_EXPRS {
             return;
         }
+        let empty_builtins = IndexSet::default();
         let build = crate::nir_value_graph::builder::build(
             &mut *self.body,
             &self.param_locals,
@@ -471,6 +489,7 @@ impl<'a> Engine<'a> {
             &self.untrackable_locals,
             &self.mut_escaped_locals,
             &self.pure_calls,
+            self.pure_builtin_callees.unwrap_or(&empty_builtins),
             self.vg_type_table,
         );
         self.body.value_graph = Some(build);
@@ -946,12 +965,10 @@ impl<'a> Engine<'a> {
                 target_type,
             },
             ExprKind::Call {
-                func,
                 func_id,
                 type_args,
                 args,
             } => ExprKind::Call {
-                func,
                 func_id,
                 type_args,
                 args: args
@@ -968,13 +985,11 @@ impl<'a> Engine<'a> {
             },
             ExprKind::MethodCall {
                 receiver,
-                func,
                 func_id,
                 type_args,
                 args,
             } => ExprKind::MethodCall {
                 receiver: self.clone_operand(receiver),
-                func,
                 func_id,
                 type_args,
                 args: args

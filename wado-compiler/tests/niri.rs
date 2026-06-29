@@ -15,8 +15,8 @@ use wado_compiler::Span;
 use wado_compiler::hashmap::IndexSet;
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::nir::{
-    FunctionKind, FunctionRef, InlineHint, NirBinaryOp, NirFunction, NirLiteralPattern, NirLocal,
-    NirParam, NirUnaryOp, ReturnAbi,
+    FunctionKind, InlineHint, NirBinaryOp, NirFunction, NirLiteralPattern, NirLocal, NirParam,
+    NirUnaryOp, ReturnAbi,
 };
 use wado_compiler::nir_arena::{
     ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, Operand, PatId, PatKind,
@@ -3471,12 +3471,6 @@ fn make_pure_fn(
 /// Build a `Call` expression targeting `func` with the given args.
 /// Mirrors what the elaborator emits for a free function call.
 fn call_expr(func: &NirFunction, args: Vec<Build>) -> Build {
-    let func_ref = FunctionRef {
-        module_source: func.module_source.clone(),
-        name: func.name.clone(),
-        monomorph_info: None,
-        method_info: None,
-    };
     let func_id = func.id;
     let return_type = func.return_type;
     Rc::new(move |b| {
@@ -3490,7 +3484,6 @@ fn call_expr(func: &NirFunction, args: Vec<Build>) -> Build {
         Operand::Expr(pe(
             b,
             ExprKind::Call {
-                func: func_ref.clone(),
                 func_id,
                 type_args: Vec::new(),
                 args: call_args,

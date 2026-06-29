@@ -1705,18 +1705,10 @@ mod tests {
     /// independent value, so the call only *mentions* `arg`, it is not an
     /// alias of it.
     fn call_with(body: &mut Body, arg: ExprId) -> ExprId {
-        use crate::module_source::ModuleSource;
-        use crate::nir::FunctionRef;
         use crate::nir_arena::ArenaCallArg;
         body.exprs.push(ExprNode {
             kind: ExprKind::Call {
                 func_id: None,
-                func: FunctionRef {
-                    module_source: ModuleSource::entry_point_synthetic(),
-                    name: "foo".to_string(),
-                    monomorph_info: None,
-                    method_info: None,
-                },
                 type_args: vec![],
                 args: vec![ArenaCallArg {
                     expr: arg.into(),

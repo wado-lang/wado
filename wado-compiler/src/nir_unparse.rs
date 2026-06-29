@@ -39,6 +39,10 @@ pub struct NirUnparser<'a> {
     type_table: &'a TypeTable,
     output: String,
     indent_level: usize,
+    /// Callee descriptor for every function, indexed by `func_id.index()`.
+    /// Calls render their callee by the stamped `func_id`; empty when unparsing
+    /// a bare module with no package context.
+    callees: Vec<crate::nir::FunctionRef>,
 }
 
 impl<'a> NirUnparser<'a> {
@@ -47,7 +51,14 @@ impl<'a> NirUnparser<'a> {
             type_table,
             output: String::new(),
             indent_level: 0,
+            callees: Vec::new(),
         }
+    }
+
+    /// Resolve a call's stamped `func_id` to its callee descriptor.
+    fn callee(&self, func_id: Option<crate::nir::FuncId>) -> Option<&crate::nir::FunctionRef> {
+        use cranelift_entity::EntityRef;
+        self.callees.get(func_id?.index())
     }
 
     /// Quote an identifier if it contains characters that make it invalid Wado syntax.
@@ -650,17 +661,23 @@ impl<'a> NirUnparser<'a> {
                     .push_str(&self.type_table.type_name(target_type));
             }
             ExprKind::Call {
-                func,
+                func_id,
                 type_args,
                 args,
                 ..
             } => {
-                let func_name = func.name.clone();
-                let full_name = if func.module_source.clone().is_entry_point() {
-                    func_name
-                } else {
-                    let module_path = func.module_path();
-                    format!("{}::{func_name}", module_path.join("::"))
+                let func_id = *func_id;
+                let full_name = match self.callee(func_id) {
+                    Some(func) => {
+                        let func_name = func.name.clone();
+                        if func.module_source.clone().is_entry_point() {
+                            func_name
+                        } else {
+                            let module_path = func.module_path();
+                            format!("{}::{func_name}", module_path.join("::"))
+                        }
+                    }
+                    None => format!("fn#{func_id:?}"),
                 };
                 let type_args = type_args.clone();
                 let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
@@ -677,13 +694,16 @@ impl<'a> NirUnparser<'a> {
             }
             ExprKind::MethodCall {
                 receiver,
-                func,
+                func_id,
                 type_args,
                 args,
                 ..
             } => {
                 let receiver = *receiver;
-                let func_name = func.name.clone();
+                let func_name = match self.callee(*func_id) {
+                    Some(func) => func.name.clone(),
+                    None => format!("fn#{func_id:?}"),
+                };
                 let type_args = type_args.clone();
                 let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
                 // The elaborator wraps `self` receivers in `&`/`&mut`
@@ -974,6 +994,14 @@ pub fn unparse_nir(module: &NirModule) -> String {
 pub fn unparse_nir_package(package: &crate::nir_package::NirPackage) -> String {
     let type_table_ref = package.type_table.borrow();
     let mut unparser = NirUnparser::new(&type_table_ref);
+    unparser.callees = package
+        .functions
+        .iter()
+        .map(|f| {
+            let f = f.borrow();
+            crate::nir::FunctionRef::from_resolved(&f, f.module_source.clone())
+        })
+        .collect();
 
     // Imports
     if !package.imports.is_empty() {

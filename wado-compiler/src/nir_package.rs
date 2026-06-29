@@ -40,7 +40,7 @@ pub struct NirPackage {
     /// All functions from all modules. Each `NirFunction` carries its own `module_source`.
     pub functions: Vec<Rc<RefCell<NirFunction>>>,
     /// The function arena's reverse index: canonical [`crate::name::FunctionId`]
-    /// → [`FuncId`] (the store position). Built once by [`Self::assign_func_ids`]
+    /// → [`FuncId`] (the store position). Built once in `lower` (`translate`)
     /// and grown append-only by [`Self::intern_extern`] as the optimizer
     /// synthesizes calls to new builtins. Authoritative, never rebuilt or
     /// invalidated — the interner that keeps the "born resolved" invariant cheap
@@ -131,77 +131,6 @@ impl NirPackage {
     /// overrides it per opt level.
     pub const DEFAULT_STRING_INLINE_MAX_BYTES: usize = 4;
 
-    /// Mint a [`FuncId`] for every function and stamp each call node's callee
-    /// reference with it ("born resolved"; see
-    /// `docs/wep-2026-06-28-function-identity.md`). Run once at the end of
-    /// `lower` over the post-monomorphization function set; the optimizer
-    /// maintains the stamps from there. `full_name()` is materialized here, once
-    /// per call, so no downstream analysis recomputes it.
-    ///
-    /// The id is the function's index at this point — intrinsic from here on, so
-    /// later `dce` compaction does not change a stamped call's id. An extern /
-    /// builtin callee resolves to `None`, which every analysis treats
-    /// conservatively.
-    pub fn assign_func_ids(&mut self) {
-        use cranelift_entity::EntityRef;
-        // Key on the canonical `name::FunctionId` (`FunctionRef::function_id`),
-        // the same injective identity the DCE call graph uses — not `full_name()`,
-        // whose monomorphized-method mangling can drift between a call site and
-        // its callee and leave an in-package call unstamped.
-        let mut ids: IndexMap<crate::name::FunctionId, FuncId> = IndexMap::default();
-        for (i, func_rc) in self.functions.iter().enumerate() {
-            let mut func = func_rc.borrow_mut();
-            let id = FuncId::new(i);
-            func.id = Some(id);
-            let key = FunctionRef::from_resolved(&func, func.module_source.clone()).function_id();
-            let prev = ids.insert(key, id);
-            // Load-bearing invariant: two functions sharing a canonical key would
-            // share a FuncId (a miscompile). The check is O(1); keep it always-on.
-            assert!(
-                prev.is_none(),
-                "duplicate canonical function key: function_id must be unique"
-            );
-        }
-        let mut extern_stubs: Vec<Rc<RefCell<NirFunction>>> = Vec::new();
-        for func_rc in &self.functions {
-            let func = func_rc.borrow();
-            let Some(body) = func.body.as_ref() else {
-                continue;
-            };
-            for expr in body.exprs.values() {
-                let func_ref = match &expr.kind {
-                    ExprKind::Call { func, .. } | ExprKind::MethodCall { func, .. } => func,
-                    _ => continue,
-                };
-                let key = func_ref.function_id();
-                if ids.contains_key(&key) {
-                    continue;
-                }
-                let id = FuncId::new(self.functions.len() + extern_stubs.len());
-                let mut stub = NirFunction::extern_stub(func_ref);
-                stub.id = Some(id);
-                extern_stubs.push(Rc::new(RefCell::new(stub)));
-                ids.insert(key, id);
-            }
-        }
-        self.functions.extend(extern_stubs);
-
-        for func_rc in &self.functions {
-            let mut func = func_rc.borrow_mut();
-            let Some(body) = func.body.as_mut() else {
-                continue;
-            };
-            for expr in body.exprs.values_mut() {
-                if let ExprKind::Call { func, func_id, .. }
-                | ExprKind::MethodCall { func, func_id, .. } = &mut expr.kind
-                {
-                    *func_id = ids.get(&func.function_id()).copied();
-                }
-            }
-        }
-        self.func_index = ids;
-    }
-
     /// The [`FuncId`] of a `builtin::<name>` callee, or `None` if no such call is
     /// interned in this package. Resolved once (e.g. at a pass's top) so an
     /// optimizer recognizer can identify a builtin call by integer id comparison
@@ -222,6 +151,26 @@ impl NirPackage {
     /// [`Self::intern_extern`]). O(1), no `full_name` materialization.
     pub fn func_id_of(&self, func_ref: &FunctionRef) -> Option<FuncId> {
         self.func_index.get(&func_ref.function_id()).copied()
+    }
+
+    /// The [`FuncId`]s of pure builtin / monomorphized-builtin intrinsics
+    /// (`array_get`, `array_len`, `select`, every `core:builtin` / wasm-asset
+    /// function, …). The value-graph builder reads this to know a call writes no
+    /// heap, so a field version forwards across a loop body that only calls such
+    /// intrinsics. Resolved by `func_id` off the callee's arena record now that
+    /// the call node carries no `FunctionRef`. O(functions); a pass computes it
+    /// once before its per-function loop.
+    pub fn pure_builtin_callee_ids(&self) -> IndexSet<FuncId> {
+        self.functions
+            .iter()
+            .filter_map(|f| {
+                let f = f.borrow();
+                let descriptor = FunctionRef::from_resolved(&f, f.module_source.clone());
+                let is_pure_builtin = descriptor.builtin_name().is_some()
+                    || descriptor.monomorphized_builtin_name().is_some();
+                is_pure_builtin.then(|| f.id.expect("func_id assigned at lower"))
+            })
+            .collect()
     }
 
     /// Intern an extern / builtin callee into the [`FuncId`] space, returning its
@@ -245,7 +194,7 @@ impl NirPackage {
     }
 
     /// Assert the born-resolved invariant: every call in every live body carries
-    /// a `func_id`. `lower` stamps in-package calls (via `assign_func_ids`) and
+    /// a `func_id`. `lower` stamps in-package calls at construction and
     /// every optimizer pass that synthesizes or retargets a call stamps it at the
     /// synthesis site, so a call site is always an integer by the end of
     /// `optimize` — no post-loop re-scan re-derives identity. Run once before

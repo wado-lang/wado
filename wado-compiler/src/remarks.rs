@@ -25,7 +25,7 @@
 
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::nir::NirUnaryOp;
+use crate::nir::{FunctionRef, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef};
 use crate::nir_package::NirPackage;
 use crate::tir::{TypeId, TypeTable};
@@ -43,6 +43,15 @@ pub struct Remark {
 /// restricted to functions defined in the entry module.
 pub fn collect_value_copy_remarks(package: &NirPackage) -> Vec<Remark> {
     let value_copy_set = package.value_copy_helper_types();
+    // Callee descriptor by `func_id` (the call node carries no `FunctionRef`).
+    let callees: Vec<FunctionRef> = package
+        .functions
+        .iter()
+        .map(|f| {
+            let f = f.borrow();
+            FunctionRef::from_resolved(&f, f.module_source.clone())
+        })
+        .collect();
 
     let type_table_ref = package.type_table.borrow();
     let type_table: &TypeTable = &type_table_ref;
@@ -61,6 +70,7 @@ pub fn collect_value_copy_remarks(package: &NirPackage) -> Vec<Remark> {
         };
         let mut collector = Collector {
             value_copy_set: &value_copy_set,
+            callees: &callees,
             type_table,
             remarks: &mut remarks,
             current_span: body.blocks[body.root].span,
@@ -73,6 +83,8 @@ pub fn collect_value_copy_remarks(package: &NirPackage) -> Vec<Remark> {
 
 struct Collector<'a> {
     value_copy_set: &'a IndexMap<(ModuleSource, String), TypeId>,
+    /// Callee descriptor indexed by `func_id.index()`. See [`collect_value_copy_remarks`].
+    callees: &'a [FunctionRef],
     type_table: &'a TypeTable,
     remarks: &'a mut Vec<Remark>,
     /// Span of the enclosing real statement. Synthesized copy nodes
@@ -88,10 +100,12 @@ impl Collector<'_> {
     /// If the expression `id` is a surviving value-copy operation, return the
     /// type whose value is copied.
     fn copied_type(&self, body: &Body, id: ExprId) -> Option<TypeId> {
+        use cranelift_entity::EntityRef;
         let node = &body.exprs[id];
-        let ExprKind::Call { func, args, .. } = &node.kind else {
+        let ExprKind::Call { func_id, args, .. } = &node.kind else {
             return None;
         };
+        let func = self.callees.get(func_id.as_ref()?.index())?;
         // Deep `$value_copy$T` helper call.
         if args.len() == 1
             && let Some(&type_id) = self
@@ -102,7 +116,13 @@ impl Collector<'_> {
         }
         // Lowered / demoted copies. `array_copy` is excluded on purpose: it is
         // bulk buffer movement inside stdlib helpers, not a value-semantic copy.
-        match func.monomorphized_builtin_name().as_deref() {
+        // `array_clone_shallow` is interned as a plain builtin (no
+        // `monomorph_info`, since a spine copy needs no element type), so classify
+        // by either the monomorphized- or the plain-builtin name.
+        let builtin = func
+            .monomorphized_builtin_name()
+            .or_else(|| func.builtin_name());
+        match builtin.as_deref() {
             // `array_clone(&agg.repr)` copies a `List<T>` / `String` backing
             // array; recover the owning aggregate type from the argument.
             Some("builtin::array_clone" | "builtin::array_clone_shallow") => args

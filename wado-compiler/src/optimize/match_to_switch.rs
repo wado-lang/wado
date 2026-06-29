@@ -44,6 +44,7 @@ const SWITCH_MAX_RANGE: i64 = 1024;
 /// (a full call-graph walk) just to satisfy the gated signature.
 pub fn match_to_switch_all(project: &mut NirPackage) -> bool {
     let (cold_path_id, unreachable_id) = intern_cold_markers(project);
+    let pure_builtin_callees = project.pure_builtin_callee_ids();
     let type_table = project.type_table.borrow();
     let rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
     let mut buffers = EngineBuffers::default();
@@ -54,10 +55,18 @@ pub fn match_to_switch_all(project: &mut NirPackage) -> bool {
         if let Some(body) = body.as_mut() {
             let mut engine = Engine::new(body, &mut buffers, locals);
             engine.set_value_graph_type_table(&type_table);
+            engine.set_pure_builtin_callees(&pure_builtin_callees);
             changed |= engine.run(&[&rule]);
         }
     }
-    changed | run_globals(&mut project.globals, &rule, &type_table, &mut buffers)
+    changed
+        | run_globals(
+            &mut project.globals,
+            &rule,
+            &type_table,
+            &pure_builtin_callees,
+            &mut buffers,
+        )
 }
 
 /// Lower dense `Match` → `Switch` in global initializer bodies only. Functions
@@ -67,16 +76,24 @@ pub fn match_to_switch_all(project: &mut NirPackage) -> bool {
 /// single pass is equivalent to running it every iteration.
 pub(super) fn match_to_switch_globals(project: &mut NirPackage) -> bool {
     let (cold_path_id, unreachable_id) = intern_cold_markers(project);
+    let pure_builtin_callees = project.pure_builtin_callee_ids();
     let type_table = project.type_table.borrow();
     let rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
     let mut buffers = EngineBuffers::default();
-    run_globals(&mut project.globals, &rule, &type_table, &mut buffers)
+    run_globals(
+        &mut project.globals,
+        &rule,
+        &type_table,
+        &pure_builtin_callees,
+        &mut buffers,
+    )
 }
 
 fn run_globals(
     globals: &mut [crate::nir::NirGlobal],
     rule: &MatchToSwitchRule,
     type_table: &TypeTable,
+    pure_builtin_callees: &crate::hashmap::IndexSet<crate::nir::FuncId>,
     buffers: &mut EngineBuffers,
 ) -> bool {
     let mut changed = false;
@@ -88,6 +105,7 @@ fn run_globals(
     for global in globals {
         let mut engine = Engine::new(global.initializer.body_mut(), buffers, &mut no_locals);
         engine.set_value_graph_type_table(type_table);
+        engine.set_pure_builtin_callees(pure_builtin_callees);
         changed |= engine.run(&[rule]);
     }
     changed
@@ -293,12 +311,6 @@ fn build_switch(
         let cold_call = engine.alloc_expr(
             ExprKind::Call {
                 func_id: Some(cold_path_id),
-                func: FunctionRef {
-                    module_source: ModuleSource::builtin(),
-                    name: "cold_path".to_string(),
-                    monomorph_info: None,
-                    method_info: None,
-                },
                 args: vec![],
                 type_args: vec![],
             },
@@ -315,12 +327,6 @@ fn build_switch(
         let call = engine.alloc_expr(
             ExprKind::Call {
                 func_id: Some(unreachable_id),
-                func: FunctionRef {
-                    module_source: ModuleSource::builtin(),
-                    name: "unreachable".to_string(),
-                    monomorph_info: None,
-                    method_info: None,
-                },
                 args: vec![],
                 type_args: vec![],
             },

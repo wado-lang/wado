@@ -1660,7 +1660,7 @@ impl Rewriter<'_, '_> {
             let elem_ty = info.element_types[0];
             let field_local = ctx.field_local_map[&(rec_local, 0)];
             let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, 0)].clone();
-            let (new_func, new_func_id) = ctx
+            let (_, new_func_id) = ctx
                 .catalog
                 .get(&(elem_ty, sig))
                 .cloned()
@@ -1672,7 +1672,6 @@ impl Rewriter<'_, '_> {
                 ExprKind::MethodCall {
                     func_id: Some(new_func_id),
                     receiver: new_receiver.into(),
-                    func: new_func,
                     type_args: Vec::new(),
                     args: Vec::new(),
                 },
@@ -1747,7 +1746,7 @@ fn build_with_capacity_call(
         ListMethodKind::Constructor,
     )
     .expect("Constructor checked by required_methods_available");
-    let (func, func_id) = ctx
+    let (_, func_id) = ctx
         .catalog
         .get(&(elem_ty, sig))
         .expect("Constructor entry checked by required_methods_available")
@@ -1755,7 +1754,6 @@ fn build_with_capacity_call(
     engine.alloc_expr(
         ExprKind::Call {
             func_id: Some(func_id),
-            func,
             type_args: Vec::new(),
             args: vec![ArenaCallArg {
                 expr: cap,
@@ -1780,7 +1778,7 @@ fn build_element_writer_call(
     span: Span,
     ctx: &RewriteCtx,
 ) -> ExprId {
-    let (func, func_id) = ctx
+    let (_, func_id) = ctx
         .catalog
         .get(&(elem_ty, sig.clone()))
         .expect("ElementWriter entry checked by required_methods_available")
@@ -1790,7 +1788,6 @@ fn build_element_writer_call(
         ExprKind::MethodCall {
             func_id: Some(func_id),
             receiver: receiver.into(),
-            func,
             type_args: Vec::new(),
             args: vec![ArenaCallArg {
                 expr: value,
@@ -1816,7 +1813,7 @@ fn build_index_writer_call(
     span: Span,
     ctx: &RewriteCtx,
 ) -> ExprId {
-    let (func, func_id) = ctx
+    let (_, func_id) = ctx
         .catalog
         .get(&(elem_ty, sig.clone()))
         .expect("IndexWriter entry checked by required_methods_available")
@@ -1826,7 +1823,6 @@ fn build_index_writer_call(
         ExprKind::MethodCall {
             func_id: Some(func_id),
             receiver: receiver.into(),
-            func,
             type_args: Vec::new(),
             args: vec![
                 ArenaCallArg {
@@ -1857,7 +1853,7 @@ fn build_index_reader_call(
     span: Span,
     ctx: &RewriteCtx,
 ) -> ExprId {
-    let (func, func_id) = ctx
+    let (_, func_id) = ctx
         .catalog
         .get(&(elem_ty, sig.clone()))
         .expect("IndexReader entry checked by required_methods_available")
@@ -1867,7 +1863,6 @@ fn build_index_reader_call(
         ExprKind::MethodCall {
             func_id: Some(func_id),
             receiver: receiver.into(),
-            func,
             type_args: Vec::new(),
             args: vec![ArenaCallArg {
                 expr: index,

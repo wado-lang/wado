@@ -808,7 +808,6 @@ impl FunctionTranslator<'_, '_> {
         self.alloc_expr(
             ExprKind::Call {
                 func_id,
-                func,
                 type_args: vec![],
                 args: vec![ArenaCallArg {
                     expr: value.into(),
@@ -1156,7 +1155,6 @@ impl FunctionTranslator<'_, '_> {
                 ExprKind::MethodCall {
                     func_id,
                     receiver: nir_receiver.into(),
-                    func,
                     type_args: Vec::new(),
                     args: nir_args,
                 },
@@ -1306,7 +1304,6 @@ impl FunctionTranslator<'_, '_> {
                 ExprKind::MethodCall {
                     func_id,
                     receiver: self.convert_operand(receiver),
-                    func,
                     type_args: type_args.clone(),
                     args: args.iter().map(|a| self.convert_call_arg(a)).collect(),
                 }
@@ -1490,7 +1487,6 @@ impl FunctionTranslator<'_, '_> {
             let func_id = Some(self.base.interner.borrow_mut().resolve(&func));
             return ExprKind::Call {
                 func_id,
-                func,
                 type_args: vec![],
                 args: args.iter().map(|a| self.convert_call_arg(a)).collect(),
             };
@@ -1499,7 +1495,6 @@ impl FunctionTranslator<'_, '_> {
         let func_id = Some(self.base.interner.borrow_mut().resolve(&func));
         ExprKind::Call {
             func_id,
-            func,
             type_args: type_args.to_vec(),
             args: args.iter().map(|a| self.convert_call_arg(a)).collect(),
         }
