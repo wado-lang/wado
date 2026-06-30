@@ -47,7 +47,7 @@ mise run report-wasm-size  # hello_world, pi_approx, zlib, and so on
   - Docs: lead with the information; drop throat-clearing, restating the obvious, and redundant phrasing.
 - Avoid ad-hoc workarounds. Write proper code based on a sound design.
 - Perform red/green TDD.
-- A compiler bug is always P0 — no exceptions. The instant you suspect one, stop all other work immediately and, as the top priority, write a minimal reproducible e2e fixture and file the issue; this is unconditional, never deferred, and never downgraded because a workaround lets the current task proceed. Only the fix itself may be deferred: fix it before continuing if it blocks the current task, otherwise land the fixture + issue first and schedule the fix.
+- A compiler bug is always P0 — no exceptions. The instant you suspect one, stop all other work, and as the top priority write a minimal reproducible e2e fixture, file the issue, and fix it. A workaround that lets the current task proceed is never a reason to skip or defer any of these.
 - A pre-existing issue — whether you find it or a reviewer points it out — must be fixed, with TDD when practical.
 - Don't pipe long-running commands (`mise run …`, `cargo test`, etc.) into `tail` or `head`. Redirect to a file and inspect it afterwards if you need to trim output.
 - Use plain `cargo build` / `cargo run` / `cargo test` (the `dev` profile) for iteration. `Cargo.toml` raises `opt-level` on `wado-compiler`, `wado-dev-tools`, and `cranelift-codegen` so dev-build runtime is close to release for the parts that matter, while compile time stays much lower. `--release` is for distributing binaries, not for the inner dev loop.
