@@ -746,7 +746,6 @@ impl<'a> Interpreter<'a> {
                     module_source,
                     name,
                 }) => self.global_field(&(module_source.clone(), name.clone()), field_name),
-                // A read through a local bound to `&G` (`let s = &G; s.used`).
                 Some(ExprKind::Local { index, .. }) => match self.ref_global_aliases.get(index) {
                     Some(key) => {
                         debug_assert!(
@@ -1503,9 +1502,7 @@ impl<'a> Interpreter<'a> {
         // The scratch fold memo is scoped to this reduction; nested CTFE calls
         // get a fresh map and ids never cross scratch bodies.
         let saved_folds = std::mem::take(&mut self.scratch_folds);
-        // `ref_global_aliases` is keyed by the *caller's* local indices, which
-        // collide with the callee's; clear it for the scratch reduction so a
-        // callee field read is never folded through a caller `&G` alias.
+        // Caller-keyed by local index, which collides with the callee's.
         let saved_aliases = std::mem::take(&mut self.ref_global_aliases);
         for (i, v) in bound.iter().enumerate() {
             #[allow(clippy::cast_possible_truncation)]

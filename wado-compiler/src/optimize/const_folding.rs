@@ -278,11 +278,9 @@ fn const_seq_len_a(body: &Body, e: ExprId) -> Option<i32> {
         ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => {
             let block = *b;
             let stmts = &body.blocks[block].stmts;
-            // A non-final `Expr` statement is a side-effecting builder push
-            // (`__b.push(..)`) that grows the sequence past its `let` init's
-            // `used`, so the length is dynamic — bail rather than read the
-            // stale initial `used`. Only `{ let __b = <literal>; …; __b }`,
-            // whose pre-tail statements are all `let`s, has a static length.
+            // A non-final `Expr` is a builder push growing the sequence past its
+            // `let` init's `used`, so the length is dynamic — don't read the
+            // stale initial `used`.
             if stmts
                 .iter()
                 .rev()

@@ -294,10 +294,7 @@ pub fn uscale(x: u64, pm_hi: u64, pm_lo: u64, s: i32) -> u64 {
 pub struct FormatResult {
     pub digits: u64,
     pub exponent: i32,
-    // Number of decimal digits in `digits` (i.e. `digits(self.digits)`), kept so
-    // callers don't recompute it on every conversion. For the fixed-width
-    // producers this is exactly the requested width `n`; for `short` it is the
-    // post-trim digit count.
+    // `digits(self.digits)`, returned so callers skip recomputing it.
     pub nd: i32,
 }
 
@@ -317,8 +314,7 @@ pub fn fixed_width(f: f64, n: i32) -> FormatResult {
     let u = uscale(m, pm.hi, pm.lo, s);
     let mut d = unrounded_round(u);
 
-    // After rounding the result holds exactly `n` significant digits (the
-    // carry case below renormalises back to `n`), so `digits(d) == n`.
+    // Rounding (and the carry renormalisation below) yields exactly `n` digits.
     if d >= pow10(n) {
         d = unrounded_round(unrounded_div(u, 10));
         return FormatResult { digits: d, exponent: -p + 1, nd: n };
@@ -375,7 +371,7 @@ pub fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
         let pm = get_pow10(p);
         let s = -(e + lp + 3);
         let u = uscale(m, pm.hi, pm.lo, s);
-        // d is 0 or 1 here, so its digit count is d itself (digits(0)=0, digits(1)=1).
+        // d is 0 or 1, so digits(d) == d.
         let d = unrounded_round(unrounded_div(u, pow10(p - precision)));
         return FormatResult { digits: d, exponent: -precision, nd: d as i32 };
     }
@@ -388,7 +384,7 @@ pub fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
     let s = -(e + lp + 3);
     let u = uscale(m, pm.hi, pm.lo, s);
     let mut d = unrounded_round(u);
-    // After rounding d holds exactly `n` significant digits, so digits(d) == n.
+    // Rounding (and the carry renormalisation below) yields exactly `n` digits.
     if d >= pow10(n) {
         d = unrounded_round(unrounded_div(u, 10));
         return FormatResult { digits: d, exponent: -p + 1, nd: n };

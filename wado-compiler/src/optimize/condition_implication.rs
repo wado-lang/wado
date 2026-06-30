@@ -1132,8 +1132,6 @@ fn index_upper_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64>
     let k = parse_const_i64(engine, binds, right)?;
     let then_const = parse_const_i64(engine, binds, block_id_tail(engine.body, then_branch)?)?;
     let else_tail = block_id_tail(engine.body, else_branch)?;
-    // The else arm (taken when `!(subject cmp K)`) must be exactly the compared
-    // subject, so `!(subject cmp K)` bounds it: `> K` ⟹ `<= K`, `>= K` ⟹ `<= K-1`.
     if !operand_same(engine, binds, left, else_tail) {
         return None;
     }

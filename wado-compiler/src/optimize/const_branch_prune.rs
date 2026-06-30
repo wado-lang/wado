@@ -430,7 +430,6 @@ fn eliminate_dead_stmts(engine: &mut Engine, block: BlockId, mode: PruneMode) ->
             consumed_inner.push(inner);
             continue;
         }
-        // Const-condition `if`: keep only the taken arm, flattened in.
         if let Some(taken) = const_if_branch(engine.body, stmt) {
             if let ConstIf::Taken(tb) = taken {
                 let tb_stmts = engine.body.blocks[tb].stmts.clone();

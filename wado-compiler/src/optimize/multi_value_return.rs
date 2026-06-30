@@ -321,18 +321,14 @@ fn nested_returns_in_expr_match_operand(
     op: Operand,
     expected: &ExpectedShape,
 ) -> bool {
-    // A promoted `Operand::Value` is a pure scalar with no nested statements,
-    // so it carries no nested `Return` to violate the shape — vacuously true.
-    // Treating it as `false` (the old `is_some_and`) wrongly disqualified any
-    // candidate with a `let x = <pure expr>;` whose value graph promoted the
-    // RHS to a Value operand (e.g. fpfmt's `fixed_width_for_prec` / `short`).
+    // A promoted `Operand::Value` is a pure scalar carrying no nested `Return`,
+    // so it cannot violate the shape — vacuously true, not `false`.
     match op.as_expr() {
         Some(e) => nested_returns_in_expr_match(body, e, expected),
         None => true,
     }
 }
 fn expr_break_values_match_operand(body: &Body, op: Operand, expected: &ExpectedShape) -> bool {
-    // As above: a Value operand has no nested `Break` to check.
     match op.as_expr() {
         Some(e) => expr_break_values_match(body, e, expected),
         None => true,

@@ -1,11 +1,8 @@
-// Regression: fpfmt's `fixed_width_for_prec` returns a `FormatResult` POD
-// struct and must use the multi-value return ABI, not a per-call heap
-// `struct.new`. It has a pure `let` (e.g. `let p1 = -log10_e63;`) whose RHS the
-// live value graph promotes to an `Operand::Value`; `multi_value_return`'s
-// shape check used to treat that non-expr operand as a non-matching return and
-// disqualify the function, forcing a `FormatResult` allocation on every
-// float-to-string conversion. `pick` is `inline("never")` so the value stays
-// opaque (a constant float would fold the call site away).
+// Regression: `fixed_width_for_prec` returns a `FormatResult` POD and must use
+// the multi-value return ABI, not a per-call heap `struct.new`. Its pure `let`
+// (promoted to an `Operand::Value`) used to fail `multi_value_return`'s shape
+// check, forcing an allocation per conversion. `pick` is `inline("never")` so
+// the float stays opaque (a constant would fold the call site away).
 
 #[inline("never")]
 fn pick(n: i32) -> f64 {
