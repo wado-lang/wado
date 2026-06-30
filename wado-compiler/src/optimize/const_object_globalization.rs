@@ -38,9 +38,9 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::hashmap::{IndexMap, IndexSet};
+use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
-use crate::nir::{FunctionRef, NirFunction, NirGlobal, NirUnaryOp};
+use crate::nir::{NirFunction, NirGlobal, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprBody, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
@@ -48,8 +48,6 @@ use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::arena_query::{expr_mentions_local, is_local, strip_refs};
-
-type FuncKey = (ModuleSource, String);
 
 /// A `let` binding selected for hoisting, identified by its owning function and
 /// the bound local index. Resolved in an immutable analysis phase, applied in a
@@ -63,16 +61,10 @@ struct Candidate {
 
 pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
     let type_table = project.type_table.clone();
-    let mut by_key: IndexMap<FuncKey, usize> = IndexMap::default();
-    for (i, f) in project.functions.iter().enumerate() {
-        let f = f.borrow();
-        by_key.insert((f.module_source.clone(), f.name.clone()), i);
-    }
 
     // Phase 1 — analysis (all immutable borrows).
     let gate = Gate {
         funcs: &project.functions,
-        by_key: &by_key,
         type_table: &type_table,
     };
     let mut candidates: Vec<Candidate> = Vec::new();
@@ -314,7 +306,6 @@ fn contains_aggregate(body: &Body, expr: ExprId) -> bool {
 
 struct Gate<'a> {
     funcs: &'a [Rc<RefCell<NirFunction>>],
-    by_key: &'a IndexMap<FuncKey, usize>,
     type_table: &'a Rc<RefCell<TypeTable>>,
 }
 
@@ -329,11 +320,9 @@ impl Gate<'_> {
     /// `Some(true)` when `func`'s `self` parameter is `&mut self`,
     /// `Some(false)` when it is `&self` / by-value, `None` when unresolvable
     /// (conservatively treated as mutating).
-    fn callee_mutates_self(&self, func: &FunctionRef) -> Option<bool> {
-        let idx = *self
-            .by_key
-            .get(&(func.module_source.clone(), func.name.clone()))?;
-        let f = self.funcs[idx].borrow();
+    fn callee_mutates_self(&self, func_id: crate::nir::FuncId) -> Option<bool> {
+        use cranelift_entity::EntityRef;
+        let f = self.funcs.get(func_id.index())?.borrow();
         let p0 = f.params.first()?;
         Some(matches!(
             self.type_table.borrow().get(p0.type_id),
@@ -395,23 +384,23 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
 
         ExprKind::MethodCall {
             receiver,
-            func,
+            func_id,
             args,
             ..
         } => {
             let receiver = *receiver;
-            let func = func.clone();
+            let callee_id = *func_id;
             let args: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
             let recv = receiver.as_expr().map(|e| strip_refs(body, e));
             if recv.is_some_and(|r| is_local(body, r, idx)) {
-                if gate.callee_mutates_self(&func) != Some(false) {
+                if gate.callee_mutates_self(callee_id) != Some(false) {
                     return false;
                 }
             } else if receiver
                 .as_expr()
                 .is_some_and(|e| expr_mentions_local(body, e, idx))
             {
-                if gate.callee_mutates_self(&func) != Some(false) {
+                if gate.callee_mutates_self(callee_id) != Some(false) {
                     return false;
                 }
                 if !expr_readonly_operand(body, receiver, idx, gate) {

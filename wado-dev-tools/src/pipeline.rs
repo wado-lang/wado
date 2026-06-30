@@ -103,6 +103,10 @@ struct WriteBatch {
     name: String,
     outputs: Vec<EmitOutput>,
     compile_time: Duration,
+    /// The dump panicked (internal compiler crash) rather than returning a clean
+    /// compile error. A panic is always fatal; a compile error is skippable under
+    /// `--skip-empty` (format-only fixtures that intentionally don't compile).
+    panicked: bool,
 }
 
 struct EmitOutput {
@@ -255,7 +259,7 @@ pub fn run_pipeline(in_template: &str, emits: &[Emit], opt_level: OptLevel, skip
                             *slot.lock().unwrap() = Some((input_path.clone(), t0));
                         }
 
-                        let rendered: IndexMap<Phase, Result<String, String>> =
+                        let render_result =
                             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                                 rt.block_on(render_phases(
                                     &item.source,
@@ -263,7 +267,9 @@ pub fn run_pipeline(in_template: &str, emits: &[Emit], opt_level: OptLevel, skip
                                     &distinct_phases,
                                     opt_level,
                                 ))
-                            }))
+                            }));
+                        let panicked = render_result.is_err();
+                        let rendered: IndexMap<Phase, Result<String, String>> = render_result
                             .unwrap_or_else(|panic_val| {
                                 let msg = match panic_val.downcast_ref::<String>() {
                                     Some(s) => s.clone(),
@@ -305,6 +311,7 @@ pub fn run_pipeline(in_template: &str, emits: &[Emit], opt_level: OptLevel, skip
                                 name: item.name.clone(),
                                 outputs,
                                 compile_time,
+                                panicked,
                             })
                             .is_err()
                         {
@@ -368,7 +375,7 @@ pub fn run_pipeline(in_template: &str, emits: &[Emit], opt_level: OptLevel, skip
                     generated += 1;
                 }
                 Err(e) => {
-                    if skip_empty {
+                    if skip_empty && !batch.panicked {
                         eprintln!("  Skipped {display} ({e})");
                         skipped += 1;
                         continue;

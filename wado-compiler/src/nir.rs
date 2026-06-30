@@ -22,6 +22,14 @@ use crate::name::LocalMethodName;
 use crate::tir::{EffectRef, TypeId, TypeTable};
 use crate::token::Span;
 
+/// Canonical identity of a function entity. Minted in `lower` over the
+/// post-monomorphization function set and intrinsic to the entity — not its
+/// storage position, so it is stable across `dce` compaction. The mangled
+/// `name` is a lookup attribute, never identity.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct FuncId(u32);
+cranelift_entity::entity_impl!(FuncId, "fn");
+
 #[derive(Debug, Clone)]
 pub struct FunctionRef {
     pub module_source: ModuleSource,
@@ -122,6 +130,21 @@ impl FunctionRef {
         self.method_info
             .as_ref()
             .is_some_and(LocalMethodName::is_trait_method)
+    }
+
+    /// The canonical [`crate::name::FunctionId`] this reference denotes, keyed on
+    /// `(module_source, mangled name)`. The mangled `name` already encodes a
+    /// method's `struct^trait::method` and any monomorphization type args, so it
+    /// is the one injective identity for a function — independent of whether a
+    /// *call site* happens to carry `monomorph_info` (which flipped the older
+    /// `Method`/`Free` split and made the same callee key two different ways).
+    /// Used to mint and stamp `FuncId`s in `lower`.
+    pub fn function_id(&self) -> crate::name::FunctionId {
+        use crate::name::{FreeFunctionName, FunctionId};
+        FunctionId::Free(FreeFunctionName::from_module_source(
+            &self.module_source,
+            &self.name,
+        ))
     }
 }
 
@@ -255,6 +278,18 @@ pub struct NirGlobal {
 
 #[derive(Debug, Clone)]
 pub struct NirFunction {
+    /// This function's canonical [`FuncId`], set by
+    /// `NirPackage::assign_func_ids` at the end of `lower`. `None` until then
+    /// (and for optimizer-synthesized functions not yet minted). Analyses key
+    /// per-function facts by this id via `SecondaryMap<FuncId, _>`.
+    pub id: Option<FuncId>,
+    /// Liveness bit. `dce` sets this `true` for an unreachable function instead
+    /// of removing it from the store, so `FuncId == position` holds for the whole
+    /// pipeline. A dead
+    /// function lingers as an inert bodyless record; `wir_build` skips it. Distinct
+    /// from a live-but-bodyless declaration (extern / `FnCanonicalDispatch`), which
+    /// keeps `is_dead == false`.
+    pub is_dead: bool,
     pub name: String,
     /// Module this function belongs to. Set by the link phase when flattening
     /// per-module body data into flat lists; before link, the `module_source` is
@@ -443,6 +478,43 @@ pub enum InlineHint {
 }
 
 impl NirFunction {
+    /// Bodyless stub for an extern / builtin callee (Phase 5 interning).
+    pub fn extern_stub(func_ref: &FunctionRef) -> Self {
+        Self {
+            id: None,
+            is_dead: false,
+            name: func_ref.name.clone(),
+            module_source: func_ref.module_source.clone(),
+            visibility: crate::ast::Visibility::Private,
+            is_export: false,
+            is_async: false,
+            type_params: Vec::new(),
+            impl_type_params: Vec::new(),
+            monomorph_info: func_ref.monomorph_info.clone(),
+            method_info: func_ref.method_info.clone(),
+            params: Vec::new(),
+            return_type: TypeTable::UNIT,
+            task_return_type: None,
+            effects: Vec::new(),
+            stores: Vec::new(),
+            body: None,
+            span: Span::default(),
+            locals: Vec::new(),
+            address_taken_locals: IndexSet::default(),
+            stores_aliased_locals: IndexSet::default(),
+            is_cm_binding: false,
+            is_dispatch_wrapper: false,
+            is_cm_export: false,
+            is_ambient: false,
+            inline_hint: InlineHint::default(),
+            compiler_item: None,
+            export_name: None,
+            allocator_tag: None,
+            kind: FunctionKind::default(),
+            return_abi: ReturnAbi::default(),
+        }
+    }
+
     /// The number of locals (params + body locals), i.e. the next free local
     /// index. `locals` is the single source of truth — there is no separate
     /// count field — so a pass allocates a local by pushing a `NirLocal` and

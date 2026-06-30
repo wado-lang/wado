@@ -32,7 +32,7 @@
 //! matching the old visitor's recurse-then-rewrite order.
 
 use crate::compiler_item::CompilerItem;
-use crate::nir::{FunctionRef, NirUnaryOp};
+use crate::nir::NirUnaryOp;
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
@@ -53,35 +53,34 @@ pub(super) fn resolve_ctx(project: &NirPackage) -> Option<Ctx> {
 }
 
 pub(super) struct Ctx {
-    push_str: FunctionRef,
-    push_char: FunctionRef,
+    /// `FuncId` of `push_str`, the call this rule recognizes.
+    push_str_id: crate::nir::FuncId,
+    /// `FuncId` of `push_char`, captured at resolution so the synthesized
+    /// per-byte `push(ch)` calls are born resolved.
+    push_char_id: crate::nir::FuncId,
 }
 
 impl Ctx {
     fn resolve(project: &NirPackage) -> Option<Self> {
-        let mut push_str: Option<FunctionRef> = None;
-        let mut push_char: Option<FunctionRef> = None;
+        let mut push_str_id: Option<crate::nir::FuncId> = None;
+        let mut push_char_id: Option<crate::nir::FuncId> = None;
         for func_rc in &project.functions {
             let f = func_rc.borrow();
             match f.compiler_item {
                 Some(CompilerItem::StringPushStr) => {
-                    push_str = Some(FunctionRef::from_resolved(&f, f.module_source.clone()));
+                    push_str_id = Some(f.id.expect("func_id assigned at lower"));
                 }
                 Some(CompilerItem::StringPushChar) => {
-                    push_char = Some(FunctionRef::from_resolved(&f, f.module_source.clone()));
+                    push_char_id = Some(f.id.expect("func_id assigned at lower"));
                 }
                 Some(_) | None => {}
             }
         }
         Some(Self {
-            push_str: push_str?,
-            push_char: push_char?,
+            push_str_id: push_str_id?,
+            push_char_id: push_char_id?,
         })
     }
-}
-
-fn func_matches(func: &FunctionRef, target: &FunctionRef) -> bool {
-    func.module_source == target.module_source && func.name == target.name
 }
 
 pub(super) struct ShortPushStrRule {
@@ -125,14 +124,14 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
     let (receiver, arg0) = {
         let ExprKind::MethodCall {
             receiver,
-            func,
+            func_id,
             args,
             ..
         } = &engine.body.exprs[expr_id].kind
         else {
             return None;
         };
-        if !func_matches(func, &ctx.push_str) || args.len() != 1 {
+        if *func_id != ctx.push_str_id || args.len() != 1 {
             return None;
         }
         (*receiver, args[0].expr)
@@ -189,8 +188,8 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
             engine.const_operand(crate::nir_value_graph::ValueKind::Char(ch), TypeTable::CHAR);
         let call = engine.alloc_expr(
             ExprKind::MethodCall {
+                func_id: ctx.push_char_id,
                 receiver: recv_clone.into(),
-                func: ctx.push_char.clone(),
                 type_args: Vec::new(),
                 args: vec![ArenaCallArg {
                     expr: char_arg,

@@ -34,6 +34,7 @@ pub fn forward_stores_to_loads_all(project: &mut NirPackage) -> bool {
     let type_table = project.type_table.borrow();
     let first_param_types = super::alias::first_param_types(project);
     let call_immutability = super::alias::CallImmutability::new(project, &type_table);
+    let pure_builtin_callees = project.pure_builtin_callee_ids();
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
@@ -43,6 +44,7 @@ pub fn forward_stores_to_loads_all(project: &mut NirPackage) -> bool {
             &type_table,
             &first_param_types,
             &call_immutability,
+            &pure_builtin_callees,
             &mut buffers,
         );
     }
@@ -54,11 +56,9 @@ pub fn forward_stores_to_loads_all(project: &mut NirPackage) -> bool {
 fn forward_one(
     func: &mut NirFunction,
     type_table: &crate::tir::TypeTable,
-    first_param_types: &crate::hashmap::IndexMap<
-        (crate::module_source::ModuleSource, String),
-        crate::tir::TypeId,
-    >,
+    first_param_types: &super::alias::FirstParamTypes,
     call_immutability: &super::alias::CallImmutability,
+    pure_builtin_callees: &crate::hashmap::IndexSet<crate::nir::FuncId>,
     buffers: &mut EngineBuffers,
 ) -> bool {
     if func.body.is_none() {
@@ -90,6 +90,7 @@ fn forward_one(
     let mut engine = Engine::new(body, buffers, locals);
     engine.set_alias_sets(aliased, untrackable, mut_escaped);
     engine.set_value_graph_type_table(type_table);
+    engine.set_pure_builtin_callees(pure_builtin_callees);
     unsafe_locals.extend(engine.body_address_taken().iter().copied());
     // Grow the build-once graph with the reaching constant of every safe bare
     // scalar local. SROA / field_scalarize introduce such scalars after the

@@ -60,9 +60,12 @@ use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtKi
 use crate::nir_package::NirPackage;
 
 use super::arena_query;
-use super::gate::{FunctionGate, FunctionId, GatedPass};
+use super::gate::{FunctionGate, GatedPass};
+use crate::nir::FuncId;
 
-pub(super) type FnKey = (ModuleSource, String);
+/// A function's canonical [`FuncId`]: the candidate/confirmed/pinned sets key on
+/// it, and a call site is matched by the stamped `func_id` on its call node.
+pub(super) type FnKey = FuncId;
 
 pub fn eliminate_dead_arguments(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let pinned = collect_pinned(project);
@@ -72,7 +75,7 @@ pub fn eliminate_dead_arguments(project: &mut NirPackage, gate: &mut FunctionGat
     let mut candidates: IndexMap<FnKey, Vec<bool>> = IndexMap::default();
     for fid in gate.dirty_funcs(GatedPass::Dae, project.functions.len()) {
         let func = project.functions[fid.index()].borrow();
-        let key = (func.module_source.clone(), func.name.clone());
+        let Some(key) = func.id else { continue };
         let is_closure_dae_relaxed = closure_call_keys.contains(&key);
         if !is_eligible(&func, &pinned, is_closure_dae_relaxed) {
             continue;
@@ -98,7 +101,7 @@ pub fn eliminate_dead_arguments(project: &mut NirPackage, gate: &mut FunctionGat
     // passes re-examine only those and their call-graph neighbours.
     let touched = apply_dae(project, &confirmed);
     for idx in touched {
-        gate.mark_changed(FunctionId::new(idx));
+        gate.mark_changed(FuncId::new(idx));
     }
     true
 }
@@ -133,7 +136,9 @@ fn collect_closure_call_keys(project: &NirPackage) -> IndexSet<FnKey> {
         .collect();
     for f in &project.closure_functors {
         let cm = f.call_method.borrow();
-        keys.insert((cm.module_source.clone(), cm.name.clone()));
+        if let Some(id) = cm.id {
+            keys.insert(id);
+        }
     }
     // Sweep the function list for synthesised
     // `__Closure_N^{Inspect,InspectAlt}::{inspect,inspect_alt}` impls.
@@ -154,7 +159,9 @@ fn collect_closure_call_keys(project: &NirPackage) -> IndexSet<FnKey> {
         if !functor_struct_names.contains(&(func.module_source.clone(), mi.struct_name.clone())) {
             continue;
         }
-        keys.insert((func.module_source.clone(), func.name.clone()));
+        if let Some(id) = func.id {
+            keys.insert(id);
+        }
     }
     keys
 }
@@ -191,7 +198,7 @@ fn is_eligible(func: &NirFunction, pinned: &IndexSet<FnKey>, is_closure_dae_rela
     {
         return false;
     }
-    if pinned.contains(&(func.module_source.clone(), func.name.clone())) {
+    if func.id.is_some_and(|id| pinned.contains(&id)) {
         return false;
     }
     true
@@ -291,8 +298,8 @@ fn validate_call(
     rejected: &mut IndexSet<FnKey>,
 ) {
     match &body.exprs[id].kind {
-        ExprKind::Call { func, args, .. } => {
-            let key = (func.module_source.clone(), func.name.clone());
+        ExprKind::Call { func_id, args, .. } => {
+            let key = *func_id;
             let Some(dead) = candidates.get(&key) else {
                 return;
             };
@@ -310,18 +317,18 @@ fn validate_call(
                     None => false,
                 };
                 if !pure {
-                    rejected.insert(key.clone());
+                    rejected.insert(key);
                     break;
                 }
             }
         }
         ExprKind::MethodCall {
-            func,
+            func_id,
             receiver,
             args,
             ..
         } => {
-            let key = (func.module_source.clone(), func.name.clone());
+            let key = *func_id;
             let Some(dead) = candidates.get(&key) else {
                 return;
             };
@@ -336,7 +343,7 @@ fn validate_call(
                     .as_expr()
                     .is_none_or(|e| arena_query::is_pure_expr(body, e))
             {
-                rejected.insert(key.clone());
+                rejected.insert(key);
             } else {
                 // params[i+1] maps to args[i] regardless of whether position 0
                 // was dropped (the receiver is structural).
@@ -347,7 +354,7 @@ fn validate_call(
                     match args.get(i - 1) {
                         Some(arg) if arena_query::is_pure_operand(body, arg.expr) => {}
                         _ => {
-                            rejected.insert(key.clone());
+                            rejected.insert(key);
                             break;
                         }
                     }
@@ -373,8 +380,7 @@ fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) -
     // renumber locals so `params[k].local_index == k` continues to hold.
     for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
-        let key = (func.module_source.clone(), func.name.clone());
-        if let Some(dead) = confirmed.get(&key) {
+        if let Some(dead) = func.id.and_then(|id| confirmed.get(&id)) {
             shrink_params_and_renumber(&mut func, dead);
             touched.insert(i);
         }
@@ -423,9 +429,7 @@ fn rewrite_calls_in_body(body: &mut Body, confirmed: &IndexMap<FnKey, Vec<bool>>
 
 fn rewrite_call(body: &mut Body, id: ExprId, confirmed: &IndexMap<FnKey, Vec<bool>>) -> bool {
     let key = match &body.exprs[id].kind {
-        ExprKind::Call { func, .. } | ExprKind::MethodCall { func, .. } => {
-            (func.module_source.clone(), func.name.clone())
-        }
+        ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => *func_id,
         _ => return false,
     };
     let Some(dead) = confirmed.get(&key).cloned() else {
@@ -447,7 +451,7 @@ fn rewrite_call(body: &mut Body, id: ExprId, confirmed: &IndexMap<FnKey, Vec<boo
                 // surviving_args)`. The receiver was verified pure, so dropping
                 // it (along with the dead `args`) is observation-free.
                 let ExprKind::MethodCall {
-                    func,
+                    func_id,
                     type_args,
                     args,
                     ..
@@ -464,7 +468,7 @@ fn rewrite_call(body: &mut Body, id: ExprId, confirmed: &IndexMap<FnKey, Vec<boo
                     new_args.push(arg);
                 }
                 body.exprs[id].kind = ExprKind::Call {
-                    func,
+                    func_id,
                     type_args,
                     args: new_args,
                 };
