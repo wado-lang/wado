@@ -1800,6 +1800,70 @@ fn check_invalid_call_uses(
                 caller_is_candidate,
             );
         }
+        // A `LocalSet`/`LocalTee` whose value is a compound `Seq` / `Block` /
+        // `If` — and whose *result* is not itself a candidate call (that case
+        // is handled by the first arm) — may still carry SROA-compatible
+        // `LocalSet(temp, Call(candidate))` sites in its prefix / branches.
+        // The `?`-desugar produces exactly this shape:
+        //
+        //     LocalSet(first_opt, Seq([
+        //         LocalSet(__scrut, Call(next_element)),  // bound to a temp
+        //         If(RefTest(__scrut, Ok)) { ...unwrap... } else { return Err },
+        //         <unwrapped payload>,                    // the Seq result
+        //     ]))
+        //
+        // so the candidate call is a clean LocalSet-temp site nested one level
+        // down. Blindly invalidating (the old `_` behaviour) rejected every
+        // `seq.next_element()?` / `de.deserialize_x()?` site. Recurse into the
+        // sub-body as a statement list instead, so the inner temp gets the
+        // standard variant-access validation. This mirrors the rewriter's
+        // `recurse_rewrite_call_sites`, which already descends into these
+        // bodies — keeping validation and rewriting in agreement. A genuinely
+        // unrewritable nested call (e.g. a bare `Call` as a branch value, with
+        // no binding temp) still reaches the catch-all below and is rejected.
+        WirInstr::LocalSet { value, .. } | WirInstr::LocalTee { value, .. }
+            if matches!(
+                value.as_ref(),
+                WirInstr::Seq(_) | WirInstr::Block { .. } | WirInstr::If { .. }
+            ) =>
+        {
+            match value.as_ref() {
+                WirInstr::Seq(body) | WirInstr::Block { body, .. } => {
+                    validate_call_sites_in_body(
+                        body,
+                        root_body,
+                        candidate_ids,
+                        invalid,
+                        caller_is_candidate,
+                    );
+                }
+                WirInstr::If {
+                    condition,
+                    then_body,
+                    else_body,
+                    ..
+                } => {
+                    find_nested_candidate_calls(condition, candidate_ids, invalid);
+                    validate_call_sites_in_body(
+                        then_body,
+                        root_body,
+                        candidate_ids,
+                        invalid,
+                        caller_is_candidate,
+                    );
+                    if let Some(eb) = else_body {
+                        validate_call_sites_in_body(
+                            eb,
+                            root_body,
+                            candidate_ids,
+                            invalid,
+                            caller_is_candidate,
+                        );
+                    }
+                }
+                _ => unreachable!(),
+            }
+        }
         // Any other instruction that contains a Call to a candidate is invalid
         _ => {
             find_nested_candidate_calls(instr, candidate_ids, invalid);

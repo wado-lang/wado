@@ -1,0 +1,87 @@
+// Test: variant-return SROA fires on a candidate whose `?` call site binds the
+// result to a temp *inside* a compound `Seq`/`Block` value, not as a top-level
+// `LocalSet(temp, Call)`.
+//
+// `let opt = cur.step()?;` lowers to
+//
+//     LocalSet(opt, Seq([
+//         LocalSet(__scrut, Call(step)),   // the candidate call, one level down
+//         If(RefTest(__scrut, Ok)) { …unwrap… } else { return Err },
+//         <unwrapped Option payload>,      // the Seq result
+//     ]))
+//
+// The call-site validator's `unwrap_to_candidate_call` only inspects the Seq's
+// *result*, so the nested candidate call was reaching the catch-all and being
+// blanket-invalidated by `find_nested_candidate_calls`. That kept every
+// `seq.next_element()?` / `de.deserialize_x()?`-style combinator boxed. The
+// rewriter already descends into these bodies, so only the validator needed to
+// agree: it now recurses into `Seq`/`Block`/`If`-valued `LocalSet` bodies.
+//
+// `step` returns `Result<Option<i64>, StepErr>` (the seq-combinator shape), so
+// success confirms the outer `Result` collapses to a multi-value return.
+
+variant StepErr {
+    Negative,
+}
+
+struct Cursor {
+    data: List<i64>,
+    pos: i32,
+}
+
+impl Cursor {
+    // The SROA candidate. `#[inline("never")]` keeps it a real call site so the
+    // rewrite is exercised (otherwise it would inline away before SROA).
+    #[inline("never")]
+    fn step(&mut self) -> Result<Option<i64>, StepErr> {
+        if self.pos >= self.data.len() {
+            return Result::Ok(null);
+        }
+        let v = self.data[self.pos];
+        if v < 0 {
+            return Result::Err(StepErr::Negative);
+        }
+        self.pos += 1;
+        return Result::Ok(Option::Some(v));
+    }
+}
+
+fn sum_all(data: List<i64>) -> Result<i64, StepErr> {
+    let mut cur = Cursor { data, pos: 0 };
+    let mut total: i64 = 0;
+    loop {
+        let opt = cur.step()?;
+        if let Some(v) = opt {
+            total += v;
+        } else {
+            break;
+        }
+    }
+    return Result::Ok(total);
+}
+
+export fn run() {
+    let ok = sum_all([1, 2, 3, 4]);
+    assert ok matches { Ok(10) };
+
+    // Error path: the `?` propagates `StepErr::Negative` out of the bound temp.
+    let bad = sum_all([1, -2, 3]);
+    assert bad matches { Err(StepErr::Negative) };
+
+    // Empty: the first `step()` yields `Ok(null)` → break → total 0.
+    let empty = sum_all([] as List<i64>);
+    assert empty matches { Ok(0) };
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "Cursor::step\" = fn(ref \"",
+        "-> [i32, ref null \"core:prelude/types.wado//Option<i64>\", ref null \"",
+        "multivalue_bind [__sroa___match_scrut_0_discriminant"
+    ],
+    "wir_not_expect:O2": [
+        "Result<core:prelude/types.wado/Option<i64>,"
+    ]
+}
