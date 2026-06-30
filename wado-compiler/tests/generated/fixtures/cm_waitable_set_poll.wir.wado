@@ -249,13 +249,15 @@ type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(50)
 
 type "functype//wasi/future-new" = fn() -> i64;  // TypeId(51)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(52)
+type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(52)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(53)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(53)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(54)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(54)
 
-type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(55)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(55)
+
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(56)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -266,6 +268,7 @@ import memory (1) from "mem/memory";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/future-new from "wasi/future-new";
+import fn wasi/task-return:handle from "wasi/task-return:handle";
 import fn wasi/future-write from "wasi/future-write";
 import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
@@ -550,6 +553,12 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
     let __local_314: i32;
     let __local_316: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let __pattern_temp_3: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
+    let packed_319: i64;
+    let rx_320: i32;
+    let tx_321: i32;
+    let packed_322: i64;
+    let rx_323: i32;
+    let tx_324: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -559,12 +568,9 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
     event = "core:rt/cm_waitable_set_poll"(local.tee ws("wasi/waitable-set-new"()));
     if ref.is_null(event) == 0 {
         "wasi/waitable-set-drop"(ws);
-        let __pair_temp_1: i64;
-        __pair_temp_1 = "wasi/future-new"();
-        let __mv_lo_1: i32;
-        let __mv_hi_1: i32;
-        multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-        __local_316 = "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_binding__Response_new"(local.tee headers_5("wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, __mv_lo_1);
+        rx_320 = builtin::i32_wrap_i64(local.tee packed_319("wasi/future-new"()));
+        tx_321 = builtin::i32_wrap_i64(packed_319 >> 32_i64);
+        __local_316 = "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_binding__Response_new"(local.tee headers_5("wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, rx_320);
         response_6 = __local_316.0;
         __local_164 = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response_6 };
         __local_166 = 0;
@@ -577,7 +583,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
         if ref.test "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok"(__local_164) {
             __local_173 = ref.cast "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok"(__local_164).payload_0;
             __local_166 = __local_173;
-            "wasi/task-return"(0, __local_166, 0, 0_i64, 0, 0, 0, 0);
+            "wasi/task-return:handle"(0, __local_166, 0, 0_i64, 0, 0, 0, 0);
         } else {
             __local_175 = ref.cast "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Err"(__local_164).payload_0;
             __local_166 = __local_175.discriminant;
@@ -855,34 +861,31 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
                 __local_168 = builtin::i64_extend_i32_s(__local_310);
                 __local_169 = __local_311;
             }
-            "wasi/task-return"(1, __local_166, __local_167, __local_168, __local_169, __local_170, __local_171, __local_172);
+            "wasi/task-return:handle"(1, __local_166, __local_167, __local_168, __local_169, __local_170, __local_171, __local_172);
         }
-        let __fw_write_ptr_2: i32;
-        let __fw_result_2: i32;
-        builtin::store_i64(local.tee __fw_write_ptr_2("mem/realloc"(0, 0, 8, 40)), 0_i64);
-        builtin::store_i64[8](__fw_write_ptr_2, 0_i64);
-        builtin::store_i64[16](__fw_write_ptr_2, 0_i64);
-        builtin::store_i64[24](__fw_write_ptr_2, 0_i64);
-        builtin::store_i64[32](__fw_write_ptr_2, 0_i64);
-        __fw_result_2 = "wasi/future-write"(__mv_hi_1, __fw_write_ptr_2);
-        if __fw_result_2 == -1 {
-            let __fw_evt_2: i32;
-            __fw_result_2 = "wasi/waitable-set-new"();
-            "wasi/waitable-join"(__mv_hi_1, __fw_result_2);
-            __fw_evt_2 = "mem/realloc"(0, 0, 4, 8);
-            drop("wasi/waitable-set-wait"(__fw_result_2, __fw_evt_2));
-            drop("mem/realloc"(__fw_evt_2, 8, 4, 0));
+        let __fw_write_ptr_1: i32;
+        let __fw_result_1: i32;
+        builtin::store_i64(local.tee __fw_write_ptr_1("mem/realloc"(0, 0, 8, 40)), 0_i64);
+        builtin::store_i64[8](__fw_write_ptr_1, 0_i64);
+        builtin::store_i64[16](__fw_write_ptr_1, 0_i64);
+        builtin::store_i64[24](__fw_write_ptr_1, 0_i64);
+        builtin::store_i64[32](__fw_write_ptr_1, 0_i64);
+        __fw_result_1 = "wasi/future-write"(tx_321, __fw_write_ptr_1);
+        if __fw_result_1 == -1 {
+            let __fw_evt_1: i32;
+            __fw_result_1 = "wasi/waitable-set-new"();
+            "wasi/waitable-join"(tx_321, __fw_result_1);
+            __fw_evt_1 = "mem/realloc"(0, 0, 4, 8);
+            drop("wasi/waitable-set-wait"(__fw_result_1, __fw_evt_1));
+            drop("mem/realloc"(__fw_evt_1, 8, 4, 0));
         }
-        drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
+        drop("mem/realloc"(__fw_write_ptr_1, 40, 8, 0));
     } else {
     }
     "wasi/waitable-set-drop"(ws);
-    let __pair_temp_3: i64;
-    __pair_temp_3 = "wasi/future-new"();
-    let __mv_lo_3: i32;
-    let __mv_hi_3: i32;
-    multivalue_bind [__mv_lo_3, __mv_hi_3] = (builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64));
-    __pattern_temp_3 = "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_binding__Response_new"(local.tee headers_10("wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, __mv_lo_3);
+    rx_323 = builtin::i32_wrap_i64(local.tee packed_322("wasi/future-new"()));
+    tx_324 = builtin::i32_wrap_i64(packed_322 >> 32_i64);
+    __pattern_temp_3 = "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_binding__Response_new"(local.tee headers_10("wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, rx_323);
     response_11 = __pattern_temp_3.0;
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response_11 };
     __tv_1 = 0;
@@ -895,7 +898,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
     if ref.test "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok"(__task_ret) {
         __local_22 = ref.cast "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok"(__task_ret).payload_0;
         __tv_1 = __local_22;
-        "wasi/task-return"(0, __tv_1, 0, 0_i64, 0, 0, 0, 0);
+        "wasi/task-return:handle"(0, __tv_1, 0, 0_i64, 0, 0, 0, 0);
     } else {
         __local_24 = ref.cast "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Err"(__task_ret).payload_0;
         __tv_1 = __local_24.discriminant;
@@ -1173,25 +1176,25 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
             __tv_3 = builtin::i64_extend_i32_s(__local_159);
             __tv_4 = __local_160;
         }
-        "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
+        "wasi/task-return:handle"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
-    let __fw_write_ptr_4: i32;
-    let __fw_result_4: i32;
-    builtin::store_i64(local.tee __fw_write_ptr_4("mem/realloc"(0, 0, 8, 40)), 0_i64);
-    builtin::store_i64[8](__fw_write_ptr_4, 0_i64);
-    builtin::store_i64[16](__fw_write_ptr_4, 0_i64);
-    builtin::store_i64[24](__fw_write_ptr_4, 0_i64);
-    builtin::store_i64[32](__fw_write_ptr_4, 0_i64);
-    __fw_result_4 = "wasi/future-write"(__mv_hi_3, __fw_write_ptr_4);
-    if __fw_result_4 == -1 {
-        let __fw_evt_4: i32;
-        __fw_result_4 = "wasi/waitable-set-new"();
-        "wasi/waitable-join"(__mv_hi_3, __fw_result_4);
-        __fw_evt_4 = "mem/realloc"(0, 0, 4, 8);
-        drop("wasi/waitable-set-wait"(__fw_result_4, __fw_evt_4));
-        drop("mem/realloc"(__fw_evt_4, 8, 4, 0));
+    let __fw_write_ptr_2: i32;
+    let __fw_result_2: i32;
+    builtin::store_i64(local.tee __fw_write_ptr_2("mem/realloc"(0, 0, 8, 40)), 0_i64);
+    builtin::store_i64[8](__fw_write_ptr_2, 0_i64);
+    builtin::store_i64[16](__fw_write_ptr_2, 0_i64);
+    builtin::store_i64[24](__fw_write_ptr_2, 0_i64);
+    builtin::store_i64[32](__fw_write_ptr_2, 0_i64);
+    __fw_result_2 = "wasi/future-write"(tx_324, __fw_write_ptr_2);
+    if __fw_result_2 == -1 {
+        let __fw_evt_2: i32;
+        __fw_result_2 = "wasi/waitable-set-new"();
+        "wasi/waitable-join"(tx_324, __fw_result_2);
+        __fw_evt_2 = "mem/realloc"(0, 0, 4, 8);
+        drop("wasi/waitable-set-wait"(__fw_result_2, __fw_evt_2));
+        drop("mem/realloc"(__fw_evt_2, 8, 4, 0));
     }
-    drop("mem/realloc"(__fw_write_ptr_4, 40, 8, 0));
+    drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
     "wasi/resource-drop:request"(request);
 }
 

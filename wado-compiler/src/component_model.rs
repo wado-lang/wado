@@ -141,7 +141,9 @@ fn is_cm_owned_source(ms: &ModuleSource) -> bool {
         ModuleSource::Wasi { .. } => true,
         // The `core:kiln` facade itself (`name == "kiln"`) plus its WIT-generated
         // submodules (`kiln/...`). `kilnfoo` is unrelated, so match exactly.
-        ModuleSource::Core { name } => name.as_str() == "kiln" || name.as_str().starts_with("kiln/"),
+        ModuleSource::Core { name } => {
+            name.as_str() == "kiln" || name.as_str().starts_with("kiln/")
+        }
         _ => false,
     }
 }
