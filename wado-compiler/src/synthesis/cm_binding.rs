@@ -26,7 +26,9 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
 use crate::package::Package;
-use crate::tir::{ResolvedType, TirFunction, TirModule, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TypeId, TypeTable};
+use crate::tir_visitor::TirRefVisitor;
+use crate::wir::CmPayloadType;
 
 pub use export_adapter::export_binding_func_name;
 use export_adapter::{
@@ -115,6 +117,197 @@ fn lookup_effect_owner(
 ///
 /// Adapter functions flow through monomorphize → lower → optimize → codegen
 /// like any other function.
+/// Reject a user record used as a `future`/`stream` payload when its fields are
+/// not registered in the CM interface registry. Such a record has no CM type to
+/// lower against, so the lower would silently mis-treat it as an i32 handle and
+/// emit an invalid component. Records are registered only for `--lib` components
+/// (under the package default interface); in any other world a user record has
+/// no CM home, so `get_struct_fields` returns `None` and the use is rejected.
+///
+/// The scan is scoped to functions reachable from the active world's export
+/// bindings — the resolvability condition, not the world, decides — so a record
+/// future in code the world drops (e.g. the non-`test` exports of a
+/// library-shaped source like `cm_catalog.wado` compiled for the test world) is
+/// never reached and never flagged.
+fn reject_unresolvable_record_payloads(project: &Package) -> Result<(), String> {
+    let reachable = reachable_from_export_bindings(project);
+    for module in project.tir_modules.values() {
+        let tt = module.type_table.borrow();
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
+            if !reachable.contains(&func.name) {
+                continue;
+            }
+            let Some(body) = &func.body else { continue };
+            let mut finder = NamedPayloadFinder {
+                tt: &tt,
+                registry: project.cm_interface_registry.as_ref(),
+                found: None,
+            };
+            finder.visit_block(body);
+            if let Some(name) = finder.found {
+                return Err(format!(
+                    "record type `{name}` is used as a `future` / `stream` payload, \
+                     which is only supported in library (`--lib`) components"
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Names of every function reachable from the active world's export bindings,
+/// following free-function and method `Call` edges by name. The roots are the
+/// user functions the world actually exports — world exports for
+/// CLI/HTTP/`--lib`, `test` functions for the test world — so any function the
+/// world drops is excluded.
+fn reachable_from_export_bindings(project: &Package) -> IndexSet<String> {
+    let mut by_name: IndexMap<String, Vec<Rc<RefCell<TirFunction>>>> = IndexMap::default();
+    for module in project.tir_modules.values() {
+        for func_rc in &module.functions {
+            let name = func_rc.borrow().name.clone();
+            by_name.entry(name).or_default().push(func_rc.clone());
+        }
+    }
+
+    let mut visited: IndexSet<String> = IndexSet::default();
+    let mut work: Vec<String> = project.export_binding_names.keys().cloned().collect();
+    while let Some(name) = work.pop() {
+        if !visited.insert(name.clone()) {
+            continue;
+        }
+        let Some(funcs) = by_name.get(&name) else {
+            continue;
+        };
+        for func_rc in funcs {
+            let func = func_rc.borrow();
+            let Some(body) = &func.body else { continue };
+            let mut collector = CalleeCollector { names: Vec::new() };
+            collector.visit_block(body);
+            for callee in collector.names {
+                if !visited.contains(&callee) {
+                    work.push(callee);
+                }
+            }
+        }
+    }
+    visited
+}
+
+struct CalleeCollector {
+    names: Vec<String>,
+}
+
+impl TirRefVisitor for CalleeCollector {
+    fn visit_stmt(&mut self, stmt: &crate::tir::TirStmt) {
+        // This pass runs before `task return` is stripped; descend into its
+        // value rather than tripping the default walker's guard.
+        if let crate::tir::TirStmtKind::TaskReturn { value } = &stmt.kind {
+            self.visit_expr(value);
+        } else {
+            self.walk_stmt(stmt);
+        }
+    }
+
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        match &expr.kind {
+            TirExprKind::Call { func, .. } | TirExprKind::MethodCall { func, .. } => {
+                self.names.push(func.name.clone());
+            }
+            _ => {}
+        }
+        self.walk_expr(expr);
+    }
+}
+
+struct NamedPayloadFinder<'a> {
+    tt: &'a TypeTable,
+    registry: &'a crate::component_model::CmInterfaceRegistry,
+    found: Option<String>,
+}
+
+impl TirRefVisitor for NamedPayloadFinder<'_> {
+    fn visit_stmt(&mut self, stmt: &crate::tir::TirStmt) {
+        // This pass runs before `task return` is stripped; descend into its
+        // value rather than tripping the default walker's guard.
+        if let crate::tir::TirStmtKind::TaskReturn { value } = &stmt.kind {
+            self.visit_expr(value);
+        } else {
+            self.walk_stmt(stmt);
+        }
+    }
+
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if self.found.is_none() {
+            self.found = unresolvable_future_stream_payload(self.tt, self.registry, expr);
+        }
+        self.walk_expr(expr);
+    }
+}
+
+/// For a `Future::<T>::new()` / `Stream::<T>::new()` static call whose payload
+/// `T` contains a named record whose fields are not registered in the CM
+/// registry, return that record's Wado name. `new` is the only way to obtain a
+/// `Future<T>` / `Stream<T>` outside `--lib` (non-lib world exports have fixed
+/// signatures), so checking it covers the creation sites.
+fn unresolvable_future_stream_payload(
+    tt: &TypeTable,
+    registry: &crate::component_model::CmInterfaceRegistry,
+    expr: &TirExpr,
+) -> Option<String> {
+    let TirExprKind::Call { func, .. } = &expr.kind else {
+        return None;
+    };
+    let cm = func
+        .method_info
+        .as_ref()
+        .and_then(|m| m.cm_name.as_deref())?;
+    if cm != "future-new" && cm != "stream-new" {
+        return None;
+    }
+    let payload = func
+        .monomorph_info
+        .as_ref()?
+        .impl_type_args
+        .first()
+        .copied()?;
+    let name = named_record_in_payload(tt, payload)?;
+    // Registered (`--lib`) records lower fine; only an unresolvable record has
+    // no CM home and would mis-lower as an i32 handle.
+    registry.get_struct_fields(&name).is_none().then_some(name)
+}
+
+/// The Wado name of the first named-record struct nested anywhere in a CM
+/// payload type (`Future<Point>`, `Future<List<Point>>`, `Future<[Point, u32]>`,
+/// …), or `None` if the payload carries no named record.
+fn named_record_in_payload(tt: &TypeTable, type_id: TypeId) -> Option<String> {
+    if let ResolvedType::Struct { name, .. } = tt.get(type_id)
+        && matches!(
+            crate::component_model::cm_payload_type_from_type_id(tt, type_id),
+            Some(CmPayloadType::Named(_))
+        )
+    {
+        return Some(name.clone());
+    }
+    if let Some(inner) = tt.as_option(type_id).or_else(|| tt.as_list(type_id)) {
+        return named_record_in_payload(tt, inner);
+    }
+    if let Some(elems) = tt.as_tuple(type_id) {
+        return elems.iter().find_map(|&e| named_record_in_payload(tt, e));
+    }
+    if let ResolvedType::GenericInstance {
+        name, type_args, ..
+    } = tt.get(type_id)
+        && name == "Result"
+    {
+        return type_args
+            .clone()
+            .iter()
+            .find_map(|&a| named_record_in_payload(tt, a));
+    }
+    None
+}
+
 pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
     let entry_source = project.entry_module_source.clone();
 
@@ -590,6 +783,13 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
             entry_module.functions.push(adapter);
         }
     }
+
+    // Reject record `future`/`stream` payloads that have no CM type to lower
+    // against (see `reject_unresolvable_record_payloads`). Runs after the export
+    // bindings are synthesized — so reachability roots are known — but before
+    // the resource rewrites below mutate the pristine `future-new`/`stream-new`
+    // call shape the scan matches.
+    reject_unresolvable_record_payloads(&project)?;
 
     // Strip remaining TaskReturn from all modules.
     // `task return` is only valid inside `async fn` (checked by elaborator).

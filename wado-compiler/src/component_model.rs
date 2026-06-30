@@ -80,9 +80,9 @@ pub fn cm_payload_type_from_type_id(
     type_id: TypeId,
 ) -> Option<CmPayloadType> {
     if let Some(inner) = type_table.as_option(type_id) {
-        return Some(CmPayloadType::Option(Box::new(cm_payload_type_from_type_id(
-            type_table, inner,
-        )?)));
+        return Some(CmPayloadType::Option(Box::new(
+            cm_payload_type_from_type_id(type_table, inner)?,
+        )));
     }
     if let Some(inner) = type_table.as_list(type_id) {
         return Some(CmPayloadType::List(Box::new(cm_payload_type_from_type_id(
@@ -106,10 +106,15 @@ pub fn cm_payload_type_from_type_id(
                 if matches!(type_table.get(id), ResolvedType::Unit) {
                     Some(None)
                 } else {
-                    Some(Some(Box::new(cm_payload_type_from_type_id(type_table, id)?)))
+                    Some(Some(Box::new(cm_payload_type_from_type_id(
+                        type_table, id,
+                    )?)))
                 }
             };
-            Some(CmPayloadType::Result(arm(type_args[0])?, arm(type_args[1])?))
+            Some(CmPayloadType::Result(
+                arm(type_args[0])?,
+                arm(type_args[1])?,
+            ))
         }
         // A user/dependency record: lower/lift it as a named CM record. WASI and
         // kiln records keep their own (registry-driven) paths, so they stay
@@ -118,7 +123,7 @@ pub fn cm_payload_type_from_type_id(
             name,
             module_source,
             ..
-        } if !is_cm_owned_source(&module_source) => Some(CmPayloadType::Named(to_kebab(&name))),
+        } if !is_cm_owned_source(module_source) => Some(CmPayloadType::Named(to_kebab(name))),
         _ => None,
     }
 }
@@ -126,10 +131,15 @@ pub fn cm_payload_type_from_type_id(
 /// Whether a type's module source already owns a CM lowering path (`wasi:*`
 /// interfaces and the `core:kiln/*` generator surface). User, local, and
 /// dependency records do not, so they route through the general `Named` payload.
+/// Whether a type's module source already owns a CM lowering path: `wasi:*`
+/// interfaces and the `core:kiln/*` generator surface (modules sourced as
+/// `kiln/...`). Keep in sync with the AST mirror in `cm_payload_type_from_ast`,
+/// which applies the equivalent `wasi:` / `core:kiln/` check on the resolved
+/// source string.
 fn is_cm_owned_source(ms: &ModuleSource) -> bool {
     match ms {
         ModuleSource::Wasi { .. } => true,
-        ModuleSource::Core { name } => name.as_str().starts_with("kiln"),
+        ModuleSource::Core { name } => name.as_str().starts_with("kiln/"),
         _ => false,
     }
 }
@@ -172,8 +182,9 @@ pub fn cm_payload_type_from_ast(
             // A user/dependency record: a registered struct whose source is not
             // a CM-owned (`wasi:*` / `core:kiln/*`) interface. Mirrors the
             // `Named` arm of `cm_payload_type_from_type_id`.
+            // Mirror of `is_cm_owned_source` on the resolved source string.
             let src = registry.resolve_cm_source_for(n, None)?;
-            if src.starts_with("wasi:") || src.starts_with("core:kiln") {
+            if src.starts_with("wasi:") || src.starts_with("core:kiln/") {
                 return None;
             }
             let cm = registry.get_struct_cm_name_by_source(src, &n.name)?;
@@ -185,11 +196,9 @@ pub fn cm_payload_type_from_ast(
             .collect::<Option<Vec<_>>>()
             .map(CmPayloadType::Tuple),
         Type::Generic(g) => match g.name.as_str() {
-            "Option" if g.args.len() == 1 => {
-                Some(CmPayloadType::Option(Box::new(cm_payload_type_from_ast(
-                    &g.args[0], registry,
-                )?)))
-            }
+            "Option" if g.args.len() == 1 => Some(CmPayloadType::Option(Box::new(
+                cm_payload_type_from_ast(&g.args[0], registry)?,
+            ))),
             "List" if g.args.len() == 1 => Some(CmPayloadType::List(Box::new(
                 cm_payload_type_from_ast(&g.args[0], registry)?,
             ))),

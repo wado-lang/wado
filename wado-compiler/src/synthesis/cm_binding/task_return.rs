@@ -415,7 +415,7 @@ fn generate_inline_task_return(
             // with no flat payload.
             stmts.push(expr_stmt(value));
             stmts.push(expr_stmt(cm_raw_call(
-            task_return_name,
+                task_return_name,
                 vec![],
                 TypeTable::UNIT,
             )));
@@ -447,7 +447,7 @@ fn generate_inline_task_return(
                 task_return_args.push(arg);
             }
             stmts.push(expr_stmt(cm_raw_call(
-            task_return_name,
+                task_return_name,
                 task_return_args,
                 TypeTable::UNIT,
             )));

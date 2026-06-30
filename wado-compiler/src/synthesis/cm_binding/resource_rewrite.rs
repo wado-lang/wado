@@ -230,11 +230,8 @@ pub(super) fn synthesize_future_writes(project: &mut Package) {
 
     let mut new_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
     for (_, payload_type_id) in &needed {
-        let func = synthesize_future_write_func(
-            *payload_type_id,
-            cm_interface_registry,
-            &type_table,
-        );
+        let func =
+            synthesize_future_write_func(*payload_type_id, cm_interface_registry, &type_table);
         new_functions.push(Rc::new(RefCell::new(func)));
     }
 
@@ -489,8 +486,8 @@ fn synthesize_stream_write_func(
         let payload = crate::component_model::classify_stream_payload(&tt, elem_type_id);
         let write_name = CanonicalIntrinsic::StreamWrite(payload).import_name();
         let elem_ast = type_id_to_ast_type(elem_type_id, &tt, cm_interface_registry);
-        let size = crate::component_model::cm_size_with_registry(&elem_ast, cm_interface_registry)
-            as i32;
+        let size =
+            crate::component_model::cm_size_with_registry(&elem_ast, cm_interface_registry) as i32;
         let align =
             crate::component_model::cm_align_with_registry(&elem_ast, cm_interface_registry) as i32;
         (func_name, write_name, elem_ast, size, align)
@@ -534,7 +531,12 @@ fn synthesize_stream_write_func(
         i32_const(0),
     ));
     let result_idx = alloc(&mut next_local, &mut locals, TypeTable::I32, true);
-    stmts.push(let_mut_stmt("result", result_idx, TypeTable::I32, i32_const(0)));
+    stmts.push(let_mut_stmt(
+        "result",
+        result_idx,
+        TypeTable::I32,
+        i32_const(0),
+    ));
 
     let offset_ref = || local_ref(offset_idx, "offset", TypeTable::I32);
     let result_ref = || local_ref(result_idx, "result", TypeTable::I32);
@@ -559,7 +561,12 @@ fn synthesize_stream_write_func(
         stmts: vec![
             // if offset >= count { break }
             if_stmt(
-                binary(TirBinaryOp::GtEq, offset_ref(), count_ref(), TypeTable::BOOL),
+                binary(
+                    TirBinaryOp::GtEq,
+                    offset_ref(),
+                    count_ref(),
+                    TypeTable::BOOL,
+                ),
                 TirBlock {
                     stmts: vec![break_stmt()],
                     span: synth_span(),
@@ -581,7 +588,12 @@ fn synthesize_stream_write_func(
             )),
             // if result == -1 { result = wait_for_blocked(handle) }
             if_stmt(
-                binary(TirBinaryOp::Eq, result_ref(), i32_const(-1), TypeTable::BOOL),
+                binary(
+                    TirBinaryOp::Eq,
+                    result_ref(),
+                    i32_const(-1),
+                    TypeTable::BOOL,
+                ),
                 TirBlock {
                     stmts: vec![expr_stmt(assign(
                         result_ref(),
@@ -618,7 +630,12 @@ fn synthesize_stream_write_func(
                     ),
                     binary(
                         TirBinaryOp::NotEq,
-                        binary(TirBinaryOp::BitAnd, result_ref(), i32_const(0xf), TypeTable::I32),
+                        binary(
+                            TirBinaryOp::BitAnd,
+                            result_ref(),
+                            i32_const(0xf),
+                            TypeTable::I32,
+                        ),
                         i32_const(0),
                         TypeTable::BOOL,
                     ),
@@ -1176,14 +1193,6 @@ impl TirRefVisitor for RecordStreamReadFinder<'_> {
     }
 }
 
-/// Generate a TIR function for reading records from a stream.
-///
-/// Generates `__cm_stream_read_<T>(handle: i32, max: i32) -> List<T>`:
-/// 1. Call `cm_stream_read_raw` to get raw buffer [ptr, count]
-/// 2. Loop: lift each record from buffer at ptr + i * `elem_size`
-/// 3. Append to result array
-/// 4. Free buffer
-/// 5. Return array
 /// Shared stream-read loop generator. `func_name` / `stream_read_name` /
 /// `payload_ast` / `cm_package` / `elem_inst_name` are precomputed by the
 /// caller so this body serves both the WASI-record path
@@ -1568,7 +1577,14 @@ fn synthesize_stream_read_value_func(
             cm_interface_registry,
             Some("cli"),
         ) as i32;
-        (func_name, read_name, elem_inst_name, payload_ast, size, align)
+        (
+            func_name,
+            read_name,
+            elem_inst_name,
+            payload_ast,
+            size,
+            align,
+        )
     };
 
     synthesize_stream_read_func(
@@ -1770,9 +1786,7 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
         }
         // Future drop / cancel: parameterize the canonical name by the future's
         // payload and rewrite as a raw CmRawCall (mirrors the stream path above).
-        if is_future_drop_cancel(&cm_name)
-            && let Some(parameterized) = parameterize_future_cm_name(&cm_name, expr, self.tt)
-        {
+        if let Some(parameterized) = parameterize_future_cm_name(&cm_name, expr, self.tt) {
             rewrite_cm_instance_method(expr, "raw", &parameterized, self.entry_source);
             return;
         }
@@ -1882,10 +1896,16 @@ fn rewrite_cm_new(expr: &mut TirExpr, tt: &TypeTable, is_future: bool) {
     };
     let (canonical_name, helper) = if is_future {
         let payload = crate::component_model::classify_future_payload(tt, payload_tid);
-        (CanonicalIntrinsic::FutureNew(payload).import_name(), "cm_future_pair")
+        (
+            CanonicalIntrinsic::FutureNew(payload).import_name(),
+            "cm_future_pair",
+        )
     } else {
         let payload = crate::component_model::classify_stream_payload(tt, payload_tid);
-        (CanonicalIntrinsic::StreamNew(payload).import_name(), "cm_stream_pair")
+        (
+            CanonicalIntrinsic::StreamNew(payload).import_name(),
+            "cm_stream_pair",
+        )
     };
     let result_type = expr.type_id;
     let packed = cm_raw_call(&canonical_name, vec![], TypeTable::I64);
@@ -1910,24 +1930,23 @@ fn rewrite_cm_new(expr: &mut TirExpr, tt: &TypeTable, is_future: bool) {
     );
 }
 
-fn is_future_drop_cancel(cm_name: &str) -> bool {
-    matches!(
-        cm_name,
-        "future-drop-readable"
-            | "future-drop-writable"
-            | "future-cancel-read"
-            | "future-cancel-write"
-    )
-}
-
 /// Parameterize a future drop / cancel canonical name by the receiver's payload
 /// (`future-drop-readable` → `future-drop-readable:val-point`, …), matching the
-/// `import_name` codegen builds. Returns `None` if the receiver is not a
-/// `Future<T>` / `FutureWritable<T>` method call.
+/// `import_name` codegen builds. Returns `None` if `cm_name` is not a future
+/// drop/cancel op or the receiver is not a `Future<T>` / `FutureWritable<T>`
+/// method call.
 fn parameterize_future_cm_name(cm_name: &str, expr: &TirExpr, tt: &TypeTable) -> Option<String> {
-    let receiver = match &expr.kind {
-        TirExprKind::MethodCall { receiver, .. } => receiver,
+    // Match the op first so the canonical-name list lives in exactly one place
+    // and non-future-handle methods skip the receiver classification below.
+    let make = match cm_name {
+        "future-drop-readable" => CanonicalIntrinsic::FutureDropReadable,
+        "future-drop-writable" => CanonicalIntrinsic::FutureDropWritable,
+        "future-cancel-read" => CanonicalIntrinsic::FutureCancelRead,
+        "future-cancel-write" => CanonicalIntrinsic::FutureCancelWrite,
         _ => return None,
+    };
+    let TirExprKind::MethodCall { receiver, .. } = &expr.kind else {
+        return None;
     };
     let mut type_id = receiver.type_id;
     while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(type_id) {
@@ -1935,14 +1954,7 @@ fn parameterize_future_cm_name(cm_name: &str, expr: &TirExpr, tt: &TypeTable) ->
     }
     let payload_tid = *tt.generic_type_args(type_id)?.first()?;
     let payload = crate::component_model::classify_future_payload(tt, payload_tid);
-    let intrinsic = match cm_name {
-        "future-drop-readable" => CanonicalIntrinsic::FutureDropReadable(payload),
-        "future-drop-writable" => CanonicalIntrinsic::FutureDropWritable(payload),
-        "future-cancel-read" => CanonicalIntrinsic::FutureCancelRead(payload),
-        "future-cancel-write" => CanonicalIntrinsic::FutureCancelWrite(payload),
-        _ => return None,
-    };
-    Some(intrinsic.import_name())
+    Some(make(payload).import_name())
 }
 
 /// Parameterize a stream CM name based on the receiver type.

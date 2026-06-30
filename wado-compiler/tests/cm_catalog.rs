@@ -28,8 +28,9 @@ use futures::StreamExt;
 use futures::channel::{mpsc, oneshot};
 use wado_compiler::{CompilerOptions, OptLevel};
 use wasmtime::component::{
-    Component, ComponentExportIndex, Destination, FutureAny, FutureConsumer, FutureReader, Instance,
-    Source, StreamAny, StreamConsumer, StreamProducer, StreamReader, StreamResult, Val, VecBuffer,
+    Component, ComponentExportIndex, Destination, FutureAny, FutureConsumer, FutureReader,
+    Instance, Source, StreamAny, StreamConsumer, StreamProducer, StreamReader, StreamResult, Val,
+    VecBuffer,
 };
 use wasmtime::{AsContextMut, Store, StoreContextMut};
 
@@ -776,7 +777,11 @@ where
         .map_err(|e| format!("`{export}`: call trapped: {e:#}"))?;
     let any = match results.into_iter().next() {
         Some(Val::Future(a)) => a,
-        other => return Err(format!("`{export}`: expected a future result, got {other:?}")),
+        other => {
+            return Err(format!(
+                "`{export}`: expected a future result, got {other:?}"
+            ));
+        }
     };
     let reader = any.try_into_future_reader::<T>().map_err(|e| {
         format!(
@@ -835,24 +840,44 @@ fn run_producer_round_trips(opt_level: OptLevel) {
         }
 
         check!(produce_and_read_back(
-            &mut store, &instance, i, "mk-future-string",
-            Val::String("héllo, wörld".into()), "héllo, wörld".to_string(),
+            &mut store,
+            &instance,
+            i,
+            "mk-future-string",
+            Val::String("héllo, wörld".into()),
+            "héllo, wörld".to_string(),
         ));
         check!(produce_and_read_back(
-            &mut store, &instance, i, "mk-future-option",
-            Val::Option(b(Val::U32(42))), Some(42u32),
+            &mut store,
+            &instance,
+            i,
+            "mk-future-option",
+            Val::Option(b(Val::U32(42))),
+            Some(42u32),
         ));
         check!(produce_and_read_back(
-            &mut store, &instance, i, "mk-future-result",
-            Val::Result(Ok(b(Val::U32(7)))), Ok::<u32, String>(7),
+            &mut store,
+            &instance,
+            i,
+            "mk-future-result",
+            Val::Result(Ok(b(Val::U32(7)))),
+            Ok::<u32, String>(7),
         ));
         check!(produce_and_read_back(
-            &mut store, &instance, i, "mk-future-list",
-            Val::List(vec![Val::U32(1), Val::U32(2), Val::U32(3)]), vec![1u32, 2, 3],
+            &mut store,
+            &instance,
+            i,
+            "mk-future-list",
+            Val::List(vec![Val::U32(1), Val::U32(2), Val::U32(3)]),
+            vec![1u32, 2, 3],
         ));
         check!(produce_and_read_back(
-            &mut store, &instance, i, "mk-future-tuple",
-            Val::Tuple(vec![Val::U32(5), Val::String("x".into())]), (5u32, "x".to_string()),
+            &mut store,
+            &instance,
+            i,
+            "mk-future-tuple",
+            Val::Tuple(vec![Val::U32(5), Val::String("x".into())]),
+            (5u32, "x".to_string()),
         ));
 
         assert!(failures.is_empty(), "\n{}", failures.join("\n"));
@@ -901,7 +926,11 @@ where
         .map_err(|e| format!("`{export}`: call trapped: {e:#}"))?;
     let any = match results.into_iter().next() {
         Some(Val::Stream(a)) => a,
-        other => return Err(format!("`{export}`: expected a stream result, got {other:?}")),
+        other => {
+            return Err(format!(
+                "`{export}`: expected a stream result, got {other:?}"
+            ));
+        }
     };
     let reader = any.try_into_stream_reader::<T>().map_err(|e| {
         format!(
@@ -1040,7 +1069,12 @@ where
 }
 
 fn run_future_identity_round_trips(opt_level: OptLevel) {
-    run_future_identity(opt_level, "String", "id-future-string", "héllo, wörld".to_string());
+    run_future_identity(
+        opt_level,
+        "String",
+        "id-future-string",
+        "héllo, wörld".to_string(),
+    );
     run_future_identity(opt_level, "Option<u32>", "id-future-option", Some(42u32));
     run_future_identity(
         opt_level,

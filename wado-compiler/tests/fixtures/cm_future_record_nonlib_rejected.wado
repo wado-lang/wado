@@ -1,0 +1,28 @@
+// A user record used as a future/stream payload is only representable in a
+// `--lib` component (where the record type is registered). In any other world
+// its fields are unresolvable, so the compiler rejects it rather than emitting
+// an invalid component.
+use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+
+struct Point {
+    x: f64,
+    y: f64,
+}
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let [rx, tx] = Future::<Point>::new();
+    tx.write(Point { x: 1.0, y: 2.0 });
+    rx.drop();
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{
+    "wasi:http/service": {},
+    "compile_error": "record type `Point` is used as a `future` / `stream` payload, which is only supported in library (`--lib`) components"
+}

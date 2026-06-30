@@ -1230,15 +1230,9 @@ fn intern_cm_type(
             panic!("CmTypeKey::Primitive has no defined-type slot; use intern_cm_valtype")
         }
         CmTypeKey::Own(inner) => ResolvedCmType::Own(intern_cm_type(builder, ctx, inner, None)),
-        CmTypeKey::Option(inner) => {
-            ResolvedCmType::Option(intern_cm_valtype(builder, ctx, inner))
-        }
-        CmTypeKey::Future(inner) => {
-            ResolvedCmType::Future(intern_cm_valtype(builder, ctx, inner))
-        }
-        CmTypeKey::Stream(inner) => {
-            ResolvedCmType::Stream(intern_cm_valtype(builder, ctx, inner))
-        }
+        CmTypeKey::Option(inner) => ResolvedCmType::Option(intern_cm_valtype(builder, ctx, inner)),
+        CmTypeKey::Future(inner) => ResolvedCmType::Future(intern_cm_valtype(builder, ctx, inner)),
+        CmTypeKey::Stream(inner) => ResolvedCmType::Stream(intern_cm_valtype(builder, ctx, inner)),
         CmTypeKey::List(inner) => ResolvedCmType::List(intern_cm_valtype(builder, ctx, inner)),
         CmTypeKey::Result { ok, err } => {
             let ok = ok.as_ref().map(|k| intern_cm_valtype(builder, ctx, k));
@@ -1408,8 +1402,12 @@ fn payload_type_to_cm_key(payload: &CmPayloadType, ctx: &ComponentModelContext) 
         CmPayloadType::List(t) => CmTypeKey::List(Box::new(payload_type_to_cm_key(t, ctx))),
         CmPayloadType::Option(t) => CmTypeKey::Option(Box::new(payload_type_to_cm_key(t, ctx))),
         CmPayloadType::Result(ok, err) => CmTypeKey::Result {
-            ok: ok.as_ref().map(|t| Box::new(payload_type_to_cm_key(t, ctx))),
-            err: err.as_ref().map(|t| Box::new(payload_type_to_cm_key(t, ctx))),
+            ok: ok
+                .as_ref()
+                .map(|t| Box::new(payload_type_to_cm_key(t, ctx))),
+            err: err
+                .as_ref()
+                .map(|t| Box::new(payload_type_to_cm_key(t, ctx))),
         },
         CmPayloadType::Tuple(elems) => CmTypeKey::Tuple(
             elems
@@ -1492,7 +1490,12 @@ fn prebuild_value_named_types(
             crate::token::Span::new(0, 0, 1, 1),
         ));
         let mut sink = TopLevelSink { builder, ctx };
-        type_gen.ast_type_to_cm(&mut sink, &named, &project.cm_interface_registry, &no_resources);
+        type_gen.ast_type_to_cm(
+            &mut sink,
+            &named,
+            &project.cm_interface_registry,
+            &no_resources,
+        );
     }
 }
 
@@ -1831,9 +1834,9 @@ fn resolve_future_type(
             .find(|(s, _)| *s == scalar)
             .map(|(_, idx)| *idx)
             .expect("scalar future type not registered"),
-        CmFuturePayload::Value(ref t) => *value_future_types.get(t).unwrap_or_else(|| {
-            panic!("value future type not registered for: {}", t.name_suffix())
-        }),
+        CmFuturePayload::Value(ref t) => *value_future_types
+            .get(t)
+            .unwrap_or_else(|| panic!("value future type not registered for: {}", t.name_suffix())),
     }
 }
 

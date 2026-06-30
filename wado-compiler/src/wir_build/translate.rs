@@ -2103,7 +2103,6 @@ impl FunctionTranslator<'_, '_> {
                     return instr;
                 }
 
-
                 let kept: Vec<Operand> = args
                     .iter()
                     .filter(|a| self.operand_type_id(a.expr) != TypeTable::UNIT)
