@@ -546,7 +546,11 @@ fn let_ref_global(body: &Body, stmt: &StmtKind) -> Option<(u32, GlobalKey)> {
         return None;
     };
     let ge = expr.as_expr()?;
-    let ExprKind::GlobalVarGet { module_source, name } = &body.exprs[ge].kind else {
+    let ExprKind::GlobalVarGet {
+        module_source,
+        name,
+    } = &body.exprs[ge].kind
+    else {
         return None;
     };
     Some((*local_index, (module_source.clone(), name.clone())))
