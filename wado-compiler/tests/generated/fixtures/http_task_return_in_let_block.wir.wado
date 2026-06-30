@@ -244,15 +244,17 @@ type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(
 
 type "functype//wasi/future-new" = fn() -> i64;  // TypeId(49)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(50)
+type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(50)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(51)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(51)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(52)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(52)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(53)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(53)
 
-type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(54)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(54)
+
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(55)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -261,6 +263,7 @@ import fn wasi/wasi:http/Response::new from "wasi/wasi:http/Response::new";
 import fn wasi/wasi:http/Response::set_status_code from "wasi/wasi:http/Response::set_status_code";
 import memory (1) from "mem/memory";
 import fn wasi/future-new from "wasi/future-new";
+import fn wasi/task-return:handle from "wasi/task-return:handle";
 import fn wasi/future-write from "wasi/future-write";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-join from "wasi/waitable-join";
@@ -407,18 +410,18 @@ fn "wado-compiler/tests/fixtures/http_task_return_in_let_block.wado/handle"(_req
     let __local_158: i32;
     let __local_159: i32;
     let __pattern_temp_1: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
+    let packed: i64;
+    let rx: i32;
+    let tx: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/future-new"();
-    let __mv_lo_1: i32;
-    let __mv_hi_1: i32;
-    multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    __pattern_temp_1 = "wado-compiler/tests/fixtures/http_task_return_in_let_block.wado/__cm_binding__Response_new"(local.tee headers("wado-compiler/tests/fixtures/http_task_return_in_let_block.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, __mv_lo_1);
+    rx = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
+    tx = builtin::i32_wrap_i64(packed >> 32_i64);
+    __pattern_temp_1 = "wado-compiler/tests/fixtures/http_task_return_in_let_block.wado/__cm_binding__Response_new"(local.tee headers("wado-compiler/tests/fixtures/http_task_return_in_let_block.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, rx);
     drop("wado-compiler/tests/fixtures/http_task_return_in_let_block.wado/__cm_binding__Response_set_status_code"(local.tee response(__pattern_temp_1.0), 200));
     __local_9 = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __local_11 = 0;
@@ -431,7 +434,7 @@ fn "wado-compiler/tests/fixtures/http_task_return_in_let_block.wado/handle"(_req
     if ref.test "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok"(__local_9) {
         __local_18 = ref.cast "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok"(__local_9).payload_0;
         __local_11 = __local_18;
-        "wasi/task-return"(0, __local_11, 0, 0_i64, 0, 0, 0, 0);
+        "wasi/task-return:handle"(0, __local_11, 0, 0_i64, 0, 0, 0, 0);
     } else {
         __local_20 = ref.cast "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Err"(__local_9).payload_0;
         __local_11 = __local_20.discriminant;
@@ -709,25 +712,25 @@ fn "wado-compiler/tests/fixtures/http_task_return_in_let_block.wado/handle"(_req
             __local_13 = builtin::i64_extend_i32_s(__local_155);
             __local_14 = __local_156;
         }
-        "wasi/task-return"(1, __local_11, __local_12, __local_13, __local_14, __local_15, __local_16, __local_17);
+        "wasi/task-return:handle"(1, __local_11, __local_12, __local_13, __local_14, __local_15, __local_16, __local_17);
     }
-    let __fw_write_ptr_2: i32;
-    let __fw_result_2: i32;
-    builtin::store_i64(local.tee __fw_write_ptr_2("mem/realloc"(0, 0, 8, 40)), 0_i64);
-    builtin::store_i64[8](__fw_write_ptr_2, 0_i64);
-    builtin::store_i64[16](__fw_write_ptr_2, 0_i64);
-    builtin::store_i64[24](__fw_write_ptr_2, 0_i64);
-    builtin::store_i64[32](__fw_write_ptr_2, 0_i64);
-    __fw_result_2 = "wasi/future-write"(__mv_hi_1, __fw_write_ptr_2);
-    if __fw_result_2 == -1 {
-        let __fw_evt_2: i32;
-        __fw_result_2 = "wasi/waitable-set-new"();
-        "wasi/waitable-join"(__mv_hi_1, __fw_result_2);
-        __fw_evt_2 = "mem/realloc"(0, 0, 4, 8);
-        drop("wasi/waitable-set-wait"(__fw_result_2, __fw_evt_2));
-        drop("mem/realloc"(__fw_evt_2, 8, 4, 0));
+    let __fw_write_ptr_1: i32;
+    let __fw_result_1: i32;
+    builtin::store_i64(local.tee __fw_write_ptr_1("mem/realloc"(0, 0, 8, 40)), 0_i64);
+    builtin::store_i64[8](__fw_write_ptr_1, 0_i64);
+    builtin::store_i64[16](__fw_write_ptr_1, 0_i64);
+    builtin::store_i64[24](__fw_write_ptr_1, 0_i64);
+    builtin::store_i64[32](__fw_write_ptr_1, 0_i64);
+    __fw_result_1 = "wasi/future-write"(tx, __fw_write_ptr_1);
+    if __fw_result_1 == -1 {
+        let __fw_evt_1: i32;
+        __fw_result_1 = "wasi/waitable-set-new"();
+        "wasi/waitable-join"(tx, __fw_result_1);
+        __fw_evt_1 = "mem/realloc"(0, 0, 4, 8);
+        drop("wasi/waitable-set-wait"(__fw_result_1, __fw_evt_1));
+        drop("mem/realloc"(__fw_evt_1, 8, 4, 0));
     }
-    drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
+    drop("mem/realloc"(__fw_write_ptr_1, 40, 8, 0));
     "wasi/resource-drop:request"(_request);
 }
 

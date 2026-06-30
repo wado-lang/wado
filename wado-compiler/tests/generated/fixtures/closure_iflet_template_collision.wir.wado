@@ -51,21 +51,23 @@ type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // T
 
 type "functype//core:rt/wait_for_blocked" = fn(i32) -> i32;  // TypeId(21)
 
-type "functype//core:rt/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(22)
+type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(22)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(23)
+type "functype//core:rt/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(24)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(24)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(25)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(25)
 
-type "functype//wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado//__Closure_2");  // TypeId(26)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(26)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(27)
+type "functype//wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado//__Closure_2");  // TypeId(27)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(28)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(29)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(29)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(30)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -129,13 +131,13 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 
 fn "core:cli/println"(message) with Stdout {
     let handle: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    let __mv_lo_1: i32;
-    let __mv_hi_1: i32;
-    multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    handle = "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__cm_binding__Stdout_write_via_stream"(__mv_lo_1);
-    "core:cli/write_to_stream"(__mv_hi_1, message, 1);
+    let packed: i64;
+    let rx_6: i32;
+    let tx_7: i32;
+    rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
@@ -171,13 +173,13 @@ fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
 
 fn "core:rt/log_stderr"(message) {
     let future_handle: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    let __mv_lo_1: i32;
-    let __mv_hi_1: i32;
-    multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(__mv_lo_1);
-    "core:rt/write_string_to_stream"(__mv_hi_1, message, 1);
+    let packed: i64;
+    let rx_6: i32;
+    let tx_7: i32;
+    rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
+    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_6);
+    "core:rt/write_string_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(future_handle);
 }
 
@@ -207,17 +209,35 @@ fn "core:rt/wait_for_blocked"(handle) {
     return payload;
 }
 
+fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
+    let offset: i32;
+    let result: i32;
+    offset = 0;
+    b4: block {
+        l5: loop {
+            break_if b4 offset >= count;
+            result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
+            if result == -1 {
+                result = "core:rt/wait_for_blocked"(handle);
+            }
+            offset = offset + (result >> 4);
+            break_if b4 (if (result >> 4) == 0 -> i32 {
+                1;
+            } else {
+                (result & 15) != 0;
+            });
+            continue l5;
+        };
+    };
+}
+
 fn "core:rt/cm_stream_write_raw_u8"(handle, data, len) {
     let packed: i64;
     let ptr: i32;
     let raw_len: i32;
-    let result: i32;
     ptr = builtin::i32_wrap_i64(local.tee packed("core:rt/cm_lower_list_u8"(data, len)));
     raw_len = builtin::i32_wrap_i64(packed >> 32_i64);
-    result = "wasi/stream-write"(handle, ptr, raw_len);
-    if result == -1 {
-        drop("core:rt/wait_for_blocked"(handle));
-    }
+    "core:rt/cm_stream_write_drain"(handle, ptr, raw_len, 1);
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 

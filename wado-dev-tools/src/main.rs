@@ -32,6 +32,7 @@ fn golden_dump(mut parser: lexopt::Parser) {
     let mut emits: Vec<pipeline::Emit> = Vec::new();
     let mut opt_level = OptLevel::O2;
     let mut skip_empty = false;
+    let mut default_world: Option<String> = None;
 
     while let Some(arg) = parser.next().expect("failed to parse args") {
         match arg {
@@ -66,6 +67,13 @@ fn golden_dump(mut parser: lexopt::Parser) {
             Long("skip-empty") => {
                 skip_empty = true;
             }
+            // World for fixtures with no `__DATA__` section at all. The
+            // `tests/fixtures` e2e set passes `test` (library-shaped sources run
+            // under the test world); the format set omits it to keep the CLI
+            // default.
+            Long("default-world") => {
+                default_world = Some(parser.value().unwrap().to_string_lossy().into_owned());
+            }
             _ => panic!("unexpected argument: {arg:?}"),
         }
     }
@@ -75,7 +83,13 @@ fn golden_dump(mut parser: lexopt::Parser) {
         !emits.is_empty(),
         "at least one --emit <phase>:<out-template> is required"
     );
-    pipeline::run_pipeline(&in_template, &emits, opt_level, skip_empty);
+    pipeline::run_pipeline(
+        &in_template,
+        &emits,
+        opt_level,
+        skip_empty,
+        default_world.as_deref(),
+    );
 }
 
 fn parse_phase(val: &str) -> pipeline::Phase {

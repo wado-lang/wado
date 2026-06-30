@@ -16,7 +16,9 @@ use crate::ast::Type;
 use crate::component_model::{CmFunctionInfo, CmTypeGen, CmVariantCase};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir_package::NirPackage;
-use crate::wir::{CanonicalIntrinsic, CmFuturePayload, CmScalarType, CmStreamPayload, WirPackage};
+use crate::wir::{
+    CanonicalIntrinsic, CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload, WirPackage,
+};
 use wasm_encoder::{
     Alias, CanonicalOption, ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind,
     ComponentValType, ExportKind, InstanceType, ModuleArg, PrimitiveValType, TypeBounds,
@@ -119,6 +121,37 @@ pub fn build_component(
     let all_canonical_intrinsics: Vec<CanonicalIntrinsic> =
         wir_package.needed_canonicals.iter().cloned().collect();
 
+    // One CM type engine shared across `--lib` named-type building, so a record
+    // (e.g. `point`) referenced by both a future/stream payload and an export
+    // signature is defined once. The interface hint resolves lib-local named
+    // types against the package's own default-interface FQ.
+    let lib_iface_fq = component_plan
+        .world_exports
+        .iter()
+        .find(|e| e.is_lib)
+        .and_then(|e| e.from_interface_fq.clone());
+    let mut lib_type_gen = component_plan
+        .world_exports
+        .iter()
+        .any(|e| e.is_lib)
+        .then(|| match lib_iface_fq.as_deref() {
+            Some(fq) => crate::component_model::CmTypeGen::with_interface_hint(fq),
+            None => crate::component_model::CmTypeGen::new(),
+        });
+
+    // Define named record types referenced by `Value(Named)` future/stream
+    // payloads *before* the future/stream types that wrap them, so the wrapping
+    // type can reference the record's index. Shares `lib_type_gen` with
+    // `emit_world_exports`, so the export-signature record and the canonical
+    // record are one and the same.
+    prebuild_value_named_types(
+        &mut builder,
+        &mut ctx,
+        project,
+        &mut lib_type_gen,
+        &all_canonical_intrinsics,
+    );
+
     // Build stream types needed by canonical intrinsics.
     let stream_types: IndexMap<CmStreamPayload, u32> = {
         let mut payloads: Vec<CmStreamPayload> = Vec::new();
@@ -131,11 +164,20 @@ pub fn build_component(
         }
         let mut map = IndexMap::default();
         for payload in payloads {
+            // General (`Value`) element types intern structurally (primitives
+            // inline, aggregates as defined types), keyed by the stream key.
+            if let CmStreamPayload::Value(t) = &payload {
+                let key = CmTypeKey::Stream(Box::new(payload_type_to_cm_key(t, &ctx)));
+                let idx = intern_cm_type(&mut builder, &mut ctx, &key, None);
+                map.insert(payload, idx);
+                continue;
+            }
             let (type_key, val_type) = match &payload {
                 CmStreamPayload::U8 => (
                     "stream-u8".to_string(),
                     ComponentValType::Primitive(PrimitiveValType::U8),
                 ),
+                CmStreamPayload::Value(_) => unreachable!("handled above"),
                 CmStreamPayload::Record(name) => {
                     // Alias the record type from the WASI interface that defines it.
                     // WASI imports are already generated (generate_cm_imports runs first),
@@ -228,6 +270,10 @@ pub fn build_component(
     let scalar_future_types =
         build_scalar_future_types(&mut builder, &mut ctx, &all_canonical_intrinsics);
 
+    // Build general future types (e.g., future<string>, future<list<u32>>).
+    let value_future_types =
+        build_value_future_types(&mut builder, &mut ctx, &all_canonical_intrinsics);
+
     // Canonical intrinsics
     emit_canonical_intrinsics(
         project,
@@ -239,6 +285,7 @@ pub fn build_component(
         trailers_future_type,
         &transmission_future_types,
         &scalar_future_types,
+        &value_future_types,
         component_plan,
     );
 
@@ -340,6 +387,7 @@ pub fn build_component(
         project,
         component_plan,
         result_unit_type,
+        &mut lib_type_gen,
     );
 
     // Test-name custom section: map each test export to its original (lossless)
@@ -1149,6 +1197,21 @@ fn emit_kiln_world_types(builder: &mut ComponentBuilder, ctx: &mut ComponentMode
 /// Repeated calls with an equal key return the cached index without re-emitting.
 /// `debug_name`, when given, names the emitted type and registers the name so
 /// existing `ctx.type_idx(name)` lookups still resolve.
+/// Resolve a [`CmTypeKey`] to a [`ComponentValType`], emitting any defined type
+/// inline. Primitives (and `string`) are returned as `Primitive` without a
+/// defined-type slot; everything else interns to a `Type(idx)`.
+fn intern_cm_valtype(
+    builder: &mut ComponentBuilder,
+    ctx: &mut ComponentModelContext,
+    key: &CmTypeKey,
+) -> ComponentValType {
+    match key {
+        CmTypeKey::Leaf(idx) => ComponentValType::Type(*idx),
+        CmTypeKey::Primitive(p) => ComponentValType::Primitive(*p),
+        _ => ComponentValType::Type(intern_cm_type(builder, ctx, key, None)),
+    }
+}
+
 fn intern_cm_type(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -1163,18 +1226,25 @@ fn intern_cm_type(
     }
     let resolved = match key {
         CmTypeKey::Leaf(_) => unreachable!("Leaf handled above"),
+        CmTypeKey::Primitive(_) => {
+            panic!("CmTypeKey::Primitive has no defined-type slot; use intern_cm_valtype")
+        }
         CmTypeKey::Own(inner) => ResolvedCmType::Own(intern_cm_type(builder, ctx, inner, None)),
-        CmTypeKey::Option(inner) => {
-            ResolvedCmType::Option(intern_cm_type(builder, ctx, inner, None))
-        }
-        CmTypeKey::Future(inner) => {
-            ResolvedCmType::Future(intern_cm_type(builder, ctx, inner, None))
-        }
+        CmTypeKey::Option(inner) => ResolvedCmType::Option(intern_cm_valtype(builder, ctx, inner)),
+        CmTypeKey::Future(inner) => ResolvedCmType::Future(intern_cm_valtype(builder, ctx, inner)),
+        CmTypeKey::Stream(inner) => ResolvedCmType::Stream(intern_cm_valtype(builder, ctx, inner)),
+        CmTypeKey::List(inner) => ResolvedCmType::List(intern_cm_valtype(builder, ctx, inner)),
         CmTypeKey::Result { ok, err } => {
-            let ok = ok.as_ref().map(|k| intern_cm_type(builder, ctx, k, None));
-            let err = err.as_ref().map(|k| intern_cm_type(builder, ctx, k, None));
+            let ok = ok.as_ref().map(|k| intern_cm_valtype(builder, ctx, k));
+            let err = err.as_ref().map(|k| intern_cm_valtype(builder, ctx, k));
             ResolvedCmType::Result { ok, err }
         }
+        CmTypeKey::Tuple(elems) => ResolvedCmType::Tuple(
+            elems
+                .iter()
+                .map(|k| intern_cm_valtype(builder, ctx, k))
+                .collect(),
+        ),
     };
 
     let idx = match debug_name {
@@ -1187,17 +1257,22 @@ fn intern_cm_type(
             enc.defined_type().own(resource);
         }
         ResolvedCmType::Option(inner) => {
-            enc.defined_type().option(ComponentValType::Type(inner));
+            enc.defined_type().option(inner);
         }
         ResolvedCmType::Future(inner) => {
-            enc.defined_type()
-                .future(Some(ComponentValType::Type(inner)));
+            enc.defined_type().future(Some(inner));
+        }
+        ResolvedCmType::Stream(inner) => {
+            enc.defined_type().stream(Some(inner));
+        }
+        ResolvedCmType::List(inner) => {
+            enc.defined_type().list(inner);
         }
         ResolvedCmType::Result { ok, err } => {
-            enc.defined_type().result(
-                ok.map(ComponentValType::Type),
-                err.map(ComponentValType::Type),
-            );
+            enc.defined_type().result(ok, err);
+        }
+        ResolvedCmType::Tuple(elems) => {
+            enc.defined_type().tuple(elems);
         }
     }
     ctx.intern_record(key.clone(), idx);
@@ -1206,9 +1281,15 @@ fn intern_cm_type(
 
 enum ResolvedCmType {
     Own(u32),
-    Option(u32),
-    Future(u32),
-    Result { ok: Option<u32>, err: Option<u32> },
+    Option(ComponentValType),
+    Future(ComponentValType),
+    Stream(ComponentValType),
+    List(ComponentValType),
+    Result {
+        ok: Option<ComponentValType>,
+        err: Option<ComponentValType>,
+    },
+    Tuple(Vec<ComponentValType>),
 }
 
 fn build_future_intrinsic_types(
@@ -1311,6 +1392,137 @@ fn build_scalar_future_types(
 }
 
 /// Convert a `CmScalarType` to `wasm_encoder::PrimitiveValType`.
+/// Convert a [`CmPayloadType`] to a structural [`CmTypeKey`] for interning.
+/// Named types resolve to the component type index already registered for the
+/// world's signatures (records / variants / enums / flags).
+fn payload_type_to_cm_key(payload: &CmPayloadType, ctx: &ComponentModelContext) -> CmTypeKey {
+    match payload {
+        CmPayloadType::Scalar(s) => CmTypeKey::Primitive(cm_scalar_to_primitive(*s)),
+        CmPayloadType::String => CmTypeKey::Primitive(PrimitiveValType::String),
+        CmPayloadType::List(t) => CmTypeKey::List(Box::new(payload_type_to_cm_key(t, ctx))),
+        CmPayloadType::Option(t) => CmTypeKey::Option(Box::new(payload_type_to_cm_key(t, ctx))),
+        CmPayloadType::Result(ok, err) => CmTypeKey::Result {
+            ok: ok
+                .as_ref()
+                .map(|t| Box::new(payload_type_to_cm_key(t, ctx))),
+            err: err
+                .as_ref()
+                .map(|t| Box::new(payload_type_to_cm_key(t, ctx))),
+        },
+        CmPayloadType::Tuple(elems) => CmTypeKey::Tuple(
+            elems
+                .iter()
+                .map(|t| payload_type_to_cm_key(t, ctx))
+                .collect(),
+        ),
+        CmPayloadType::Named(name) => CmTypeKey::Leaf(ctx.type_idx(name)),
+    }
+}
+
+/// Collect the CM (kebab) names of every `Named` record nested in a payload.
+fn collect_named_payload_names(payload: &CmPayloadType, out: &mut Vec<String>) {
+    match payload {
+        CmPayloadType::Named(name) => {
+            if !out.contains(name) {
+                out.push(name.clone());
+            }
+        }
+        CmPayloadType::List(t) | CmPayloadType::Option(t) => {
+            collect_named_payload_names(t, out);
+        }
+        CmPayloadType::Result(ok, err) => {
+            if let Some(t) = ok {
+                collect_named_payload_names(t, out);
+            }
+            if let Some(t) = err {
+                collect_named_payload_names(t, out);
+            }
+        }
+        CmPayloadType::Tuple(elems) => {
+            for e in elems {
+                collect_named_payload_names(e, out);
+            }
+        }
+        CmPayloadType::Scalar(_) | CmPayloadType::String => {}
+    }
+}
+
+/// Define the named record types referenced by `Value(Named)` future/stream
+/// payloads, before the `future<T>` / `stream<T>` types that wrap them are
+/// built. Each record is defined top-level through the shared `lib_type_gen`
+/// (so the export-signature record and the canonical record are one type) and
+/// bound by its CM name in `ctx`, so `payload_type_to_cm_key`'s `type_idx`
+/// lookup resolves it.
+fn prebuild_value_named_types(
+    builder: &mut ComponentBuilder,
+    ctx: &mut ComponentModelContext,
+    project: &NirPackage,
+    lib_type_gen: &mut Option<CmTypeGen>,
+    canonical_intrinsics: &[CanonicalIntrinsic],
+) {
+    let Some(type_gen) = lib_type_gen.as_mut() else {
+        return;
+    };
+    let mut names: Vec<String> = Vec::new();
+    for intrinsic in canonical_intrinsics {
+        if let Some(CmFuturePayload::Value(p)) = intrinsic.future_payload() {
+            collect_named_payload_names(&p, &mut names);
+        }
+        if let Some(CmStreamPayload::Value(p)) = intrinsic.stream_payload() {
+            collect_named_payload_names(&p, &mut names);
+        }
+    }
+    let no_resources: IndexMap<&str, u32> = IndexMap::default();
+    for cm_name in names {
+        if ctx.has_type(&cm_name) {
+            continue;
+        }
+        let Some(wado_name) = project
+            .cm_interface_registry
+            .find_struct_wado_name_by_cm(&cm_name)
+            .map(str::to_string)
+        else {
+            continue;
+        };
+        let named = Type::Named(crate::ast::NamedType::new(
+            crate::ast::AstId::fresh(),
+            wado_name,
+            crate::token::Span::new(0, 0, 1, 1),
+        ));
+        let mut sink = TopLevelSink { builder, ctx };
+        type_gen.ast_type_to_cm(
+            &mut sink,
+            &named,
+            &project.cm_interface_registry,
+            &no_resources,
+        );
+    }
+}
+
+/// Build `future<T>` component types for general (`Value`) future payloads,
+/// returning a payload → type-index map for `resolve_future_type`.
+fn build_value_future_types(
+    builder: &mut ComponentBuilder,
+    ctx: &mut ComponentModelContext,
+    canonical_intrinsics: &[CanonicalIntrinsic],
+) -> IndexMap<CmPayloadType, u32> {
+    let mut payloads: Vec<CmPayloadType> = Vec::new();
+    for intrinsic in canonical_intrinsics {
+        if let Some(CmFuturePayload::Value(t)) = intrinsic.future_payload()
+            && !payloads.contains(&t)
+        {
+            payloads.push(t);
+        }
+    }
+    let mut map = IndexMap::default();
+    for payload in payloads {
+        let key = CmTypeKey::Future(Box::new(payload_type_to_cm_key(&payload, ctx)));
+        let idx = intern_cm_type(builder, ctx, &key, None);
+        map.insert(payload, idx);
+    }
+    map
+}
+
 fn cm_scalar_to_primitive(scalar: CmScalarType) -> PrimitiveValType {
     match scalar {
         CmScalarType::S8 => PrimitiveValType::S8,
@@ -1338,17 +1550,13 @@ fn emit_canonical_intrinsics(
     trailers_future_type: u32,
     transmission_future_types: &IndexMap<String, u32>,
     scalar_future_types: &IndexSet<(CmScalarType, u32)>,
+    value_future_types: &IndexMap<CmPayloadType, u32>,
     component_plan: &crate::wir_build::component_plan::ComponentPlan,
 ) {
     // The `task.return` canon needs the export's CM-resolved result type.
     // Worlds with one boundary export (HTTP service `handle`, kiln
     // `generate`, CLI `Command::run`) all share this single-task assumption;
     // the test world emits zero world exports so we fall back to `result<>`.
-    let task_return_type: ComponentValType = component_plan
-        .world_exports
-        .first()
-        .map(|export| cm_export_type_to_valtype(ctx, &export.cm_result, result_unit_type))
-        .unwrap_or(ComponentValType::Type(result_unit_type));
     for intrinsic in canonical_intrinsics {
         ctx.register_core_func(&intrinsic.import_name());
 
@@ -1395,6 +1603,7 @@ fn emit_canonical_intrinsics(
                     trailers_future_type,
                     transmission_future_types,
                     scalar_future_types,
+                    value_future_types,
                 );
                 builder.future_new(ft);
             }
@@ -1404,6 +1613,7 @@ fn emit_canonical_intrinsics(
                     trailers_future_type,
                     transmission_future_types,
                     scalar_future_types,
+                    value_future_types,
                 );
                 builder.future_write(
                     ft,
@@ -1420,6 +1630,7 @@ fn emit_canonical_intrinsics(
                     trailers_future_type,
                     transmission_future_types,
                     scalar_future_types,
+                    value_future_types,
                 );
                 builder.future_read(
                     ft,
@@ -1436,6 +1647,7 @@ fn emit_canonical_intrinsics(
                     trailers_future_type,
                     transmission_future_types,
                     scalar_future_types,
+                    value_future_types,
                 );
                 builder.future_cancel_read(ft, false);
             }
@@ -1445,6 +1657,7 @@ fn emit_canonical_intrinsics(
                     trailers_future_type,
                     transmission_future_types,
                     scalar_future_types,
+                    value_future_types,
                 );
                 builder.future_cancel_write(ft, false);
             }
@@ -1454,6 +1667,7 @@ fn emit_canonical_intrinsics(
                     trailers_future_type,
                     transmission_future_types,
                     scalar_future_types,
+                    value_future_types,
                 );
                 builder.future_drop_writable(ft);
             }
@@ -1463,29 +1677,25 @@ fn emit_canonical_intrinsics(
                     trailers_future_type,
                     transmission_future_types,
                     scalar_future_types,
+                    value_future_types,
                 );
                 builder.future_drop_readable(ft);
             }
-            CanonicalIntrinsic::TaskReturn => {
-                // The `task.return` result shape is the active world
-                // export's CM-resolved return type — `result<response,
-                // error>` for the kiln generator and HTTP service,
-                // `result<>` for CLI and the test
-                // world. Computed once at function entry from
-                // `component_plan.world_exports[0].cm_result` so the
-                // code path here is uniform across worlds. The flat
-                // decomposition must match the core module's task-return
-                // import signature (computed via
-                // `compute_export_flat_return_types`) or component
-                // validation fails at instantiation.
-                // task.return lifts payloads from linear memory into
-                // component values; it does not allocate, so `realloc`
-                // must not appear in the option list (wasm-tools
-                // rejects it).
-                builder.task_return(
-                    Some(task_return_type),
-                    [CanonicalOption::Memory(ctx.memory_idx())],
+            CanonicalIntrinsic::TaskReturn(key) => {
+                let memory_idx = ctx.memory_idx();
+                let result_ty = resolve_task_return_valtype(
+                    key,
+                    component_plan,
+                    project,
+                    ctx,
+                    result_unit_type,
+                    trailers_future_type,
+                    transmission_future_types,
+                    scalar_future_types,
+                    value_future_types,
+                    stream_types,
                 );
+                builder.task_return(Some(result_ty), [CanonicalOption::Memory(memory_idx)]);
             }
             CanonicalIntrinsic::WaitableSetNew => {
                 builder.waitable_set_new();
@@ -1548,12 +1758,69 @@ fn emit_canonical_intrinsics(
     }
 }
 
+/// Resolve the `task.return` result type for an `async` export, keyed by its
+/// name. A `--lib` `future<T>` result resolves to the interned `future<T>`
+/// type; everything else (WASI handler results, unit) resolves through
+/// `cm_result`. An unmatched/empty key falls back to the first export.
+#[allow(clippy::too_many_arguments)]
+fn resolve_task_return_valtype(
+    key: &str,
+    component_plan: &crate::wir_build::component_plan::ComponentPlan,
+    project: &NirPackage,
+    ctx: &ComponentModelContext,
+    result_unit_type: u32,
+    trailers_future_type: u32,
+    transmission_future_types: &IndexMap<String, u32>,
+    scalar_future_types: &IndexSet<(CmScalarType, u32)>,
+    value_future_types: &IndexMap<CmPayloadType, u32>,
+    stream_types: &IndexMap<CmStreamPayload, u32>,
+) -> ComponentValType {
+    let export = component_plan
+        .world_exports
+        .iter()
+        .find(|e| e.name == key)
+        .or_else(|| component_plan.world_exports.first());
+    let Some(export) = export else {
+        return ComponentValType::Type(result_unit_type);
+    };
+    if export.is_lib
+        && let Some(crate::ast::Type::Generic(g)) = &export.result_type
+        && g.args.len() == 1
+    {
+        if g.name == "Future" {
+            let payload = crate::component_model::classify_future_payload_from_ast(
+                &g.args[0],
+                &project.cm_interface_registry,
+            );
+            let idx = resolve_future_type(
+                payload,
+                trailers_future_type,
+                transmission_future_types,
+                scalar_future_types,
+                value_future_types,
+            );
+            return ComponentValType::Type(idx);
+        }
+        if g.name == "Stream" {
+            let payload = crate::component_model::classify_stream_payload_from_ast(
+                &g.args[0],
+                &project.cm_interface_registry,
+            );
+            if let Some(&idx) = stream_types.get(&payload) {
+                return ComponentValType::Type(idx);
+            }
+        }
+    }
+    cm_export_type_to_valtype(ctx, &export.cm_result, result_unit_type)
+}
+
 /// Resolve the component-level type index for a future canonical intrinsic.
 fn resolve_future_type(
     payload: CmFuturePayload,
     trailers_future_type: u32,
     transmission_future_types: &IndexMap<String, u32>,
     scalar_future_types: &IndexSet<(CmScalarType, u32)>,
+    value_future_types: &IndexMap<CmPayloadType, u32>,
 ) -> u32 {
     match payload {
         CmFuturePayload::Trailers => trailers_future_type,
@@ -1567,6 +1834,9 @@ fn resolve_future_type(
             .find(|(s, _)| *s == scalar)
             .map(|(_, idx)| *idx)
             .expect("scalar future type not registered"),
+        CmFuturePayload::Value(ref t) => *value_future_types
+            .get(t)
+            .unwrap_or_else(|| panic!("value future type not registered for: {}", t.name_suffix())),
     }
 }
 
@@ -1672,6 +1942,10 @@ impl crate::component_model::CmTypeSink for TopLevelSink<'_> {
     fn name(&mut self, cm_name: &str, idx: u32) -> u32 {
         // Top-level types are not aliased; the instance export names them.
         self.ctx.push_lib_export_type(cm_name.to_string(), idx);
+        // Also resolvable by `type_idx`, so a `CmPayloadType::Named(<cm-name>)`
+        // future/stream payload can reference this record (see
+        // `prebuild_value_named_types`).
+        self.ctx.bind_type_name(cm_name, idx);
         idx
     }
 }
@@ -1682,24 +1956,8 @@ fn emit_world_exports(
     project: &NirPackage,
     component_plan: &crate::wir_build::component_plan::ComponentPlan,
     result_unit_type: u32,
+    lib_type_gen: &mut Option<crate::component_model::CmTypeGen>,
 ) {
-    // Shared across all `--lib` exports so a named type (e.g. `point`) is
-    // defined once and reused. The interface hint resolves lib-local named
-    // types against the package's own default-interface FQ in the registry.
-    let is_lib_world = component_plan.world_exports.iter().any(|e| e.sync_lift);
-    let lib_iface_fq = component_plan
-        .world_exports
-        .iter()
-        .find(|e| e.sync_lift)
-        .and_then(|e| e.from_interface_fq.clone());
-    // One engine shared across all lib exports (dedups named types). The
-    // interface hint resolves lib-local named types against the package's
-    // default-interface FQ; a functions-only (direct-export) lib has no named
-    // types and needs no hint.
-    let mut lib_type_gen = is_lib_world.then(|| match lib_iface_fq.as_deref() {
-        Some(fq) => crate::component_model::CmTypeGen::with_interface_hint(fq),
-        None => crate::component_model::CmTypeGen::new(),
-    });
     let no_resources: IndexMap<&str, u32> = IndexMap::default();
 
     for export in &component_plan.world_exports {
@@ -1721,7 +1979,7 @@ fn emit_world_exports(
             ExportKind::Func,
         );
 
-        let func_type = if export.sync_lift {
+        let func_type = if export.is_lib {
             // `--lib` export: build the param/result CM value types (and any
             // named types they reference) top-level from the raw Wado types via
             // the shared engine, *before* the func type so their indices precede
@@ -3903,7 +4161,7 @@ fn append_interface_instance_exports(
     for (i, (&fq, group)) in groups.iter().enumerate() {
         let instance_idx = base_instance_idx + i as u32;
         let mut type_items: Vec<(String, u32)> = Vec::new();
-        if group.iter().any(|e| e.sync_lift) {
+        if group.iter().any(|e| e.is_lib) {
             // `--lib` default interface: its named types were defined top-level
             // by `emit_world_exports` and recorded on the context.
             type_items.extend(ctx.lib_export_types().iter().cloned());

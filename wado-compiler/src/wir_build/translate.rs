@@ -2110,18 +2110,6 @@ impl FunctionTranslator<'_, '_> {
                     return instr;
                 }
 
-                // Static method: canonical dispatch (e.g., Stream::new, WaitableSet::new)
-                if let Some(canonical) = func.method_info.clone().and_then(|m| m.cm_name)
-                    && let Some(instr) = self.try_translate_canonical_static_method(
-                        &canonical,
-                        func,
-                        args,
-                        expr.type_id,
-                    )
-                {
-                    return instr;
-                }
-
                 let kept: Vec<Operand> = args
                     .iter()
                     .filter(|a| self.operand_type_id(a.expr) != TypeTable::UNIT)

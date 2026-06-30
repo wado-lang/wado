@@ -144,7 +144,13 @@ fn collect_stale(existing: Vec<(String, PathBuf)>, written: &IndexSet<String>) -
         .collect()
 }
 
-pub fn run_pipeline(in_template: &str, emits: &[Emit], opt_level: OptLevel, skip_empty: bool) {
+pub fn run_pipeline(
+    in_template: &str,
+    emits: &[Emit],
+    opt_level: OptLevel,
+    skip_empty: bool,
+    default_world: Option<&str>,
+) {
     assert!(!emits.is_empty(), "at least one --emit is required");
 
     let start = Instant::now();
@@ -203,6 +209,8 @@ pub fn run_pipeline(in_template: &str, emits: &[Emit], opt_level: OptLevel, skip
             .collect(),
     );
     let distinct_phases = std::sync::Arc::new(distinct_phases);
+    let default_world: std::sync::Arc<Option<String>> =
+        std::sync::Arc::new(default_world.map(str::to_string));
 
     // Channels
     let (read_tx, read_rx) = mpsc::sync_channel::<ReadItem>(2 * num_workers);
@@ -228,6 +236,7 @@ pub fn run_pipeline(in_template: &str, emits: &[Emit], opt_level: OptLevel, skip
         let tx = write_tx.clone();
         let emit_templates = emit_templates.clone();
         let distinct_phases = distinct_phases.clone();
+        let default_world = default_world.clone();
 
         workers.push(
             std::thread::Builder::new()
@@ -266,6 +275,7 @@ pub fn run_pipeline(in_template: &str, emits: &[Emit], opt_level: OptLevel, skip
                                     &item.input_path,
                                     &distinct_phases,
                                     opt_level,
+                                    default_world.as_deref(),
                                 ))
                             }));
                         let panicked = render_result.is_err();
@@ -487,6 +497,7 @@ async fn render_phases(
     input_path: &str,
     phases: &[Phase],
     opt_level: OptLevel,
+    default_world: Option<&str>,
 ) -> IndexMap<Phase, Result<String, String>> {
     let mut out: IndexMap<Phase, Result<String, String>> = IndexMap::default();
 
@@ -500,7 +511,7 @@ async fn render_phases(
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
-    let target_world = extract_world_from_data_section(source);
+    let target_world = extract_world_from_data_section(source, default_world);
 
     if needs_dump {
         let host = FilesystemCompilerHost::silent(base_path.clone());

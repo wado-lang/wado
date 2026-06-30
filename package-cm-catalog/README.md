@@ -37,18 +37,21 @@ Full intended scope; checked items are implemented.
 **`future<T>` (consume/produce)**
 
 - [x] Scalar payloads (`bool`, `u8`–`u64`, `s8`–`s64`, `f32`, `f64`, `char`)
-- [ ] `string`
-- [ ] `record`
-- [ ] `option<_>`
-- [ ] `result<_, _>`
-- [ ] `list<_>`
-- [ ] `tuple<…>`
+- [x] `string`
+- [x] `record`
+- [x] `option<_>`
+- [x] `result<_, _>`
+- [x] `list<_>`
+- [x] `tuple<…>`
+- [ ] `variant` / `enum` / `flags` payloads — the other named shapes still
+      route to the legacy WIR path (only `record` is wired through `Named`)
 
 **`stream<T>`**
 
 - [x] `stream<u8>` (pass-through)
-- [ ] `stream<T>` consume/produce — scalar element payloads
-- [ ] `stream<T>` consume/produce — aggregate element payloads
+- [x] `stream<T>` consume/produce — scalar element payloads (`stream<u32>`)
+- [x] `stream<T>` consume/produce — aggregate element payloads (`stream<string>`, `stream<point>`)
+- [ ] `stream<T>` consume/produce — `variant` / `enum` / `flags` element payloads
 - `stream<char>` is intentionally out of scope (rejected by the Component Model)
 
 **Embedded handles (pass-through)**
@@ -58,7 +61,7 @@ Full intended scope; checked items are implemented.
 
 **Test oracle**
 
-- [ ] Async value read-back — assert the payload survives the round-trip, not
+- [x] Async value read-back — assert the payload survives the round-trip, not
       only the handle
 
 **Handles**
