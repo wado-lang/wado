@@ -102,18 +102,12 @@ impl ModifiedVars {
         }
     }
 
-    /// True when hoisting a candidate whose *value* is a GC heap object of type
-    /// `value_type` is unsound: an object of that type is `&mut`-clobbered by an
-    /// opaque call in the loop. Wado references alias by type, so the hoisted
-    /// handle may be that mutated object — and hoisting it lets a later LICM
-    /// iteration treat the object's now-opaquely-mutated fields (e.g. a `List`'s
-    /// length) as loop-invariant. Issue #1472: `r = &mut self.xs` plus
-    /// `r.push(...)` clobbers `List<i32>`, so `self.xs` must not be hoisted.
-    ///
-    /// Only the opaque-call clobber needs this guard. A *visible* field write
-    /// (`x.field = …`) is caught by per-iteration field tracking: after the
-    /// outer handle is hoisted, the write's receiver is rewritten to the hoist
-    /// local, so the next iteration sees that field as modified and stops.
+    /// Soundness (#1472): a candidate whose value is a GC heap object
+    /// `&mut`-clobbered by an opaque call in the loop must not be hoisted. Wado
+    /// references alias by type, so the hoisted handle may be that mutated
+    /// object, and hoisting it lets a later iteration treat its opaquely-mutated
+    /// fields (e.g. a `List`'s length) as invariant. Only opaque calls need this:
+    /// a visible `x.field = …` write is already caught by per-iteration tracking.
     fn is_clobbered_gc_value(&self, value_type: TypeId, type_table: &TypeTable) -> bool {
         let pointee = strip_references(value_type, type_table);
         is_gc_heap_type(pointee, type_table) && self.clobbered_pointee_types.contains(&pointee)

@@ -1,16 +1,9 @@
-// Soundness guard (issue #1472, BuiltinArray case): a loop that reads an array
-// element through `self.arr` while mutating the same element through a `&mut`
-// alias to that array must observe every mutation.
-//
-// `r = &mut self.arr` aliases `self.arr`; `bump(r)` mutates element 0 in place
-// while the guard reads element 0 via `self.arr`. LICM may hoist the array
-// *handle* into the pre-header — that is sound, because the hoist local aliases
-// the same array (it is not a copy) and the element read re-executes each
-// iteration. What must never happen is hoisting the element *read* itself out of
-// the loop; that would freeze the guard and spin forever. Unlike `List`, a raw
-// array has no growable struct field, so the List-style `.used` cascade cannot
-// arise here — this fixture pins the runtime behavior so a future pass that
-// learns to hoist pure array reads cannot silently reintroduce the #1472 class.
+// Regression guard (#1472, BuiltinArray case): a loop reading an array element
+// through `self.arr` while mutating it through a `&mut` alias must observe every
+// mutation. Hoisting the array handle is sound (the hoist local aliases the same
+// array; the element read re-executes), but hoisting the element read itself
+// would freeze the guard and spin forever. A future pass that learns to hoist
+// pure array reads must not reintroduce that.
 
 #[inline("never")]
 fn bump(p: &mut Array<i32>) {

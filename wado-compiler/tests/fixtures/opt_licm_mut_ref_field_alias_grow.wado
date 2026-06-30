@@ -1,14 +1,7 @@
-// Soundness regression (issue #1472): LICM must not hoist a field read out of
-// a loop that mutates the same field through a `&mut` alias bound to that field.
-//
-// `r = &mut self.xs` aliases `self.xs`. Inside the loop, `r.push(-1)` grows the
-// list (clobbering the `List<i32>` pointee), while the guard reads the same
-// list directly as `self.xs.len()`. LICM used to hoist `self.xs` (and its
-// `.used` length field) to the pre-header because the read goes through the
-// field chain `self.xs` while the write goes through the opaque alias `r` — so
-// the modified-vars analysis never connected the two. The hoisted guard then
-// never observed the growth, looping forever until `List::grow` runs the heap
-// out of memory.
+// Regression (#1472): LICM must not hoist `self.xs` (and its `.used` length) out
+// of a loop that grows the same list through a `&mut` alias `r = &mut self.xs`.
+// The guard reads `self.xs.len()` while `r.push(-1)` mutates it opaquely; hoisting
+// froze the guard, spinning until `List::grow` ran the heap out of memory.
 
 struct Acc {
     xs: List<i32>,
