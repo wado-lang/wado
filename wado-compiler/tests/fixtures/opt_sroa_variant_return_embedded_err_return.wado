@@ -1,0 +1,73 @@
+// Regression: variant-return SROA must not confirm a function whose `?`-error
+// `return` is embedded in a `LocalSet(temp, if … { … } else { return … })`
+// binding the call-site validator (`check_return_variant_struct_new`) used to
+// skip.
+//
+// `field_scalarize` (HFS) ferries the propagated `Err(…)` box through a
+// `__hfs_call_N` temp: `LocalSet(t, StructNew(Err)); Return(LocalGet(t))`.
+// `elide_return_only_temps` normally folds that pair into `Return(StructNew)`,
+// which the return-rewriter lowers to the multi-value shape. But when an
+// intervening side-effecting statement (here the `for … of` iterator's own
+// `struct.set` advance) sits between the temp write and the return, the fold
+// can't fire and the return stays `Return(LocalGet(t))`. The validator descended
+// only into `Block`/`Loop`/`If`/`Seq` bodies — never into a `LocalSet` *value* —
+// so it confirmed the function anyway, while the rewriter (which does descend
+// into `LocalSet` values) could not lower the `LocalGet` leaf and left a boxed
+// single-value `return` under the widened multi-value signature: invalid Wasm
+// (`type mismatch: expected (ref null …), found (ref …)`), only at `-O3` where
+// scheduling produces the intervening store.
+//
+// The validator now checks returns embedded in non-structural statements too, so
+// it rejects the function when the rewriter can't lower one of its returns —
+// keeping the two in agreement. At `-O2` the temp is elided and SROA still fires.
+//
+// Mirrors `package-gale/example/logic.wado::operands`: a `for … of` loop over a
+// list of variants whose body `if let`-matches each element, does
+// `let x = checked(v)?`, and folds the result into a two-slot tuple returned as
+// `Result<[i64, i64], String>` (the `String` Err matches the boxed shape HFS
+// routes through the temp).
+
+variant Tree {
+    Leaf(i64),
+    Skip,
+}
+
+#[inline("never")]
+fn checked(v: i64) -> Result<i64, String> {
+    if v < 0 {
+        return Result::Err("negative");
+    }
+    return Result::Ok(v);
+}
+
+fn first_two(nodes: List<Tree>) -> Result<[i64, i64], String> {
+    let mut a: i64 = 0;
+    let mut b: i64 = 0;
+    let mut have_a = false;
+    for let child of &nodes {
+        if let Leaf(v) = *child {
+            let x = checked(v)?;
+            if have_a {
+                b = x;
+            } else {
+                a = x;
+                have_a = true;
+            }
+        }
+    }
+    return Result::Ok([a, b]);
+}
+
+export fn run() {
+    let ok = first_two([Tree::Leaf(10), Tree::Skip, Tree::Leaf(20)]);
+    assert ok matches { Ok([10, 20]) };
+
+    // Error path: `?` propagates the `Err(String)` out of the loop.
+    let bad = first_two([Tree::Leaf(10), Tree::Leaf(-5), Tree::Leaf(30)]);
+    assert bad matches { Err(_) };
+}
+
+__DATA__
+{
+    "stdout": ""
+}

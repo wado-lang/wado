@@ -961,7 +961,13 @@ fn check_return_variant_struct_new(
         WirInstr::Drop(inner) => {
             check_return_variant_struct_new(inner, valid_type_indices, tail_call_candidates)
         }
-        _ => true,
+        // Other statements can embed a `Return` in a value position the arms
+        // above skip — e.g. `LocalSet(t, if … else { return Err(…) })`. The
+        // rewriter descends into them (`for_each_boxed_child_mut`), so the
+        // validator must too, or it confirms a function with an unrewritable
+        // return (`Return(LocalGet(hfs_temp))` left un-elided behind a
+        // side-effecting statement) that the rewriter leaves boxed.
+        other => embedded_returns_compatible(other, valid_type_indices, tail_call_candidates),
     }
 }
 
@@ -1143,9 +1149,15 @@ fn all_br_variant_values_are_struct_new(
             }
             i += 1;
         } else {
-            // Recurse into nested blocks and ifs (both add a depth level)
+            // Recurse into nested control frames. `Block`/`Loop`/`If` add a depth
+            // level; a plain `Seq` does not. `Loop` and `Seq` both matter: an
+            // inlined helper's tail `block { loop { … break outer: <val> … } }`
+            // carries its exit value through a loop- and `Seq`-nested break
+            // (`Seq([Seq([Call, Br(d)])])`). Missing either let a
+            // `break outer: Call(boxed_fn)` exit escape the StructNew check while
+            // the rewriter left its boxed ref under the multi-value signature.
             match &instrs[i] {
-                WirInstr::Block { body, .. } => {
+                WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
                     if !all_br_variant_values_are_struct_new(
                         body,
                         valid_type_indices,
@@ -1172,6 +1184,13 @@ fn all_br_variant_values_are_struct_new(
                             valid_type_indices,
                             target_depth + 1,
                         )
+                    {
+                        return false;
+                    }
+                }
+                // `Seq` is not a Wasm control frame — recurse at the same depth.
+                WirInstr::Seq(seq) => {
+                    if !all_br_variant_values_are_struct_new(seq, valid_type_indices, target_depth)
                     {
                         return false;
                     }
@@ -1800,6 +1819,60 @@ fn check_invalid_call_uses(
                 caller_is_candidate,
             );
         }
+        // A `LocalSet`/`LocalTee` whose value is a compound `Seq`/`Block`/`If`,
+        // and whose result is not itself a candidate call (the first arm
+        // handles that), can still nest a clean `LocalSet(temp, Call(candidate))`
+        // in its prefix or branches: `let x = next_element()?` desugars to the
+        // call bound to a temp one level down inside a `Seq`. The old `_` arm
+        // invalidated those blindly, keeping every `seq.next_element()?` boxed.
+        // Recurse into the sub-body so the inner temp gets normal variant-access
+        // validation, matching the rewriter's `recurse_rewrite_call_sites` which
+        // descends here too (accept and rewrite must agree). A truly unrewritable
+        // nested call (a bare `Call` branch value with no binding temp) still
+        // reaches the catch-all below and is rejected.
+        WirInstr::LocalSet { value, .. } | WirInstr::LocalTee { value, .. }
+            if matches!(
+                value.as_ref(),
+                WirInstr::Seq(_) | WirInstr::Block { .. } | WirInstr::If { .. }
+            ) =>
+        {
+            match value.as_ref() {
+                WirInstr::Seq(body) | WirInstr::Block { body, .. } => {
+                    validate_call_sites_in_body(
+                        body,
+                        root_body,
+                        candidate_ids,
+                        invalid,
+                        caller_is_candidate,
+                    );
+                }
+                WirInstr::If {
+                    condition,
+                    then_body,
+                    else_body,
+                    ..
+                } => {
+                    find_nested_candidate_calls(condition, candidate_ids, invalid);
+                    validate_call_sites_in_body(
+                        then_body,
+                        root_body,
+                        candidate_ids,
+                        invalid,
+                        caller_is_candidate,
+                    );
+                    if let Some(eb) = else_body {
+                        validate_call_sites_in_body(
+                            eb,
+                            root_body,
+                            candidate_ids,
+                            invalid,
+                            caller_is_candidate,
+                        );
+                    }
+                }
+                _ => unreachable!(),
+            }
+        }
         // Any other instruction that contains a Call to a candidate is invalid
         _ => {
             find_nested_candidate_calls(instr, candidate_ids, invalid);
@@ -2264,7 +2337,10 @@ fn rewrite_variant_struct_new_br_to_return(
             i += 2;
         } else {
             match &mut instrs[i] {
-                WirInstr::Block { body, .. } => {
+                // `Loop` adds a depth level like `Block`; recurse so a
+                // `[StructNew, Br]` exit nested in a loop is lowered too, keeping
+                // this rewriter symmetric with `all_br_variant_values_are_struct_new`.
+                WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
                     rewrite_variant_struct_new_br_to_return(
                         body,
                         target_depth + 1,
@@ -2913,6 +2989,760 @@ fn take_block_result_call(
         other => {
             let taken = std::mem::replace(other, WirInstr::Nop);
             Some(Box::new(taken))
+        }
+    }
+}
+
+// Nested variant-slot flattening.
+//
+// Single-level SROA turns `next_element<i64>` into a function returning the
+// multi-value vector `[outer_disc, ref Option<i64>, ref Err]`. The `Option<i64>`
+// payload is still heap-boxed at every return (`struct.new Option<i64>::Some`)
+// and immediately matched at every call site. This phase splits such a
+// `ref Option<scalar>` result slot into `[inner_disc, scalar]`, removing the
+// per-element inner allocation (the dominant cost when deserializing arrays of
+// scalars).
+//
+// Scope: the inner variant must be "Option-like scalar" — exactly two cases,
+// one carrying a single non-ref scalar payload, the other unit. `Option<&T>`
+// is null-opt (already unboxed) and is out of scope.
+//
+// Bail-everywhere: a slot is expanded only when every return of the function
+// decomposes structurally and every call site's slot local is consumed solely
+// via variant access — either directly, or through the lowered `?`-unwrap
+// `local = if Ok { payload } else { return Err }` (whose then-arm copies the
+// slot out and whose else-arm diverges). Any other shape leaves the slot at its
+// single-level (boxed) form, which is already correct.
+
+/// Layout of an Option-like scalar variant.
+struct OptionLikeInfo {
+    /// WIR type index of the payload-bearing ("Some") case struct.
+    some_case_type_idx: u32,
+    /// Discriminant of the payload-bearing case.
+    some_disc: i32,
+    /// Discriminant of the unit ("None") case.
+    none_disc: i32,
+    /// The scalar payload type.
+    payload_ty: WirType,
+    /// Field name of the payload inside the Some case struct.
+    some_payload_field: String,
+}
+
+/// A confirmed nested-slot flatten target.
+struct NestedSlotCand {
+    func_idx: usize,
+    func_id_index: u32,
+    /// Result-vector index of the `ref Option<scalar>` slot to expand.
+    slot: usize,
+    info: OptionLikeInfo,
+}
+
+fn is_scalar_value_type(ty: &WirType) -> bool {
+    matches!(
+        ty,
+        WirType::I8
+            | WirType::I16
+            | WirType::I32
+            | WirType::I64
+            | WirType::U8
+            | WirType::U16
+            | WirType::U32
+            | WirType::U64
+            | WirType::F32
+            | WirType::F64
+            | WirType::Bool
+            | WirType::Char
+            | WirType::Enum { .. }
+            | WirType::Flags { .. }
+    )
+}
+
+/// Recognise an Option-like scalar variant: two cases, one single-scalar
+/// payload, one unit.
+fn option_like_scalar(module: &WirPackage, v_idx: u32) -> Option<OptionLikeInfo> {
+    let WirTypeDef::Variant(v) = module.types.get(v_idx as usize)? else {
+        return None;
+    };
+    if v.cases.len() != 2 {
+        return None;
+    }
+    // Identify the payload case (exactly one scalar payload) and the unit case.
+    let (some_case, none_case) = match (&v.cases[0], &v.cases[1]) {
+        (a, b) if a.payload.len() == 1 && b.payload.is_empty() => (a, b),
+        (a, b) if b.payload.len() == 1 && a.payload.is_empty() => (b, a),
+        _ => return None,
+    };
+    let payload_ty = some_case.payload[0].clone();
+    if !is_scalar_value_type(&payload_ty) {
+        return None;
+    }
+    let some_disc = i32::try_from(some_case.index).ok()?;
+    let none_disc = i32::try_from(none_case.index).ok()?;
+    // Resolve the Some case's struct type index via variant_case_info.
+    let mut some_case_type_idx = None;
+    for (&case_type_idx, &(parent, case_index)) in &module.variant_case_info {
+        if parent == v_idx && case_index == some_case.index {
+            some_case_type_idx = Some(case_type_idx);
+            break;
+        }
+    }
+    let some_case_type_idx = some_case_type_idx?;
+    // The payload field name (field after the discriminant) in the Some struct.
+    let WirTypeDef::Struct(st) = module.types.get(some_case_type_idx as usize)? else {
+        return None;
+    };
+    let some_payload_field = st.fields.get(1)?.name.clone();
+    Some(OptionLikeInfo {
+        some_case_type_idx,
+        some_disc,
+        none_disc,
+        payload_ty,
+        some_payload_field,
+    })
+}
+
+/// True when `type_id` belongs to variant `v_idx`'s family (the base variant
+/// type or one of its case structs).
+fn is_variant_family(module: &WirPackage, type_id: u32, v_idx: u32) -> bool {
+    type_id == v_idx
+        || matches!(module.variant_case_info.get(&type_id), Some((p, _)) if *p == v_idx)
+}
+
+/// Look through a `RefAsNonNull` narrowing wrapper (single-level SROA emits the
+/// `Ok(None)` payload as `RefAsNonNull(StructNew(..))`).
+fn peel_ref_as_non_null(expr: &WirInstr) -> &WirInstr {
+    match expr {
+        WirInstr::RefAsNonNull(inner) => peel_ref_as_non_null(inner),
+        other => other,
+    }
+}
+
+/// A slot field at a multi-value return is decomposable when it is a `StructNew`
+/// of the inner variant family (Ok(Some)/Ok(None)) or a null ref (the slot is
+/// unused on this return, e.g. an `Err` return), optionally under a
+/// `RefAsNonNull` wrapper.
+fn slot_field_decomposable(expr: &WirInstr, v_idx: u32, module: &WirPackage) -> bool {
+    match peel_ref_as_non_null(expr) {
+        WirInstr::StructNew { type_id, fields } => {
+            !fields.is_empty() && is_variant_family(module, type_id.index(), v_idx)
+        }
+        WirInstr::RefNull { .. } => true,
+        _ => false,
+    }
+}
+
+/// Verify every value-returning `Return` reachable in `instr` yields a
+/// multi-value `Seq` of `arity` whose `slot` field is decomposable. Walks every
+/// child position via `for_each_child` so the validator's coverage matches the
+/// rewriter (`rewrite_nested_returns`, which uses `for_each_boxed_child_mut`):
+/// a `?` desugar can leave a `Return` inside an `If` condition or a `LocalSet`
+/// value, and the rewriter visits those, so the validator must too or it would
+/// confirm a function whose un-validated return is later left at the old arity.
+fn all_returns_decompose(
+    instr: &WirInstr,
+    arity: usize,
+    slot: usize,
+    v_idx: u32,
+    module: &WirPackage,
+) -> bool {
+    if let WirInstr::Return { value: Some(v) } = instr {
+        let decomposable = match v.as_ref() {
+            WirInstr::Seq(fields) => {
+                fields.len() == arity
+                    && slot < fields.len()
+                    && slot_field_decomposable(&fields[slot], v_idx, module)
+            }
+            _ => false,
+        };
+        if !decomposable {
+            return false;
+        }
+    }
+    let mut ok = true;
+    instr.for_each_child(&mut |c| {
+        if ok && !all_returns_decompose(c, arity, slot, v_idx, module) {
+            ok = false;
+        }
+    });
+    ok
+}
+
+/// Phase 1: collect functions with an expandable `ref Option<scalar>` result
+/// slot whose returns all decompose.
+fn nested_slot_candidates(module: &WirPackage, pinned: &IndexSet<u32>) -> Vec<NestedSlotCand> {
+    let mut out = Vec::new();
+    for (i, func) in module.functions.iter().enumerate() {
+        let func_id_index = crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
+        if pinned.contains(&func_id_index) || func.body.is_none() {
+            continue;
+        }
+        let Some(WirTypeDef::Func(ft)) = module.types.get(func.type_id.index() as usize) else {
+            continue;
+        };
+        if ft.results.len() < 2 || ft.results.len() + 1 > 8 {
+            continue;
+        }
+        for slot in 0..ft.results.len() {
+            let WirType::Ref { type_id, .. } = &ft.results[slot] else {
+                continue;
+            };
+            let v_idx = type_id.index();
+            let Some(info) = option_like_scalar(module, v_idx) else {
+                continue;
+            };
+            let body = func.body.as_ref().unwrap();
+            let arity = ft.results.len();
+            if !body
+                .iter()
+                .all(|instr| all_returns_decompose(instr, arity, slot, v_idx, module))
+            {
+                continue;
+            }
+            out.push(NestedSlotCand {
+                func_idx: i,
+                func_id_index,
+                slot,
+                info,
+            });
+            break; // one slot per function
+        }
+    }
+    out
+}
+
+/// Classification of how a call site consumes the slot local.
+enum SlotConsumer {
+    /// `ref.test`/`ref.cast` directly on the slot local.
+    Direct,
+    /// The lowered `?`-unwrap: `LocalSet(alias, If { Ok => slot, else => diverge })`.
+    /// `alias` carries the unboxed Option onward and is matched downstream.
+    Unwrap { alias: String },
+}
+
+/// True when a `?`-unwrap then-arm is *exactly* the slot copied out — either
+/// `[<slot extraction>]` or `[LocalSet(t, <slot extraction>), LocalGet(t)]`,
+/// where `<slot extraction>` is `LocalGet(slot)` under zero or more
+/// `RefAsNonNull` wrappers. `rewrite_unwrap_to_guard` discards the whole
+/// then-arm, so anything richer (a side-effecting prefix statement, a branch, a
+/// second definition of the temp) must be rejected or a needed statement would
+/// be silently dropped.
+fn then_is_pure_slot_copy(then_body: &[WirInstr], slot_local: &str) -> bool {
+    fn is_slot_extraction(e: &WirInstr, slot: &str) -> bool {
+        match e {
+            WirInstr::RefAsNonNull(inner) => is_slot_extraction(inner, slot),
+            WirInstr::LocalGet { name, .. } => name == slot,
+            _ => false,
+        }
+    }
+    match then_body {
+        [single] => is_slot_extraction(single, slot_local),
+        [
+            WirInstr::LocalSet { name: t, value },
+            WirInstr::LocalGet { name: g, .. },
+        ] => g == t && is_slot_extraction(value, slot_local),
+        _ => false,
+    }
+}
+
+/// Find the unique `?`-unwrap `LocalSet(alias, If {...})` whose then-arm copies
+/// `slot_local` out and whose else-arm diverges. Returns the alias name.
+fn find_unwrap_alias(body: &[WirInstr], slot_local: &str) -> Option<String> {
+    let mut found = None;
+    fn walk(body: &[WirInstr], slot_local: &str, found: &mut Option<String>) {
+        for instr in body {
+            if let WirInstr::LocalSet { name, value } = instr
+                && let WirInstr::If {
+                    then_body,
+                    else_body: Some(eb),
+                    ..
+                } = value.as_ref()
+                && eb.iter().any(WirInstr::always_diverges)
+                && then_is_pure_slot_copy(then_body, slot_local)
+            {
+                *found = Some(name.clone());
+            }
+            match instr {
+                WirInstr::Block { body, .. }
+                | WirInstr::Loop { body, .. }
+                | WirInstr::Seq(body) => {
+                    walk(body, slot_local, found);
+                }
+                WirInstr::If {
+                    then_body,
+                    else_body,
+                    ..
+                } => {
+                    walk(then_body, slot_local, found);
+                    if let Some(eb) = else_body {
+                        walk(eb, slot_local, found);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    walk(body, slot_local, &mut found);
+    found
+}
+
+/// Count `LocalGet(name)` occurrences in a body (recursively, all positions).
+fn count_local_get(instr: &WirInstr, name: &str) -> usize {
+    let mut n = 0;
+    if let WirInstr::LocalGet { name: g, .. } = instr
+        && g == name
+    {
+        n += 1;
+    }
+    instr.for_each_child(&mut |c| n += count_local_get(c, name));
+    n
+}
+
+/// Classify the consumer of `slot_local` in `body`, or `None` if not cleanly
+/// rewritable.
+fn classify_slot_consumer(body: &[WirInstr], slot_local: &str) -> Option<SlotConsumer> {
+    if all_uses_are_variant_access(body, slot_local) {
+        return Some(SlotConsumer::Direct);
+    }
+    // Otherwise the only use must be a single `?`-unwrap copy whose alias is
+    // itself consumed only via variant access.
+    let total: usize = body.iter().map(|i| count_local_get(i, slot_local)).sum();
+    if total != 1 {
+        return None;
+    }
+    let alias = find_unwrap_alias(body, slot_local)?;
+    if count_local_set_in_body(body, &alias) == 1 && all_uses_are_variant_access(body, &alias) {
+        Some(SlotConsumer::Unwrap { alias })
+    } else {
+        None
+    }
+}
+
+/// Phase 2: keep candidates whose every call site consumes the slot cleanly.
+fn validate_nested_sites(module: &WirPackage, cands: Vec<NestedSlotCand>) -> Vec<NestedSlotCand> {
+    cands
+        .into_iter()
+        .filter(|cand| {
+            let mut saw_call = false;
+            let mut all_ok = true;
+            for func in &module.functions {
+                let Some(body) = &func.body else { continue };
+                // Every reference to the candidate must be a multi-value bind we
+                // can rewrite. A `Return(Call(f))` tail call (or any other raw
+                // call) would keep the old arity after we widen the signature,
+                // producing a Wasm type mismatch — bail if one exists.
+                let total_calls: usize = body
+                    .iter()
+                    .map(|i| count_calls_to(i, cand.func_id_index))
+                    .sum();
+                let mut mvbind_calls = 0usize;
+                for_each_multivalue_call(body, cand.func_id_index, &mut |locals| {
+                    saw_call = true;
+                    mvbind_calls += 1;
+                    match locals.get(cand.slot).and_then(|o| o.as_ref()) {
+                        Some(slot_local) => {
+                            if classify_slot_consumer(body, slot_local).is_none() {
+                                all_ok = false;
+                            }
+                        }
+                        None => all_ok = false, // slot dropped: nothing to gain, bail
+                    }
+                });
+                if total_calls != mvbind_calls {
+                    all_ok = false;
+                }
+            }
+            saw_call && all_ok
+        })
+        .collect()
+}
+
+/// Count every `Call` to `func_id_index` anywhere in `body` (all positions).
+fn count_calls_to(instr: &WirInstr, func_id_index: u32) -> usize {
+    let mut n = 0;
+    if let WirInstr::Call { func_id, .. } = instr
+        && func_id.index() == func_id_index
+    {
+        n += 1;
+    }
+    instr.for_each_child(&mut |c| n += count_calls_to(c, func_id_index));
+    n
+}
+
+/// Visit each `MultiValueLocalBind { Call(func_id_index), locals }` in a body.
+///
+/// Deliberately recurses only into statement-list bodies (Block/Loop/Seq, If
+/// arms) — NOT into If conditions / `LocalSet` values — so it stays symmetric
+/// with `expand_nested_binds` (which rewrites the same positions). A call in a
+/// non-statement position is counted by `count_calls_to` (which visits every
+/// position via `for_each_child`) but not here, so `total_calls != mvbind_calls`
+/// bails the candidate. Do not switch this to `for_each_child` without also
+/// teaching `expand_nested_binds` to rewrite those positions.
+fn for_each_multivalue_call(
+    body: &[WirInstr],
+    func_id_index: u32,
+    f: &mut impl FnMut(&[Option<String>]),
+) {
+    for instr in body {
+        if let WirInstr::MultiValueLocalBind {
+            instr: call,
+            locals,
+        } = instr
+            && let Some(WirInstr::Call { func_id, .. }) = unwrap_to_inner_call(call)
+            && func_id.index() == func_id_index
+        {
+            f(locals);
+        }
+        match instr {
+            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
+                for_each_multivalue_call(body, func_id_index, f);
+            }
+            WirInstr::If {
+                then_body,
+                else_body,
+                ..
+            } => {
+                for_each_multivalue_call(then_body, func_id_index, f);
+                if let Some(eb) = else_body {
+                    for_each_multivalue_call(eb, func_id_index, f);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+pub(super) fn flatten_nested_variant_slots(module: &mut WirPackage) {
+    let pinned = collect_pinned_func_ids(module);
+    let cands = nested_slot_candidates(module, &pinned);
+    if cands.is_empty() {
+        return;
+    }
+    let confirmed = validate_nested_sites(module, cands);
+    compiler_trace!(
+        "sroa_variant_return",
+        "nested confirmed = {}",
+        confirmed.len()
+    );
+    if confirmed.is_empty() {
+        return;
+    }
+    apply_nested_flatten(module, &confirmed);
+}
+
+/// Phase 3: rewrite signatures, returns, and call sites of confirmed nested
+/// candidates.
+fn apply_nested_flatten(module: &mut WirPackage, confirmed: &[NestedSlotCand]) {
+    let by_func: crate::hashmap::IndexMap<u32, &NestedSlotCand> =
+        confirmed.iter().map(|c| (c.func_id_index, c)).collect();
+
+    // Step A: signatures + returns of the confirmed functions.
+    for cand in confirmed {
+        let func = &mut module.functions[cand.func_idx];
+        let old_type_idx = func.type_id.index() as usize;
+        let WirTypeDef::Func(ft) = &module.types[old_type_idx] else {
+            unreachable!()
+        };
+        let old_arity = ft.results.len();
+        let mut results = ft.results.clone();
+        results.splice(
+            cand.slot..=cand.slot,
+            [WirType::I32, cand.info.payload_ty.clone()],
+        );
+        let new_ft = WirFuncType {
+            name: ft.name.clone(),
+            params: ft.params.clone(),
+            results,
+        };
+        let new_type_idx = u32::try_from(module.types.len()).unwrap();
+        module.types.push(WirTypeDef::Func(new_ft));
+        let func = &mut module.functions[cand.func_idx];
+        func.type_id = WirTypeId::new(new_type_idx, func.type_id.fq().into());
+        if let Some(body) = &mut func.body {
+            for instr in body.iter_mut() {
+                rewrite_nested_returns(instr, cand, old_arity);
+            }
+        }
+    }
+
+    // Step B: call sites in all bodies.
+    for i in 0..module.functions.len() {
+        if module.functions[i].body.is_some() {
+            let mut body = module.functions[i].body.take().unwrap();
+            rewrite_nested_call_sites(&mut body, &by_func);
+            module.functions[i].body = Some(body);
+        }
+    }
+}
+
+/// Split the slot field of every multi-value `Return` `Seq` of the function
+/// into `[inner_disc, payload]`. Walks every child position — a `?` desugar can
+/// leave a `Return` inside an `If` condition or a `LocalSet` value, not just in
+/// a block body — and only touches `Return`s whose `Seq` has the pre-widening
+/// arity and whose slot field is the `Option` value (a `StructNew`/null), so an
+/// unrelated same-arity return is left alone.
+fn rewrite_nested_returns(instr: &mut WirInstr, cand: &NestedSlotCand, old_arity: usize) {
+    if let WirInstr::Return { value: Some(v) } = instr
+        && let WirInstr::Seq(fields) = v.as_mut()
+        && fields.len() == old_arity
+        && cand.slot < fields.len()
+        && matches!(
+            peel_ref_as_non_null(&fields[cand.slot]),
+            WirInstr::StructNew { .. } | WirInstr::RefNull { .. }
+        )
+    {
+        let slot_expr = std::mem::replace(&mut fields[cand.slot], WirInstr::Nop);
+        let (disc, payload) = decompose_slot_value(slot_expr, &cand.info);
+        fields.splice(cand.slot..=cand.slot, [disc, payload]);
+    }
+    instr.for_each_boxed_child_mut(&mut |c| rewrite_nested_returns(c, cand, old_arity));
+}
+
+/// Decompose a slot value (`StructNew` of the inner variant, or null) into
+/// `(inner_disc, payload)` expressions.
+fn decompose_slot_value(mut expr: WirInstr, info: &OptionLikeInfo) -> (WirInstr, WirInstr) {
+    // Look through `RefAsNonNull` narrowing wrappers (mirror the recursive
+    // `peel_ref_as_non_null` the validator uses, so accept/rewrite agree).
+    while let WirInstr::RefAsNonNull(inner) = expr {
+        expr = *inner;
+    }
+    match expr {
+        WirInstr::StructNew { mut fields, .. } if !fields.is_empty() => {
+            // Field 0 is the discriminant constant; field 1 (if present) the payload.
+            let payload = if fields.len() >= 2 {
+                fields.remove(1)
+            } else {
+                default_value_for_type(&info.payload_ty)
+            };
+            let disc = fields.remove(0);
+            (disc, payload)
+        }
+        _ => (
+            WirInstr::I32Const(info.none_disc),
+            default_value_for_type(&info.payload_ty),
+        ),
+    }
+}
+
+/// Rewrite all nested-candidate call sites in one body. Classification runs in
+/// a read-only plan pass over the *whole* body (same scope `validate_nested_sites`
+/// uses), so the consumer verdict never depends on where the bind sits or on
+/// mutations a prior bind made; the mutation pass then consumes those plans.
+fn rewrite_nested_call_sites(
+    body: &mut Vec<WirInstr>,
+    by_func: &crate::hashmap::IndexMap<u32, &NestedSlotCand>,
+) {
+    // Plan: classify every candidate call site's slot consumer against the full
+    // body. Keyed by slot local (single-level SROA gives each call site a unique
+    // slot-local name).
+    let mut plans: crate::hashmap::IndexMap<String, SlotConsumer> =
+        crate::hashmap::IndexMap::default();
+    {
+        let root: &[WirInstr] = body;
+        for instr in root {
+            plan_nested_call_sites(instr, root, by_func, &mut plans);
+        }
+    }
+    if plans.is_empty() {
+        return;
+    }
+    // Turn each `?`-unwrap binding into a guard, dropping the (pure) slot copy.
+    for consumer in plans.values() {
+        if let SlotConsumer::Unwrap { alias } = consumer {
+            rewrite_unwrap_to_guard(body, alias);
+        }
+    }
+    // Expand the binds and register the inner-variant replacements.
+    let mut replacements: crate::hashmap::IndexMap<String, VariantReplacement> =
+        crate::hashmap::IndexMap::default();
+    expand_nested_binds(body, by_func, &plans, &mut replacements);
+    // Replace variant accesses on the slot local / unwrap alias.
+    let mut aliases: crate::hashmap::IndexMap<String, (String, u32)> =
+        crate::hashmap::IndexMap::default();
+    collect_refcast_aliases(body, &replacements, &mut aliases);
+    for instr in body.iter_mut() {
+        replace_variant_accesses(instr, &replacements, &aliases);
+    }
+}
+
+/// Read-only plan pass: record `slot_local -> SlotConsumer` for every candidate
+/// `MultiValueLocalBind`, classifying against `root` (the full function body).
+fn plan_nested_call_sites(
+    instr: &WirInstr,
+    root: &[WirInstr],
+    by_func: &crate::hashmap::IndexMap<u32, &NestedSlotCand>,
+    plans: &mut crate::hashmap::IndexMap<String, SlotConsumer>,
+) {
+    if let WirInstr::MultiValueLocalBind {
+        instr: call,
+        locals,
+    } = instr
+        && let Some(WirInstr::Call { func_id, .. }) = unwrap_to_inner_call(call)
+        && let Some(cand) = by_func.get(&func_id.index())
+        && let Some(Some(slot_local)) = locals.get(cand.slot)
+        && let Some(consumer) = classify_slot_consumer(root, slot_local)
+    {
+        plans.insert(slot_local.clone(), consumer);
+    }
+    instr.for_each_child(&mut |c| plan_nested_call_sites(c, root, by_func, plans));
+}
+
+/// Mutation pass: at each candidate bind, split the slot local into
+/// `[disc, payload]`, declare the two inner locals, and register the inner
+/// `VariantReplacement` keyed by the `?`-unwrap alias (the unwrap was already
+/// turned into a guard) or, for a direct consumer, by the slot local itself.
+fn expand_nested_binds(
+    body: &mut Vec<WirInstr>,
+    by_func: &crate::hashmap::IndexMap<u32, &NestedSlotCand>,
+    plans: &crate::hashmap::IndexMap<String, SlotConsumer>,
+    replacements: &mut crate::hashmap::IndexMap<String, VariantReplacement>,
+) {
+    let mut i = 0;
+    while i < body.len() {
+        // Post-order: recurse into nested bodies before rewriting this level.
+        match &mut body[i] {
+            WirInstr::Block { body: b, .. } | WirInstr::Loop { body: b, .. } | WirInstr::Seq(b) => {
+                expand_nested_binds(b, by_func, plans, replacements);
+            }
+            WirInstr::If {
+                then_body,
+                else_body,
+                ..
+            } => {
+                expand_nested_binds(then_body, by_func, plans, replacements);
+                if let Some(eb) = else_body {
+                    expand_nested_binds(eb, by_func, plans, replacements);
+                }
+            }
+            _ => {}
+        }
+
+        let cand_slot = match &body[i] {
+            WirInstr::MultiValueLocalBind {
+                instr: call,
+                locals,
+            } => unwrap_to_inner_call(call)
+                .and_then(|c| match c {
+                    WirInstr::Call { func_id, .. } => by_func.get(&func_id.index()),
+                    _ => None,
+                })
+                .map(|c| (*c, locals.clone())),
+            _ => None,
+        };
+        let Some((cand, locals)) = cand_slot else {
+            i += 1;
+            continue;
+        };
+        let Some(Some(slot_local)) = locals.get(cand.slot).cloned() else {
+            i += 1;
+            continue;
+        };
+        // `validate_nested_sites` confirmed this site, so the plan pass (same
+        // classification, same scope) must have recorded a consumer.
+        let consumer = plans.get(&slot_local).unwrap_or_else(|| {
+            unreachable!("nested-flatten: confirmed call site `{slot_local}` has no plan")
+        });
+
+        let disc_local = format!("{slot_local}__ndisc");
+        let val_local = format!("{slot_local}__nval");
+
+        // Expand the bind's locals: replace the single slot local with the two
+        // inner locals.
+        if let WirInstr::MultiValueLocalBind { locals, .. } = &mut body[i] {
+            locals.splice(
+                cand.slot..=cand.slot,
+                [Some(disc_local.clone()), Some(val_local.clone())],
+            );
+        }
+
+        // Build the inner VariantReplacement.
+        let mut case_disc_values: crate::hashmap::IndexMap<u32, i32> =
+            crate::hashmap::IndexMap::default();
+        case_disc_values.insert(cand.info.some_case_type_idx, cand.info.some_disc);
+        let mut field_to_local: crate::hashmap::IndexMap<(u32, String), String> =
+            crate::hashmap::IndexMap::default();
+        field_to_local.insert(
+            (
+                cand.info.some_case_type_idx,
+                cand.info.some_payload_field.clone(),
+            ),
+            val_local.clone(),
+        );
+        let ivr = VariantReplacement {
+            disc_local: disc_local.clone(),
+            case_disc_values,
+            field_to_local,
+            ref_locals: crate::hashmap::IndexSet::default(),
+        };
+
+        // Insert DeclareLocals for the inner locals before the bind.
+        let decls = vec![
+            WirInstr::DeclareLocal {
+                name: disc_local,
+                ty: WirType::I32,
+            },
+            WirInstr::DeclareLocal {
+                name: val_local,
+                ty: cand.info.payload_ty.clone(),
+            },
+        ];
+
+        let key = match consumer {
+            SlotConsumer::Direct => slot_local,
+            SlotConsumer::Unwrap { alias } => alias.clone(),
+        };
+        replacements.insert(key, ivr);
+
+        body.splice(i..i, decls);
+        i += 3; // 2 decls + the bind
+    }
+}
+
+/// Replace `LocalSet(alias, If { cond, then, else })` (the `?`-unwrap) with the
+/// guard `If { cond, then: [], else }`, dropping the slot copy.
+fn rewrite_unwrap_to_guard(body: &mut [WirInstr], alias: &str) {
+    for instr in body.iter_mut() {
+        if let WirInstr::LocalSet { name, value } = instr
+            && name == alias
+            && matches!(
+                value.as_ref(),
+                WirInstr::If {
+                    else_body: Some(_),
+                    ..
+                }
+            )
+        {
+            if let WirInstr::If {
+                condition,
+                else_body,
+                ..
+            } = value.as_mut()
+            {
+                let cond = std::mem::replace(condition.as_mut(), WirInstr::Nop);
+                let eb = else_body.take();
+                *instr = WirInstr::If {
+                    condition: Box::new(cond),
+                    result: None,
+                    then_body: Vec::new(),
+                    else_body: eb,
+                };
+            }
+            continue;
+        }
+        match instr {
+            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
+                rewrite_unwrap_to_guard(body, alias);
+            }
+            WirInstr::If {
+                then_body,
+                else_body,
+                ..
+            } => {
+                rewrite_unwrap_to_guard(then_body, alias);
+                if let Some(eb) = else_body {
+                    rewrite_unwrap_to_guard(eb, alias);
+                }
+            }
+            _ => {}
         }
     }
 }
