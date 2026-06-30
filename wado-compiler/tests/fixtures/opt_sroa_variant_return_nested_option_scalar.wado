@@ -1,0 +1,77 @@
+// Test: nested variant-slot flattening removes the inner `Option<scalar>` box
+// that single-level variant-return SROA leaves boxed at the function boundary.
+//
+// After single-level SROA, `step` returns the multi-value vector
+// `[outer_disc, ref Option<i64>, ref StepErr]` and still builds a
+// `struct.new Option<i64>::Some` at every return, matched at the call site.
+// The nested pass splits the `ref Option<i64>` slot into `[inner_disc, i64]`,
+// so `step` returns `[i32, i32, i64, ref StepErr]` with no inner allocation —
+// the lowered `?`-unwrap `opt = step()?` becomes a guard plus a virtual-variant
+// alias, and `if let Some(v) = opt` reads the flattened locals directly.
+//
+// `Cursor::step` returns `Result<Option<i64>, StepErr>` (the serde
+// `next_element<scalar>` shape) and is `#[inline("never")]` to keep it a real
+// SROA'd call site.
+
+variant StepErr {
+    Negative,
+}
+
+struct Cursor {
+    data: List<i64>,
+    pos: i32,
+}
+
+impl Cursor {
+    #[inline("never")]
+    fn step(&mut self) -> Result<Option<i64>, StepErr> {
+        if self.pos >= self.data.len() {
+            return Result::Ok(null);
+        }
+        let v = self.data[self.pos];
+        if v < 0 {
+            return Result::Err(StepErr::Negative);
+        }
+        self.pos += 1;
+        return Result::Ok(Option::Some(v));
+    }
+}
+
+fn sum_all(data: List<i64>) -> Result<i64, StepErr> {
+    let mut cur = Cursor { data, pos: 0 };
+    let mut total: i64 = 0;
+    loop {
+        let opt = cur.step()?;
+        if let Some(v) = opt {
+            total += v;
+        } else {
+            break;
+        }
+    }
+    return Result::Ok(total);
+}
+
+export fn run() {
+    let ok = sum_all([10, 20, 30, 40]);
+    assert ok matches { Ok(100) };
+
+    // Error path: `?` propagates `StepErr::Negative` through the flattened slot.
+    let bad = sum_all([10, -5, 30]);
+    assert bad matches { Err(StepErr::Negative) };
+
+    // Empty: first `step()` yields `Ok(null)` → break → total 0.
+    let empty = sum_all([] as List<i64>);
+    assert empty matches { Ok(0) };
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "Cursor::step\" = fn(ref \"",
+        "-> [i32, i32, i64, ref null \""
+    ],
+    "wir_not_expect:O2": [
+        "struct.new \"core:prelude/types.wado//Option<i64>"
+    ]
+}

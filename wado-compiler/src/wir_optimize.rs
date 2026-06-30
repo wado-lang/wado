@@ -61,7 +61,7 @@ use elide_struct::{
 use init_guard::remove_trivial_init_globals;
 use nullable_ref::lower_nullable_refs;
 use peephole::run_peephole;
-use sroa_variant_return::sroa_variant_returns;
+use sroa_variant_return::{flatten_nested_variant_slots, sroa_variant_returns};
 
 /// Run a single WIR optimization pass with profiling.
 ///
@@ -168,6 +168,14 @@ pub fn optimize_wir(
             peephole::propagate_trivial_copies(m);
         },
     );
+    // Nested variant-slot flattening: now that `flatten_seq_assignments` +
+    // copy propagation have exposed the clean `multivalue_bind […] = call;
+    // x = if Ok { payload } else { return Err }` shape, split a `ref
+    // Option<scalar>` result slot into `[inner_disc, scalar]`, removing the
+    // per-element inner box that single-level variant-return SROA leaves boxed.
+    wir_pass("wir/flatten_nested_variant_slots", module, profiler, |m| {
+        flatten_nested_variant_slots(m);
+    });
     profiler.span_end("wir/phase5_peephole");
 
     // Phase 6: strip write-only WIR-synthesised locals (`__match_scrut_N`,

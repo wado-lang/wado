@@ -5,8 +5,8 @@
 // `let opt = cur.step()?;` lowers to
 //
 //     LocalSet(opt, Seq([
-//         LocalSet(__scrut, Call(step)),   // the candidate call, one level down
-//         If(RefTest(__scrut, Ok)) { …unwrap… } else { return Err },
+//         LocalSet(__scrut, Call(step)),   // candidate call, one level down
+//         If(RefTest(__scrut, Ok)) { ...unwrap... } else { return Err },
 //         <unwrapped Option payload>,      // the Seq result
 //     ]))
 //
@@ -17,15 +17,18 @@
 // rewriter already descends into these bodies, so only the validator needed to
 // agree: it now recurses into `Seq`/`Block`/`If`-valued `LocalSet` bodies.
 //
-// `step` returns `Result<Option<i64>, StepErr>` (the seq-combinator shape), so
-// success confirms the outer `Result` collapses to a multi-value return.
+// `step` returns `Result<Option<String>, StepErr>`. `Option<String>` is
+// null-opt (a nullable ref, never boxed), so this exercises single-level
+// variant-return SROA without the nested-scalar-slot flattening — `step`'s
+// outer `Result` collapses to a multi-value return whose Ok slot is the
+// nullable `ref String`.
 
 variant StepErr {
-    Negative,
+    Empty,
 }
 
 struct Cursor {
-    data: List<i64>,
+    data: List<String>,
     pos: i32,
 }
 
@@ -33,26 +36,26 @@ impl Cursor {
     // The SROA candidate. `#[inline("never")]` keeps it a real call site so the
     // rewrite is exercised (otherwise it would inline away before SROA).
     #[inline("never")]
-    fn step(&mut self) -> Result<Option<i64>, StepErr> {
+    fn step(&mut self) -> Result<Option<String>, StepErr> {
         if self.pos >= self.data.len() {
             return Result::Ok(null);
         }
         let v = self.data[self.pos];
-        if v < 0 {
-            return Result::Err(StepErr::Negative);
+        if v.len() == 0 {
+            return Result::Err(StepErr::Empty);
         }
         self.pos += 1;
         return Result::Ok(Option::Some(v));
     }
 }
 
-fn sum_all(data: List<i64>) -> Result<i64, StepErr> {
+fn total_len(data: List<String>) -> Result<i32, StepErr> {
     let mut cur = Cursor { data, pos: 0 };
-    let mut total: i64 = 0;
+    let mut total = 0;
     loop {
         let opt = cur.step()?;
         if let Some(v) = opt {
-            total += v;
+            total += v.len();
         } else {
             break;
         }
@@ -61,15 +64,15 @@ fn sum_all(data: List<i64>) -> Result<i64, StepErr> {
 }
 
 export fn run() {
-    let ok = sum_all([1, 2, 3, 4]);
-    assert ok matches { Ok(10) };
+    let ok = total_len(["ab", "cde", "f"]);
+    assert ok matches { Ok(6) };
 
-    // Error path: the `?` propagates `StepErr::Negative` out of the bound temp.
-    let bad = sum_all([1, -2, 3]);
-    assert bad matches { Err(StepErr::Negative) };
+    // Error path: the `?` propagates `StepErr::Empty` out of the bound temp.
+    let bad = total_len(["ab", "", "cd"]);
+    assert bad matches { Err(StepErr::Empty) };
 
-    // Empty: the first `step()` yields `Ok(null)` → break → total 0.
-    let empty = sum_all([] as List<i64>);
+    // Empty list: the first `step()` yields `Ok(null)` → break → total 0.
+    let empty = total_len([] as List<String>);
     assert empty matches { Ok(0) };
 }
 
@@ -78,10 +81,10 @@ __DATA__
     "stdout": "",
     "wir_expect:O2": [
         "Cursor::step\" = fn(ref \"",
-        "-> [i32, ref null \"core:prelude/types.wado//Option<i64>\", ref null \"",
+        "-> [i32, ref null \"core:prelude/string.wado//String\", ref null \"",
         "multivalue_bind [__sroa___match_scrut_0_discriminant"
     ],
     "wir_not_expect:O2": [
-        "Result<core:prelude/types.wado/Option<i64>,"
+        "Result<core:prelude/types.wado/Option<core:prelude/string.wado/String>,"
     ]
 }
