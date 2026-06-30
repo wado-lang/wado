@@ -400,7 +400,7 @@ fn register_call_wrapper(
         export_name: None,
     };
 
-    ctx.register_function(func)
+    ctx.register_function(func, None)
 }
 
 /// Build an inspect / `inspect_alt` wrapper for a functor.
@@ -456,6 +456,9 @@ fn register_inspect_wrapper(
     let impl_unqualified_name = format!("{functor_name}^{trait_name}::{method_name}");
     let impl_param_names: Option<Vec<String>> = ctx.package.functions.iter().find_map(|f| {
         let f = f.borrow();
+        if f.is_dead {
+            return None;
+        }
         if f.module_source == *module_source && f.name == impl_unqualified_name {
             Some(f.params.iter().map(|p| p.name.clone()).collect())
         } else {
@@ -560,7 +563,7 @@ fn register_inspect_wrapper(
         export_name: None,
     };
 
-    ctx.register_function(func)
+    ctx.register_function(func, None)
 }
 
 /// Build the WIR body for a `FunctionKind::FnCanonicalDispatch`
@@ -1057,11 +1060,12 @@ impl FunctionTranslator<'_, '_> {
         // expects. `MethodCall` lowers to a single `WirInstr::Call` after
         // receiver / arg translation, so it's interchangeable with `Call`
         // for the multi-value-bind purpose.
-        let func = match &self.body.exprs[value].kind {
-            ExprKind::Call { func, .. } | ExprKind::MethodCall { func, .. } => func,
+        let func_id = match &self.body.exprs[value].kind {
+            ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => *func_id,
             _ => return None,
         };
-        let key = (func.name.clone(), func.module_source.clone());
+        let func = self.callee_descriptor(func_id);
+        let key = (func.name.clone(), func.module_source);
         let fields = self.ctx.multi_value_return_funcs.get(&key)?.clone();
 
         // Build per-field split locals: `<base>_mv_<field_name>`.
@@ -2091,7 +2095,10 @@ impl FunctionTranslator<'_, '_> {
                 }
             },
 
-            ExprKind::Call { func, args, .. } => {
+            ExprKind::Call { func_id, args, .. } => {
+                // The callee descriptor comes from the function record by
+                // `func_id` (Phase 5); the call node carries no `FunctionRef`.
+                let func = &self.callee_descriptor(*func_id);
                 // Check for instruction-builtins first
                 let builtin = func
                     .builtin_name()
@@ -2125,9 +2132,9 @@ impl FunctionTranslator<'_, '_> {
                     .map(|op| self.translate_operand(op))
                     .collect();
 
-                if let Some(func_id) = self.resolve_function_ref(func) {
+                if let Some(wir_func_id) = self.resolve_call(func, *func_id) {
                     WirInstr::Call {
-                        func_id,
+                        func_id: wir_func_id,
                         args: translated_args,
                     }
                 } else {
@@ -2140,11 +2147,14 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
             ExprKind::MethodCall {
-                func,
+                func_id,
                 receiver,
                 args,
                 ..
             } => {
+                // The callee descriptor comes from the function record by
+                // `func_id` (Phase 5); the call node carries no `FunctionRef`.
+                let func = &self.callee_descriptor(*func_id);
                 // Canonical resource method dispatch: uses #[canonical("...")] from types.wado
                 if let Some(re) = receiver.as_expr()
                     && let Some(instr) =
@@ -2164,9 +2174,9 @@ impl FunctionTranslator<'_, '_> {
                     }
                 }
 
-                if let Some(func_id) = self.resolve_function_ref(func) {
+                if let Some(wir_func_id) = self.resolve_call(func, *func_id) {
                     WirInstr::Call {
-                        func_id,
+                        func_id: wir_func_id,
                         args: translated_args,
                     }
                 } else {

@@ -52,6 +52,11 @@ pub struct WirContext<'a> {
     pub functions: Vec<WirFunction>,
     /// Map from fully-qualified function name to `WirFuncId`.
     pub func_map: IndexMap<String, WirFuncId>,
+    /// Map from a defined function's canonical [`crate::nir::FuncId`] to its
+    /// `WirFuncId`. Lets a stamped call resolve its target by id, skipping the
+    /// name reconstruction in `resolve_function_ref` (the name path stays for
+    /// extern / unstamped callees).
+    pub funcid_map: IndexMap<crate::nir::FuncId, WirFuncId>,
     /// Function type index for each function (into types vec).
     pub func_type_ids: Vec<WirTypeId>,
 
@@ -172,6 +177,12 @@ fn compute_inspectable_fn_dispatch(package: &NirPackage) -> IndexSet<(usize, Typ
         let Ok(func) = func_rc.try_borrow() else {
             continue;
         };
+        // `dce` marks unreachable functions dead in place (Phase 4) rather than
+        // removing them, so a dead `FnCanonicalDispatch` stub lingers; gate on
+        // liveness, not mere presence.
+        if func.is_dead {
+            continue;
+        }
         if let Some((_, arity, return_type)) = func.fn_canonical_dispatch() {
             set.insert((arity, return_type));
         }
@@ -262,6 +273,7 @@ impl<'a> WirContext<'a> {
             variant_case_info: IndexMap::default(),
             functions: Vec::new(),
             func_map: IndexMap::default(),
+            funcid_map: IndexMap::default(),
             func_type_ids: Vec::new(),
             imports: Vec::new(),
             import_func_count: 0,
@@ -352,13 +364,23 @@ impl<'a> WirContext<'a> {
     }
 
     /// Register a defined function (with body) and return its `WirFuncId`.
-    pub fn register_function(&mut self, func: WirFunction) -> WirFuncId {
+    /// `nir_id` is the source function's canonical id (`None` for synthesized
+    /// functions with no NIR origin); when present it indexes `funcid_map` so a
+    /// stamped call resolves by id.
+    pub fn register_function(
+        &mut self,
+        func: WirFunction,
+        nir_id: Option<crate::nir::FuncId>,
+    ) -> WirFuncId {
         let func_idx =
             DEFINED_FUNC_BASE + u32::try_from(self.functions.len()).expect("too many funcs");
         let fq = func.name.fq.clone();
         let fq_rc: Rc<str> = Rc::from(fq.as_str());
         let func_id = WirFuncId::new(func_idx, fq_rc);
         self.func_map.insert(fq, func_id.clone());
+        if let Some(nir_id) = nir_id {
+            self.funcid_map.insert(nir_id, func_id.clone());
+        }
         self.func_type_ids.push(func.type_id.clone());
         self.functions.push(func);
         func_id

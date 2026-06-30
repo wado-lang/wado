@@ -18,9 +18,11 @@
 //!
 //! [`ValueGraph`]: crate::nir_value_graph
 
+use cranelift_entity::SecondaryMap;
+
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::NirUnaryOp;
+use crate::nir::{FuncId, NirUnaryOp};
 use crate::nir_arena::{Body, ExprKind, NodeRef, Operand, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::niri::{AliasInfo, LocalSet};
@@ -101,20 +103,19 @@ pub(super) fn build_alias_info(
     }
 }
 
-/// The `(module_source, func_name) → first-param type` map. Mirrors the
-/// `FirstParamTypes` map `copy_prop` builds: it lets the mutable-escape scan
-/// decide whether a method call takes `&self` (immutable, cannot mutate the
-/// receiver) or `&mut self` from the callee's declared signature, without a
-/// whole-program mod-ref analysis. Build once per pass over all functions.
-pub(super) fn first_param_types(project: &NirPackage) -> IndexMap<(ModuleSource, String), TypeId> {
-    let mut map = IndexMap::default();
+/// Per-[`FuncId`] first-parameter type. Lets the mutable-escape scan decide
+/// whether a method call takes `&self` (immutable, cannot mutate the receiver)
+/// or `&mut self` from the callee's declared signature, without a whole-program
+/// mod-ref analysis. Keyed by the callee's id (read off the call node), so no
+/// `full_name` is resolved per lookup. Build once per pass over all functions.
+pub(super) type FirstParamTypes = SecondaryMap<FuncId, Option<TypeId>>;
+
+pub(super) fn first_param_types(project: &NirPackage) -> FirstParamTypes {
+    let mut map = FirstParamTypes::new();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
-        if let Some(first_param) = func.params.first() {
-            map.insert(
-                (func.module_source.clone(), func.name.clone()),
-                first_param.type_id,
-            );
+        if let (Some(id), Some(first_param)) = (func.id, func.params.first()) {
+            map[id] = Some(first_param.type_id);
         }
     }
     map
@@ -135,7 +136,7 @@ pub(super) fn builder_alias_sets(
     address_taken_locals: &IndexSet<u32>,
     stores_aliased_locals: &IndexSet<u32>,
     type_table: &TypeTable,
-    first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
+    first_param_types: &FirstParamTypes,
     call_immutability: &CallImmutability,
 ) -> (IndexSet<u32>, IndexSet<u32>, IndexSet<u32>) {
     // A mutating method call `recv.m(…)` (`&mut self`) aliases `recv` implicitly:
@@ -151,12 +152,14 @@ pub(super) fn builder_alias_sets(
         type_table,
         |body, node| {
             if let NodeRef::Expr(e) = node
-                && let ExprKind::MethodCall { receiver, func, .. } = &body.exprs[e].kind
+                && let ExprKind::MethodCall {
+                    receiver, func_id, ..
+                } = &body.exprs[e].kind
                 && let Some(re) = receiver.as_expr()
                 && method_mutates_receiver(
                     body,
                     re,
-                    func,
+                    *func_id,
                     first_param_types,
                     type_table,
                     true,
@@ -201,7 +204,7 @@ fn build_mut_escaped(
     aliased: &IndexSet<u32>,
     stores_aliased_locals: &IndexSet<u32>,
     type_table: &TypeTable,
-    first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
+    first_param_types: &FirstParamTypes,
     call_immutability: &CallImmutability,
     alias_groups: &IndexMap<u32, IndexSet<u32>>,
 ) -> IndexSet<u32> {
@@ -264,15 +267,16 @@ pub(super) struct CallImmutability<'a> {
     box_name: String,
     list_name: String,
     memo: std::cell::RefCell<IndexMap<TypeId, bool>>,
-    /// Methods whose body provably writes through their receiver (param 0).
-    /// Boxing erases the `&self` / `&mut self` distinction — both become a
-    /// `Box<T>` param (see `lower/plan/boxing`) — so a receiver's mutability
-    /// cannot be read off its type; only the callee body distinguishes
+    /// Per-[`FuncId`]: the function's body provably writes through its receiver
+    /// (param 0). Boxing erases the `&self` / `&mut self` distinction — both
+    /// become a `Box<T>` param (see `lower/plan/boxing`) — so a receiver's
+    /// mutability cannot be read off its type; only the callee body distinguishes
     /// `bump(&mut self) { *self = … }` from `fmt(&self)`. Computed by fixpoint.
-    receiver_mutating: IndexSet<(ModuleSource, String)>,
-    /// Methods with a body (so a not-mutating verdict is *proven*, not unknown).
-    /// A callee absent here (extern / builtin) stays conservatively mutating.
-    has_body: IndexSet<(ModuleSource, String)>,
+    receiver_mutating: SecondaryMap<FuncId, bool>,
+    /// Per-[`FuncId`]: the function has a body (so a not-mutating verdict is
+    /// *proven*, not unknown). A callee that does not resolve here (extern /
+    /// builtin / unstamped) stays conservatively mutating.
+    has_body: SecondaryMap<FuncId, bool>,
 }
 
 impl<'a> CallImmutability<'a> {
@@ -308,13 +312,11 @@ impl<'a> CallImmutability<'a> {
         }
     }
 
-    /// Whether the method `(module, name)` writes through its receiver. `None`
-    /// for a callee with no body (extern / builtin) — the caller falls back to
-    /// its conservative default.
-    pub(super) fn method_writes_receiver(&self, key: &(ModuleSource, String)) -> Option<bool> {
-        self.has_body
-            .contains(key)
-            .then(|| self.receiver_mutating.contains(key))
+    /// Whether the callee `func_id` writes through its receiver. `None` for a
+    /// callee with no body (extern / builtin) — the caller falls back to its
+    /// conservative default.
+    pub(super) fn method_writes_receiver(&self, func_id: FuncId) -> Option<bool> {
+        self.has_body[func_id].then(|| self.receiver_mutating[func_id])
     }
 
     pub(super) fn is_call_immutable(&self, type_id: TypeId) -> bool {
@@ -392,7 +394,7 @@ use super::arena_query::projection_root_local;
 pub(super) fn pure_calls(
     body: &Body,
     type_table: &TypeTable,
-    first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
+    first_param_types: &FirstParamTypes,
     call_immutability: &CallImmutability,
 ) -> IndexSet<crate::nir_arena::ExprId> {
     let arg_safe = |arg: &crate::nir_arena::ArenaCallArg| -> bool {
@@ -425,7 +427,7 @@ pub(super) fn pure_calls(
             ExprKind::Call { args, .. } => args.iter().all(&arg_safe),
             ExprKind::MethodCall {
                 receiver,
-                func,
+                func_id,
                 args,
                 ..
             } => {
@@ -433,7 +435,7 @@ pub(super) fn pure_calls(
                     !method_mutates_receiver(
                         body,
                         re,
-                        func,
+                        *func_id,
                         first_param_types,
                         type_table,
                         true,
@@ -460,8 +462,8 @@ pub(super) fn pure_calls(
 pub(super) fn method_mutates_receiver(
     body: &Body,
     receiver: crate::nir_arena::ExprId,
-    func: &crate::nir::FunctionRef,
-    first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
+    func_id: FuncId,
+    first_param_types: &FirstParamTypes,
     type_table: &TypeTable,
     conservative_on_unknown: bool,
     call_immutability: Option<&CallImmutability>,
@@ -470,7 +472,6 @@ pub(super) fn method_mutates_receiver(
         type_table.get(body.exprs[receiver].type_id),
         ResolvedType::MutRef(_)
     );
-    let key = (func.module_source.clone(), func.name.clone());
     // The receiver type alone cannot tell `&self` from `&mut self` once boxing
     // has made both a `Box<T>` param, so consult the body-derived verdict: a
     // method that writes through its receiver mutates it, one that does not is
@@ -478,10 +479,10 @@ pub(super) fn method_mutates_receiver(
     // `MutRef`-param check (still valid for a genuine `&mut Struct` receiver) or
     // the conservative default. `call_immutability` is `None` for the
     // copy-propagation caller, which keeps its own type-based receiver guard.
-    let callee_mutates = match call_immutability.and_then(|ci| ci.method_writes_receiver(&key)) {
+    let callee_mutates = match call_immutability.and_then(|ci| ci.method_writes_receiver(func_id)) {
         Some(writes) => writes,
-        None => match first_param_types.get(&key) {
-            Some(&tp) => matches!(type_table.get(tp), ResolvedType::MutRef(_)),
+        None => match first_param_types[func_id] {
+            Some(tp) => matches!(type_table.get(tp), ResolvedType::MutRef(_)),
             None => conservative_on_unknown,
         },
     };
@@ -499,44 +500,59 @@ pub(super) fn method_mutates_receiver(
 fn compute_receiver_mutating(
     project: &NirPackage,
     type_table: &TypeTable,
-    first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
-) -> (
-    IndexSet<(ModuleSource, String)>,
-    IndexSet<(ModuleSource, String)>,
-) {
-    let mut has_body: IndexSet<(ModuleSource, String)> = IndexSet::default();
-    let mut p0_of: IndexMap<(ModuleSource, String), u32> = IndexMap::default();
+    first_param_types: &FirstParamTypes,
+) -> (SecondaryMap<FuncId, bool>, SecondaryMap<FuncId, bool>) {
+    let mut has_body: SecondaryMap<FuncId, bool> = SecondaryMap::new();
+    let mut p0_of: SecondaryMap<FuncId, Option<u32>> = SecondaryMap::new();
     for func_rc in &project.functions {
         let f = func_rc.borrow();
+        let Some(id) = f.id else { continue };
         if f.body.is_some()
             && let Some(p0) = f.params.first()
         {
-            let key = (f.module_source.clone(), f.name.clone());
-            has_body.insert(key.clone());
-            p0_of.insert(key, p0.local_index);
+            has_body[id] = true;
+            p0_of[id] = Some(p0.local_index);
         }
     }
-    let mut mutating: IndexSet<(ModuleSource, String)> = IndexSet::default();
+    // Walk each body once to extract a fixpoint-invariant summary: whether it
+    // writes through its receiver directly, and the bodied callees it invokes on
+    // a self projection (the only verdicts that vary as `mutating` grows). The
+    // fixpoint then iterates these summaries with cheap integer lookups instead
+    // of re-walking every body each round.
+    struct Summary {
+        id: FuncId,
+        direct: bool,
+        pending: Vec<FuncId>,
+    }
+    let mut summaries: Vec<Summary> = Vec::new();
+    for func_rc in &project.functions {
+        let f = func_rc.borrow();
+        let Some(id) = f.id else { continue };
+        let (Some(body), Some(p0)) = (f.body.as_ref(), p0_of[id]) else {
+            continue;
+        };
+        let (direct, pending) =
+            summarize_receiver_writes(body, p0, &has_body, first_param_types, type_table);
+        summaries.push(Summary {
+            id,
+            direct,
+            pending,
+        });
+    }
+    let mut mutating: SecondaryMap<FuncId, bool> = SecondaryMap::new();
+    for s in &summaries {
+        if s.direct {
+            mutating[s.id] = true;
+        }
+    }
     loop {
         let mut changed = false;
-        for func_rc in &project.functions {
-            let f = func_rc.borrow();
-            let key = (f.module_source.clone(), f.name.clone());
-            if mutating.contains(&key) {
+        for s in &summaries {
+            if mutating[s.id] {
                 continue;
             }
-            let (Some(body), Some(&p0)) = (f.body.as_ref(), p0_of.get(&key)) else {
-                continue;
-            };
-            if body_writes_through_receiver(
-                body,
-                p0,
-                &mutating,
-                &has_body,
-                first_param_types,
-                type_table,
-            ) {
-                mutating.insert(key);
+            if s.pending.iter().any(|&c| mutating[c]) {
+                mutating[s.id] = true;
                 changed = true;
             }
         }
@@ -547,75 +563,84 @@ fn compute_receiver_mutating(
     (mutating, has_body)
 }
 
-/// Whether `body` writes through param-0's projection root `p0`, using the
-/// partial `mutating` set for the recursive method-call clause (monotone, so a
-/// `false` here is re-derived on the next fixpoint round if `mutating` grows).
-fn body_writes_through_receiver(
+/// One walk of `body` extracting param-0's receiver-write summary:
+///
+/// - `direct`: a fixpoint-invariant write through param-0's projection root
+///   `p0` — `self.f = …` / `*self = …`, `&mut <self projection>`, a `mut` call
+///   argument rooted at self, or a receiver-projecting method call into a
+///   bodyless / unstamped callee that mutates its receiver (verdict fixed by the
+///   callee's declared first-param type, conservative when unknown).
+/// - `pending`: ids of bodied callees invoked on a self projection. Their verdict
+///   is `mutating[id]`, resolved by the fixpoint as the set grows. `direct`
+///   short-circuits the walk; `pending` is collected only while no direct write
+///   has been seen.
+fn summarize_receiver_writes(
     body: &Body,
     p0: u32,
-    mutating: &IndexSet<(ModuleSource, String)>,
-    has_body: &IndexSet<(ModuleSource, String)>,
-    first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
+    has_body: &SecondaryMap<FuncId, bool>,
+    first_param_types: &FirstParamTypes,
     type_table: &TypeTable,
-) -> bool {
+) -> (bool, Vec<FuncId>) {
     let projects_p0 = |e: crate::nir_arena::ExprId| -> bool {
         super::arena_query::projection_root_local(body, e) == Some(p0)
     };
-    let mut found = false;
+    let mut direct = false;
+    let mut pending: Vec<FuncId> = Vec::new();
     walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
-        if found {
+        if direct {
             return;
         }
         let NodeRef::Expr(e) = node else { return };
         match &body.exprs[e].kind {
             // A write to a projection of self: `self.f = …`, `*self = …`.
-            ExprKind::Assign { target, .. } if projects_p0(*target) => found = true,
+            ExprKind::Assign { target, .. } if projects_p0(*target) => direct = true,
             // `&mut <self projection>` hands a mutable place out.
             ExprKind::Unary {
                 op: NirUnaryOp::MutRef,
                 expr: inner,
-            } if inner.as_expr().is_some_and(projects_p0) => found = true,
+            } if inner.as_expr().is_some_and(projects_p0) => direct = true,
             ExprKind::Call { args, .. } => {
                 if args
                     .iter()
                     .any(|a| a.is_mut && a.expr.as_expr().is_some_and(projects_p0))
                 {
-                    found = true;
+                    direct = true;
                 }
             }
             ExprKind::MethodCall {
                 receiver,
-                func,
+                func_id,
                 args,
                 ..
             } => {
                 if receiver.as_expr().is_some_and(projects_p0) {
                     // self-rooted receiver: mutated iff the callee mutates its
-                    // own receiver. Unknown (bodyless) callee → conservative.
-                    let key = (func.module_source.clone(), func.name.clone());
-                    let inner_mut = if has_body.contains(&key) {
-                        mutating.contains(&key)
+                    // own receiver. A bodied callee (stamped id with a body) →
+                    // defer to the fixpoint; an unstamped / bodyless callee →
+                    // conservative via its declared first-param type.
+                    if has_body[*func_id] {
+                        pending.push(*func_id);
                     } else {
-                        match first_param_types.get(&key) {
-                            Some(&tp) => matches!(type_table.get(tp), ResolvedType::MutRef(_)),
+                        let inner_mut = match first_param_types[*func_id] {
+                            Some(tp) => matches!(type_table.get(tp), ResolvedType::MutRef(_)),
                             None => true,
+                        };
+                        if inner_mut {
+                            direct = true;
                         }
-                    };
-                    if inner_mut {
-                        found = true;
                     }
                 }
                 if args
                     .iter()
                     .any(|a| a.is_mut && a.expr.as_expr().is_some_and(projects_p0))
                 {
-                    found = true;
+                    direct = true;
                 }
             }
             _ => {}
         }
     });
-    found
+    (direct, pending)
 }
 
 /// Flag the roots of mutable-escape sites in a single node:
@@ -635,7 +660,7 @@ fn collect_mut_escaped_node(
     body: &Body,
     node: NodeRef,
     type_table: &TypeTable,
-    first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
+    first_param_types: &FirstParamTypes,
     call_immutability: &CallImmutability,
     out: &mut IndexSet<u32>,
 ) {
@@ -667,7 +692,7 @@ fn collect_mut_escaped_node(
         }
         ExprKind::MethodCall {
             receiver,
-            func,
+            func_id,
             args,
             ..
         } => {
@@ -679,7 +704,7 @@ fn collect_mut_escaped_node(
                 && method_mutates_receiver(
                     body,
                     re,
-                    func,
+                    *func_id,
                     first_param_types,
                     type_table,
                     true,

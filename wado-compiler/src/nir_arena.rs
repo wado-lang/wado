@@ -16,7 +16,7 @@
 use cranelift_entity::{PrimaryMap, entity_impl};
 
 use crate::hashmap::IndexSet;
-use crate::nir::{FunctionRef, NirBinaryOp, NirLocal, NirUnaryOp};
+use crate::nir::{NirBinaryOp, NirLocal, NirUnaryOp};
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
 use crate::tir::TypeId;
 use crate::token::Span;
@@ -192,7 +192,12 @@ pub enum ExprKind {
         target_type: TypeId,
     },
     Call {
-        func: FunctionRef,
+        /// The sole callee reference: the canonical [`FuncId`](crate::nir::FuncId),
+        /// stamped at `lower` ("born resolved"), non-optional so a call is never
+        /// transiently unresolved. The callee's name / module / monomorph / method
+        /// identity lives only in the function record at this id (`store[id]`); the
+        /// call node carries no `FunctionRef`.
+        func_id: crate::nir::FuncId,
         type_args: Vec<TypeId>,
         args: Vec<ArenaCallArg>,
     },
@@ -202,7 +207,7 @@ pub enum ExprKind {
     },
     MethodCall {
         receiver: Operand,
-        func: FunctionRef,
+        func_id: crate::nir::FuncId,
         type_args: Vec<TypeId>,
         args: Vec<ArenaCallArg>,
     },
@@ -865,11 +870,11 @@ impl Body {
                 target_type,
             },
             ExprKind::Call {
-                func,
+                func_id,
                 type_args,
                 args,
             } => ExprKind::Call {
-                func,
+                func_id,
                 type_args,
                 args: args
                     .into_iter()
@@ -885,12 +890,12 @@ impl Body {
             },
             ExprKind::MethodCall {
                 receiver,
-                func,
+                func_id,
                 type_args,
                 args,
             } => ExprKind::MethodCall {
                 receiver: self.clone_operand(receiver),
-                func,
+                func_id,
                 type_args,
                 args: args
                     .into_iter()

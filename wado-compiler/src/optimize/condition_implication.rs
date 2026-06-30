@@ -41,7 +41,29 @@ use crate::nir_value_graph::ValueKind;
 /// it still sees the hoisted body.
 pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
     let root = engine.body.root;
-    process_block(engine, root)
+    // Built once and threaded down: sound because eliminations never add
+    // reassignments, so the snapshot only omits bindings, never holds a stale one.
+    let binds = build_copy_bindings(engine.body);
+    process_block(engine, root, &binds)
+}
+
+/// The [`FuncId`](crate::nir::FuncId)s of the diverging panic / `unreachable`
+/// builtins, recognized by name on the function record. Resolved once per pass
+/// run so the panic-block matcher identifies a panic callee by id. The driver
+/// hands the result to the engine via [`Engine::set_panic_callee_ids`].
+pub(super) fn resolve_panic_ids(
+    project: &crate::nir_package::NirPackage,
+) -> crate::hashmap::IndexSet<crate::nir::FuncId> {
+    project
+        .functions
+        .iter()
+        .filter_map(|f| {
+            let f = f.borrow();
+            (f.name.contains("panic") || f.name == "unreachable")
+                .then_some(f.id)
+                .flatten()
+        })
+        .collect()
 }
 
 /// Standalone post-`promote_fields` run of the structural BCE matcher.
@@ -60,6 +82,8 @@ pub(super) fn eliminate_post_promote(project: &mut crate::nir_package::NirPackag
     let type_table = project.type_table.borrow();
     let first_param_types = super::alias::first_param_types(project);
     let call_immutability = super::alias::CallImmutability::new(project, &type_table);
+    let panic_ids = resolve_panic_ids(project);
+    let pure_builtin_callees = project.pure_builtin_callee_ids();
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
@@ -90,6 +114,8 @@ pub(super) fn eliminate_post_promote(project: &mut crate::nir_package::NirPackag
         engine.set_alias_sets(aliased, untrackable, mut_escaped);
         engine.set_value_graph_type_table(&type_table);
         engine.set_param_locals(param_locals);
+        engine.set_panic_callee_ids(&panic_ids);
+        engine.set_pure_builtin_callees(&pure_builtin_callees);
         changed |= eliminate_at_root(&mut engine);
     }
     changed
@@ -603,7 +629,7 @@ fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: BoundKey) -> b
 /// `if (var >= bound) { panic }` in the body — by **structural** comparison of
 /// the skeleton reads plus a position-aware "no modification of `var`/`bound`
 /// between the guard and the check" scan. No value graph, no promotion.
-fn structural_loop_guard(engine: &mut Engine, loop_body: BlockId) -> bool {
+fn structural_loop_guard(engine: &mut Engine, loop_body: BlockId, binds: &Binds) -> bool {
     let stmts = engine.body.blocks[loop_body].stmts.clone();
     let guard_idx = stmts.iter().position(|s| {
         !matches!(
@@ -642,8 +668,7 @@ fn structural_loop_guard(engine: &mut Engine, loop_body: BlockId) -> bool {
     else {
         return false;
     };
-    let binds = build_copy_bindings(engine.body);
-    let Some((var, goff, bound, gop)) = parse_cmp(engine, &binds, *inner) else {
+    let Some((var, goff, bound, gop)) = parse_cmp(engine, binds, *inner) else {
         return false;
     };
     // Walk body statements after the guard, in order. While no statement has
@@ -675,8 +700,8 @@ fn structural_loop_guard(engine: &mut Engine, loop_body: BlockId) -> bool {
             break;
         }
         changed |= match le_gbl {
-            None => eliminate_checks_in_node(engine, NodeRef::Stmt(s), var, goff, bound, &binds),
-            Some(gbl) => eliminate_le_checks_in_node(engine, NodeRef::Stmt(s), var, gbl, &binds),
+            None => eliminate_checks_in_node(engine, NodeRef::Stmt(s), var, goff, bound, binds),
+            Some(gbl) => eliminate_le_checks_in_node(engine, NodeRef::Stmt(s), var, gbl, binds),
         };
     }
     changed
@@ -845,35 +870,45 @@ fn recognize_early_exit(engine: &Engine, s: StmtId, binds: &Binds) -> Option<(u3
     parse_check(engine, binds, cond)
 }
 
-fn process_block(engine: &mut Engine, block: BlockId) -> bool {
+fn process_block(engine: &mut Engine, block: BlockId, binds: &Binds) -> bool {
     let mut changed = false;
     // Structural early-exit facts `var < bound` (value_of-free): a fact is used
     // for a later statement's checks while no statement since the guard has
     // modified `var` / `bound` (`stmt_modifies`), then dropped when one does.
-    let binds = build_copy_bindings(engine.body);
     let mut seguards: Vec<(u32, i64, BoundKey)> = Vec::new();
     let stmts = engine.body.blocks[block].stmts.clone();
     for s in stmts {
         for &(var, k, bound) in &seguards {
             if !stmt_modifies(engine, s, var, bound) {
-                changed |=
-                    eliminate_checks_in_node(engine, NodeRef::Stmt(s), var, k, bound, &binds);
+                changed |= eliminate_checks_in_node(engine, NodeRef::Stmt(s), var, k, bound, binds);
             }
         }
+<<<<<<< HEAD
         changed |= apply_dominating_if(engine, s, &binds);
         changed |= BitmaskEliminator { binds: &binds }.visit_stmt(engine, s);
         changed |= ConstBoundIndexEliminator { binds: &binds }.visit_stmt(engine, s);
         changed |= ShortCircuitEliminator { binds: &binds }.visit_stmt(engine, s);
         changed |= process_stmt(engine, s);
+||||||| 05f57c78
+        changed |= apply_dominating_if(engine, s, &binds);
+        changed |= BitmaskEliminator { binds: &binds }.visit_stmt(engine, s);
+        changed |= ShortCircuitEliminator { binds: &binds }.visit_stmt(engine, s);
+        changed |= process_stmt(engine, s);
+=======
+        changed |= apply_dominating_if(engine, s, binds);
+        changed |= BitmaskEliminator { binds }.visit_stmt(engine, s);
+        changed |= ShortCircuitEliminator { binds }.visit_stmt(engine, s);
+        changed |= process_stmt(engine, s, binds);
+>>>>>>> origin/main
         seguards.retain(|&(var, _, bound)| !stmt_modifies(engine, s, var, bound));
-        if let Some(fact) = recognize_early_exit(engine, s, &binds) {
+        if let Some(fact) = recognize_early_exit(engine, s, binds) {
             seguards.push(fact);
         }
     }
     changed
 }
 
-fn process_stmt(engine: &mut Engine, s: StmtId) -> bool {
+fn process_stmt(engine: &mut Engine, s: StmtId, binds: &Binds) -> bool {
     let shape = match &engine.body.stmts[s].kind {
         StmtKind::Loop { body: lb } => StmtShape::Loop(*lb),
         StmtKind::If {
@@ -885,15 +920,15 @@ fn process_stmt(engine: &mut Engine, s: StmtId) -> bool {
         _ => StmtShape::None,
     };
     match shape {
-        StmtShape::Loop(lb) => process_loop(engine, lb),
+        StmtShape::Loop(lb) => process_loop(engine, lb, binds),
         StmtShape::If(then_b, else_b) => {
-            let mut changed = process_block(engine, then_b);
+            let mut changed = process_block(engine, then_b, binds);
             if let Some(eb) = else_b {
-                changed |= process_block(engine, eb);
+                changed |= process_block(engine, eb, binds);
             }
             changed
         }
-        StmtShape::Labeled(b) => process_block(engine, b),
+        StmtShape::Labeled(b) => process_block(engine, b, binds),
         StmtShape::None => false,
     }
 }
@@ -905,21 +940,20 @@ enum StmtShape {
     None,
 }
 
-fn process_loop(engine: &mut Engine, loop_body: BlockId) -> bool {
-    let mut changed = structural_loop_guard(engine, loop_body);
+fn process_loop(engine: &mut Engine, loop_body: BlockId, binds: &Binds) -> bool {
+    let mut changed = structural_loop_guard(engine, loop_body, binds);
 
     // Dominating `if (var + K) < bound { … }` in the loop body proves the
     // dominated checks inside its then-block, and bitmask-bounded checks
     // `(x & MASK) >= BOUND` are refuted by the mask (value_of-free, structural).
-    let binds = build_copy_bindings(engine.body);
     for s in engine.body.blocks[loop_body].stmts.clone() {
-        changed |= apply_dominating_if(engine, s, &binds);
-        changed |= BitmaskEliminator { binds: &binds }.visit_stmt(engine, s);
+        changed |= apply_dominating_if(engine, s, binds);
+        changed |= BitmaskEliminator { binds }.visit_stmt(engine, s);
     }
 
     // Recurse into nested loops.
     for s in engine.body.blocks[loop_body].stmts.clone() {
-        changed |= process_stmt_nested_loops(engine, s);
+        changed |= process_stmt_nested_loops(engine, s, binds);
     }
 
     changed
@@ -927,7 +961,7 @@ fn process_loop(engine: &mut Engine, loop_body: BlockId) -> bool {
 
 /// Recurse into nested structures to find inner loops, but don't re-process
 /// the current loop level.
-fn process_stmt_nested_loops(engine: &mut Engine, s: StmtId) -> bool {
+fn process_stmt_nested_loops(engine: &mut Engine, s: StmtId, binds: &Binds) -> bool {
     let shape = match &engine.body.stmts[s].kind {
         StmtKind::Loop { body: lb } => StmtShape::Loop(*lb),
         StmtKind::If {
@@ -939,15 +973,15 @@ fn process_stmt_nested_loops(engine: &mut Engine, s: StmtId) -> bool {
         _ => StmtShape::None,
     };
     match shape {
-        StmtShape::Loop(lb) => process_loop(engine, lb),
+        StmtShape::Loop(lb) => process_loop(engine, lb, binds),
         StmtShape::If(then_b, else_b) => {
             let mut changed = false;
             for s in engine.body.blocks[then_b].stmts.clone() {
-                changed |= process_stmt_nested_loops(engine, s);
+                changed |= process_stmt_nested_loops(engine, s, binds);
             }
             if let Some(eb) = else_b {
                 for s in engine.body.blocks[eb].stmts.clone() {
-                    changed |= process_stmt_nested_loops(engine, s);
+                    changed |= process_stmt_nested_loops(engine, s, binds);
                 }
             }
             changed
@@ -955,7 +989,7 @@ fn process_stmt_nested_loops(engine: &mut Engine, s: StmtId) -> bool {
         StmtShape::Labeled(b) => {
             let mut changed = false;
             for s in engine.body.blocks[b].stmts.clone() {
-                changed |= process_stmt_nested_loops(engine, s);
+                changed |= process_stmt_nested_loops(engine, s, binds);
             }
             changed
         }
@@ -1028,7 +1062,7 @@ fn is_panic_block(engine: &Engine, block: BlockId) -> bool {
 
 fn is_panic_call(engine: &Engine, e: ExprId) -> bool {
     match &engine.body.exprs[e].kind {
-        ExprKind::Call { func, .. } => func.name.contains("panic") || func.name == "unreachable",
+        ExprKind::Call { func_id, .. } => engine.is_panic_callee(*func_id),
         _ => false,
     }
 }

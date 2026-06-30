@@ -101,6 +101,34 @@ impl FunctionTranslator<'_, '_> {
         None
     }
 
+    /// Resolve a call target, preferring the stamped canonical `func_id` (a
+    /// direct id→`WirFuncId` lookup, no name reconstruction) and falling back to
+    /// [`Self::resolve_function_ref`] on the callee `descriptor` for an imported
+    /// callee — imports are not entered into `funcid_map`, so the name path
+    /// resolves them. `descriptor` is the record-derived [`Self::callee_descriptor`],
+    /// not a node field (the call node carries no `FunctionRef`).
+    pub(super) fn resolve_call(
+        &self,
+        descriptor: &crate::nir::FunctionRef,
+        func_id: crate::nir::FuncId,
+    ) -> Option<crate::wir::WirFuncId> {
+        if let Some(wid) = self.ctx.funcid_map.get(&func_id) {
+            return Some(wid.clone());
+        }
+        self.resolve_function_ref(descriptor)
+    }
+
+    /// The callee's identity descriptor (`module_source`, `name`,
+    /// `monomorph_info`, `method_info`) used for builtin / canonical dispatch and
+    /// diagnostics. Reads it from the function record by `func_id` — the single
+    /// source of truth (`FuncId == store position`, Phase 4), and the sole callee
+    /// reference now that the call node carries no `FunctionRef`.
+    pub(super) fn callee_descriptor(&self, func_id: crate::nir::FuncId) -> crate::nir::FunctionRef {
+        use cranelift_entity::EntityRef;
+        let rec = self.ctx.package.functions[func_id.index()].borrow();
+        crate::nir::FunctionRef::from_resolved(&rec, rec.module_source.clone())
+    }
+
     /// Try to resolve a method call on a newtype by substituting the base type name.
     /// For example, `Location::sum` → `Point::sum` when `type Location = Point`.
     /// Follows the newtype chain for chained newtypes (C → B → A → Point).

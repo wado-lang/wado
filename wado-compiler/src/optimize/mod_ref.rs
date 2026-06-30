@@ -671,7 +671,7 @@ pub(super) fn can_move_past(expr_mr: &ModRef, int_mr: &ModRef, candidate: u32) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nir::{FunctionRef, NirBinaryOp, NirUnaryOp};
+    use crate::nir::{NirBinaryOp, NirUnaryOp};
     use crate::nir_arena::{
         ArenaCallArg, ArenaStructField, ArmData, BlockNode, Body, ExprNode, PatNode, StmtNode,
     };
@@ -836,14 +836,6 @@ mod tests {
             },
         )
     }
-    fn func_ref(name: &str) -> FunctionRef {
-        FunctionRef {
-            module_source: ModuleSource::prelude(),
-            name: name.to_string(),
-            monomorph_info: None,
-            method_info: None,
-        }
-    }
     fn call(body: &mut Body, args: Vec<ExprId>) -> ExprId {
         let args = args
             .into_iter()
@@ -852,10 +844,11 @@ mod tests {
                 is_mut: false,
             })
             .collect();
+        use cranelift_entity::EntityRef;
         pe(
             body,
             ExprKind::Call {
-                func: func_ref("f"),
+                func_id: crate::nir::FuncId::new(0),
                 type_args: vec![],
                 args,
             },

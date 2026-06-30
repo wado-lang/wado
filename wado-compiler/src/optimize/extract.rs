@@ -293,6 +293,7 @@ pub(super) fn freeze_pure_arith(
     let type_table = project.type_table.borrow();
     let first_param_types = super::alias::first_param_types(project);
     let call_immutability = super::alias::CallImmutability::new(project, &type_table);
+    let pure_builtin_callees = project.pure_builtin_callee_ids();
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
@@ -344,6 +345,7 @@ pub(super) fn freeze_pure_arith(
         engine.set_value_graph_type_table(&type_table);
         engine.set_param_locals(param_locals);
         engine.set_pure_calls(pure_calls);
+        engine.set_pure_builtin_callees(&pure_builtin_callees);
 
         // Phase 1: decide every freeze on the clean, unedited graph. A value
         // query never mutates the skeleton, so the verify oracle (which fires

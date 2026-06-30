@@ -191,9 +191,9 @@ impl Lattice {
 /// Identity of a callee in the [`CalleeMap`]. Mirrors the shape produced
 /// by `FunctionRef::full_name` so the interpreter can look up a `Call`
 /// node's target without re-deriving the format.
-pub type CalleeKey = (ModuleSource, String);
+pub type CalleeKey = crate::nir::FuncId;
 
-/// Map of CTFE-eligible callees, keyed by `(module_source, full_name)`.
+/// Map of CTFE-eligible callees, keyed by canonical [`crate::nir::FuncId`].
 ///
 /// Values are [`Rc<RefCell<NirFunction>>`] handles aliased with
 /// [`crate::flat_package::FlatPackage::functions`], not body clones, so
@@ -1465,13 +1465,13 @@ impl<'a> Interpreter<'a> {
         let Some(callees) = self.callees else {
             return Lattice::Unevaluated;
         };
-        let (func, args): (crate::nir::FunctionRef, Vec<Operand>) = match &body.exprs[e].kind {
-            ExprKind::Call { func, args, .. } => {
-                (func.clone(), args.iter().map(|a| a.expr).collect())
+        let (key, args): (CalleeKey, Vec<Operand>) = match &body.exprs[e].kind {
+            ExprKind::Call { func_id, args, .. } => {
+                (*func_id, args.iter().map(|a| a.expr).collect())
             }
+            // Only a free `Call` is a CTFE-eligible in-package callee.
             _ => return Lattice::Unevaluated,
         };
-        let key: CalleeKey = (func.module_source.clone(), func.full_name());
         let Some(callee_rc) = callees.get(&key) else {
             return Lattice::Unevaluated;
         };

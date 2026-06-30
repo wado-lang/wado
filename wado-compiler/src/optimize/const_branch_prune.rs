@@ -60,6 +60,7 @@ fn run_rule(project: &mut NirPackage, mode: PruneMode) -> bool {
     let mut changed = false;
     let mut buffers = EngineBuffers::default();
     let type_table = project.type_table.borrow();
+    let pure_builtin_callees = project.pure_builtin_callee_ids();
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         let NirFunction { body, locals, .. } = &mut *func;
@@ -67,6 +68,7 @@ fn run_rule(project: &mut NirPackage, mode: PruneMode) -> bool {
             let mut engine = Engine::new(body, &mut buffers, locals);
             // A pruned break value that is a promoted constant is re-materialized.
             engine.set_value_graph_type_table(&type_table);
+            engine.set_pure_builtin_callees(&pure_builtin_callees);
             changed |= engine.run(&[&rule]);
         }
     }

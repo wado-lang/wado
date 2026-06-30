@@ -41,7 +41,8 @@ use cranelift_entity::EntityRef;
 
 use super::arena_query;
 use super::dae;
-use super::gate::{FunctionGate, FunctionId, GatedPass};
+use super::gate::{FunctionGate, GatedPass};
+use crate::nir::FuncId;
 
 type FnKey = dae::FnKey;
 
@@ -57,8 +58,9 @@ pub fn eliminate_dead_return_values(project: &mut NirPackage, gate: &mut Functio
         }
         if let Some(body) = &func.body
             && has_only_pure_returns_with_explicit_tail(body)
+            && let Some(id) = func.id
         {
-            candidates.insert((func.module_source.clone(), func.name.clone()));
+            candidates.insert(id);
         }
     }
     drop(type_table);
@@ -76,7 +78,7 @@ pub fn eliminate_dead_return_values(project: &mut NirPackage, gate: &mut Functio
     // re-examine only those. The call graph is unaffected, so no refresh.
     let touched = apply_drve(project, &confirmed);
     for idx in touched {
-        gate.mark_changed(FunctionId::new(idx));
+        gate.mark_changed(FuncId::new(idx));
     }
     true
 }
@@ -120,7 +122,7 @@ fn is_eligible(func: &NirFunction, pinned: &IndexSet<FnKey>, type_table: &TypeTa
     {
         return false;
     }
-    if pinned.contains(&(func.module_source.clone(), func.name.clone())) {
+    if func.id.is_some_and(|id| pinned.contains(&id)) {
         return false;
     }
     true
@@ -229,19 +231,19 @@ impl ValidateCtx<'_> {
         if let StmtKind::Expr(Operand::Expr(e)) = &body.stmts[stmt].kind {
             let e = *e;
             let (call_key, scan): (Option<FnKey>, Vec<ExprId>) = match &body.exprs[e].kind {
-                ExprKind::Call { func, args, .. } => (
-                    Some((func.module_source.clone(), func.name.clone())),
+                ExprKind::Call { func_id, args, .. } => (
+                    Some(*func_id),
                     args.iter().filter_map(|a| a.expr.as_expr()).collect(),
                 ),
                 ExprKind::MethodCall {
-                    func,
+                    func_id,
                     receiver,
                     args,
                     ..
                 } => {
                     let mut scan: Vec<ExprId> = receiver.as_expr().into_iter().collect();
                     scan.extend(args.iter().filter_map(|a| a.expr.as_expr()));
-                    (Some((func.module_source.clone(), func.name.clone())), scan)
+                    (Some(*func_id), scan)
                 }
                 // Not a top-level call: the whole expression is a use.
                 _ => (None, vec![e]),
@@ -273,13 +275,11 @@ impl ValidateCtx<'_> {
     /// in the subtree at `node` (value position).
     fn scan_node(&mut self, body: &Body, node: NodeRef) {
         if let NodeRef::Expr(id) = node
-            && let ExprKind::Call { func, .. } | ExprKind::MethodCall { func, .. } =
+            && let ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } =
                 &body.exprs[id].kind
+            && self.candidates.contains(func_id)
         {
-            let key = (func.module_source.clone(), func.name.clone());
-            if self.candidates.contains(&key) {
-                self.rejected.insert(key);
-            }
+            self.rejected.insert(*func_id);
         }
         let mut kids = Vec::new();
         body.for_each_child(node, |c| kids.push(c));
@@ -305,8 +305,7 @@ fn apply_drve(project: &mut NirPackage, confirmed: &IndexSet<FnKey>) -> Vec<usiz
     // pure expression, so dropping its value is observably equivalent.
     for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
-        let key = (func.module_source.clone(), func.name.clone());
-        if !confirmed.contains(&key) {
+        if !func.id.is_some_and(|id| confirmed.contains(&id)) {
             continue;
         }
         func.return_type = TypeTable::UNIT;
@@ -358,13 +357,11 @@ fn retype_calls(body: &mut Body, confirmed: &IndexSet<FnKey>) -> bool {
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Expr(id) = node
-            && let ExprKind::Call { func, .. } | ExprKind::MethodCall { func, .. } =
+            && let ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } =
                 &body.exprs[id].kind
+            && confirmed.contains(func_id)
         {
-            let key = (func.module_source.clone(), func.name.clone());
-            if confirmed.contains(&key) {
-                targets.push(id);
-            }
+            targets.push(id);
         }
         body.for_each_child(node, |c| stack.push(c));
     }

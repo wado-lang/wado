@@ -19,8 +19,7 @@
 //! `return_abi` — so it reads the arena `Body` directly.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::module_source::ModuleSource;
-use crate::nir::{FunctionKind, NirFunction, NirStruct, ReturnAbi};
+use crate::nir::{FuncId, FunctionKind, NirFunction, NirStruct, ReturnAbi};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -37,10 +36,10 @@ struct CandidateInfo {
 fn candidate_call_idx_operand(
     body: &Body,
     op: Operand,
-    candidate_names: &IndexMap<(String, ModuleSource), usize>,
+    candidate_ids: &IndexMap<FuncId, usize>,
 ) -> Option<usize> {
     op.as_expr()
-        .and_then(|e| candidate_call_idx(body, e, candidate_names))
+        .and_then(|e| candidate_call_idx(body, e, candidate_ids))
 }
 
 /// If `expr` is a direct `Call(f)` / `MethodCall(f)` whose callee is a
@@ -48,28 +47,26 @@ fn candidate_call_idx_operand(
 fn candidate_call_idx(
     body: &Body,
     expr: ExprId,
-    candidate_names: &IndexMap<(String, ModuleSource), usize>,
+    candidate_ids: &IndexMap<FuncId, usize>,
 ) -> Option<usize> {
-    let func = match &body.exprs[expr].kind {
-        ExprKind::Call { func, .. } | ExprKind::MethodCall { func, .. } => func,
+    let func_id = match &body.exprs[expr].kind {
+        ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => *func_id,
         _ => return None,
     };
-    candidate_names
-        .get(&(func.name.clone(), func.module_source.clone()))
-        .copied()
+    candidate_ids.get(&func_id).copied()
 }
 
 /// [`walk_call_args_for_uses`] for an operand.
 fn walk_call_args_for_uses_operand(
     body: &Body,
     op: Operand,
-    candidate_names: &IndexMap<(String, ModuleSource), usize>,
+    candidate_ids: &IndexMap<FuncId, usize>,
     candidates: &IndexMap<usize, CandidateInfo>,
     invalid: &mut IndexSet<usize>,
     tracked: &IndexMap<u32, usize>,
 ) {
     if let Some(e) = op.as_expr() {
-        walk_call_args_for_uses(body, e, candidate_names, candidates, invalid, tracked);
+        walk_call_args_for_uses(body, e, candidate_ids, candidates, invalid, tracked);
     }
 }
 
@@ -78,7 +75,7 @@ fn walk_call_args_for_uses_operand(
 fn walk_call_args_for_uses(
     body: &Body,
     expr: ExprId,
-    candidate_names: &IndexMap<(String, ModuleSource), usize>,
+    candidate_ids: &IndexMap<FuncId, usize>,
     candidates: &IndexMap<usize, CandidateInfo>,
     invalid: &mut IndexSet<usize>,
     tracked: &IndexMap<u32, usize>,
@@ -93,7 +90,7 @@ fn walk_call_args_for_uses(
         _ => return,
     };
     for a in args {
-        walk_expr_for_uses(body, a, candidate_names, candidates, invalid, tracked);
+        walk_expr_for_uses(body, a, candidate_ids, candidates, invalid, tracked);
     }
 }
 
@@ -116,11 +113,11 @@ pub fn classify_multi_value_returns(project: &mut NirPackage) -> bool {
     }
 
     // Phase 2: call-site validation across every function body.
-    let candidate_names: IndexMap<(String, ModuleSource), usize> = candidates
+    let candidate_ids: IndexMap<FuncId, usize> = candidates
         .keys()
-        .map(|&idx| {
+        .filter_map(|&idx| {
             let func = project.functions[idx].borrow();
-            ((func.name.clone(), func.module_source.clone()), idx)
+            func.id.map(|id| (id, idx))
         })
         .collect();
 
@@ -130,7 +127,7 @@ pub fn classify_multi_value_returns(project: &mut NirPackage) -> bool {
         let Some(body) = &func.body else {
             continue;
         };
-        validate_uses_in_block(body, body.root, &candidate_names, &candidates, &mut invalid);
+        validate_uses_in_block(body, body.root, &candidate_ids, &candidates, &mut invalid);
     }
 
     // Phase 3: apply. Drop disqualified candidates, set ReturnAbi on the rest.
@@ -465,27 +462,20 @@ fn block_tail_returns_match(body: &Body, block: BlockId, expected: &ExpectedShap
 fn validate_uses_in_block(
     body: &Body,
     block: BlockId,
-    candidate_names: &IndexMap<(String, ModuleSource), usize>,
+    candidate_ids: &IndexMap<FuncId, usize>,
     candidates: &IndexMap<usize, CandidateInfo>,
     invalid: &mut IndexSet<usize>,
 ) {
     let mut tracked: IndexMap<u32, usize> = IndexMap::default();
     for &stmt in &body.blocks[block].stmts {
-        validate_stmt(
-            body,
-            stmt,
-            candidate_names,
-            candidates,
-            invalid,
-            &mut tracked,
-        );
+        validate_stmt(body, stmt, candidate_ids, candidates, invalid, &mut tracked);
     }
 }
 
 fn validate_stmt(
     body: &Body,
     stmt: StmtId,
-    candidate_names: &IndexMap<(String, ModuleSource), usize>,
+    candidate_ids: &IndexMap<FuncId, usize>,
     candidates: &IndexMap<usize, CandidateInfo>,
     invalid: &mut IndexSet<usize>,
     tracked: &mut IndexMap<u32, usize>,
@@ -499,32 +489,31 @@ fn validate_stmt(
         } => {
             let (local_index, value, is_mut) = (*local_index, *value, *is_mut);
             if !is_mut
-                && let Some(candidate_idx) =
-                    candidate_call_idx_operand(body, value, candidate_names)
+                && let Some(candidate_idx) = candidate_call_idx_operand(body, value, candidate_ids)
             {
                 tracked.insert(local_index, candidate_idx);
                 walk_call_args_for_uses_operand(
                     body,
                     value,
-                    candidate_names,
+                    candidate_ids,
                     candidates,
                     invalid,
                     tracked,
                 );
                 return;
             }
-            walk_expr_for_uses_operand(body, value, candidate_names, candidates, invalid, tracked);
+            walk_expr_for_uses_operand(body, value, candidate_ids, candidates, invalid, tracked);
         }
         StmtKind::Expr(e) => {
-            walk_expr_for_uses_operand(body, *e, candidate_names, candidates, invalid, tracked);
+            walk_expr_for_uses_operand(body, *e, candidate_ids, candidates, invalid, tracked);
         }
         StmtKind::Return { value: Some(e) } => {
-            walk_expr_for_uses_operand(body, *e, candidate_names, candidates, invalid, tracked);
+            walk_expr_for_uses_operand(body, *e, candidate_ids, candidates, invalid, tracked);
         }
         StmtKind::Return { value: None } | StmtKind::Continue => {}
         StmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                walk_expr_for_uses_operand(body, *v, candidate_names, candidates, invalid, tracked);
+                walk_expr_for_uses_operand(body, *v, candidate_ids, candidates, invalid, tracked);
             }
         }
         StmtKind::If {
@@ -536,19 +525,19 @@ fn validate_stmt(
             walk_expr_for_uses_operand(
                 body,
                 condition,
-                candidate_names,
+                candidate_ids,
                 candidates,
                 invalid,
                 tracked,
             );
             let mut inner = tracked.clone();
             for &s in &body.blocks[then_block].stmts.clone() {
-                validate_stmt(body, s, candidate_names, candidates, invalid, &mut inner);
+                validate_stmt(body, s, candidate_ids, candidates, invalid, &mut inner);
             }
             if let Some(eb) = else_block {
                 let mut inner = tracked.clone();
                 for &s in &body.blocks[eb].stmts.clone() {
-                    validate_stmt(body, s, candidate_names, candidates, invalid, &mut inner);
+                    validate_stmt(body, s, candidate_ids, candidates, invalid, &mut inner);
                 }
             }
         }
@@ -556,11 +545,11 @@ fn validate_stmt(
             let b = *b;
             let mut inner = tracked.clone();
             for &s in &body.blocks[b].stmts.clone() {
-                validate_stmt(body, s, candidate_names, candidates, invalid, &mut inner);
+                validate_stmt(body, s, candidate_ids, candidates, invalid, &mut inner);
             }
         }
         StmtKind::LetDestructure { value, .. } => {
-            walk_expr_for_uses_operand(body, *value, candidate_names, candidates, invalid, tracked);
+            walk_expr_for_uses_operand(body, *value, candidate_ids, candidates, invalid, tracked);
         }
     }
 }
@@ -568,20 +557,20 @@ fn validate_stmt(
 fn walk_expr_for_uses_operand(
     body: &Body,
     op: Operand,
-    candidate_names: &IndexMap<(String, ModuleSource), usize>,
+    candidate_ids: &IndexMap<FuncId, usize>,
     candidates: &IndexMap<usize, CandidateInfo>,
     invalid: &mut IndexSet<usize>,
     tracked: &IndexMap<u32, usize>,
 ) {
     if let Some(e) = op.as_expr() {
-        walk_expr_for_uses(body, e, candidate_names, candidates, invalid, tracked);
+        walk_expr_for_uses(body, e, candidate_ids, candidates, invalid, tracked);
     }
 }
 
 fn walk_expr_for_uses(
     body: &Body,
     expr: ExprId,
-    candidate_names: &IndexMap<(String, ModuleSource), usize>,
+    candidate_ids: &IndexMap<FuncId, usize>,
     candidates: &IndexMap<usize, CandidateInfo>,
     invalid: &mut IndexSet<usize>,
     tracked: &IndexMap<u32, usize>,
@@ -602,68 +591,57 @@ fn walk_expr_for_uses(
             {
                 return;
             }
-            walk_expr_for_uses_operand(body, source, candidate_names, candidates, invalid, tracked);
+            walk_expr_for_uses_operand(body, source, candidate_ids, candidates, invalid, tracked);
         }
         ExprKind::Local { index, .. } => {
             if let Some(&candidate_idx) = tracked.get(index) {
                 invalid.insert(candidate_idx);
             }
         }
-        ExprKind::Call { func, args, .. } => {
-            if let Some(&candidate_idx) =
-                candidate_names.get(&(func.name.clone(), func.module_source.clone()))
-            {
+        ExprKind::Call { func_id, args, .. } => {
+            if let Some(&candidate_idx) = candidate_ids.get(func_id) {
                 invalid.insert(candidate_idx);
             }
             let args: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
             for a in args {
-                walk_expr_for_uses(body, a, candidate_names, candidates, invalid, tracked);
+                walk_expr_for_uses(body, a, candidate_ids, candidates, invalid, tracked);
             }
         }
         ExprKind::MethodCall {
             receiver,
-            func,
+            func_id,
             args,
             ..
         } => {
-            if let Some(&candidate_idx) =
-                candidate_names.get(&(func.name.clone(), func.module_source.clone()))
-            {
+            if let Some(&candidate_idx) = candidate_ids.get(func_id) {
                 invalid.insert(candidate_idx);
             }
             let receiver = *receiver;
             let args: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
-            walk_expr_for_uses_operand(
-                body,
-                receiver,
-                candidate_names,
-                candidates,
-                invalid,
-                tracked,
-            );
+            walk_expr_for_uses_operand(body, receiver, candidate_ids, candidates, invalid, tracked);
             for a in args {
-                walk_expr_for_uses(body, a, candidate_names, candidates, invalid, tracked);
+                walk_expr_for_uses(body, a, candidate_ids, candidates, invalid, tracked);
             }
         }
         ExprKind::CmRawCall { args, .. } => {
             let args = args.clone();
             for a in args {
-                walk_expr_for_uses_operand(body, a, candidate_names, candidates, invalid, tracked);
+                walk_expr_for_uses_operand(body, a, candidate_ids, candidates, invalid, tracked);
             }
         }
         ExprKind::IndirectCall { callee, args } => {
             let callee = *callee;
             let args = args.clone();
-            walk_expr_for_uses_operand(body, callee, candidate_names, candidates, invalid, tracked);
+            walk_expr_for_uses_operand(body, callee, candidate_ids, candidates, invalid, tracked);
             for a in args {
-                walk_expr_for_uses_operand(body, a, candidate_names, candidates, invalid, tracked);
+                walk_expr_for_uses_operand(body, a, candidate_ids, candidates, invalid, tracked);
             }
         }
         ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => {
             let b = *b;
             let mut inner = tracked.clone();
             for &s in &body.blocks[b].stmts.clone() {
-                validate_stmt(body, s, candidate_names, candidates, invalid, &mut inner);
+                validate_stmt(body, s, candidate_ids, candidates, invalid, &mut inner);
             }
         }
         ExprKind::If {
@@ -675,19 +653,19 @@ fn walk_expr_for_uses(
             walk_expr_for_uses_operand(
                 body,
                 condition,
-                candidate_names,
+                candidate_ids,
                 candidates,
                 invalid,
                 tracked,
             );
             let mut inner = tracked.clone();
             for &s in &body.blocks[then_branch].stmts.clone() {
-                validate_stmt(body, s, candidate_names, candidates, invalid, &mut inner);
+                validate_stmt(body, s, candidate_ids, candidates, invalid, &mut inner);
             }
             if let Some(eb) = else_branch {
                 let mut inner = tracked.clone();
                 for &s in &body.blocks[eb].stmts.clone() {
-                    validate_stmt(body, s, candidate_names, candidates, invalid, &mut inner);
+                    validate_stmt(body, s, candidate_ids, candidates, invalid, &mut inner);
                 }
             }
         }
@@ -695,13 +673,13 @@ fn walk_expr_for_uses(
             let scrut = *scrut;
             let arm_data: Vec<(Option<Operand>, Operand)> =
                 arms.iter().map(|a| (a.guard, a.body)).collect();
-            walk_expr_for_uses_operand(body, scrut, candidate_names, candidates, invalid, tracked);
+            walk_expr_for_uses_operand(body, scrut, candidate_ids, candidates, invalid, tracked);
             for (guard, arm_body) in arm_data {
                 if let Some(g) = guard {
                     walk_expr_for_uses_operand(
                         body,
                         g,
-                        candidate_names,
+                        candidate_ids,
                         candidates,
                         invalid,
                         tracked,
@@ -710,7 +688,7 @@ fn walk_expr_for_uses(
                 walk_expr_for_uses_operand(
                     body,
                     arm_body,
-                    candidate_names,
+                    candidate_ids,
                     candidates,
                     invalid,
                     tracked,
@@ -729,7 +707,7 @@ fn walk_expr_for_uses(
             walk_expr_for_uses_operand(
                 body,
                 scrutinee,
-                candidate_names,
+                candidate_ids,
                 candidates,
                 invalid,
                 tracked,
@@ -737,12 +715,12 @@ fn walk_expr_for_uses(
             for arm in arms {
                 let mut inner = tracked.clone();
                 for &s in &body.blocks[arm].stmts.clone() {
-                    validate_stmt(body, s, candidate_names, candidates, invalid, &mut inner);
+                    validate_stmt(body, s, candidate_ids, candidates, invalid, &mut inner);
                 }
             }
             let mut inner = tracked.clone();
             for &s in &body.blocks[default].stmts.clone() {
-                validate_stmt(body, s, candidate_names, candidates, invalid, &mut inner);
+                validate_stmt(body, s, candidate_ids, candidates, invalid, &mut inner);
             }
         }
         _ => {
@@ -755,7 +733,7 @@ fn walk_expr_for_uses(
                 }
             });
             for e in kids {
-                walk_expr_for_uses(body, e, candidate_names, candidates, invalid, tracked);
+                walk_expr_for_uses(body, e, candidate_ids, candidates, invalid, tracked);
             }
         }
     }
