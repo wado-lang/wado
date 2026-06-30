@@ -1800,27 +1800,17 @@ fn check_invalid_call_uses(
                 caller_is_candidate,
             );
         }
-        // A `LocalSet`/`LocalTee` whose value is a compound `Seq` / `Block` /
-        // `If` — and whose *result* is not itself a candidate call (that case
-        // is handled by the first arm) — may still carry SROA-compatible
-        // `LocalSet(temp, Call(candidate))` sites in its prefix / branches.
-        // The `?`-desugar produces exactly this shape:
-        //
-        //     LocalSet(first_opt, Seq([
-        //         LocalSet(__scrut, Call(next_element)),  // bound to a temp
-        //         If(RefTest(__scrut, Ok)) { ...unwrap... } else { return Err },
-        //         <unwrapped payload>,                    // the Seq result
-        //     ]))
-        //
-        // so the candidate call is a clean LocalSet-temp site nested one level
-        // down. Blindly invalidating (the old `_` behaviour) rejected every
-        // `seq.next_element()?` / `de.deserialize_x()?` site. Recurse into the
-        // sub-body as a statement list instead, so the inner temp gets the
-        // standard variant-access validation. This mirrors the rewriter's
-        // `recurse_rewrite_call_sites`, which already descends into these
-        // bodies — keeping validation and rewriting in agreement. A genuinely
-        // unrewritable nested call (e.g. a bare `Call` as a branch value, with
-        // no binding temp) still reaches the catch-all below and is rejected.
+        // A `LocalSet`/`LocalTee` whose value is a compound `Seq`/`Block`/`If`,
+        // and whose result is not itself a candidate call (the first arm
+        // handles that), can still nest a clean `LocalSet(temp, Call(candidate))`
+        // in its prefix or branches: `let x = next_element()?` desugars to the
+        // call bound to a temp one level down inside a `Seq`. The old `_` arm
+        // invalidated those blindly, keeping every `seq.next_element()?` boxed.
+        // Recurse into the sub-body so the inner temp gets normal variant-access
+        // validation, matching the rewriter's `recurse_rewrite_call_sites` which
+        // descends here too (accept and rewrite must agree). A truly unrewritable
+        // nested call (a bare `Call` branch value with no binding temp) still
+        // reaches the catch-all below and is rejected.
         WirInstr::LocalSet { value, .. } | WirInstr::LocalTee { value, .. }
             if matches!(
                 value.as_ref(),
@@ -3567,7 +3557,7 @@ fn expand_nested_binds(
 ) {
     let mut i = 0;
     while i < body.len() {
-        // Recurse into nested bodies first.
+        // Post-order: recurse into nested bodies before rewriting this level.
         match &mut body[i] {
             WirInstr::Block { body: b, .. } | WirInstr::Loop { body: b, .. } | WirInstr::Seq(b) => {
                 expand_nested_binds(b, by_func, plans, replacements);
