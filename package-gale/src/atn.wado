@@ -162,6 +162,13 @@ pub fn empty_atn() -> Atn {
     };
 }
 
+fn sparse_set(list: &mut List<i32>, idx: i32, val: i32) {
+    while list.len() <= idx {
+        list.push(-1);
+    }
+    list[idx] = val;
+}
+
 /// Mutable accumulator used during construction.
 struct AtnBuilder {
     states: List<AtnState>,
@@ -188,10 +195,7 @@ impl AtnBuilder {
         if call_site < 0 {
             return;
         }
-        while self.call_site_returns.len() <= call_site {
-            self.call_site_returns.push(-1);
-        }
-        self.call_site_returns[call_site] = return_state;
+        sparse_set(&mut self.call_site_returns, call_site, return_state);
     }
 
     /// Allocate a fresh decision number and bind it to `state`.
@@ -211,10 +215,7 @@ impl AtnBuilder {
         if site < 0 {
             return;
         }
-        while self.decision_sites.len() <= site {
-            self.decision_sites.push(-1);
-        }
-        self.decision_sites[site] = d;
+        sparse_set(&mut self.decision_sites, site, d);
     }
 
     fn add_eps(&mut self, from: i32, to: i32) {
