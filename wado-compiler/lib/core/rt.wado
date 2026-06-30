@@ -314,14 +314,14 @@ internal fn cm_stream_write_u8(handle: i32, data: List<u8>) {
 /// advancing past the written elements, until the buffer is drained or the
 /// reader drops. `elem_size` is the byte stride per element (1 for `u8`).
 internal fn cm_stream_write_drain(handle: i32, ptr: i32, count: i32, elem_size: i32) {
-    for let mut offset = 0; offset < count; {
+    for let mut offset = 0; offset < count;  {
         let mut result = builtin::stream_write(handle, ptr + offset * elem_size, count - offset);
         if result == -1 {
             result = wait_for_blocked(handle);
         }
         offset += result >> 4;
         // No progress, or the reader/stream closed (DROPPED/CANCELLED).
-        if (result >> 4) == 0 || (result & 0xf) != 0 {
+        if result >> 4 == 0 || result & 0xf != 0 {
             break;
         }
     }
