@@ -57,38 +57,11 @@ Pre-release, so no API-compat constraints; the two axes that matter are **ANTLR4
 - **Conflict resolution: ANTLR4-compatible.** On a genuine prediction conflict pick the minimum alt index; non-greedy subrules (`??`/`*?`/`+?`) prefer the exit transition. The ATN is built so this falls out of transition ordering.
 - **Trigger.** The simulator is invoked exactly where `build_prediction` returns a tree containing `Ambiguous`; everything else keeps emitting the existing compiled path.
 
-The static parser/non-greedy `??`/LR loop-entry pieces of this design are in place (`src/atn.wado`, `src/runtime/atn.wado`, `atn_predict_with_stack` / `atn_lr_loop_decision`).
+The static parser/non-greedy `??`/LR loop-entry pieces of this design are in place (`src/atn.wado`, `src/runtime/atn.wado`, `atn_predict_with_stack` / `atn_lr_loop_decision`), as is the compile-time decision-number correspondence the simulator needs (`assign_atn_decisions` → `Atn.decision_sites`, read via `GenContext::atn_decision_site`; every non-greedy `??` routes through `atn_predict_with_stack(sim, decision, …)`).
 
-#### Decision-number correspondence (done)
+#### Remaining work
 
-The compile-time decision-number correspondence the simulator needs is now in
-place: `assign_atn_decisions` (`ir.wado`) stamps every surface `Repeat` /
-`Group` with a unique `atn_decision` id, `build_atn` records `atn_decision ->
-decision number` in `Atn.decision_sites`, lowering threads the id onto
-`RepeatOp.atn_decision`, and codegen reads it (`GenContext::atn_decision_site`)
-to emit `atn_predict_with_stack(sim, decision, …)` for each non-greedy `??`.
-This **retired the `atn_ng_optional_enter` "unique exit-first BlockStart"
-search**, so several `??` in one rule each predict their own decision (the
-search collapsed to greedy ENTER once a rule had more than one `??`). Fixtures:
-`atn_test.wado` (decision-site map), `codegen_test.wado` (distinct emitted
-decisions), `tests/grammars/ll_optional_non_greedy_multi.g4` +
-`tests/driver_cst_ll_optional_non_greedy_multi_test.wado` (two-`??` rule binds
-each dangling clause to its outer statement).
-
-A genuinely multi-alt `Ambiguous` group (3+ alts, overlapping first-sets) can
-reuse the same `decision_sites` correspondence (group nodes are stamped too),
-but no corpus grammar needs it: the longest-match scan tournament resolves every
-multi-alt overlap present (fully-scannable alts), and the residual — a
-tournament site whose suffix is genuinely unscannable — is a codegen-time
-`panic!`, not a misparse, and is not exercised by any descriptor. Route such a
-site through `atn_predict_with_stack(sim, decision, …)` if one ever surfaces
-(detect ambiguity at lower time to set `needs_atn`, then dispatch on the
-returned alt); revisit when a descriptor regresses, per the static-edge policy
-above.
-
-A per-`Parser` DFA cache is an intentional non-goal (pure speed lever; the
-simulator is already correct without it) — see `perf.md` if profiling later
-shows simulator closures are hot.
+- **Route a genuinely multi-alt `Ambiguous` group (3+ alts, overlapping first-sets) through the simulator.** The `decision_sites` correspondence already stamps multi-alt `Group` nodes, so the missing piece is the emit side: detect the ambiguity at lower time to set `needs_atn`, then dispatch on the alt `atn_predict_with_stack` returns. No corpus grammar needs it today — the longest-match scan tournament resolves every multi-alt overlap present, and the only residual (a tournament site whose suffix is genuinely unscannable) is a codegen-time `panic!`, not a misparse — so revisit when a descriptor surfaces one, per the static-edge policy above.
 
 The Stage B′ JVM oracle (see below) is the measurement axis: each ATN-class fix flips its pinned `[stage_b_oracle_todo]` / `[stage_a_todo]` test green.
 
