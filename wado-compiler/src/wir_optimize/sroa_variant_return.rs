@@ -1196,7 +1196,8 @@ fn all_br_variant_values_are_struct_new(
                 }
                 // `Seq` is not a Wasm control frame — recurse at the same depth.
                 WirInstr::Seq(seq) => {
-                    if !all_br_variant_values_are_struct_new(seq, valid_type_indices, target_depth) {
+                    if !all_br_variant_values_are_struct_new(seq, valid_type_indices, target_depth)
+                    {
                         return false;
                     }
                 }
