@@ -1,0 +1,28 @@
+// A user record used as a future payload must be rejected outside `--lib` even
+// when its name collides with an imported WASI struct (`DnsErrorPayload` is a
+// `wasi:http` record). Resolvability is keyed on the record's own module source,
+// so the homonym never masks the unregistered user record — without that, the
+// user record would be mistaken for the WASI struct, pass the check, and panic
+// in codegen with a struct-layout mismatch.
+use { Request, Response, ErrorCode, Fields } from "wasi:http";
+
+struct DnsErrorPayload {
+    x: f64,
+    y: f64,
+}
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let [rx, tx] = Future::<DnsErrorPayload>::new();
+    tx.write(DnsErrorPayload { x: 1.0, y: 2.0 });
+    rx.drop();
+
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, null, null);
+    task return Result::<Response, ErrorCode>::Ok(response);
+}
+
+__DATA__
+{
+    "wasi:http/service": {},
+    "compile_error": "record type `DnsErrorPayload` is used as a `future` / `stream` payload, which is only supported in library (`--lib`) components"
+}

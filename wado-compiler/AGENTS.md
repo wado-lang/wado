@@ -62,7 +62,11 @@ E2E tests are run in each optimization level. By default, O0 and O2 are executed
 
 ### Data Section Test Spec
 
-The target world is indicated by the top-level key in the JSON:
+A fixture with no `__DATA__` section at all defaults to the test world (as if
+`{"test": {}}`), so a library-shaped source — `export fn`s plus a `test` block —
+can double as a fixture verbatim (see `cm_catalog.wado`, kept byte-identical to
+`package-cm-catalog/src/lib.wado`). A fixture _with_ `__DATA__` selects its world
+by the top-level key:
 
 - No world key → `wasi:cli/command` (default)
 - `"test": {}` → test world (runs test block exports)

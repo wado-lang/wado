@@ -31,7 +31,7 @@ use crate::synthesis::common::{
     if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some,
     return_stmt, synth_span,
 };
-use crate::wir::{CanonicalIntrinsic, CmFuturePayload};
+use crate::wir::{CanonicalIntrinsic, CmFuturePayload, CmStreamPayload};
 
 use super::synthesize_lift;
 use super::types::{LiftContext, binary_add, type_id_to_ast_type};
@@ -100,13 +100,21 @@ pub(super) fn synthesize_record_stream_reads(project: &mut Package) {
         let elem_align =
             crate::component_model::cm_align_with_registry(&ast_type, cm_interface_registry) as i32;
 
+        let cm_record_name = cm_interface_registry
+            .get_struct_cm_name(elem_name)
+            .unwrap_or(elem_name)
+            .to_string();
+        let _ = fields;
         let func = synthesize_stream_read_func(
+            format!("__cm_stream_read_{elem_name}"),
+            format!("stream-read:{cm_record_name}"),
             elem_name,
             *elem_type_id,
             *array_type_id,
-            fields,
             elem_size,
             elem_align,
+            &ast_type,
+            "filesystem",
             cm_interface_registry,
             &type_table,
             &project.interner,
@@ -181,6 +189,696 @@ pub(super) fn synthesize_future_reads(project: &mut Package) {
     }
 }
 
+/// Generate the per-payload `FutureWritable<T>::write()` binding functions for
+/// general (aggregate) payloads, mirroring [`synthesize_future_reads`].
+///
+/// For each distinct aggregate payload `T` written, synthesizes
+/// `__cm_future_write_<mangle(T)>(handle: i32, value: T)` which allocates a CM
+/// buffer (sized via `cm_abi`), lowers `value` into it with the shared
+/// `synthesize_lower_wasi_type_to_memory`, and calls the payload-parameterized
+/// `future-write` canonical. As with the scalar WIR path, the buffer is
+/// intentionally left alive: the `async` canonical option returns BLOCKED until
+/// the reader copies the value, so freeing here (or waiting) would be wrong.
+pub(super) fn synthesize_future_writes(project: &mut Package) {
+    let cm_interface_registry = &project.cm_interface_registry;
+    // payload mangle -> payload_type_id
+    let mut needed: IndexMap<String, TypeId> = IndexMap::default();
+    for module in project.tir_modules.values() {
+        let tt = module.type_table.borrow();
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
+            if let Some(body) = &func.body {
+                FutureWriteFinder {
+                    tt: &tt,
+                    results: &mut needed,
+                }
+                .visit_block(body);
+            }
+        }
+    }
+    if needed.is_empty() {
+        return;
+    }
+
+    let entry_source = project.entry_module_source.clone();
+    let type_table = project
+        .tir_modules
+        .get(&entry_source)
+        .expect("entry module must exist in tir_modules")
+        .type_table
+        .clone();
+
+    let mut new_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
+    for (_, payload_type_id) in &needed {
+        let func =
+            synthesize_future_write_func(*payload_type_id, cm_interface_registry, &type_table);
+        new_functions.push(Rc::new(RefCell::new(func)));
+    }
+
+    let entry_module = project
+        .tir_modules
+        .get_mut(&entry_source)
+        .expect("entry module must exist in tir_modules");
+    for func in new_functions {
+        entry_module.functions.push(func);
+    }
+}
+
+/// The future-write payload type for a value `future-write` method call, or
+/// `None` if it is not a future-write or its payload is a transmission shape
+/// (`Result<(), E>`, `Result<Option<resource>, E>`) that the WIR-build path
+/// still lowers directly. Covers scalar and aggregate payloads alike — both go
+/// through the synthesized `__cm_future_write_<T>` helper.
+fn future_write_value_payload(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
+    let (func, receiver) = match &expr.kind {
+        TirExprKind::MethodCall { func, receiver, .. } => (func, receiver),
+        _ => return None,
+    };
+    if func.method_info.as_ref().and_then(|m| m.cm_name.as_deref()) != Some("future-write") {
+        return None;
+    }
+    let mut recv = receiver.type_id;
+    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(recv) {
+        recv = *inner;
+    }
+    let payload = *tt.generic_type_args(recv)?.first()?;
+    crate::component_model::cm_payload_type_from_type_id(tt, payload)
+        .is_some()
+        .then_some(payload)
+}
+
+/// The `__cm_future_write_*` helper name for a payload type. Finder, rewriter,
+/// and synthesizer must agree on this mangle.
+fn future_write_func_name(tt: &TypeTable, payload_type_id: TypeId) -> String {
+    format!(
+        "__cm_future_write_{}",
+        tt.mangle_type_arg_for_generic(payload_type_id)
+    )
+}
+
+struct FutureWriteFinder<'a> {
+    tt: &'a TypeTable,
+    results: &'a mut IndexMap<String, TypeId>,
+}
+
+/// Generate per-element `StreamWritable<T>::write()` binding functions for
+/// scalar / structural (non-`u8`, non-record) element types, mirroring
+/// [`synthesize_future_writes`]. Each lowers a `List<T>` into a CM element
+/// buffer (via `synthesize_lower_list_to_buffer`) and calls the
+/// element-parameterized `stream-write` canonical, waiting for the reader on
+/// BLOCKED (streams deliver element-by-element, so the buffer must survive the
+/// wait — the function runs in an `async` task).
+pub(super) fn synthesize_stream_writes(project: &mut Package) {
+    let cm_interface_registry = &project.cm_interface_registry;
+    let mut needed: IndexMap<String, TypeId> = IndexMap::default();
+    for module in project.tir_modules.values() {
+        let tt = module.type_table.borrow();
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
+            if let Some(body) = &func.body {
+                StreamWriteFinder {
+                    tt: &tt,
+                    results: &mut needed,
+                }
+                .visit_block(body);
+            }
+        }
+    }
+    if needed.is_empty() {
+        return;
+    }
+
+    let entry_source = project.entry_module_source.clone();
+    let type_table = project
+        .tir_modules
+        .get(&entry_source)
+        .expect("entry module must exist in tir_modules")
+        .type_table
+        .clone();
+
+    let mut new_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
+    for (_, elem_type_id) in &needed {
+        new_functions.push(Rc::new(RefCell::new(synthesize_stream_write_func(
+            *elem_type_id,
+            cm_interface_registry,
+            &type_table,
+        ))));
+    }
+    let entry_module = project
+        .tir_modules
+        .get_mut(&entry_source)
+        .expect("entry module must exist in tir_modules");
+    for func in new_functions {
+        entry_module.functions.push(func);
+    }
+}
+
+/// The stream-write element type for a scalar / structural `stream-write`, or
+/// `None` for `u8` and record streams (handled elsewhere).
+fn stream_write_value_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
+    let (func, receiver) = match &expr.kind {
+        TirExprKind::MethodCall { func, receiver, .. } => (func, receiver),
+        _ => return None,
+    };
+    if func.method_info.as_ref().and_then(|m| m.cm_name.as_deref()) != Some("stream-write") {
+        return None;
+    }
+    let mut recv = receiver.type_id;
+    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(recv) {
+        recv = *inner;
+    }
+    let elem = *tt.generic_type_args(recv)?.first()?;
+    matches!(
+        crate::component_model::classify_stream_payload(tt, elem),
+        CmStreamPayload::Value(_)
+    )
+    .then_some(elem)
+}
+
+fn stream_write_func_name(tt: &TypeTable, elem_type_id: TypeId) -> String {
+    format!(
+        "__cm_stream_write_{}",
+        tt.mangle_type_arg_for_generic(elem_type_id)
+    )
+}
+
+struct StreamWriteFinder<'a> {
+    tt: &'a TypeTable,
+    results: &'a mut IndexMap<String, TypeId>,
+}
+
+impl TirRefVisitor for StreamWriteFinder<'_> {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if let Some(elem) = stream_write_value_element(self.tt, expr) {
+            let name = stream_write_func_name(self.tt, elem);
+            self.results.entry(name).or_insert(elem);
+        }
+        self.walk_expr(expr);
+    }
+}
+
+/// Generate per-element `StreamReadable<T>::read()` binding functions for
+/// scalar / structural (non-`u8`, non-WASI-record) element types, mirroring
+/// [`synthesize_stream_writes`]. Each reads up to `max` elements into a CM
+/// buffer via the element-parameterized `stream-read` canonical, lifts each
+/// element with the shared `synthesize_lift`, and returns `List<T>`. An empty
+/// result signals EOF to the caller.
+pub(super) fn synthesize_stream_reads(project: &mut Package) {
+    let cm_interface_registry = &project.cm_interface_registry;
+    let mut needed: IndexMap<String, TypeId> = IndexMap::default();
+    for module in project.tir_modules.values() {
+        let tt = module.type_table.borrow();
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
+            if let Some(body) = &func.body {
+                StreamReadValueFinder {
+                    tt: &tt,
+                    results: &mut needed,
+                }
+                .visit_block(body);
+            }
+        }
+    }
+    if needed.is_empty() {
+        return;
+    }
+
+    let entry_source = project.entry_module_source.clone();
+    let type_table = project
+        .tir_modules
+        .get(&entry_source)
+        .expect("entry module must exist in tir_modules")
+        .type_table
+        .clone();
+
+    let mut new_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
+    for (_, elem_type_id) in &needed {
+        new_functions.push(Rc::new(RefCell::new(synthesize_stream_read_value_func(
+            *elem_type_id,
+            cm_interface_registry,
+            &type_table,
+            &project.interner,
+        ))));
+    }
+    let entry_module = project
+        .tir_modules
+        .get_mut(&entry_source)
+        .expect("entry module must exist in tir_modules");
+    for func in new_functions {
+        entry_module.functions.push(func);
+    }
+}
+
+/// The stream-read element type for a value-payload `stream-read`, or `None`
+/// for `u8` and WASI record streams (handled by their own paths).
+fn stream_read_value_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
+    let func = match &expr.kind {
+        TirExprKind::MethodCall { func, .. } | TirExprKind::Call { func, .. } => func,
+        _ => return None,
+    };
+    if func.method_info.as_ref().and_then(|m| m.cm_name.as_deref()) != Some("stream-read") {
+        return None;
+    }
+    if is_u8_array_type(expr.type_id, tt) {
+        return None;
+    }
+    let elem = *tt.generic_type_args(expr.type_id)?.first()?;
+    matches!(
+        crate::component_model::classify_stream_payload(tt, elem),
+        CmStreamPayload::Value(_)
+    )
+    .then_some(elem)
+}
+
+/// The `__cm_stream_read_val_*` helper name for an element type. Finder,
+/// rewriter, and synthesizer must agree on this mangle.
+fn stream_read_value_func_name(tt: &TypeTable, elem_type_id: TypeId) -> String {
+    format!(
+        "__cm_stream_read_val_{}",
+        tt.mangle_type_arg_for_generic(elem_type_id)
+    )
+}
+
+struct StreamReadValueFinder<'a> {
+    tt: &'a TypeTable,
+    results: &'a mut IndexMap<String, TypeId>,
+}
+
+impl TirRefVisitor for StreamReadValueFinder<'_> {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if let Some(elem) = stream_read_value_element(self.tt, expr) {
+            let name = stream_read_value_func_name(self.tt, elem);
+            self.results.entry(name).or_insert(elem);
+        }
+        self.walk_expr(expr);
+    }
+}
+
+fn synthesize_stream_write_func(
+    elem_type_id: TypeId,
+    cm_interface_registry: &CmInterfaceRegistry,
+    type_table: &RefCell<TypeTable>,
+) -> TirFunction {
+    let list_type_id = type_table.borrow_mut().make_list(elem_type_id);
+    let (func_name, write_name, elem_ast, elem_size, elem_align) = {
+        let tt = type_table.borrow();
+        let func_name = stream_write_func_name(&tt, elem_type_id);
+        let payload = crate::component_model::classify_stream_payload(&tt, elem_type_id);
+        let write_name = CanonicalIntrinsic::StreamWrite(payload).import_name();
+        let elem_ast = type_id_to_ast_type(elem_type_id, &tt, cm_interface_registry);
+        let size =
+            crate::component_model::cm_size_with_registry(&elem_ast, cm_interface_registry) as i32;
+        let align =
+            crate::component_model::cm_align_with_registry(&elem_ast, cm_interface_registry) as i32;
+        (func_name, write_name, elem_ast, size, align)
+    };
+
+    let mut next_local: u32 = 0;
+    let mut locals: Vec<TirLocal> = Vec::new();
+    let mut stmts: Vec<TirStmt> = Vec::new();
+
+    let alloc = |next: &mut u32, locals: &mut Vec<TirLocal>, ty: TypeId, is_mut: bool| -> u32 {
+        let idx = *next;
+        *next += 1;
+        locals.push(TirLocal::synth(*next, ty, is_mut));
+        idx
+    };
+
+    // Params: handle (i32), data (List<T>).
+    let handle_idx = alloc(&mut next_local, &mut locals, TypeTable::I32, false);
+    let data_idx = alloc(&mut next_local, &mut locals, list_type_id, false);
+
+    // Lower the list into a CM element buffer: (ptr, element count).
+    let (lower_stmts, ptr_local, count_local) = super::lower::synthesize_lower_list_to_buffer(
+        &elem_ast,
+        local_ref(data_idx, "data", list_type_id),
+        &mut next_local,
+        &mut locals,
+        cm_interface_registry,
+        "cli",
+        type_table,
+    );
+    stmts.extend(lower_stmts);
+
+    // A reader may take fewer elements than offered, so `stream.write` can copy
+    // only a prefix and report COMPLETED. Loop, advancing past the elements
+    // already written, until the whole buffer is sent or the reader drops.
+    let offset_idx = alloc(&mut next_local, &mut locals, TypeTable::I32, true);
+    stmts.push(let_mut_stmt(
+        "offset",
+        offset_idx,
+        TypeTable::I32,
+        i32_const(0),
+    ));
+    let result_idx = alloc(&mut next_local, &mut locals, TypeTable::I32, true);
+    stmts.push(let_mut_stmt(
+        "result",
+        result_idx,
+        TypeTable::I32,
+        i32_const(0),
+    ));
+
+    let offset_ref = || local_ref(offset_idx, "offset", TypeTable::I32);
+    let result_ref = || local_ref(result_idx, "result", TypeTable::I32);
+    let count_ref = || local_ref(count_local, "__list_len", TypeTable::I32);
+
+    // cur_ptr = base + offset * elem_size
+    let cur_ptr = binary(
+        TirBinaryOp::Add,
+        local_ref(ptr_local, "__list_base", TypeTable::I32),
+        binary(
+            TirBinaryOp::Mul,
+            offset_ref(),
+            i32_const(elem_size),
+            TypeTable::I32,
+        ),
+        TypeTable::I32,
+    );
+    // remaining = count - offset
+    let remaining = binary(TirBinaryOp::Sub, count_ref(), offset_ref(), TypeTable::I32);
+
+    let loop_body = TirBlock {
+        stmts: vec![
+            // if offset >= count { break }
+            if_stmt(
+                binary(
+                    TirBinaryOp::GtEq,
+                    offset_ref(),
+                    count_ref(),
+                    TypeTable::BOOL,
+                ),
+                TirBlock {
+                    stmts: vec![break_stmt()],
+                    span: synth_span(),
+                },
+                None,
+            ),
+            // result = stream-write:<elem>(handle, cur_ptr, remaining)
+            expr_stmt(assign(
+                result_ref(),
+                cm_raw_call(
+                    &write_name,
+                    vec![
+                        local_ref(handle_idx, "handle", TypeTable::I32),
+                        cur_ptr,
+                        remaining,
+                    ],
+                    TypeTable::I32,
+                ),
+            )),
+            // if result == -1 { result = wait_for_blocked(handle) }
+            if_stmt(
+                binary(
+                    TirBinaryOp::Eq,
+                    result_ref(),
+                    i32_const(-1),
+                    TypeTable::BOOL,
+                ),
+                TirBlock {
+                    stmts: vec![expr_stmt(assign(
+                        result_ref(),
+                        internal_call(
+                            "wait_for_blocked",
+                            vec![local_ref(handle_idx, "handle", TypeTable::I32)],
+                            TypeTable::I32,
+                        ),
+                    ))],
+                    span: synth_span(),
+                },
+                None,
+            ),
+            // offset += result >> 4   (the copied-element count)
+            expr_stmt(assign(
+                offset_ref(),
+                binary(
+                    TirBinaryOp::Add,
+                    offset_ref(),
+                    binary(TirBinaryOp::Shr, result_ref(), i32_const(4), TypeTable::I32),
+                    TypeTable::I32,
+                ),
+            )),
+            // if (result >> 4) == 0 || (result & 0xf) != 0 { break }
+            // No progress, or the reader/stream closed (DROPPED/CANCELLED).
+            if_stmt(
+                binary(
+                    TirBinaryOp::Or,
+                    binary(
+                        TirBinaryOp::Eq,
+                        binary(TirBinaryOp::Shr, result_ref(), i32_const(4), TypeTable::I32),
+                        i32_const(0),
+                        TypeTable::BOOL,
+                    ),
+                    binary(
+                        TirBinaryOp::NotEq,
+                        binary(
+                            TirBinaryOp::BitAnd,
+                            result_ref(),
+                            i32_const(0xf),
+                            TypeTable::I32,
+                        ),
+                        i32_const(0),
+                        TypeTable::BOOL,
+                    ),
+                    TypeTable::BOOL,
+                ),
+                TirBlock {
+                    stmts: vec![break_stmt()],
+                    span: synth_span(),
+                },
+                None,
+            ),
+        ],
+        span: synth_span(),
+    };
+    stmts.push(loop_stmt(loop_body));
+
+    // Free the element buffer: realloc(ptr, count * elem_size, elem_align, 0).
+    let byte_count = binary(
+        TirBinaryOp::Mul,
+        local_ref(count_local, "__list_len", TypeTable::I32),
+        i32_const(elem_size),
+        TypeTable::I32,
+    );
+    let freed_idx = alloc(&mut next_local, &mut locals, TypeTable::I32, false);
+    stmts.push(let_stmt(
+        "__freed",
+        freed_idx,
+        TypeTable::I32,
+        builtin_call(
+            "realloc",
+            vec![
+                local_ref(ptr_local, "__list_base", TypeTable::I32),
+                byte_count,
+                i32_const(elem_align),
+                i32_const(0),
+            ],
+            TypeTable::I32,
+        ),
+    ));
+
+    TirFunction {
+        module_source: ModuleSource::default(),
+        name: func_name,
+        visibility: crate::ast::Visibility::Private,
+        is_export: false,
+        is_async: false,
+        type_params: vec![],
+        impl_type_params: vec![],
+        monomorph_info: None,
+        method_info: None,
+        params: vec![
+            TirParam {
+                name: "handle".to_string(),
+                local_index: handle_idx,
+                type_id: TypeTable::I32,
+                is_mut: false,
+                span: synth_span(),
+            },
+            TirParam {
+                name: "data".to_string(),
+                local_index: data_idx,
+                type_id: list_type_id,
+                is_mut: false,
+                span: synth_span(),
+            },
+        ],
+        return_type: TypeTable::UNIT,
+        task_return_type: None,
+        effects: vec![],
+        stores: vec![],
+        body: Some(TirBlock {
+            stmts,
+            span: synth_span(),
+        }),
+        span: synth_span(),
+        local_count: next_local,
+        locals,
+        address_taken_locals: IndexSet::default(),
+        stores_aliased_locals: IndexSet::default(),
+        is_cm_binding: true,
+        is_dispatch_wrapper: false,
+        is_cm_export: false,
+        is_ambient: false,
+        benign_effects: Vec::new(),
+        inline_hint: InlineHint::Auto,
+        compiler_item: None,
+        export_name: None,
+        allocator_tag: None,
+        kind: FunctionKind::Regular,
+        return_abi: crate::tir::ReturnAbi::default(),
+    }
+}
+
+impl TirRefVisitor for FutureWriteFinder<'_> {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if let Some(payload_type_id) = future_write_value_payload(self.tt, expr) {
+            let name = future_write_func_name(self.tt, payload_type_id);
+            self.results.entry(name).or_insert(payload_type_id);
+        }
+        self.walk_expr(expr);
+    }
+}
+
+fn synthesize_future_write_func(
+    payload_type_id: TypeId,
+    cm_interface_registry: &CmInterfaceRegistry,
+    type_table: &RefCell<TypeTable>,
+) -> TirFunction {
+    let (func_name, write_name, cm_package, payload_ast, size, align) = {
+        let tt = type_table.borrow();
+        let func_name = future_write_func_name(&tt, payload_type_id);
+        let payload = crate::component_model::classify_future_payload(&tt, payload_type_id);
+        let write_name = CanonicalIntrinsic::FutureWrite(payload.clone()).import_name();
+        let cm_package = future_payload_package(&payload);
+        let payload_ast = type_id_to_ast_type(payload_type_id, &tt, cm_interface_registry);
+        let size = crate::component_model::cm_size_with_registry_scoped(
+            &payload_ast,
+            cm_interface_registry,
+            Some(&cm_package),
+        ) as i32;
+        let align = crate::component_model::cm_align_with_registry_scoped(
+            &payload_ast,
+            cm_interface_registry,
+            Some(&cm_package),
+        ) as i32;
+        (func_name, write_name, cm_package, payload_ast, size, align)
+    };
+
+    let mut next_local: u32 = 0;
+    let mut locals: Vec<TirLocal> = Vec::new();
+    let mut stmts: Vec<TirStmt> = Vec::new();
+
+    let alloc = |next: &mut u32, locals: &mut Vec<TirLocal>, ty: TypeId, is_mut: bool| -> u32 {
+        let idx = *next;
+        *next += 1;
+        locals.push(TirLocal::synth(*next, ty, is_mut));
+        idx
+    };
+
+    // Params: handle (i32), value (T).
+    let handle_idx = alloc(&mut next_local, &mut locals, TypeTable::I32, false);
+    let value_idx = alloc(&mut next_local, &mut locals, payload_type_id, false);
+
+    // let ptr = realloc(0, 0, align, size)
+    let ptr_idx = alloc(&mut next_local, &mut locals, TypeTable::I32, false);
+    stmts.push(let_stmt(
+        "ptr",
+        ptr_idx,
+        TypeTable::I32,
+        builtin_call(
+            "realloc",
+            vec![
+                i32_const(0),
+                i32_const(0),
+                i32_const(align),
+                i32_const(size),
+            ],
+            TypeTable::I32,
+        ),
+    ));
+
+    // Lower `value` into the buffer using the shared registry-backed lowerer.
+    stmts.extend(super::lower::synthesize_lower_wasi_type_to_memory(
+        &payload_ast,
+        local_ref(value_idx, "value", payload_type_id),
+        local_ref(ptr_idx, "ptr", TypeTable::I32),
+        &mut next_local,
+        &mut locals,
+        cm_interface_registry,
+        &cm_package,
+        type_table,
+    ));
+
+    // let __written = future-write:<payload>(handle, ptr)
+    // The result is intentionally ignored and the buffer left alive (see above).
+    let written_idx = alloc(&mut next_local, &mut locals, TypeTable::I32, false);
+    stmts.push(let_stmt(
+        "__written",
+        written_idx,
+        TypeTable::I32,
+        cm_raw_call(
+            &write_name,
+            vec![
+                local_ref(handle_idx, "handle", TypeTable::I32),
+                local_ref(ptr_idx, "ptr", TypeTable::I32),
+            ],
+            TypeTable::I32,
+        ),
+    ));
+
+    TirFunction {
+        module_source: ModuleSource::default(),
+        name: func_name,
+        visibility: crate::ast::Visibility::Private,
+        is_export: false,
+        is_async: false,
+        type_params: vec![],
+        impl_type_params: vec![],
+        monomorph_info: None,
+        method_info: None,
+        params: vec![
+            TirParam {
+                name: "handle".to_string(),
+                local_index: handle_idx,
+                type_id: TypeTable::I32,
+                is_mut: false,
+                span: synth_span(),
+            },
+            TirParam {
+                name: "value".to_string(),
+                local_index: value_idx,
+                type_id: payload_type_id,
+                is_mut: false,
+                span: synth_span(),
+            },
+        ],
+        return_type: TypeTable::UNIT,
+        task_return_type: None,
+        effects: vec![],
+        stores: vec![],
+        body: Some(TirBlock {
+            stmts,
+            span: synth_span(),
+        }),
+        span: synth_span(),
+        local_count: next_local,
+        locals,
+        address_taken_locals: IndexSet::default(),
+        stores_aliased_locals: IndexSet::default(),
+        is_cm_binding: true,
+        is_dispatch_wrapper: false,
+        is_cm_export: false,
+        is_ambient: false,
+        benign_effects: Vec::new(),
+        inline_hint: InlineHint::Auto,
+        compiler_item: None,
+        export_name: None,
+        allocator_tag: None,
+        kind: FunctionKind::Regular,
+        return_abi: crate::tir::ReturnAbi::default(),
+    }
+}
+
 struct FutureReadFinder<'a> {
     tt: &'a TypeTable,
     results: &'a mut IndexMap<String, (TypeId, TypeId)>,
@@ -223,6 +921,9 @@ fn future_payload_package(payload: &CmFuturePayload) -> String {
         CmFuturePayload::Transmission(src) => src.clone(),
         CmFuturePayload::Trailers => "http".to_string(),
         CmFuturePayload::Scalar(_) => "cli".to_string(),
+        // General value payloads carry no WASI scope; named types in the
+        // payload resolve through the registry against the entry package.
+        CmFuturePayload::Value(_) => "cli".to_string(),
     }
 }
 
@@ -475,6 +1176,12 @@ impl TirRefVisitor for RecordStreamReadFinder<'_> {
             // Extract element type from List<T>
             if let Some(type_args) = self.tt.generic_type_args(expr.type_id)
                 && let Some(&elem_type_id) = type_args.first()
+                // Value-payload elements are handled by `synthesize_stream_reads`;
+                // only true WASI records belong to this path.
+                && !matches!(
+                    crate::component_model::classify_stream_payload(self.tt, elem_type_id),
+                    CmStreamPayload::Value(_)
+                )
             {
                 let elem_name = self.tt.base_type_name(elem_type_id);
                 self.results
@@ -486,21 +1193,23 @@ impl TirRefVisitor for RecordStreamReadFinder<'_> {
     }
 }
 
-/// Generate a TIR function for reading records from a stream.
-///
-/// Generates `__cm_stream_read_<T>(handle: i32, max: i32) -> List<T>`:
-/// 1. Call `cm_stream_read_raw` to get raw buffer [ptr, count]
-/// 2. Loop: lift each record from buffer at ptr + i * `elem_size`
-/// 3. Append to result array
-/// 4. Free buffer
-/// 5. Return array
+/// Shared stream-read loop generator. `func_name` / `stream_read_name` /
+/// `payload_ast` / `cm_package` / `elem_inst_name` are precomputed by the
+/// caller so this body serves both the WASI-record path
+/// ([`synthesize_record_stream_reads`]) and the value-payload path
+/// ([`synthesize_stream_reads`]). `elem_inst_name` is the type name used to
+/// instantiate `List<…>` for the result builder.
+#[allow(clippy::too_many_arguments)]
 fn synthesize_stream_read_func(
-    elem_name: &str,
+    func_name: String,
+    stream_read_name: String,
+    elem_inst_name: &str,
     elem_type_id: TypeId,
     array_type_id: TypeId,
-    _fields: &[(String, Type)],
     elem_size: i32,
     elem_align: i32,
+    payload_ast: &Type,
+    cm_package: &str,
     cm_interface_registry: &CmInterfaceRegistry,
     type_table: &RefCell<TypeTable>,
     interner: &RefCell<ModuleSourceInterner>,
@@ -508,7 +1217,6 @@ fn synthesize_stream_read_func(
     let list_struct_name =
         super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items())
             .array;
-    let func_name = format!("__cm_stream_read_{elem_name}");
     let _tuple_type_id = type_table
         .borrow_mut()
         .make_tuple(vec![TypeTable::I32, TypeTable::I32]);
@@ -524,13 +1232,6 @@ fn synthesize_stream_read_func(
     let max_idx = next_local;
     next_local += 1;
     locals.push(TirLocal::synth(next_local, TypeTable::I32, false));
-
-    // Use the CM kebab-case name for the stream-read intrinsic
-    let cm_record_name = cm_interface_registry
-        .get_struct_cm_name(elem_name)
-        .unwrap_or(elem_name)
-        .to_string();
-    let stream_read_name = format!("stream-read:{cm_record_name}");
 
     // let byte_count = max * elem_size
     let byte_count_idx = next_local;
@@ -633,7 +1334,7 @@ fn synthesize_stream_read_func(
         TirExprKind::Call {
             func: FunctionRef {
                 module_source: ModuleSource::list(),
-                name: format!("{list_struct_name}<{elem_name}>::with_capacity"),
+                name: format!("{list_struct_name}<{elem_inst_name}>::with_capacity"),
                 monomorph_info: Some(MonomorphInfo {
                     generic_name: "List::with_capacity".to_string(),
                     impl_type_args: vec![elem_type_id],
@@ -641,7 +1342,7 @@ fn synthesize_stream_read_func(
                     is_blanket: false,
                 }),
                 method_info: Some(LocalMethodName {
-                    struct_name: format!("{list_struct_name}<{elem_name}>"),
+                    struct_name: format!("{list_struct_name}<{elem_inst_name}>"),
                     base_struct_name: list_struct_name.clone(),
                     trait_name: None,
                     base_trait_name: None,
@@ -703,21 +1404,15 @@ fn synthesize_stream_read_func(
     let addr = binary_add(local_ref(ptr_idx, "ptr", TypeTable::I32), offset);
     loop_body_stmts.push(let_stmt("addr", addr_idx, TypeTable::I32, addr));
 
-    // Lift each field from linear memory at addr + field_offset
+    // Lift each element from linear memory at addr.
     let lift_ctx = LiftContext {
         cm_interface_registry,
         type_table,
-        cm_package: "filesystem",
+        cm_package,
         interner,
     };
-    let ast_type = Type::Named(NamedType {
-        id: AstId::fresh(),
-        name: elem_name.to_string(),
-        span: synth_span(),
-        source_interface: None,
-    });
     let lifted_elem = synthesize_lift(
-        &ast_type,
+        payload_ast,
         local_ref(addr_idx, "addr", TypeTable::I32),
         &mut next_local,
         &mut loop_body_stmts,
@@ -737,7 +1432,7 @@ fn synthesize_stream_read_func(
             Box::new(local_ref(arr_idx, "arr", array_type_id)),
             FunctionRef {
                 module_source: ModuleSource::list(),
-                name: format!("{list_struct_name}<{elem_name}>::push"),
+                name: format!("{list_struct_name}<{elem_inst_name}>::push"),
                 monomorph_info: Some(MonomorphInfo {
                     generic_name: "List::push".to_string(),
                     impl_type_args: vec![elem_type_id],
@@ -745,7 +1440,7 @@ fn synthesize_stream_read_func(
                     is_blanket: false,
                 }),
                 method_info: Some(LocalMethodName {
-                    struct_name: format!("{list_struct_name}<{elem_name}>"),
+                    struct_name: format!("{list_struct_name}<{elem_inst_name}>"),
                     base_struct_name: list_struct_name,
                     trait_name: None,
                     base_trait_name: None,
@@ -851,6 +1546,61 @@ fn synthesize_stream_read_func(
 
         return_abi: crate::tir::ReturnAbi::default(),
     }
+}
+
+/// Synthesize `__cm_stream_read_val_<mangle>(handle, max) -> List<T>` for a
+/// value-payload element type, delegating the read loop to the shared
+/// [`synthesize_stream_read_func`]. The canonical name and CM layout come from
+/// the general `classify_stream_payload` / `cm_*_with_registry_scoped` path,
+/// matching the `val-` naming the codegen builds for `CmStreamPayload::Value`.
+fn synthesize_stream_read_value_func(
+    elem_type_id: TypeId,
+    cm_interface_registry: &CmInterfaceRegistry,
+    type_table: &RefCell<TypeTable>,
+    interner: &RefCell<ModuleSourceInterner>,
+) -> TirFunction {
+    let array_type_id = type_table.borrow_mut().make_list(elem_type_id);
+    let (func_name, read_name, elem_inst_name, payload_ast, elem_size, elem_align) = {
+        let tt = type_table.borrow();
+        let func_name = stream_read_value_func_name(&tt, elem_type_id);
+        let payload = crate::component_model::classify_stream_payload(&tt, elem_type_id);
+        let read_name = CanonicalIntrinsic::StreamRead(payload).import_name();
+        let elem_inst_name = tt.base_type_name(elem_type_id);
+        let payload_ast = type_id_to_ast_type(elem_type_id, &tt, cm_interface_registry);
+        let size = crate::component_model::cm_size_with_registry_scoped(
+            &payload_ast,
+            cm_interface_registry,
+            Some("cli"),
+        ) as i32;
+        let align = crate::component_model::cm_align_with_registry_scoped(
+            &payload_ast,
+            cm_interface_registry,
+            Some("cli"),
+        ) as i32;
+        (
+            func_name,
+            read_name,
+            elem_inst_name,
+            payload_ast,
+            size,
+            align,
+        )
+    };
+
+    synthesize_stream_read_func(
+        func_name,
+        read_name,
+        &elem_inst_name,
+        elem_type_id,
+        array_type_id,
+        elem_size,
+        elem_align,
+        &payload_ast,
+        "cli",
+        cm_interface_registry,
+        type_table,
+        interner,
+    )
 }
 
 /// Determine the internal binding function name for a CM resource method.
@@ -970,9 +1720,30 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             return;
         };
 
-        // stream-new / future-new remain handled by WIR translate (they need
-        // i64→tuple splitting with proper GC type casting).
-        if matches!(cm_name.as_str(), "stream-new" | "future-new") {
+        // future-new / stream-new: emit the payload-parameterized canonical as a
+        // `CmRawCall` (returns the packed i64) and pass it to the `core:rt` pair
+        // splitter, which casts the two halves to the readable/writable handles.
+        if matches!(cm_name.as_str(), "future-new" | "stream-new") {
+            rewrite_cm_new(expr, self.tt, cm_name == "future-new");
+            return;
+        }
+        // Value future writes (scalar + aggregate) call a generated per-payload
+        // binding function; only the transmission shapes (`Result<(), E>`,
+        // `Result<Option<resource>, E>`) fall through to the WIR-build path.
+        if cm_name == "future-write"
+            && let Some(payload_type_id) = future_write_value_payload(self.tt, expr)
+        {
+            let func_name = future_write_func_name(self.tt, payload_type_id);
+            rewrite_cm_instance_method(expr, "entry", &func_name, self.entry_source);
+            return;
+        }
+        // Scalar / structural stream writes call a generated per-element binding;
+        // `u8` and record streams fall through to the existing paths.
+        if cm_name == "stream-write"
+            && let Some(elem_type_id) = stream_write_value_element(self.tt, expr)
+        {
+            let func_name = stream_write_func_name(self.tt, elem_type_id);
+            rewrite_cm_instance_method(expr, "entry", &func_name, self.entry_source);
             return;
         }
         // Future reads call a generated per-payload binding function.
@@ -985,7 +1756,14 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             }
             return;
         }
-        // Non-u8 stream reads call a generated binding function.
+        // Value-payload stream reads call a generated per-element binding;
+        // WASI-record reads fall through to the `__cm_stream_read_<record>` path.
+        if let Some(elem_type_id) = stream_read_value_element(self.tt, expr) {
+            let func_name = stream_read_value_func_name(self.tt, elem_type_id);
+            rewrite_cm_instance_method(expr, "entry", &func_name, self.entry_source);
+            return;
+        }
+        // Non-u8 (record) stream reads call a generated binding function.
         if cm_name == "stream-read" && !is_u8_array_type(expr.type_id, self.tt) {
             if let Some(type_args) = self.tt.generic_type_args(expr.type_id)
                 && let Some(&elem_type_id) = type_args.first()
@@ -1005,6 +1783,12 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
                 rewrite_cm_instance_method(expr, "raw", &parameterized, self.entry_source);
                 return;
             }
+        }
+        // Future drop / cancel: parameterize the canonical name by the future's
+        // payload and rewrite as a raw CmRawCall (mirrors the stream path above).
+        if let Some(parameterized) = parameterize_future_cm_name(&cm_name, expr, self.tt) {
+            rewrite_cm_instance_method(expr, "raw", &parameterized, self.entry_source);
+            return;
         }
         // Look up the binding function for everything else.
         let Some((kind, func_name)) = cm_binding_function(&cm_name) else {
@@ -1095,6 +1879,84 @@ fn is_stream_cm_method(cm_name: &str) -> bool {
     )
 }
 
+/// Rewrite a `Future::<T>::new()` / `Stream::<T>::new()` static call into
+/// `rt::cm_{future,stream}_pair::<T>(<canonical-new CmRawCall>)`. The canonical
+/// name is parameterized by the payload (computed here from the call's concrete
+/// type arg); the i64 handle split lives in `core:rt`.
+fn rewrite_cm_new(expr: &mut TirExpr, tt: &TypeTable, is_future: bool) {
+    let TirExprKind::Call { func, .. } = &expr.kind else {
+        return;
+    };
+    let Some(payload_tid) = func
+        .monomorph_info
+        .as_ref()
+        .and_then(|m| m.impl_type_args.first().copied())
+    else {
+        return;
+    };
+    let (canonical_name, helper) = if is_future {
+        let payload = crate::component_model::classify_future_payload(tt, payload_tid);
+        (
+            CanonicalIntrinsic::FutureNew(payload).import_name(),
+            "cm_future_pair",
+        )
+    } else {
+        let payload = crate::component_model::classify_stream_payload(tt, payload_tid);
+        (
+            CanonicalIntrinsic::StreamNew(payload).import_name(),
+            "cm_stream_pair",
+        )
+    };
+    let result_type = expr.type_id;
+    let packed = cm_raw_call(&canonical_name, vec![], TypeTable::I64);
+    *expr = TirExpr::new(
+        TirExprKind::Call {
+            func: FunctionRef {
+                module_source: ModuleSource::rt(),
+                name: helper.to_string(),
+                monomorph_info: Some(MonomorphInfo {
+                    generic_name: helper.to_string(),
+                    impl_type_args: vec![payload_tid],
+                    method_type_args: vec![],
+                    is_blanket: false,
+                }),
+                method_info: None,
+            },
+            type_args: vec![payload_tid],
+            args: vec![CallArg::new(packed, false)],
+        },
+        result_type,
+        synth_span(),
+    );
+}
+
+/// Parameterize a future drop / cancel canonical name by the receiver's payload
+/// (`future-drop-readable` → `future-drop-readable:val-point`, …), matching the
+/// `import_name` codegen builds. Returns `None` if `cm_name` is not a future
+/// drop/cancel op or the receiver is not a `Future<T>` / `FutureWritable<T>`
+/// method call.
+fn parameterize_future_cm_name(cm_name: &str, expr: &TirExpr, tt: &TypeTable) -> Option<String> {
+    // Match the op first so the canonical-name list lives in exactly one place
+    // and non-future-handle methods skip the receiver classification below.
+    let make = match cm_name {
+        "future-drop-readable" => CanonicalIntrinsic::FutureDropReadable,
+        "future-drop-writable" => CanonicalIntrinsic::FutureDropWritable,
+        "future-cancel-read" => CanonicalIntrinsic::FutureCancelRead,
+        "future-cancel-write" => CanonicalIntrinsic::FutureCancelWrite,
+        _ => return None,
+    };
+    let TirExprKind::MethodCall { receiver, .. } = &expr.kind else {
+        return None;
+    };
+    let mut type_id = receiver.type_id;
+    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(type_id) {
+        type_id = *inner;
+    }
+    let payload_tid = *tt.generic_type_args(type_id)?.first()?;
+    let payload = crate::component_model::classify_future_payload(tt, payload_tid);
+    Some(make(payload).import_name())
+}
+
 /// Parameterize a stream CM name based on the receiver type.
 /// For non-u8 streams (e.g., `Stream<DirectoryEntry>`), appends the CM record name
 /// (e.g., "stream-drop-readable:directory-entry").
@@ -1126,6 +1988,11 @@ fn parameterize_stream_cm_name(
     {
         let elem_name = tt.base_type_name(elem);
         if elem_name != "u8" {
+            // Scalar / structural elements use the general `val-` payload name,
+            // matching `CmStreamPayload::Value`; named records keep their CM name.
+            if let Some(payload) = crate::component_model::cm_payload_type_from_type_id(tt, elem) {
+                return format!("{cm_name}:val-{}", payload.name_suffix());
+            }
             let cm_elem = registered_cm_name(&elem_name, cm_interface_registry)
                 .unwrap_or_else(|| pascal_to_kebab(&elem_name));
             return format!("{cm_name}:{cm_elem}");

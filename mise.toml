@@ -300,9 +300,13 @@ set -xe -o pipefail
 # no point at which the golden files are all deleted, so `git status` never
 # shows a scary mass deletion mid-run.
 mkdir -p wado-compiler/tests/generated/fixtures
+# A fixture with no __DATA__ section defaults to the test world (matching the
+# e2e harness), so `--default-world test` keeps golden-dump and the harness in
+# agreement.
 ./target/debug/wado-dev-tools golden-dump \
     --in 'wado-compiler/tests/fixtures/{name}.wado' \
     --emit wir:'wado-compiler/tests/generated/fixtures/{name}.wir.wado' \
+    --default-world test \
     -O2
 """
 

@@ -1,13 +1,13 @@
 // Regression test for #1025: partial-use destructure of `Future::<T>::new()`
 // must not lift a heap tuple struct in WIR.
 //
-// `wir_optimize::elide_multi_field_struct_locals` accepts partial-use
-// patterns when every field initializer is pure: the unread initializer
-// is dropped along with the eliminated `LocalSet`. The canonical
-// `emit_stream_or_future_new` lowering binds the i32 low / high halves
-// into named locals via `multivalue_bind`, then builds a `StructNew`
-// reading those locals. The pure-LocalGet fields make the elision pass
-// fire even when only one of `_rx` / `tx` is read.
+// `Future::<T>::new()` is lowered by CM-binding synthesis to
+// `core:rt::cm_future_pair(<future-new canonical>)`, which splits the packed
+// i64 into the two i32 handle halves and returns the pair. After inlining,
+// `wir_optimize::elide_multi_field_struct_locals` elides the tuple struct:
+// each field initializer (`i32_wrap_i64` of the low / high half) is pure, so
+// the unread `_rx` half is just dropped while `tx` is read directly — no heap
+// allocation.
 
 use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
 
@@ -32,6 +32,7 @@ __DATA__
         "struct.new \"tuple//[Future<i32>"
     ],
     "wir_expect:O2": [
-        "multivalue_bind [__mv_lo"
+        "wasi/future-new:s32",
+        ">> 32_i64"
     ]
 }

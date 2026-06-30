@@ -14,12 +14,31 @@ use {
     Option,
     Result,
     Future,
+    FutureWritable,
+    Stream,
     StreamWritable,
     Subtask,
     WaitEvent,
     Waitable,
     WaitableSet,
 } from "core:prelude/types.wado";
+
+/// Split a packed `future.new` result (`readable | writable << 32`) into the
+/// `[Future<T>, FutureWritable<T>]` pair. The parameterized canonical call is
+/// emitted by CM-binding synthesis; this is the Wado-level handle split.
+internal fn cm_future_pair<T>(packed: i64) -> [Future<T>, FutureWritable<T>] {
+    let rx = packed as i32;
+    let tx = (packed >> 32) as i32;
+    return [rx as Future<T>, tx as FutureWritable<T>];
+}
+
+/// Split a packed `stream.new` result into the `[Stream<T>, StreamWritable<T>]`
+/// pair. See [`cm_future_pair`].
+internal fn cm_stream_pair<T>(packed: i64) -> [Stream<T>, StreamWritable<T>] {
+    let rx = packed as i32;
+    let tx = (packed >> 32) as i32;
+    return [rx as Stream<T>, tx as StreamWritable<T>];
+}
 
 /// Returns the smaller of two i32 values (branchless).
 internal fn i32_min(a: i32, b: i32) -> i32 {
@@ -286,11 +305,26 @@ internal fn cm_stream_write_u8(handle: i32, data: List<u8>) {
     let packed = cm_lower_array_u8(data);
     let ptr = packed as i32;
     let len = (packed >> 32) as i32;
-    let result = builtin::stream_write(handle, ptr, len);
-    if result == -1 {
-        let payload = wait_for_blocked(handle);
-    }
+    cm_stream_write_drain(handle, ptr, len, 1);
     let freed = builtin::realloc(ptr, len, 1, 0);
+}
+
+/// Drive a `stream.write` to completion. A reader may take fewer elements than
+/// offered, so the canonical can copy only a prefix and report COMPLETED; loop,
+/// advancing past the written elements, until the buffer is drained or the
+/// reader drops. `elem_size` is the byte stride per element (1 for `u8`).
+internal fn cm_stream_write_drain(handle: i32, ptr: i32, count: i32, elem_size: i32) {
+    for let mut offset = 0; offset < count;  {
+        let mut result = builtin::stream_write(handle, ptr + offset * elem_size, count - offset);
+        if result == -1 {
+            result = wait_for_blocked(handle);
+        }
+        offset += result >> 4;
+        // No progress, or the reader/stream closed (DROPPED/CANCELLED).
+        if result >> 4 == 0 || result & 0xf != 0 {
+            break;
+        }
+    }
 }
 
 /// CM adapter for stream.write_raw(data, len) on Stream<u8>.
@@ -299,10 +333,7 @@ internal fn cm_stream_write_raw_u8(handle: i32, data: Array<u8>, len: i32) {
     let packed = cm_lower_list_u8(data, len);
     let ptr = packed as i32;
     let raw_len = (packed >> 32) as i32;
-    let result = builtin::stream_write(handle, ptr, raw_len);
-    if result == -1 {
-        let payload = wait_for_blocked(handle);
-    }
+    cm_stream_write_drain(handle, ptr, raw_len, 1);
     let freed = builtin::realloc(ptr, raw_len, 1, 0);
 }
 
