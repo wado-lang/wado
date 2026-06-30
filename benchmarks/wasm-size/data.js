@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782778889689,
+  "lastUpdate": 1782791904729,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -36509,6 +36509,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 288458,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ad9a4882d138acc3736d806430264a33e5563c62",
+          "message": "Merge pull request #1470 from wado-lang/claude/cm-abi-test-tasks-fkosua\n\nfeat(cm): future/stream record payloads and canonical-op synthesis migration",
+          "timestamp": "2026-06-30T12:50:11+09:00",
+          "tree_id": "68a5411c136a0b8972e2b50de190c5df087af7f9",
+          "url": "https://github.com/wado-lang/wado/commit/ad9a4882d138acc3736d806430264a33e5563c62"
+        },
+        "date": 1782791904087,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8516,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15404,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288543,
             "unit": "bytes"
           }
         ]
