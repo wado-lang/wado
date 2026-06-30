@@ -410,3 +410,25 @@ fn assert_qq_exit_first(atn: &Atn, d: i32) {
     assert st.kind == ATN_BLOCK_START, "?? decision is a BlockStart";
     assert atn.states[st.transitions[0].target].kind == ATN_BLOCK_END, "?? decision is exit-first";
 }
+
+// A decision-bearing node inside a left-recursive suffix is built by the
+// `_prec` builders. They must record the surface decision-site -> decision
+// correspondence too (via `mark_decision_for_site`), or `decision_sites` is
+// silently incomplete for LR-suffix decisions.
+global LR_SUFFIX_QQ_G4: String = "
+grammar T;
+e : e ('x')?? '+' e | ID ;
+ID : 'a'..'z'+ ;
+WS : ' ' -> skip ;
+";
+
+test "decision sites are recorded for a node inside an LR suffix" {
+    let mut g = parse(LR_SUFFIX_QQ_G4).unwrap();
+    assign_atn_decisions(&mut g);
+    let atn = build_atn(&g);
+    let ds = &atn.decision_sites;
+    // Site 0 is the `('x')??` Repeat in alt0's LR suffix (the leading self-ref
+    // `e` consumes no site). The `_prec` builder must record it.
+    assert ds.len() >= 1, "expected at least one decision site";
+    assert ds[0] >= 0, `LR-suffix decision must be recorded, got {ds[0]}`;
+}

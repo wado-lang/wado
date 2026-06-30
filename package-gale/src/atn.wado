@@ -182,10 +182,8 @@ impl AtnBuilder {
     }
 
     /// Record that the surface call site `call_site` returns to ATN state
-    /// `return_state`. Grows `call_site_returns` (sparsely, with -1 fillers)
-    /// so it can be indexed directly by id. A `call_site` of -1 (unassigned
-    /// `RuleRefElement`, e.g. a unit test that skipped `assign_atn_call_sites`)
-    /// is ignored.
+    /// `return_state`. A `call_site` of -1 (unassigned `RuleRefElement`, e.g. a
+    /// unit test that skipped `assign_atn_call_sites`) is ignored.
     fn record_call_site(&mut self, call_site: i32, return_state: i32) {
         if call_site < 0 {
             return;
@@ -206,8 +204,7 @@ impl AtnBuilder {
     /// Allocate a fresh decision number for `state` (like `mark_decision`) and
     /// record the surface decision-site `site -> decision` correspondence so
     /// codegen can emit the exact decision number. A `site` of -1 (a node with
-    /// no stamped id, e.g. a rule body / LR atom block) only marks the
-    /// decision. Grows `decision_sites` sparsely with -1 fillers.
+    /// no stamped id, e.g. a rule body / LR atom block) only marks the decision.
     fn mark_decision_for_site(&mut self, state: i32, site: i32) {
         let d = self.decision_state.len();
         self.mark_decision(state);
@@ -235,6 +232,7 @@ impl AtnBuilder {
         return -1;
     }
 }
+
 
 /// Build the name -> token-kind-id map, driven by the same
 /// `lexer_gen::token_slot_order` that numbers the generated `TK_*`
@@ -481,6 +479,7 @@ fn build_lr_suffix_element(
             follow_has,
             r,
             rule_index,
+            g.atn_decision,
         ),
         Repeat(rep) => {
             // For `*` / `+` the body can be followed by another iteration
@@ -501,6 +500,7 @@ fn build_lr_suffix_element(
                 iter_has,
                 r,
                 rule_index,
+                rep.atn_decision,
             );
         },
         // A self-ref nested under `Not` is not a rule operand; build generically.
@@ -518,11 +518,12 @@ fn build_alternation_prec(
     follow_has: bool,
     r: i32,
     rule_index: &TreeMap<String, i32>,
+    site: i32,
 ) -> [i32, i32] {
     let start = b.new_state(ATN_BLOCK_START, r);
     let end = b.new_state(ATN_BLOCK_END, r);
     if alts.len() > 1 {
-        b.mark_decision(start);
+        b.mark_decision_for_site(start, site);
     }
     for let alt of alts {
         let seg = build_sequence_prec(b, &alt.elements, rule_name, lr_first, conflict_min, follow_has, r, rule_index);
@@ -572,12 +573,13 @@ fn build_repeat_prec(
     iter_has: bool,
     r: i32,
     rule_index: &TreeMap<String, i32>,
+    site: i32,
 ) -> [i32, i32] {
     return match kind {
         Optional => {
             let start = b.new_state(ATN_BLOCK_START, r);
             let end = b.new_state(ATN_BLOCK_END, r);
-            b.mark_decision(start);
+            b.mark_decision_for_site(start, site);
             let seg = build_lr_suffix_element(b, inner, rule_name, lr_first, conflict_min, iter_has, r, rule_index);
             if non_greedy {
                 b.add_eps(start, end);
@@ -592,7 +594,7 @@ fn build_repeat_prec(
         Star => {
             let entry = b.new_state(ATN_STAR_LOOP_ENTRY, r);
             let end = b.new_state(ATN_LOOP_END, r);
-            b.mark_decision(entry);
+            b.mark_decision_for_site(entry, site);
             let seg = build_lr_suffix_element(b, inner, rule_name, lr_first, conflict_min, iter_has, r, rule_index);
             let back = b.new_state(ATN_STAR_LOOP_BACK, r);
             if non_greedy {
@@ -610,7 +612,7 @@ fn build_repeat_prec(
             let seg = build_lr_suffix_element(b, inner, rule_name, lr_first, conflict_min, iter_has, r, rule_index);
             let back = b.new_state(ATN_PLUS_LOOP_BACK, r);
             let end = b.new_state(ATN_LOOP_END, r);
-            b.mark_decision(back);
+            b.mark_decision_for_site(back, site);
             b.add_eps(seg.1, back);
             if non_greedy {
                 b.add_eps(back, end);

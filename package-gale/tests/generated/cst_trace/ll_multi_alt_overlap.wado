@@ -2797,11 +2797,13 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
     let kind = p.peek_kind();
     if kind == TK_X {
         let _atn_alt = atn_predict_with_stack(&ATN_SIM, 1, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0);
+        trace_pick(p, &"a", _atn_alt);
         if _atn_alt == 0 {
-            trace_pick(p, &"a", 0);
             return _parse_a__inner_alt_0(p, follow);
         }
-        trace_pick(p, &"a", 1);
+        if _atn_alt == 1 {
+            return _parse_a__inner_alt_1(p, follow);
+        }
         return _parse_a__inner_alt_1(p, follow);
     }
     p.no_viable(

@@ -259,13 +259,12 @@ pub fn prediction_contains_at_end_conflict(node: &PredictionNode) -> bool {
         },
         Consume(c) => prediction_contains_at_end_conflict(&c.child),
         Dispatch(d) => {
-            let mut found = false;
             for let b of &d.branches {
                 if prediction_contains_at_end_conflict(&b.child) {
-                    found = true;
+                    return true;
                 }
             }
-            return found;
+            return false;
         },
         Leaf(_) => false,
     };

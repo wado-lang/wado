@@ -117,8 +117,10 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // tournament resolves unsoundly — its longest pick can steal a token the
     // caller needs. Route those sites through the runtime ATN simulator, which
     // forces the ATN build below. Every other ambiguity reason keeps the
-    // tournament.
-    if grammar_has_at_end_conflict(grammar, &lowered, &mut ctx) {
+    // tournament. Skip the scan entirely when lowering already requested the
+    // ATN (a `??` or ATN-class LR rule): the build happens regardless, so the
+    // detection pass would be pure wasted prediction-tree work.
+    if !ctx.needs_atn() && grammar_has_at_end_conflict(grammar, &lowered, &mut ctx) {
         ctx.mark_needs_atn();
     }
     let mut atn = empty_atn();
@@ -129,8 +131,14 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         let mut lr_decs: List<i32> = [];
         let mut body_decs: List<i32> = [];
         for let mut r = 0; r < grammar.parser_rules.len(); r += 1 {
-            lr_decs.push(lr_loop_entry_decision(&atn, r));
-            body_decs.push(rule_body_decision(&atn, r));
+            let lr_dec = lr_loop_entry_decision(&atn, r);
+            lr_decs.push(lr_dec);
+            // For an LR rule, `rule_body_decision` returns the atom block's
+            // decision, whose edge indices exclude the LR alts and so do NOT
+            // equal grammar alt indices. AtEndConflict routing only fires on
+            // non-LR rules, so store -1 for LR rules rather than a wrong-by-
+            // construction atom-relative decision number.
+            body_decs.push(if lr_dec >= 0 { -1 } else { rule_body_decision(&atn, r) });
         }
         ctx.set_lr_loop_entry_decisions(&lr_decs);
         ctx.set_atn_rule_body_decisions(&body_decs);
