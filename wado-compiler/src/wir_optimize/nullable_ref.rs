@@ -38,8 +38,26 @@ pub(super) fn lower_nullable_refs(module: &mut WirPackage) {
     // Snapshot variant_case_info so we can identify case structs while mutating functions.
     let vci: IndexMap<u32, (u32, u32)> = module.variant_case_info.clone();
     for func in &mut module.functions {
+        // Result nullability (after Phase 3's func-type substitution) lets us
+        // fix multi-value `Return { Seq(fields) }`: its fields still carry the
+        // `RefAsNonNull` wrappers `cast_nonnull_fields` minted before
+        // NullableRef made the corresponding result slot nullable. The
+        // StructNew arm below strips these per field, but a multi-value return
+        // was already lifted to a `Seq` in `wir_build`, so it slips past.
+        let result_nullable: Vec<bool> =
+            if let WirTypeDef::Func(ft) = &module.types[func.type_id.index() as usize] {
+                ft.results
+                    .iter()
+                    .map(|r| matches!(r, WirType::Ref { nullable: true, .. }))
+                    .collect()
+            } else {
+                Vec::new()
+            };
         if let Some(body) = &mut func.body {
             transform_body(body, &module.types, &vci, &nullable_map);
+            if result_nullable.iter().any(|&n| n) {
+                strip_nonnull_in_multivalue_returns(body, &result_nullable);
+            }
         }
     }
 
@@ -242,6 +260,49 @@ fn transform_body(
 ) {
     for instr in body.iter_mut() {
         transform_instr(instr, types, vci, nullable_map);
+    }
+}
+
+/// Strip the bogus `RefAsNonNull` wrapper from a multi-value
+/// `Return { Seq(fields) }` slot that NullableRef made nullable.
+///
+/// `cast_nonnull_fields` (wir_build) wraps every aggregate field whose nominal
+/// struct type is a non-null ref. An `Option<Ref>` field lowers to a nullable
+/// ref here, so forcing it non-null traps on the `None` (null) value. The
+/// `StructNew` arm of [`transform_instr`] already strips this per field, but
+/// `optimize::multi_value_return` lifts the aggregate to a `Seq` of result
+/// values back in wir_build, so its fields never reach that arm.
+fn strip_nonnull_in_multivalue_returns(body: &mut [WirInstr], result_nullable: &[bool]) {
+    for instr in body.iter_mut() {
+        match instr {
+            WirInstr::Return { value: Some(v) } => {
+                if let WirInstr::Seq(fields) = v.as_mut()
+                    && fields.len() == result_nullable.len()
+                {
+                    for (i, f) in fields.iter_mut().enumerate() {
+                        if result_nullable[i]
+                            && let WirInstr::RefAsNonNull(inner) = f
+                        {
+                            *f = std::mem::replace(inner.as_mut(), WirInstr::Nop);
+                        }
+                    }
+                }
+            }
+            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
+                strip_nonnull_in_multivalue_returns(body, result_nullable);
+            }
+            WirInstr::If {
+                then_body,
+                else_body,
+                ..
+            } => {
+                strip_nonnull_in_multivalue_returns(then_body, result_nullable);
+                if let Some(eb) = else_body {
+                    strip_nonnull_in_multivalue_returns(eb, result_nullable);
+                }
+            }
+            _ => {}
+        }
     }
 }
 
