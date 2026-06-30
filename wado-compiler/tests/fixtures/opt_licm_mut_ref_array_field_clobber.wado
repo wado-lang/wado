@@ -1,0 +1,43 @@
+// Soundness guard (issue #1472, BuiltinArray case): a loop that reads an array
+// element through `self.arr` while mutating the same element through a `&mut`
+// alias to that array must observe every mutation.
+//
+// `r = &mut self.arr` aliases `self.arr`; `bump(r)` mutates element 0 in place
+// while the guard reads element 0 via `self.arr`. LICM may hoist the array
+// *handle* into the pre-header — that is sound, because the hoist local aliases
+// the same array (it is not a copy) and the element read re-executes each
+// iteration. What must never happen is hoisting the element *read* itself out of
+// the loop; that would freeze the guard and spin forever. Unlike `List`, a raw
+// array has no growable struct field, so the List-style `.used` cascade cannot
+// arise here — this fixture pins the runtime behavior so a future pass that
+// learns to hoist pure array reads cannot silently reintroduce the #1472 class.
+
+#[inline("never")]
+fn bump(p: &mut Array<i32>) {
+    p.set(0, p.get(0) + 1);
+}
+
+struct Buf {
+    arr: Array<i32>,
+    tag: i32,
+}
+
+impl Buf {
+    #[inline("never")]
+    fn go(&mut self) {
+        let r = &mut self.arr;
+        while self.arr.get(0) < 5 {
+            bump(r);
+        }
+    }
+}
+
+export fn run() {
+    let mut b = Buf { arr: Array::filled(1, 0), tag: 7 };
+    b.go();
+    assert b.arr.get(0) == 5, `v = {b.arr.get(0)}`;
+    assert b.tag == 7;
+}
+
+__DATA__
+{"stdout": ""}
