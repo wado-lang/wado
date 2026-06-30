@@ -473,13 +473,6 @@ pub struct Interpreter<'a> {
     /// [`invalidate_local`]: Self::invalidate_local
     /// [`enter_function`]: Self::enter_function
     env: IndexMap<u32, Lattice>,
-    /// Per-function map of locals single-bound to a reference to an immutable
-    /// global: `let s = &G` → `s ↦ key(G)`. Lets a field read through the
-    /// reference (`s.used`) fold via [`global_fields`] exactly as a direct
-    /// `global:G.used` does. Reset per function by [`enter_function`].
-    ///
-    /// [`global_fields`]: Self::global_fields
-    /// [`enter_function`]: Self::enter_function
     ref_global_aliases: IndexMap<u32, GlobalKey>,
     /// CTFE scratch-body fold memo: `expr → folded constant`. The scratch
     /// [`BodySink`] cannot promote a fold to an `Operand::Value` (no parent map)
@@ -520,10 +513,6 @@ pub struct Interpreter<'a> {
     call_stack: Vec<CalleeKey>,
 }
 
-/// The `(local, global)` an immutable reference-to-global binding (`let s = &G`)
-/// establishes, or `None`. The single source of truth for what
-/// [`Interpreter::record_ref_global_aliases`] records and what the consult-site
-/// debug assertion re-checks, so the two cannot drift.
 fn let_ref_global(body: &Body, stmt: &StmtKind) -> Option<(u32, GlobalKey)> {
     let StmtKind::Let {
         local_index,
@@ -556,10 +545,6 @@ fn let_ref_global(body: &Body, stmt: &StmtKind) -> Option<(u32, GlobalKey)> {
     Some((*local_index, (module_source.clone(), name.clone())))
 }
 
-/// Whether `body` binds `local` to `&key` (`let local = &key`). The invariant a
-/// recorded `ref_global_aliases[local] = key` must satisfy in the body being
-/// folded — a mismatch means per-function alias state leaked across a body
-/// boundary (e.g. a CTFE scratch reduction that forgot to save/clear it).
 fn local_binds_to_global_ref(body: &Body, local: u32, key: &GlobalKey) -> bool {
     body.stmts
         .iter()
@@ -624,10 +609,6 @@ impl<'a> Interpreter<'a> {
         self
     }
 
-    /// The constant value of an immutable global's field via [`global_fields`],
-    /// or [`Lattice::Unevaluated`].
-    ///
-    /// [`global_fields`]: Self::global_fields
     fn global_field(&self, key: &GlobalKey, field_name: &str) -> Lattice {
         self.global_fields
             .and_then(|m| m.get(key))
@@ -636,16 +617,11 @@ impl<'a> Interpreter<'a> {
             .map_or(Lattice::Unevaluated, Lattice::Const)
     }
 
-    /// Record locals single-bound to a reference to a global (`let s = &G`), so
-    /// a field read through `s` folds. Conservative: only non-`mut` bindings,
-    /// which Wado value semantics never reassign or `&mut`-alias.
     pub fn record_ref_global_aliases(&mut self, body: &Body) {
         self.ref_global_aliases.clear();
         let mut seen: IndexSet<u32> = IndexSet::default();
         for (_, st) in &body.stmts {
             if let Some((local, key)) = let_ref_global(body, &st.kind) {
-                // A reused local index (two `&G` bindings in disjoint scopes) is
-                // ambiguous at a read keyed only by index — record neither.
                 if seen.insert(local) {
                     self.ref_global_aliases.insert(local, key);
                 } else {
@@ -1513,7 +1489,6 @@ impl<'a> Interpreter<'a> {
         // The scratch fold memo is scoped to this reduction; nested CTFE calls
         // get a fresh map and ids never cross scratch bodies.
         let saved_folds = std::mem::take(&mut self.scratch_folds);
-        // Caller-keyed by local index, which collides with the callee's.
         let saved_aliases = std::mem::take(&mut self.ref_global_aliases);
         for (i, v) in bound.iter().enumerate() {
             #[allow(clippy::cast_possible_truncation)]

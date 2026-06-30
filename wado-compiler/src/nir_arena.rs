@@ -419,8 +419,6 @@ impl Body {
         }
     }
 
-    /// The value of a constant-bool `Operand::Value` (e.g. a condition driven to
-    /// a literal by `condition_implication`). `None` for any other operand.
     pub fn operand_const_bool(&self, op: Operand) -> Option<bool> {
         match self.values.kind(op.as_value()?) {
             ValueKind::Bool(b) => Some(*b),

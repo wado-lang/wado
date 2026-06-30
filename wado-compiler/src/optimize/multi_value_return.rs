@@ -318,18 +318,12 @@ fn nested_returns_in_expr_match_operand(
     op: Operand,
     expected: &ExpectedShape,
 ) -> bool {
-    // A promoted `Operand::Value` is a pure scalar carrying no nested `Return`,
-    // so it cannot violate the shape — vacuously true, not `false`.
-    match op.as_expr() {
-        Some(e) => nested_returns_in_expr_match(body, e, expected),
-        None => true,
-    }
+    op.as_expr()
+        .is_none_or(|e| nested_returns_in_expr_match(body, e, expected))
 }
 fn expr_break_values_match_operand(body: &Body, op: Operand, expected: &ExpectedShape) -> bool {
-    match op.as_expr() {
-        Some(e) => expr_break_values_match(body, e, expected),
-        None => true,
-    }
+    op.as_expr()
+        .is_none_or(|e| expr_break_values_match(body, e, expected))
 }
 
 fn nested_returns_in_expr_match(body: &Body, expr: ExprId, expected: &ExpectedShape) -> bool {

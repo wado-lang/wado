@@ -1231,8 +1231,8 @@ fn "core:prelude/primitive.wado/f64::fmt_into"(self, f) {
     abs_f = select f64(__pattern_temp_0_mv_1, builtin::f64_neg(self), self);
     let result_mv_digits: u64;
     let result_mv_exponent: i32;
-    let result_mv_nd: i32;
-    multivalue_bind [result_mv_digits, result_mv_exponent, result_mv_nd] = "core:prelude/fpfmt.wado/short"(abs_f);
+    let result_mv_n_digits: i32;
+    multivalue_bind [result_mv_digits, result_mv_exponent, result_mv_n_digits] = "core:prelude/fpfmt.wado/short"(abs_f);
     self_14 = f.buf;
     mark = self_14.used;
     if __pattern_temp_0_mv_1 {
@@ -1240,7 +1240,7 @@ fn "core:prelude/primitive.wado/f64::fmt_into"(self, f) {
     } else if f.sign_plus {
         "core:prelude/string.wado/String::push"(f.buf, 43);
     }
-    "core:prelude/fpfmt.wado/write_decimal"(f.buf, result_mv_digits, result_mv_exponent, result_mv_nd);
+    "core:prelude/fpfmt.wado/write_decimal"(f.buf, result_mv_digits, result_mv_exponent, result_mv_n_digits);
     "core:prelude/format.wado/Formatter::apply_padding"(f, mark);
 }
 
@@ -1281,8 +1281,8 @@ fn "core:prelude/primitive.wado/f64::fmt_fixed"(self, precision, f) {
     abs_f = select f64(__pattern_temp_0_mv_1, builtin::f64_neg(self), self);
     let result_mv_digits: u64;
     let result_mv_exponent: i32;
-    let result_mv_nd: i32;
-    multivalue_bind [result_mv_digits, result_mv_exponent, result_mv_nd] = "core:prelude/fpfmt.wado/fixed_width_for_prec"(abs_f, precision);
+    let result_mv_n_digits: i32;
+    multivalue_bind [result_mv_digits, result_mv_exponent, result_mv_n_digits] = "core:prelude/fpfmt.wado/fixed_width_for_prec"(abs_f, precision);
     self_20 = f.buf;
     mark_13 = self_20.used;
     if __pattern_temp_0_mv_1 {
@@ -1290,7 +1290,7 @@ fn "core:prelude/primitive.wado/f64::fmt_fixed"(self, precision, f) {
     } else if f.sign_plus {
         "core:prelude/string.wado/String::push"(f.buf, 43);
     }
-    "core:prelude/fpfmt.wado/write_decimal_prec"(f.buf, result_mv_digits, result_mv_exponent, result_mv_nd, precision);
+    "core:prelude/fpfmt.wado/write_decimal_prec"(f.buf, result_mv_digits, result_mv_exponent, result_mv_n_digits, precision);
     "core:prelude/format.wado/Formatter::apply_padding"(f, mark_13);
 }
 

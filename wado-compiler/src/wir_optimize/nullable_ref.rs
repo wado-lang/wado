@@ -38,12 +38,6 @@ pub(super) fn lower_nullable_refs(module: &mut WirPackage) {
     // Snapshot variant_case_info so we can identify case structs while mutating functions.
     let vci: IndexMap<u32, (u32, u32)> = module.variant_case_info.clone();
     for func in &mut module.functions {
-        // Result nullability (after Phase 3's func-type substitution) lets us
-        // fix multi-value `Return { Seq(fields) }`: its fields still carry the
-        // `RefAsNonNull` wrappers `cast_nonnull_fields` minted before
-        // NullableRef made the corresponding result slot nullable. The
-        // StructNew arm below strips these per field, but a multi-value return
-        // was already lifted to a `Seq` in `wir_build`, so it slips past.
         let result_nullable: Vec<bool> =
             if let WirTypeDef::Func(ft) = &module.types[func.type_id.index() as usize] {
                 ft.results
@@ -263,25 +257,12 @@ fn transform_body(
     }
 }
 
-/// Strip the bogus `RefAsNonNull` wrapper from a multi-value
-/// `Return { Seq(fields) }` slot that NullableRef made nullable.
-///
-/// `cast_nonnull_fields` (wir_build) wraps every aggregate field whose nominal
-/// struct type is a non-null ref. An `Option<Ref>` field lowers to a nullable
-/// ref here, so forcing it non-null traps on the `None` (null) value. The
-/// `StructNew` arm of [`transform_instr`] already strips this per field, but
-/// `optimize::multi_value_return` lifts the aggregate to a `Seq` of result
-/// values back in wir_build, so its fields never reach that arm.
 fn strip_nonnull_in_multivalue_returns(body: &mut [WirInstr], result_nullable: &[bool]) {
     for instr in body.iter_mut() {
         strip_nonnull_in_return(instr, result_nullable);
     }
 }
 
-/// Strip the wrapper from one instruction's multi-value `Return { Seq }` (if it
-/// is one), then descend into its children via the shared WIR child-walker so a
-/// `Return` nested in any compound node is reached without re-enumerating the
-/// body-bearing variants by hand.
 fn strip_nonnull_in_return(instr: &mut WirInstr, result_nullable: &[bool]) {
     if let WirInstr::Return { value: Some(v) } = instr
         && let WirInstr::Seq(fields) = v.as_mut()

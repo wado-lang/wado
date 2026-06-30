@@ -2886,7 +2886,7 @@ fn "core:prelude/fpfmt.wado/fixed_width"(f, n) {
     __cond_3 = n <= 18;
     if @unlikely(__cond_3 == 0) {
         cold_path;
-        "core:rt/panic"(__local_13 = "core:prelude/string.wado/String::with_capacity"(131); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("fixed_width"), used: 11 }); "core:prelude/string.wado/String::push"(__local_13, 32); "core:prelude/string.wado/String::push"(__local_13, 97); "core:prelude/string.wado/String::push"(__local_13, 116); "core:prelude/string.wado/String::push"(__local_13, 32); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/fpfmt.wado"), used: 23 }); "core:prelude/string.wado/String::push"(__local_13, 58); __local_14 = "core:prelude/format.wado/Formatter::new"(__local_13); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 303 }, __local_14); "core:prelude/string.wado/String::push"(__local_13, 58); "core:prelude/string.wado/String::push"(__local_13, 32); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("digits must be <= 18"), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_13 = "core:prelude/string.wado/String::with_capacity"(131); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("fixed_width"), used: 11 }); "core:prelude/string.wado/String::push"(__local_13, 32); "core:prelude/string.wado/String::push"(__local_13, 97); "core:prelude/string.wado/String::push"(__local_13, 116); "core:prelude/string.wado/String::push"(__local_13, 32); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/fpfmt.wado"), used: 23 }); "core:prelude/string.wado/String::push"(__local_13, 58); __local_14 = "core:prelude/format.wado/Formatter::new"(__local_13); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 302 }, __local_14); "core:prelude/string.wado/String::push"(__local_13, 58); "core:prelude/string.wado/String::push"(__local_13, 32); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("digits must be <= 18"), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: n <= 18
 "), used: 20 }); "core:prelude/string.wado/String::push"(__local_13, 110); "core:prelude/string.wado/String::push"(__local_13, 58); "core:prelude/string.wado/String::push"(__local_13, 32); __local_14 = "core:prelude/format.wado/Formatter::new"(__local_13); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: n }, __local_14); "core:prelude/string.wado/String::push"(__local_13, 10); __local_13);
         unreachable;
@@ -3947,8 +3947,8 @@ fn "core:prelude/primitive.wado/f32::fmt_into"(self, f) {
     abs_f = select f32(__pattern_temp_0_mv_1, builtin::f32_neg(self), self);
     let result_mv_digits: u64;
     let result_mv_exponent: i32;
-    let result_mv_nd: i32;
-    multivalue_bind [result_mv_digits, result_mv_exponent, result_mv_nd] = "core:prelude/fpfmt.wado/short32"(abs_f);
+    let result_mv_n_digits: i32;
+    multivalue_bind [result_mv_digits, result_mv_exponent, result_mv_n_digits] = "core:prelude/fpfmt.wado/short32"(abs_f);
     self_17 = f.buf;
     mark = self_17.used;
     if __pattern_temp_0_mv_1 {
@@ -3956,7 +3956,7 @@ fn "core:prelude/primitive.wado/f32::fmt_into"(self, f) {
     } else if f.sign_plus {
         "core:prelude/string.wado/String::push"(f.buf, 43);
     }
-    "core:prelude/fpfmt.wado/write_decimal"(f.buf, result_mv_digits, result_mv_exponent, result_mv_nd);
+    "core:prelude/fpfmt.wado/write_decimal"(f.buf, result_mv_digits, result_mv_exponent, result_mv_n_digits);
     "core:prelude/format.wado/Formatter::apply_padding"(f, mark);
 }
 
@@ -3979,8 +3979,8 @@ fn "core:prelude/primitive.wado/f64::fmt_into"(self, f) {
     abs_f = select f64(__pattern_temp_0_mv_1, builtin::f64_neg(self), self);
     let result_mv_digits: u64;
     let result_mv_exponent: i32;
-    let result_mv_nd: i32;
-    multivalue_bind [result_mv_digits, result_mv_exponent, result_mv_nd] = "core:prelude/fpfmt.wado/short"(abs_f);
+    let result_mv_n_digits: i32;
+    multivalue_bind [result_mv_digits, result_mv_exponent, result_mv_n_digits] = "core:prelude/fpfmt.wado/short"(abs_f);
     self_14 = f.buf;
     mark = self_14.used;
     if __pattern_temp_0_mv_1 {
@@ -3988,7 +3988,7 @@ fn "core:prelude/primitive.wado/f64::fmt_into"(self, f) {
     } else if f.sign_plus {
         "core:prelude/string.wado/String::push"(f.buf, 43);
     }
-    "core:prelude/fpfmt.wado/write_decimal"(f.buf, result_mv_digits, result_mv_exponent, result_mv_nd);
+    "core:prelude/fpfmt.wado/write_decimal"(f.buf, result_mv_digits, result_mv_exponent, result_mv_n_digits);
     "core:prelude/format.wado/Formatter::apply_padding"(f, mark);
 }
 
@@ -4029,8 +4029,8 @@ fn "core:prelude/primitive.wado/f64::fmt_fixed"(self, precision, f) {
     abs_f = select f64(__pattern_temp_0_mv_1, builtin::f64_neg(self), self);
     let result_mv_digits: u64;
     let result_mv_exponent: i32;
-    let result_mv_nd: i32;
-    multivalue_bind [result_mv_digits, result_mv_exponent, result_mv_nd] = "core:prelude/fpfmt.wado/fixed_width_for_prec"(abs_f, precision);
+    let result_mv_n_digits: i32;
+    multivalue_bind [result_mv_digits, result_mv_exponent, result_mv_n_digits] = "core:prelude/fpfmt.wado/fixed_width_for_prec"(abs_f, precision);
     self_20 = f.buf;
     mark_13 = self_20.used;
     if __pattern_temp_0_mv_1 {
@@ -4038,7 +4038,7 @@ fn "core:prelude/primitive.wado/f64::fmt_fixed"(self, precision, f) {
     } else if f.sign_plus {
         "core:prelude/string.wado/String::push"(f.buf, 43);
     }
-    "core:prelude/fpfmt.wado/write_decimal_prec"(f.buf, result_mv_digits, result_mv_exponent, result_mv_nd, precision);
+    "core:prelude/fpfmt.wado/write_decimal_prec"(f.buf, result_mv_digits, result_mv_exponent, result_mv_n_digits, precision);
     "core:prelude/format.wado/Formatter::apply_padding"(f, mark_13);
 }
 
@@ -4105,15 +4105,15 @@ fn "core:prelude/primitive.wado/f64::fmt_exp"(self, precision, upper, f) {
         });
         let result_14_mv_digits: u64;
         let result_14_mv_exponent: i32;
-        let result_14_mv_nd: i32;
-        multivalue_bind [result_14_mv_digits, result_14_mv_exponent, result_14_mv_nd] = "core:prelude/fpfmt.wado/fixed_width"(abs_f, clamped);
-        "core:prelude/fpfmt.wado/write_exp_prec"(f.buf, result_14_mv_digits, result_14_mv_exponent, result_14_mv_nd, precision, upper_bool);
+        let result_14_mv_n_digits: i32;
+        multivalue_bind [result_14_mv_digits, result_14_mv_exponent, result_14_mv_n_digits] = "core:prelude/fpfmt.wado/fixed_width"(abs_f, clamped);
+        "core:prelude/fpfmt.wado/write_exp_prec"(f.buf, result_14_mv_digits, result_14_mv_exponent, result_14_mv_n_digits, precision, upper_bool);
     } else {
         let result_18_mv_digits: u64;
         let result_18_mv_exponent: i32;
-        let result_18_mv_nd: i32;
-        multivalue_bind [result_18_mv_digits, result_18_mv_exponent, result_18_mv_nd] = "core:prelude/fpfmt.wado/short"(abs_f);
-        "core:prelude/fpfmt.wado/write_exp"(f.buf, result_18_mv_digits, result_18_mv_exponent, result_18_mv_nd, upper_bool);
+        let result_18_mv_n_digits: i32;
+        multivalue_bind [result_18_mv_digits, result_18_mv_exponent, result_18_mv_n_digits] = "core:prelude/fpfmt.wado/short"(abs_f);
+        "core:prelude/fpfmt.wado/write_exp"(f.buf, result_18_mv_digits, result_18_mv_exponent, result_18_mv_n_digits, upper_bool);
     }
     "core:prelude/format.wado/Formatter::apply_padding"(f, mark_11);
 }

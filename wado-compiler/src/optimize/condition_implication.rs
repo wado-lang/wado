@@ -1119,10 +1119,6 @@ impl ArenaOptVisitor for ShortCircuitEliminator<'_> {
     }
 }
 
-/// A sound static upper bound for an integer index: a literal, or the
-/// `min(var, K)` clamp `if (var > K) { K } else { var }` (and the `>=` form).
-/// The else arm must be exactly the compared `var`, so `!(var > K)` bounds it by
-/// `K`; the result is at most the max of the constant then-arm and that bound.
 fn index_upper_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64> {
     if let Some(c) = parse_const_i64(engine, binds, op) {
         return Some(c);
@@ -1157,9 +1153,6 @@ fn index_upper_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64>
     if !operand_same(engine, binds, left, else_tail) {
         return None;
     }
-    // The else arm yields `left`, so the `left <= k` fact from `!(left > k)` only
-    // transfers to the returned value if the else block never reassigns `left`
-    // before its tail.
     if let Operand::Expr(le) = resolve(engine, binds, left)
         && let ExprKind::Local { index, .. } = &engine.body.exprs[le].kind
     {
@@ -1180,9 +1173,6 @@ fn index_upper_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64>
     Some(then_const.max(else_ub))
 }
 
-/// Whether two operands denote the same value, through copy temps: equal after
-/// [`resolve`], or both bare locals of the same index. Used to confirm a clamp's
-/// else arm is the very subject the condition compares.
 fn operand_same(engine: &Engine, binds: &Binds, a: Operand, b: Operand) -> bool {
     match (resolve(engine, binds, a), resolve(engine, binds, b)) {
         (Operand::Expr(ea), Operand::Expr(eb)) => {
@@ -1200,7 +1190,6 @@ fn operand_same(engine: &Engine, binds: &Binds, a: Operand, b: Operand) -> bool 
     }
 }
 
-/// The tail value operand of a block by id: `{ …; tail }`.
 fn block_id_tail(body: &crate::nir_arena::Body, block: BlockId) -> Option<Operand> {
     match &body.stmts[*body.blocks[block].stmts.last()?].kind {
         StmtKind::Expr(op) => Some(*op),
@@ -1208,12 +1197,6 @@ fn block_id_tail(body: &crate::nir_arena::Body, block: BlockId) -> Option<Operan
     }
 }
 
-/// Eliminates an absolute false bounds check `if !(idx < BOUND) { panic }` where
-/// `BOUND` is a constant and `idx`'s static upper bound is `< BOUND`. The bound
-/// reaches a literal via `const_folding` (which folds an immutable global's
-/// `used` length, even through a `&G` reference). Complements the relational
-/// guard recognizers, which need a dominating guard variable; here the index is
-/// bounded intrinsically (a clamp) against a constant bound.
 struct ConstBoundIndexEliminator<'a> {
     binds: &'a Binds,
 }

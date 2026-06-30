@@ -299,19 +299,11 @@ fn stmt_dominated(body: &Body, stmt: StmtId, mode: PruneMode) -> bool {
     base || is_tail_break_only_labeled_block(body, stmt, mode)
 }
 
-/// The arm a const-condition `if` runs.
 enum ConstIf {
-    /// The taken block (const-true → then; const-false → else).
     Taken(BlockId),
-    /// Nothing runs (a false condition with no else).
     Empty,
 }
 
-/// For a statement `if CONST { … } [else { … }]` whose condition was driven to a
-/// literal bool (e.g. by `condition_implication`'s BCE), the arm that runs.
-/// `None` when the statement is not a const-condition `if`. Lets
-/// [`eliminate_dead_stmts`] flatten the live arm and drop the dead one — niri
-/// only folds const-condition *expression* `if`s, not statements.
 fn const_if_branch(body: &Body, stmt: StmtId) -> Option<ConstIf> {
     let StmtKind::If {
         condition,
