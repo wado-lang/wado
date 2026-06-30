@@ -35,8 +35,10 @@ use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec, str_lit } from "./wad
 use { TreeSet } from "core:collections";
 use {
     PredictionNode,
+    AmbiguityReason,
     build_group_prediction_tree,
     prediction_collect_all_indices,
+    prediction_contains_at_end_conflict,
     MAX_LOOKAHEAD_DEPTH,
 } from "./prediction.wado";
 use {
@@ -2061,6 +2063,57 @@ fn gen_scan_op_elements_in_block(
     for let mut i = start; i < end; i += 1 {
         gen_scan_op_element(w, &scan_elems[i], ctx, &fail);
     }
+}
+
+/// Whether any non-LR multi-alt rule's prediction contains an `AtEndConflict`
+/// ambiguity — the one longest-match-tournament-unsound site that must route to
+/// the runtime ATN simulator (an alt returns to the caller while another
+/// continues, so the tournament's longest pick can steal a token the caller
+/// needs). Run before `build_atn` so codegen builds the ATN
+/// (`GenContext::mark_needs_atn`) and the rule emitter routes those sites
+/// through `atn_predict_with_stack`. Mirrors the overlap-group + prediction-tree
+/// computation `gen_parse_fn` performs, so detection and emission agree.
+pub fn grammar_has_at_end_conflict(grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) -> bool {
+    let mut found = false;
+    for let mut r = 0; r < grammar.parser_rules.len(); r += 1 {
+        if rule_has_at_end_conflict(&grammar.parser_rules[r], &lowered.parser_rules[r], ctx) {
+            found = true;
+        }
+    }
+    return found;
+}
+
+fn rule_has_at_end_conflict(rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) -> bool {
+    let mut non_lr_indices: List<i32> = [];
+    match lowered_rule {
+        MultiAlt(m) => {
+            for let alt of &m.alts {
+                non_lr_indices.push(alt.alt_index);
+            }
+        },
+        _ => {
+            return false;
+        },
+    }
+    if non_lr_indices.len() < 2 {
+        return false;
+    }
+    let mut first_sets: List<List<String>> = [];
+    for let idx of non_lr_indices {
+        let mut visiting: List<String> = [];
+        first_sets.push(ctx.first_of_alt(&rule.alternatives[idx], &mut visiting));
+    }
+    let groups = compute_overlap_groups(&first_sets);
+    let mut found = false;
+    for let group of &groups {
+        if group.len() > 1 {
+            let tree = build_group_prediction_tree(&rule.alternatives, group, &first_sets, &non_lr_indices, ctx);
+            if prediction_contains_at_end_conflict(&tree) {
+                found = true;
+            }
+        }
+    }
+    return found;
 }
 
 fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) {
@@ -6053,6 +6106,44 @@ fn gen_prediction_code_inner(
         let mut sorted_indices = a.alts.sorted();
         sort_group_by_element_count(&mut sorted_indices, alts);
         if skip == 0 {
+            // `AtEndConflict` is the one ambiguity the longest-match tournament
+            // resolves unsoundly (an alt returns to the caller while another
+            // continues, so the longest pick can steal the caller's token).
+            // Route it through the runtime ATN simulator, keyed on the rule's
+            // body decision number, which decides with full caller context.
+            // Restricted to non-LR rules (the LR atom dispatch threads
+            // `min_prec` separately); every other reason keeps the tournament.
+            let _amb_rule = ctx.current_rule_index();
+            let _amb_route = if let AtEndConflict = a.reason {
+                ctx.needs_atn()
+                    && ctx.lr_loop_entry_decision(_amb_rule) < 0
+                    && ctx.atn_rule_body_decision(_amb_rule) >= 0;
+            } else {
+                false;
+            };
+            if _amb_route {
+                let dec = ctx.atn_rule_body_decision(_amb_rule);
+                w.line(
+                    &`let _atn_alt = atn_predict_with_stack(&ATN_SIM, {dec}, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0);`,
+                );
+                for let mut i = 0; i < sorted_indices.len(); i += 1 {
+                    let idx = sorted_indices[i];
+                    if i == sorted_indices.len() - 1 {
+                        if ctx.is_trace() {
+                            w.line(&`trace_pick(p, &{str_lit(*rule_display)}, {idx});`);
+                        }
+                        w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
+                    } else {
+                        w.begin(&`if _atn_alt == {idx}`);
+                        if ctx.is_trace() {
+                            w.line(&`trace_pick(p, &{str_lit(*rule_display)}, {idx});`);
+                        }
+                        w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
+                        w.end();
+                    }
+                }
+                return;
+            }
             // Check if any alternatives have scan functions available.
             // If ALL non-last alternatives have scans, we run a longest-match
             // scan tournament: scan each, parse the winner. If some have

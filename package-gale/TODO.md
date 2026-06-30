@@ -57,11 +57,12 @@ Pre-release, so no API-compat constraints; the two axes that matter are **ANTLR4
 - **Conflict resolution: ANTLR4-compatible.** On a genuine prediction conflict pick the minimum alt index; non-greedy subrules (`??`/`*?`/`+?`) prefer the exit transition. The ATN is built so this falls out of transition ordering.
 - **Trigger.** The simulator is invoked exactly where `build_prediction` returns a tree containing `Ambiguous`; everything else keeps emitting the existing compiled path.
 
-The static parser/non-greedy `??`/LR loop-entry pieces of this design are in place (`src/atn.wado`, `src/runtime/atn.wado`, `atn_predict_with_stack` / `atn_lr_loop_decision`), as is the compile-time decision-number correspondence the simulator needs (`assign_atn_decisions` → `Atn.decision_sites`, read via `GenContext::atn_decision_site`; every non-greedy `??` routes through `atn_predict_with_stack(sim, decision, …)`).
+The static parser/non-greedy `??`/LR loop-entry pieces of this design are in place (`src/atn.wado`, `src/runtime/atn.wado`, `atn_predict_with_stack` / `atn_lr_loop_decision`), as is the compile-time decision-number correspondence (`assign_atn_decisions` → `Atn.decision_sites`, read via `GenContext::atn_decision_site`). Both ATN-routed parser sites are wired:
 
-#### Remaining work
+- Every non-greedy `??` routes through `atn_predict_with_stack(sim, decision, …)`, each keyed to its own decision number.
+- A multi-alt `AtEndConflict` site — an alt returns to the caller while another continues, the one ambiguity the longest-match scan tournament resolves unsoundly (its longest pick can steal a token the caller needs) — routes through the simulator too, keyed on the rule body decision (`rule_body_decision` → `GenContext::atn_rule_body_decision`); `grammar_has_at_end_conflict` (run before `build_atn`) triggers the ATN build. Regression fixtures: `tests/grammars/ll_longest_vs_context.g4` + `tests/driver_cst_ll_longest_vs_context_test.wado`.
 
-- **Route a genuinely multi-alt `Ambiguous` group (3+ alts, overlapping first-sets) through the simulator.** The `decision_sites` correspondence already stamps multi-alt `Group` nodes, so the missing piece is the emit side: detect the ambiguity at lower time to set `needs_atn`, then dispatch on the alt `atn_predict_with_stack` returns. No corpus grammar needs it today — the longest-match scan tournament resolves every multi-alt overlap present, and the only residual (a tournament site whose suffix is genuinely unscannable) is a codegen-time `panic!`, not a misparse — so revisit when a descriptor surfaces one, per the static-edge policy above.
+Every other ambiguity reason (`OpaqueRuleRef`, `MaxDepth`, `ConfigExplosion`, `MultiAtEnd`, `NoViableAlt`) stays on the sound scan tournament — the tournament's longest-match agrees with ANTLR4 for those on the whole corpus. Route one through the simulator only if a descriptor ever shows the tournament resolving it wrongly, per the static-edge policy above.
 
 The Stage B′ JVM oracle (see below) is the measurement axis: each ATN-class fix flips its pinned `[stage_b_oracle_todo]` / `[stage_a_todo]` test green.
 

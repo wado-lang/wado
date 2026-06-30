@@ -245,6 +245,32 @@ fn prediction_contains_ambiguous(node: &PredictionNode) -> bool {
     };
 }
 
+/// True iff `node` contains an `Ambiguous` leaf whose reason is
+/// `AtEndConflict` — the one case the longest-match scan tournament gets
+/// wrong (an alt returns to the caller while another continues, so the
+/// tournament's longest pick can steal a token the caller needs). These
+/// sites route to the runtime ATN simulator; every other ambiguity reason
+/// keeps the tournament. See `TODO.md` "ATN-class grammars".
+pub fn prediction_contains_at_end_conflict(node: &PredictionNode) -> bool {
+    return match *node {
+        Ambiguous(a) => match a.reason {
+            AtEndConflict => true,
+            _ => false,
+        },
+        Consume(c) => prediction_contains_at_end_conflict(&c.child),
+        Dispatch(d) => {
+            let mut found = false;
+            for let b of &d.branches {
+                if prediction_contains_at_end_conflict(&b.child) {
+                    found = true;
+                }
+            }
+            return found;
+        },
+        Leaf(_) => false,
+    };
+}
+
 pub fn prediction_collect_all_indices(node: &PredictionNode, out: &mut List<i32>) {
     match *node {
         Ambiguous(a) => {

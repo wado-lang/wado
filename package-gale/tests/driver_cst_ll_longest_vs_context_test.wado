@@ -1,0 +1,25 @@
+use g from "./grammars/ll_longest_vs_context.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/cst_ll_longest_vs_context",
+        },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+}
+
+// `x` must yield the `'c'` to its caller `s`: longest-match would grab it.
+test "tree: multi-alt x yields trailing c to caller" {
+    assert_tree(&"a b c", &"(s (x a b) c)");
+}
+
+// Without a trailing caller `'c'`, x takes its 3-token alt.
+test "tree: multi-alt x takes the longer alt when caller has no c" {
+    assert_tree(&"a b c c", &"(s (x a b c) c)");
+}

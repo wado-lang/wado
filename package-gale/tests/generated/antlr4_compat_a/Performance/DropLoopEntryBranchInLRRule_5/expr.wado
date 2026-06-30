@@ -1052,9 +1052,11 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
 //! Runtime ATN simulator (hybrid ALL(*)) — full-context SLL prediction.
 //!
 //! Emitted into a generated parser only when lowering saw a construct that
-//! needs it (`GenContext::needs_atn`, today a non-greedy `??`). The
-//! compiled fast path handles everything else, so this never runs on the
-//! hot path.
+//! needs it (`GenContext::needs_atn`: a non-greedy `??` or an ATN-class LR
+//! rule). Each `??` calls `atn_predict_with_stack` with its own compile-time
+//! decision number (`Atn.decision_sites`), so several `??` in one rule no
+//! longer collide. The compiled fast path handles everything else, so this
+//! never runs on the hot path.
 //!
 //! Full context without a per-call-site GIR<->ATN mapping: the caller passes
 //! its current *rule-invocation stack* (a list of rule indices, cheaply
