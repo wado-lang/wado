@@ -224,8 +224,13 @@ fn check_dominance_in_instr(
             }
         }
         WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
-            let mut nested = defined.clone();
-            check_dominance_in_body(body, candidates, params, &mut nested, disqualified);
+            // Definitions inside the block/loop do not dominate code after it.
+            // `defined` is append-only here, so a length-mark + `truncate`
+            // restores the entry scope without cloning the whole set per scope
+            // (cloning was O(N) per block → O(N²) on large bodies, #1472).
+            let mark = defined.len();
+            check_dominance_in_body(body, candidates, params, defined, disqualified);
+            defined.truncate(mark);
         }
         WirInstr::Seq(body) => {
             check_dominance_in_body(body, candidates, params, defined, disqualified);
@@ -237,17 +242,14 @@ fn check_dominance_in_instr(
             ..
         } => {
             check_dominance_in_instr(condition, candidates, params, defined, disqualified);
-            let mut then_defined = defined.clone();
-            check_dominance_in_body(
-                then_body,
-                candidates,
-                params,
-                &mut then_defined,
-                disqualified,
-            );
+            // Each branch is independent and its defs do not persist past the
+            // `if`; mark + truncate isolates them without cloning `defined`.
+            let mark = defined.len();
+            check_dominance_in_body(then_body, candidates, params, defined, disqualified);
+            defined.truncate(mark);
             if let Some(eb) = else_body {
-                let mut else_defined = defined.clone();
-                check_dominance_in_body(eb, candidates, params, &mut else_defined, disqualified);
+                check_dominance_in_body(eb, candidates, params, defined, disqualified);
+                defined.truncate(mark);
             }
         }
         other => {
@@ -260,19 +262,41 @@ fn check_dominance_in_instr(
 
 /// Collapse `a -> b -> c` chains so every alias maps to its ultimate source.
 fn resolve_chains(candidates: &IndexMap<String, String>) -> IndexMap<String, String> {
+    // Path-compress each alias to its ultimate source, memoizing into `subst` so
+    // each chain node is walked once across all aliases. A naive per-alias walk
+    // is O(N²) on a long copy chain (e.g. a large sequence-literal builder),
+    // which makes large generated parsers time out at -O3 (#1472 follow-up).
     let mut subst: IndexMap<String, String> = IndexMap::default();
     for alias in candidates.keys() {
-        let mut seen: IndexSet<String> = IndexSet::default();
-        seen.insert(alias.clone());
-        let mut current = candidates[alias].clone();
-        while !seen.contains(&current) {
-            seen.insert(current.clone());
+        if subst.contains_key(alias) {
+            continue;
+        }
+        let mut path: Vec<String> = Vec::new();
+        let mut on_path: IndexSet<String> = IndexSet::default();
+        let mut current = alias.clone();
+        // Resolve to: an already-memoized target, a non-candidate (ultimate
+        // source), or a cycle (`None` — leave the path unpropagated, sound).
+        let end: Option<String> = loop {
+            if let Some(t) = subst.get(&current) {
+                break Some(t.clone());
+            }
+            if on_path.contains(&current) {
+                break None;
+            }
             match candidates.get(&current) {
-                Some(next) => current.clone_from(next),
-                None => break,
+                Some(next) => {
+                    on_path.insert(current.clone());
+                    path.push(current.clone());
+                    current = next.clone();
+                }
+                None => break Some(current.clone()),
+            }
+        };
+        if let Some(end) = end {
+            for node in path {
+                subst.insert(node, end.clone());
             }
         }
-        subst.insert(alias.clone(), current);
     }
     subst
 }

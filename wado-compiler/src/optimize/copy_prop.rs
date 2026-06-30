@@ -174,57 +174,6 @@ fn analyze_copy_binding(
     })
 }
 
-/// Whether `local`'s value is mutated anywhere in the subtree at `node`:
-/// re-assignment, field/element assignment, `&mut` borrow, mutable method
-/// receiver, or a mutable call argument — through any field/index projection
-/// (`local.f.g = …`, `local[i] = …`, `local.f.method()`), not just one level.
-/// Conservative (treats any method call on a place rooted at `local` as a
-/// mutation), matching and generalizing the in-block copy-inlining check this
-/// subsumes.
-fn subtree_mutates_local(body: &Body, node: NodeRef, local: u32) -> bool {
-    if let NodeRef::Expr(id) = node {
-        match &body.exprs[id].kind {
-            ExprKind::Assign { target, .. } => {
-                if place_root_local(body, *target) == Some(local) {
-                    return true;
-                }
-            }
-            ExprKind::Unary {
-                op: NirUnaryOp::MutRef,
-                expr: inner,
-            } => {
-                if let Some(ie) = inner.as_expr()
-                    && place_root_local(body, ie) == Some(local)
-                {
-                    return true;
-                }
-            }
-            ExprKind::MethodCall { receiver, .. } => {
-                if receiver.as_expr().and_then(|e| place_root_local(body, e)) == Some(local) {
-                    return true;
-                }
-            }
-            ExprKind::Call { args, .. } => {
-                for arg in args {
-                    if arg.is_mut
-                        && arg.expr.as_expr().and_then(|e| place_root_local(body, e)) == Some(local)
-                    {
-                        return true;
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-    let mut found = false;
-    body.for_each_child(node, |c| {
-        if !found {
-            found = subtree_mutates_local(body, c, local);
-        }
-    });
-    found
-}
-
 struct AnalysisResult {
     bindings: Vec<CopyBinding>,
     usage: IndexMap<u32, LocalUsage>,
@@ -275,21 +224,74 @@ fn analyze_block(
     copy_value_id: Option<FuncId>,
 ) {
     let stmts = body.blocks[block].stmts.clone();
+    // Per-local last statement index whose subtree mutates it (one pass over the
+    // block). A binding at `k` is source-scope-stable iff its source has no
+    // mutation after `k`. Precomputing this avoids the per-binding
+    // `stmts[k+1..]` rescan, which is O(N²) when a block holds many copy
+    // bindings (e.g. a large sequence-literal builder chain — #1472 follow-up).
+    let mut last_mut: IndexMap<u32, usize> = IndexMap::default();
+    for (i, &stmt) in stmts.iter().enumerate() {
+        collect_mutated_locals(body, NodeRef::Stmt(stmt), &mut last_mut, i);
+    }
     for (k, &stmt) in stmts.iter().enumerate() {
         if let Some(mut binding) = analyze_copy_binding(body, stmt, copy_value_id) {
             // The target's uses are confined to this block from `k` onward, so
             // the source is stable for the propagation iff it is not mutated in
             // those statements (a promoted value is unconditionally stable).
             binding.source_scope_stable = match binding.source.local_index() {
-                Some(src) => !stmts[k + 1..]
-                    .iter()
-                    .any(|&s| subtree_mutates_local(body, NodeRef::Stmt(s), src)),
+                Some(src) => last_mut.get(&src).is_none_or(|&i| i <= k),
                 None => true,
             };
             result.bindings.push(binding);
         }
         analyze_stmt(body, stmt, result, type_table, fpt, copy_value_id);
     }
+}
+
+/// Record, into `last_mut`, every local whose subtree `node` mutates, mapping it
+/// to statement index `idx` (later indices overwrite earlier ones, so each local
+/// ends up keyed to the last statement that mutates it). Mirrors the mutation
+/// shapes recognised by [`subtree_mutates_local`], collecting all roots in one
+/// walk instead of testing a single local.
+fn collect_mutated_locals(
+    body: &Body,
+    node: NodeRef,
+    last_mut: &mut IndexMap<u32, usize>,
+    idx: usize,
+) {
+    if let NodeRef::Expr(id) = node {
+        match &body.exprs[id].kind {
+            ExprKind::Assign { target, .. } => {
+                if let Some(l) = place_root_local(body, *target) {
+                    last_mut.insert(l, idx);
+                }
+            }
+            ExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                expr: inner,
+            } => {
+                if let Some(l) = inner.as_expr().and_then(|ie| place_root_local(body, ie)) {
+                    last_mut.insert(l, idx);
+                }
+            }
+            ExprKind::MethodCall { receiver, .. } => {
+                if let Some(l) = receiver.as_expr().and_then(|e| place_root_local(body, e)) {
+                    last_mut.insert(l, idx);
+                }
+            }
+            ExprKind::Call { args, .. } => {
+                for arg in args {
+                    if arg.is_mut
+                        && let Some(l) = arg.expr.as_expr().and_then(|e| place_root_local(body, e))
+                    {
+                        last_mut.insert(l, idx);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    body.for_each_child(node, |c| collect_mutated_locals(body, c, last_mut, idx));
 }
 
 fn analyze_stmt(
