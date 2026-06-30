@@ -139,7 +139,9 @@ pub fn cm_payload_type_from_type_id(
 fn is_cm_owned_source(ms: &ModuleSource) -> bool {
     match ms {
         ModuleSource::Wasi { .. } => true,
-        ModuleSource::Core { name } => name.as_str().starts_with("kiln/"),
+        // The `core:kiln` facade itself (`name == "kiln"`) plus its WIT-generated
+        // submodules (`kiln/...`). `kilnfoo` is unrelated, so match exactly.
+        ModuleSource::Core { name } => name.as_str() == "kiln" || name.as_str().starts_with("kiln/"),
         _ => false,
     }
 }
@@ -2134,6 +2136,20 @@ impl CmInterfaceRegistry {
     /// Get the fields of a struct (CM kebab-case field name, field type), when unambiguous.
     pub fn get_struct_fields(&self, name: &str) -> Option<&[(String, Type)]> {
         find_unique_in(&self.structs, name).map(|(_, fields, _)| fields.as_slice())
+    }
+
+    /// Whether a struct named `name` is registered under an interface whose CM
+    /// source is exactly `source`. Unlike [`Self::get_struct_fields`], this keys
+    /// on the struct's own module source, so a user record is never confused
+    /// with a same-named WASI/dependency struct (which lives under a different
+    /// source). A `--lib` entry record is registered under the package default
+    /// interface, whose source [`register_lib_local_decls`] maps to the entry
+    /// module; outside `--lib` the user record is registered nowhere, so this is
+    /// `false` and the payload has no CM type to lower against.
+    pub fn is_struct_registered_from(&self, source: &ModuleSource, name: &str) -> bool {
+        self.structs.keys().any(|(fq, struct_name)| {
+            struct_name == name && self.cm_interface_module_sources.get(fq) == Some(source)
+        })
     }
 
     /// Get the source interface path for a struct, when unambiguous.

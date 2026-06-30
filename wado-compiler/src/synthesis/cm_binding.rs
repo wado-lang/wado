@@ -246,10 +246,10 @@ impl TirRefVisitor for NamedPayloadFinder<'_> {
 }
 
 /// For a `Future::<T>::new()` / `Stream::<T>::new()` static call whose payload
-/// `T` contains a named record whose fields are not registered in the CM
-/// registry, return that record's Wado name. `new` is the only way to obtain a
-/// `Future<T>` / `Stream<T>` outside `--lib` (non-lib world exports have fixed
-/// signatures), so checking it covers the creation sites.
+/// `T` contains a named record with no CM type to lower against, return that
+/// record's Wado name. `new` is the only way to obtain a `Future<T>` /
+/// `Stream<T>` outside `--lib` (non-lib world exports have fixed signatures), so
+/// checking it covers the creation sites.
 fn unresolvable_future_stream_payload(
     tt: &TypeTable,
     registry: &crate::component_model::CmInterfaceRegistry,
@@ -271,29 +271,43 @@ fn unresolvable_future_stream_payload(
         .impl_type_args
         .first()
         .copied()?;
-    let name = named_record_in_payload(tt, payload)?;
-    // Registered (`--lib`) records lower fine; only an unresolvable record has
-    // no CM home and would mis-lower as an i32 handle.
-    registry.get_struct_fields(&name).is_none().then_some(name)
+    unresolvable_record_in_payload(tt, registry, payload)
 }
 
-/// The Wado name of the first named-record struct nested anywhere in a CM
-/// payload type (`Future<Point>`, `Future<List<Point>>`, `Future<[Point, u32]>`,
-/// …), or `None` if the payload carries no named record.
-fn named_record_in_payload(tt: &TypeTable, type_id: TypeId) -> Option<String> {
-    if let ResolvedType::Struct { name, .. } = tt.get(type_id)
+/// The Wado name of the first user record nested anywhere in a CM payload type
+/// (`Future<Point>`, `Future<List<Point>>`, `Future<[Point, u32]>`, …) that is
+/// not registered under its own module source — i.e. has no CM type to lower
+/// against. `None` if every named record in the payload resolves.
+///
+/// Resolvability is keyed on the record's own `module_source`, never its bare
+/// name: a user record that happens to share a name with an imported WASI/
+/// dependency struct must still be rejected, since the homonym lives under a
+/// different source and carries different fields.
+fn unresolvable_record_in_payload(
+    tt: &TypeTable,
+    registry: &crate::component_model::CmInterfaceRegistry,
+    type_id: TypeId,
+) -> Option<String> {
+    if let ResolvedType::Struct {
+        name,
+        module_source,
+        ..
+    } = tt.get(type_id)
         && matches!(
             crate::component_model::cm_payload_type_from_type_id(tt, type_id),
             Some(CmPayloadType::Named(_))
         )
+        && !registry.is_struct_registered_from(module_source, name)
     {
         return Some(name.clone());
     }
     if let Some(inner) = tt.as_option(type_id).or_else(|| tt.as_list(type_id)) {
-        return named_record_in_payload(tt, inner);
+        return unresolvable_record_in_payload(tt, registry, inner);
     }
     if let Some(elems) = tt.as_tuple(type_id) {
-        return elems.iter().find_map(|&e| named_record_in_payload(tt, e));
+        return elems
+            .iter()
+            .find_map(|&e| unresolvable_record_in_payload(tt, registry, e));
     }
     if let ResolvedType::GenericInstance {
         name, type_args, ..
@@ -303,7 +317,7 @@ fn named_record_in_payload(tt: &TypeTable, type_id: TypeId) -> Option<String> {
         return type_args
             .clone()
             .iter()
-            .find_map(|&a| named_record_in_payload(tt, a));
+            .find_map(|&a| unresolvable_record_in_payload(tt, registry, a));
     }
     None
 }
