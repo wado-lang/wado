@@ -1153,9 +1153,17 @@ fn all_br_variant_values_are_struct_new(
             }
             i += 1;
         } else {
-            // Recurse into nested blocks and ifs (both add a depth level)
+            // Recurse into nested control frames. `Block`/`Loop`/`If` each add a
+            // depth level; a plain `Seq` does not. Both `Loop` and `Seq` matter:
+            // an inlined helper whose tail is `block { loop { … if … { break
+            // outer: <val> } } }` carries its exit value via a `break` nested in
+            // the loop and wrapped in `Seq`s (`Seq([Seq([Call, Br(d)])])`).
+            // Skipping either left that exit value unchecked, so a
+            // `break outer: Call(boxed_fn)` (an inlined `?`/tail-call return)
+            // slipped past validation while the rewriter — which only lowers a
+            // `StructNew` exit — left a boxed ref under the multi-value signature.
             match &instrs[i] {
-                WirInstr::Block { body, .. } => {
+                WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
                     if !all_br_variant_values_are_struct_new(
                         body,
                         valid_type_indices,
@@ -1183,6 +1191,12 @@ fn all_br_variant_values_are_struct_new(
                             target_depth + 1,
                         )
                     {
+                        return false;
+                    }
+                }
+                // `Seq` is not a Wasm control frame — recurse at the same depth.
+                WirInstr::Seq(seq) => {
+                    if !all_br_variant_values_are_struct_new(seq, valid_type_indices, target_depth) {
                         return false;
                     }
                 }
@@ -2328,7 +2342,10 @@ fn rewrite_variant_struct_new_br_to_return(
             i += 2;
         } else {
             match &mut instrs[i] {
-                WirInstr::Block { body, .. } => {
+                // `Loop` adds a depth level like `Block`; recurse so a
+                // `[StructNew, Br]` exit nested in a loop is lowered too, keeping
+                // this rewriter symmetric with `all_br_variant_values_are_struct_new`.
+                WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
                     rewrite_variant_struct_new_br_to_return(
                         body,
                         target_depth + 1,
