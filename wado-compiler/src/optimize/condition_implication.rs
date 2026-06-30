@@ -883,23 +883,11 @@ fn process_block(engine: &mut Engine, block: BlockId, binds: &Binds) -> bool {
                 changed |= eliminate_checks_in_node(engine, NodeRef::Stmt(s), var, k, bound, binds);
             }
         }
-<<<<<<< HEAD
-        changed |= apply_dominating_if(engine, s, &binds);
-        changed |= BitmaskEliminator { binds: &binds }.visit_stmt(engine, s);
-        changed |= ConstBoundIndexEliminator { binds: &binds }.visit_stmt(engine, s);
-        changed |= ShortCircuitEliminator { binds: &binds }.visit_stmt(engine, s);
-        changed |= process_stmt(engine, s);
-||||||| 05f57c78
-        changed |= apply_dominating_if(engine, s, &binds);
-        changed |= BitmaskEliminator { binds: &binds }.visit_stmt(engine, s);
-        changed |= ShortCircuitEliminator { binds: &binds }.visit_stmt(engine, s);
-        changed |= process_stmt(engine, s);
-=======
         changed |= apply_dominating_if(engine, s, binds);
         changed |= BitmaskEliminator { binds }.visit_stmt(engine, s);
+        changed |= ConstBoundIndexEliminator { binds }.visit_stmt(engine, s);
         changed |= ShortCircuitEliminator { binds }.visit_stmt(engine, s);
         changed |= process_stmt(engine, s, binds);
->>>>>>> origin/main
         seguards.retain(|&(var, _, bound)| !stmt_modifies(engine, s, var, bound));
         if let Some(fact) = recognize_early_exit(engine, s, binds) {
             seguards.push(fact);
