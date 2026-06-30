@@ -2981,7 +2981,7 @@ fn take_block_result_call(
     }
 }
 
-// ======================= Nested variant-slot flattening =======================
+// Nested variant-slot flattening.
 //
 // Single-level SROA turns `next_element<i64>` into a function returning the
 // multi-value vector `[outer_disc, ref Option<i64>, ref Err]`. The `Option<i64>`
@@ -3119,44 +3119,33 @@ fn slot_field_decomposable(expr: &WirInstr, v_idx: u32, module: &WirPackage) -> 
     }
 }
 
-/// Recursively verify every `Return` of `body` yields a multi-value `Seq` of
-/// `arity` whose `slot` field is decomposable.
-fn all_returns_decompose(
-    body: &[WirInstr],
-    arity: usize,
-    slot: usize,
-    v_idx: u32,
-    module: &WirPackage,
-) -> bool {
-    for instr in body {
-        let ok = match instr {
-            WirInstr::Return { value: Some(v) } => match v.as_ref() {
-                WirInstr::Seq(fields) => {
-                    fields.len() == arity
-                        && slot_field_decomposable(&fields[slot], v_idx, module)
-                }
-                _ => false,
-            },
-            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
-                all_returns_decompose(body, arity, slot, v_idx, module)
+/// Verify every value-returning `Return` reachable in `instr` yields a
+/// multi-value `Seq` of `arity` whose `slot` field is decomposable. Walks every
+/// child position via `for_each_child` so the validator's coverage matches the
+/// rewriter (`rewrite_nested_returns`, which uses `for_each_boxed_child_mut`):
+/// a `?` desugar can leave a `Return` inside an `If` condition or a `LocalSet`
+/// value, and the rewriter visits those, so the validator must too or it would
+/// confirm a function whose un-validated return is later left at the old arity.
+fn all_returns_decompose(instr: &WirInstr, arity: usize, slot: usize, v_idx: u32, module: &WirPackage) -> bool {
+    if let WirInstr::Return { value: Some(v) } = instr {
+        let decomposable = match v.as_ref() {
+            WirInstr::Seq(fields) => {
+                fields.len() == arity && slot < fields.len()
+                    && slot_field_decomposable(&fields[slot], v_idx, module)
             }
-            WirInstr::If {
-                then_body,
-                else_body,
-                ..
-            } => {
-                all_returns_decompose(then_body, arity, slot, v_idx, module)
-                    && else_body.as_ref().is_none_or(|eb| {
-                        all_returns_decompose(eb, arity, slot, v_idx, module)
-                    })
-            }
-            _ => true,
+            _ => false,
         };
-        if !ok {
+        if !decomposable {
             return false;
         }
     }
-    true
+    let mut ok = true;
+    instr.for_each_child(&mut |c| {
+        if ok && !all_returns_decompose(c, arity, slot, v_idx, module) {
+            ok = false;
+        }
+    });
+    ok
 }
 
 /// Phase 1: collect functions with an expandable `ref Option<scalar>` result
@@ -3183,7 +3172,11 @@ fn nested_slot_candidates(module: &WirPackage, pinned: &IndexSet<u32>) -> Vec<Ne
                 continue;
             };
             let body = func.body.as_ref().unwrap();
-            if !all_returns_decompose(body, ft.results.len(), slot, v_idx, module) {
+            let arity = ft.results.len();
+            if !body
+                .iter()
+                .all(|instr| all_returns_decompose(instr, arity, slot, v_idx, module))
+            {
                 continue;
             }
             out.push(NestedSlotCand {
@@ -3207,37 +3200,28 @@ enum SlotConsumer {
     Unwrap { alias: String },
 }
 
-/// Resolve the value yielded by a `?`-unwrap then-arm to the slot local it
-/// copies out (`RefAsNonNull(LocalGet(slot))`, possibly via one intermediate
-/// `LocalSet`).
-fn then_yields_slot(then_body: &[WirInstr], slot_local: &str) -> bool {
-    fn resolve<'a>(body: &'a [WirInstr], mut expr: &'a WirInstr) -> &'a WirInstr {
-        loop {
-            match expr {
-                WirInstr::RefAsNonNull(inner) => expr = inner,
-                WirInstr::LocalGet { name, .. } => {
-                    // Follow a single in-body `LocalSet(name, X)` copy.
-                    let mut def = None;
-                    for s in body {
-                        if let WirInstr::LocalSet { name: n, value } = s
-                            && n == name
-                        {
-                            def = Some(value.as_ref());
-                        }
-                    }
-                    match def {
-                        Some(v) => expr = v,
-                        None => return expr,
-                    }
-                }
-                other => return other,
-            }
+/// True when a `?`-unwrap then-arm is *exactly* the slot copied out — either
+/// `[<slot extraction>]` or `[LocalSet(t, <slot extraction>), LocalGet(t)]`,
+/// where `<slot extraction>` is `LocalGet(slot)` under zero or more
+/// `RefAsNonNull` wrappers. `rewrite_unwrap_to_guard` discards the whole
+/// then-arm, so anything richer (a side-effecting prefix statement, a branch, a
+/// second definition of the temp) must be rejected or a needed statement would
+/// be silently dropped.
+fn then_is_pure_slot_copy(then_body: &[WirInstr], slot_local: &str) -> bool {
+    fn is_slot_extraction(e: &WirInstr, slot: &str) -> bool {
+        match e {
+            WirInstr::RefAsNonNull(inner) => is_slot_extraction(inner, slot),
+            WirInstr::LocalGet { name, .. } => name == slot,
+            _ => false,
         }
     }
-    let Some(last) = then_body.last() else {
-        return false;
-    };
-    matches!(resolve(then_body, last), WirInstr::LocalGet { name, .. } if name == slot_local)
+    match then_body {
+        [single] => is_slot_extraction(single, slot_local),
+        [WirInstr::LocalSet { name: t, value }, WirInstr::LocalGet { name: g, .. }] => {
+            g == t && is_slot_extraction(value, slot_local)
+        }
+        _ => false,
+    }
 }
 
 /// Find the unique `?`-unwrap `LocalSet(alias, If {...})` whose then-arm copies
@@ -3253,13 +3237,13 @@ fn find_unwrap_alias(body: &[WirInstr], slot_local: &str) -> Option<String> {
                     ..
                 } = value.as_ref()
                 && eb.iter().any(WirInstr::always_diverges)
-                && then_yields_slot(then_body, slot_local)
+                && then_is_pure_slot_copy(then_body, slot_local)
             {
                 *found = Some(name.clone());
             }
             match instr {
                 WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
-                    walk(body, slot_local, found)
+                    walk(body, slot_local, found);
                 }
                 WirInstr::If {
                     then_body,
@@ -3327,8 +3311,8 @@ fn validate_nested_sites(
                 // can rewrite. A `Return(Call(f))` tail call (or any other raw
                 // call) would keep the old arity after we widen the signature,
                 // producing a Wasm type mismatch — bail if one exists.
-                let mut total_calls = 0usize;
-                count_calls_to(body, cand.func_id_index, &mut total_calls);
+                let total_calls: usize =
+                    body.iter().map(|i| count_calls_to(i, cand.func_id_index)).sum();
                 let mut mvbind_calls = 0usize;
                 for_each_multivalue_call(body, cand.func_id_index, &mut |locals| {
                     saw_call = true;
@@ -3352,18 +3336,26 @@ fn validate_nested_sites(
 }
 
 /// Count every `Call` to `func_id_index` anywhere in `body` (all positions).
-fn count_calls_to(body: &[WirInstr], func_id_index: u32, n: &mut usize) {
-    for instr in body {
-        if let WirInstr::Call { func_id, .. } = instr
-            && func_id.index() == func_id_index
-        {
-            *n += 1;
-        }
-        instr.for_each_child(&mut |c| count_calls_to(std::slice::from_ref(c), func_id_index, n));
+fn count_calls_to(instr: &WirInstr, func_id_index: u32) -> usize {
+    let mut n = 0;
+    if let WirInstr::Call { func_id, .. } = instr
+        && func_id.index() == func_id_index
+    {
+        n += 1;
     }
+    instr.for_each_child(&mut |c| n += count_calls_to(c, func_id_index));
+    n
 }
 
 /// Visit each `MultiValueLocalBind { Call(func_id_index), locals }` in a body.
+///
+/// Deliberately recurses only into statement-list bodies (Block/Loop/Seq, If
+/// arms) — NOT into If conditions / `LocalSet` values — so it stays symmetric
+/// with `expand_nested_binds` (which rewrites the same positions). A call in a
+/// non-statement position is counted by `count_calls_to` (which visits every
+/// position via `for_each_child`) but not here, so `total_calls != mvbind_calls`
+/// bails the candidate. Do not switch this to `for_each_child` without also
+/// teaching `expand_nested_binds` to rewrite those positions.
 fn for_each_multivalue_call(
     body: &[WirInstr],
     func_id_index: u32,
@@ -3378,7 +3370,7 @@ fn for_each_multivalue_call(
         }
         match instr {
             WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
-                for_each_multivalue_call(body, func_id_index, f)
+                for_each_multivalue_call(body, func_id_index, f);
             }
             WirInstr::If {
                 then_body,
@@ -3425,7 +3417,7 @@ fn apply_nested_flatten(module: &mut WirPackage, confirmed: &[NestedSlotCand]) {
         let old_arity = ft.results.len();
         let mut results = ft.results.clone();
         results.splice(
-            cand.slot..cand.slot + 1,
+            cand.slot..=cand.slot,
             [WirType::I32, cand.info.payload_ty.clone()],
         );
         let new_ft = WirFuncType {
@@ -3472,7 +3464,7 @@ fn rewrite_nested_returns(instr: &mut WirInstr, cand: &NestedSlotCand, old_arity
     {
         let slot_expr = std::mem::replace(&mut fields[cand.slot], WirInstr::Nop);
         let (disc, payload) = decompose_slot_value(slot_expr, &cand.info);
-        fields.splice(cand.slot..cand.slot + 1, [disc, payload]);
+        fields.splice(cand.slot..=cand.slot, [disc, payload]);
     }
     instr.for_each_boxed_child_mut(&mut |c| rewrite_nested_returns(c, cand, old_arity));
 }
@@ -3503,20 +3495,39 @@ fn decompose_slot_value(mut expr: WirInstr, info: &OptionLikeInfo) -> (WirInstr,
     }
 }
 
-/// Rewrite all nested-candidate call sites in one body: expand the
-/// `multivalue_bind` slot local into `[disc, payload]`, build a
-/// `VariantReplacement` for the inner variant, turn each `?`-unwrap binding into
-/// a guard, then replace variant accesses.
+/// Rewrite all nested-candidate call sites in one body. Classification runs in
+/// a read-only plan pass over the *whole* body (same scope `validate_nested_sites`
+/// uses), so the consumer verdict never depends on where the bind sits or on
+/// mutations a prior bind made; the mutation pass then consumes those plans.
 fn rewrite_nested_call_sites(
     body: &mut Vec<WirInstr>,
     by_func: &crate::hashmap::IndexMap<u32, &NestedSlotCand>,
 ) {
-    let mut replacements: crate::hashmap::IndexMap<String, VariantReplacement> =
+    // Plan: classify every candidate call site's slot consumer against the full
+    // body. Keyed by slot local (single-level SROA gives each call site a unique
+    // slot-local name).
+    let mut plans: crate::hashmap::IndexMap<String, SlotConsumer> =
         crate::hashmap::IndexMap::default();
-    expand_binds_and_collect(body, by_func, &mut replacements);
-    if replacements.is_empty() {
+    {
+        let root: &[WirInstr] = body;
+        for instr in root {
+            plan_nested_call_sites(instr, root, by_func, &mut plans);
+        }
+    }
+    if plans.is_empty() {
         return;
     }
+    // Turn each `?`-unwrap binding into a guard, dropping the (pure) slot copy.
+    for consumer in plans.values() {
+        if let SlotConsumer::Unwrap { alias } = consumer {
+            rewrite_unwrap_to_guard(body, alias);
+        }
+    }
+    // Expand the binds and register the inner-variant replacements.
+    let mut replacements: crate::hashmap::IndexMap<String, VariantReplacement> =
+        crate::hashmap::IndexMap::default();
+    expand_nested_binds(body, by_func, &plans, &mut replacements);
+    // Replace variant accesses on the slot local / unwrap alias.
     let mut aliases: crate::hashmap::IndexMap<String, (String, u32)> =
         crate::hashmap::IndexMap::default();
     collect_refcast_aliases(body, &replacements, &mut aliases);
@@ -3525,14 +3536,33 @@ fn rewrite_nested_call_sites(
     }
 }
 
-/// Walk the body: at each candidate `MultiValueLocalBind`, expand the slot
-/// local, build the inner `VariantReplacement` (keyed by the slot local for a
-/// direct consumer, or by the `?`-unwrap alias), and convert the unwrap binding
-/// into a guard. Recurse into nested bodies. Declarations for the new inner
-/// locals are inserted just before the bind.
-fn expand_binds_and_collect(
+/// Read-only plan pass: record `slot_local -> SlotConsumer` for every candidate
+/// `MultiValueLocalBind`, classifying against `root` (the full function body).
+fn plan_nested_call_sites(
+    instr: &WirInstr,
+    root: &[WirInstr],
+    by_func: &crate::hashmap::IndexMap<u32, &NestedSlotCand>,
+    plans: &mut crate::hashmap::IndexMap<String, SlotConsumer>,
+) {
+    if let WirInstr::MultiValueLocalBind { instr: call, locals } = instr
+        && let Some(WirInstr::Call { func_id, .. }) = unwrap_to_inner_call(call)
+        && let Some(cand) = by_func.get(&func_id.index())
+        && let Some(Some(slot_local)) = locals.get(cand.slot)
+        && let Some(consumer) = classify_slot_consumer(root, slot_local)
+    {
+        plans.insert(slot_local.clone(), consumer);
+    }
+    instr.for_each_child(&mut |c| plan_nested_call_sites(c, root, by_func, plans));
+}
+
+/// Mutation pass: at each candidate bind, split the slot local into
+/// `[disc, payload]`, declare the two inner locals, and register the inner
+/// `VariantReplacement` keyed by the `?`-unwrap alias (the unwrap was already
+/// turned into a guard) or, for a direct consumer, by the slot local itself.
+fn expand_nested_binds(
     body: &mut Vec<WirInstr>,
     by_func: &crate::hashmap::IndexMap<u32, &NestedSlotCand>,
+    plans: &crate::hashmap::IndexMap<String, SlotConsumer>,
     replacements: &mut crate::hashmap::IndexMap<String, VariantReplacement>,
 ) {
     let mut i = 0;
@@ -3540,29 +3570,28 @@ fn expand_binds_and_collect(
         // Recurse into nested bodies first.
         match &mut body[i] {
             WirInstr::Block { body: b, .. } | WirInstr::Loop { body: b, .. } | WirInstr::Seq(b) => {
-                expand_binds_and_collect(b, by_func, replacements);
+                expand_nested_binds(b, by_func, plans, replacements);
             }
             WirInstr::If {
                 then_body,
                 else_body,
                 ..
             } => {
-                expand_binds_and_collect(then_body, by_func, replacements);
+                expand_nested_binds(then_body, by_func, plans, replacements);
                 if let Some(eb) = else_body {
-                    expand_binds_and_collect(eb, by_func, replacements);
+                    expand_nested_binds(eb, by_func, plans, replacements);
                 }
             }
             _ => {}
         }
 
         let cand_slot = match &body[i] {
-            WirInstr::MultiValueLocalBind { instr: call, locals } => {
-                if let WirInstr::Call { func_id, .. } = call.as_ref() {
-                    by_func.get(&func_id.index()).map(|c| (*c, locals.clone()))
-                } else {
-                    None
-                }
-            }
+            WirInstr::MultiValueLocalBind { instr: call, locals } => unwrap_to_inner_call(call)
+                .and_then(|c| match c {
+                    WirInstr::Call { func_id, .. } => by_func.get(&func_id.index()),
+                    _ => None,
+                })
+                .map(|c| (*c, locals.clone())),
             _ => None,
         };
         let Some((cand, locals)) = cand_slot else {
@@ -3573,6 +3602,11 @@ fn expand_binds_and_collect(
             i += 1;
             continue;
         };
+        // `validate_nested_sites` confirmed this site, so the plan pass (same
+        // classification, same scope) must have recorded a consumer.
+        let consumer = plans.get(&slot_local).unwrap_or_else(|| {
+            unreachable!("nested-flatten: confirmed call site `{slot_local}` has no plan")
+        });
 
         let disc_local = format!("{slot_local}__ndisc");
         let val_local = format!("{slot_local}__nval");
@@ -3581,7 +3615,7 @@ fn expand_binds_and_collect(
         // inner locals.
         if let WirInstr::MultiValueLocalBind { locals, .. } = &mut body[i] {
             locals.splice(
-                cand.slot..cand.slot + 1,
+                cand.slot..=cand.slot,
                 [Some(disc_local.clone()), Some(val_local.clone())],
             );
         }
@@ -3606,33 +3640,20 @@ fn expand_binds_and_collect(
         // Insert DeclareLocals for the inner locals before the bind.
         let decls = vec![
             WirInstr::DeclareLocal {
-                name: disc_local.clone(),
+                name: disc_local,
                 ty: WirType::I32,
             },
             WirInstr::DeclareLocal {
-                name: val_local.clone(),
+                name: val_local,
                 ty: cand.info.payload_ty.clone(),
             },
         ];
 
-        // Determine the consumer and register the replacement.
-        match classify_slot_consumer(body, &slot_local) {
-            Some(SlotConsumer::Direct) => {
-                replacements.insert(slot_local.clone(), ivr);
-            }
-            Some(SlotConsumer::Unwrap { alias }) => {
-                // Turn `LocalSet(alias, If { cond, then: [slot], else: diverge })`
-                // into the guard `If { cond, then: [], else: diverge }`.
-                rewrite_unwrap_to_guard(body, &alias);
-                replacements.insert(alias, ivr);
-            }
-            None => {
-                // Shouldn't happen (validated), but stay safe: undo nothing
-                // structurally fatal — the bind already expanded, so register a
-                // direct replacement keyed by the slot local.
-                replacements.insert(slot_local.clone(), ivr);
-            }
-        }
+        let key = match consumer {
+            SlotConsumer::Direct => slot_local,
+            SlotConsumer::Unwrap { alias } => alias.clone(),
+        };
+        replacements.insert(key, ivr);
 
         body.splice(i..i, decls);
         i += 3; // 2 decls + the bind
@@ -3666,7 +3687,7 @@ fn rewrite_unwrap_to_guard(body: &mut [WirInstr], alias: &str) {
         }
         match instr {
             WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
-                rewrite_unwrap_to_guard(body, alias)
+                rewrite_unwrap_to_guard(body, alias);
             }
             WirInstr::If {
                 then_body,
