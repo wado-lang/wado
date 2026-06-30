@@ -14,8 +14,8 @@
 // so it confirmed the function anyway, while the rewriter (which does descend
 // into `LocalSet` values) could not lower the `LocalGet` leaf and left a boxed
 // single-value `return` under the widened multi-value signature: invalid Wasm
-// (`type mismatch: expected (ref null …), found (ref …)`), only at `-O3`, where
-// scheduling places the iterator advance between the box and the return.
+// (`type mismatch: expected (ref null …), found (ref …)`), only at `-O3` where
+// scheduling produces the intervening store.
 //
 // The validator now checks returns embedded in non-structural statements too, so
 // it rejects the function when the rewriter can't lower one of its returns —

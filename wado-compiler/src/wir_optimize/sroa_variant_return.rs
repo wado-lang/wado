@@ -961,16 +961,12 @@ fn check_return_variant_struct_new(
         WirInstr::Drop(inner) => {
             check_return_variant_struct_new(inner, valid_type_indices, tail_call_candidates)
         }
-        // Any other statement can still embed a `Return` in a value position the
-        // structural arms above don't descend into — a `?`-desugared
-        // `return Err(…)` inside a `LocalSet(t, if … { … } else { return … })`
-        // binding being the canonical case. `rewrite_variant_returns_to_multi_value`
-        // visits those via `for_each_boxed_child_mut`, so the validator must check
-        // them too: an embedded return the rewriter can't lower (e.g.
-        // `Return(LocalGet(hfs_temp))`, left un-elided when an intervening
-        // side-effecting statement blocks `elide_return_only_temps`) would
-        // otherwise stay a boxed single-value return under the multi-value
-        // signature, producing invalid Wasm.
+        // Other statements can embed a `Return` in a value position the arms
+        // above skip — e.g. `LocalSet(t, if … else { return Err(…) })`. The
+        // rewriter descends into them (`for_each_boxed_child_mut`), so the
+        // validator must too, or it confirms a function with an unrewritable
+        // return (`Return(LocalGet(hfs_temp))` left un-elided behind a
+        // side-effecting statement) that the rewriter leaves boxed.
         other => embedded_returns_compatible(other, valid_type_indices, tail_call_candidates),
     }
 }
@@ -1153,15 +1149,13 @@ fn all_br_variant_values_are_struct_new(
             }
             i += 1;
         } else {
-            // Recurse into nested control frames. `Block`/`Loop`/`If` each add a
-            // depth level; a plain `Seq` does not. Both `Loop` and `Seq` matter:
-            // an inlined helper whose tail is `block { loop { … if … { break
-            // outer: <val> } } }` carries its exit value via a `break` nested in
-            // the loop and wrapped in `Seq`s (`Seq([Seq([Call, Br(d)])])`).
-            // Skipping either left that exit value unchecked, so a
-            // `break outer: Call(boxed_fn)` (an inlined `?`/tail-call return)
-            // slipped past validation while the rewriter — which only lowers a
-            // `StructNew` exit — left a boxed ref under the multi-value signature.
+            // Recurse into nested control frames. `Block`/`Loop`/`If` add a depth
+            // level; a plain `Seq` does not. `Loop` and `Seq` both matter: an
+            // inlined helper's tail `block { loop { … break outer: <val> … } }`
+            // carries its exit value through a loop- and `Seq`-nested break
+            // (`Seq([Seq([Call, Br(d)])])`). Missing either let a
+            // `break outer: Call(boxed_fn)` exit escape the StructNew check while
+            // the rewriter left its boxed ref under the multi-value signature.
             match &instrs[i] {
                 WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
                     if !all_br_variant_values_are_struct_new(
