@@ -299,6 +299,27 @@ fn stmt_dominated(body: &Body, stmt: StmtId, mode: PruneMode) -> bool {
     base || is_tail_break_only_labeled_block(body, stmt, mode)
 }
 
+enum ConstIf {
+    Taken(BlockId),
+    Empty,
+}
+
+fn const_if_branch(body: &Body, stmt: StmtId) -> Option<ConstIf> {
+    let StmtKind::If {
+        condition,
+        then_block,
+        else_block,
+    } = &body.stmts[stmt].kind
+    else {
+        return None;
+    };
+    Some(if body.operand_const_bool(*condition)? {
+        ConstIf::Taken(*then_block)
+    } else {
+        else_block.map_or(ConstIf::Empty, ConstIf::Taken)
+    })
+}
+
 /// Rebuild `block`'s statement list, dropping code after a terminator and
 /// flattening unused-label / void wrapper blocks into it. A flattened-in inner
 /// block is emptied: the engine may later pop that now-orphaned block, and
@@ -312,7 +333,13 @@ fn eliminate_dead_stmts(engine: &mut Engine, block: BlockId, mode: PruneMode) ->
                 StmtKind::Break { .. } | StmtKind::Continue | StmtKind::Return { .. }
             )
     });
-    if !has_dead_after_terminator && !stmts.iter().any(|&s| stmt_dominated(engine.body, s, mode)) {
+    let has_const_if = stmts
+        .iter()
+        .any(|&s| const_if_branch(engine.body, s).is_some());
+    if !has_dead_after_terminator
+        && !has_const_if
+        && !stmts.iter().any(|&s| stmt_dominated(engine.body, s, mode))
+    {
         return false;
     }
 
@@ -395,6 +422,17 @@ fn eliminate_dead_stmts(engine: &mut Engine, block: BlockId, mode: PruneMode) ->
             }
             new_stmts.extend(inner_stmts);
             consumed_inner.push(inner);
+            continue;
+        }
+        if let Some(taken) = const_if_branch(engine.body, stmt) {
+            if let ConstIf::Taken(tb) = taken {
+                let tb_stmts = engine.body.blocks[tb].stmts.clone();
+                if ends_with_terminator_stmt(engine.body, &tb_stmts) {
+                    terminated = true;
+                }
+                new_stmts.extend(tb_stmts);
+                consumed_inner.push(tb);
+            }
             continue;
         }
         if matches!(

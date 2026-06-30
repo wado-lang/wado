@@ -38,8 +38,20 @@ pub(super) fn lower_nullable_refs(module: &mut WirPackage) {
     // Snapshot variant_case_info so we can identify case structs while mutating functions.
     let vci: IndexMap<u32, (u32, u32)> = module.variant_case_info.clone();
     for func in &mut module.functions {
+        let result_nullable: Vec<bool> =
+            if let WirTypeDef::Func(ft) = &module.types[func.type_id.index() as usize] {
+                ft.results
+                    .iter()
+                    .map(|r| matches!(r, WirType::Ref { nullable: true, .. }))
+                    .collect()
+            } else {
+                Vec::new()
+            };
         if let Some(body) = &mut func.body {
             transform_body(body, &module.types, &vci, &nullable_map);
+            if result_nullable.iter().any(|&n| n) {
+                strip_nonnull_in_multivalue_returns(body, &result_nullable);
+            }
         }
     }
 
@@ -243,6 +255,28 @@ fn transform_body(
     for instr in body.iter_mut() {
         transform_instr(instr, types, vci, nullable_map);
     }
+}
+
+fn strip_nonnull_in_multivalue_returns(body: &mut [WirInstr], result_nullable: &[bool]) {
+    for instr in body.iter_mut() {
+        strip_nonnull_in_return(instr, result_nullable);
+    }
+}
+
+fn strip_nonnull_in_return(instr: &mut WirInstr, result_nullable: &[bool]) {
+    if let WirInstr::Return { value: Some(v) } = instr
+        && let WirInstr::Seq(fields) = v.as_mut()
+        && fields.len() == result_nullable.len()
+    {
+        for (i, f) in fields.iter_mut().enumerate() {
+            if result_nullable[i]
+                && let WirInstr::RefAsNonNull(inner) = f
+            {
+                *f = std::mem::replace(inner.as_mut(), WirInstr::Nop);
+            }
+        }
+    }
+    instr.for_each_boxed_child_mut(&mut |child| strip_nonnull_in_return(child, result_nullable));
 }
 
 /// Recursively transform a single WIR instruction.

@@ -1,0 +1,36 @@
+// BCE: an index clamped below an immutable global sequence's length needs no
+// bounds check. `const_folding` folds `(&TABLE).used` to a literal (through the
+// `&TABLE` receiver), `ConstBoundIndexEliminator` proves `min(x,18) < 20`, and
+// `const_branch_prune` drops the dead panic. Mirrors fpfmt's `POW10[n]`.
+// Regression guard: a builder block's length is dynamic, so `TABLE.used` must
+// not fold to the initial `used: 0` (which would make the check always panic).
+
+global TABLE: List<u64> = [
+    1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000,
+    10000000000, 100000000000, 1000000000000, 10000000000000, 100000000000000,
+    1000000000000000, 10000000000000000, 100000000000000000, 1000000000000000000,
+    10000000000000000000,
+];
+
+#[inline("never")]
+fn lookup(x: i32) -> u64 {
+    let n = if x > 18 { 18 } else { x };
+    return TABLE[n];
+}
+
+export fn run() {
+    assert lookup(0) == 1;
+    assert lookup(5) == 100000;
+    assert lookup(19) == 1000000000000000000;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "array_get<u64>"
+    ],
+    "wir_not_expect:O2": [
+        "List::index_value"
+    ]
+}

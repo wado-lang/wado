@@ -319,11 +319,11 @@ fn nested_returns_in_expr_match_operand(
     expected: &ExpectedShape,
 ) -> bool {
     op.as_expr()
-        .is_some_and(|e| nested_returns_in_expr_match(body, e, expected))
+        .is_none_or(|e| nested_returns_in_expr_match(body, e, expected))
 }
 fn expr_break_values_match_operand(body: &Body, op: Operand, expected: &ExpectedShape) -> bool {
     op.as_expr()
-        .is_some_and(|e| expr_break_values_match(body, e, expected))
+        .is_none_or(|e| expr_break_values_match(body, e, expected))
 }
 
 fn nested_returns_in_expr_match(body: &Body, expr: ExprId, expected: &ExpectedShape) -> bool {

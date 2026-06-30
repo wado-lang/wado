@@ -1,0 +1,47 @@
+// Regression: a `multi_value_return`-lifted function whose POD has an
+// `Option<Ref>` field that is `None`. `Option<String>` lowers to a nullable
+// ref (NullableRef niche), but `cast_nonnull_fields` wraps every nominally
+// non-null aggregate field in `ref.as_non_null`. The `StructNew` path strips
+// that wrapper once the field becomes nullable; the multi-value `Return { Seq }`
+// — lifted from the `StructNew` in wir_build — used to keep it, so returning
+// `None` (null) trapped with `wasm trap: null reference`. `split` is
+// `inline("never")` so the call survives to exercise the lifted ABI.
+
+struct Opt {
+    raw: String,
+    inline: Option<String>,
+}
+
+#[inline("never")]
+fn split(tok: &String) -> Opt {
+    let body = tok.substr_bytes(2, tok.len());
+    let mut raw = body;
+    let mut inline: Option<String> = null;
+    if let Some(eq) = body.find("=") {
+        raw = body.substr_bytes(0, eq);
+        inline = Option::Some(body.substr_bytes(eq + 1, body.len()));
+    }
+    return Opt { raw, inline };
+}
+
+export fn run() {
+    let none = "--flag";
+    let lo = split(&none);
+    assert lo.raw == "flag";
+    if let Some(_) = lo.inline {
+        assert false;
+    }
+
+    let some = "--key=val";
+    let hi = split(&some);
+    assert hi.raw == "key";
+    assert hi.inline == Option::Some("val");
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "split\" = fn(ref \"core:prelude/string.wado//String\") -> [ref \"core:prelude/string.wado//String\", ref null \"core:prelude/string.wado//String\"]"
+    ]
+}

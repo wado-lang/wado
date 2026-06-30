@@ -23,6 +23,7 @@ pub struct PmHiLo {
 pub struct FormatResult {
     pub digits: u64,
     pub exponent: i32,
+    pub n_digits: i32,
 }
 
 struct u128 {
@@ -3858,7 +3859,7 @@ pub fn fixed_width(f: f64, n: i32) -> FormatResult {
                 __r.String::push_str(&String { repr: packed"core:prelude/fpfmt.wado", used: 23 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 301 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 302 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"digits must be <= 18", used: 20 });
                 __r.String::push_str(&String { repr: packed"\ncondition: n <= 18\n", used: 20 });
@@ -3881,9 +3882,9 @@ pub fn fixed_width(f: f64, n: i32) -> FormatResult {
     let mut d: u64 = "core::prelude/fpfmt.wado::unrounded_round"(u);
     if (d >= "core::prelude/fpfmt.wado::pow10"(n)) {
         d = "core::prelude/fpfmt.wado::unrounded_round"("core::prelude/fpfmt.wado::unrounded_div"(u, 10));
-        return FormatResult { digits: d, exponent: (-p + 1) };
+        return FormatResult { digits: d, exponent: (-p + 1), n_digits: n };
     }
-    return FormatResult { digits: d, exponent: -p };
+    return FormatResult { digits: d, exponent: -p, n_digits: n };
 }
 
 pub fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
@@ -3905,7 +3906,7 @@ pub fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
     let total_digits: i32 = (decimal_pos + precision);
     if (total_digits <= 0) {
         if (total_digits < 0) {
-            return FormatResult { digits: 0, exponent: -precision };
+            return FormatResult { digits: 0, exponent: -precision, n_digits: 0 };
         }
         let p: i32 = -log10_e63;
         let lp: i32 = "core::prelude/fpfmt.wado::log2_pow10"(p);
@@ -3913,7 +3914,7 @@ pub fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
         let s: i32 = -((e + lp) + 3);
         let u: u64 = "core::prelude/fpfmt.wado::uscale"(m, pm.hi, pm.lo, s);
         let d: u64 = "core::prelude/fpfmt.wado::unrounded_round"("core::prelude/fpfmt.wado::unrounded_div"(u, "core::prelude/fpfmt.wado::pow10"((p - precision))));
-        return FormatResult { digits: d, exponent: -precision };
+        return FormatResult { digits: d, exponent: -precision, n_digits: d as i32 };
     }
     let n: i32 = if (total_digits > 18) {
         18;
@@ -3928,9 +3929,9 @@ pub fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
     let mut d: u64 = "core::prelude/fpfmt.wado::unrounded_round"(u);
     if (d >= "core::prelude/fpfmt.wado::pow10"(n)) {
         d = "core::prelude/fpfmt.wado::unrounded_round"("core::prelude/fpfmt.wado::unrounded_div"(u, 10));
-        return FormatResult { digits: d, exponent: (-p + 1) };
+        return FormatResult { digits: d, exponent: (-p + 1), n_digits: n };
     }
-    return FormatResult { digits: d, exponent: -p };
+    return FormatResult { digits: d, exponent: -p, n_digits: n };
 }
 
 pub fn short(f: f64) -> FormatResult {
@@ -3963,15 +3964,15 @@ pub fn short(f: f64) -> FormatResult {
     let can_trim: bool = ((d_div_10 * 10) >= dmin);
     if can_trim {
         let __pattern_temp_0: [u64, i32] = "core::prelude/fpfmt.wado::trim_zeros"(d_div_10, -(p - 1));
-        let digits: u64 = __pattern_temp_0.0;
+        let trimmed: u64 = __pattern_temp_0.0;
         let exponent: i32 = __pattern_temp_0.1;
-        return FormatResult { digits: digits, exponent: exponent };
+        return FormatResult { digits: trimmed, exponent: exponent, n_digits: "core::prelude/fpfmt.wado::digits"(trimmed) };
     }
     let mut d: u64 = dmin;
     if (dmin < dmax) {
         d = "core::prelude/fpfmt.wado::unrounded_round"("core::prelude/fpfmt.wado::uscale"(m, pm.hi, pm.lo, s));
     }
-    return FormatResult { digits: d, exponent: -p };
+    return FormatResult { digits: d, exponent: -p, n_digits: "core::prelude/fpfmt.wado::digits"(d) };
 }
 
 pub fn short32(f: f32) -> FormatResult {
@@ -4004,15 +4005,15 @@ pub fn short32(f: f32) -> FormatResult {
     let can_trim: bool = ((d_div_10 * 10) >= dmin);
     if can_trim {
         let __pattern_temp_0: [u64, i32] = "core::prelude/fpfmt.wado::trim_zeros"(d_div_10, -(p - 1));
-        let digits: u64 = __pattern_temp_0.0;
+        let trimmed: u64 = __pattern_temp_0.0;
         let exponent: i32 = __pattern_temp_0.1;
-        return FormatResult { digits: digits, exponent: exponent };
+        return FormatResult { digits: trimmed, exponent: exponent, n_digits: "core::prelude/fpfmt.wado::digits"(trimmed) };
     }
     let mut d: u64 = dmin;
     if (dmin < dmax) {
         d = "core::prelude/fpfmt.wado::unrounded_round"("core::prelude/fpfmt.wado::uscale"(m, pm.hi, pm.lo, s));
     }
-    return FormatResult { digits: d, exponent: -p };
+    return FormatResult { digits: d, exponent: -p, n_digits: "core::prelude/fpfmt.wado::digits"(d) };
 }
 
 pub fn skewed(e: i32) -> i32 {
@@ -4590,7 +4591,7 @@ pub fn "PmHiLo^Ord::cmp"(self: &PmHiLo, other: &PmHiLo) -> Ordering {
 }
 
 pub fn "FormatResult^Eq::eq"(self: &FormatResult, other: &FormatResult) -> bool {
-    return (Box<u64> { value: self.digits }."u64^Eq::eq"(Box<u64> { value: other.digits }) && Box<i32> { value: self.exponent }."i32^Eq::eq"(Box<i32> { value: other.exponent }));
+    return ((Box<u64> { value: self.digits }."u64^Eq::eq"(Box<u64> { value: other.digits }) && Box<i32> { value: self.exponent }."i32^Eq::eq"(Box<i32> { value: other.exponent })) && Box<i32> { value: self.n_digits }."i32^Eq::eq"(Box<i32> { value: other.n_digits }));
 }
 
 pub fn "FormatResult^Ord::cmp"(self: &FormatResult, other: &FormatResult) -> Ordering {
@@ -4599,6 +4600,10 @@ pub fn "FormatResult^Ord::cmp"(self: &FormatResult, other: &FormatResult) -> Ord
         return c;
     }
     let c: Ordering = Box<i32> { value: self.exponent }."i32^Ord::cmp"(Box<i32> { value: other.exponent });
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    let c: Ordering = Box<i32> { value: self.n_digits }."i32^Ord::cmp"(Box<i32> { value: other.n_digits });
     if (c != Ordering::Equal) {
         return c;
     }
@@ -4650,6 +4655,9 @@ pub fn "FormatResult^Inspect::inspect"(self: &FormatResult, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed", ", used: 2 });
     f.Formatter::write_str(&String { repr: packed"exponent: ", used: 10 });
     Box<i32> { value: self.exponent }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str(&String { repr: packed", ", used: 2 });
+    f.Formatter::write_str(&String { repr: packed"n_digits: ", used: 10 });
+    Box<i32> { value: self.n_digits }."i32^Inspect::inspect"(f);
     f.Formatter::write_str(&String { repr: packed" }", used: 2 });
 }
 
@@ -4748,6 +4756,10 @@ pub fn "FormatResult^InspectAlt::inspect_alt"(self: &FormatResult, f: &mut Forma
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&String { repr: packed"exponent: ", used: 10 });
     Box<i32> { value: self.exponent }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&String { repr: packed",", used: 1 });
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&String { repr: packed"n_digits: ", used: 10 });
+    Box<i32> { value: self.n_digits }."i32^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&String { repr: packed",", used: 1 });
     f.Formatter::close_brace(String { repr: packed"}", used: 1 });
 }
@@ -8331,10 +8343,10 @@ fn f32::fmt_into(self: Box<f32>, f: &mut Formatter) {
     let result: FormatResult = "core::prelude/fpfmt.wado::short32"(abs_f);
     let d: u64 = result.digits;
     let p: i32 = result.exponent;
-    let nd: i32 = "core::prelude/fpfmt.wado::digits"(d);
+    let n_digits: i32 = result.n_digits;
     let mark: i32 = f.Formatter::mark();
     "core::prelude/primitive.wado::fmt_float_sign"(f, is_neg);
-    "core::prelude/fpfmt.wado::write_decimal"(f.buf, d, p, nd);
+    "core::prelude/fpfmt.wado::write_decimal"(f.buf, d, p, n_digits);
     f.Formatter::apply_padding(mark);
 }
 
@@ -8359,18 +8371,18 @@ fn f32::inspect_into(self: Box<f32>, f: &mut Formatter) {
     let result: FormatResult = "core::prelude/fpfmt.wado::short32"(abs_f);
     let d: u64 = result.digits;
     let p: i32 = result.exponent;
-    let nd: i32 = "core::prelude/fpfmt.wado::digits"(d);
-    let exp: i32 = ((p + nd) - 1);
+    let n_digits: i32 = result.n_digits;
+    let exp: i32 = ((p + n_digits) - 1);
     let mark: i32 = f.Formatter::mark();
     "core::prelude/primitive.wado::fmt_float_sign"(f, is_neg);
     if ((exp < -4) || (exp >= 16)) {
-        "core::prelude/fpfmt.wado::write_exp"(f.buf, d, p, nd, false);
+        "core::prelude/fpfmt.wado::write_exp"(f.buf, d, p, n_digits, false);
     } else {
         if (p >= 0) {
-            "core::prelude/fpfmt.wado::write_decimal"(f.buf, d, p, nd);
+            "core::prelude/fpfmt.wado::write_decimal"(f.buf, d, p, n_digits);
             f.buf.String::push_str(&String { repr: packed".0", used: 2 });
         } else {
-            "core::prelude/fpfmt.wado::write_decimal"(f.buf, d, p, nd);
+            "core::prelude/fpfmt.wado::write_decimal"(f.buf, d, p, n_digits);
         }
     }
     f.Formatter::apply_padding(mark);
@@ -8582,10 +8594,10 @@ fn f64::fmt_into(self: Box<f64>, f: &mut Formatter) {
     let result: FormatResult = "core::prelude/fpfmt.wado::short"(abs_f);
     let d: u64 = result.digits;
     let p: i32 = result.exponent;
-    let nd: i32 = "core::prelude/fpfmt.wado::digits"(d);
+    let n_digits: i32 = result.n_digits;
     let mark: i32 = f.Formatter::mark();
     "core::prelude/primitive.wado::fmt_float_sign"(f, is_neg);
-    "core::prelude/fpfmt.wado::write_decimal"(f.buf, d, p, nd);
+    "core::prelude/fpfmt.wado::write_decimal"(f.buf, d, p, n_digits);
     f.Formatter::apply_padding(mark);
 }
 
@@ -8611,18 +8623,18 @@ fn f64::inspect_into(self: Box<f64>, f: &mut Formatter) {
     let result: FormatResult = "core::prelude/fpfmt.wado::short"(abs_f);
     let d: u64 = result.digits;
     let p: i32 = result.exponent;
-    let nd: i32 = "core::prelude/fpfmt.wado::digits"(d);
-    let exp: i32 = ((p + nd) - 1);
+    let n_digits: i32 = result.n_digits;
+    let exp: i32 = ((p + n_digits) - 1);
     let mark: i32 = f.Formatter::mark();
     "core::prelude/primitive.wado::fmt_float_sign"(f, is_neg);
     if ((exp < -4) || (exp >= 16)) {
-        "core::prelude/fpfmt.wado::write_exp"(f.buf, d, p, nd, false);
+        "core::prelude/fpfmt.wado::write_exp"(f.buf, d, p, n_digits, false);
     } else {
         if (p >= 0) {
-            "core::prelude/fpfmt.wado::write_decimal"(f.buf, d, p, nd);
+            "core::prelude/fpfmt.wado::write_decimal"(f.buf, d, p, n_digits);
             f.buf.String::push_str(&String { repr: packed".0", used: 2 });
         } else {
-            "core::prelude/fpfmt.wado::write_decimal"(f.buf, d, p, nd);
+            "core::prelude/fpfmt.wado::write_decimal"(f.buf, d, p, n_digits);
         }
     }
     f.Formatter::apply_padding(mark);
@@ -8663,10 +8675,10 @@ fn f64::fmt_fixed(self: Box<f64>, precision: i32, f: &mut Formatter) {
     let result: FormatResult = "core::prelude/fpfmt.wado::fixed_width_for_prec"(abs_f, precision);
     let d: u64 = result.digits;
     let p: i32 = result.exponent;
-    let nd: i32 = "core::prelude/fpfmt.wado::digits"(d);
+    let n_digits: i32 = result.n_digits;
     let mark: i32 = f.Formatter::mark();
     "core::prelude/primitive.wado::fmt_float_sign"(f, is_neg);
-    "core::prelude/fpfmt.wado::write_decimal_prec"(f.buf, d, p, nd, precision);
+    "core::prelude/fpfmt.wado::write_decimal_prec"(f.buf, d, p, n_digits, precision);
     f.Formatter::apply_padding(mark);
 }
 
@@ -8725,14 +8737,14 @@ fn f64::fmt_exp(self: Box<f64>, precision: i32, upper: i32, f: &mut Formatter) {
         let result: FormatResult = "core::prelude/fpfmt.wado::fixed_width"(abs_f, clamped);
         let d: u64 = result.digits;
         let p: i32 = result.exponent;
-        let nd: i32 = "core::prelude/fpfmt.wado::digits"(d);
-        "core::prelude/fpfmt.wado::write_exp_prec"(f.buf, d, p, nd, precision, upper_bool);
+        let n_digits: i32 = result.n_digits;
+        "core::prelude/fpfmt.wado::write_exp_prec"(f.buf, d, p, n_digits, precision, upper_bool);
     } else {
         let result: FormatResult = "core::prelude/fpfmt.wado::short"(abs_f);
         let d: u64 = result.digits;
         let p: i32 = result.exponent;
-        let nd: i32 = "core::prelude/fpfmt.wado::digits"(d);
-        "core::prelude/fpfmt.wado::write_exp"(f.buf, d, p, nd, upper_bool);
+        let n_digits: i32 = result.n_digits;
+        "core::prelude/fpfmt.wado::write_exp"(f.buf, d, p, n_digits, upper_bool);
     }
     f.Formatter::apply_padding(mark);
 }

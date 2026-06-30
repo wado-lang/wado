@@ -473,6 +473,7 @@ pub struct Interpreter<'a> {
     /// [`invalidate_local`]: Self::invalidate_local
     /// [`enter_function`]: Self::enter_function
     env: IndexMap<u32, Lattice>,
+    ref_global_aliases: IndexMap<u32, GlobalKey>,
     /// CTFE scratch-body fold memo: `expr → folded constant`. The scratch
     /// [`BodySink`] cannot promote a fold to an `Operand::Value` (no parent map)
     /// and pure scalars have no literal-node form, so a fold is recorded here and
@@ -512,12 +513,51 @@ pub struct Interpreter<'a> {
     call_stack: Vec<CalleeKey>,
 }
 
+fn let_ref_global(body: &Body, stmt: &StmtKind) -> Option<(u32, GlobalKey)> {
+    let StmtKind::Let {
+        local_index,
+        value,
+        is_mut,
+        ..
+    } = stmt
+    else {
+        return None;
+    };
+    if *is_mut {
+        return None;
+    }
+    let ve = value.as_expr()?;
+    let ExprKind::Unary {
+        op: NirUnaryOp::Ref,
+        expr,
+    } = &body.exprs[ve].kind
+    else {
+        return None;
+    };
+    let ge = expr.as_expr()?;
+    let ExprKind::GlobalVarGet {
+        module_source,
+        name,
+    } = &body.exprs[ge].kind
+    else {
+        return None;
+    };
+    Some((*local_index, (module_source.clone(), name.clone())))
+}
+
+fn local_binds_to_global_ref(body: &Body, local: u32, key: &GlobalKey) -> bool {
+    body.stmts
+        .iter()
+        .any(|(_, st)| let_ref_global(body, &st.kind) == Some((local, key.clone())))
+}
+
 impl<'a> Interpreter<'a> {
     #[must_use]
     pub fn new(type_table: &'a TypeTable) -> Self {
         Self {
             type_table,
             env: IndexMap::default(),
+            ref_global_aliases: IndexMap::default(),
             scratch_folds: IndexMap::default(),
             callees: None,
             globals: None,
@@ -569,6 +609,28 @@ impl<'a> Interpreter<'a> {
         self
     }
 
+    fn global_field(&self, key: &GlobalKey, field_name: &str) -> Lattice {
+        self.global_fields
+            .and_then(|m| m.get(key))
+            .and_then(|m| m.get(field_name))
+            .copied()
+            .map_or(Lattice::Unevaluated, Lattice::Const)
+    }
+
+    pub fn record_ref_global_aliases(&mut self, body: &Body) {
+        self.ref_global_aliases.clear();
+        let mut seen: IndexSet<u32> = IndexSet::default();
+        for (_, st) in &body.stmts {
+            if let Some((local, key)) = let_ref_global(body, &st.kind) {
+                if seen.insert(local) {
+                    self.ref_global_aliases.insert(local, key);
+                } else {
+                    self.ref_global_aliases.swap_remove(&local);
+                }
+            }
+        }
+    }
+
     /// Reset the per-function environment. The driving visitor must call
     /// this before walking each function body; otherwise a previous
     /// function's bindings would leak into the next one (local indices
@@ -580,6 +642,7 @@ impl<'a> Interpreter<'a> {
     /// pass, not per-function.
     pub fn enter_function(&mut self) {
         self.env.clear();
+        self.ref_global_aliases.clear();
         self.scratch_folds.clear();
         debug_assert!(
             self.call_stack.is_empty(),
@@ -669,12 +732,20 @@ impl<'a> Interpreter<'a> {
                 Some(ExprKind::GlobalVarGet {
                     module_source,
                     name,
-                }) => self
-                    .global_fields
-                    .and_then(|m| m.get(&(module_source.clone(), name.clone())))
-                    .and_then(|m| m.get(field_name.as_str()))
-                    .copied()
-                    .map_or(Lattice::Unevaluated, Lattice::Const),
+                }) => self.global_field(&(module_source.clone(), name.clone()), field_name),
+                Some(ExprKind::Local { index, .. }) => match self.ref_global_aliases.get(index) {
+                    Some(key) => {
+                        debug_assert!(
+                            local_binds_to_global_ref(body, *index, key),
+                            "ref_global_aliases[{index}] = {key:?} is stale: the body being \
+                             folded does not bind local {index} to that reference — per-function \
+                             alias state leaked across a body boundary (e.g. a CTFE scratch \
+                             reduction that did not save/clear it)",
+                        );
+                        self.global_field(key, field_name)
+                    }
+                    None => Lattice::Unevaluated,
+                },
                 _ => Lattice::Unevaluated,
             },
             ExprKind::GlobalVarGet {
@@ -1418,6 +1489,7 @@ impl<'a> Interpreter<'a> {
         // The scratch fold memo is scoped to this reduction; nested CTFE calls
         // get a fresh map and ids never cross scratch bodies.
         let saved_folds = std::mem::take(&mut self.scratch_folds);
+        let saved_aliases = std::mem::take(&mut self.ref_global_aliases);
         for (i, v) in bound.iter().enumerate() {
             #[allow(clippy::cast_possible_truncation)]
             self.env.insert(i as u32, Lattice::Const(*v));
@@ -1432,6 +1504,7 @@ impl<'a> Interpreter<'a> {
         let result = self.reduce_to_lattice_a(&scratch, tail);
         self.env = saved_env;
         self.scratch_folds = saved_folds;
+        self.ref_global_aliases = saved_aliases;
         self.call_stack.pop();
         match result {
             c @ Lattice::Const(_) => c,

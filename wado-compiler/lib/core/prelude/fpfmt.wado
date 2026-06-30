@@ -294,6 +294,7 @@ pub fn uscale(x: u64, pm_hi: u64, pm_lo: u64, s: i32) -> u64 {
 pub struct FormatResult {
     pub digits: u64,
     pub exponent: i32,
+    pub n_digits: i32,
 }
 
 // FixedWidth returns the n-digit decimal form of f
@@ -311,13 +312,12 @@ pub fn fixed_width(f: f64, n: i32) -> FormatResult {
 
     let u = uscale(m, pm.hi, pm.lo, s);
     let mut d = unrounded_round(u);
-
     if d >= pow10(n) {
         d = unrounded_round(unrounded_div(u, 10));
-        return FormatResult { digits: d, exponent: -p + 1 };
+        return FormatResult { digits: d, exponent: -p + 1, n_digits: n };
     }
 
-    return FormatResult { digits: d, exponent: -p };
+    return FormatResult { digits: d, exponent: -p, n_digits: n };
 }
 
 // Compute fixed_width result for fixed-point formatting with given precision.
@@ -354,7 +354,7 @@ pub fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
         // either 0 or a single 1 in that place. total_digits < 0 means
         // f < 0.5 * 10^-precision, which always rounds down to zero.
         if total_digits < 0 {
-            return FormatResult { digits: 0, exponent: -precision };
+            return FormatResult { digits: 0, exponent: -precision, n_digits: 0 };
         }
         // total_digits == 0: f is in [10^(-precision-1), 10^-precision), one
         // decade below the last printed place. Scale for a single significant
@@ -369,7 +369,7 @@ pub fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
         let s = -(e + lp + 3);
         let u = uscale(m, pm.hi, pm.lo, s);
         let d = unrounded_round(unrounded_div(u, pow10(p - precision)));
-        return FormatResult { digits: d, exponent: -precision };
+        return FormatResult { digits: d, exponent: -precision, n_digits: d as i32 };
     }
 
     let n = if total_digits > 18 { 18 } else { total_digits };
@@ -382,9 +382,9 @@ pub fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
     let mut d = unrounded_round(u);
     if d >= pow10(n) {
         d = unrounded_round(unrounded_div(u, 10));
-        return FormatResult { digits: d, exponent: -p + 1 };
+        return FormatResult { digits: d, exponent: -p + 1, n_digits: n };
     }
-    return FormatResult { digits: d, exponent: -p };
+    return FormatResult { digits: d, exponent: -p, n_digits: n };
 }
 
 // Short computes the shortest formatting of f that round-trips
@@ -426,15 +426,15 @@ pub fn short(f: f64) -> FormatResult {
     let can_trim = d_div_10 * 10 >= dmin;
 
     if can_trim {
-        let [digits, exponent] = trim_zeros(d_div_10, -(p - 1));
-        return FormatResult { digits, exponent };
+        let [trimmed, exponent] = trim_zeros(d_div_10, -(p - 1));
+        return FormatResult { digits: trimmed, exponent, n_digits: digits(trimmed) };
     }
 
     let mut d = dmin;
     if dmin < dmax {
         d = unrounded_round(uscale(m, pm.hi, pm.lo, s));
     }
-    return FormatResult { digits: d, exponent: -p };
+    return FormatResult { digits: d, exponent: -p, n_digits: digits(d) };
 }
 
 // short32 computes the shortest formatting of f32 that round-trips through f32.
@@ -476,15 +476,15 @@ pub fn short32(f: f32) -> FormatResult {
     let can_trim = d_div_10 * 10 >= dmin;
 
     if can_trim {
-        let [digits, exponent] = trim_zeros(d_div_10, -(p - 1));
-        return FormatResult { digits, exponent };
+        let [trimmed, exponent] = trim_zeros(d_div_10, -(p - 1));
+        return FormatResult { digits: trimmed, exponent, n_digits: digits(trimmed) };
     }
 
     let mut d = dmin;
     if dmin < dmax {
         d = unrounded_round(uscale(m, pm.hi, pm.lo, s));
     }
-    return FormatResult { digits: d, exponent: -p };
+    return FormatResult { digits: d, exponent: -p, n_digits: digits(d) };
 }
 
 pub fn skewed(e: i32) -> i32 {

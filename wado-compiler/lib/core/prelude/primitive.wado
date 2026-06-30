@@ -45,7 +45,6 @@ use {
     short32,
     fixed_width,
     fixed_width_for_prec,
-    digits,
     format_decimal,
     format_exp,
     format_decimal_prec,
@@ -1165,10 +1164,10 @@ impl f32 {
         let result = short32(abs_f);
         let d = result.digits;
         let p = result.exponent;
-        let nd = digits(d);
+        let n_digits = result.n_digits;
         let mark = f.mark();
         fmt_float_sign(f, is_neg);
-        write_decimal(f.buf, d, p, nd);
+        write_decimal(f.buf, d, p, n_digits);
         f.apply_padding(mark);
     }
 
@@ -1186,17 +1185,17 @@ impl f32 {
         let result = short32(abs_f);
         let d = result.digits;
         let p = result.exponent;
-        let nd = digits(d);
-        let exp = p + nd - 1;
+        let n_digits = result.n_digits;
+        let exp = p + n_digits - 1;
         let mark = f.mark();
         fmt_float_sign(f, is_neg);
         if exp < -4 || exp >= 16 {
-            write_exp(f.buf, d, p, nd, false);
+            write_exp(f.buf, d, p, n_digits, false);
         } else if p >= 0 {
-            write_decimal(f.buf, d, p, nd);
+            write_decimal(f.buf, d, p, n_digits);
             f.buf.push_str(&".0");
         } else {
-            write_decimal(f.buf, d, p, nd);
+            write_decimal(f.buf, d, p, n_digits);
         }
         f.apply_padding(mark);
     }
@@ -1462,10 +1461,10 @@ impl f64 {
         let result = short(abs_f);
         let d = result.digits;
         let p = result.exponent;
-        let nd = digits(d);
+        let n_digits = result.n_digits;
         let mark = f.mark();
         fmt_float_sign(f, is_neg);
-        write_decimal(f.buf, d, p, nd);
+        write_decimal(f.buf, d, p, n_digits);
         f.apply_padding(mark);
     }
 
@@ -1484,17 +1483,17 @@ impl f64 {
         let result = short(abs_f);
         let d = result.digits;
         let p = result.exponent;
-        let nd = digits(d);
-        let exp = p + nd - 1;
+        let n_digits = result.n_digits;
+        let exp = p + n_digits - 1;
         let mark = f.mark();
         fmt_float_sign(f, is_neg);
         if exp < -4 || exp >= 16 {
-            write_exp(f.buf, d, p, nd, false);
+            write_exp(f.buf, d, p, n_digits, false);
         } else if p >= 0 {
-            write_decimal(f.buf, d, p, nd);
+            write_decimal(f.buf, d, p, n_digits);
             f.buf.push_str(&".0");
         } else {
-            write_decimal(f.buf, d, p, nd);
+            write_decimal(f.buf, d, p, n_digits);
         }
         f.apply_padding(mark);
     }
@@ -1521,10 +1520,10 @@ impl f64 {
         let result = fixed_width_for_prec(abs_f, precision);
         let d = result.digits;
         let p = result.exponent;
-        let nd = digits(d);
+        let n_digits = result.n_digits;
         let mark = f.mark();
         fmt_float_sign(f, is_neg);
-        write_decimal_prec(f.buf, d, p, nd, precision);
+        write_decimal_prec(f.buf, d, p, n_digits, precision);
         f.apply_padding(mark);
     }
 
@@ -1564,14 +1563,14 @@ impl f64 {
             let result = fixed_width(abs_f, clamped);
             let d = result.digits;
             let p = result.exponent;
-            let nd = digits(d);
-            write_exp_prec(f.buf, d, p, nd, precision, upper_bool);
+            let n_digits = result.n_digits;
+            write_exp_prec(f.buf, d, p, n_digits, precision, upper_bool);
         } else {
             let result = short(abs_f);
             let d = result.digits;
             let p = result.exponent;
-            let nd = digits(d);
-            write_exp(f.buf, d, p, nd, upper_bool);
+            let n_digits = result.n_digits;
+            write_exp(f.buf, d, p, n_digits, upper_bool);
         }
         f.apply_padding(mark);
     }

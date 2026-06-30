@@ -106,6 +106,7 @@ fn fold_function(
     };
     // Local indices are per-function; reset the interpreter env at each boundary.
     visitor.interpreter.enter_function();
+    visitor.interpreter.record_ref_global_aliases(body);
     let mut engine = Engine::new(body, buffers, locals);
     let root = engine.body.root;
     visitor.visit_block(&mut engine, root)
@@ -267,6 +268,16 @@ fn const_seq_len_operand_a(body: &Body, op: Operand) -> Option<i32> {
     op.as_expr().and_then(|e| const_seq_len_a(body, e))
 }
 
+fn tail_local_a(body: &Body, op: Operand) -> Option<u32> {
+    match &body.exprs[op.as_expr()?].kind {
+        ExprKind::Local { index, .. } => Some(*index),
+        ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
+            tail_local_a(body, *inner)
+        }
+        _ => None,
+    }
+}
+
 /// Arena counterpart of [`const_seq_len`]: the statically-known
 /// [`SeqField::Len`] length of a constant `List` / `String` value held
 /// in the arena. Used by [`SeqLenCollector`] to read the value of an
@@ -276,16 +287,29 @@ fn const_seq_len_a(body: &Body, e: ExprId) -> Option<i32> {
     match &body.exprs[e].kind {
         ExprKind::ArrayLiteral { elements } => i32::try_from(elements.len()).ok(),
         ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => {
-            let block = *b;
-            body.blocks[block]
-                .stmts
+            let stmts = &body.blocks[*b].stmts;
+            let (&last, rest) = stmts.split_last()?;
+            if rest
                 .iter()
-                .rev()
-                .find_map(|s| match &body.stmts[*s].kind {
-                    StmtKind::Let { value, .. } => const_seq_len_operand_a(body, *value),
-                    StmtKind::Expr(ex) => const_seq_len_operand_a(body, *ex),
-                    _ => None,
-                })
+                .any(|&s| !matches!(body.stmts[s].kind, StmtKind::Let { .. }))
+            {
+                return None;
+            }
+            let tail = match &body.stmts[last].kind {
+                StmtKind::Expr(ex) => *ex,
+                StmtKind::Break { value: Some(v), .. } => *v,
+                _ => return None,
+            };
+            if let Some(len) = const_seq_len_operand_a(body, tail) {
+                return Some(len);
+            }
+            let index = tail_local_a(body, tail)?;
+            rest.iter().rev().find_map(|&s| match &body.stmts[s].kind {
+                StmtKind::Let {
+                    local_index, value, ..
+                } if *local_index == index => const_seq_len_operand_a(body, *value),
+                _ => None,
+            })
         }
         ExprKind::StructLiteral { fields, .. } => fields.iter().find_map(|f| {
             if f.name == SeqField::Len.field_name()

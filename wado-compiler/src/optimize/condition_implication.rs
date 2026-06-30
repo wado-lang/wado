@@ -315,13 +315,7 @@ fn parse_value_offset(engine: &Engine, v: crate::nir_value_graph::ValueId) -> Op
 /// `break label tail`.
 fn block_tail_operand(body: &crate::nir_arena::Body, e: ExprId) -> Option<Operand> {
     match &body.exprs[e].kind {
-        ExprKind::Block(block) => {
-            let last = *body.blocks[*block].stmts.last()?;
-            match &body.stmts[last].kind {
-                StmtKind::Expr(op) => Some(*op),
-                _ => None,
-            }
-        }
+        ExprKind::Block(block) => block_id_tail(body, *block),
         ExprKind::LabeledBlock { label, block, .. } => {
             let last = *body.blocks[*block].stmts.last()?;
             let StmtKind::Break {
@@ -891,6 +885,7 @@ fn process_block(engine: &mut Engine, block: BlockId, binds: &Binds) -> bool {
         }
         changed |= apply_dominating_if(engine, s, binds);
         changed |= BitmaskEliminator { binds }.visit_stmt(engine, s);
+        changed |= ConstBoundIndexEliminator { binds }.visit_stmt(engine, s);
         changed |= ShortCircuitEliminator { binds }.visit_stmt(engine, s);
         changed |= process_stmt(engine, s, binds);
         seguards.retain(|&(var, _, bound)| !stmt_modifies(engine, s, var, bound));
@@ -1121,6 +1116,112 @@ impl ArenaOptVisitor for ShortCircuitEliminator<'_> {
             return changed;
         }
         arena_opt_walk(self, engine, NodeRef::Expr(e))
+    }
+}
+
+fn index_upper_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64> {
+    if let Some(c) = parse_const_i64(engine, binds, op) {
+        return Some(c);
+    }
+    let Operand::Expr(e) = resolve(engine, binds, op) else {
+        return None;
+    };
+    let ExprKind::If {
+        condition,
+        then_branch,
+        else_branch: Some(else_branch),
+    } = &engine.body.exprs[e].kind
+    else {
+        return None;
+    };
+    let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
+    let Operand::Expr(ce) = resolve(engine, binds, condition) else {
+        return None;
+    };
+    let ExprKind::Binary {
+        left,
+        op: cmp,
+        right,
+    } = &engine.body.exprs[ce].kind
+    else {
+        return None;
+    };
+    let (left, cmp, right) = (*left, *cmp, *right);
+    let k = parse_const_i64(engine, binds, right)?;
+    let then_const = parse_const_i64(engine, binds, block_id_tail(engine.body, then_branch)?)?;
+    let else_tail = block_id_tail(engine.body, else_branch)?;
+    if !operand_same(engine, binds, left, else_tail) {
+        return None;
+    }
+    if let Operand::Expr(le) = resolve(engine, binds, left)
+        && let ExprKind::Local { index, .. } = &engine.body.exprs[le].kind
+    {
+        let idx = *index;
+        if engine.body.blocks[else_branch]
+            .stmts
+            .iter()
+            .any(|&s| stmt_modifies(engine, s, idx, BoundKey::Local(idx)))
+        {
+            return None;
+        }
+    }
+    let else_ub = match cmp {
+        NirBinaryOp::Gt => k,
+        NirBinaryOp::GtEq => k.checked_sub(1)?,
+        _ => return None,
+    };
+    Some(then_const.max(else_ub))
+}
+
+fn operand_same(engine: &Engine, binds: &Binds, a: Operand, b: Operand) -> bool {
+    match (resolve(engine, binds, a), resolve(engine, binds, b)) {
+        (Operand::Expr(ea), Operand::Expr(eb)) => {
+            ea == eb
+                || matches!(
+                    (&engine.body.exprs[ea].kind, &engine.body.exprs[eb].kind),
+                    (
+                        ExprKind::Local { index: ia, .. },
+                        ExprKind::Local { index: ib, .. },
+                    ) if ia == ib
+                )
+        }
+        (Operand::Value(va), Operand::Value(vb)) => va == vb,
+        _ => false,
+    }
+}
+
+fn block_id_tail(body: &crate::nir_arena::Body, block: BlockId) -> Option<Operand> {
+    match &body.stmts[*body.blocks[block].stmts.last()?].kind {
+        StmtKind::Expr(op) => Some(*op),
+        _ => None,
+    }
+}
+
+struct ConstBoundIndexEliminator<'a> {
+    binds: &'a Binds,
+}
+
+impl ArenaOptVisitor for ConstBoundIndexEliminator<'_> {
+    fn visit_stmt(&mut self, engine: &mut Engine, s: StmtId) -> bool {
+        let if_ids = match &engine.body.stmts[s].kind {
+            StmtKind::If {
+                condition,
+                then_block,
+                else_block: None,
+            } => Some((*condition, *then_block)),
+            _ => None,
+        };
+        if let Some((condition, then_block)) = if_ids
+            && is_panic_block(engine, then_block)
+            && let Some((idx, bound)) = ge_check_operands(engine, self.binds, condition)
+            && let Some(b) = parse_const_i64(engine, self.binds, bound)
+            && let Some(ub) = index_upper_bound(engine, self.binds, idx)
+            && ub < b
+        {
+            eliminate_condition(engine, NodeRef::Stmt(s), condition);
+            return true;
+        }
+        arena_opt_walk(self, engine, NodeRef::Stmt(s))
     }
 }
 
