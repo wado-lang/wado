@@ -268,6 +268,18 @@ fn const_seq_len_operand_a(body: &Body, op: Operand) -> Option<i32> {
     op.as_expr().and_then(|e| const_seq_len_a(body, e))
 }
 
+/// The local a tail operand ultimately reads, peeling `*`/cast wrappers (a block
+/// tail is often `*__b`). `None` if the tail is not rooted in a local.
+fn tail_local_a(body: &Body, op: Operand) -> Option<u32> {
+    match &body.exprs[op.as_expr()?].kind {
+        ExprKind::Local { index, .. } => Some(*index),
+        ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
+            tail_local_a(body, *inner)
+        }
+        _ => None,
+    }
+}
+
 /// Arena counterpart of [`const_seq_len`]: the statically-known
 /// [`SeqField::Len`] length of a constant `List` / `String` value held
 /// in the arena. Used by [`SeqLenCollector`] to read the value of an
@@ -277,22 +289,35 @@ fn const_seq_len_a(body: &Body, e: ExprId) -> Option<i32> {
     match &body.exprs[e].kind {
         ExprKind::ArrayLiteral { elements } => i32::try_from(elements.len()).ok(),
         ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => {
-            let block = *b;
-            let stmts = &body.blocks[block].stmts;
-            // A non-final `Expr` is a builder push growing the sequence past its
-            // `let` init's `used`, so the length is dynamic — don't read the
-            // stale initial `used`.
-            if stmts
+            let stmts = &body.blocks[*b].stmts;
+            let (&last, rest) = stmts.split_last()?;
+            // A non-final non-`let` statement may grow the sequence (a builder
+            // push is an `Expr`; `let _ = s.push(..)` keeps the local), so its
+            // length is dynamic — never read a stale initial `used`.
+            if rest
                 .iter()
-                .rev()
-                .skip(1)
-                .any(|&s| matches!(body.stmts[s].kind, StmtKind::Expr(_)))
+                .any(|&s| !matches!(body.stmts[s].kind, StmtKind::Let { .. }))
             {
                 return None;
             }
-            stmts.iter().rev().find_map(|s| match &body.stmts[*s].kind {
-                StmtKind::Let { value, .. } => const_seq_len_operand_a(body, *value),
-                StmtKind::Expr(ex) => const_seq_len_operand_a(body, *ex),
+            // The block's length is its tail value's: a literal directly, or the
+            // local it reads (possibly behind a `*`/cast) resolved through that
+            // local's own `let` binding among the preceding (push-free) bindings
+            // — not merely the first seq-typed binding. The tail value is the
+            // final `Expr`, or a labeled block's `break` value.
+            let tail = match &body.stmts[last].kind {
+                StmtKind::Expr(ex) => *ex,
+                StmtKind::Break { value: Some(v), .. } => *v,
+                _ => return None,
+            };
+            if let Some(len) = const_seq_len_operand_a(body, tail) {
+                return Some(len);
+            }
+            let index = tail_local_a(body, tail)?;
+            rest.iter().rev().find_map(|&s| match &body.stmts[s].kind {
+                StmtKind::Let {
+                    local_index, value, ..
+                } if *local_index == index => const_seq_len_operand_a(body, *value),
                 _ => None,
             })
         }

@@ -274,36 +274,28 @@ fn transform_body(
 /// values back in wir_build, so its fields never reach that arm.
 fn strip_nonnull_in_multivalue_returns(body: &mut [WirInstr], result_nullable: &[bool]) {
     for instr in body.iter_mut() {
-        match instr {
-            WirInstr::Return { value: Some(v) } => {
-                if let WirInstr::Seq(fields) = v.as_mut()
-                    && fields.len() == result_nullable.len()
-                {
-                    for (i, f) in fields.iter_mut().enumerate() {
-                        if result_nullable[i]
-                            && let WirInstr::RefAsNonNull(inner) = f
-                        {
-                            *f = std::mem::replace(inner.as_mut(), WirInstr::Nop);
-                        }
-                    }
-                }
+        strip_nonnull_in_return(instr, result_nullable);
+    }
+}
+
+/// Strip the wrapper from one instruction's multi-value `Return { Seq }` (if it
+/// is one), then descend into its children via the shared WIR child-walker so a
+/// `Return` nested in any compound node is reached without re-enumerating the
+/// body-bearing variants by hand.
+fn strip_nonnull_in_return(instr: &mut WirInstr, result_nullable: &[bool]) {
+    if let WirInstr::Return { value: Some(v) } = instr
+        && let WirInstr::Seq(fields) = v.as_mut()
+        && fields.len() == result_nullable.len()
+    {
+        for (i, f) in fields.iter_mut().enumerate() {
+            if result_nullable[i]
+                && let WirInstr::RefAsNonNull(inner) = f
+            {
+                *f = std::mem::replace(inner.as_mut(), WirInstr::Nop);
             }
-            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
-                strip_nonnull_in_multivalue_returns(body, result_nullable);
-            }
-            WirInstr::If {
-                then_body,
-                else_body,
-                ..
-            } => {
-                strip_nonnull_in_multivalue_returns(then_body, result_nullable);
-                if let Some(eb) = else_body {
-                    strip_nonnull_in_multivalue_returns(eb, result_nullable);
-                }
-            }
-            _ => {}
         }
     }
+    instr.for_each_boxed_child_mut(&mut |child| strip_nonnull_in_return(child, result_nullable));
 }
 
 /// Recursively transform a single WIR instruction.

@@ -1157,9 +1157,24 @@ fn index_upper_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64>
     if !operand_same(engine, binds, left, else_tail) {
         return None;
     }
+    // The else arm yields `left`, so the `left <= k` fact from `!(left > k)` only
+    // transfers to the returned value if the else block never reassigns `left`
+    // before its tail.
+    if let Operand::Expr(le) = resolve(engine, binds, left)
+        && let ExprKind::Local { index, .. } = &engine.body.exprs[le].kind
+    {
+        let idx = *index;
+        if engine.body.blocks[else_branch]
+            .stmts
+            .iter()
+            .any(|&s| stmt_modifies(engine, s, idx, BoundKey::Local(idx)))
+        {
+            return None;
+        }
+    }
     let else_ub = match cmp {
         NirBinaryOp::Gt => k,
-        NirBinaryOp::GtEq => k - 1,
+        NirBinaryOp::GtEq => k.checked_sub(1)?,
         _ => return None,
     };
     Some(then_const.max(else_ub))

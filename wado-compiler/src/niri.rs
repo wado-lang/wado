@@ -641,9 +641,16 @@ impl<'a> Interpreter<'a> {
     /// which Wado value semantics never reassign or `&mut`-alias.
     pub fn record_ref_global_aliases(&mut self, body: &Body) {
         self.ref_global_aliases.clear();
+        let mut seen: IndexSet<u32> = IndexSet::default();
         for (_, st) in &body.stmts {
             if let Some((local, key)) = let_ref_global(body, &st.kind) {
-                self.ref_global_aliases.insert(local, key);
+                // A reused local index (two `&G` bindings in disjoint scopes) is
+                // ambiguous at a read keyed only by index — record neither.
+                if seen.insert(local) {
+                    self.ref_global_aliases.insert(local, key);
+                } else {
+                    self.ref_global_aliases.swap_remove(&local);
+                }
             }
         }
     }
