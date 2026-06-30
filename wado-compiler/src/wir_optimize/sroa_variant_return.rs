@@ -961,7 +961,17 @@ fn check_return_variant_struct_new(
         WirInstr::Drop(inner) => {
             check_return_variant_struct_new(inner, valid_type_indices, tail_call_candidates)
         }
-        _ => true,
+        // Any other statement can still embed a `Return` in a value position the
+        // structural arms above don't descend into — a `?`-desugared
+        // `return Err(…)` inside a `LocalSet(t, if … { … } else { return … })`
+        // binding being the canonical case. `rewrite_variant_returns_to_multi_value`
+        // visits those via `for_each_boxed_child_mut`, so the validator must check
+        // them too: an embedded return the rewriter can't lower (e.g.
+        // `Return(LocalGet(hfs_temp))`, left un-elided when an intervening
+        // side-effecting statement blocks `elide_return_only_temps`) would
+        // otherwise stay a boxed single-value return under the multi-value
+        // signature, producing invalid Wasm.
+        other => embedded_returns_compatible(other, valid_type_indices, tail_call_candidates),
     }
 }
 
