@@ -45,6 +45,7 @@
 
 use crate::compiler_item::{CompilerItem, SeqField};
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::nir::FuncId;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
@@ -60,29 +61,53 @@ const ARRAY_NEW: &str = "array_new";
 const REPR_FIELD: &str = SeqField::Backing.field_name();
 const USED_FIELD: &str = SeqField::Len.field_name();
 
-/// Collect the mangled names of every `List<T>::push` monomorphization by
-/// their shared [`CompilerItem::ListPush`] marker. Each element type produces
-/// a distinct `NirFunction` (`List<i32>::push`, `List<String>::push`, …), so
-/// call sites are matched by membership in this set rather than against one
-/// reference.
-pub(super) fn resolve_array_push_names(project: &NirPackage) -> IndexSet<String> {
+/// Collect the [`FuncId`] of every `List<T>::push` monomorphization by their
+/// shared [`CompilerItem::ListPush`] marker. Each element type produces a
+/// distinct `NirFunction` (`List<i32>::push`, `List<String>::push`, …), so call
+/// sites are matched by id membership in this set.
+pub(super) fn resolve_array_push_ids(project: &NirPackage) -> IndexSet<FuncId> {
     project
         .functions
         .iter()
         .filter_map(|f| {
             let func = f.borrow();
-            (func.compiler_item == Some(CompilerItem::ListPush)).then(|| func.name.clone())
+            (func.compiler_item == Some(CompilerItem::ListPush))
+                .then_some(func.id)
+                .flatten()
+        })
+        .collect()
+}
+
+/// Collect the [`FuncId`] of every `builtin::array_new` instance — the bare
+/// callee and each generic monomorphization (`array_new<u8>`, …), recognized by
+/// name on the function record or its `monomorph_info.generic_name`.
+pub(super) fn resolve_array_new_ids(project: &NirPackage) -> IndexSet<FuncId> {
+    project
+        .functions
+        .iter()
+        .filter_map(|f| {
+            let func = f.borrow();
+            let is_array_new = func.name == ARRAY_NEW
+                || func
+                    .monomorph_info
+                    .as_ref()
+                    .is_some_and(|m| m.generic_name == ARRAY_NEW);
+            (is_array_new).then_some(func.id).flatten()
         })
         .collect()
 }
 
 pub(super) struct Collapser<'a> {
-    push_names: &'a IndexSet<String>,
+    push_ids: &'a IndexSet<FuncId>,
+    array_new_ids: &'a IndexSet<FuncId>,
 }
 
 impl<'a> Collapser<'a> {
-    pub(super) fn new(push_names: &'a IndexSet<String>) -> Self {
-        Self { push_names }
+    pub(super) fn new(push_ids: &'a IndexSet<FuncId>, array_new_ids: &'a IndexSet<FuncId>) -> Self {
+        Self {
+            push_ids,
+            array_new_ids,
+        }
     }
 }
 
@@ -132,7 +157,14 @@ impl Collapser<'_> {
         let mut targets = Vec::new();
         if let Some(value) = init_value(body, stmts[start]) {
             let mut const_env = IndexMap::default();
-            collect_array_targets(body, value, &mut Vec::new(), &mut const_env, &mut targets);
+            collect_array_targets(
+                body,
+                value,
+                &mut Vec::new(),
+                &mut const_env,
+                self.array_new_ids,
+                &mut targets,
+            );
         }
         if targets.is_empty() {
             return 0;
@@ -247,14 +279,14 @@ impl Collapser<'_> {
         };
         let ExprKind::MethodCall {
             receiver,
-            func,
+            func_id,
             args,
             ..
         } = &body.exprs[*e].kind
         else {
             return None;
         };
-        if !self.push_names.contains(&func.name) || args.len() != 1 {
+        if !self.push_ids.contains(func_id) || args.len() != 1 {
             return None;
         }
         let path = place_path_operand(body, *receiver, local)?;
@@ -326,6 +358,7 @@ fn collect_array_targets(
     expr: ExprId,
     path: &mut Vec<u32>,
     const_env: &mut IndexMap<u32, u64>,
+    array_new_ids: &IndexSet<FuncId>,
     out: &mut Vec<ArrayTarget>,
 ) {
     match &body.exprs[expr].kind {
@@ -355,7 +388,7 @@ fn collect_array_targets(
                     _ => continue,
                 };
                 if let Some(e) = cand.as_expr() {
-                    collect_array_targets(body, e, path, const_env, out);
+                    collect_array_targets(body, e, path, const_env, array_new_ids, out);
                 }
             }
         }
@@ -364,7 +397,9 @@ fn collect_array_targets(
             // indistinguishable from a growable-array initialization (`let mut
             // v = []; v.push(…)`); collapsing it to a fixed 0-length
             // `array.new_fixed()` would break subsequent growth.
-            if let Some(capacity) = match_list_struct(body, expr, const_env).filter(|&n| n > 0) {
+            if let Some(capacity) =
+                match_list_struct(body, expr, const_env, array_new_ids).filter(|&n| n > 0)
+            {
                 out.push(ArrayTarget {
                     struct_expr_id: expr,
                     path: path.clone(),
@@ -378,7 +413,7 @@ fn collect_array_targets(
                     .collect();
                 for (field_index, value) in fields {
                     path.push(field_index);
-                    collect_array_targets(body, value, path, const_env, out);
+                    collect_array_targets(body, value, path, const_env, array_new_ids, out);
                     path.pop();
                 }
             }
@@ -402,7 +437,12 @@ fn const_int(body: &Body, op: Operand, const_env: &IndexMap<u32, u64>) -> Option
 }
 
 /// If `expr` is an `List<T> { repr: array_new(N), used: 0 }` struct, return N.
-fn match_list_struct(body: &Body, expr: ExprId, const_env: &IndexMap<u32, u64>) -> Option<usize> {
+fn match_list_struct(
+    body: &Body,
+    expr: ExprId,
+    const_env: &IndexMap<u32, u64>,
+    array_new_ids: &IndexSet<FuncId>,
+) -> Option<usize> {
     let ExprKind::StructLiteral { fields, .. } = &body.exprs[expr].kind else {
         return None;
     };
@@ -415,23 +455,20 @@ fn match_list_struct(body: &Body, expr: ExprId, const_env: &IndexMap<u32, u64>) 
         return None;
     }
     let repr_expr = repr.value.as_expr()?;
-    array_new_capacity(body, repr_expr, const_env)
+    array_new_capacity(body, repr_expr, const_env, array_new_ids)
 }
 
 /// If `expr` is a `builtin::array_new(N)` call with a constant `N`, return N.
-fn array_new_capacity(body: &Body, expr: ExprId, const_env: &IndexMap<u32, u64>) -> Option<usize> {
-    let ExprKind::Call { func, args, .. } = &body.exprs[expr].kind else {
+fn array_new_capacity(
+    body: &Body,
+    expr: ExprId,
+    const_env: &IndexMap<u32, u64>,
+    array_new_ids: &IndexSet<FuncId>,
+) -> Option<usize> {
+    let ExprKind::Call { func_id, args, .. } = &body.exprs[expr].kind else {
         return None;
     };
-    // The builtin reaches NIR either as a bare `array_new` (non-generic call)
-    // or mangled (`…/array_new<u8>`) carrying its generic name on
-    // `monomorph_info`; match the exact name in each form.
-    let is_array_new = func.name == ARRAY_NEW
-        || func
-            .monomorph_info
-            .as_ref()
-            .is_some_and(|m| m.generic_name == ARRAY_NEW);
-    if !is_array_new || args.len() != 1 {
+    if !array_new_ids.contains(func_id) || args.len() != 1 {
         return None;
     }
     usize::try_from(const_int(body, args[0].expr, const_env)?).ok()

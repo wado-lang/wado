@@ -339,6 +339,9 @@ pub fn optimize(
         extract::freeze_pure_arith(p, /* include_fields */ false, /* early */ false)
     });
 
+    // The born-resolved invariant is now enforced by the type system: a call
+    // node's `func_id` is a non-optional `FuncId`, stamped at its synthesis site.
+
     project
 }
 

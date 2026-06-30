@@ -23,9 +23,8 @@
 //! so eligibility decisions match the old standalone pass even as other rules
 //! interleave. Strips go through the engine edit API.
 
-use crate::hashmap::IndexMap;
-use crate::module_source::ModuleSource;
-use crate::nir::NirUnaryOp;
+use crate::hashmap::{IndexMap, IndexSet};
+use crate::nir::{FuncId, NirUnaryOp};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -41,17 +40,17 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 /// (fewer strips), never unsound. Strips go through the engine edit API so the
 /// worklist re-examines the unwrapped value.
 pub(super) struct ValueCopyElideRule<'a> {
-    value_copy_set: &'a IndexMap<(ModuleSource, String), TypeId>,
+    value_copy_ids: &'a IndexSet<FuncId>,
     usage: IndexMap<u32, LocalUsage>,
 }
 
 impl<'a> ValueCopyElideRule<'a> {
     pub(super) fn new(
-        value_copy_set: &'a IndexMap<(ModuleSource, String), TypeId>,
+        value_copy_ids: &'a IndexSet<FuncId>,
         usage: IndexMap<u32, LocalUsage>,
     ) -> Self {
         Self {
-            value_copy_set,
+            value_copy_ids,
             usage,
         }
     }
@@ -65,14 +64,14 @@ pub(super) fn build_usage(body: &Body, type_table: &TypeTable) -> IndexMap<u32, 
 
 impl Rule for ValueCopyElideRule<'_> {
     fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
-        if self.value_copy_set.is_empty() {
+        if self.value_copy_ids.is_empty() {
             return false;
         }
         let usage = &self.usage;
         let stmts = engine.body.blocks[block].stmts.clone();
         let mut changed = false;
         for stmt in stmts {
-            let Some(value) = eligible_value(engine.body, stmt, self.value_copy_set, usage) else {
+            let Some(value) = eligible_value(engine.body, stmt, self.value_copy_ids, usage) else {
                 continue;
             };
             // `value` is `$value_copy$T(arg)`; replace it with `arg` so the
@@ -242,15 +241,11 @@ fn mark_root_field_mutated(body: &Body, expr: ExprId, usage: &mut IndexMap<u32, 
 // Wrapper stripping
 // ──────────────────────────────────────────────────────────────────────────────
 
-fn is_value_copy_call(
-    body: &Body,
-    expr: ExprId,
-    value_copy_set: &IndexMap<(ModuleSource, String), TypeId>,
-) -> bool {
-    if let ExprKind::Call { func, args, .. } = &body.exprs[expr].kind
+fn is_value_copy_call(body: &Body, expr: ExprId, value_copy_ids: &IndexSet<FuncId>) -> bool {
+    if let ExprKind::Call { func_id, args, .. } = &body.exprs[expr].kind
         && args.len() == 1
     {
-        value_copy_set.contains_key(&(func.module_source.clone(), func.name.clone()))
+        value_copy_ids.contains(func_id)
     } else {
         false
     }
@@ -282,10 +277,10 @@ fn elision_safe(
     target_index: u32,
     target_assign_limit: u32,
     value: ExprId,
-    value_copy_set: &IndexMap<(ModuleSource, String), TypeId>,
+    value_copy_ids: &IndexSet<FuncId>,
     usage: &IndexMap<u32, LocalUsage>,
 ) -> bool {
-    if !is_value_copy_call(body, value, value_copy_set) {
+    if !is_value_copy_call(body, value, value_copy_ids) {
         return false;
     }
     let target_ok = match usage.get(&target_index) {
@@ -320,7 +315,7 @@ fn elision_safe(
 fn eligible_value(
     body: &Body,
     stmt: StmtId,
-    value_copy_set: &IndexMap<(ModuleSource, String), TypeId>,
+    value_copy_ids: &IndexSet<FuncId>,
     usage: &IndexMap<u32, LocalUsage>,
 ) -> Option<ExprId> {
     match &body.stmts[stmt].kind {
@@ -337,7 +332,7 @@ fn eligible_value(
             if let Some(ve) = value.as_expr()
                 && !*is_mut
                 && !*skip_value_copy
-                && elision_safe(body, *local_index, 0, ve, value_copy_set, usage)
+                && elision_safe(body, *local_index, 0, ve, value_copy_ids, usage)
             {
                 Some(ve)
             } else {
@@ -350,7 +345,7 @@ fn eligible_value(
             if let ExprKind::Assign { target, value } = &body.exprs[*e].kind
                 && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
                 && let Some(ve) = value.as_expr()
-                && elision_safe(body, *index, 1, ve, value_copy_set, usage)
+                && elision_safe(body, *index, 1, ve, value_copy_ids, usage)
             {
                 Some(ve)
             } else {

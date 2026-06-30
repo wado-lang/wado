@@ -39,7 +39,7 @@ use cranelift_entity::EntityRef;
 use super::gate::{FunctionGate, GatedPass};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{FunctionRef, NirFunction};
+use crate::nir::NirFunction;
 use crate::nir_arena::{
     ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
@@ -49,7 +49,7 @@ use crate::tir::TypeId;
 use crate::token::Span;
 
 /// Maps (`module_source`, `func_name`) → set of parameter indices that have `stores` declared.
-type StoresLookup = IndexMap<(ModuleSource, String), IndexSet<usize>>;
+type StoresLookup = IndexMap<crate::nir::FuncId, IndexSet<usize>>;
 
 /// Information about a struct/tuple local that may be decomposable.
 struct SroaCandidate {
@@ -77,11 +77,10 @@ fn build_stores_lookup(project: &NirPackage) -> StoresLookup {
             .filter(|(_, param)| func.stores.iter().any(|s| s == &param.name))
             .map(|(i, _)| i)
             .collect();
-        if !stored_indices.is_empty() {
-            lookup.insert(
-                (func.module_source.clone(), func.name.clone()),
-                stored_indices,
-            );
+        if !stored_indices.is_empty()
+            && let Some(id) = func.id
+        {
+            lookup.insert(id, stored_indices);
         }
     }
     lookup
@@ -784,13 +783,13 @@ fn soft_expr(
                 hard_escaped,
             );
         }
-        ExprKind::Call { func, args, .. } => {
-            let func = func.clone();
+        ExprKind::Call { func_id, args, .. } => {
+            let callee_id = *func_id;
             let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
             for (i, arg) in arg_ops.into_iter().enumerate() {
                 let Some(arg) = arg.as_expr() else { continue };
                 if is_immut_ref_to_candidate(body, arg, candidates)
-                    && !callee_stores_param_at(&func, i, current_module, stores_lookup)
+                    && !callee_stores_param_at(callee_id, i, stores_lookup)
                 {
                     continue;
                 }
@@ -807,16 +806,16 @@ fn soft_expr(
         }
         ExprKind::MethodCall {
             receiver,
-            func,
+            func_id,
             args,
             ..
         } => {
             let receiver = *receiver;
-            let func = func.clone();
+            let callee_id = *func_id;
             let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
             if let Some(re) = receiver.as_expr()
                 && (!is_immut_ref_to_candidate(body, re, candidates)
-                    || callee_stores_param_at(&func, 0, current_module, stores_lookup))
+                    || callee_stores_param_at(callee_id, 0, stores_lookup))
             {
                 soft_expr(
                     body,
@@ -831,7 +830,7 @@ fn soft_expr(
             for (i, arg) in arg_ops.into_iter().enumerate() {
                 let Some(arg) = arg.as_expr() else { continue };
                 if is_immut_ref_to_candidate(body, arg, candidates)
-                    && !callee_stores_param_at(&func, i + 1, current_module, stores_lookup)
+                    && !callee_stores_param_at(callee_id, i + 1, stores_lookup)
                 {
                     continue;
                 }
@@ -864,21 +863,15 @@ fn soft_expr(
 }
 
 fn callee_stores_param_at(
-    func_ref: &FunctionRef,
+    func_id: crate::nir::FuncId,
     param_index: usize,
-    current_module: &ModuleSource,
     stores_lookup: &StoresLookup,
 ) -> bool {
-    let target_module = if func_ref.module_source.is_entry_point() {
-        current_module.clone()
-    } else {
-        func_ref.module_source.clone()
-    };
-    let key = (target_module, func_ref.name.clone());
-    match stores_lookup.get(&key) {
-        Some(stored_indices) => stored_indices.contains(&param_index),
-        None => false,
-    }
+    // Born-resolved `func_id` names the callee directly — no entry-point module
+    // remap needed (it resolved the real target at `lower`).
+    stores_lookup
+        .get(&func_id)
+        .is_some_and(|stored_indices| stored_indices.contains(&param_index))
 }
 
 // -----------------------------------------------------------------------

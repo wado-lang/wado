@@ -18,6 +18,8 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::{LowerPlan, closure, value_copy};
 use crate::name::{LocalMethodName, MethodName};
+use cranelift_entity::EntityRef;
+
 use crate::nir;
 use crate::nir::{
     NirCapture, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember, NirFunction, NirGlobal,
@@ -104,12 +106,31 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
     for s in &structs {
         struct_fields_map.insert((s.name.clone(), s.module_source.clone()), s.fields.clone());
     }
+    // Pre-register every in-package function's canonical `FuncId` (its position,
+    // 1:1 with the final function list). Calls stamp against this at construction.
+    let mut ids: IndexMap<crate::name::FunctionId, crate::nir::FuncId> = IndexMap::default();
+    for (i, func_rc) in functions.iter().enumerate() {
+        let key = tir_function_key(&func_rc.borrow());
+        let prev = ids.insert(key, crate::nir::FuncId::new(i));
+        // Load-bearing: two functions sharing a canonical key would share a
+        // FuncId (a miscompile). The check is O(1); keep it always-on.
+        assert!(
+            prev.is_none(),
+            "duplicate canonical function key: function_id must be unique"
+        );
+    }
+    let base_len = functions.len();
     let translator = Translator {
         box_plan: &box_plan,
         value_copy: &value_copy,
         closure: &closure,
         type_table: Rc::clone(&type_table),
         struct_fields_map,
+        interner: RefCell::new(Interner {
+            ids,
+            stubs: Vec::new(),
+            base_len,
+        }),
     };
 
     let mut func_map: IndexMap<*const RefCell<TirFunction>, Rc<RefCell<NirFunction>>> =
@@ -123,10 +144,11 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
             nir_rc
         })
         .collect();
-    NirPackage {
+    let mut nir = NirPackage {
         entry_module_source,
         type_table,
         functions,
+        func_index: IndexMap::default(),
         structs: structs
             .iter()
             .map(|s| translator.convert_struct(s))
@@ -167,7 +189,17 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         task_return_flat_params,
         wasm_assets,
         trait_env,
+    };
+    // Finalize the born-resolved callee ids: append the interned extern stubs,
+    // set every function's `id` to its store position (`FuncId == position`), and
+    // publish the reverse index. Replaces the former post-pass `assign_func_ids`.
+    let Interner { ids, stubs, .. } = translator.interner.into_inner();
+    nir.functions.extend(stubs);
+    for (i, func_rc) in nir.functions.iter().enumerate() {
+        func_rc.borrow_mut().id = Some(crate::nir::FuncId::new(i));
     }
+    nir.func_index = ids;
+    nir
 }
 
 struct Translator<'a> {
@@ -177,6 +209,50 @@ struct Translator<'a> {
     type_table: Rc<RefCell<TypeTable>>,
     struct_fields_map:
         IndexMap<(String, crate::module_source::ModuleSource), Vec<crate::tir::TirField>>,
+    /// Mints each call's canonical `FuncId` at construction ("born resolved"),
+    /// so the call node never carries a `FunctionRef`. In-package callees resolve
+    /// against the pre-built `FunctionId → FuncId` map (positions in
+    /// `flat.functions`, 1:1 with the final function list); extern / builtin
+    /// callees are interned on first sight as `extern_stub`s appended after the
+    /// in-package functions. Replaces the former post-pass `assign_func_ids`.
+    interner: RefCell<Interner>,
+}
+
+/// Construction-time callee-id minting (see [`Translator::interner`]).
+struct Interner {
+    ids: IndexMap<crate::name::FunctionId, crate::nir::FuncId>,
+    stubs: Vec<Rc<RefCell<NirFunction>>>,
+    base_len: usize,
+}
+
+impl Interner {
+    /// The `FuncId` of `func_ref`: its pre-registered in-package id, or a freshly
+    /// interned extern stub's id.
+    fn resolve(&mut self, func_ref: &nir::FunctionRef) -> crate::nir::FuncId {
+        let key = func_ref.function_id();
+        if let Some(&id) = self.ids.get(&key) {
+            return id;
+        }
+        let id = crate::nir::FuncId::new(self.base_len + self.stubs.len());
+        let mut stub = NirFunction::extern_stub(func_ref);
+        stub.id = Some(id);
+        self.stubs.push(Rc::new(RefCell::new(stub)));
+        self.ids.insert(key, id);
+        id
+    }
+}
+
+/// The canonical `FunctionId` of a TIR function — the same identity its
+/// converted `NirFunction` yields (`FunctionRef::function_id`), so the
+/// pre-built id map agrees with every call site's `convert_function_ref`.
+fn tir_function_key(f: &TirFunction) -> crate::name::FunctionId {
+    nir::FunctionRef {
+        module_source: f.module_source.clone(),
+        name: f.name.clone(),
+        monomorph_info: f.monomorph_info.as_ref().map(convert_monomorph_info),
+        method_info: f.method_info.clone(),
+    }
+    .function_id()
 }
 
 /// Per-function translation context. Created fresh for each function
@@ -340,6 +416,8 @@ impl Translator<'_> {
             arena
         });
         NirFunction {
+            id: None,
+            is_dead: false,
             name: func.name.clone(),
             module_source: func.module_source.clone(),
             visibility: func.visibility,
@@ -720,14 +798,16 @@ impl FunctionTranslator<'_, '_> {
         else {
             return value;
         };
+        let func = nir::FunctionRef {
+            module_source: helper_module.clone(),
+            name: helper_name.clone(),
+            monomorph_info: None,
+            method_info: None,
+        };
+        let func_id = self.base.interner.borrow_mut().resolve(&func);
         self.alloc_expr(
             ExprKind::Call {
-                func: nir::FunctionRef {
-                    module_source: helper_module.clone(),
-                    name: helper_name.clone(),
-                    monomorph_info: None,
-                    method_info: None,
-                },
+                func_id,
                 type_args: vec![],
                 args: vec![ArenaCallArg {
                     expr: value.into(),
@@ -1064,15 +1144,17 @@ impl FunctionTranslator<'_, '_> {
                     is_mut,
                 })
                 .collect();
+            let func = nir::FunctionRef {
+                module_source: functor.module_source.clone(),
+                name: call_method_name,
+                monomorph_info: None,
+                method_info: Some(call_method_info),
+            };
+            let func_id = self.base.interner.borrow_mut().resolve(&func);
             return self.alloc_expr(
                 ExprKind::MethodCall {
+                    func_id,
                     receiver: nir_receiver.into(),
-                    func: nir::FunctionRef {
-                        module_source: functor.module_source.clone(),
-                        name: call_method_name,
-                        monomorph_info: None,
-                        method_info: Some(call_method_info),
-                    },
                     type_args: Vec::new(),
                     args: nir_args,
                 },
@@ -1216,12 +1298,16 @@ impl FunctionTranslator<'_, '_> {
                 type_args,
                 args,
                 ..
-            } => ExprKind::MethodCall {
-                receiver: self.convert_operand(receiver),
-                func: convert_function_ref(func),
-                type_args: type_args.clone(),
-                args: args.iter().map(|a| self.convert_call_arg(a)).collect(),
-            },
+            } => {
+                let func = convert_function_ref(func);
+                let func_id = self.base.interner.borrow_mut().resolve(&func);
+                ExprKind::MethodCall {
+                    func_id,
+                    receiver: self.convert_operand(receiver),
+                    type_args: type_args.clone(),
+                    args: args.iter().map(|a| self.convert_call_arg(a)).collect(),
+                }
+            }
             TirExprKind::FieldAccess {
                 expr,
                 field_index,
@@ -1392,19 +1478,23 @@ impl FunctionTranslator<'_, '_> {
             && let Some((helper_module, helper_name)) =
                 self.base.value_copy.name_for_type.get(&type_id)
         {
+            let func = nir::FunctionRef {
+                module_source: helper_module.clone(),
+                name: helper_name.clone(),
+                monomorph_info: None,
+                method_info: None,
+            };
+            let func_id = self.base.interner.borrow_mut().resolve(&func);
             return ExprKind::Call {
-                func: nir::FunctionRef {
-                    module_source: helper_module.clone(),
-                    name: helper_name.clone(),
-                    monomorph_info: None,
-                    method_info: None,
-                },
+                func_id,
                 type_args: vec![],
                 args: args.iter().map(|a| self.convert_call_arg(a)).collect(),
             };
         }
+        let func = convert_function_ref(func);
+        let func_id = self.base.interner.borrow_mut().resolve(&func);
         ExprKind::Call {
-            func: convert_function_ref(func),
+            func_id,
             type_args: type_args.to_vec(),
             args: args.iter().map(|a| self.convert_call_arg(a)).collect(),
         }

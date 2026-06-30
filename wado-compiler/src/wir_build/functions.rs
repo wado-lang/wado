@@ -13,6 +13,21 @@ use super::context::{PendingFunctionBody, WirContext};
 
 /// Collect all functions from the `NirPackage`, register imports, and create function stubs.
 pub fn collect_functions(ctx: &mut WirContext<'_>) {
+    // `FuncId == position` holds end-to-end: `lower` mints `id = index`, `dce`
+    // marks dead in place without renumbering (Phase 4), and synthesized
+    // functions append at `id = next_func_id() = len`. Phase 5's `store[id]`
+    // descriptor reads depend on this; the check is O(n), once.
+    {
+        use cranelift_entity::EntityRef;
+        for (i, func_rc) in ctx.package.functions.iter().enumerate() {
+            assert_eq!(
+                func_rc.borrow().id,
+                Some(crate::nir::FuncId::new(i)),
+                "FuncId must equal store position at codegen (function #{i})"
+            );
+        }
+    }
+
     // Step 1: Register builtin + bundled imports
     register_imports(ctx);
 
@@ -309,6 +324,13 @@ fn register_methods(ctx: &mut WirContext<'_>) {
         let tir_func = func_rc.borrow();
         let module_source = &tir_func.module_source;
 
+        // Skip dead functions. A dead `FnCanonicalDispatch` is bodyless yet would
+        // otherwise pass the `body.is_none()` exception below; `is_dead`
+        // distinguishes it from a live bodyless dispatch (Phase 4).
+        if tir_func.is_dead {
+            continue;
+        }
+
         // Only methods
         if tir_func.method_info.is_none() {
             continue;
@@ -443,7 +465,7 @@ fn register_single_function(
         export_name: tir_func.export_name.clone(),
     };
 
-    let _func_id = ctx.register_function(wir_func);
+    let _func_id = ctx.register_function(wir_func, tir_func.id);
     let wir_func_index = ctx.functions.len() - 1;
 
     // Register as pending body for translation

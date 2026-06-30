@@ -43,8 +43,10 @@ const SWITCH_MAX_RANGE: i64 = 1024;
 /// (and thus the gate) is skipped — avoids building a throwaway `FunctionGate`
 /// (a full call-graph walk) just to satisfy the gated signature.
 pub fn match_to_switch_all(project: &mut NirPackage) -> bool {
+    let (cold_path_id, unreachable_id) = intern_cold_markers(project);
+    let pure_builtin_callees = project.pure_builtin_callee_ids();
     let type_table = project.type_table.borrow();
-    let rule = MatchToSwitchRule::new(&type_table);
+    let rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
@@ -53,10 +55,18 @@ pub fn match_to_switch_all(project: &mut NirPackage) -> bool {
         if let Some(body) = body.as_mut() {
             let mut engine = Engine::new(body, &mut buffers, locals);
             engine.set_value_graph_type_table(&type_table);
+            engine.set_pure_builtin_callees(&pure_builtin_callees);
             changed |= engine.run(&[&rule]);
         }
     }
-    changed | run_globals(&mut project.globals, &rule, &type_table, &mut buffers)
+    changed
+        | run_globals(
+            &mut project.globals,
+            &rule,
+            &type_table,
+            &pure_builtin_callees,
+            &mut buffers,
+        )
 }
 
 /// Lower dense `Match` → `Switch` in global initializer bodies only. Functions
@@ -65,16 +75,25 @@ pub fn match_to_switch_all(project: &mut NirPackage) -> bool {
 /// Global initializer bodies are not mutated by the function-level loop, so a
 /// single pass is equivalent to running it every iteration.
 pub(super) fn match_to_switch_globals(project: &mut NirPackage) -> bool {
+    let (cold_path_id, unreachable_id) = intern_cold_markers(project);
+    let pure_builtin_callees = project.pure_builtin_callee_ids();
     let type_table = project.type_table.borrow();
-    let rule = MatchToSwitchRule::new(&type_table);
+    let rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
     let mut buffers = EngineBuffers::default();
-    run_globals(&mut project.globals, &rule, &type_table, &mut buffers)
+    run_globals(
+        &mut project.globals,
+        &rule,
+        &type_table,
+        &pure_builtin_callees,
+        &mut buffers,
+    )
 }
 
 fn run_globals(
     globals: &mut [crate::nir::NirGlobal],
     rule: &MatchToSwitchRule,
     type_table: &TypeTable,
+    pure_builtin_callees: &crate::hashmap::IndexSet<crate::nir::FuncId>,
     buffers: &mut EngineBuffers,
 ) -> bool {
     let mut changed = false;
@@ -86,6 +105,7 @@ fn run_globals(
     for global in globals {
         let mut engine = Engine::new(global.initializer.body_mut(), buffers, &mut no_locals);
         engine.set_value_graph_type_table(type_table);
+        engine.set_pure_builtin_callees(pure_builtin_callees);
         changed |= engine.run(&[rule]);
     }
     changed
@@ -93,12 +113,43 @@ fn run_globals(
 
 pub(super) struct MatchToSwitchRule<'t> {
     type_table: &'t TypeTable,
+    cold_path_id: crate::nir::FuncId,
+    unreachable_id: crate::nir::FuncId,
 }
 
 impl<'t> MatchToSwitchRule<'t> {
-    pub(super) fn new(type_table: &'t TypeTable) -> Self {
-        Self { type_table }
+    pub(super) fn new(
+        type_table: &'t TypeTable,
+        cold_path_id: crate::nir::FuncId,
+        unreachable_id: crate::nir::FuncId,
+    ) -> Self {
+        Self {
+            type_table,
+            cold_path_id,
+            unreachable_id,
+        }
     }
+}
+
+/// Intern the `cold_path` / `unreachable` builtins this pass synthesizes for the
+/// default arm of an exhaustive match, returning their `FuncId`s so the
+/// synthesized calls are born resolved.
+pub(super) fn intern_cold_markers(
+    project: &mut NirPackage,
+) -> (crate::nir::FuncId, crate::nir::FuncId) {
+    let cold_path_id = project.intern_extern(&FunctionRef {
+        module_source: ModuleSource::builtin(),
+        name: "cold_path".to_string(),
+        monomorph_info: None,
+        method_info: None,
+    });
+    let unreachable_id = project.intern_extern(&FunctionRef {
+        module_source: ModuleSource::builtin(),
+        name: "unreachable".to_string(),
+        monomorph_info: None,
+        method_info: None,
+    });
+    (cold_path_id, unreachable_id)
 }
 
 impl Rule for MatchToSwitchRule<'_> {
@@ -120,7 +171,15 @@ impl Rule for MatchToSwitchRule<'_> {
         };
 
         let span = engine.body.exprs[id].span;
-        let new_kind = build_switch(engine, scrutinee, &arms, analysis, span);
+        let new_kind = build_switch(
+            engine,
+            scrutinee,
+            &arms,
+            analysis,
+            span,
+            self.cold_path_id,
+            self.unreachable_id,
+        );
         engine.replace_expr_kind(id, new_kind);
         true
     }
@@ -291,6 +350,8 @@ fn build_switch(
     arms: &[ArmData],
     analysis: SwitchAnalysis,
     span: Span,
+    cold_path_id: crate::nir::FuncId,
+    unreachable_id: crate::nir::FuncId,
 ) -> ExprKind {
     let range = (analysis.max_value - analysis.min_value + 1) as usize;
 
@@ -318,12 +379,7 @@ fn build_switch(
         // matching the other compiler-synthesized cold branches.
         let cold_call = engine.alloc_expr(
             ExprKind::Call {
-                func: FunctionRef {
-                    module_source: ModuleSource::builtin(),
-                    name: "cold_path".to_string(),
-                    monomorph_info: None,
-                    method_info: None,
-                },
+                func_id: cold_path_id,
                 args: vec![],
                 type_args: vec![],
             },
@@ -339,12 +395,7 @@ fn build_switch(
         // synthesised callee being removed.
         let call = engine.alloc_expr(
             ExprKind::Call {
-                func: FunctionRef {
-                    module_source: ModuleSource::builtin(),
-                    name: "unreachable".to_string(),
-                    monomorph_info: None,
-                    method_info: None,
-                },
+                func_id: unreachable_id,
                 args: vec![],
                 type_args: vec![],
             },

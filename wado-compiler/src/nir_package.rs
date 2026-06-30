@@ -16,8 +16,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::LocalMethodName;
 use crate::nir::{
-    ClosureFunctor, NirEnum, NirFlags, NirFunction, NirGlobal, NirImport, NirStruct, NirTest,
-    NirVariantDecl,
+    ClosureFunctor, FuncId, FunctionRef, NirEnum, NirFlags, NirFunction, NirGlobal, NirImport,
+    NirStruct, NirTest, NirVariantDecl,
 };
 use crate::tir::{TypeId, TypeTable};
 use crate::wir_build::component_plan::ComponentPlan;
@@ -38,6 +38,13 @@ pub struct NirPackage {
 
     /// All functions from all modules. Each `NirFunction` carries its own `module_source`.
     pub functions: Vec<Rc<RefCell<NirFunction>>>,
+    /// The function arena's reverse index: canonical [`crate::name::FunctionId`]
+    /// → [`FuncId`] (the store position). Built once in `lower` (`translate`)
+    /// and grown append-only by [`Self::intern_extern`] as the optimizer
+    /// synthesizes calls to new builtins. Authoritative, never rebuilt or
+    /// invalidated — the interner that keeps the "born resolved" invariant cheap
+    /// (O(1) per synthesis site, no per-pass walk).
+    pub func_index: IndexMap<crate::name::FunctionId, FuncId>,
     /// All struct declarations (each carries its own `module_source`)
     pub structs: Vec<NirStruct>,
     /// All enum declarations (each carries its own `module_source`)
@@ -122,15 +129,93 @@ impl NirPackage {
     /// overrides it per opt level.
     pub const DEFAULT_STRING_INLINE_MAX_BYTES: usize = 4;
 
+    /// The [`FuncId`] of a `builtin::<name>` callee, or `None` if no such call is
+    /// interned in this package. Resolved once (e.g. at a pass's top) so an
+    /// optimizer recognizer can identify a builtin call by integer id comparison
+    /// against the call node's `func_id` — no per-call name materialization, and
+    /// no `store[id]` deref (which a self-recursive callee would double-borrow).
+    pub fn builtin_func_id(&self, name: &str) -> Option<FuncId> {
+        self.func_id_of(&FunctionRef {
+            module_source: crate::module_source::ModuleSource::builtin(),
+            name: name.to_string(),
+            monomorph_info: None,
+            method_info: None,
+        })
+    }
+
+    /// Resolve a callee `FunctionRef` to its [`FuncId`] via the reverse index.
+    /// `Some` for every in-package function and every already-interned extern;
+    /// `None` only for a builtin the optimizer has not interned yet (see
+    /// [`Self::intern_extern`]). O(1), no `full_name` materialization.
+    pub fn func_id_of(&self, func_ref: &FunctionRef) -> Option<FuncId> {
+        self.func_index.get(&func_ref.function_id()).copied()
+    }
+
+    /// The [`FuncId`]s of pure builtin / monomorphized-builtin intrinsics
+    /// (`array_get`, `array_len`, `select`, every `core:builtin` / wasm-asset
+    /// function, …). The value-graph builder reads this to know a call writes no
+    /// heap, so a field version forwards across a loop body that only calls such
+    /// intrinsics. Resolved by `func_id` off the callee's arena record now that
+    /// the call node carries no `FunctionRef`. O(functions); a pass computes it
+    /// once before its per-function loop.
+    pub fn pure_builtin_callee_ids(&self) -> IndexSet<FuncId> {
+        self.functions
+            .iter()
+            .filter_map(|f| {
+                let f = f.borrow();
+                let descriptor = FunctionRef::from_resolved(&f, f.module_source.clone());
+                let is_pure_builtin = descriptor.builtin_name().is_some()
+                    || descriptor.monomorphized_builtin_name().is_some();
+                is_pure_builtin.then(|| f.id.expect("func_id assigned at lower"))
+            })
+            .collect()
+    }
+
+    /// Intern an extern / builtin callee into the [`FuncId`] space, returning its
+    /// id. Idempotent: a callee already present (in-package or previously
+    /// interned) returns its existing id; otherwise an `extern_stub` record is
+    /// appended at `FuncId == position` and indexed. Lets an optimizer pass that
+    /// synthesizes a builtin call stamp the call "born resolved" at the synthesis
+    /// site, keeping `func_id` total across the loop without a re-scan.
+    pub fn intern_extern(&mut self, func_ref: &FunctionRef) -> FuncId {
+        use cranelift_entity::EntityRef;
+        let key = func_ref.function_id();
+        if let Some(&id) = self.func_index.get(&key) {
+            return id;
+        }
+        let id = FuncId::new(self.functions.len());
+        let mut stub = NirFunction::extern_stub(func_ref);
+        stub.id = Some(id);
+        self.functions.push(Rc::new(RefCell::new(stub)));
+        self.func_index.insert(key, id);
+        id
+    }
+
+    /// The next free [`FuncId`] (one past the current maximum). Optimizer passes
+    /// that synthesize functions (`value_copy_demote`'s shallow-copy twins,
+    /// container SROA's per-field accessors) mint fresh ids from here so a new
+    /// function never collides with an existing id. `FuncId` stays monotonic and
+    /// intrinsic — independent of `dce` compaction.
+    pub fn next_func_id(&self) -> FuncId {
+        use cranelift_entity::EntityRef;
+        let next = self
+            .functions
+            .iter()
+            .filter_map(|f| f.borrow().id)
+            .map(|id| id.index() + 1)
+            .max()
+            .unwrap_or(0);
+        FuncId::new(next)
+    }
+
     /// Check if the project targets the synthetic test world.
     pub fn is_test_world(&self) -> bool {
         self.target_world == world_registry::TEST_WORLD
     }
 
     /// Build the lookup of synthesized value-copy helpers, keyed by
-    /// `(module_source, name)` → the type each helper deep-copies. Shared by the
-    /// `value_copy_elide` optimizer pass and the `remarks` collector so the two
-    /// stay in lock-step with the helper-identification convention.
+    /// `(module_source, name)` → the type each helper deep-copies. Used by the
+    /// `remarks` collector, which reports the copied type.
     pub fn value_copy_helper_types(&self) -> IndexMap<(ModuleSource, String), TypeId> {
         self.functions
             .iter()
@@ -138,6 +223,18 @@ impl NirPackage {
                 let f = f.borrow();
                 f.value_copy_type()
                     .map(|t| ((f.module_source.clone(), f.name.clone()), t))
+            })
+            .collect()
+    }
+
+    /// The [`FuncId`]s of the synthesized `$value_copy$T` helpers. The
+    /// `value_copy_elide` pass identifies a wrapper call by id membership.
+    pub fn value_copy_func_ids(&self) -> crate::hashmap::IndexSet<FuncId> {
+        self.functions
+            .iter()
+            .filter_map(|f| {
+                let f = f.borrow();
+                f.value_copy_type().and(f.id)
             })
             .collect()
     }

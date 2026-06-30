@@ -45,7 +45,7 @@ use crate::nir::NirFunction;
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 
-use super::array_literal::{Collapser, resolve_array_push_names};
+use super::array_literal::{Collapser, resolve_array_new_ids, resolve_array_push_ids};
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::const_folding::{ConstFoldRule, build_callee_map};
 use super::elide_box_local::build_elide_box_local;
@@ -71,21 +71,26 @@ pub(super) fn run_peephole(
     gate: &mut FunctionGate,
     pre_inline: bool,
 ) -> bool {
+    // Intern the builtins the bundled rules synthesize, before any shared
+    // immutable borrow of `project`, so their calls are born resolved.
+    let (cold_path_id, unreachable_id) = super::match_to_switch::intern_cold_markers(project);
     // Whole-package contexts, resolved once before the mutable body walk.
-    let push_names = resolve_array_push_names(project);
-    let array_rule = Collapser::new(&push_names);
+    let push_ids = resolve_array_push_ids(project);
+    let array_new_ids = resolve_array_new_ids(project);
+    let array_rule = Collapser::new(&push_ids, &array_new_ids);
     let push_rule = resolve_ctx(project).map(ShortPushStrRule::new);
-    // `$value_copy$T` helper types, for the pre-inline value-copy-elision rule.
-    let value_copy_set = project.value_copy_helper_types();
+    // `$value_copy$T` helper ids, for the pre-inline value-copy-elision rule.
+    let value_copy_ids = project.value_copy_func_ids();
     // Environment-free constant folding shares the session. It needs the
     // program-wide CTFE callee map and the type table; the per-function `env`
     // stays empty so only literal arithmetic and pure CTFE fold here, leaving
     // the flow-sensitive folds to the standalone `const_folding` walker.
     let type_table = project.type_table.borrow();
     let callees = build_callee_map(project);
+    let pure_builtin_callees = project.pure_builtin_callee_ids();
     let const_fold_rule = ConstFoldRule::new(&type_table, &callees);
     let branch_prune_rule = BranchPruneRule::new(PruneMode::Fixpoint);
-    let match_rule = MatchToSwitchRule::new(&type_table);
+    let match_rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
 
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
@@ -100,10 +105,10 @@ pub(super) fn run_peephole(
         // pristine body here, before the session rewrites it (matching the old
         // standalone pass's snapshot); the rule borrows the shared helper-type
         // set.
-        let value_copy_usage = (pre_inline && !func.is_value_copy() && !value_copy_set.is_empty())
+        let value_copy_usage = (pre_inline && !func.is_value_copy() && !value_copy_ids.is_empty())
             .then(|| func.body.as_ref().map(|b| build_usage(b, &type_table)))
             .flatten();
-        let value_copy_rule = value_copy_usage.map(|u| ValueCopyElideRule::new(&value_copy_set, u));
+        let value_copy_rule = value_copy_usage.map(|u| ValueCopyElideRule::new(&value_copy_ids, u));
         // Reference elimination runs post-inline only (it cleans up the ref
         // bindings inlining exposes). Its maps are built from the pristine
         // post-inline body.
@@ -166,6 +171,7 @@ pub(super) fn run_peephole(
         // `MatchToSwitchRule` materializes promoted constant scrutinees / arm
         // bodies; the extractor reads `prim` from the type table for literal repr.
         engine.set_value_graph_type_table(&type_table);
+        engine.set_pure_builtin_callees(&pure_builtin_callees);
         engine.run(&rules)
     })
 }

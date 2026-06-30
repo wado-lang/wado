@@ -15,7 +15,7 @@
 //! produces the same result the old top-down visitor did.
 
 use crate::module_source::ModuleSource;
-use crate::nir::{FunctionRef, MonomorphInfo, NirBinaryOp, NirFunction, NirUnaryOp};
+use crate::nir::{FunctionRef, NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
@@ -23,9 +23,19 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 /// Run select lowering on all functions, driven by the rewrite engine.
 pub fn select_lowering(project: &mut NirPackage) -> bool {
+    // Intern the `select` builtin once so every synthesized call is born
+    // resolved. Its `FuncId` keys on `Free(builtin, "select")` (type args ride
+    // the node), so one id serves all instantiations.
+    let select_id = project.intern_extern(&FunctionRef {
+        module_source: ModuleSource::builtin(),
+        name: "select".to_string(),
+        monomorph_info: None,
+        method_info: None,
+    });
     let type_table = project.type_table.borrow();
     let rule = SelectLoweringRule {
         type_table: &type_table,
+        select_id,
     };
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
@@ -42,6 +52,7 @@ pub fn select_lowering(project: &mut NirPackage) -> bool {
 
 struct SelectLoweringRule<'t> {
     type_table: &'t TypeTable,
+    select_id: crate::nir::FuncId,
 }
 
 impl Rule for SelectLoweringRule<'_> {
@@ -70,21 +81,10 @@ impl Rule for SelectLoweringRule<'_> {
             return false;
         };
 
-        let func = FunctionRef {
-            module_source: ModuleSource::builtin(),
-            name: "select".to_string(),
-            monomorph_info: Some(MonomorphInfo {
-                generic_name: "select".to_string(),
-                impl_type_args: vec![result_type],
-                method_type_args: vec![],
-                is_blanket: false,
-            }),
-            method_info: None,
-        };
         engine.replace_expr_kind(
             id,
             ExprKind::Call {
-                func,
+                func_id: self.select_id,
                 type_args: vec![result_type],
                 args: vec![
                     ArenaCallArg {
