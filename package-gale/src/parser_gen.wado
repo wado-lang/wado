@@ -2065,8 +2065,8 @@ fn gen_scan_op_elements_in_block(
 
 fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) {
     // Track which rule's body we are emitting so a non-greedy `??` inside it
-    // can pass its owning rule index to `atn_ng_optional_enter` (the caller
-    // stack holds return states, not rule indices).
+    // can tell whether the rule is left-recursive (and so forward `min_prec`
+    // to its `atn_predict_with_stack` call).
     ctx.set_current_rule_index(ctx.rule_index_of(&rule.name));
     // Phase 4 — dispatch on the GIR `Rule` variant. Each shape gets
     // its own focused emit entry; the existing internal helpers
@@ -3732,7 +3732,7 @@ fn gen_op_storable_optional(
             rep_op,
             inner_elem,
             ctx,
-            &atn_optional_enter_cond(ctx),
+            &atn_optional_enter_cond(ctx, rep_op),
         );
         return;
     }
@@ -3781,12 +3781,22 @@ fn gen_op_storable_optional(
     };
 }
 
-/// Runtime entry condition for a non-greedy `??`: the ATN simulator
-/// decides enter vs skip with full context. The current rule is read from
-/// `p.atn_stack`'s top at runtime, so no compile-time decision number is
-/// needed.
-fn atn_optional_enter_cond(ctx: &GenContext) -> String {
+/// Runtime entry condition for a non-greedy `??`: the ATN simulator decides
+/// enter vs skip with full context. The exact ATN decision number is stamped
+/// at compile time (`RepeatElement.atn_decision` -> `Atn.decision_sites`), so
+/// each `??` predicts its own decision — several `??` in one rule no longer
+/// collide on the retired "unique exit-first BlockStart" search. Non-greedy
+/// optional edges are ordered `[exit=0, enter=1]`, so ENTER iff the simulator
+/// returns alt 1.
+fn atn_optional_enter_cond(ctx: &GenContext, rep_op: &RepeatOp) -> String {
     let rule = ctx.current_rule_index();
+    let decision = ctx.atn_decision_site(rep_op.atn_decision);
+    // A `??` always marks an Optional decision, so `decision` is known. Guard
+    // against a missing stamp (decision sites not assigned) by falling back to
+    // the prior greedy ENTER rather than emitting an out-of-range decision.
+    if decision < 0 {
+        return "true";
+    }
     // A non-greedy `??` predicts enter-vs-skip with the rule's live
     // precedence: inside a left-recursive rule the parser can be invoked with
     // a raised `min_prec`, so the prediction must prune LR enter edges below
@@ -3796,7 +3806,7 @@ fn atn_optional_enter_cond(ctx: &GenContext) -> String {
     // always invoked at 0 and its fns carry no `min_prec` parameter — pass the
     // literal `0` there.
     let prec_arg = if ctx.lr_loop_entry_decision(rule) >= 0 { "min_prec" } else { "0" };
-    return `atn_ng_optional_enter(&ATN_SIM, {rule}, &p.atn_stack, &p.kinds, p.pos, TK_EOF, {prec_arg})`;
+    return `atn_predict_with_stack(&ATN_SIM, {decision}, &p.atn_stack, &p.kinds, p.pos, TK_EOF, {prec_arg}) == 1`;
 }
 
 /// Wrap a raw Optional entry condition with the runtime caller-FOLLOW
@@ -3849,7 +3859,7 @@ fn gen_op_transparent_optional(
 
     // Non-greedy `??`: runtime ATN decision (see gen_op_storable_optional).
     if rep.non_greedy && ctx.needs_atn() {
-        gen_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &atn_optional_enter_cond(ctx));
+        gen_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &atn_optional_enter_cond(ctx, rep_op));
         return;
     }
 

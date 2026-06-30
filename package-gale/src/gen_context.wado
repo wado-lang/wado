@@ -97,9 +97,9 @@ pub struct GenContext {
     /// infrastructure (the serialized `ATN_DATA` blob, the shared
     /// `ATN_SIM` global, the `Parser.atn_stack` field, and the
     /// rule-entry stack push/pop) and routes the `??` enter/skip decision
-    /// through `atn_ng_optional_enter`. Grammars without either stay
-    /// byte-identical. (`*?`/`+?` keep the dedicated non-greedy strategy and
-    /// do not set this.)
+    /// through `atn_predict_with_stack` (keyed by the `??`'s stamped decision
+    /// number). Grammars without either stay byte-identical. (`*?`/`+?` keep
+    /// the dedicated non-greedy strategy and do not set this.)
     needs_atn_seen: bool,
     /// Set by lowering for an ATN-class LR rule. Gates the scan-side caller
     /// stack (`SCAN_STACK`) and the scan-side LR loop routing, so a
@@ -112,11 +112,18 @@ pub struct GenContext {
     /// push each rule call's exact return state (`atn_ret_pending`). Empty
     /// for grammars that do not need the ATN. See P4.2b in `TODO.md`.
     atn_call_site_returns: List<i32>,
+    /// The ATN decision-site → decision-number correspondence
+    /// (`Atn.decision_sites`, indexed by `RepeatElement.atn_decision` /
+    /// `GroupElement.atn_decision`). Populated after `build_atn` when
+    /// `needs_atn`, so emit can give each non-greedy `??` its exact decision
+    /// number in `atn_predict_with_stack` instead of the retired unique
+    /// exit-first BlockStart search. Empty for grammars without the ATN.
+    atn_decision_sites: List<i32>,
     /// Index of the parser rule currently being emitted (set by
-    /// `gen_parse_fn`). Read when emitting a non-greedy `??`'s
-    /// `atn_ng_optional_enter` call so the simulator knows which rule's
-    /// exit-first decision to predict (the caller stack now holds return
-    /// states, not rule indices). -1 outside rule-body emission.
+    /// `gen_parse_fn`). Read when emitting a non-greedy `??` to decide whether
+    /// the rule is left-recursive (so the `??`'s `atn_predict_with_stack` call
+    /// forwards `min_prec` rather than the literal `0`). -1 outside rule-body
+    /// emission.
     current_rule_index: i32,
     /// Monotonic counter for scan-group label uniqueness (`sg_<n>` etc.).
     /// Lives on the context — fresh per generation — so that generating two
@@ -159,6 +166,7 @@ impl GenContext {
             needs_atn_seen: false,
             needs_scan_atn_seen: false,
             atn_call_site_returns: [],
+            atn_decision_sites: [],
             current_rule_index: -1,
             scan_group_counter: 0,
             lr_loop_entry_decisions: [],
@@ -232,6 +240,22 @@ impl GenContext {
             return -1;
         }
         return self.atn_call_site_returns[call_site];
+    }
+
+    /// Store the ATN decision-site → decision-number correspondence after the
+    /// ATN is built (only when `needs_atn`). Read by `atn_optional_enter_cond`.
+    pub fn set_atn_decision_sites(&mut self, sites: &List<i32>) {
+        self.atn_decision_sites = *sites;
+    }
+
+    /// The exact ATN decision number for surface decision site `site`, or -1
+    /// when unknown (no ATN built, the id is out of range, or the node marked
+    /// no decision — e.g. a single-alt group).
+    pub fn atn_decision_site(&self, site: i32) -> i32 {
+        if site < 0 || site >= self.atn_decision_sites.len() {
+            return -1;
+        }
+        return self.atn_decision_sites[site];
     }
 
     /// Record the rule whose body is currently being emitted (its index in

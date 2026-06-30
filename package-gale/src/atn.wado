@@ -3,8 +3,10 @@
 //! This is the codegen-side representation of the grammar as an NFA, the
 //! foundation of the hybrid runtime ATN simulator (see the "ATN-class
 //! grammars" section of `TODO.md`). The simulator runs only at the cold
-//! decisions that need it — today, non-greedy `??` (the static fast path
-//! handles everything else); the ATN is the data it walks.
+//! decisions that need it — today, non-greedy `??` (each one keyed to its own
+//! decision number via `assign_atn_decisions` -> `Atn.decision_sites`) and an
+//! ATN-class LR rule's loop entry; the static fast path handles everything
+//! else. The ATN is the data it walks.
 //!
 //! Clean-room: the construction here follows the textbook Thompson-style
 //! NFA-for-a-grammar (rule-start/stop states, alternation block-start
@@ -89,6 +91,14 @@ pub struct Atn {
     /// exact return state around each rule call. Empty when call sites were
     /// not assigned (`assign_atn_call_sites` not run).
     pub call_site_returns: List<i32>,
+    /// Compile-time correspondence `atn_decision -> decision number`, indexed
+    /// by the surface `RepeatElement.atn_decision` / `GroupElement.atn_decision`
+    /// id (`-1` for any id whose node marked no decision, e.g. a single-alt
+    /// group). NOT part of the serialized blob — codegen reads it to emit each
+    /// `??`'s exact `atn_predict_with_stack(sim, decision, …)` call, retiring
+    /// the runtime "unique exit-first BlockStart" search. Empty when decision
+    /// sites were not assigned (`assign_atn_decisions` not run).
+    pub decision_sites: List<i32>,
 }
 
 /// The loop-entry (`STAR_LOOP_ENTRY`) decision number for parser rule
@@ -134,6 +144,7 @@ pub fn empty_atn() -> Atn {
         decision_state: [],
         num_tokens: 0,
         call_site_returns: [],
+        decision_sites: [],
     };
 }
 
@@ -146,6 +157,7 @@ struct AtnBuilder {
     kinds: TreeMap<String, i32>,
     num_tokens: i32,
     call_site_returns: List<i32>,
+    decision_sites: List<i32>,
 }
 
 impl AtnBuilder {
@@ -175,6 +187,23 @@ impl AtnBuilder {
         let d = self.decision_state.len();
         self.decision_state.push(state);
         self.states[state].decision = d;
+    }
+
+    /// Allocate a fresh decision number for `state` (like `mark_decision`) and
+    /// record the surface decision-site `site -> decision` correspondence so
+    /// codegen can emit the exact decision number. A `site` of -1 (a node with
+    /// no stamped id, e.g. a rule body / LR atom block) only marks the
+    /// decision. Grows `decision_sites` sparsely with -1 fillers.
+    fn mark_decision_for_site(&mut self, state: i32, site: i32) {
+        let d = self.decision_state.len();
+        self.mark_decision(state);
+        if site < 0 {
+            return;
+        }
+        while self.decision_sites.len() <= site {
+            self.decision_sites.push(-1);
+        }
+        self.decision_sites[site] = d;
     }
 
     fn add_eps(&mut self, from: i32, to: i32) {
@@ -242,6 +271,7 @@ pub fn build_atn_with(grammar: &Grammar, lowered: &LoweredGrammar) -> Atn {
         kinds: tk.0,
         num_tokens: tk.1,
         call_site_returns: [],
+        decision_sites: [],
     };
 
     let nrules = grammar.parser_rules.len();
@@ -264,7 +294,7 @@ pub fn build_atn_with(grammar: &Grammar, lowered: &LoweredGrammar) -> Atn {
         let rule = &grammar.parser_rules[r];
         let body = match &lowered.parser_rules[r] {
             LeftRecursive(lr) => build_lr_body(&mut b, rule, lr, r, &rule_index),
-            _ => build_alternation(&mut b, &rule.alternatives, r, &rule_index),
+            _ => build_alternation(&mut b, &rule.alternatives, r, &rule_index, -1),
         };
         b.add_eps(b.rule_start[r], body.0);
         b.add_eps(body.1, b.rule_stop[r]);
@@ -277,6 +307,7 @@ pub fn build_atn_with(grammar: &Grammar, lowered: &LoweredGrammar) -> Atn {
         decision_state: b.decision_state,
         num_tokens: b.num_tokens,
         call_site_returns: b.call_site_returns,
+        decision_sites: b.decision_sites,
     };
 }
 
@@ -319,7 +350,7 @@ fn build_lr_body(
             atom_alts.push(rule.alternatives[i]);
         }
     }
-    let atom_seg = build_alternation(b, &atom_alts, r, rule_index);
+    let atom_seg = build_alternation(b, &atom_alts, r, rule_index, -1);
 
     let entry = b.new_state(ATN_STAR_LOOP_ENTRY, r);
     let loop_end = b.new_state(ATN_LOOP_END, r);
@@ -711,11 +742,12 @@ fn build_alternation(
     alts: &List<Alternative>,
     rule: i32,
     rule_index: &TreeMap<String, i32>,
+    site: i32,
 ) -> [i32, i32] {
     let start = b.new_state(ATN_BLOCK_START, rule);
     let end = b.new_state(ATN_BLOCK_END, rule);
     if alts.len() > 1 {
-        b.mark_decision(start);
+        b.mark_decision_for_site(start, site);
     }
     for let alt of alts {
         let seg = build_sequence(b, &alt.elements, rule, rule_index);
@@ -773,10 +805,10 @@ fn build_element(b: &mut AtnBuilder, elem: &Element, rule: i32, rule_index: &Tre
             b.record_call_site(rr.atn_call_site, to);
             [from, to];
         },
-        Group(g) => build_alternation(b, &g.alternatives, rule, rule_index),
+        Group(g) => build_alternation(b, &g.alternatives, rule, rule_index, g.atn_decision),
         Label(lab) => build_element(b, &lab.element, rule, rule_index),
         Not(n) => not_segment(b, &n.element, rule),
-        Repeat(rep) => build_repeat(b, rep.kind, rep.non_greedy, &rep.element, rule, rule_index),
+        Repeat(rep) => build_repeat(b, rep.kind, rep.non_greedy, &rep.element, rule, rule_index, rep.atn_decision),
     };
 }
 
@@ -821,12 +853,13 @@ fn build_repeat(
     inner: &Element,
     rule: i32,
     rule_index: &TreeMap<String, i32>,
+    site: i32,
 ) -> [i32, i32] {
     return match kind {
         Optional => {
             let start = b.new_state(ATN_BLOCK_START, rule);
             let end = b.new_state(ATN_BLOCK_END, rule);
-            b.mark_decision(start);
+            b.mark_decision_for_site(start, site);
             let seg = build_element(b, inner, rule, rule_index);
             if non_greedy {
                 b.add_eps(start, end);
@@ -841,7 +874,7 @@ fn build_repeat(
         Star => {
             let entry = b.new_state(ATN_STAR_LOOP_ENTRY, rule);
             let end = b.new_state(ATN_LOOP_END, rule);
-            b.mark_decision(entry);
+            b.mark_decision_for_site(entry, site);
             let seg = build_element(b, inner, rule, rule_index);
             let back = b.new_state(ATN_STAR_LOOP_BACK, rule);
             if non_greedy {
@@ -859,7 +892,7 @@ fn build_repeat(
             let seg = build_element(b, inner, rule, rule_index);
             let back = b.new_state(ATN_PLUS_LOOP_BACK, rule);
             let end = b.new_state(ATN_LOOP_END, rule);
-            b.mark_decision(back);
+            b.mark_decision_for_site(back, site);
             b.add_eps(seg.1, back);
             if non_greedy {
                 b.add_eps(back, end);

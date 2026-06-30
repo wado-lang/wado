@@ -6,6 +6,7 @@ use {
     normalize_caches,
     canonicalize_empty_alt_groups,
     assign_atn_call_sites,
+    assign_atn_decisions,
 } from "./ir.wado";
 use { rule_type_name, all_alts_are_single_token } from "./gen_util.wado";
 use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
@@ -78,6 +79,12 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // return states) is keyed consistently. Runs after canonicalization (the
     // numbered shape is the post-canonicalization one) and before lowering.
     assign_atn_call_sites(grammar);
+    // Number every surface decision-bearing node (`Repeat` / `Group`) so
+    // `build_atn`'s `decision_sites` correspondence (read by codegen to emit
+    // each `??`'s exact ATN decision number) is keyed consistently. Must run
+    // after `assign_atn_call_sites` (its `Repeat` / `Group` rebuild would
+    // otherwise reset the freshly stamped ids) and before lowering.
+    assign_atn_decisions(grammar);
     normalize_caches(grammar);
     // Pre-size the output buffer from the grammar's rule count so the
     // bulk of `String::push_str` calls in `CodeWriter::line` don't
@@ -103,6 +110,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     if ctx.needs_atn() {
         atn = build_atn_with(grammar, &lowered);
         ctx.set_atn_call_site_returns(&atn.call_site_returns);
+        ctx.set_atn_decision_sites(&atn.decision_sites);
         let mut lr_decs: List<i32> = [];
         for let mut r = 0; r < grammar.parser_rules.len(); r += 1 {
             lr_decs.push(lr_loop_entry_decision(&atn, r));

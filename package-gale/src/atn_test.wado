@@ -21,7 +21,7 @@ use {
     ATN_TR_PRECEDENCE,
 } from "./runtime/atn.wado";
 use { parse } from "./g4/parser.wado";
-use { assign_atn_call_sites } from "./ir.wado";
+use { assign_atn_call_sites, assign_atn_decisions } from "./ir.wado";
 
 global NON_GREEDY_G4: String = "
 grammar T;
@@ -373,4 +373,40 @@ test "build_atn handles a nested self-reference in an LR suffix" {
         }
     }
     assert found_floored_self_ref, "nested self-ref in `('and' e)+` should carry a precedence floor";
+}
+
+// Two non-greedy `??` in one rule. The decision-site correspondence
+// (`assign_atn_decisions` -> `Atn.decision_sites`) must give each its own ATN
+// decision number, retiring the runtime "unique exit-first BlockStart" search
+// that fell back to greedy ENTER once a rule had more than one `??`.
+global TWO_QQ_G4: String = "
+grammar T;
+s : 'a' ('b')?? 'c' ('d')?? EOF ;
+WS : ' ' -> skip ;
+";
+
+test "two ?? in a rule map to distinct ATN decisions" {
+    let mut g = parse(TWO_QQ_G4).unwrap();
+    assign_atn_decisions(&mut g);
+    let atn = build_atn(&g);
+    let ds = &atn.decision_sites;
+    // Decision sites (depth-first): 0 = first `??` Repeat, 1 = its `('b')`
+    // group, 2 = second `??` Repeat, 3 = its `('d')` group. The Repeats mark a
+    // decision; the single-alt groups do not (-1). The list grows only to the
+    // highest recorded site (2), so site 3 is never materialised.
+    assert ds.len() == 3, `expected 3 decision sites, got {ds.len()}`;
+    assert ds[0] >= 0, "first ?? has an ATN decision";
+    assert ds[1] == -1, "single-alt group marks no decision";
+    assert ds[2] >= 0, "second ?? has an ATN decision";
+    assert ds[0] != ds[2], "the two ?? must get distinct decision numbers";
+    // Each mapped decision is genuinely the non-greedy optional: its decision
+    // state's first edge goes straight to a BlockEnd (the exit-first ordering).
+    assert_qq_exit_first(&atn, ds[0]);
+    assert_qq_exit_first(&atn, ds[2]);
+}
+
+fn assert_qq_exit_first(atn: &Atn, d: i32) {
+    let st = &atn.states[atn.decision_state[d]];
+    assert st.kind == ATN_BLOCK_START, "?? decision is a BlockStart";
+    assert atn.states[st.transitions[0].target].kind == ATN_BLOCK_END, "?? decision is exit-first";
 }
