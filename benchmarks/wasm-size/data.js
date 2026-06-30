@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782727246332,
+  "lastUpdate": 1782778889689,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -36445,6 +36445,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/05f57c788c040c91f41795cd6b55ce987a4c9734"
         },
         "date": 1782727245918,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1845,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8434,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15339,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288458,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f4f43f40bd127b8346bfd8484267592c368b01ef",
+          "message": "Merge pull request #1469 from wado-lang/claude/optimizner-performance-aqw1pd\n\nperf(compiler): canonical FuncId function identity; up to ~2× faster heavy compiles",
+          "timestamp": "2026-06-30T09:13:43+09:00",
+          "tree_id": "55f98c8e4df555310ce974dd46c31d7c4bb3c54c",
+          "url": "https://github.com/wado-lang/wado/commit/f4f43f40bd127b8346bfd8484267592c368b01ef"
+        },
+        "date": 1782778889093,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
