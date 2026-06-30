@@ -14,12 +14,10 @@ fn assert_tree(input: &String, expected: &String) {
     assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
 }
 
-// `x` must yield the `'c'` to its caller `s`: longest-match would grab it.
 test "tree: multi-alt x yields trailing c to caller" {
     assert_tree(&"a b c", &"(s (x a b) c)");
 }
 
-// Without a trailing caller `'c'`, x takes its 3-token alt.
 test "tree: multi-alt x takes the longer alt when caller has no c" {
     assert_tree(&"a b c c", &"(s (x a b c) c)");
 }

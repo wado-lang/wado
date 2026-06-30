@@ -85,11 +85,8 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // return states) is keyed consistently. Runs after canonicalization (the
     // numbered shape is the post-canonicalization one) and before lowering.
     assign_atn_call_sites(grammar);
-    // Number every surface decision-bearing node (`Repeat` / `Group`) so
-    // `build_atn`'s `decision_sites` correspondence (read by codegen to emit
-    // each `??`'s exact ATN decision number) is keyed consistently. Must run
-    // after `assign_atn_call_sites` (its `Repeat` / `Group` rebuild would
-    // otherwise reset the freshly stamped ids) and before lowering.
+    // Must run after `assign_atn_call_sites` (its `Repeat` / `Group` rebuild
+    // would otherwise reset the freshly stamped decision-site ids).
     assign_atn_decisions(grammar);
     normalize_caches(grammar);
     // Pre-size the output buffer from the grammar's rule count so the
@@ -112,14 +109,9 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // emit can push each rule call's exact return state (`call_site_returns`)
     // and `gen_atn_data_global` can serialize the very same ATN. Gate-free
     // grammars skip this entirely.
-    // A multi-alt `AtEndConflict` site (an alt returns to the caller while
-    // another continues) is the one ambiguity the longest-match scan
-    // tournament resolves unsoundly — its longest pick can steal a token the
-    // caller needs. Route those sites through the runtime ATN simulator, which
-    // forces the ATN build below. Every other ambiguity reason keeps the
-    // tournament. Skip the scan entirely when lowering already requested the
-    // ATN (a `??` or ATN-class LR rule): the build happens regardless, so the
-    // detection pass would be pure wasted prediction-tree work.
+    // Route a multi-alt `AtEndConflict` through the simulator (see
+    // `gen_prediction_code_inner`); the detection forces the ATN build. Skipped
+    // when lowering already requested the ATN — the build happens regardless.
     if !ctx.needs_atn() && grammar_has_at_end_conflict(grammar, &lowered, &mut ctx) {
         ctx.mark_needs_atn();
     }
@@ -133,11 +125,9 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         for let mut r = 0; r < grammar.parser_rules.len(); r += 1 {
             let lr_dec = lr_loop_entry_decision(&atn, r);
             lr_decs.push(lr_dec);
-            // For an LR rule, `rule_body_decision` returns the atom block's
-            // decision, whose edge indices exclude the LR alts and so do NOT
-            // equal grammar alt indices. AtEndConflict routing only fires on
-            // non-LR rules, so store -1 for LR rules rather than a wrong-by-
-            // construction atom-relative decision number.
+            // -1 for LR rules: the atom-block decision's edge indices exclude the
+            // LR alts, so they would not equal the grammar alt indices `_alt_N`
+            // uses (AtEndConflict routing is non-LR only).
             body_decs.push(if lr_dec >= 0 { -1 } else { rule_body_decision(&atn, r) });
         }
         ctx.set_lr_loop_entry_decisions(&lr_decs);

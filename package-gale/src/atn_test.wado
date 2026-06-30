@@ -375,10 +375,7 @@ test "build_atn handles a nested self-reference in an LR suffix" {
     assert found_floored_self_ref, "nested self-ref in `('and' e)+` should carry a precedence floor";
 }
 
-// Two non-greedy `??` in one rule. The decision-site correspondence
-// (`assign_atn_decisions` -> `Atn.decision_sites`) must give each its own ATN
-// decision number, retiring the runtime "unique exit-first BlockStart" search
-// that fell back to greedy ENTER once a rule had more than one `??`.
+// Two non-greedy `??` in one rule must get distinct ATN decisions.
 global TWO_QQ_G4: String = "
 grammar T;
 s : 'a' ('b')?? 'c' ('d')?? EOF ;
@@ -390,17 +387,13 @@ test "two ?? in a rule map to distinct ATN decisions" {
     assign_atn_decisions(&mut g);
     let atn = build_atn(&g);
     let ds = &atn.decision_sites;
-    // Decision sites (depth-first): 0 = first `??` Repeat, 1 = its `('b')`
-    // group, 2 = second `??` Repeat, 3 = its `('d')` group. The Repeats mark a
-    // decision; the single-alt groups do not (-1). The list grows only to the
-    // highest recorded site (2), so site 3 is never materialised.
+    // Sites: 0 = first `??` Repeat, 1 = its single-alt group (-1, no decision),
+    // 2 = second `??` Repeat; the list stops at the highest recorded site (2).
     assert ds.len() == 3, `expected 3 decision sites, got {ds.len()}`;
     assert ds[0] >= 0, "first ?? has an ATN decision";
     assert ds[1] == -1, "single-alt group marks no decision";
     assert ds[2] >= 0, "second ?? has an ATN decision";
     assert ds[0] != ds[2], "the two ?? must get distinct decision numbers";
-    // Each mapped decision is genuinely the non-greedy optional: its decision
-    // state's first edge goes straight to a BlockEnd (the exit-first ordering).
     assert_qq_exit_first(&atn, ds[0]);
     assert_qq_exit_first(&atn, ds[2]);
 }
@@ -411,10 +404,8 @@ fn assert_qq_exit_first(atn: &Atn, d: i32) {
     assert atn.states[st.transitions[0].target].kind == ATN_BLOCK_END, "?? decision is exit-first";
 }
 
-// A decision-bearing node inside a left-recursive suffix is built by the
-// `_prec` builders. They must record the surface decision-site -> decision
-// correspondence too (via `mark_decision_for_site`), or `decision_sites` is
-// silently incomplete for LR-suffix decisions.
+// A decision-bearing node inside an LR suffix (built by the `_prec` builders)
+// must still record its decision site, or `decision_sites` is incomplete there.
 global LR_SUFFIX_QQ_G4: String = "
 grammar T;
 e : e ('x')?? '+' e | ID ;
@@ -427,8 +418,7 @@ test "decision sites are recorded for a node inside an LR suffix" {
     assign_atn_decisions(&mut g);
     let atn = build_atn(&g);
     let ds = &atn.decision_sites;
-    // Site 0 is the `('x')??` Repeat in alt0's LR suffix (the leading self-ref
-    // `e` consumes no site). The `_prec` builder must record it.
+    // Site 0 is the `('x')??` Repeat in alt0's LR suffix.
     assert ds.len() >= 1, "expected at least one decision site";
     assert ds[0] >= 0, `LR-suffix decision must be recorded, got {ds[0]}`;
 }

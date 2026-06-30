@@ -14,15 +14,10 @@ fn assert_tree(input: &String, expected: &String) {
     assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
 }
 
-// Sanity: a lone `if` with a trailing `else` must consume it (the first `??`).
 test "tree: single if with trailing else binds" {
     assert_tree(&"if y x else x", &"(start (statement if y (statement x) else (statement x)))");
 }
 
-// Dangling-`else`: the rule has TWO `??` (else + otherwise), so the retired
-// unique-exit-first heuristic could not identify the decision and fell back to
-// greedy ENTER (binding INNER). The per-`??` decision number restores the
-// non-greedy prefer-skip semantics: the `else` binds to the OUTER if.
 test "tree: dangling else binds to the outer if (first ?? of a two-?? rule)" {
     assert_tree(
         &"if y if y x else x",
@@ -30,8 +25,6 @@ test "tree: dangling else binds to the outer if (first ?? of a two-?? rule)" {
     );
 }
 
-// The SECOND `??` in the same rule must also predict its own decision: the
-// dangling `otherwise` binds to the OUTER when.
 test "tree: dangling otherwise binds to the outer when (second ?? of a two-?? rule)" {
     assert_tree(
         &"when y when y x otherwise x",

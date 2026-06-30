@@ -2,15 +2,8 @@
 //   ParserExec/IfIfElseNonGreedyBinding1 (extended to two `??` per rule)
 // License: BSD-3-Clause (ANTLR4 upstream)
 //
-// Regression for MULTIPLE non-greedy `(e)??` per rule. `statement` carries two
-// exit-first decisions (`('else' …)??` and `('otherwise' …)??`). The retired
-// `atn_ng_optional_enter` heuristic searched for the rule's UNIQUE exit-first
-// BlockStart and, finding two, fell back to greedy ENTER — wrongly binding the
-// dangling `else` / `otherwise` to the INNER statement. With the compile-time
-// decision-number correspondence each `??` predicts its own decision, so the
-// non-greedy prefer-skip semantics bind to the OUTER statement again.
-// Tracked in package-gale/TODO.md "ATN-class grammars".
-
+// `statement` has two `??` (`('else' …)??` / `('otherwise' …)??`); each must
+// predict its own decision so the dangling clause binds to the OUTER statement.
 grammar LlOptionalNonGreedyMulti;
 
 start : statement+ ;

@@ -1231,10 +1231,7 @@ test "non-greedy ?? inside a left-recursive rule threads min_prec" {
     assert str_contains(&output, &"atn_predict_with_stack(&ATN_SIM,");
 }
 
-// Two non-greedy `??` in one rule must emit two DISTINCT ATN decision numbers
-// (decision 0 and decision 1), not the retired rule-keyed
-// `atn_ng_optional_enter` which collapsed to greedy ENTER once a rule had more
-// than one `??`.
+// Two non-greedy `??` in one rule must emit two distinct ATN decision numbers.
 global TWO_QQ_CODEGEN_G4: String = "
 grammar T;
 s : 'a' ('b')?? 'c' ('d')?? EOF ;
@@ -1250,10 +1247,8 @@ test "multiple ?? in a rule emit distinct ATN decision numbers" {
     assert !str_contains(&body, &"atn_ng_optional_enter(");
 }
 
-// A multi-alt `AtEndConflict`: `x`'s alts share `'a' 'b'`; alt1 also eats a
-// trailing `'c'` the caller `s` needs. The longest-match tournament would
-// always grab the 3-token alt; codegen must instead route `x` through the ATN
-// simulator (`atn_predict_with_stack`), not the `_sd_best_i` tournament.
+// A multi-alt `AtEndConflict` must route through the ATN simulator, not the
+// `_sd_best_i` longest-match tournament.
 global AT_END_CONFLICT_G4: String = "
 grammar T;
 s : x 'c' ;
@@ -1267,6 +1262,5 @@ test "at-end-conflict multi-alt rule routes through the ATN simulator" {
     let body = extract_fn_body(&output, &"fn _parse_x__inner(");
     assert str_contains(&body, &"let _atn_alt = atn_predict_with_stack(&ATN_SIM,");
     assert str_contains(&body, &"if _atn_alt ==");
-    // The unsound longest-match tournament must NOT drive this decision.
     assert !str_contains(&body, &"_sd_best_i");
 }
