@@ -1497,13 +1497,11 @@ fn "core:prelude/format.wado/Formatter::new"(buf) {
 
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
-    let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
-    _licm_buf_4 = self.buf;
     b157: block {
         l158: loop {
             break_if b157 i >= n;
-            "core:prelude/string.wado/String::push"(_licm_buf_4, c);
+            "core:prelude/string.wado/String::push"(self.buf, c);
             i = i + 1;
             continue l158;
         };
@@ -1733,15 +1731,13 @@ fn "core:prelude/format.wado/Formatter::write_indent"(self) {
     let i: i32;
     let s: ref "core:prelude/string.wado//String";
     let _licm_indent_4: i32;
-    let _licm_buf_5: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_indent_4 = self.indent;
-    _licm_buf_5 = self.buf;
     b192: block {
         l193: loop {
             break_if b192 i >= _licm_indent_4;
             s = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 32), used: 2 };
-            "core:prelude/string.wado/String::push_str"(_licm_buf_5, s);
+            "core:prelude/string.wado/String::push_str"(self.buf, s);
             i = i + 1;
             continue l193;
         };

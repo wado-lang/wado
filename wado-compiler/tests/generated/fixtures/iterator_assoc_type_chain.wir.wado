@@ -478,13 +478,11 @@ fn "core:prelude/format.wado/Formatter::new"(buf) {
 
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
-    let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
-    _licm_buf_4 = self.buf;
     b26: block {
         l27: loop {
             break_if b26 i >= n;
-            "core:prelude/string.wado/String::push"(_licm_buf_4, c);
+            "core:prelude/string.wado/String::push"(self.buf, c);
             i = i + 1;
             continue l27;
         };
@@ -602,19 +600,17 @@ fn "core:prelude/list.wado/List<i32>::push"(self, value) {
 }
 
 fn "core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/ArrayIter<i32>>^Iterator::next"(self) {
-    let _licm_inner_3: ref "core:prelude/slice.wado//ArrayIter<i32>";
-    let _licm_pred_4: ref struct;
-    _licm_inner_3 = self.inner;
-    _licm_pred_4 = self.pred;
+    let _licm_pred_3: ref struct;
+    _licm_pred_3 = self.pred;
     block {
         l50: loop {
             let __sroa___match_2_discriminant: i32;
             let __sroa___match_2_payload_0: i32;
-            multivalue_bind [__sroa___match_2_discriminant, __sroa___match_2_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(_licm_inner_3);
+            multivalue_bind [__sroa___match_2_discriminant, __sroa___match_2_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self.inner);
             if __sroa___match_2_discriminant == 0 {
                 if block -> bool {
                     let __indirect_call_0: ref "canonical//CanonicalClosure_0";
-                    __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(_licm_pred_4);
+                    __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(_licm_pred_3);
                     call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env, __sroa___match_2_payload_0);
                 } {
                     return 0, __sroa___match_2_payload_0;
