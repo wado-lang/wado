@@ -3116,11 +3116,18 @@ fn slot_field_decomposable(expr: &WirInstr, v_idx: u32, module: &WirPackage) -> 
 /// a `?` desugar can leave a `Return` inside an `If` condition or a `LocalSet`
 /// value, and the rewriter visits those, so the validator must too or it would
 /// confirm a function whose un-validated return is later left at the old arity.
-fn all_returns_decompose(instr: &WirInstr, arity: usize, slot: usize, v_idx: u32, module: &WirPackage) -> bool {
+fn all_returns_decompose(
+    instr: &WirInstr,
+    arity: usize,
+    slot: usize,
+    v_idx: u32,
+    module: &WirPackage,
+) -> bool {
     if let WirInstr::Return { value: Some(v) } = instr {
         let decomposable = match v.as_ref() {
             WirInstr::Seq(fields) => {
-                fields.len() == arity && slot < fields.len()
+                fields.len() == arity
+                    && slot < fields.len()
                     && slot_field_decomposable(&fields[slot], v_idx, module)
             }
             _ => false,
@@ -3207,9 +3214,10 @@ fn then_is_pure_slot_copy(then_body: &[WirInstr], slot_local: &str) -> bool {
     }
     match then_body {
         [single] => is_slot_extraction(single, slot_local),
-        [WirInstr::LocalSet { name: t, value }, WirInstr::LocalGet { name: g, .. }] => {
-            g == t && is_slot_extraction(value, slot_local)
-        }
+        [
+            WirInstr::LocalSet { name: t, value },
+            WirInstr::LocalGet { name: g, .. },
+        ] => g == t && is_slot_extraction(value, slot_local),
         _ => false,
     }
 }
@@ -3232,7 +3240,9 @@ fn find_unwrap_alias(body: &[WirInstr], slot_local: &str) -> Option<String> {
                 *found = Some(name.clone());
             }
             match instr {
-                WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
+                WirInstr::Block { body, .. }
+                | WirInstr::Loop { body, .. }
+                | WirInstr::Seq(body) => {
                     walk(body, slot_local, found);
                 }
                 WirInstr::If {
@@ -3286,10 +3296,7 @@ fn classify_slot_consumer(body: &[WirInstr], slot_local: &str) -> Option<SlotCon
 }
 
 /// Phase 2: keep candidates whose every call site consumes the slot cleanly.
-fn validate_nested_sites(
-    module: &WirPackage,
-    cands: Vec<NestedSlotCand>,
-) -> Vec<NestedSlotCand> {
+fn validate_nested_sites(module: &WirPackage, cands: Vec<NestedSlotCand>) -> Vec<NestedSlotCand> {
     cands
         .into_iter()
         .filter(|cand| {
@@ -3301,8 +3308,10 @@ fn validate_nested_sites(
                 // can rewrite. A `Return(Call(f))` tail call (or any other raw
                 // call) would keep the old arity after we widen the signature,
                 // producing a Wasm type mismatch — bail if one exists.
-                let total_calls: usize =
-                    body.iter().map(|i| count_calls_to(i, cand.func_id_index)).sum();
+                let total_calls: usize = body
+                    .iter()
+                    .map(|i| count_calls_to(i, cand.func_id_index))
+                    .sum();
                 let mut mvbind_calls = 0usize;
                 for_each_multivalue_call(body, cand.func_id_index, &mut |locals| {
                     saw_call = true;
@@ -3352,7 +3361,10 @@ fn for_each_multivalue_call(
     f: &mut impl FnMut(&[Option<String>]),
 ) {
     for instr in body {
-        if let WirInstr::MultiValueLocalBind { instr: call, locals } = instr
+        if let WirInstr::MultiValueLocalBind {
+            instr: call,
+            locals,
+        } = instr
             && let Some(WirInstr::Call { func_id, .. }) = unwrap_to_inner_call(call)
             && func_id.index() == func_id_index
         {
@@ -3384,7 +3396,11 @@ pub(super) fn flatten_nested_variant_slots(module: &mut WirPackage) {
         return;
     }
     let confirmed = validate_nested_sites(module, cands);
-    compiler_trace!("sroa_variant_return", "nested confirmed = {}", confirmed.len());
+    compiler_trace!(
+        "sroa_variant_return",
+        "nested confirmed = {}",
+        confirmed.len()
+    );
     if confirmed.is_empty() {
         return;
     }
@@ -3534,7 +3550,10 @@ fn plan_nested_call_sites(
     by_func: &crate::hashmap::IndexMap<u32, &NestedSlotCand>,
     plans: &mut crate::hashmap::IndexMap<String, SlotConsumer>,
 ) {
-    if let WirInstr::MultiValueLocalBind { instr: call, locals } = instr
+    if let WirInstr::MultiValueLocalBind {
+        instr: call,
+        locals,
+    } = instr
         && let Some(WirInstr::Call { func_id, .. }) = unwrap_to_inner_call(call)
         && let Some(cand) = by_func.get(&func_id.index())
         && let Some(Some(slot_local)) = locals.get(cand.slot)
@@ -3576,7 +3595,10 @@ fn expand_nested_binds(
         }
 
         let cand_slot = match &body[i] {
-            WirInstr::MultiValueLocalBind { instr: call, locals } => unwrap_to_inner_call(call)
+            WirInstr::MultiValueLocalBind {
+                instr: call,
+                locals,
+            } => unwrap_to_inner_call(call)
                 .and_then(|c| match c {
                     WirInstr::Call { func_id, .. } => by_func.get(&func_id.index()),
                     _ => None,
@@ -3617,7 +3639,10 @@ fn expand_nested_binds(
         let mut field_to_local: crate::hashmap::IndexMap<(u32, String), String> =
             crate::hashmap::IndexMap::default();
         field_to_local.insert(
-            (cand.info.some_case_type_idx, cand.info.some_payload_field.clone()),
+            (
+                cand.info.some_case_type_idx,
+                cand.info.some_payload_field.clone(),
+            ),
             val_local.clone(),
         );
         let ivr = VariantReplacement {
@@ -3656,7 +3681,13 @@ fn rewrite_unwrap_to_guard(body: &mut [WirInstr], alias: &str) {
     for instr in body.iter_mut() {
         if let WirInstr::LocalSet { name, value } = instr
             && name == alias
-            && matches!(value.as_ref(), WirInstr::If { else_body: Some(_), .. })
+            && matches!(
+                value.as_ref(),
+                WirInstr::If {
+                    else_body: Some(_),
+                    ..
+                }
+            )
         {
             if let WirInstr::If {
                 condition,
