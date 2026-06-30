@@ -278,20 +278,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b14: block {
-        l15: loop {
-            break_if b14 offset >= count;
+    b12: block {
+        l13: loop {
+            break_if b12 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/wait_for_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b14 (if (result >> 4) == 0 -> i32 {
+            break_if b12 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l15;
+            continue l13;
         };
     };
 }
@@ -414,28 +414,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-<<<<<<< HEAD
-    b21: block {
-        l22: loop {
-            break_if b21 i >= n;
-||||||| f4f43f40
-    b23: block {
-        l24: loop {
-            break_if b23 i >= n;
-=======
-    b26: block {
-        l27: loop {
-            break_if b26 i >= n;
->>>>>>> origin/main
+    b24: block {
+        l25: loop {
+            break_if b24 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-<<<<<<< HEAD
-            continue l22;
-||||||| f4f43f40
-            continue l24;
-=======
-            continue l27;
->>>>>>> origin/main
+            continue l25;
         };
     };
 }
