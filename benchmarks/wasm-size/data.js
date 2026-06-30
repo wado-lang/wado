@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782799677037,
+  "lastUpdate": 1782855965012,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -36592,6 +36592,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 15306,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288503,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "604ee1c1bf4694adf19368b5d2fd5ec3787f72d0",
+          "message": "Merge pull request #1476 from wado-lang/claude/benchmark-json-catalog-optimize-llzwr9\n\nperf(optimizer): debox nested Result<Option<scalar>> return slots",
+          "timestamp": "2026-07-01T06:35:08+09:00",
+          "tree_id": "140e3250363c0ed131442461d76cbeccb4c5f945",
+          "url": "https://github.com/wado-lang/wado/commit/604ee1c1bf4694adf19368b5d2fd5ec3787f72d0"
+        },
+        "date": 1782855964738,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15276,
             "unit": "bytes"
           },
           {
