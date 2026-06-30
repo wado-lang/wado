@@ -102,6 +102,23 @@ impl ModifiedVars {
         }
     }
 
+    /// True when hoisting a candidate whose *value* is a GC heap object of type
+    /// `value_type` is unsound: an object of that type is `&mut`-clobbered by an
+    /// opaque call in the loop. Wado references alias by type, so the hoisted
+    /// handle may be that mutated object — and hoisting it lets a later LICM
+    /// iteration treat the object's now-opaquely-mutated fields (e.g. a `List`'s
+    /// length) as loop-invariant. Issue #1472: `r = &mut self.xs` plus
+    /// `r.push(...)` clobbers `List<i32>`, so `self.xs` must not be hoisted.
+    ///
+    /// Only the opaque-call clobber needs this guard. A *visible* field write
+    /// (`x.field = …`) is caught by per-iteration field tracking: after the
+    /// outer handle is hoisted, the write's receiver is rewritten to the hoist
+    /// local, so the next iteration sees that field as modified and stops.
+    fn is_clobbered_gc_value(&self, value_type: TypeId, type_table: &TypeTable) -> bool {
+        let pointee = strip_references(value_type, type_table);
+        is_gc_heap_type(pointee, type_table) && self.clobbered_pointee_types.contains(&pointee)
+    }
+
     fn extend_full(&mut self, other: &IndexSet<u32>) {
         self.fully.extend(other.iter().copied());
     }
@@ -368,6 +385,7 @@ fn licm_loop(
                 c.type_id
             };
             !modified_vars.is_reference_field_aliasing_written(root_ty, c.field_index, type_table)
+                && !modified_vars.is_clobbered_gc_value(c.type_id, type_table)
         });
 
         if candidates.is_empty() {
@@ -741,8 +759,10 @@ fn record_mut_ref_clobber_operand(
     }
 }
 
-/// If `expr` is a `&mut`-reference to a struct passed to a call, record its
-/// pointee as clobbered.
+/// If `expr` is a `&mut`-reference to a heap object passed to a call, record its
+/// pointee as clobbered. Covers both plain structs and generic instances
+/// (`List<T>`, `String`, …) — a `&mut List<i32>` method like `push` mutates the
+/// pointee just as a `&mut Node` method does (issue #1472).
 fn record_mut_ref_clobber(
     body: &Body,
     e: ExprId,
@@ -761,7 +781,12 @@ fn record_mut_ref_clobber(
             _ => break,
         }
     }
-    if saw_mut && matches!(type_table.get(ty), ResolvedType::Struct { .. }) {
+    if saw_mut
+        && matches!(
+            type_table.get(ty),
+            ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. }
+        )
+    {
         modified.insert_clobbered_pointee_type(ty);
     }
 }
