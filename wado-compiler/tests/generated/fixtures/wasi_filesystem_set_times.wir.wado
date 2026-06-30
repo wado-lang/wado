@@ -1571,11 +1571,13 @@ fn "core:prelude/format.wado/Formatter::new"(buf) {
 
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
+    let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
+    _licm_buf_4 = self.buf;
     b245: block {
         l246: loop {
             break_if b245 i >= n;
-            "core:prelude/string.wado/String::push"(self.buf, c);
+            "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
             continue l246;
         };

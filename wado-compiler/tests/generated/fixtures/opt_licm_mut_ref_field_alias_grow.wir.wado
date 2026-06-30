@@ -447,14 +447,16 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 
 fn "wado-compiler/tests/fixtures/opt_licm_mut_ref_field_alias_grow.wado/Acc::grow"(self, idx) {
     let r: ref "core:prelude//List<i32>";
+    let _licm_xs_4: ref "core:prelude//List<i32>";
     let __v1: i32;
     let __cond: bool;
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
     r = self.xs;
+    _licm_xs_4 = self.xs;
     b25: block {
         l26: loop {
-            break_if b25 self.xs.used > idx;
+            break_if b25 _licm_xs_4.used > idx;
             "core:prelude/list.wado/List<i32>::push"(r, -1);
             continue l26;
         };
@@ -477,11 +479,13 @@ fn "core:prelude/format.wado/Formatter::new"(buf) {
 
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
+    let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
+    _licm_buf_4 = self.buf;
     b28: block {
         l29: loop {
             break_if b28 i >= n;
-            "core:prelude/string.wado/String::push"(self.buf, c);
+            "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
             continue l29;
         };
