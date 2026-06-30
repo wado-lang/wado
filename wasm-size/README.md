@@ -61,12 +61,8 @@ Reads SQL from stdin and writes syntax-highlighted HTML to stdout.
 | wado     |      288,418 | Gale-generated highlighter from `SQLite.g4` |
 | rust¹    |    3,482,397 | tree-sitter + tree-sitter-sequel            |
 
-¹ Values carried over from the previous report — these toolchains were
-not re-measured this round (C/moonbit need `wasi-sdk`, which is
-currently disabled to avoid GitHub API rate limits; the Rust
-tree-sitter build also needs `wasi-sdk` for the C parser). Output
-sizes are toolchain-version dependent but not host dependent, so the
-old numbers still characterize the toolchain.
+¹ Carried over from a previous report; not re-measured this round (these
+builds need `wasi-sdk`). Sizes are toolchain- but not host-dependent.
 
 ## Usage
 
@@ -106,13 +102,10 @@ Run `mise install` to install:
 
 wasmtime is inherited from the root `mise.toml`.
 
-`wasi-sdk` (clang + wasm-ld + wasi-sysroot, used for C and for the
-tree-sitter C parser of the Rust `sqlite_highlight` build) is currently
-commented out in `mise.toml` to avoid GitHub API rate-limit failures
-during artifact install. To enable C and Rust-tree-sitter outputs,
-uncomment the `github:WebAssembly/wasi-sdk` line in `[tools]` and re-run
-`mise install`, or install a wasi-sysroot by other means (apt on
-Linux, Homebrew on macOS).
+`wasi-sdk` (used for C and the Rust `sqlite_highlight` tree-sitter parser) is
+commented out in `mise.toml`. To build those outputs, uncomment the
+`github:WebAssembly/wasi-sdk` line in `[tools]` and re-run `mise install`, or
+provide a wasi-sysroot another way (apt on Linux, Homebrew on macOS).
 
 ### Manual installation
 
