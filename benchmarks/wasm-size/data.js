@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782791904729,
+  "lastUpdate": 1782799677037,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -36553,6 +36553,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 288543,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b43b2eb3dbbd62ce03b8f07de7a9a88daf4334c2",
+          "message": "Merge pull request #1471 from wado-lang/claude/benchmark-fpfmt-wir-optimize-rwqxwb\n\nperf(optimize): multi-value POD returns, constant-index BCE, and fpfmt digit-count reuse",
+          "timestamp": "2026-06-30T14:59:47+09:00",
+          "tree_id": "327cd54f33dc79a352554e53c6a07b05319f7da6",
+          "url": "https://github.com/wado-lang/wado/commit/b43b2eb3dbbd62ce03b8f07de7a9a88daf4334c2"
+        },
+        "date": 1782799676712,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15306,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288503,
             "unit": "bytes"
           }
         ]
