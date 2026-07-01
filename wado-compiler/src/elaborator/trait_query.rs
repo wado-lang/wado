@@ -359,7 +359,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Explain *why* `type_id` does not implement `trait_name` by walking the
-    /// auto-derive / on_bound structure. Each returned entry is one step of a
+    /// auto-derive / `on_bound` structure. Each returned entry is one step of a
     /// reason chain, deepest cause last; an empty result means no structural
     /// explanation is available (the type is itself a leaf — e.g. a function
     /// type — whose non-conformance the headline message already states).
