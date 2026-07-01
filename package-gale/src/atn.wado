@@ -16,17 +16,12 @@
 //! Embedding (decided design): the ATN is serialized to a packed,
 //! column-oriented byte blob (`atn_blob_bytes`) that the generated parser
 //! decodes once at construction (`runtime/atn.wado::atn_decode`) into SoA
-//! arrays. Only fields the runtime simulator actually reads are carried —
-//! `num_tokens` and each state's `rule`/`decision` and each rule's `stop`
-//! state are compile-time-only (dump/debug, `build_token_kinds`) and never
-//! serialized. Field widths match real value ranges (`u8` for the small
-//! kind enums, `u16` for everything else) rather than a uniform `i32`; see
-//! `atn_blob_bytes`'s doc comment for the exact layout. The blob layout's
-//! constants (state kinds, transition kinds) are the single source of truth
-//! in `runtime/atn.wado` — that module is embedded verbatim into every
-//! parser and so cannot import from here, whereas this compiler-side module
-//! freely `use`s it. `atn_test.wado` pins the `atn_blob_bytes` -> `atn_decode`
-//! round-trip.
+//! arrays — see `atn_blob_bytes`'s doc comment for the wire layout. The
+//! blob layout's constants (state kinds, transition kinds) are the single
+//! source of truth in `runtime/atn.wado` — that module is embedded verbatim
+//! into every parser and so cannot import from here, whereas this
+//! compiler-side module freely `use`s it. `atn_test.wado` pins the
+//! `atn_blob_bytes` -> `atn_decode` round-trip.
 
 use { Grammar, ParserRule, Alternative, Element, RepeatKind } from "./ir.wado";
 use { LoweredGrammar, Rule, LeftRecursiveRule, LrAlt } from "./gir.wado";
@@ -929,28 +924,28 @@ fn build_repeat(
     };
 }
 
-/// Append `v` as a single byte. Asserts `v` fits `u8` (0..=255) so a
-/// too-large value fails loudly at generation time instead of silently
-/// truncating — only the tiny state/transition kind enums use this width.
+/// Asserts `v` fits `u8` (0..=255) so an overflow fails loudly at generation
+/// time instead of truncating silently. Only the tiny state/transition kind
+/// enums use this width.
 fn push_u8(bytes: &mut List<u8>, v: i32) {
     assert 0 <= v <= 255, `ATN blob: value {v} exceeds u8 range`;
     bytes.push(v as u8);
 }
 
-/// Append `v` as 2 little-endian bytes. Asserts `v` fits `u16` (0..=65535).
-/// Every count and state/rule/token index in the blob uses this width.
+/// Little-endian; same overflow assert as `push_u8`, widened to `u16`
+/// (0..=65535). Every count and state/rule/token index uses this width.
 fn push_u16(bytes: &mut List<u8>, v: i32) {
     assert 0 <= v <= 65535, `ATN blob: value {v} exceeds u16 range`;
     bytes.push((v & 0xff) as u8);
     bytes.push((v >> 8 & 0xff) as u8);
 }
 
-/// Append `v` as 3 little-endian bytes. Asserts `v` fits `u24` (0..=16777215).
+/// Little-endian; same as `push_u16` widened to `u24` (0..=16777215).
 /// `label`/`follow` need this width, not `u16`: the *parser* ATN uses `label`
 /// as a small token-kind index, but the *lexer* ATN (`latn.wado`) reuses the
-/// same `AtnTransition` fields to carry a Unicode scalar range (`label` =
-/// low, `follow` = high, up to `CHAR_MAX` = `0x10FFFF`) — one wire format,
-/// one decoder, so the field must be wide enough for its widest use.
+/// same fields for a Unicode scalar range (`label` = low, `follow` = high,
+/// up to `CHAR_MAX` = `0x10FFFF`) — one shared decoder, so the field must
+/// fit its widest use.
 fn push_u24(bytes: &mut List<u8>, v: i32) {
     assert 0 <= v <= 16777215, `ATN blob: value {v} exceeds u24 range`;
     bytes.push((v & 0xff) as u8);
@@ -958,19 +953,17 @@ fn push_u24(bytes: &mut List<u8>, v: i32) {
     bytes.push((v >> 16 & 0xff) as u8);
 }
 
-/// Append a `target` field biased by +1 so the sentinel -1 (unset/no value)
-/// round-trips through the unsigned `u16` wire encoding — `atn_decode`
-/// reverses it with an unconditional `- 1`, no branch needed. `push_u16`'s
-/// own range check catches the case where `v` is large enough that `v + 1`
-/// would overflow `u16`; the assert here only guards the other end (no
-/// value here is ever below the -1 sentinel).
+/// Biases `target` by +1 so the sentinel -1 (unset) survives the unsigned
+/// `u16` encoding; `atn_decode` reverses it with an unconditional `- 1`, no
+/// branch needed. Only the lower bound is asserted — `push_u16` itself
+/// catches `v + 1` overflowing `u16`.
 fn push_u16_biased(bytes: &mut List<u8>, v: i32) {
     assert v >= -1, `ATN blob: biased value {v} below sentinel -1`;
     push_u16(bytes, v + 1);
 }
 
-/// Append a `label`/`follow` field biased by +1 (see `push_u16_biased`);
-/// `push_u24` catches `v + 1` overflow.
+/// `label`/`follow` counterpart to `push_u16_biased`; `push_u24` catches
+/// `v + 1` overflow.
 fn push_u24_biased(bytes: &mut List<u8>, v: i32) {
     assert v >= -1, `ATN blob: biased value {v} below sentinel -1`;
     push_u24(bytes, v + 1);
@@ -997,9 +990,8 @@ fn push_u24_biased(bytes: &mut List<u8>, v: i32) {
 /// `ntrans_total` is not stored: it's the sum of `state_tr_count`, which
 /// precedes the transition columns, so `atn_decode` derives it (and
 /// `state_tr_start`, a running prefix sum) while reading that column.
-/// Fields the runtime simulator never reads — `num_tokens`, each state's
-/// `rule`/`decision`, each rule's `stop` state — are compile-time-only
-/// (dump/debug, `build_token_kinds`) and are not part of the blob at all.
+/// `num_tokens`, per-state `rule`/`decision`, and `rule_stop` aren't in the
+/// blob at all — see `AtnSim`'s doc comment in `runtime/atn.wado` for why.
 /// One pass over `atn.states` (and each state's `transitions`) fills seven
 /// per-column byte accumulators; a final handful of bulk `extend_from_slice`
 /// calls assembles them into the wire order above, so no field is walked

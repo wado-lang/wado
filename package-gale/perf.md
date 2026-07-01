@@ -266,18 +266,10 @@ refactor it is one writer (`atn_blob_bytes`) + one reader (`atn_decode`)
   round-trip-tested (`atn_test.wado` drives `atn_blob_bytes` → `atn_decode`
   field-for-field). The codec/reader pair is the irreducible minimum;
   serde would trade ~95 LOC for a heavyweight per-parser dependency.
-
-**Follow-up (2026-07): column-oriented, width-matched wire format.** The
-codec was later rewritten from a uniform `i32`-per-field blob (with a
-redundant byte→word reconstruction pass on decode) to a column-oriented
-(SoA) blob using `u8` for the small kind enums and `u16` for every
-count/index field (a `+1` bias encodes the -1 sentinel without a branch),
-dropping four fields the runtime simulator never reads (`num_tokens`,
-per-state `rule`/`decision`, `rule_stop`) entirely. `atn_decode` now reads
-each column directly off the packed bytes into a `with_capacity`-presized
-`List` — one pass, no intermediate word array, nothing grows by repeated
-doubling. See `atn_blob_bytes`'s doc comment in `atn.wado` for the exact
-layout.
+  (Separable, still open: embedding the blob as base64/`#data` rather than
+  an `i32`-array literal — a source-size/compile-time lever, codec-agnostic,
+  worth revisiting only once a _large_ grammar's ATN literal is a measured
+  problem. Today only small grammars carry an ATN.)
 
 ## Correctness items with a performance flavor
 

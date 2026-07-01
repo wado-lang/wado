@@ -225,17 +225,14 @@ fn gen_latn_data_global(w: &mut CodeWriter, atn: &Atn) {
 /// Shared by the parser (`ATN_SIM`) and lexer (`LATN_SIM`) — same wire format
 /// and decoder; only the atom semantics differ.
 ///
-/// The byte-string literal is passed straight into `atn_decode` rather than
-/// bound to its own `global` first: a `global` is a permanent GC root for the
-/// module's lifetime, so a separate `global ATN_DATA = b"...";` would keep
-/// the raw blob reachable forever even though `atn_decode` reads it exactly
-/// once and never stores a reference into it. As a bare call argument the
-/// materialized byte array has no referrers left once `atn_decode` returns,
-/// so it's collectible immediately. Confirmed this doesn't cost the
-/// constant-data-segment lowering: `array.new_data` (not a builder/push
-/// chain) fires the same way whether the literal is a global's initializer
-/// or a nested call argument — the compiled Wasm module is a few bytes
-/// smaller here (one fewer global), not larger.
+/// The literal is a bare call argument, not bound to its own `global` first:
+/// a `global` is a permanent GC root for the module's lifetime, so naming it
+/// (`global ATN_DATA = b"...";`) would keep the raw blob reachable forever
+/// even though `atn_decode` reads it once and never stores a reference. As
+/// an argument it has no referrers left once `atn_decode` returns, so it's
+/// collectible immediately — and this costs nothing at compile time:
+/// `array.new_data` fires the same way whether the literal is a global's
+/// initializer or a nested call argument.
 fn emit_atn_blob_global(w: &mut CodeWriter, atn: &Atn, sim_name: &String) {
     let bytes = atn_blob_bytes(atn);
     let mut body = String::with_capacity(bytes.len() * 4);
