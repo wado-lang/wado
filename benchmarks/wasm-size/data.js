@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782908127085,
+  "lastUpdate": 1782911576775,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -36841,6 +36841,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7543ea8d4a5b8c56b95d60b57228ebb7fd5142f3"
         },
         "date": 1782908126679,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15276,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457444,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "233f671765bbd0ca4c718fe73635c3bb2b7f20ab",
+          "message": "Merge pull request #1483 from wado-lang/claude/trait-bound-requests-uw7gpd\n\nfeat(traits): bound-driven Serialize/Deserialize/Eq/Ord synthesis",
+          "timestamp": "2026-07-01T22:04:44+09:00",
+          "tree_id": "149e31e23515c8d4cd640805a80e1278736c54ae",
+          "url": "https://github.com/wado-lang/wado/commit/233f671765bbd0ca4c718fe73635c3bb2b7f20ab"
+        },
+        "date": 1782911576160,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
