@@ -8559,10 +8559,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 TirExprKind::StringLiteral(value)
             }
             ast::Literal::Bytes(raw) => {
-                // Decode `\xNN` / standard escapes to the byte payload; the AST
-                // holds the raw source text. Typed `List<u8>` by annotate, this
-                // reuses the `BytesLiteral` data-segment lowering — no builder
-                // chain, so a large blob never expands into N pushes.
+                // Decode the raw source to bytes and reuse the `#include_bytes`
+                // lowering (`BytesLiteral` -> `List<u8>` data segment).
                 let bytes = super::util::unescape_bytes(raw).unwrap_or_default();
                 let array_u8_type = self
                     .tysys
