@@ -191,8 +191,8 @@ Trade-offs and known limits:
 
 - Notes are strings without their own spans; they explain the cause but do not
   point the editor at the offending field's definition.
-- Only the `Eq`/`Ord` (`automatic`) and `Serialize`/`Deserialize` (`on_bound`)
-  structural rules are unfolded (see
+- Only the `Eq`/`Ord` / `Serialize`/`Deserialize` structural rules are
+  unfolded (all four are `on_bound`; see
   [Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md)). A missing
   user-written `impl Trait for T` is not explained beyond "does not implement".
 - Generic inference provenance is not tracked: when `T` is inferred to a

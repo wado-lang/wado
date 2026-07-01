@@ -949,13 +949,13 @@ impl<T: Eq> Eq for Pair<T> {
 
 ### Auto-Derived Traits
 
-All primitives implement `Eq` and `Ord`. Structs and enums auto-derive `Eq` and `Ord` (variants: `Eq` only) when every field or case implements the trait. The impl is synthesized on demand — only where a `==`/`<` call site, a bound, or an explicit `impl Eq for T;` / `impl Ord for T;` marker needs it. The explicit marker is also a guarantee: a compile error if any field/case is ineligible. `Option<T: Eq>`, `Result<T: Eq, E: Eq>`, `List<T: Eq>` implement `Eq`; `List<T: Ord>` implements `Ord`.
+All primitives implement `Eq` and `Ord`. Structs and enums auto-derive both (variants: `Eq` only) when every field/case implements the trait — synthesized on demand, not for every type. An explicit `impl Eq for T;` / `impl Ord for T;` marker forces it and is a compile error if ineligible. `Option<T: Eq>`, `Result<T: Eq, E: Eq>`, `List<T: Eq>` implement `Eq`; `List<T: Ord>` implements `Ord`.
 
 `Inspect` and `InspectAlt` are auto-derived unconditionally for every type. `Display` and `DisplayAlt` fall back to them.
 
 `Default` is auto-derived unconditionally for a non-generic struct when every field has a declared default expression (`f: T = expr`).
 
-`Serialize` / `Deserialize` (`core:serde`) derive the same on-demand way as `Eq`/`Ord`, for struct (including anonymous), variant, enum, or flags, with no marker required — but their marker doesn't pre-validate eligibility like `Eq`/`Ord`'s does. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
+`Serialize` / `Deserialize` (`core:serde`) derive the same on-demand way, for struct (including anonymous), variant, enum, or flags — no marker required, though their marker (unlike `Eq`/`Ord`'s) doesn't pre-validate. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 
 Auto-derived traits are overridden by user-written `impl Trait for T`.
 

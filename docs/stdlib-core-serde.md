@@ -15,13 +15,12 @@ use { Serialize, Deserialize, SerializeError, DeserializeError } from "core:serd
 
 ## Deriving `Serialize` / `Deserialize`
 
-`impl Serialize for T;` / `impl Deserialize for T;` (an empty body — the
-compiler generates the method) is optional: a `T: Serialize` bound is
-satisfied structurally whenever every field or case of `T` implements the
-trait, with no marker required. This is also how an anonymous struct,
-which has no name to write the marker against, ever becomes serializable.
-Write the marker to force the impl into existence with no bound present,
-or alongside `#[serde(...)]` customization.
+`impl Serialize for T;` / `impl Deserialize for T;` (empty body — the
+compiler fills it in) is optional: a `T: Serialize` bound is satisfied
+structurally once every field or case of `T` implements the trait — how
+an anonymous struct, which has no name for a marker, becomes serializable.
+Write the marker to force the impl with no bound present, or alongside
+`#[serde(...)]` customization.
 
 ```wado
 struct Point { x: i32, y: i32 }               // no marker needed

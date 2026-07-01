@@ -18,24 +18,23 @@ for _when_ a derived impl exists for a type `T`:
   empty marker `impl Serialize for T;`. A bare `T: Serialize` bound does not
   trigger synthesis.
 
-This split is ad hoc. Serde's marker is pure boilerplate the compiler could
-discharge structurally, exactly as it already does for `Inspect` — and it
-makes anonymous-struct serialization impossible (no name to write a marker
-against). Conversely, `Eq` / `Ord` synthesize for every declared type
-regardless of use, which is pure compile-time and code-size waste for a
-program most of whose types are never compared.
+The split is ad hoc: serde's marker is boilerplate the compiler could
+discharge structurally (as it already does for `Inspect`), and it makes
+anonymous-struct serialization impossible (no name to write a marker
+against). `Eq` / `Ord`, meanwhile, synthesize for every declared type
+regardless of use — compile-time and code-size waste for types the program
+never compares.
 
-This is orthogonal to
+Orthogonal to
 [Library-Defined Derivation (`Reflect`)](./wep-2026-06-13-reflect-derivation.md),
-which decides _how_ an impl is written (a generic library `impl` over a
-synthesized `Reflect`). This WEP decides _when_ it is instantiated for a
-given `T`.
+which decides _how_ an impl is written. This WEP decides _when_ one is
+instantiated for a given `T`.
 
 ### Forcing functions
 
-- Anonymous structs have no name, so `impl Serialize for …` is unwritable;
-  bound-driven synthesis is the only way one can satisfy `T: Serialize`. This
-  is a hard prerequisite for the efficient field path in
+- Anonymous structs have no name, so `impl Serialize for …` is unwritable —
+  bound-driven synthesis is the only way to satisfy `T: Serialize`. A hard
+  prerequisite for the efficient field path in
   [`core:log`](./wep-2026-06-25-core-log.md).
 - `Eq` / `Ord` synthesizing for every declared type costs compile time and
   code size with no compensating benefit (unlike `Inspect`, which exists so
@@ -53,44 +52,29 @@ given `T`.
 
 - A hand-written `impl Trait for T { … }` always wins.
 - The explicit marker `impl Trait for T;` stays valid under every policy —
-  under `on_bound` it is optional, but still useful to force an impl into
-  existence with no bound present. For `Eq` / `Ord` it is a hard guarantee:
-  the marker is a compile error if any field/case is not itself eligible,
-  unlike a bound (simply unsatisfied) or the structural rule (nothing to
-  reject).
+  optional under `on_bound`, but still useful to force an impl into
+  existence with no bound present. For `Eq` / `Ord` it's also a hard
+  guarantee: a compile error if any field/case is ineligible, unlike a bound
+  (simply unsatisfied) or the structural rule (nothing to reject).
 - `automatic` and `on_bound` differ only in eagerness. For `Eq` / `Ord` this
-  is invisible at the bound-check level: `T: Eq` was already satisfied the
-  moment fields qualified, still is, and every `==` / `<` call site is
-  unchanged — the difference is purely whether `synthesis::traits` emits a
-  body for a type nothing asked about.
+  is invisible at the bound-check level — `T: Eq` was already satisfied the
+  moment fields qualified, and every `==` / `<` call site is unchanged. The
+  only difference is whether a body gets emitted for a type nothing asked
+  about.
 
 ### Bound-driven synthesis semantics
 
 An `on_bound` obligation `T: Trait` is satisfied structurally: no manual impl
-exists, and every field/case of `T` itself satisfies `Trait` recursively. On
+exists, and every field/case of `T` satisfies `Trait` recursively. On
 failure, the error reason-chains from the bound site to the offending
 field/case ([Diagnostic Reason Chains](./wep-2026-06-02-diagnostic-reason-chains.md)).
+See [Synthesis](./compiler.md#synthesis) for the recording/generation
+mechanism.
 
-Mechanism: the elaborator's structural bound check records the
-`(type_name, module, trait_name)` triple on a `TypeTable` set shared by every
-module whenever it finds a match. `synthesis::serde_synth` reads the
-`Serialize` / `Deserialize` entries and synthesizes each body the same way
-the explicit marker already did; `synthesis::traits` reads the `Eq` / `Ord`
-entries the same way, replacing its old unconditional sweep. Both read a
-_snapshot_, not a drain — the two passes run at different pipeline points, so
-whichever drained first would discard the other's entries.
-
-`Serialize` / `Deserialize` check "no impl already exists" before recording,
-since nothing else catches a duplicate. `Eq` / `Ord` don't need that check at
-the recording site — `synthesis::traits`'s own dedup already skips
-regenerating over a hand-written impl — except for the marker itself: an
-empty `impl Eq for T;` is indexed identically to a real impl, so `Eq`/`Ord`
-generation gates on `has_methodful_impl` (ignores marker-only impls) instead
-of the general `has_impl`, letting the marker request its own body rather
-than block it. The explicit-marker path also differs by family: `impl Eq for
-T;` validates `T` structurally before recording and is a hard compile error
-if ineligible — stronger than serde's marker, which does not pre-validate (a
-pre-existing gap; see Open Questions).
+The explicit marker differs by family: `impl Eq for T;` / `impl Ord for T;`
+validates `T` structurally before recording and is a hard compile error if
+ineligible. Serde's marker does not pre-validate (a gap; see Open
+Questions).
 
 Whole-program and monomorphized, so there's no orphan rule to violate.
 `GenericInstance` is out of scope for `Serialize` / `Deserialize` —
@@ -98,8 +82,7 @@ elaboration only sees the generic template, so a request keyed by a concrete
 instantiation wouldn't resolve to a body (the same gap
 [Serde](./wep-2026-02-28-serde.md) tracks for generic-struct `Deserialize`).
 `Eq` / `Ord` are unaffected: their generic synthesis predates this WEP and
-already records against the base declaration. Built-in generics (`List<T>`,
-`Option<T>`, …) carry their own hand-written impls either way.
+already records against the base declaration.
 
 ### Policy assignment
 
@@ -152,13 +135,13 @@ motivation is pure compile-time / code size, with no opt-out to weigh.
 
 ### Relationship and prerequisites
 
-Ships directly against the existing bespoke synthesizers (`synthesis::serde_synth`,
-`synthesis::traits`), not against [`Reflect`](./wep-2026-06-13-reflect-derivation.md),
-which remains unbuilt. The original plan was to land this after migrating
-serde onto a `Reflect`-based impl, but the two turned out independent: this
-WEP only changes _when_ a request is created, not _how_ the body is written.
-A future `Reflect`-based rewrite can land later against the same
-request-recording plumbing.
+Ships directly against the existing bespoke synthesizers
+(`synthesis::serde_synth`, `synthesis::traits`), not against
+[`Reflect`](./wep-2026-06-13-reflect-derivation.md), which remains unbuilt.
+The original plan was to land this after migrating serde onto a
+`Reflect`-based impl, but the two turned out independent — this WEP only
+changes _when_ a request is created, not _how_ the body is written. A future
+`Reflect`-based rewrite can land later against the same plumbing.
 
 ## Alternatives Considered
 
