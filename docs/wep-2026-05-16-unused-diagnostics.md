@@ -20,15 +20,18 @@ suppressed, and what is reported is owned here.
 
 The reachability roots for "unused" in Wado are not what rustc uses:
 
-- `export` is the only modifier that crosses the package boundary. It
-  applies uniformly across `command`, `service`, and `lib` entry
-  points: a `lib` package exposes `export` items as its public API
-  (see [Package Manifest](./wep-2026-02-14-package-manifest.md)).
-- `pub` is package-internal visibility. A `pub fn` that no caller
-  invokes inside the package is dead code, even in a `lib` package —
+- `pub` and `export` both cross the package boundary. `export` additionally
+  crosses the CM boundary (`export ⟹ pub`); a `pub`-only item reaches other
+  Wado packages natively, with no CM representation (see
+  [Visibility](./wep-2026-06-25-visibility-internal-pub-export.md)). Both
+  apply uniformly across `command`, `service`, and `lib` entry points: a
+  `lib` package exposes its `pub` / `export` items as its public API (see
+  [Package Manifest](./wep-2026-02-14-package-manifest.md)).
+- `internal` is package-internal visibility. An `internal fn` that no
+  caller invokes inside the package is dead code, even in a `lib` package —
   it is not part of the package's public API surface.
-- The standard library is a separate package whose `pub` items are
-  visible from user code under special rules. Stdlib must never receive
+- The standard library is a separate package whose `pub` / `export` items
+  are visible from user code under special rules. Stdlib must never receive
   user-facing unused warnings.
 - Synthesised functions (CM bindings, effect-dispatch wrappers,
   monomorphisation clones, auto-derived impls) are not source-authored
@@ -58,8 +61,8 @@ existing `CompilerHost`. Two passes contribute, both consuming
    the computation does not reach (its `Liveness::dead_items`).
 
 Both passes are guarded by `CompilerOptions::unused_diagnostics` (on
-by default). No package-kind toggle is needed: `export` already names
-the complete set of package-external roots for every entry-point
+by default). No package-kind toggle is needed: `pub` and `export` already
+name the complete set of package-external roots for every entry-point
 kind (`command`, `service`, `lib`).
 
 The optimize-time DCE in `optimize/dce.rs` stays in place as a
@@ -92,6 +95,8 @@ optimize-time and silent.
 - Per-`UseItem::InterfaceFunctions` granularity (function-level inside
   an interface import)
 - Workspace-aware multi-package root computation
+- Preserving `pub`-only items in `optimize/dce.rs` for the not-yet-implemented
+  provider-metadata standalone-`.wasm` publish path (see Reachability roots)
 
 ### Reachability roots (package-external boundary)
 
@@ -102,6 +107,7 @@ The pass runs two independent reachability closures over the same call graph:
 
 | Production root (seeds `E`)               | Source                                                                                                                  |
 | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `pub` / `export` items                    | `Visibility::Public` on a function or global (`export ⟹ pub`); the package-external boundary                            |
 | Items satisfying world-export contracts   | Functions whose name and signature satisfy a world export (`command` / `service` / `lib`); identified during `annotate` |
 | `#[export]`-attributed items              | Raw Wasm exports                                                                                                        |
 | Items in `wasm_module_sources` re-exports | Bridged Wasm module exports                                                                                             |
@@ -120,21 +126,27 @@ only from a test is therefore reported, not silently kept alive — the behaviou
 Rust's test-build masks. Reify still gates emission on `live_items = E ∪ T`, so
 test-reachable code compiles (in non-test worlds the optimize-time DCE drops it).
 
-The production root set matches the existing optimize-time DCE root set in
-`optimize/dce.rs` (`compute_reachable_from_entries`); the liveness
-pass restates them at the source level so reachability can be
-computed before TIR is emitted. Synthesised items — CM binding
-wrappers, effect-dispatch helpers, monomorphisation clones,
-auto-derived impls — are not in `Semantics` at all (they are born
-during `synthesis` / `monomorphize`) and therefore cannot appear in
-either the live set or the unused set. The optimize-time DCE
+The `#[export]` / world-export part of the production root set matches the
+existing optimize-time DCE root set in `optimize/dce.rs`
+(`compute_reachable_from_entries`); the liveness pass restates them at the
+source level so reachability can be computed before TIR is emitted.
+Synthesised items — CM binding wrappers, effect-dispatch helpers,
+monomorphisation clones, auto-derived impls — are not in `Semantics` at all
+(they are born during `synthesis` / `monomorphize`) and therefore cannot
+appear in either the live set or the unused set. The optimize-time DCE
 continues to remove them silently.
 
-`is_pub` is never a root. In Wado it denotes package-internal
-visibility, never package-external API — that is `export`'s job, and
-`export` covers `lib` packages as well as `command` / `service`. An
-unreferenced `pub fn` is dead code regardless of the entry-point
-kind.
+`pub` (`Visibility::Public`) _is_ a root, exactly like `export`. The one
+divergence from `optimize/dce.rs`: a Wado-to-Wado dependency is today always
+consumed from source (see [Package Manifest](./wep-2026-02-14-package-manifest.md)
+§"Wado-to-Wado Optimization"), so `compute_reachable_from_entries` does not
+root `pub` yet — the consumer's own build supplies real reachability from
+its own roots. Preserving `pub` for a standalone published `.wasm` (provider
+metadata) is deferred.
+
+`internal` (`Visibility::Internal`) is never a root: it is package-internal
+visibility only, so an unreferenced `internal fn` is dead code regardless of
+entry-point kind.
 
 ### Stdlib exclusion
 
@@ -519,7 +531,8 @@ E2E fixtures (under `tests/fixtures/`):
 - `dead_fn_export_root.wado`
 - `dead_fn_generic.wado`
 - `dead_fn_test_world.wado`
-- `dead_fn_lib_pub_is_dead.wado`
+- `dead_fn_pub_is_root.wado` (a `pub fn` with no in-package caller is not dead)
+- `dead_fn_internal_no_caller.wado` (an `internal fn` with no in-package caller is dead)
 - `dead_fn_cascade_via_global.wado` (function reachable until a dead global is removed)
 - `dead_global_basic.wado`
 - `dead_global_used_by_dead_fn.wado` (cascade across iterations)
@@ -572,8 +585,3 @@ through the diagnostics path.
   `liveness` only consults edges recorded during `annotate`; adding
   new edge kinds is part of the language feature that introduces
   them.
-- Risk: users coming from Rust expect `pub fn` in a `lib` package to
-  be a public API root and may be surprised that it is reported as
-  dead. Mitigation: the lint message names the rule
-  ("`pub` is package-internal; use `export` to expose at the package
-  boundary") and points at [Package Manifest](./wep-2026-02-14-package-manifest.md).

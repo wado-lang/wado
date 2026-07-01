@@ -338,3 +338,67 @@ test "unrelated" {
         "`helper` is used by neither → Dead, got {diags:?}"
     );
 }
+
+#[test]
+fn pub_function_with_no_caller_is_not_reported() {
+    // `pub` crosses the package boundary (the Wado-native library API), like
+    // `export` crosses the CM boundary, so it is a liveness root.
+    let diags = unused_for(
+        r#"
+pub fn library_api() -> i32 { return 1; }
+
+export fn run() {}
+"#,
+    );
+    assert!(
+        !has_dead_function(&diags, "library_api"),
+        "`pub fn` is a package-external root, got {diags:?}"
+    );
+}
+
+#[test]
+fn pub_global_with_no_caller_is_not_reported() {
+    let diags = unused_for(
+        r#"
+pub global LIBRARY_CONST: i32 = 42;
+
+export fn run() {}
+"#,
+    );
+    assert!(
+        !has_dead_global(&diags, "LIBRARY_CONST"),
+        "`pub global` is a package-external root, got {diags:?}"
+    );
+}
+
+#[test]
+fn internal_function_with_no_caller_is_reported_dead() {
+    // `internal` is package-internal-only visibility, not a liveness root:
+    // an unreferenced `internal fn` is still dead code.
+    let diags = unused_for(
+        r#"
+internal fn helper() -> i32 { return 1; }
+
+export fn run() {}
+"#,
+    );
+    assert!(
+        has_dead_function(&diags, "helper"),
+        "`internal fn` with no caller must still be reported, got {diags:?}"
+    );
+}
+
+#[test]
+fn internal_global_with_no_caller_is_reported_dead() {
+    let diags = unused_for(
+        r#"
+internal global UNUSED: i32 = 42;
+
+export fn run() {}
+"#,
+    );
+    assert!(
+        has_dead_global(&diags, "UNUSED"),
+        "`internal global` with no caller must still be reported, got {diags:?}"
+    );
+}

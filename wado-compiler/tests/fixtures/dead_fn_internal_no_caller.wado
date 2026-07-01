@@ -1,0 +1,13 @@
+// `internal` is package-internal-only visibility, not a liveness root: an
+// `internal fn` with no in-package caller is still dead code.
+internal fn helper() -> i32 {
+    return 1;
+}
+
+export fn run() {}
+
+__DATA__
+{
+    "stdout": "",
+    "warnings_contains": ["function `helper` is never used"]
+}
