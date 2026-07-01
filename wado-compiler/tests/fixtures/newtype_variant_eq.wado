@@ -1,8 +1,8 @@
 // Regression: a newtype/alias over a variant type must dispatch `==`/`<`
 // through the same Variant-Eq/Ord path a direct variant comparison uses.
-// Previously the newtype's ultimate-base match only recognized Struct /
-// GenericInstance, so a variant base silently fell through to a raw
-// primitive compare on GC struct refs and crashed the compiler (ICE).
+// The newtype's ultimate-base match previously only recognized Struct /
+// GenericInstance, so a variant base fell through to a raw primitive
+// compare on GC struct refs and crashed the compiler (ICE).
 
 variant Shape {
     Circle(i32),

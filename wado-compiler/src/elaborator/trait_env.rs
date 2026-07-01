@@ -969,18 +969,11 @@ impl TraitEnv {
     /// for these two traits is itself a request for the body, so treating
     /// it as "already implemented" would permanently block that body.
     ///
-    /// Scoped by `module_source` rather than matching any candidate
-    /// regardless of module: `impl_index` is keyed by bare type name, so
-    /// two unrelated same-named types in different modules (e.g. two
-    /// independent `struct Widget` declarations) share one bucket. Unlike
-    /// [`Self::impl_module_for`] (which picks a dispatch target and may
-    /// fall back to an unrelated module's entry when the hint doesn't
-    /// match, since some impl is a valid answer for routing a call this
-    /// gate must answer "does *this* module's own declaration already have
-    /// a real impl" — a fallback would silently reuse a different type's
-    /// impl and skip synthesizing this one's. Every real Eq/Ord impl in the
-    /// stdlib is co-located with its target type's own declaration, so a
-    /// strict match costs nothing in practice.
+    /// Strictly scoped to `module_source`, unlike [`Self::impl_module_for`]'s
+    /// hint-preferred-with-fallback: `impl_index` is keyed by bare type
+    /// name, so two unrelated same-named types in different modules share
+    /// one bucket, and a fallback here would silently reuse the wrong
+    /// type's impl and skip synthesizing this one's.
     pub(crate) fn has_methodful_impl(
         &self,
         type_name: &str,

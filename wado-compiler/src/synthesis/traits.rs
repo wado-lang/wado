@@ -308,9 +308,8 @@ pub fn synthesize_traits(project: Package) -> Package {
     // this pass runs) and keep only the `Eq` / `Ord` entries.
     //
     // `TypeTable` is shared (one `Rc<RefCell<…>>` per project, cloned onto
-    // every module) so any loaded module's handle reaches the same table;
-    // `build_tir` always populates at least the entry module before this
-    // pass runs, so `tir_modules` is never empty here.
+    // every module), so any module's handle reaches the same table, and
+    // `build_tir` always populates at least the entry module first.
     let first_module = project
         .tir_modules
         .values()

@@ -500,25 +500,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_id: TypeId,
         trait_name: &str,
     ) -> bool {
-        // Variants derive `Eq` only, never `Ord` (mirrors the `is_eq` gate
-        // on the `Variant` / generic-variant arms of
-        // `type_implements_trait_inner`) — without this, `impl Ord for
-        // SomeVariant;` would be wrongly accepted here (every payload
-        // happens to satisfy whatever `trait_name` is passed) and only
-        // fail later, at a `<` use site, defeating the marker's guarantee.
+        // Variants derive `Eq` only, never `Ord` (mirrors
+        // `type_implements_trait_inner`'s `Variant` arms). Without this,
+        // `impl Ord for SomeVariant;` would be wrongly accepted here and
+        // only fail later, at a `<` use site.
         let is_eq = {
             let tt = self.tysys.type_table.borrow();
             trait_name == tt.compiler_items().trait_name(CompilerItem::Eq)
         };
-        // A field/case type that resolves to the impl block's own
-        // (necessarily unconstrained — an explicit bound would already
-        // satisfy `type_implements_trait` on its own) type parameter is
-        // trivially eligible here: `impl<T> Eq for Wrapper<T>;` validates
-        // the *shape* of `Wrapper`, not a bound on `T`, matching how the
-        // compiler auto-derives `impl<T: Eq> Eq for Wrapper<T>` once some
-        // concrete instantiation actually demands it. Mirrors the
-        // `TypeParam` / `TypePack` skip in `find_arithmetic_trait_impl`'s
-        // bound-checking.
+        // A field/case type resolving to the impl block's own (necessarily
+        // unconstrained) type parameter is trivially eligible: `impl<T> Eq
+        // for Wrapper<T>;` validates the *shape* of `Wrapper`, not a bound
+        // on `T` — matching how the compiler auto-derives `impl<T: Eq> Eq
+        // for Wrapper<T>` once some concrete instantiation demands it.
         let trivially_eligible = |concrete: TypeId| {
             matches!(
                 self.tysys.type_table.borrow().get(concrete),

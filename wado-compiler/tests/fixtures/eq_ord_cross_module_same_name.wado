@@ -1,10 +1,9 @@
 // Regression: an unrelated, same-named type in another module must not
 // block this module's own bound-driven Eq/Ord synthesis. `TraitEnv`'s
-// impl index is keyed by bare type name, so two independent `struct
-// Widget` declarations (one per module) share one bucket; the gate that
-// gave the module in `sub/eq_ord_cross_module_same_name_a.wado` a
-// hand-written `impl Eq for Widget` wrongly matched by bare name alone
-// and skipped generating this module's own `Widget^Eq::eq`.
+// impl index is keyed by bare type name, so this module's `Widget` and
+// `sub/eq_ord_cross_module_same_name_a.wado`'s `Widget` share one bucket
+// — the gate used to match the other module's hand-written `impl Eq for
+// Widget` by bare name alone and skip generating this module's own.
 use { make_a } from "./sub/eq_ord_cross_module_same_name_a.wado";
 
 struct Widget {

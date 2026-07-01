@@ -1052,10 +1052,8 @@ impl TypeTable {
     /// Record that `type_name` (declared in `module_source`) satisfied a
     /// `T: <trait_name>` bound structurally (bound-driven synthesis). A
     /// no-op if already recorded for this triple — the same type is
-    /// typically discovered from many call sites and, recursively, from
-    /// every type that embeds it, so the borrowed pre-check avoids
-    /// allocating a fresh `(String, ModuleSource, String)` key on repeat
-    /// discoveries of the same fact.
+    /// typically rediscovered from many call sites, so the pre-check
+    /// avoids reallocating the key each time.
     pub fn record_bound_driven_synth_request(
         &mut self,
         type_name: &str,
@@ -1077,13 +1075,10 @@ impl TypeTable {
 
     /// Requests recorded by [`Self::record_bound_driven_synth_request`] so
     /// far whose trait name satisfies `matches`. A snapshot, not a drain:
-    /// `synthesis::serde_synth::synthesize_serde` and
-    /// `synthesis::traits::synthesize_traits` each read this same shared
-    /// set and filter for the trait names they own, so consuming it here
-    /// would silently drop whichever of the two runs second. Filtering
-    /// before cloning (rather than cloning the whole set into a `Vec` and
-    /// filtering that) means each caller only clones the entries it
-    /// actually keeps.
+    /// `synthesize_serde` and `synthesize_traits` each read this same
+    /// shared set and filter for the trait names they own, so consuming it
+    /// here would drop whichever runs second. Filtering before cloning
+    /// means each caller only clones the entries it keeps.
     pub fn bound_driven_synth_requests(
         &self,
         mut matches: impl FnMut(&str) -> bool,

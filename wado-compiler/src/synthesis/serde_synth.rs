@@ -487,10 +487,9 @@ fn distribute_bound_driven_requests(project: &mut Package) {
         )
     };
 
-    // Fetch (and filter to just ours — Eq/Ord entries are
-    // `synthesize_traits`'s to claim) before scanning every type in the
-    // project below; a program with no bound-driven serde requests at all
-    // skips that scan entirely.
+    // Fetch and filter to just ours (Eq/Ord entries belong to
+    // `synthesize_traits`) before the scan below, so a program with no
+    // bound-driven serde requests skips it entirely.
     let requests = type_table
         .borrow()
         .bound_driven_synth_requests(|trait_name| {
@@ -531,9 +530,8 @@ fn distribute_bound_driven_requests(project: &mut Package) {
     };
 
     for (target_type_name, module_source, trait_name) in requests {
-        // Every entry in `requests` already satisfies the filter above, so
-        // it matches `serialize_name` or `deserialize_name` — never both
-        // (the two are always distinct trait names) and never neither.
+        // `requests` is already filtered to serialize_name/deserialize_name,
+        // so the else branch below is always Deserialize.
         let trait_ref = if Some(trait_name.as_str()) == serialize_name.as_deref() {
             SynthTrait::Serialize
         } else {

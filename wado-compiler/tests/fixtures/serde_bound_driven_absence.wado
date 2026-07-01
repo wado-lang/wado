@@ -1,8 +1,8 @@
-// Regression: bound-driven Serialize synthesis is genuinely on-demand — a
-// declared type never passed to a serializer must not get a synthesized
-// impl at all. `serde_bound_driven.wado` only exercises the positive
-// (used) case; without this, a regression back to unconditional synthesis
-// would pass every serde test in this suite silently.
+// Regression: bound-driven Serialize synthesis must be genuinely
+// on-demand — a declared type nothing ever serializes must get no
+// synthesized impl. `serde_bound_driven.wado` only exercises the
+// positive (used) case, so a regression to unconditional synthesis
+// would still pass it.
 use { to_string } from "core:json";
 
 struct UsedForSerialize {

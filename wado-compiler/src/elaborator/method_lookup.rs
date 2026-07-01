@@ -2819,11 +2819,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             |found_trait_name| found_trait_name == trait_name,
             |s, impl_ref, mapping, _declared| {
                 // Check trait bounds on type parameters (e.g., impl<T: Eq> Eq for List<T>).
-                // Shared with `lookup_method_info_uncached`'s inherent-impl
-                // lookup and `find_trait_impl_for_type_with_args`, so a gap
-                // fixed for one AST shape (`Type::Generic` /
-                // `Type::Reference` / `Type::MutReference` / `Type::Tuple`)
-                // is fixed for every caller.
+                // Shared with `lookup_method_info_uncached` and
+                // `find_trait_impl_for_type_with_args`, so a bound-checking
+                // fix for any AST shape applies to every caller.
                 let impl_block = s.get_impl_block(impl_ref);
                 if !s.check_impl_block_bounds(
                     &impl_block.type_params,
