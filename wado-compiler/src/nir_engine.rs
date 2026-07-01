@@ -61,12 +61,20 @@ pub struct EngineBuffers {
     /// `build_uses`, run on every one of the tens-of-thousands of sessions.
     uses: Vec<LocalUses>,
     worklist: VecDeque<NodeRef>,
-    queued: IndexSet<NodeRef>,
+    /// Dense in-worklist bit per node, one `Vec` per arena kind (mirrors the
+    /// `*_parent` vecs above) — same dense-index rationale as `uses`:
+    /// `enqueue`/`pop` run on nearly every rewrite edit, the engine's hottest
+    /// path, so a `NodeRef`-keyed `IndexSet` here would pay a hash + probe on
+    /// every one of them instead of a plain array index.
+    expr_queued: Vec<bool>,
+    stmt_queued: Vec<bool>,
+    block_queued: Vec<bool>,
+    pat_queued: Vec<bool>,
 }
 
 impl EngineBuffers {
-    /// Clear every buffer and size the parent maps to `body`'s current node
-    /// counts (`None`-filled), readying them for a fresh session. Capacity is
+    /// Clear every buffer and size the parent / queued-bit maps to `body`'s
+    /// current node counts, readying them for a fresh session. Capacity is
     /// retained, so a reused `EngineBuffers` allocates only when a body is
     /// larger than any seen before.
     fn reset_for(&mut self, body: &Body) {
@@ -78,9 +86,16 @@ impl EngineBuffers {
         fill(&mut self.stmt_parent, body.stmts.len());
         fill(&mut self.block_parent, body.blocks.len());
         fill(&mut self.pat_parent, body.pats.len());
+        let fill_bit = |v: &mut Vec<bool>, len: usize| {
+            v.clear();
+            v.resize(len, false);
+        };
+        fill_bit(&mut self.expr_queued, body.exprs.len());
+        fill_bit(&mut self.stmt_queued, body.stmts.len());
+        fill_bit(&mut self.block_queued, body.blocks.len());
+        fill_bit(&mut self.pat_queued, body.pats.len());
         self.uses.clear();
         self.worklist.clear();
-        self.queued.clear();
     }
 
     /// Mutable access to local `index`'s use record, growing `uses` on demand
@@ -91,6 +106,26 @@ impl EngineBuffers {
             self.uses.resize_with(i + 1, LocalUses::default);
         }
         &mut self.uses[i]
+    }
+
+    /// Whether `node` currently has an in-worklist bit set.
+    fn is_queued(&self, node: NodeRef) -> bool {
+        match node {
+            NodeRef::Expr(id) => self.expr_queued[id.index()],
+            NodeRef::Stmt(id) => self.stmt_queued[id.index()],
+            NodeRef::Block(id) => self.block_queued[id.index()],
+            NodeRef::Pat(id) => self.pat_queued[id.index()],
+        }
+    }
+
+    /// Set `node`'s in-worklist bit.
+    fn set_queued(&mut self, node: NodeRef, value: bool) {
+        match node {
+            NodeRef::Expr(id) => self.expr_queued[id.index()] = value,
+            NodeRef::Stmt(id) => self.stmt_queued[id.index()] = value,
+            NodeRef::Block(id) => self.block_queued[id.index()] = value,
+            NodeRef::Pat(id) => self.pat_queued[id.index()] = value,
+        }
     }
 }
 
@@ -625,7 +660,8 @@ impl<'a> Engine<'a> {
 
     /// Push a node onto the worklist unless it is already queued.
     pub fn enqueue(&mut self, node: NodeRef) {
-        if self.buf.queued.insert(node) {
+        if !self.buf.is_queued(node) {
+            self.buf.set_queued(node, true);
             self.buf.worklist.push_back(node);
         }
     }
@@ -633,7 +669,7 @@ impl<'a> Engine<'a> {
     /// Pop the next node to process, clearing its in-queue bit.
     pub fn pop(&mut self) -> Option<NodeRef> {
         let node = self.buf.worklist.pop_front()?;
-        self.buf.queued.swap_remove(&node);
+        self.buf.set_queued(node, false);
         Some(node)
     }
 
@@ -836,6 +872,7 @@ impl<'a> Engine<'a> {
             span,
         });
         self.buf.expr_parent.push(None);
+        self.buf.expr_queued.push(false);
         let mut children = Vec::new();
         self.body
             .for_each_child(NodeRef::Expr(id), |c| children.push(c));
@@ -866,6 +903,7 @@ impl<'a> Engine<'a> {
     pub fn alloc_stmt(&mut self, kind: StmtKind, span: Span) -> StmtId {
         let id = self.body.stmts.push(StmtNode { kind, span });
         self.buf.stmt_parent.push(None);
+        self.buf.stmt_queued.push(false);
         let mut children = Vec::new();
         self.body
             .for_each_child(NodeRef::Stmt(id), |c| children.push(c));
@@ -884,6 +922,7 @@ impl<'a> Engine<'a> {
     pub fn alloc_block(&mut self, stmts: Vec<StmtId>, span: Span) -> BlockId {
         let id = self.body.blocks.push(BlockNode { stmts, span });
         self.buf.block_parent.push(None);
+        self.buf.block_queued.push(false);
         let kids: Vec<StmtId> = self.body.blocks[id].stmts.clone();
         for s in kids {
             self.set_parent(NodeRef::Stmt(s), Some(NodeRef::Block(id)));
@@ -896,6 +935,7 @@ impl<'a> Engine<'a> {
     pub fn alloc_pat(&mut self, kind: PatKind, span: Span) -> PatId {
         let id = self.body.pats.push(PatNode { kind, span });
         self.buf.pat_parent.push(None);
+        self.buf.pat_queued.push(false);
         let mut children = Vec::new();
         self.body
             .for_each_child(NodeRef::Pat(id), |c| children.push(c));
