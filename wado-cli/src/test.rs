@@ -26,7 +26,7 @@ use crate::discover;
 use crate::manifest as project_manifest;
 use crate::runtime::{self, WasiState};
 use crate::test_report::{
-    CompactReporter, CompileEvent, LoadEvent, PackageDoneArgs, TapReporter, TestReporter,
+    CompileEvent, HeartbeatReporter, LoadEvent, PackageDoneArgs, TapReporter, TestReporter,
     VerboseReporter,
 };
 use wado_compiler::LogLevel;
@@ -72,7 +72,7 @@ pub enum TestFormat {
     /// Immediate one-line notices for failures/resolved TODOs, a 5s
     /// heartbeat digest otherwise, and a final summary — meant to be
     /// tailed. The default.
-    Compact,
+    Heartbeat,
     /// TAP14 document: one Test Point per file (a `# Subtest:` block for
     /// files with `test` blocks), for CI/tooling consumption.
     Tap,
@@ -82,7 +82,7 @@ impl TestFormat {
     fn parse(s: &str) -> Option<Self> {
         match s {
             "verbose" => Some(Self::Verbose),
-            "compact" => Some(Self::Compact),
+            "heartbeat" => Some(Self::Heartbeat),
             "tap" => Some(Self::Tap),
             _ => None,
         }
@@ -191,7 +191,7 @@ impl Opt {
                 long: Some("format"),
                 short: None,
                 value: Some("<name>"),
-                desc: "Output format: compact (default), verbose, tap",
+                desc: "Output format: heartbeat (default), verbose, tap",
             },
             Self::Dir => args::DIR_SPEC,
             Self::NoDir => args::NO_DIR_SPEC,
@@ -411,7 +411,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let mut no_dir = false;
     let mut no_run = false;
     let mut no_cache = false;
-    let mut format = TestFormat::Compact;
+    let mut format = TestFormat::Heartbeat;
     let mut param_args = args::ParamArgs::default();
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
@@ -455,7 +455,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
                     let val = args::require_string(&mut parser)?;
                     format = TestFormat::parse(&val).ok_or_else(|| {
                         CliExit::error(format!(
-                            "--format requires compact, verbose, or tap, got '{val}'"
+                            "--format requires heartbeat, verbose, or tap, got '{val}'"
                         ))
                     })?;
                 }
@@ -2168,7 +2168,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     let total_files: usize = package_runs.iter().map(|r| r.paths.len()).sum();
     let reporter: Arc<dyn TestReporter> = match format {
         TestFormat::Verbose => Arc::new(VerboseReporter::new(overall_start)),
-        TestFormat::Compact => Arc::new(CompactReporter::new(overall_start, total_files)),
+        TestFormat::Heartbeat => Arc::new(HeartbeatReporter::new(overall_start, total_files)),
         TestFormat::Tap => Arc::new(TapReporter::new(overall_start, total_files)),
     };
 

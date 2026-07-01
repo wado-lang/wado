@@ -3,8 +3,8 @@
 //! The pipeline (`test.rs`) drives compile/load/execute purely on data; it
 //! reports progress through a [`TestReporter`] rather than printing
 //! directly, so different `--format` values can render the same event
-//! stream differently (a human-readable log, a compact tailable digest, a
-//! TAP document, ...).
+//! stream differently (a human-readable log, a tailable heartbeat digest,
+//! a TAP document, ...).
 //!
 //! Events fire live as the pipeline discovers them (per file compiled,
 //! per file loaded, per test executed). Totals used for the exit code are
@@ -25,9 +25,9 @@ use crate::test::{
     TodoCompileError,
 };
 
-/// How often the compact reporter's heartbeat re-prints progress while
+/// How often the heartbeat reporter re-prints progress while
 /// otherwise quiet. A failure/resolved-TODO notice resets this window
-/// (see `CompactState::notify`) so the next heartbeat doesn't immediately
+/// (see `HeartbeatState::notify`) so the next heartbeat doesn't immediately
 /// repeat what was just reported.
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 
@@ -200,7 +200,7 @@ impl TestReporter for VerboseReporter {
 /// `#![TODO]` compile error, immediately on load with zero test blocks
 /// (a SKIP), or once its last test result arrives (tracked via
 /// `pending_tests`).
-struct CompactState {
+struct HeartbeatState {
     overall_start: Instant,
     total_files: usize,
     files_done: AtomicUsize,
@@ -217,13 +217,13 @@ struct CompactState {
     stop: AtomicBool,
 }
 
-impl CompactState {
+impl HeartbeatState {
     fn mark_file_done(&self) {
         self.files_done.fetch_add(1, Ordering::Relaxed);
     }
 }
 
-fn print_heartbeat(state: &CompactState) {
+fn print_heartbeat(state: &HeartbeatState) {
     let elapsed = state.overall_start.elapsed();
     let done = state.files_done.load(Ordering::Relaxed);
     let total = state.total_files;
@@ -267,13 +267,13 @@ fn print_heartbeat(state: &CompactState) {
 /// Tailable default: immediate one-line notices for anything that needs
 /// attention (failures, resolved TODOs), a periodic heartbeat digest
 /// otherwise, and a final three-axis summary.
-pub(crate) struct CompactReporter {
-    state: Arc<CompactState>,
+pub(crate) struct HeartbeatReporter {
+    state: Arc<HeartbeatState>,
 }
 
-impl CompactReporter {
+impl HeartbeatReporter {
     pub(crate) fn new(overall_start: Instant, total_files: usize) -> Self {
-        let state = Arc::new(CompactState {
+        let state = Arc::new(HeartbeatState {
             overall_start,
             total_files,
             files_done: AtomicUsize::new(0),
@@ -333,11 +333,11 @@ impl CompactReporter {
     }
 }
 
-impl TestReporter for CompactReporter {
+impl TestReporter for HeartbeatReporter {
     fn on_package_start(&self, _pkg_run: &PackageRun, _show_banner: bool) {
-        // Compact treats the whole invocation as one continuous run — no
+        // Heartbeat treats the whole invocation as one continuous run — no
         // per-package banners, consistent with the single running total
-        // the heartbeat reports.
+        // it reports.
     }
 
     fn on_compile(&self, path: &str, event: CompileEvent, _duration: Duration) {

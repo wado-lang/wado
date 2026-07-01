@@ -353,8 +353,8 @@ fn test_test_failing() {
 }
 
 #[test]
-fn test_test_compact_is_default_and_reports_failure_immediately() {
-    // `compact` is the default `--format`: no per-file `Compiled`/`Loaded`
+fn test_test_heartbeat_is_default_and_reports_failure_immediately() {
+    // `heartbeat` is the default `--format`: no per-file `Compiled`/`Loaded`
     // log lines and no per-test `ok`/`FAILED` lines (that's `verbose`
     // territory) — but a failing test still gets its own `not ok` line,
     // not just a buried count in the final summary.
@@ -370,7 +370,7 @@ fn test_test_compact_is_default_and_reports_failure_immediately() {
 }
 
 #[test]
-fn test_test_compact_reports_skip_for_files_without_test_blocks() {
+fn test_test_heartbeat_reports_skip_for_files_without_test_blocks() {
     // A file with zero `test` blocks still compiles and loads; the
     // `skip` axis (not silently folded into `load: N ok`) is how a
     // developer notices "this file has no tests" rather than assuming
