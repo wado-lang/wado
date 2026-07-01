@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782893384210,
+  "lastUpdate": 1782905423748,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -36753,6 +36753,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/cfcafd57178083aeb557b7dbe18af679fb3c6fd4"
         },
         "date": 1782893383559,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15276,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457444,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1ae606828df567ef7204d9fb5f74eeed1329b479",
+          "message": "Merge pull request #1481 from wado-lang/claude/wado-test-format-ma7o4g\n\nfeat(cli): redesign wado test's output format",
+          "timestamp": "2026-07-01T20:22:12+09:00",
+          "tree_id": "eda28579c23123f43f9c1c1ff8551709933752f4",
+          "url": "https://github.com/wado-lang/wado/commit/1ae606828df567ef7204d9fb5f74eeed1329b479"
+        },
+        "date": 1782905423137,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
