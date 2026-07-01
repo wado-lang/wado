@@ -853,6 +853,74 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
+    /// Whether an `impl Trait for Type;` marker's trait name resolves to
+    /// `Eq` or `Ord`. Handled separately from [`Self::classify_synth_trait`]:
+    /// unlike `Serialize` / `Deserialize` / `From`, an `Eq` / `Ord` marker
+    /// does not go through a [`tir::SynthesisRequest`] drained by a
+    /// dedicated synthesis pass — it validates eligibility immediately (see
+    /// [`Self::record_eq_ord_explicit_request`]) and records directly into
+    /// the same bound-driven request set a `T: Eq` / `T: Ord` bound already
+    /// feeds (`docs/wep-2026-06-25-trait-derivation.md`).
+    fn classify_eq_ord_marker(&self, trait_type: &ast::Type) -> Option<String> {
+        use crate::compiler_item::CompilerItem;
+        let base = trait_type.head_base_name()?;
+        let tt = self.tysys.type_table.borrow();
+        let items = tt.compiler_items();
+        if base == items.trait_name(CompilerItem::Eq) || base == items.trait_name(CompilerItem::Ord)
+        {
+            Some(base.to_string())
+        } else {
+            None
+        }
+    }
+
+    /// Validate and record an explicit `impl Eq for T;` / `impl Ord for T;`
+    /// marker. Unlike a `T: Eq` bound (satisfied the moment fields
+    /// structurally qualify), the marker is the user's explicit guarantee
+    /// that `T` derives the trait — so ineligibility is a hard error at the
+    /// marker's own span, not a deferred bound-check failure elsewhere.
+    fn record_eq_ord_explicit_request(
+        &mut self,
+        trait_type: &ast::Type,
+        trait_name: &str,
+        target_ty: &ast::Type,
+        target_type_name: &str,
+        span: crate::token::Span,
+    ) {
+        let target_type_id = self.resolve_type(target_ty);
+        if self.structurally_derivable_for_explicit_request(
+            &self.annotate_ctx,
+            target_type_id,
+            trait_name,
+        ) {
+            let module_source = match self.tysys.type_table.borrow().get(target_type_id) {
+                tir::ResolvedType::Struct { module_source, .. }
+                | tir::ResolvedType::Enum { module_source, .. }
+                | tir::ResolvedType::Variant { module_source, .. }
+                | tir::ResolvedType::GenericInstance { module_source, .. } => module_source.clone(),
+                _ => self.current_module_source.clone(),
+            };
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .record_bound_driven_synth_request(
+                    target_type_name.to_string(),
+                    module_source,
+                    trait_name.to_string(),
+                );
+        } else {
+            let reason = self.trait_unimpl_reason_chain(target_type_id, trait_name);
+            let _ = self
+                .logger
+                .error(types::TypeError::ExplicitDeriveNotEligible {
+                    trait_name: self.get_type_name_full(trait_type),
+                    type_name: target_type_name.to_string(),
+                    reason,
+                    span,
+                });
+        }
+    }
+
     /// Record a coercion decision for the expression at `ast_id`. Called
     /// from each successful `try_coerce_*` sub-helper so every caller of
     /// those helpers (`try_coerce`, `resolve_cast`, the deferred-coercion
@@ -1576,35 +1644,45 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // `tir_module.synthesis_requests`.
                     if impl_block.is_synthesize_request {
                         if let Some(ref trait_type) = impl_block.trait_type {
-                            match self.classify_synth_trait(trait_type) {
-                                Some(trait_ref) => {
-                                    let target_type_id = self.resolve_type(&impl_block.ty);
-                                    let type_params: Vec<_> = self
-                                        .annotate_ctx
-                                        .trait_ctx
-                                        .type_params
-                                        .iter()
-                                        .map(|(name, &(index, type_id))| {
-                                            (name.clone(), index, type_id)
-                                        })
-                                        .collect();
-                                    let req = crate::tir::SynthesisRequest {
-                                        trait_ref,
-                                        target_type_name: struct_name.clone(),
-                                        target_type_id,
-                                        type_params,
-                                        span: impl_block.span,
-                                    };
-                                    self.record_pending_synthesis_request(req);
-                                }
-                                None => {
-                                    let _ = self.logger.error(
-                                        types::TypeError::UnsupportedSynthesisTrait {
-                                            trait_name: self.get_type_name_full(trait_type),
-                                            type_name: struct_name.clone(),
+                            if let Some(trait_name) = self.classify_eq_ord_marker(trait_type) {
+                                self.record_eq_ord_explicit_request(
+                                    trait_type,
+                                    &trait_name,
+                                    &impl_block.ty,
+                                    &struct_name,
+                                    impl_block.span,
+                                );
+                            } else {
+                                match self.classify_synth_trait(trait_type) {
+                                    Some(trait_ref) => {
+                                        let target_type_id = self.resolve_type(&impl_block.ty);
+                                        let type_params: Vec<_> = self
+                                            .annotate_ctx
+                                            .trait_ctx
+                                            .type_params
+                                            .iter()
+                                            .map(|(name, &(index, type_id))| {
+                                                (name.clone(), index, type_id)
+                                            })
+                                            .collect();
+                                        let req = crate::tir::SynthesisRequest {
+                                            trait_ref,
+                                            target_type_name: struct_name.clone(),
+                                            target_type_id,
+                                            type_params,
                                             span: impl_block.span,
-                                        },
-                                    );
+                                        };
+                                        self.record_pending_synthesis_request(req);
+                                    }
+                                    None => {
+                                        let _ = self.logger.error(
+                                            types::TypeError::UnsupportedSynthesisTrait {
+                                                trait_name: self.get_type_name_full(trait_type),
+                                                type_name: struct_name.clone(),
+                                                span: impl_block.span,
+                                            },
+                                        );
+                                    }
                                 }
                             }
                         }

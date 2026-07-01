@@ -4037,74 +4037,6 @@ pub fn parse_text(s: &String) -> Option<f64> {
     return "core::prelude/fpfmt.wado::parse_text_range"(s, 0, s.String::len());
 }
 
-pub fn "SpecialKind^Eq::eq"(self: Box<core:prelude/fpfmt.wado/SpecialKind>, other: Box<core:prelude/fpfmt.wado/SpecialKind>) -> bool {
-    return (self.value == other.value);
-}
-
-pub fn "SpecialKind^Ord::cmp"(self: Box<core:prelude/fpfmt.wado/SpecialKind>, other: Box<core:prelude/fpfmt.wado/SpecialKind>) -> Ordering {
-    let a: SpecialKind = self.value;
-    let b: SpecialKind = other.value;
-    if (a < b) {
-        return Ordering::Less;
-    }
-    if (a > b) {
-        return Ordering::Greater;
-    }
-    return Ordering::Equal;
-}
-
-pub fn "UnpackResult^Eq::eq"(self: &UnpackResult, other: &UnpackResult) -> bool {
-    return (Box<u64> { value: self.mantissa }."u64^Eq::eq"(Box<u64> { value: other.mantissa }) && Box<i32> { value: self.exponent }."i32^Eq::eq"(Box<i32> { value: other.exponent }));
-}
-
-pub fn "UnpackResult^Ord::cmp"(self: &UnpackResult, other: &UnpackResult) -> Ordering {
-    let c: Ordering = Box<u64> { value: self.mantissa }."u64^Ord::cmp"(Box<u64> { value: other.mantissa });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<i32> { value: self.exponent }."i32^Ord::cmp"(Box<i32> { value: other.exponent });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    return Ordering::Equal;
-}
-
-pub fn "PmHiLo^Eq::eq"(self: &PmHiLo, other: &PmHiLo) -> bool {
-    return (Box<u64> { value: self.hi }."u64^Eq::eq"(Box<u64> { value: other.hi }) && Box<u64> { value: self.lo }."u64^Eq::eq"(Box<u64> { value: other.lo }));
-}
-
-pub fn "PmHiLo^Ord::cmp"(self: &PmHiLo, other: &PmHiLo) -> Ordering {
-    let c: Ordering = Box<u64> { value: self.hi }."u64^Ord::cmp"(Box<u64> { value: other.hi });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<u64> { value: self.lo }."u64^Ord::cmp"(Box<u64> { value: other.lo });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    return Ordering::Equal;
-}
-
-pub fn "FormatResult^Eq::eq"(self: &FormatResult, other: &FormatResult) -> bool {
-    return ((Box<u64> { value: self.digits }."u64^Eq::eq"(Box<u64> { value: other.digits }) && Box<i32> { value: self.exponent }."i32^Eq::eq"(Box<i32> { value: other.exponent })) && Box<i32> { value: self.n_digits }."i32^Eq::eq"(Box<i32> { value: other.n_digits }));
-}
-
-pub fn "FormatResult^Ord::cmp"(self: &FormatResult, other: &FormatResult) -> Ordering {
-    let c: Ordering = Box<u64> { value: self.digits }."u64^Ord::cmp"(Box<u64> { value: other.digits });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<i32> { value: self.exponent }."i32^Ord::cmp"(Box<i32> { value: other.exponent });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<i32> { value: self.n_digits }."i32^Ord::cmp"(Box<i32> { value: other.n_digits });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    return Ordering::Equal;
-}
-
 pub fn "SpecialKind^Inspect::inspect"(self: Box<core:prelude/fpfmt.wado/SpecialKind>, f: &mut Formatter) {
     if (self.value == %0) {
         f.Formatter::write_str(&String { repr: packed"SpecialKind::NotSpecial", used: 23 });
@@ -6109,62 +6041,6 @@ fn parse_f64_from_str_range(s: &String, start: i32, end: i32) -> Result<f64, Par
 
 fn parse_f64_from_str(s: &String) -> Result<f64, ParseFloatError> {
     return "core::prelude/intparse.wado::parse_f64_from_str_range"(s, 0, s.String::len());
-}
-
-pub fn "IntErrorKind^Eq::eq"(self: Box<core:prelude/intparse.wado/IntErrorKind>, other: Box<core:prelude/intparse.wado/IntErrorKind>) -> bool {
-    return (self.value == other.value);
-}
-
-pub fn "IntErrorKind^Ord::cmp"(self: Box<core:prelude/intparse.wado/IntErrorKind>, other: Box<core:prelude/intparse.wado/IntErrorKind>) -> Ordering {
-    let a: IntErrorKind = self.value;
-    let b: IntErrorKind = other.value;
-    if (a < b) {
-        return Ordering::Less;
-    }
-    if (a > b) {
-        return Ordering::Greater;
-    }
-    return Ordering::Equal;
-}
-
-pub fn "FloatErrorKind^Eq::eq"(self: Box<core:prelude/intparse.wado/FloatErrorKind>, other: Box<core:prelude/intparse.wado/FloatErrorKind>) -> bool {
-    return (self.value == other.value);
-}
-
-pub fn "FloatErrorKind^Ord::cmp"(self: Box<core:prelude/intparse.wado/FloatErrorKind>, other: Box<core:prelude/intparse.wado/FloatErrorKind>) -> Ordering {
-    let a: FloatErrorKind = self.value;
-    let b: FloatErrorKind = other.value;
-    if (a < b) {
-        return Ordering::Less;
-    }
-    if (a > b) {
-        return Ordering::Greater;
-    }
-    return Ordering::Equal;
-}
-
-pub fn "ParseIntError^Eq::eq"(self: &ParseIntError, other: &ParseIntError) -> bool {
-    return Box<core:prelude/intparse.wado/IntErrorKind> { value: self.kind }."IntErrorKind^Eq::eq"(Box<core:prelude/intparse.wado/IntErrorKind> { value: other.kind });
-}
-
-pub fn "ParseIntError^Ord::cmp"(self: &ParseIntError, other: &ParseIntError) -> Ordering {
-    let c: Ordering = Box<core:prelude/intparse.wado/IntErrorKind> { value: self.kind }."IntErrorKind^Ord::cmp"(Box<core:prelude/intparse.wado/IntErrorKind> { value: other.kind });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    return Ordering::Equal;
-}
-
-pub fn "ParseFloatError^Eq::eq"(self: &ParseFloatError, other: &ParseFloatError) -> bool {
-    return Box<core:prelude/intparse.wado/FloatErrorKind> { value: self.kind }."FloatErrorKind^Eq::eq"(Box<core:prelude/intparse.wado/FloatErrorKind> { value: other.kind });
-}
-
-pub fn "ParseFloatError^Ord::cmp"(self: &ParseFloatError, other: &ParseFloatError) -> Ordering {
-    let c: Ordering = Box<core:prelude/intparse.wado/FloatErrorKind> { value: self.kind }."FloatErrorKind^Ord::cmp"(Box<core:prelude/intparse.wado/FloatErrorKind> { value: other.kind });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    return Ordering::Equal;
 }
 
 pub fn "IntErrorKind^Inspect::inspect"(self: Box<core:prelude/intparse.wado/IntErrorKind>, f: &mut Formatter) {
@@ -13136,198 +13012,6 @@ pub fn String::char_indices(self: &String) -> StrCharIndicesIter {
     return StrCharIndicesIter { repr: self.repr, used: self.used, byte_index: 0 };
 }
 
-pub fn "Utf8Scalar^Eq::eq"(self: &Utf8Scalar, other: &Utf8Scalar) -> bool {
-    return ((Box<u32> { value: self.code }."u32^Eq::eq"(Box<u32> { value: other.code }) && Box<i32> { value: self.advance }."i32^Eq::eq"(Box<i32> { value: other.advance })) && Box<bool> { value: self.valid }."bool^Eq::eq"(Box<bool> { value: other.valid }));
-}
-
-pub fn "Utf8Scalar^Ord::cmp"(self: &Utf8Scalar, other: &Utf8Scalar) -> Ordering {
-    let c: Ordering = Box<u32> { value: self.code }."u32^Ord::cmp"(Box<u32> { value: other.code });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<i32> { value: self.advance }."i32^Ord::cmp"(Box<i32> { value: other.advance });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<bool> { value: self.valid }."bool^Ord::cmp"(Box<bool> { value: other.valid });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    return Ordering::Equal;
-}
-
-pub fn "StrUtf8ByteIter^Eq::eq"(self: &StrUtf8ByteIter, other: &StrUtf8ByteIter) -> bool {
-    return ((self.repr."Array<u8>^Eq::eq"(&other.repr) && Box<i32> { value: self.used }."i32^Eq::eq"(Box<i32> { value: other.used })) && Box<i32> { value: self.index }."i32^Eq::eq"(Box<i32> { value: other.index }));
-}
-
-pub fn "StrUtf8ByteIter^Ord::cmp"(self: &StrUtf8ByteIter, other: &StrUtf8ByteIter) -> Ordering {
-    let c: Ordering = self.repr."Array<u8>^Ord::cmp"(&other.repr);
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<i32> { value: self.used }."i32^Ord::cmp"(Box<i32> { value: other.used });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<i32> { value: self.index }."i32^Ord::cmp"(Box<i32> { value: other.index });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    return Ordering::Equal;
-}
-
-pub fn "StrCharIter^Eq::eq"(self: &StrCharIter, other: &StrCharIter) -> bool {
-    return ((self.repr."Array<u8>^Eq::eq"(&other.repr) && Box<i32> { value: self.used }."i32^Eq::eq"(Box<i32> { value: other.used })) && Box<i32> { value: self.byte_index }."i32^Eq::eq"(Box<i32> { value: other.byte_index }));
-}
-
-pub fn "StrCharIter^Ord::cmp"(self: &StrCharIter, other: &StrCharIter) -> Ordering {
-    let c: Ordering = self.repr."Array<u8>^Ord::cmp"(&other.repr);
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<i32> { value: self.used }."i32^Ord::cmp"(Box<i32> { value: other.used });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<i32> { value: self.byte_index }."i32^Ord::cmp"(Box<i32> { value: other.byte_index });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    return Ordering::Equal;
-}
-
-pub fn "StrSplitIter^Eq::eq"(self: &StrSplitIter, other: &StrSplitIter) -> bool {
-    return (((((self.repr."Array<u8>^Eq::eq"(&other.repr) && Box<i32> { value: self.used }."i32^Eq::eq"(Box<i32> { value: other.used })) && Box<i32> { value: self.pos }."i32^Eq::eq"(Box<i32> { value: other.pos })) && self.sep_repr."Array<u8>^Eq::eq"(&other.sep_repr)) && Box<i32> { value: self.sep_len }."i32^Eq::eq"(Box<i32> { value: other.sep_len })) && Box<bool> { value: self.finished }."bool^Eq::eq"(Box<bool> { value: other.finished }));
-}
-
-pub fn "StrSplitIter^Ord::cmp"(self: &StrSplitIter, other: &StrSplitIter) -> Ordering {
-    let c: Ordering = self.repr."Array<u8>^Ord::cmp"(&other.repr);
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<i32> { value: self.used }."i32^Ord::cmp"(Box<i32> { value: other.used });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<i32> { value: self.pos }."i32^Ord::cmp"(Box<i32> { value: other.pos });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = self.sep_repr."Array<u8>^Ord::cmp"(&other.sep_repr);
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<i32> { value: self.sep_len }."i32^Ord::cmp"(Box<i32> { value: other.sep_len });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<bool> { value: self.finished }."bool^Ord::cmp"(Box<bool> { value: other.finished });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    return Ordering::Equal;
-}
-
-pub fn "StrSplitNIter^Eq::eq"(self: &StrSplitNIter, other: &StrSplitNIter) -> bool {
-    return ((((((self.repr."Array<u8>^Eq::eq"(&other.repr) && Box<i32> { value: self.used }."i32^Eq::eq"(Box<i32> { value: other.used })) && Box<i32> { value: self.pos }."i32^Eq::eq"(Box<i32> { value: other.pos })) && self.sep_repr."Array<u8>^Eq::eq"(&other.sep_repr)) && Box<i32> { value: self.sep_len }."i32^Eq::eq"(Box<i32> { value: other.sep_len })) && Box<i32> { value: self.remaining }."i32^Eq::eq"(Box<i32> { value: other.remaining })) && Box<bool> { value: self.finished }."bool^Eq::eq"(Box<bool> { value: other.finished }));
-}
-
-pub fn "StrSplitNIter^Ord::cmp"(self: &StrSplitNIter, other: &StrSplitNIter) -> Ordering {
-    let c: Ordering = self.repr."Array<u8>^Ord::cmp"(&other.repr);
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<i32> { value: self.used }."i32^Ord::cmp"(Box<i32> { value: other.used });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<i32> { value: self.pos }."i32^Ord::cmp"(Box<i32> { value: other.pos });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = self.sep_repr."Array<u8>^Ord::cmp"(&other.sep_repr);
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<i32> { value: self.sep_len }."i32^Ord::cmp"(Box<i32> { value: other.sep_len });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<i32> { value: self.remaining }."i32^Ord::cmp"(Box<i32> { value: other.remaining });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<bool> { value: self.finished }."bool^Ord::cmp"(Box<bool> { value: other.finished });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    return Ordering::Equal;
-}
-
-pub fn "StrSplitWhitespaceIter^Eq::eq"(self: &StrSplitWhitespaceIter, other: &StrSplitWhitespaceIter) -> bool {
-    return ((self.repr."Array<u8>^Eq::eq"(&other.repr) && Box<i32> { value: self.used }."i32^Eq::eq"(Box<i32> { value: other.used })) && Box<i32> { value: self.pos }."i32^Eq::eq"(Box<i32> { value: other.pos }));
-}
-
-pub fn "StrSplitWhitespaceIter^Ord::cmp"(self: &StrSplitWhitespaceIter, other: &StrSplitWhitespaceIter) -> Ordering {
-    let c: Ordering = self.repr."Array<u8>^Ord::cmp"(&other.repr);
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<i32> { value: self.used }."i32^Ord::cmp"(Box<i32> { value: other.used });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<i32> { value: self.pos }."i32^Ord::cmp"(Box<i32> { value: other.pos });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    return Ordering::Equal;
-}
-
-pub fn "StrLinesIter^Eq::eq"(self: &StrLinesIter, other: &StrLinesIter) -> bool {
-    return (((self.repr."Array<u8>^Eq::eq"(&other.repr) && Box<i32> { value: self.used }."i32^Eq::eq"(Box<i32> { value: other.used })) && Box<i32> { value: self.pos }."i32^Eq::eq"(Box<i32> { value: other.pos })) && Box<bool> { value: self.finished }."bool^Eq::eq"(Box<bool> { value: other.finished }));
-}
-
-pub fn "StrLinesIter^Ord::cmp"(self: &StrLinesIter, other: &StrLinesIter) -> Ordering {
-    let c: Ordering = self.repr."Array<u8>^Ord::cmp"(&other.repr);
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<i32> { value: self.used }."i32^Ord::cmp"(Box<i32> { value: other.used });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<i32> { value: self.pos }."i32^Ord::cmp"(Box<i32> { value: other.pos });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<bool> { value: self.finished }."bool^Ord::cmp"(Box<bool> { value: other.finished });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    return Ordering::Equal;
-}
-
-pub fn "StrCharIndicesIter^Eq::eq"(self: &StrCharIndicesIter, other: &StrCharIndicesIter) -> bool {
-    return ((self.repr."Array<u8>^Eq::eq"(&other.repr) && Box<i32> { value: self.used }."i32^Eq::eq"(Box<i32> { value: other.used })) && Box<i32> { value: self.byte_index }."i32^Eq::eq"(Box<i32> { value: other.byte_index }));
-}
-
-pub fn "StrCharIndicesIter^Ord::cmp"(self: &StrCharIndicesIter, other: &StrCharIndicesIter) -> Ordering {
-    let c: Ordering = self.repr."Array<u8>^Ord::cmp"(&other.repr);
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<i32> { value: self.used }."i32^Ord::cmp"(Box<i32> { value: other.used });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<i32> { value: self.byte_index }."i32^Ord::cmp"(Box<i32> { value: other.byte_index });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    return Ordering::Equal;
-}
-
 pub fn "Utf8Scalar^Inspect::inspect"(self: &Utf8Scalar, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"Utf8Scalar { ", used: 13 });
     f.Formatter::write_str(&String { repr: packed"code: ", used: 6 });
@@ -14222,26 +13906,6 @@ pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>,
 
 pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
     self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "WaitEvent^Eq::eq"(self: &WaitEvent, other: &WaitEvent) -> bool {
-    return ((Box<i32> { value: self.code }."i32^Eq::eq"(Box<i32> { value: other.code }) && Box<i32> { value: self.handle }."Waitable^Eq::eq"(Box<i32> { value: other.handle })) && Box<u32> { value: self.payload }."u32^Eq::eq"(Box<u32> { value: other.payload }));
-}
-
-pub fn "WaitEvent^Ord::cmp"(self: &WaitEvent, other: &WaitEvent) -> Ordering {
-    let c: Ordering = Box<i32> { value: self.code }."i32^Ord::cmp"(Box<i32> { value: other.code });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<i32> { value: self.handle }."Waitable^Ord::cmp"(Box<i32> { value: other.handle });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<u32> { value: self.payload }."u32^Ord::cmp"(Box<u32> { value: other.payload });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    return Ordering::Equal;
 }
 
 pub fn "WaitEvent^Inspect::inspect"(self: &WaitEvent, f: &mut Formatter) {
@@ -16195,22 +15859,6 @@ export fn __cm_export__run() {
     cm_raw_call task-return(0);
 }
 
-pub fn "ErrorCode^Eq::eq"(self: Box<wasi:cli/types.wado/ErrorCode>, other: Box<wasi:cli/types.wado/ErrorCode>) -> bool {
-    return (self.value == other.value);
-}
-
-pub fn "ErrorCode^Ord::cmp"(self: Box<wasi:cli/types.wado/ErrorCode>, other: Box<wasi:cli/types.wado/ErrorCode>) -> Ordering {
-    let a: ErrorCode = self.value;
-    let b: ErrorCode = other.value;
-    if (a < b) {
-        return Ordering::Less;
-    }
-    if (a > b) {
-        return Ordering::Greater;
-    }
-    return Ordering::Equal;
-}
-
 pub fn "ErrorCode^Inspect::inspect"(self: Box<wasi:cli/types.wado/ErrorCode>, f: &mut Formatter) {
     if (self.value == %0) {
         f.Formatter::write_str(&String { repr: packed"ErrorCode::Io", used: 13 });
@@ -16842,62 +16490,6 @@ pub fn "String^InspectAlt::inspect_alt"(self: &String, f: &mut Formatter) {
     self."String^Inspect::inspect"(f);
 }
 
-pub fn "Alignment^Eq::eq"(self: Box<core:prelude/format.wado/Alignment>, other: Box<core:prelude/format.wado/Alignment>) -> bool {
-    return (self.value == other.value);
-}
-
-pub fn "Alignment^Ord::cmp"(self: Box<core:prelude/format.wado/Alignment>, other: Box<core:prelude/format.wado/Alignment>) -> Ordering {
-    let a: Alignment = self.value;
-    let b: Alignment = other.value;
-    if (a < b) {
-        return Ordering::Less;
-    }
-    if (a > b) {
-        return Ordering::Greater;
-    }
-    return Ordering::Equal;
-}
-
-pub fn "Formatter^Eq::eq"(self: &Formatter, other: &Formatter) -> bool {
-    return (((((((Box<char> { value: self.fill }."char^Eq::eq"(Box<char> { value: other.fill }) && Box<core:prelude/format.wado/Alignment> { value: self.align }."Alignment^Eq::eq"(Box<core:prelude/format.wado/Alignment> { value: other.align })) && Box<bool> { value: self.sign_plus }."bool^Eq::eq"(Box<bool> { value: other.sign_plus })) && Box<bool> { value: self.zero_pad }."bool^Eq::eq"(Box<bool> { value: other.zero_pad })) && Box<i32> { value: self.width }."i32^Eq::eq"(Box<i32> { value: other.width })) && Box<i32> { value: self.precision }."i32^Eq::eq"(Box<i32> { value: other.precision })) && Box<i32> { value: self.indent }."i32^Eq::eq"(Box<i32> { value: other.indent })) && self.buf."&mut core:prelude/string.wado/String^Eq::eq"(&other.buf));
-}
-
-pub fn "Formatter^Ord::cmp"(self: &Formatter, other: &Formatter) -> Ordering {
-    let c: Ordering = Box<char> { value: self.fill }."char^Ord::cmp"(Box<char> { value: other.fill });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<core:prelude/format.wado/Alignment> { value: self.align }."Alignment^Ord::cmp"(Box<core:prelude/format.wado/Alignment> { value: other.align });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<bool> { value: self.sign_plus }."bool^Ord::cmp"(Box<bool> { value: other.sign_plus });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<bool> { value: self.zero_pad }."bool^Ord::cmp"(Box<bool> { value: other.zero_pad });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<i32> { value: self.width }."i32^Ord::cmp"(Box<i32> { value: other.width });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<i32> { value: self.precision }."i32^Ord::cmp"(Box<i32> { value: other.precision });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = Box<i32> { value: self.indent }."i32^Ord::cmp"(Box<i32> { value: other.indent });
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    let c: Ordering = self.buf."&mut String^Ord::cmp"(&other.buf);
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    return Ordering::Equal;
-}
-
 pub fn "Alignment^Inspect::inspect"(self: Box<core:prelude/format.wado/Alignment>, f: &mut Formatter) {
     if (self.value == %0) {
         f.Formatter::write_str(&String { repr: packed"Alignment::Left", used: 15 });
@@ -17202,46 +16794,6 @@ pub fn LenientParseError::new(reason: String) -> LenientParseError {
 
 pub fn LenientParseError::reason(self: &LenientParseError) -> String {
     return self.reason;
-}
-
-pub fn "Ordering^Eq::eq"(self: Box<core:prelude/traits.wado/Ordering>, other: Box<core:prelude/traits.wado/Ordering>) -> bool {
-    return (self.value == other.value);
-}
-
-pub fn "Ordering^Ord::cmp"(self: Box<core:prelude/traits.wado/Ordering>, other: Box<core:prelude/traits.wado/Ordering>) -> Ordering {
-    let a: Ordering = self.value;
-    let b: Ordering = other.value;
-    if (a < b) {
-        return Ordering::Less;
-    }
-    if (a > b) {
-        return Ordering::Greater;
-    }
-    return Ordering::Equal;
-}
-
-pub fn "ConvertError^Eq::eq"(self: &ConvertError, other: &ConvertError) -> bool {
-    return self.message."String^Eq::eq"(&other.message);
-}
-
-pub fn "ConvertError^Ord::cmp"(self: &ConvertError, other: &ConvertError) -> Ordering {
-    let c: Ordering = self.message."String^Ord::cmp"(&other.message);
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    return Ordering::Equal;
-}
-
-pub fn "LenientParseError^Eq::eq"(self: &LenientParseError, other: &LenientParseError) -> bool {
-    return self.reason."String^Eq::eq"(&other.reason);
-}
-
-pub fn "LenientParseError^Ord::cmp"(self: &LenientParseError, other: &LenientParseError) -> Ordering {
-    let c: Ordering = self.reason."String^Ord::cmp"(&other.reason);
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    return Ordering::Equal;
 }
 
 pub fn "Ordering^Inspect::inspect"(self: Box<core:prelude/traits.wado/Ordering>, f: &mut Formatter) {
@@ -17596,10 +17148,6 @@ fn "List<u64>^SequenceLiteralBuilder::push_literal"(self: &mut List<u64>, value:
 
 fn "List<u64>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> List<u64> {
     return "core::prelude/list.wado::List<u64>::with_capacity"(capacity);
-}
-
-pub fn "&mut core:prelude/string.wado/String^Eq::eq"(self: &&mut String, other: &&mut String) -> bool {
-    return (*self ref.eq *other);
 }
 
 pub fn "List<u8>::internal_from_raw"(repr: Array<u8>, used: i32) -> List<u8> {
@@ -18122,16 +17670,6 @@ fn "$value_copy$T149"(v: [String, u32]) -> [String, u32] {
 fn "$value_copy$T50"(v: u128) -> u128 {
     return u128 { low: v.low, high: v.high };
 }
-
-fn "Array<u8>^Eq::eq"();
-
-fn "Array<u8>^Ord::cmp"();
-
-fn "Waitable^Eq::eq"();
-
-fn "Waitable^Ord::cmp"();
-
-fn "&mut String^Ord::cmp"();
 
 fn array_set();
 

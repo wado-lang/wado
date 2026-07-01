@@ -301,6 +301,35 @@ fn make_trait_method(
 pub fn synthesize_traits(project: Package) -> Package {
     let mut project = project;
     let trait_env = project.trait_env.clone();
+
+    // Bound-driven requests (WEP 2026-06-25-trait-derivation): read the set
+    // `Elaborator::type_implements_trait_inner` and the explicit
+    // `impl Eq for T;` / `impl Ord for T;` marker path both feed, and keep
+    // only the `Eq` / `Ord` entries. This is a snapshot, not a drain —
+    // `synthesis::serde_synth::synthesize_serde` reads the same shared set
+    // for its `Serialize` / `Deserialize` entries, and runs after this pass,
+    // so consuming the set here would silently lose its entries.
+    let (eq_trait_name, ord_trait_name) = match project.tir_modules.values().next() {
+        Some(m) => {
+            let tt = m.type_table.borrow();
+            let items = tt.compiler_items();
+            (
+                items.trait_name(CompilerItem::Eq).to_string(),
+                items.trait_name(CompilerItem::Ord).to_string(),
+            )
+        }
+        None => (String::new(), String::new()),
+    };
+    let requested: IndexSet<(String, ModuleSource, String)> = project
+        .tir_modules
+        .values()
+        .next()
+        .map(|m| m.type_table.borrow().bound_driven_synth_requests())
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|(_, _, trait_name)| *trait_name == eq_trait_name || *trait_name == ord_trait_name)
+        .collect();
+
     // In-pass dedup: each sub-pass records `(type_name, module, trait_name)`
     // of every impl it generates so later sub-passes within this same
     // `synthesize_traits` run can skip emitting a duplicate. The module
@@ -320,6 +349,7 @@ pub fn synthesize_traits(project: Package) -> Package {
         let mut ctx = SynthesisCtx {
             trait_env: &trait_env,
             pending: &mut pending,
+            requested: &requested,
             module: module_source,
             names: &names,
         };
@@ -342,7 +372,7 @@ pub fn synthesize_traits(project: Package) -> Package {
 /// that grows as each sub-pass adds new impls. Together they let a
 /// sub-pass answer "is `impl <trait> for <type>` already in the project?"
 /// without re-scanning TIR per call.
-pub(crate) struct SynthesisCtx<'env, 'pend> {
+pub(crate) struct SynthesisCtx<'env, 'pend, 'req> {
     pub(crate) trait_env: &'env TraitEnv,
     /// In-progress dedup of `(type_name, module, trait_name)` triples. Module
     /// is part of the key so that two same-name structs from different
@@ -351,6 +381,18 @@ pub(crate) struct SynthesisCtx<'env, 'pend> {
     /// receiver type from the second module would dispatch to the first
     /// module's impl.
     pub(crate) pending: &'pend mut IndexSet<(String, ModuleSource, String)>,
+    /// `(type_name, module, trait_name)` triples that a real `T: Eq` /
+    /// `T: Ord` bound (or an explicit `impl Eq for T;` / `impl Ord for T;`
+    /// marker) actually demanded, drained once from
+    /// `TypeTable::bound_driven_synth_requests` before this pass starts
+    /// (WEP 2026-06-25-trait-derivation). `Eq` / `Ord` stay `automatic`
+    /// *policy* — a bound is satisfied the moment fields structurally
+    /// qualify, no marker needed — but an impl is now emitted only for a
+    /// pair actually recorded here, not for every declared type, so this
+    /// gates `generate_enum_trait_impls` / `generate_struct_eq_ord_impls` /
+    /// `generate_variant_eq_impls` (Default / Inspect / Display / their
+    /// `Alt` siblings stay unconditional).
+    pub(crate) requested: &'req IndexSet<(String, ModuleSource, String)>,
     /// Module currently being synthesised. Auto-derived impls live in this
     /// module by convention.
     pub(crate) module: ModuleSource,
@@ -363,7 +405,7 @@ pub(crate) struct SynthesisCtx<'env, 'pend> {
     pub(crate) names: &'env TraitsStdlibNames,
 }
 
-impl SynthesisCtx<'_, '_> {
+impl SynthesisCtx<'_, '_, '_> {
     /// `true` when an impl of `trait_name` for `<type_name>` is already known
     /// to the project — either user-written (in the AST layer of `TraitEnv`,
     /// regardless of which module it lives in) or generated earlier in this
@@ -414,6 +456,40 @@ impl SynthesisCtx<'_, '_> {
             self.module.clone(),
             trait_name.to_string(),
         ));
+    }
+
+    /// `true` when some `T: <trait_name>` bound (or an explicit marker) in
+    /// the project actually demanded `impl <trait_name> for <type_name>` in
+    /// the current module — see [`Self::requested`]. Only consulted for the
+    /// `Eq` / `Ord` sub-passes; the other auto-derives stay unconditional.
+    pub(crate) fn is_requested(&self, type_name: &str, trait_name: &str) -> bool {
+        self.requested.contains(&(
+            type_name.to_string(),
+            self.module.clone(),
+            trait_name.to_string(),
+        ))
+    }
+
+    /// Like [`Self::has_impl`], but for the `Eq` / `Ord` sub-passes only: an
+    /// empty `impl Trait for Type;` marker does not count as "already
+    /// implemented" (see `TraitEnv::has_methodful_impl`). Unlike `Serialize`
+    /// / `Deserialize` — whose marker is drained into a `SynthesisRequest`
+    /// and never consulted through `has_impl` at all — an `Eq` / `Ord`
+    /// marker is validated and recorded directly into the same bound-driven
+    /// request set a real `T: Eq` / `T: Ord` bound feeds (see
+    /// `Elaborator::record_eq_ord_explicit_request`), so it *does* reach
+    /// `trait_env`'s AST-layer impl index like any other `Item::Impl` — and
+    /// plain `has_impl` would treat that as "already implemented," which
+    /// would permanently block the very body the marker asks for.
+    pub(crate) fn has_real_impl(&self, type_name: &str, trait_name: &str) -> bool {
+        if self.trait_env.has_methodful_impl(type_name, trait_name) {
+            return true;
+        }
+        self.pending.contains(&(
+            type_name.to_string(),
+            self.module.clone(),
+            trait_name.to_string(),
+        ))
     }
 }
 
@@ -547,7 +623,7 @@ fn collect_generic_struct_visible_fields(
 }
 
 /// Generate auto-derived trait implementations (Eq, Ord) for enum types in a module.
-fn generate_enum_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>) {
+fn generate_enum_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
     if module.enums.is_empty() {
         return;
     }
@@ -579,14 +655,18 @@ fn generate_enum_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
         let enum_type = type_table.make_enum(enum_name.clone(), module_source.clone());
         let ref_enum_type = type_table.make_ref(enum_type);
 
-        if !ctx.has_impl(enum_name, &eq_trait_name) {
+        if ctx.is_requested(enum_name, &eq_trait_name)
+            && !ctx.has_real_impl(enum_name, &eq_trait_name)
+        {
             let func =
                 generate_enum_eq_fn(enum_name, enum_type, ref_enum_type, &eq_trait_name, *span);
             generated_functions.push(Rc::new(RefCell::new(func)));
             ctx.record_impl(enum_name, &eq_trait_name);
         }
 
-        if !ctx.has_impl(enum_name, &ord_trait_name) {
+        if ctx.is_requested(enum_name, &ord_trait_name)
+            && !ctx.has_real_impl(enum_name, &ord_trait_name)
+        {
             let ordering_type =
                 type_table.make_compiler_enum(crate::compiler_item::CompilerItem::Ordering);
             let func = generate_enum_ord_fn(
@@ -613,7 +693,7 @@ fn generate_enum_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
 /// - `StructName^Ord::cmp(&self, &Self) -> Ordering` — lexicographic field comparison
 ///
 /// Skips structs that already have user-provided implementations.
-fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>) {
+fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
     if module.structs.is_empty() {
         return;
     }
@@ -640,7 +720,7 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
         let struct_type = tt.make_struct(name.clone(), module_source.clone());
         let ref_struct_type = tt.make_ref(struct_type);
 
-        if !ctx.has_impl(name, &eq_trait_name) {
+        if ctx.is_requested(name, &eq_trait_name) && !ctx.has_real_impl(name, &eq_trait_name) {
             let func = generate_struct_eq_fn(
                 name,
                 &[],
@@ -656,7 +736,7 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
             ctx.record_impl(name, &eq_trait_name);
         }
 
-        if !ctx.has_impl(name, &ord_trait_name) {
+        if ctx.is_requested(name, &ord_trait_name) && !ctx.has_real_impl(name, &ord_trait_name) {
             let ordering_type = tt.make_compiler_enum(crate::compiler_item::CompilerItem::Ordering);
             let func = generate_struct_ord_fn(
                 name,
@@ -683,7 +763,7 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
             tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
         let ref_struct_type = tt.make_ref(struct_type);
 
-        if !ctx.has_impl(name, &eq_trait_name) {
+        if ctx.is_requested(name, &eq_trait_name) && !ctx.has_real_impl(name, &eq_trait_name) {
             let func = generate_struct_eq_fn(
                 name,
                 type_params,
@@ -699,7 +779,7 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
             ctx.record_impl(name, &eq_trait_name);
         }
 
-        if !ctx.has_impl(name, &ord_trait_name) {
+        if ctx.is_requested(name, &ord_trait_name) && !ctx.has_real_impl(name, &ord_trait_name) {
             let ordering_type = tt.make_compiler_enum(crate::compiler_item::CompilerItem::Ordering);
             let func = generate_struct_ord_fn(
                 name,
@@ -739,7 +819,7 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
 /// Effect purity of the default expressions is already enforced by
 /// `check_default_purity_semantic` before synthesis runs; if it had failed the
 /// pipeline would have bailed, so every `default_expr` reaching here is pure.
-fn generate_struct_default_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>) {
+fn generate_struct_default_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
     if module.structs.is_empty() {
         return;
     }
@@ -844,7 +924,7 @@ fn generate_struct_default_fn(
 /// - `VariantName^Eq::eq(&self, &Self) -> bool` — case-discriminated payload equality
 ///
 /// Skips variants that already have user-provided implementations.
-fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>) {
+fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
     if module.variants.is_empty() {
         return;
     }
@@ -861,7 +941,7 @@ fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
 
     let variant_infos = collect_variant_cases(module);
     for (name, cases, span) in &variant_infos {
-        if ctx.has_impl(name, &eq_trait_name) {
+        if !ctx.is_requested(name, &eq_trait_name) || ctx.has_real_impl(name, &eq_trait_name) {
             continue;
         }
         let variant_type = tt.make_variant(name.clone(), module_source.clone());
@@ -883,7 +963,7 @@ fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
 
     let generic_variant_infos = collect_generic_variant_cases(module);
     for (name, type_params, cases, span) in &generic_variant_infos {
-        if ctx.has_impl(name, &eq_trait_name) {
+        if !ctx.is_requested(name, &eq_trait_name) || ctx.has_real_impl(name, &eq_trait_name) {
             continue;
         }
         let type_param_ids = make_type_param_ids(type_params, &mut tt);
@@ -916,7 +996,7 @@ fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
 /// - Non-generic structs: writes field names and recursively inspects field values
 /// - Generic structs: same with `impl_type_params` having Inspect bounds
 /// - Non-generic variants: `VariantTest` dispatch with payload inspection
-fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>) {
+fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
     let module_source = module.module_source.clone();
     let mut generated = Vec::new();
     let formatter_name = ctx.names.formatter.clone();
@@ -2012,7 +2092,7 @@ fn generate_opaque_inspect_fn(
 /// For composite types (structs, variants, arrays, tuples), generates pretty-printed
 /// multi-line output using Formatter's `begin_block`/`end_block`/`write_field_sep` helpers.
 /// For simple types (enums, flags, newtypes, primitives, functions), delegates to Inspect.
-fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>) {
+fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
     let module_source = module.module_source.clone();
     let formatter_name = ctx.names.formatter.clone();
     let inspect_name = ctx.names.inspect.clone();
@@ -2038,7 +2118,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     // the second form survives in legacy stdlib code that predates the
     // trait synthesis. Both shapes need to qualify a type for an
     // `InspectAlt` Display-delegate.
-    let has_inspect = |type_name: &str, ctx: &SynthesisCtx<'_, '_>| -> bool {
+    let has_inspect = |type_name: &str, ctx: &SynthesisCtx<'_, '_, '_>| -> bool {
         if ctx.has_impl(type_name, &inspect_name) {
             return true;
         }
@@ -2743,7 +2823,7 @@ fn formatter_call(
 /// ```text
 /// fn fmt(&self, f: &mut Formatter) { self.inspect(f); }
 /// ```
-fn generate_display_fallback_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>) {
+fn generate_display_fallback_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
     let pair = TraitPair::display(ctx.names);
     generate_fallback_impls(module, ctx, &pair);
 }
@@ -2864,7 +2944,7 @@ fn generate_display_fallback(
 }
 
 /// Generate `DisplayAlt::fmt_alt` fallback implementations that delegate to `InspectAlt::inspect_alt`.
-fn generate_display_alt_fallback_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>) {
+fn generate_display_alt_fallback_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
     let pair = TraitPair::display_alt(ctx.names);
     generate_fallback_impls(module, ctx, &pair);
 }
@@ -2874,7 +2954,7 @@ fn generate_display_alt_fallback_impls(module: &mut TirModule, ctx: &mut Synthes
 /// already implemented or the delegate trait is missing.
 fn generate_fallback_impls(
     module: &mut TirModule,
-    ctx: &mut SynthesisCtx<'_, '_>,
+    ctx: &mut SynthesisCtx<'_, '_, '_>,
     pair: &TraitPair,
 ) {
     let module_source = module.module_source.clone();
@@ -2906,7 +2986,7 @@ fn generate_fallback_impls(
     let formatter_type = tt.make_struct(formatter_struct_name.clone(), ModuleSource::format());
     let fmt_type = tt.make_mut_ref(formatter_type);
 
-    let needs_fallback = |name: &str, ctx: &SynthesisCtx<'_, '_>| -> bool {
+    let needs_fallback = |name: &str, ctx: &SynthesisCtx<'_, '_, '_>| -> bool {
         if ctx.has_impl(name, &pair.target_trait) {
             return false;
         }

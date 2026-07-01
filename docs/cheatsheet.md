@@ -949,15 +949,13 @@ impl<T: Eq> Eq for Pair<T> {
 
 ### Auto-Derived Traits
 
-All primitives implement `Eq` and `Ord`. Structs auto-derive `Eq` and `Ord` when all fields implement the trait.
+All primitives implement `Eq` and `Ord`. Structs and enums auto-derive `Eq` and `Ord` (variants auto-derive `Eq` only, not `Ord`) when every field or case implements the trait. The impl is synthesized on demand — only where a `==`/`<` call site, a bound, or an explicit `impl Eq for T;` / `impl Ord for T;` marker actually needs it, not unconditionally for every declared type. The explicit marker also acts as a guarantee: it is a compile error if any field/case is not itself eligible. `Option<T: Eq>`, `Result<T: Eq, E: Eq>`, `List<T: Eq>` implement `Eq`. `List<T: Ord>` implements `Ord`.
 
-Variants auto-derive `Eq` and `Ord` as well. `Option<T: Eq>`, `Result<T: Eq, E: Eq>`, `List<T: Eq>` implement `Eq`. `List<T: Ord>` implements `Ord`.
+`Inspect` and `InspectAlt` are auto-derived unconditionally, for every type. The compiler synthesizes `Display` and `DisplayAlt` fallbacks that delegate to `Inspect` and `InspectAlt` respectively.
 
-`Inspect` and `InspectAlt` are also auto-derived. The compiler synthesizes `Display` and `DisplayAlt` fallbacks that delegate to `Inspect` and `InspectAlt` respectively.
+`Default` is auto-derived unconditionally for a non-generic struct when every field has a declared default expression (`f: T = expr`).
 
-`Default` is auto-derived for a non-generic struct when every field has a declared default expression (`f: T = expr`).
-
-`Serialize` / `Deserialize` (`core:serde`) are derived the same way — structurally, when every field or case implements the trait — for any struct (including anonymous structs), variant, enum, or flags type, with no `impl Serialize for T;` marker required. Unlike `Eq`/`Ord`/`Default` (derived unconditionally), the impl is only synthesized where a `T: Serialize` bound actually demands it. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
+`Serialize` / `Deserialize` (`core:serde`) are derived the same on-demand way as `Eq`/`Ord` — structurally, when every field or case implements the trait — for any struct (including anonymous structs), variant, enum, or flags type, with no `impl Serialize for T;` marker required. Unlike `Eq`/`Ord`'s marker, the `Serialize`/`Deserialize` marker does not pre-validate eligibility. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 
 Auto-derived traits are overridden by user-written `impl Trait for T`.
 

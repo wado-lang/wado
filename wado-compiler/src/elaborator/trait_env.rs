@@ -959,6 +959,29 @@ impl TraitEnv {
         pick_module_union(ast, syn, type_module)
     }
 
+    /// Whether a **methodful** `impl trait_name for type_name` exists at the
+    /// AST layer — unlike [`Self::impl_module_for`], an empty `impl Trait for
+    /// Type;` marker does not count.
+    ///
+    /// `impl_index` indexes a marker exactly like a real impl (both are
+    /// `Item::Impl`), which is correct for most callers — a marker still
+    /// declares the type "wants" the trait. But `Eq` / `Ord` synthesis
+    /// gating (WEP 2026-06-25-trait-derivation) needs the opposite question:
+    /// a marker for these two traits is itself a *request* for a synthesized
+    /// body, so treating its presence as "already implemented" would
+    /// permanently block the very body it asks for. `Serialize` /
+    /// `Deserialize` don't need this: their marker is drained into a
+    /// [`crate::tir::SynthesisRequest`] instead of gated through this index.
+    pub(crate) fn has_methodful_impl(&self, type_name: &str, trait_name: &str) -> bool {
+        self.impl_index.get(type_name).is_some_and(|entries| {
+            entries.iter().any(|entry| {
+                self.impl_headers.get(entry).is_some_and(|header| {
+                    header.trait_name.as_deref() == Some(trait_name) && !header.methods.is_empty()
+                })
+            })
+        })
+    }
+
     /// Return the home module of a blanket impl (`impl<T: Bound> Trait for T`)
     /// for `trait_name`, if one exists. When multiple blanket impls
     /// implement the same trait, the first registered module is returned,

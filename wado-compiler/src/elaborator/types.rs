@@ -220,6 +220,19 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An explicit `impl Eq for T;` / `impl Ord for T;` marker was written,
+    /// but `T` is not structurally eligible — some field/case does not
+    /// itself implement the trait. Unlike [`Self::TraitBoundNotSatisfied`]
+    /// (a bound unsatisfied at a use site), this always points at the
+    /// marker's own span — the "guarantee" an explicit derive request is
+    /// for (see `docs/wep-2026-06-25-trait-derivation.md`).
+    ExplicitDeriveNotEligible {
+        trait_name: String,
+        type_name: String,
+        reason: Vec<String>,
+        span: Span,
+    },
+
     /// Invalid pattern in context
     InvalidPattern {
         message: String,
@@ -334,8 +347,8 @@ pub enum TypeError {
     },
 
     /// `impl Trait for Type;` requested synthesis of a trait the compiler
-    /// cannot generate. Only `From`, `Serialize`, and `Deserialize` are
-    /// synthesizable through the bodyless-impl form.
+    /// cannot generate. Only `From`, `Serialize`, `Deserialize`, `Eq`, and
+    /// `Ord` are synthesizable through the bodyless-impl form.
     UnsupportedSynthesisTrait {
         trait_name: String,
         type_name: String,
@@ -629,6 +642,21 @@ impl TypeError {
                 ),
                 *span,
             ),
+            TypeError::ExplicitDeriveNotEligible {
+                trait_name,
+                type_name,
+                reason,
+                span,
+            } => (
+                Code::TypeMismatch,
+                append_reason_chain(
+                    format!(
+                        "cannot derive `{trait_name}` for `{type_name}`: not every field/case implements `{trait_name}`"
+                    ),
+                    reason,
+                ),
+                *span,
+            ),
             TypeError::InvalidPattern { message, span } => (
                 Code::InvalidSyntax,
                 format!("invalid pattern: {message}"),
@@ -769,7 +797,7 @@ impl TypeError {
             } => (
                 Code::TypeMismatch,
                 format!(
-                    "cannot synthesize trait `{trait_name}` for `{type_name}`: only `From`, `Serialize`, and `Deserialize` support `impl Trait for Type;`"
+                    "cannot synthesize trait `{trait_name}` for `{type_name}`: only `From`, `Serialize`, `Deserialize`, `Eq`, and `Ord` support `impl Trait for Type;`"
                 ),
                 *span,
             ),

@@ -2859,6 +2859,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 break;
                             }
                         }
+                    } else if let ast::Type::Tuple(elements) = &impl_block.ty {
+                        // Variadic tuple impl (`impl<..T: Trait> Trait for
+                        // [..T]`, e.g. `Eq`/`Ord` for tuples in
+                        // core:prelude/tuple.wado): every entry in
+                        // `concrete_type_args` is an instantiation of the
+                        // SAME variadic parameter, so each one is checked
+                        // against that parameter's bounds. Without this, the
+                        // `ast::Type::Generic` arm above never matches a
+                        // `Type::Tuple`-shaped impl, `bounds_satisfied` stays
+                        // trivially `true`, and no element's bound is ever
+                        // checked via `type_implements_trait` — so an
+                        // on_bound trait (`Eq`/`Ord`) never gets recorded for
+                        // that element type (WEP 2026-06-25-trait-derivation).
+                        for elem in elements {
+                            let ast::Type::TypePackSpread(name, _) = elem else {
+                                continue;
+                            };
+                            let Some(bounds) = bounds_map.get(name.as_str()) else {
+                                continue;
+                            };
+                            for &type_arg in &concrete_type_args {
+                                if matches!(
+                                    s.tysys.type_table.borrow().get(type_arg),
+                                    ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+                                ) {
+                                    continue;
+                                }
+                                for bound in bounds {
+                                    if !s.type_implements_trait(&s.annotate_ctx, type_arg, bound) {
+                                        bounds_satisfied = false;
+                                        break;
+                                    }
+                                }
+                                if !bounds_satisfied {
+                                    break;
+                                }
+                            }
+                            if !bounds_satisfied {
+                                break;
+                            }
+                        }
                     }
                     if !bounds_satisfied {
                         return None;

@@ -1,0 +1,16 @@
+// Test: an explicit `impl Eq for T;` marker is a hard compile error when a
+// field is not structurally eligible — the marker is a guarantee, not a
+// best-effort request (WEP: Trait Derivation Policy).
+struct Handler {
+    cb: fn(i32) -> i32,
+}
+
+impl Eq for Handler;
+
+export fn run() {
+    let h = Handler { cb: |x: i32| x };
+    let _ = h;
+}
+
+__DATA__
+{"compile_error": "cannot derive `Eq` for `Handler`: not every field/case implements `Eq`"}
