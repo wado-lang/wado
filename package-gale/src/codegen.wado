@@ -222,7 +222,7 @@ fn gen_latn_data_global(w: &mut CodeWriter, atn: &Atn) {
     w.blank();
 }
 
-/// Emit `global <data_name>: List<i32> = [...serialized blob...];` and
+/// Emit `global <data_name>: List<u8> = b"...packed blob...";` and
 /// `global <sim_name>: AtnSim = atn_decode(&<data_name>);`. Shared by the
 /// parser (`ATN_*`) and lexer (`LATN_*`) ATN blobs — same wire format and
 /// decoder; only the atom semantics differ.
@@ -244,11 +244,7 @@ fn emit_atn_blob_global(w: &mut CodeWriter, atn: &Atn, data_name: &String, sim_n
 /// Append the `\xNN` byte escape (lowercase, zero-padded to two digits) for
 /// byte `b` to `out`.
 fn push_hex_byte(out: &mut String, b: u8) {
-    out.push_str(&"\\x");
-    if b < 16 {
-        out.push('0');
-    }
-    out.push_str(&`{b:x}`);
+    out.push_str(&`\\x{b:02x}`);
 }
 
 fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {
