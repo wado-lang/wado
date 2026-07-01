@@ -55,7 +55,11 @@ pub struct EngineBuffers {
     stmt_parent: Vec<Option<NodeRef>>,
     block_parent: Vec<Option<NodeRef>>,
     pat_parent: Vec<Option<NodeRef>>,
-    uses: IndexMap<u32, LocalUses>,
+    /// Indexed directly by local index (dense, `0..locals.len()` — same
+    /// invariant `LocalSet` relies on elsewhere), not hashed: a local-keyed
+    /// `IndexMap` here would pay a hash + probe for every read/def recorded by
+    /// `build_uses`, run on every one of the tens-of-thousands of sessions.
+    uses: Vec<LocalUses>,
     worklist: VecDeque<NodeRef>,
     queued: IndexSet<NodeRef>,
 }
@@ -77,6 +81,16 @@ impl EngineBuffers {
         self.uses.clear();
         self.worklist.clear();
         self.queued.clear();
+    }
+
+    /// Mutable access to local `index`'s use record, growing `uses` on demand
+    /// (a session may `alloc_local` past the count `reset_for` saw).
+    fn uses_entry(&mut self, index: u32) -> &mut LocalUses {
+        let i = index as usize;
+        if self.uses.len() <= i {
+            self.uses.resize_with(i + 1, LocalUses::default);
+        }
+        &mut self.uses[i]
     }
 }
 
@@ -324,7 +338,7 @@ impl<'a> Engine<'a> {
         let root = self.body.root;
         let live_base = self.body.values.len() as u32;
         let mut scratch = self.body.values.clone();
-        let empty = crate::hashmap::IndexMap::default();
+        let empty = IndexMap::default();
         // The real alias sets, not a maximally-conservative `all`: with `all` as
         // `mut_escaped`, every call would bump every local to a fresh opaque
         // (`bump_call_effects`), destroying a bare scalar's reaching constant
@@ -567,13 +581,13 @@ impl<'a> Engine<'a> {
                 NodeRef::Expr(id) => {
                     if let ExprKind::Local { index, .. } = &self.body.exprs[id].kind {
                         let index = *index;
-                        self.buf.uses.entry(index).or_default().reads.push(id);
+                        self.buf.uses_entry(index).reads.push(id);
                     }
                 }
                 NodeRef::Stmt(id) => {
                     if let StmtKind::Let { local_index, .. } = &self.body.stmts[id].kind {
                         let index = *local_index;
-                        self.buf.uses.entry(index).or_default().def = Some(id);
+                        self.buf.uses_entry(index).def = Some(id);
                     }
                 }
                 NodeRef::Block(_) | NodeRef::Pat(_) => {}
@@ -636,12 +650,12 @@ impl<'a> Engine<'a> {
 
     /// Every `Local { index }` expression node naming `local`.
     pub fn local_reads(&self, local: u32) -> &[ExprId] {
-        self.buf.uses.get(&local).map_or(&[], |u| &u.reads)
+        self.buf.uses.get(local as usize).map_or(&[], |u| &u.reads)
     }
 
     /// The defining `Let` / `LetDestructure` statement of `local`, if any.
     pub fn local_def(&self, local: u32) -> Option<StmtId> {
-        self.buf.uses.get(&local).and_then(|u| u.def)
+        self.buf.uses.get(local as usize).and_then(|u| u.def)
     }
 
     /// Whether `local` is read anywhere — i.e. has any mention that is not the
@@ -681,7 +695,7 @@ impl<'a> Engine<'a> {
         // Drop the old `Local` mention, if any, from the use index.
         if let ExprKind::Local { index, .. } = &self.body.exprs[id].kind {
             let index = *index;
-            if let Some(u) = self.buf.uses.get_mut(&index) {
+            if let Some(u) = self.buf.uses.get_mut(index as usize) {
                 u.reads.retain(|&r| r != id);
             }
         }
@@ -689,7 +703,7 @@ impl<'a> Engine<'a> {
         // Register a new `Local` mention, if any.
         if let ExprKind::Local { index, .. } = &self.body.exprs[id].kind {
             let index = *index;
-            self.buf.uses.entry(index).or_default().reads.push(id);
+            self.buf.uses_entry(index).reads.push(id);
         }
         // Re-parent and re-enqueue the new kind's children.
         let mut children = Vec::new();
@@ -748,7 +762,7 @@ impl<'a> Engine<'a> {
         // mentions stay — a stale read is conservative, never drops a live one).
         if let ExprKind::Local { index, .. } = &self.body.exprs[id].kind {
             let index = *index;
-            if let Some(u) = self.buf.uses.get_mut(&index) {
+            if let Some(u) = self.buf.uses.get_mut(index as usize) {
                 u.reads.retain(|&r| r != id);
             }
         }
@@ -782,7 +796,7 @@ impl<'a> Engine<'a> {
         // for `dst` when `src_kind` is itself a `Local`.
         if let ExprKind::Local { index, .. } = &src_kind {
             let index = *index;
-            if let Some(u) = self.buf.uses.get_mut(&index) {
+            if let Some(u) = self.buf.uses.get_mut(index as usize) {
                 u.reads.retain(|&r| r != src);
             }
         }
@@ -830,7 +844,7 @@ impl<'a> Engine<'a> {
         }
         if let ExprKind::Local { index, .. } = &self.body.exprs[id].kind {
             let index = *index;
-            self.buf.uses.entry(index).or_default().reads.push(id);
+            self.buf.uses_entry(index).reads.push(id);
         }
         self.enqueue(NodeRef::Expr(id));
         id
@@ -860,7 +874,7 @@ impl<'a> Engine<'a> {
         }
         if let StmtKind::Let { local_index, .. } = &self.body.stmts[id].kind {
             let index = *local_index;
-            self.buf.uses.entry(index).or_default().def = Some(id);
+            self.buf.uses_entry(index).def = Some(id);
         }
         self.enqueue(NodeRef::Stmt(id));
         id
