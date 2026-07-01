@@ -419,7 +419,11 @@ fn test_test_tap_format_produces_a_tap14_document() {
             "not ok - wado-cli/tests/fixtures/test_fail.wado",
         ))
         .stdout(predicate::str::contains("      ---"))
-        .stdout(predicate::str::contains("      message: |"));
+        .stdout(predicate::str::contains("      message: |"))
+        // The final summary carries the same compile/load/execute [cpu: …]
+        // timing as `verbose`, as `#` comments (TAP allows arbitrary data
+        // there) — not just the pass/fail counts.
+        .stdout(predicate::str::contains("compile: 3 ok, 0 failed  [cpu:"));
 }
 
 #[test]

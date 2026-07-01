@@ -1753,42 +1753,58 @@ impl PackageTotals {
     }
 }
 
-/// Print the per-stage tally lines (`compile:` / `load:` / `test:` /
-/// optionally `todo:`). The `load:` line is suppressed when the stage
-/// didn't run (e.g. `--no-run`) so the no-run output stays as concise
-/// as before.
-pub(crate) fn print_three_axis(totals: &PackageTotals, duration: Option<&str>) {
+/// Build the per-stage tally lines (`compile:` / `load:` / `test:` /
+/// optionally `skip:`/`todo:`/wall time), each including its `[cpu: …]`
+/// work-time tag. Shared by every reporter so the numbers — including
+/// the compile/load/execute timing — never drift between `verbose`,
+/// `heartbeat`, and `tap` (which renders each line as a `#` comment).
+/// The `load:` line is suppressed when the stage didn't run (e.g.
+/// `--no-run`) so the no-run output stays as concise as before.
+pub(crate) fn format_three_axis_lines(
+    totals: &PackageTotals,
+    duration: Option<&str>,
+) -> Vec<String> {
     let compile_dur = format_stage_duration(totals.timings.compile);
     let load_dur = format_stage_duration(totals.timings.load);
     let execute_dur = format_stage_duration(totals.timings.execute);
-    println!(
+    let mut lines = vec![format!(
         "compile: {} ok, {} failed{compile_dur}",
         totals.compile_ok, totals.compile_failed
-    );
+    )];
     let load_total = totals.load_ok + totals.load_failed;
     if load_total > 0 {
-        println!(
+        lines.push(format!(
             "load:    {} ok, {} failed{load_dur}",
             totals.load_ok, totals.load_failed
-        );
+        ));
     }
     if totals.skip_files > 0 {
-        println!("skip:    {} files (no test blocks)", totals.skip_files);
+        lines.push(format!(
+            "skip:    {} files (no test blocks)",
+            totals.skip_files
+        ));
     }
-    println!(
+    lines.push(format!(
         "test:    {} passed, {} failed{execute_dur}",
         totals.test_passed, totals.test_failed
-    );
+    ));
     let todo_total = totals.todo_pending + totals.todo_resolved;
     if todo_total > 0 {
         let mut todo_line = format!("todo:    {} pending", totals.todo_pending);
         if totals.todo_resolved > 0 {
             todo_line.push_str(&format!(", {} resolved", totals.todo_resolved));
         }
-        println!("{todo_line}");
+        lines.push(todo_line);
     }
     if let Some(d) = duration {
-        println!("(wall: {d})");
+        lines.push(format!("(wall: {d})"));
+    }
+    lines
+}
+
+pub(crate) fn print_three_axis(totals: &PackageTotals, duration: Option<&str>) {
+    for line in format_three_axis_lines(totals, duration) {
+        println!("{line}");
     }
 }
 

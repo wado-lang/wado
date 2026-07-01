@@ -693,32 +693,9 @@ impl TestReporter for TapReporter {
     }
 
     fn on_run_done(&self, grand: &PackageTotals, _multi_pkg: bool, wall: Duration) {
-        self.comment(&format!(
-            "compile: {} ok, {} failed",
-            grand.compile_ok, grand.compile_failed
-        ));
-        if grand.load_ok + grand.load_failed > 0 {
-            self.comment(&format!(
-                "load: {} ok, {} failed",
-                grand.load_ok, grand.load_failed
-            ));
+        let wall_str = test::format_duration(wall);
+        for line in test::format_three_axis_lines(grand, Some(&wall_str)) {
+            self.comment(&line);
         }
-        if grand.skip_files > 0 {
-            self.comment(&format!(
-                "skip: {} files (no test blocks)",
-                grand.skip_files
-            ));
-        }
-        self.comment(&format!(
-            "test: {} passed, {} failed",
-            grand.test_passed, grand.test_failed
-        ));
-        if grand.todo_pending + grand.todo_resolved > 0 {
-            self.comment(&format!(
-                "todo: {} pending, {} resolved",
-                grand.todo_pending, grand.todo_resolved
-            ));
-        }
-        self.comment(&format!("wall: {}", test::format_duration(wall)));
     }
 }
