@@ -232,7 +232,7 @@ scan.
 
 ### `core:cbor`/`core:serde` for the ATN blob codec — NO-GO (2026-06)
 
-**Goal.** Replace the hand-written ATN wire-format codec (`serialize_atn`
+**Goal.** Replace the hand-written ATN wire-format codec (`atn_blob_bytes`
 in `atn.wado` + `atn_decode` in `runtime/atn.wado`) with derived
 `Serialize`/`Deserialize` + `core:cbor` `to_bytes`/`from_bytes`, so the
 field layout is generated from the struct (maximal DRY — no hand codec,
@@ -260,10 +260,10 @@ derived impls into every ATN-using parser — the size hit measured above —
 where the hand codec stays dependency-free.
 
 **Decision.** Keep the hand-written codec. After the wire-format DRY
-refactor it is one writer (`serialize_atn`) + one reader (`atn_decode`)
+refactor it is one writer (`atn_blob_bytes`) + one reader (`atn_decode`)
 
 - one shared constant set in `runtime/atn.wado` — fast, zero-dependency, and
-  round-trip-tested (`atn_test.wado` drives `serialize_atn` → `atn_decode`
+  round-trip-tested (`atn_test.wado` drives `atn_blob_bytes` → `atn_decode`
   field-for-field). The codec/reader pair is the irreducible minimum;
   serde would trade ~95 LOC for a heavyweight per-parser dependency.
   (Separable, still open: embedding the blob as base64/`#data` rather than

@@ -283,13 +283,12 @@ the compiled fast path:**
    `tests/grammars/ll_longest_vs_context.g4`,
    `tests/grammars/ll_optional_non_greedy_multi.g4`.
 
-**ATN embedding.** The reachable whole-grammar ATN is serialized
-(`serialize_atn`) to one compact `i32` array `global` (`ATN_DATA`),
-decoded once at parser construction (`atn_decode`) into the flat parallel
-`List<i32>` SoA arrays the simulator walks (`AtnSim`). Smallest artifact,
-cheapest init; `gale dump --atn` plus a serialize/deserialize round-trip
-test (`atn_test.wado`) cover readability. Emitted only when a grammar
-needs it; non-ATN grammars are byte-identical to before.
+**ATN embedding.** The reachable whole-grammar ATN is serialized to a
+packed byte blob and decoded once, at parser construction, into the
+`ATN_SIM` the simulator reads (`atn_blob_bytes` / `atn_decode` in
+`atn.wado` / `runtime/atn.wado`); `gale dump --atn` plus a round-trip test
+(`atn_test.wado`) cover readability. Emitted only when a grammar needs it;
+non-ATN grammars stay byte-identical to before.
 
 ### Two mechanisms
 

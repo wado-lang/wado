@@ -94,8 +94,8 @@ pub struct GenContext {
     caller_follow_gate_seen: bool,
     /// Set by lowering when it lowers a non-greedy optional (`??`) or an
     /// ATN-class LR rule. When set, emit includes the runtime ATN simulator
-    /// infrastructure (the serialized `ATN_DATA` blob, the shared
-    /// `ATN_SIM` global, the `Parser.atn_stack` field, and the
+    /// infrastructure (the shared `ATN_SIM` global, decoded from its
+    /// serialized blob, the `Parser.atn_stack` field, and the
     /// rule-entry stack push/pop) and routes the `??` enter/skip decision
     /// through `atn_predict_with_stack` (keyed by the `??`'s stamped decision
     /// number). Grammars without either stay byte-identical. (`*?`/`+?` keep

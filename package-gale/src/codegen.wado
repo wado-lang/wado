@@ -198,11 +198,10 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     };
 }
 
-/// Emit `global ATN_DATA: List<i32> = [...]`: the serialized
-/// whole-grammar ATN the inlined runtime decodes once into the module-level
-/// `ATN_SIM`.
+/// Emit the decoded `ATN_SIM` global: the serialized whole-grammar ATN the
+/// inlined runtime decodes once, at construction, into the module-level sim.
 fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, emit_scan_globals: bool) {
-    emit_atn_blob_global(w, atn, &"ATN_DATA", &"ATN_SIM");
+    emit_atn_blob_global(w, atn, &"ATN_SIM");
     // The mutable scan caller stack. The scan emit pushes/pops it around
     // operand scans so an ATN-class LR rule's scan loop can route through
     // `atn_lr_loop_decision` exactly like the parse side. Only needed when an
@@ -214,31 +213,33 @@ fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, emit_scan_globals: bool) {
     w.blank();
 }
 
-/// Emit `global LATN_DATA: List<i32> = [...]` and the decoded `LATN_SIM`
-/// for the runtime lexer simulator. Same blob format and decoder as the
-/// parser ATN; only the atom semantics differ (char ranges vs token kinds).
+/// Emit the decoded `LATN_SIM` global for the runtime lexer simulator. Same
+/// blob format and decoder as the parser ATN; only the atom semantics differ
+/// (char ranges vs token kinds).
 fn gen_latn_data_global(w: &mut CodeWriter, atn: &Atn) {
-    emit_atn_blob_global(w, atn, &"LATN_DATA", &"LATN_SIM");
+    emit_atn_blob_global(w, atn, &"LATN_SIM");
     w.blank();
 }
 
-/// Emit `global <data_name>: List<u8> = b"...packed blob...";` and
-/// `global <sim_name>: AtnSim = atn_decode(&<data_name>);`. Shared by the
-/// parser (`ATN_*`) and lexer (`LATN_*`) ATN blobs — same wire format and
-/// decoder; only the atom semantics differ.
-fn emit_atn_blob_global(w: &mut CodeWriter, atn: &Atn, data_name: &String, sim_name: &String) {
-    // Emit the ATN as a `b"..."` byte-string literal (the packed little-endian
-    // wire form from `atn_blob_bytes`). Unlike an `[i32, …]` array literal —
-    // which lowers to an N-element builder/push chain the optimizer must walk —
-    // a byte literal lowers straight to a constant data segment, so even a
-    // 40k-word ATN keeps generated-parser compile time flat and the Wasm small.
+/// Emit `global <sim_name>: AtnSim = atn_decode(&b"...packed blob...");`.
+/// Shared by the parser (`ATN_SIM`) and lexer (`LATN_SIM`) — same wire format
+/// and decoder; only the atom semantics differ.
+///
+/// The literal is a bare call argument, not bound to its own `global` first:
+/// a `global` is a permanent GC root for the module's lifetime, so naming it
+/// (`global ATN_DATA = b"...";`) would keep the raw blob reachable forever
+/// even though `atn_decode` reads it once and never stores a reference. As
+/// an argument it has no referrers left once `atn_decode` returns, so it's
+/// collectible immediately — and this costs nothing at compile time:
+/// `array.new_data` fires the same way whether the literal is a global's
+/// initializer or a nested call argument.
+fn emit_atn_blob_global(w: &mut CodeWriter, atn: &Atn, sim_name: &String) {
     let bytes = atn_blob_bytes(atn);
     let mut body = String::with_capacity(bytes.len() * 4);
     for let b of &bytes {
         push_hex_byte(&mut body, *b);
     }
-    w.line(&`global {*data_name}: List<u8> = b"{body}";`);
-    w.line(&`global {*sim_name}: AtnSim = atn_decode(&{*data_name});`);
+    w.line(&`global {*sim_name}: AtnSim = atn_decode(&b"{body}");`);
 }
 
 /// Append the `\xNN` byte escape (lowercase, zero-padded to two digits) for
