@@ -1096,8 +1096,34 @@ fn embed_package_metadata(
         return wasm;
     };
     let revision = crate::metadata_embed::clean_git_revision(&project.root);
-    let sections = wado_manifest::metadata_sections(pkg, revision.as_deref());
+    let license_text = match read_license_text(project, pkg) {
+        Ok(text) => text,
+        Err(e) => {
+            eprintln!("warning: skipped embedding license text: {e}");
+            None
+        }
+    };
+    let sections =
+        wado_manifest::metadata_sections(pkg, revision.as_deref(), license_text.as_deref());
     crate::metadata_embed::embed_metadata_sections(wasm, &sections)
+}
+
+/// Read the `license-file` text to embed, resolving the path against the
+/// manifest that declared it (see [`manifest::license_file_base_dir`]). Returns
+/// `Ok(None)` when the package has no `license-file`; an `Err` when the declared
+/// file cannot be read (the caller downgrades this to a warning, matching the
+/// other embed steps).
+fn read_license_text(
+    project: &manifest::ProjectManifest,
+    pkg: &wado_manifest::Package,
+) -> Result<Option<String>, String> {
+    let Some(license_file) = pkg.license_file.as_deref() else {
+        return Ok(None);
+    };
+    let path = manifest::license_file_base_dir(&project.root).join(license_file);
+    fs::read_to_string(&path)
+        .map(Some)
+        .map_err(|e| format!("cannot read license-file {}: {e}", path.display()))
 }
 
 pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
