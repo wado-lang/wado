@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782855965012,
+  "lastUpdate": 1782869602971,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -36641,6 +36641,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 288503,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "86cd2c74d436d4c3b1aae90d573a0993fc960287",
+          "message": "Merge pull request #1475 from wado-lang/claude/atn-class-grammar-impl-lsvgi6\n\nfeat: ATN-class grammar routing in Gale, plus `b\"...\"` byte-string literals",
+          "timestamp": "2026-07-01T10:24:53+09:00",
+          "tree_id": "99c681c2541a7a08603724032eca96f53729e370",
+          "url": "https://github.com/wado-lang/wado/commit/86cd2c74d436d4c3b1aae90d573a0993fc960287"
+        },
+        "date": 1782869602301,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15276,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457444,
             "unit": "bytes"
           }
         ]
