@@ -957,6 +957,8 @@ Variants auto-derive `Eq` and `Ord` as well. `Option<T: Eq>`, `Result<T: Eq, E: 
 
 `Default` is auto-derived for a non-generic struct when every field has a declared default expression (`f: T = expr`).
 
+`Serialize` / `Deserialize` (`core:serde`) are derived the same way — structurally, when every field or case implements the trait — for any struct (including anonymous structs), variant, enum, or flags type, with no `impl Serialize for T;` marker required. Unlike `Eq`/`Ord`/`Default` (derived unconditionally), the impl is only synthesized where a `T: Serialize` bound actually demands it. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
+
 Auto-derived traits are overridden by user-written `impl Trait for T`.
 
 ## Associated Constants

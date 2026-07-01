@@ -191,8 +191,10 @@ Trade-offs and known limits:
 
 - Notes are strings without their own spans; they explain the cause but do not
   point the editor at the offending field's definition.
-- Only the `Eq`/`Ord` auto-derive rules are unfolded. A missing user-written
-  `impl Trait for T` is not explained beyond "does not implement".
+- Only the `Eq`/`Ord` (`automatic`) and `Serialize`/`Deserialize` (`on_bound`)
+  structural rules are unfolded (see
+  [Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md)). A missing
+  user-written `impl Trait for T` is not explained beyond "does not implement".
 - Generic inference provenance is not tracked: when `T` is inferred to a
   concrete type from an argument, the diagnostic cannot yet say where that
   binding came from (`infer.rs` records `bindings` without source origin).
@@ -206,4 +208,6 @@ Next steps, in priority order toward the paper's `all` level:
 - [ ] Track inference provenance through unification so a `TypeMismatch` from
       generic inference can show where a type variable was bound.
 - [ ] Explain a missing user-written `impl` (candidate impls, near-misses).
-- [ ] Extend reason chains beyond `Eq`/`Ord` to other structural bounds.
+- [x] Extend reason chains beyond `Eq`/`Ord` to other structural bounds —
+      `Serialize`/`Deserialize` (`on_bound` policy), see
+      [Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).

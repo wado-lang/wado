@@ -1,0 +1,136 @@
+// Test: `T: Serialize` / `T: Deserialize` bounds are satisfied structurally
+// (WEP: Trait Derivation Policy — Bound-Driven Synthesis), with no explicit
+// `impl Serialize for T;` / `impl Deserialize for T;` marker required.
+use { to_string, from_string } from "core:json";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+test "named struct serializes without an explicit impl marker" {
+    let p = Point { x: 1, y: 2 };
+    let r = to_string(&p);
+    if let Ok(s) = r {
+        assert s == `\{"x":1,"y":2\}`;
+    } else {
+        panic("serialize Point failed");
+    }
+}
+
+test "named struct deserializes without an explicit impl marker" {
+    let r = from_string::<Point>(`\{"x":3,"y":4\}`);
+    if let Ok(p) = r {
+        assert p.x == 3;
+        assert p.y == 4;
+    } else {
+        panic("deserialize Point failed");
+    }
+}
+
+struct Inner {
+    value: i32,
+}
+
+struct Outer {
+    inner: Inner,
+    label: String,
+}
+
+test "nested struct serializes without explicit impl markers on either type" {
+    let o = Outer { inner: Inner { value: 42 }, label: "hi" };
+    let r = to_string(&o);
+    if let Ok(s) = r {
+        assert s == `\{"inner":\{"value":42\},"label":"hi"\}`;
+    } else {
+        panic("serialize Outer failed");
+    }
+}
+
+test "anonymous struct serializes via a bound-driven request" {
+    let point = { x: 5, y: 6 };
+    let r = to_string(&point);
+    if let Ok(s) = r {
+        assert s == `\{"x":5,"y":6\}`;
+    } else {
+        panic("serialize anonymous struct failed");
+    }
+}
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+test "enum serializes without an explicit impl marker" {
+    let c = Color::Green;
+    let r = to_string(&c);
+    if let Ok(s) = r {
+        assert s == `"Green"`;
+    } else {
+        panic("serialize Color failed");
+    }
+}
+
+test "enum deserializes without an explicit impl marker" {
+    let r = from_string::<Color>(`"Blue"`);
+    if let Ok(c) = r {
+        assert c == Color::Blue;
+    } else {
+        panic("deserialize Color failed");
+    }
+}
+
+variant Shape {
+    Circle(f64),
+    Point,
+}
+
+test "variant serializes without an explicit impl marker" {
+    let s = Shape::Circle(2.5);
+    let r = to_string(&s);
+    if let Ok(json) = r {
+        assert json == `\{"Circle":2.5\}`;
+    } else {
+        panic("serialize Shape failed");
+    }
+}
+
+test "variant deserializes without an explicit impl marker" {
+    let r = from_string::<Shape>(`"Point"`);
+    if let Ok(parsed) = r {
+        if let Point = parsed {
+            // OK
+        } else {
+            panic("expected Point");
+        }
+    } else {
+        panic("deserialize Shape failed");
+    }
+}
+
+flags Perms {
+    Read,
+    Write,
+    Execute,
+}
+
+test "flags serializes without an explicit impl marker" {
+    let p = Perms::Read | Perms::Write;
+    let r = to_string(&p);
+    if let Ok(json) = r {
+        assert json == `["Read","Write"]`;
+    } else {
+        panic("serialize Perms failed");
+    }
+}
+
+test "flags deserializes without an explicit impl marker" {
+    let r = from_string::<Perms>(`["Execute"]`);
+    if let Ok(parsed) = r {
+        assert parsed as u32 == Perms::Execute as u32;
+    } else {
+        panic("deserialize Perms failed");
+    }
+}

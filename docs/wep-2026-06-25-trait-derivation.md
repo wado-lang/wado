@@ -1,6 +1,10 @@
 # Trait Derivation Policy — Bound-Driven Synthesis
 
-Status: Draft
+Status: Implemented for `Serialize` / `Deserialize` over struct, variant,
+enum, and flags types, including anonymous structs. Does not yet extend to
+`GenericInstance` (user-defined generic struct/variant instantiations) or to
+a general per-trait policy declaration for user-defined traits — see
+Consequences and Open Questions.
 
 ## Context
 
@@ -82,10 +86,30 @@ from the Reflect WEP), subject to:
    "`Event: Serialize` requires `Metadata: Serialize` requires `Badge: Serialize`
    — `Badge` is not serializable and has no `impl`."
 
+Shipped mechanism (deviates from the `Reflect`-blanket sketch above, since
+`Reflect` itself remains unbuilt — see Relationship and prerequisites): the
+elaborator's structural trait-bound check gained a parallel branch for
+`Serialize`/`Deserialize`, alongside the existing one for `Eq`/`Ord`/`Default`.
+A structural match with no existing impl records the `(type, trait)` pair on
+the type table (shared by every module, since elaboration runs one pass per
+module and finishes before synthesis can act on the fact); `synthesis::serde_synth`
+drains it once and synthesizes each body with the same walk the explicit
+`impl Trait for T;` marker already used. Points 1-3 above hold either way —
+only "how the body is written" differs from the sketch, and a future
+`Reflect`-based rewrite of the body slots into the same request-recording
+plumbing unchanged.
+
 This is whole-program and monomorphized; there is no orphan rule to violate
 because there are no separately-compiled crates. Synthesis happens once per
 `(trait, type)` actually required, so no dead impls are emitted (consistent with
 [Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md)).
+
+`GenericInstance` (a user-defined generic struct/variant instantiation, e.g.
+`Wrapper<Foo>`) is out of scope: elaboration only sees the not-yet-monomorphized
+generic template, so a request keyed by a concrete instantiation would not
+resolve to a body — the same gap [Serde](./wep-2026-02-28-serde.md) already
+tracks for generic-struct `Deserialize`. Built-in generics (`List<T>`,
+`Option<T>`, …) are unaffected — they carry their own hand-written impls.
 
 ### Policy assignment
 
@@ -97,7 +121,7 @@ because there are no separately-compiled crates. Synthesis happens once per
 - User-defined derivable traits default to `explicit`, and may opt into
   `automatic` / `on_bound` (the declaration syntax is an open question below).
 
-### The trust-boundary opt-out
+### The trust boundary
 
 `Serialize` / `Deserialize` cross a data boundary (wire, storage), so making them
 `on_bound` means a type becomes serializable the moment some code asks — and a
@@ -105,20 +129,14 @@ later field addition silently extends the wire shape. This is precisely why Rust
 `serde` and Swift `Codable` are opt-in, and why `Inspect` (debug-only, low stakes)
 being automatic is not a precedent that transfers for free.
 
-Mitigations keep `on_bound` safe:
-
-- A type-level opt-out (e.g. `#[no_derive(Serialize, Deserialize)]`) makes a
-  `T: Serialize` bound fail with a clear "opted out" message instead of
-  synthesizing — for types that must never cross the boundary.
-- Field-level `#[hidden]` (already honored by `Inspect`) excludes a field from
-  the synthesized serialization, the existing redaction lever.
-- A manual impl always overrides, for full control.
-
-Wado's whole-program model (no published crates, no downstream consumers who
-could be surprised by a wire-shape change) materially lowers the risk relative to
-Rust. The recommendation is `on_bound` with the opt-out; whether the opt-out
-should instead be opt-_in_ for `Deserialize` (the untrusted-input direction,
-which also carries `#[validate]` enforcement) is the main open decision.
+Wado accepts this trade-off rather than adding an opt-out marker: its
+whole-program model (no published crates, no downstream consumers who could be
+surprised by a wire-shape change) materially lowers the risk relative to Rust.
+The levers that already exist are the ones available for a type that needs
+tighter control — a manual impl always overrides, and field-level `#[hidden]`
+(already honored by `Inspect`) excludes a field from the synthesized
+serialization. No dedicated opt-out (e.g. a `#[no_derive(...)]` marker) is
+introduced.
 
 ## Consequences
 
@@ -130,28 +148,36 @@ which also carries `#[validate]` enforcement) is the main open decision.
   experience of `Inspect`.
 - Unblocks anonymous-struct serialization, a prerequisite for the efficient field
   path in [`core:log`](./wep-2026-06-25-core-log.md).
-- No macros, no dynamic reflection; synthesis stays static and monomorphized,
-  reusing the Reflect mechanism.
+- No macros, no dynamic reflection; synthesis stays static and monomorphized.
 
 ### Trade-offs
 
 - `Serialize` / `Deserialize` crossing to `on_bound` weakens the explicit opt-in
-  that today bounds the wire surface; the opt-out and `#[hidden]` are the
-  countermeasures, and they are weaker than opt-in.
+  that today bounds the wire surface; `#[hidden]` and a manual impl override are
+  the only countermeasures, and they are weaker than opt-in.
 - Errors move from the (absent) impl site to the bound site; reason chains are
   what keep them legible.
-- Coherence: a policy-driven blanket synthesis must not conflict with concrete
-  impls (e.g. a primitive's own `impl Serialize`). This rides on the coherence
-  rules still open in the Reflect / variadic WEPs (concrete-impl-wins,
-  no-overlap) and does not add a new coherence regime of its own.
+- Coherence: a *future* `Reflect`-based rewrite of the synthesized body (see
+  below) must not let a blanket `impl<T: Reflect> Trait for T` conflict with
+  concrete impls (e.g. a primitive's own `impl Serialize`) — that rides on the
+  coherence rules still open in the Reflect / variadic WEPs. The mechanism
+  actually shipped does not introduce this question yet: it instantiates the
+  existing per-type synthesizer directly, the same one the explicit marker
+  already used, so "no applicable manual impl exists (else that wins)" is the
+  only precedence rule in play today.
 
 ### Relationship and prerequisites
 
-- Mechanism: [`Reflect` derivation](./wep-2026-06-13-reflect-derivation.md) §1–§3
-  (Reflect synthesis + metadata) and §5 (serde migrated to a generic impl over
-  `Reflect`). Bound-driven synthesis is "instantiate that generic impl at the
-  bound site," so it is a thin policy layer on top and should land after the
-  serde-over-Reflect migration.
+- Mechanism: shipped directly against the existing bespoke synthesizer
+  (`synthesis::serde_synth`), the same one `impl Serialize for T;` already
+  used — **not** against [`Reflect` derivation](./wep-2026-06-13-reflect-derivation.md),
+  which remains unbuilt. The original plan was to land this after migrating
+  serde onto a generic `Reflect`-based impl (§5 of that WEP), but the two
+  turned out to be independent: this WEP only changes *when* a request for
+  the existing synthesizer is created (a bound match, not just a written
+  marker), not *how* the body is written. A future `Reflect`-based rewrite of
+  the body is still free to land later against the same request-recording
+  plumbing.
 - Diagnostics: [reason chains](./wep-2026-06-02-diagnostic-reason-chains.md) for
   the field-level failure path.
 
@@ -179,9 +205,13 @@ for T;` already serves as the explicit-request form when one is wanted.
 ## Open Questions
 
 - Declaration syntax for a trait's policy (an attribute on the trait? a keyword?
-  a property of being `Reflect`-derivable?).
-- `Deserialize` direction: `on_bound` with opt-out, or opt-in, given it ingests
-  untrusted data and carries `#[validate]` enforcement.
-- Opt-out spelling (`#[no_derive(...)]` vs other) and whether it is per-trait.
+  a property of being `Reflect`-derivable?) — still open for user-defined
+  traits, which default to `explicit` and have no way to opt into
+  `automatic` / `on_bound` yet.
+- `GenericInstance` (a user-defined generic struct/variant instantiation, e.g.
+  `Wrapper<Foo>`) is not yet `on_bound`-eligible — see Bound-driven synthesis
+  semantics.
 - Coherence interaction with concrete impls, inherited from the Reflect /
-  variadic coherence items.
+  variadic coherence items — relevant once a `Reflect`-based rewrite of the
+  synthesized body lands (see Trade-offs); the shipped mechanism does not run
+  into it.

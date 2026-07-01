@@ -13,9 +13,10 @@ use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName, mangle_local_trait_method};
 use crate::package::Package;
 use crate::tir::{
-    CallArg, FunctionKind, FunctionRef, InlineHint, SynthTrait, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt,
-    TirStmtKind, TirStructField, TirTemplatePart, TirTypeParam, TypeId, TypeTable,
+    BoundDrivenSerdeTrait, CallArg, FunctionKind, FunctionRef, InlineHint, ResolvedType,
+    SynthTrait, SynthesisRequest, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStructField,
+    TirTemplatePart, TirTypeParam, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -384,6 +385,8 @@ fn serialized_case_name(
 }
 
 pub fn synthesize_serde(project: &mut Package) {
+    distribute_bound_driven_requests(project);
+
     for module in project.tir_modules.values_mut() {
         let requests: Vec<_> = module.synthesis_requests.drain(..).collect();
         if requests.is_empty() {
@@ -448,6 +451,74 @@ pub fn synthesize_serde(project: &mut Package) {
         }
 
         module.functions.extend(generated);
+    }
+}
+
+/// Distribute bound-driven `Serialize` / `Deserialize` requests (WEP
+/// 2026-06-25-trait-derivation) into the `synthesis_requests` of each
+/// request's own defining module — exactly where an explicit
+/// `impl Trait for T;` marker's request already lives — so the drain loop
+/// above sees one uniform list regardless of which path produced an entry.
+///
+/// These requests accumulate on the one `TypeTable` every module's
+/// `Rc<RefCell<…>>` handle shares: elaboration runs one fresh `Elaborator`
+/// per module (see `elaborator/orchestration.rs`), so a bound check made
+/// while resolving module A has no way to reach module B's own
+/// `synthesis_requests` directly when the type it just validated is
+/// defined in B. Draining through any module's `type_table` handle works
+/// because they all point at the same underlying table.
+fn distribute_bound_driven_requests(project: &mut Package) {
+    let Some(type_table) = project
+        .tir_modules
+        .values()
+        .next()
+        .map(|m| m.type_table.clone())
+    else {
+        return;
+    };
+    let drained = type_table.borrow_mut().drain_bound_driven_synth_requests();
+
+    for (target_type_id, kind) in drained {
+        let target = {
+            let tt = type_table.borrow();
+            match tt.get(target_type_id) {
+                ResolvedType::Struct {
+                    name,
+                    module_source,
+                    ..
+                }
+                | ResolvedType::Enum {
+                    name,
+                    module_source,
+                }
+                | ResolvedType::Variant {
+                    name,
+                    module_source,
+                }
+                | ResolvedType::Flags {
+                    name,
+                    module_source,
+                } => Some((name.clone(), module_source.clone())),
+                _ => None,
+            }
+        };
+        let Some((target_type_name, module_source)) = target else {
+            continue;
+        };
+        let Some(module) = project.tir_modules.get_mut(&module_source) else {
+            continue;
+        };
+        let trait_ref = match kind {
+            BoundDrivenSerdeTrait::Serialize => SynthTrait::Serialize,
+            BoundDrivenSerdeTrait::Deserialize => SynthTrait::Deserialize,
+        };
+        module.synthesis_requests.push(SynthesisRequest {
+            trait_ref,
+            target_type_name,
+            target_type_id,
+            type_params: Vec::new(),
+            span: Span::default(),
+        });
     }
 }
 

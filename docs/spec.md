@@ -3183,12 +3183,23 @@ impl Serialize for User;      // compiler generates serialize method
 impl Deserialize for User;    // compiler generates deserialize method
 ```
 
-The compiler inspects the struct definition and synthesizes the appropriate method body. This is a compile error if:
+The compiler inspects the type definition (struct, enum, variant, or flags) and synthesizes the appropriate method body. This is a compile error if a field or case's type doesn't implement the required trait.
 
-- The type is not a struct (enums and variants are not yet supported for synthesis)
-- The struct contains fields whose types don't implement the required trait
+Struct field names are serialized verbatim by default (identity); see [Serialization Names](./wep-2026-02-28-serde.md#serialization-names) for `rename` / `rename_all` overrides.
 
-Struct field names are converted from `snake_case` to `camelCase` for serialization (e.g., `user_name` → `"userName"`).
+### Bound-Driven Serialize / Deserialize
+
+The marker above is no longer required: a `T: Serialize` bound (a generic function call, a field of another type, …) is satisfied structurally when every field or case of `T` itself satisfies the trait — the same structural rule `Eq` / `Ord` already use. This is how an anonymous struct, which has no name to write `impl Serialize for …;` against, ever becomes serializable:
+
+```wado
+use { to_string } from "core:json";
+
+struct Point { x: i32, y: i32 }              // no impl marker needed
+let json = to_string(&Point { x: 1, y: 2 }); // Ok("{\"x\":1,\"y\":2}")
+let anon = to_string(&{ x: 1, y: 2 });        // Ok("{\"x\":1,\"y\":2}") — anonymous struct
+```
+
+The explicit marker `impl Serialize for T;` remains valid and still wins over structural synthesis — write it to force the impl into existence with no bound present, or to attach `#[serde(rename_all = "...")]` and similar customization. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 
 ### JSON Module (`core:json`)
 

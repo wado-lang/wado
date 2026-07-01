@@ -655,6 +655,29 @@ pub struct TypeTable {
     ///
     /// A sparse [`TypeMap`] keyed by the decl-backed `TypeId`.
     symbol_by_type: TypeMap<crate::ast::AstId>,
+    /// `(type, trait)` pairs that satisfied a `T: Serialize` / `T:
+    /// Deserialize` bound structurally during elaboration, with no
+    /// explicit `impl Trait for T;` marker (bound-driven synthesis, see
+    /// `docs/wep-2026-06-25-trait-derivation.md`). Elaboration runs one
+    /// fresh `Elaborator` per module (see `elaborator/orchestration.rs`),
+    /// so this list — living on the one `TypeTable` every module's
+    /// `Rc<RefCell<…>>` handle shares — is the only place a bound check in
+    /// module A can durably record a fact about a type defined in module
+    /// B. Drained once by `synthesis::serde_synth::synthesize_serde`,
+    /// which turns each entry into the same `SynthesisRequest` an explicit
+    /// marker would have produced, routed to the type's own defining
+    /// module.
+    bound_driven_synth_requests: IndexSet<(TypeId, BoundDrivenSerdeTrait)>,
+}
+
+/// Which bound-driven-eligible serde trait a recorded request targets.
+/// A standalone, `Eq + Hash` discriminant rather than reusing
+/// [`SynthTrait`] (whose `From { source }` variant carries data that
+/// does not need — and should not need — to implement set membership).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BoundDrivenSerdeTrait {
+    Serialize,
+    Deserialize,
 }
 
 impl Default for TypeTable {
@@ -740,6 +763,7 @@ impl TypeTable {
             struct_name_index: IndexMap::default(),
             type_by_symbol: IndexMap::default(),
             symbol_by_type: TypeMap::default(),
+            bound_driven_synth_requests: IndexSet::default(),
         };
 
         // Pre-populate primitive types matching the constants above
@@ -1033,6 +1057,29 @@ impl TypeTable {
     /// declaration.
     pub fn compiler_items_mut(&mut self) -> &mut crate::compiler_item::CompilerItems {
         &mut self.compiler_items
+    }
+
+    /// Record that `type_id` satisfied a `T: Serialize` / `T: Deserialize`
+    /// bound structurally (bound-driven synthesis). A no-op if already
+    /// recorded for this `(type, trait)` pair — the same type is typically
+    /// discovered from many call sites and, recursively, from every type
+    /// that embeds it.
+    pub fn record_bound_driven_synth_request(
+        &mut self,
+        type_id: TypeId,
+        trait_ref: BoundDrivenSerdeTrait,
+    ) {
+        self.bound_driven_synth_requests
+            .insert((type_id, trait_ref));
+    }
+
+    /// Take every request recorded by [`Self::record_bound_driven_synth_request`]
+    /// so far, leaving the set empty. Called once by
+    /// `synthesis::serde_synth::synthesize_serde`.
+    pub fn drain_bound_driven_synth_requests(&mut self) -> Vec<(TypeId, BoundDrivenSerdeTrait)> {
+        std::mem::take(&mut self.bound_driven_synth_requests)
+            .into_iter()
+            .collect()
     }
 
     /// Canonical name of a registered struct / trait / variant / enum
