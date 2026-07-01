@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782914162991,
+  "lastUpdate": 1782941195984,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -36949,6 +36949,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 457444,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "428949716f1324da0d79b636a7589845c7700492",
+          "message": "Merge pull request #1485 from wado-lang/claude/atn-encoder-decoder-perf-f3bpsk\n\nperf(gale): column-oriented, width-matched ATN wire format",
+          "timestamp": "2026-07-02T06:18:17+09:00",
+          "tree_id": "8d3fddd3d4da0b2222121885b30ca3344899571f",
+          "url": "https://github.com/wado-lang/wado/commit/428949716f1324da0d79b636a7589845c7700492"
+        },
+        "date": 1782941195322,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15276,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 371011,
             "unit": "bytes"
           }
         ]
