@@ -17,6 +17,11 @@ use crate::manifest::Package;
 /// Custom section name for the Wado-custom monorepo subdirectory field.
 pub const REPOSITORY_DIRECTORY_SECTION: &str = "org.wado-lang.package.repository-directory";
 
+/// Custom section carrying the verbatim text of a non-standard `license-file`.
+/// The `licenses` annotation is a `LicenseRef-<id>`; the referenced text ships
+/// here since a `LicenseRef` has no canonical SPDX text to look up.
+pub const LICENSE_SECTION: &str = "org.wado-lang.license";
+
 /// A custom section carrying one metadata field: the section name and its
 /// UTF-8 payload.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,10 +40,17 @@ impl MetadataSection {
 }
 
 /// The metadata sections to embed, in deterministic order. `revision` (the git
-/// commit SHA) is supplied by the caller since it is derived at build time;
-/// pass `None` to omit it. Absent optional fields are skipped.
+/// commit SHA) and `license_text` (the `license-file` contents) are supplied by
+/// the caller since both need build-time IO this pure crate avoids; pass `None`
+/// to omit them. `license_text` is embedded only when the package uses
+/// `license-file` (a `LicenseRef` licenses annotation). Absent optional fields
+/// are skipped.
 #[must_use]
-pub fn metadata_sections(pkg: &Package, revision: Option<&str>) -> Vec<MetadataSection> {
+pub fn metadata_sections(
+    pkg: &Package,
+    revision: Option<&str>,
+    license_text: Option<&str>,
+) -> Vec<MetadataSection> {
     let mut out = Vec::new();
     if let Some(description) = &pkg.description {
         out.push(MetadataSection::new("description", description));
@@ -57,6 +69,11 @@ pub fn metadata_sections(pkg: &Package, revision: Option<&str>) -> Vec<MetadataS
     }
     if let Some(licenses) = license_expression(pkg) {
         out.push(MetadataSection::new("licenses", licenses));
+    }
+    // Gate on `license_file`, not just `license_text`: an SPDX `license` has no
+    // text to ship, and the two fields are mutually exclusive.
+    if let (Some(_), Some(text)) = (&pkg.license_file, license_text) {
+        out.push(MetadataSection::new(LICENSE_SECTION, text));
     }
     out.push(MetadataSection::new("version", &pkg.version));
     if let Some(revision) = revision {
@@ -129,7 +146,7 @@ license = "MIT OR Apache-2.0"
 authors = ["Alice <alice@example.com>", "Bob"]
 "#,
         );
-        let sections = metadata_sections(&pkg, None);
+        let sections = metadata_sections(&pkg, None, None);
         assert_eq!(
             value_of(&sections, "description"),
             Some("A fast widget toolkit")
@@ -165,7 +182,7 @@ version = "0.1.0"
 repository = "https://github.com/myorg/app"
 "#,
         );
-        let sections = metadata_sections(&pkg, None);
+        let sections = metadata_sections(&pkg, None, None);
         assert_eq!(
             value_of(&sections, "homepage"),
             Some("https://github.com/myorg/app")
@@ -179,7 +196,7 @@ repository = "https://github.com/myorg/app"
     #[test]
     fn absent_optional_fields_are_skipped() {
         let pkg = package("[package]\nname = \"app\"\nversion = \"0.1.0\"\n");
-        let sections = metadata_sections(&pkg, None);
+        let sections = metadata_sections(&pkg, None, None);
         assert!(value_of(&sections, "description").is_none());
         assert!(value_of(&sections, "homepage").is_none());
         assert!(value_of(&sections, "licenses").is_none());
@@ -190,7 +207,7 @@ repository = "https://github.com/myorg/app"
     #[test]
     fn revision_is_included_when_supplied() {
         let pkg = package("[package]\nname = \"app\"\nversion = \"0.1.0\"\n");
-        let sections = metadata_sections(&pkg, Some("abc1234def5678"));
+        let sections = metadata_sections(&pkg, Some("abc1234def5678"), None);
         assert_eq!(value_of(&sections, "revision"), Some("abc1234def5678"));
     }
 
@@ -204,7 +221,7 @@ version = "0.1.0"
 repository-directory = "packages/app"
 "#,
         );
-        let sections = metadata_sections(&pkg, None);
+        let sections = metadata_sections(&pkg, None, None);
         assert_eq!(
             value_of(&sections, "org.wado-lang.package.repository-directory"),
             Some("packages/app")
@@ -221,11 +238,41 @@ version = "0.1.0"
 license-file = "licenses/LICENSE-COMMERCIAL.txt"
 "#,
         );
-        let sections = metadata_sections(&pkg, None);
+        let sections = metadata_sections(&pkg, None, None);
         assert_eq!(
             value_of(&sections, "licenses"),
             Some("LicenseRef-LICENSE-COMMERCIAL.txt")
         );
+    }
+
+    #[test]
+    fn license_file_text_embedded_when_supplied() {
+        let pkg = package(
+            r#"
+[package]
+name = "app"
+version = "0.1.0"
+license-file = "LICENSE-COMMERCIAL"
+"#,
+        );
+        let sections = metadata_sections(&pkg, None, Some("Commercial license terms.\n"));
+        assert_eq!(
+            value_of(&sections, "licenses"),
+            Some("LicenseRef-LICENSE-COMMERCIAL")
+        );
+        assert_eq!(
+            value_of(&sections, LICENSE_SECTION),
+            Some("Commercial license terms.\n")
+        );
+    }
+
+    #[test]
+    fn spdx_license_has_no_license_text_section() {
+        let pkg = package("[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"MIT\"\n");
+        // Even if text is (spuriously) supplied, an SPDX license embeds no text.
+        let sections = metadata_sections(&pkg, None, Some("should be ignored"));
+        assert_eq!(value_of(&sections, "licenses"), Some("MIT"));
+        assert!(value_of(&sections, LICENSE_SECTION).is_none());
     }
 
     #[test]

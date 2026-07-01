@@ -116,6 +116,32 @@ pub(crate) fn governing_workspace_root_dir(
     Ok(governing_workspace(member_dir, &content).map(|(dir, _)| dir))
 }
 
+/// The directory a `license-file` path resolves against: the package's own root
+/// when the package declares its own license slot, or the governing workspace
+/// root when the `license-file` is inherited from `[workspace.package]` (per the
+/// package-manifest WEP). Falls back to `package_root` when the own manifest is
+/// unreadable or the package is standalone.
+pub(crate) fn license_file_base_dir(package_root: &Path) -> PathBuf {
+    let content = fs::read_to_string(package_root.join(MANIFEST_FILENAME)).unwrap_or_default();
+    if own_manifest_declares_license_slot(&content) {
+        return package_root.to_path_buf();
+    }
+    governing_workspace(package_root, &content)
+        .map(|(dir, _)| dir)
+        .unwrap_or_else(|| package_root.to_path_buf())
+}
+
+/// Whether `[package]` sets `license` or `license-file` directly.
+fn own_manifest_declares_license_slot(content: &str) -> bool {
+    let Ok(table) = content.parse::<toml::Table>() else {
+        return false;
+    };
+    let Some(pkg) = table.get("package").and_then(toml::Value::as_table) else {
+        return false;
+    };
+    pkg.contains_key("license") || pkg.contains_key("license-file")
+}
+
 /// Member package directories of the workspace rooted at `root_dir`, expanded
 /// from its `members` globs (directories containing a `wado.toml`, excluding the
 /// root itself).
@@ -720,6 +746,53 @@ authors = ["Alice"]
             dirs,
             vec![tmp.path().join("packages/a"), tmp.path().join("packages/b")]
         );
+    }
+
+    const WS_ROOT_LICENSE_FILE: &str = r#"
+[workspace]
+members = ["packages/*"]
+
+[workspace.package]
+version = "0.1.0"
+repository = "https://github.com/org/monorepo"
+namespace = "org"
+license-file = "COMPANY-LICENSE.txt"
+authors = ["Alice"]
+"#;
+
+    #[test]
+    fn license_file_base_dir_standalone_uses_package_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("wado.toml"),
+            "[package]\nname = \"solo\"\nversion = \"0.1.0\"\nlicense-file = \"LICENSE\"\n",
+        );
+        assert_eq!(license_file_base_dir(tmp.path()), tmp.path());
+    }
+
+    #[test]
+    fn license_file_base_dir_inherited_uses_workspace_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(&tmp.path().join("wado.toml"), WS_ROOT_LICENSE_FILE);
+        let member_dir = tmp.path().join("packages/core");
+        write(
+            &member_dir.join("wado.toml"),
+            "[package]\nname = \"core\"\nlib = \"src/lib.wado\"\n",
+        );
+        // No license slot of its own, so it inherits the workspace's.
+        assert_eq!(license_file_base_dir(&member_dir), tmp.path());
+    }
+
+    #[test]
+    fn license_file_base_dir_member_own_license_file_uses_member() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(&tmp.path().join("wado.toml"), WS_ROOT_LICENSE_FILE);
+        let member_dir = tmp.path().join("packages/core");
+        write(
+            &member_dir.join("wado.toml"),
+            "[package]\nname = \"core\"\nlib = \"src/lib.wado\"\nlicense-file = \"OWN-LICENSE\"\n",
+        );
+        assert_eq!(license_file_base_dir(&member_dir), member_dir);
     }
 
     #[test]

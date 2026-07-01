@@ -12,7 +12,8 @@ pub use manifest::{
     Package, TestSettings, Workspace, WorkspacePackage, WorldEntry, resolve_member,
 };
 pub use metadata::{
-    MetadataSection, REPOSITORY_DIRECTORY_SECTION, license_ref_id, metadata_sections,
+    LICENSE_SECTION, MetadataSection, REPOSITORY_DIRECTORY_SECTION, license_ref_id,
+    metadata_sections,
 };
 pub use provider::{
     DependencyProvider, GitTagInfo, InMemoryDependencyProvider, ProviderError, RegistryPackageInfo,
