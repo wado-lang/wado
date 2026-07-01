@@ -1,12 +1,14 @@
 //! Per-function alias analysis feeding the engine [`ValueGraph`] builder.
 //!
-//! [`build_alias_info`] computes the [`crate::niri::AliasInfo`] (`aliased`,
-//! `untrackable`, `alias_groups`); [`builder_alias_sets`] wraps it with the
-//! mutable-escape analysis ([`build_mut_escaped`]) so every engine-driven pass
-//! feeds the [`ValueGraph`] the alias view it needs to bound heap-write
-//! invalidation. The walk seeds `aliased` from the function's stable
-//! `address_taken_locals` / `stores_aliased_locals` annotations plus a body
-//! scan for transient inlined-in copies, builds the union-find of
+//! [`build_alias_info`] shares one body walk across the alias analysis and the
+//! mutable-escape scan, returning an [`AliasWalkResult`]: the finished
+//! [`crate::niri::AliasInfo`] (`aliased`, `untrackable`, `alias_groups`) plus
+//! the mutable-escape walk's raw `syntactic_mut` set. [`builder_alias_sets`]
+//! finishes `syntactic_mut` into `mut_escaped` via [`build_mut_escaped`], so
+//! every engine-driven pass feeds the [`ValueGraph`] the alias view it needs to
+//! bound heap-write invalidation. The walk seeds `aliased` from the function's
+//! stable `address_taken_locals` / `stores_aliased_locals` annotations plus a
+//! body scan for transient inlined-in copies, builds the union-find of
 //! reference-typed `let dst = src` aliases, and lifts `stores_aliased_locals`
 //! verbatim into `untrackable`.
 //!
@@ -36,9 +38,24 @@ fn walk_all(body: &Body, node: NodeRef, f: &mut impl FnMut(&Body, NodeRef)) {
     body.for_each_child(node, |c| walk_all(body, c, f));
 }
 
-/// Compute per-function alias annotations for a function body.
+/// [`build_alias_info`]'s result: the finished per-function [`AliasInfo`] plus
+/// the mutable-escape walk's raw `syntactic_mut` set — [`build_mut_escaped`]'s
+/// input, unfinished (no immutable-type filter / alias-group closure applied
+/// yet). Two related-but-distinct analyses share one struct because they also
+/// share the one body walk that produces them (see [`build_alias_info`]).
+pub(super) struct AliasWalkResult {
+    pub(super) info: AliasInfo,
+    pub(super) syntactic_mut: IndexSet<u32>,
+}
+
+/// Compute per-function alias annotations for a function body, plus the
+/// mutable-escape walk's raw `syntactic_mut` set (see [`build_mut_escaped`]).
 ///
-/// Returns an [`AliasInfo`] populated as follows:
+/// Shares one body traversal across three independent per-node collectors —
+/// `collect_aliased_node`, `collect_alias_edges_node`, `collect_mut_escaped_node`
+/// — instead of walking `body` three times: none of the three reads another's
+/// output *during* the walk, only in the post-processing below, so they can
+/// run in the same pass. Populates [`AliasWalkResult::info`] as follows:
 ///
 /// - `aliased`: seeds from `address_taken_locals` ∪
 ///   `stores_aliased_locals`, then augmented with locals whose
@@ -57,15 +74,20 @@ fn walk_all(body: &Body, node: NodeRef, f: &mut impl FnMut(&Body, NodeRef)) {
 ///   Local→Local copies in `body` (`Box<T>`, `List<T>`, `&T`,
 ///   `&mut T`). Used to widen field-assignment invalidation: writing
 ///   `dst.field = …` drops the same field on every alias.
+///
+/// [`AliasWalkResult::syntactic_mut`] is `stores_aliased_locals` plus every
+/// local this walk found a mutable-escape site for.
 pub(super) fn build_alias_info(
     body: &Body,
     locals: &[crate::nir::NirLocal],
     address_taken_locals: &IndexSet<u32>,
     stores_aliased_locals: &IndexSet<u32>,
     type_table: &TypeTable,
+    first_param_types: &FirstParamTypes,
+    call_immutability: &CallImmutability,
     // Per-node hook fused into the walk; its returned local is marked aliased.
     mut extra_aliased: impl FnMut(&Body, NodeRef) -> Option<u32>,
-) -> AliasInfo {
+) -> AliasWalkResult {
     // Seed dense bitsets sized to the function's local count; local indices
     // are dense (`0..locals.len()`), so membership stays hash-free.
     let mut aliased = LocalSet::with_capacity(locals.len());
@@ -79,27 +101,43 @@ pub(super) fn build_alias_info(
     for &idx in stores_aliased_locals {
         untrackable.insert(idx);
     }
-    walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
-        collect_aliased_node(body, node, &mut aliased);
-        if let Some(r) = extra_aliased(body, node) {
-            aliased.insert(r);
-        }
-    });
     // Reference parameters/locals pointing at the same struct may alias the
     // same heap object (Wado references alias, no borrow checker), so a write
     // through one must invalidate field knowledge of the others. Treat them as
     // a mutual alias group, and mark them `aliased` so a call boundary (opaque
-    // mutation through any handle) drops their fields too.
+    // mutation through any handle) drops their fields too. Computed from
+    // `locals` directly (no body walk needed), so it seeds `edges` before the
+    // walk starts.
     let same_pointee_edges = same_pointee_reference_edges(locals, type_table);
     for &(a, b) in &same_pointee_edges {
         aliased.insert(a);
         aliased.insert(b);
     }
-    let alias_groups = collect_alias_groups(body, type_table, &same_pointee_edges);
-    AliasInfo {
-        aliased,
-        untrackable,
-        alias_groups,
+    let mut edges = same_pointee_edges;
+    let mut syntactic_mut: IndexSet<u32> = stores_aliased_locals.iter().copied().collect();
+    walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
+        collect_aliased_node(body, node, &mut aliased);
+        if let Some(r) = extra_aliased(body, node) {
+            aliased.insert(r);
+        }
+        collect_alias_edges_node(body, node, type_table, &mut edges);
+        collect_mut_escaped_node(
+            body,
+            node,
+            type_table,
+            first_param_types,
+            call_immutability,
+            &mut syntactic_mut,
+        );
+    });
+    let alias_groups = alias_groups_from_edges(edges);
+    AliasWalkResult {
+        info: AliasInfo {
+            aliased,
+            untrackable,
+            alias_groups,
+        },
+        syntactic_mut,
     }
 }
 
@@ -144,12 +182,17 @@ pub(super) fn builder_alias_sets(
     // `collect_aliased_node` misses it and the value graph would forward `recv`'s
     // pre-call fields across the call (`x.bump(); x.value` — a miscompile). Mark
     // the receiver root via the `build_alias_info` hook, sharing its walk.
-    let info = build_alias_info(
+    let AliasWalkResult {
+        info,
+        syntactic_mut,
+    } = build_alias_info(
         body,
         locals,
         address_taken_locals,
         stores_aliased_locals,
         type_table,
+        first_param_types,
+        call_immutability,
         |body, node| {
             if let NodeRef::Expr(e) = node
                 && let ExprKind::MethodCall {
@@ -174,12 +217,9 @@ pub(super) fn builder_alias_sets(
     );
     let aliased: IndexSet<u32> = info.aliased.iter().collect();
     let mut_escaped = build_mut_escaped(
-        body,
         locals,
         &aliased,
-        stores_aliased_locals,
-        type_table,
-        first_param_types,
+        syntactic_mut,
         call_immutability,
         &info.alias_groups,
     );
@@ -187,38 +227,25 @@ pub(super) fn builder_alias_sets(
 }
 
 /// Compute the per-function `mut_escaped` set subtractively from `aliased`.
+/// `syntactic_mut` is [`build_alias_info`]'s walk output: the body's syntactic
+/// mutable-escape sites ([`collect_mut_escaped_node`]) plus
+/// `stores_aliased_locals` (an inlined `stores`-annotated callee stashed the
+/// reference, mutability unknown).
 ///
-/// 1. Collect the body's *syntactic* mutable-escape sites
-///    ([`collect_mut_escaped_node`]) plus `stores_aliased_locals` (an inlined
-///    `stores`-annotated callee stashed the reference, mutability unknown).
-/// 2. Keep every `aliased` local whose type is not provably call-immutable
+/// 1. Keep every `aliased` local whose type is not provably call-immutable
 ///    *or* that has a syntactic mutable escape; drop the rest (provably
 ///    immutable: no callee can mutate them).
-/// 3. Close the result over `alias_groups` (the union-find
+/// 2. Close the result over `alias_groups` (the union-find
 ///    [`build_alias_info`] already computed), so that mutating one member of an
 ///    alias group (a `let dst = src` reference copy, or two same-pointee
 ///    reference params) clobbers the whole group's fields.
 fn build_mut_escaped(
-    body: &Body,
     locals: &[crate::nir::NirLocal],
     aliased: &IndexSet<u32>,
-    stores_aliased_locals: &IndexSet<u32>,
-    type_table: &TypeTable,
-    first_param_types: &FirstParamTypes,
+    syntactic_mut: IndexSet<u32>,
     call_immutability: &CallImmutability,
     alias_groups: &IndexMap<u32, IndexSet<u32>>,
 ) -> IndexSet<u32> {
-    let mut syntactic_mut: IndexSet<u32> = stores_aliased_locals.iter().copied().collect();
-    walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
-        collect_mut_escaped_node(
-            body,
-            node,
-            type_table,
-            first_param_types,
-            call_immutability,
-            &mut syntactic_mut,
-        );
-    });
     let local_type = |idx: u32| locals.get(idx as usize).map(|l| l.type_id);
     // Keep a local in `mut_escaped` unless it is provably immutable across
     // calls — no syntactic mutable escape AND a transitively-immutable type.
@@ -795,15 +822,13 @@ fn same_pointee_reference_edges(
     edges
 }
 
-fn collect_alias_groups(
-    body: &Body,
-    type_table: &TypeTable,
-    extra_edges: &[(u32, u32)],
-) -> IndexMap<u32, IndexSet<u32>> {
-    let mut edges: Vec<(u32, u32)> = extra_edges.to_vec();
-    walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
-        collect_alias_edges_node(body, node, type_table, &mut edges);
-    });
+/// Union-find `edges` (reference-typed Local→Local aliasing pairs) into alias
+/// groups. Pure post-processing over an edge list assembled by the caller:
+/// [`build_alias_info`] seeds it from [`same_pointee_reference_edges`] (no
+/// body walk — read off `locals` alone) before its shared walk extends it via
+/// [`collect_alias_edges_node`] for every `let dst = src` / `dst = src` copy
+/// found in the body.
+fn alias_groups_from_edges(edges: Vec<(u32, u32)>) -> IndexMap<u32, IndexSet<u32>> {
     if edges.is_empty() {
         return IndexMap::default();
     }
