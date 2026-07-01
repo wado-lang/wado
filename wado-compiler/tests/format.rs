@@ -171,6 +171,21 @@ fn run() {
     assert_eq!(formatted1, formatted2, "format should be idempotent");
 }
 
+/// A byte-string literal `b"..."` must round-trip through the formatter with
+/// its `b` prefix and raw escapes intact.
+#[test]
+fn test_format_byte_string_literal_roundtrips() {
+    let source = "fn run() {\n    let a = b\"\\x00\\xffab\";\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("b\"\\x00\\xffab\""),
+        "expected byte string to survive formatting, got:\n{formatted}"
+    );
+    assert_format_preserves_ast(source);
+    let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
 /// A `_` inference placeholder inside a turbofish must round-trip through the
 /// formatter as `_` (issue #1106), not get dropped or rewritten to a name.
 #[test]

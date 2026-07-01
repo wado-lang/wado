@@ -3802,6 +3802,9 @@ impl Parser {
                 Ok(self.consume_literal(Literal::Number(repr), start_span))
             }
             TokenKind::StringLit(raw) => Ok(self.consume_literal(Literal::String(raw), start_span)),
+            TokenKind::ByteStringLit(raw) => {
+                Ok(self.consume_literal(Literal::Bytes(raw), start_span))
+            }
             TokenKind::TemplateStringLit(parts) => {
                 self.advance();
                 self.parse_template_string_parts(parts, start_span)

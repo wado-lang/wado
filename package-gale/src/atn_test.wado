@@ -7,7 +7,7 @@
 //!   3. non-greedy repeats put the EXIT edge first at the decision state
 //!      (the invariant that makes `(else stmt)??` bind to the outer rule).
 
-use { build_atn, build_token_kinds, serialize_atn, lr_loop_entry_decision, Atn, AtnState } from "./atn.wado";
+use { build_atn, build_token_kinds, atn_blob_bytes, lr_loop_entry_decision, Atn, AtnState } from "./atn.wado";
 use {
     atn_decode,
     AtnSim,
@@ -148,7 +148,7 @@ fn assert_sim_matches_atn(sim: &AtnSim, atn: &Atn) {
 test "ATN round-trips through serialize_atn/atn_decode exactly" {
     let g = parse(NON_GREEDY_G4).unwrap();
     let atn = build_atn(&g);
-    let sim = atn_decode(&serialize_atn(&atn));
+    let sim = atn_decode(&atn_blob_bytes(&atn));
     assert_sim_matches_atn(&sim, &atn);
 }
 
@@ -247,7 +247,7 @@ test "LR rule has no position-0 self-reference (no naive left recursion)" {
 test "LR ATN round-trips through serialize_atn/atn_decode exactly" {
     let g = parse(LR_G4).unwrap();
     let atn = build_atn(&g);
-    let sim = atn_decode(&serialize_atn(&atn));
+    let sim = atn_decode(&atn_blob_bytes(&atn));
     assert_sim_matches_atn(&sim, &atn);
 }
 

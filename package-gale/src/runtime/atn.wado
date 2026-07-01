@@ -321,10 +321,30 @@ fn edge_lists_eq(a: &List<[i32, i32, i32]>, b: &List<[i32, i32, i32]>) -> bool {
     return true;
 }
 
+/// Reconstruct the serialized `i32` ATN words from the packed `List<u8>` blob
+/// (4 little-endian bytes per word). The blob is emitted as a `b"..."`
+/// byte-string literal, which lowers to a constant data segment instead of an
+/// `i32` builder/push chain — keeping parser compile time flat.
+fn atn_bytes_to_words(bytes: &List<u8>) -> List<i32> {
+    let mut data: List<i32> = [];
+    let n = bytes.len() / 4;
+    for let mut i = 0; i < n; i += 1 {
+        let base = i * 4;
+        let b0 = bytes[base] as i32;
+        let b1 = bytes[base + 1] as i32;
+        let b2 = bytes[base + 2] as i32;
+        let b3 = bytes[base + 3] as i32;
+        data.push(b0 | (b1 << 8) | (b2 << 16) | (b3 << 24));
+    }
+    return data;
+}
+
 /// Decode the serialized ATN blob into `AtnSim`. Mirrors the layout of
-/// `atn.wado::serialize_atn`.
+/// `atn.wado::serialize_atn`. The blob arrives as a packed `List<u8>`
+/// (`b"..."`); the words are reassembled once here.
 #[allow(dead_code)]
-pub fn atn_decode(data: &List<i32>) -> AtnSim {
+pub fn atn_decode(bytes: &List<u8>) -> AtnSim {
+    let data = atn_bytes_to_words(bytes);
     let mut p = 0;
     let num_tokens = data[p];
     p += 1;

@@ -22,7 +22,7 @@ use { gen_highlight } from "./highlight_gen.wado";
 use { GenContext, sets_overlap } from "./gen_context.wado";
 use { CodeWriter, StructSpec, VariantSpec, EnumSpec, Vis } from "./wadopoet.wado";
 use { lower } from "./lower.wado";
-use { build_atn_with, serialize_atn, Atn, empty_atn, lr_loop_entry_decision, rule_body_decision } from "./atn.wado";
+use { build_atn_with, atn_blob_bytes, Atn, empty_atn, lr_loop_entry_decision, rule_body_decision } from "./atn.wado";
 use { build_latn, grammar_needs_latn, LatnResult } from "./latn.wado";
 use { TreeMap } from "core:collections";
 use {
@@ -227,16 +227,28 @@ fn gen_latn_data_global(w: &mut CodeWriter, atn: &Atn) {
 /// parser (`ATN_*`) and lexer (`LATN_*`) ATN blobs — same wire format and
 /// decoder; only the atom semantics differ.
 fn emit_atn_blob_global(w: &mut CodeWriter, atn: &Atn, data_name: &String, sim_name: &String) {
-    let blob = serialize_atn(atn);
-    let mut body = String::with_capacity(blob.len() * 6);
-    for let mut i = 0; i < blob.len(); i += 1 {
-        if i > 0 {
-            body.push_str(&", ");
-        }
-        body.push_str(&`{blob[i]}`);
+    // Emit the ATN as a `b"..."` byte-string literal (the packed little-endian
+    // wire form from `atn_blob_bytes`). Unlike an `[i32, …]` array literal —
+    // which lowers to an N-element builder/push chain the optimizer must walk —
+    // a byte literal lowers straight to a constant data segment, so even a
+    // 40k-word ATN keeps generated-parser compile time flat and the Wasm small.
+    let bytes = atn_blob_bytes(atn);
+    let mut body = String::with_capacity(bytes.len() * 4);
+    for let b of &bytes {
+        push_hex_byte(&mut body, *b);
     }
-    w.line(&`global {*data_name}: List<i32> = [{body}];`);
+    w.line(&`global {*data_name}: List<u8> = b"{body}";`);
     w.line(&`global {*sim_name}: AtnSim = atn_decode(&{*data_name});`);
+}
+
+/// Append the `\xNN` byte escape (lowercase, zero-padded to two digits) for
+/// byte `b` to `out`.
+fn push_hex_byte(out: &mut String, b: u8) {
+    out.push_str(&"\\x");
+    if b < 16 {
+        out.push('0');
+    }
+    out.push_str(&`{b:x}`);
 }
 
 fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {

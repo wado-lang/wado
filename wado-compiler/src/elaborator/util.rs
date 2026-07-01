@@ -149,6 +149,50 @@ pub(super) fn unescape_string(raw: &str) -> Result<String, String> {
     Ok(result)
 }
 
+/// Interpret the raw content of a byte-string literal `b"..."` (between quotes,
+/// without the quotes) into the bytes it denotes.
+///
+/// Source bytes must be ASCII; each escape produces exactly one byte. Supports
+/// `\xNN` (two hex digits) plus the standard one-char escapes. Rejects
+/// non-ASCII source characters and `\u` (a byte string is not Unicode).
+pub(super) fn unescape_bytes(raw: &str) -> Result<Vec<u8>, String> {
+    let mut out = Vec::new();
+    let mut chars = raw.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            match chars.next() {
+                Some('x') => {
+                    let hi = chars
+                        .next()
+                        .ok_or_else(|| "unterminated `\\x` escape".to_string())?;
+                    let lo = chars
+                        .next()
+                        .ok_or_else(|| "unterminated `\\x` escape".to_string())?;
+                    let byte = u8::from_str_radix(&format!("{hi}{lo}"), 16)
+                        .map_err(|_| format!("invalid `\\x` escape: \\x{hi}{lo}"))?;
+                    out.push(byte);
+                }
+                Some('n') => out.push(b'\n'),
+                Some('t') => out.push(b'\t'),
+                Some('r') => out.push(b'\r'),
+                Some('\\') => out.push(b'\\'),
+                Some('"') => out.push(b'"'),
+                Some('\'') => out.push(b'\''),
+                Some('0') => out.push(0),
+                Some(c) => return Err(format!("invalid escape sequence in byte string: \\{c}")),
+                None => return Err("unterminated escape sequence".to_string()),
+            }
+        } else if ch.is_ascii() {
+            out.push(ch as u8);
+        } else {
+            return Err(format!(
+                "non-ASCII character in byte string: '{ch}' (use a `\\xNN` escape)"
+            ));
+        }
+    }
+    Ok(out)
+}
+
 /// Interpret the raw content of a char literal (between quotes, without the quotes).
 ///
 /// Returns the resulting `char`, or an error message.

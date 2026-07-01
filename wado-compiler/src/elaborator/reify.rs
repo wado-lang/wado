@@ -8558,6 +8558,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let value = super::util::unescape_string(s).unwrap_or_default();
                 TirExprKind::StringLiteral(value)
             }
+            ast::Literal::Bytes(raw) => {
+                // Decode `\xNN` / standard escapes to the byte payload; the AST
+                // holds the raw source text. Typed `List<u8>` by annotate, this
+                // reuses the `BytesLiteral` data-segment lowering — no builder
+                // chain, so a large blob never expands into N pushes.
+                let bytes = super::util::unescape_bytes(raw).unwrap_or_default();
+                let array_u8_type = self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_list(crate::tir::TypeTable::U8);
+                return TirExpr::new(TirExprKind::BytesLiteral(bytes), array_u8_type, lit.span);
+            }
             ast::Literal::Char(s) => {
                 // The Char literal is the raw source text (e.g. `'a'`,
                 // `'\n'`). Decode escapes via the shared `unescape_char`,
@@ -9468,6 +9481,7 @@ fn ast_literal_to_pattern(lit: &ast::Literal) -> crate::tir::TirLiteralPattern {
         // earlier. Falling here would be a parser-elaborator
         // invariant violation; panic with a labelled tripwire.
         ast::Literal::Unit
+        | ast::Literal::Bytes(_)
         | ast::Literal::LocationFile
         | ast::Literal::LocationLine
         | ast::Literal::LocationFunction

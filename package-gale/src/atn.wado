@@ -955,6 +955,24 @@ pub fn serialize_atn(atn: &Atn) -> List<i32> {
     return out;
 }
 
+/// The serialized ATN as a packed little-endian byte blob (4 bytes per `i32`
+/// word). This is the wire form the generated parser embeds as a `b"..."`
+/// byte-string literal and `atn_decode` reads back; `atn_bytes_to_words` is the
+/// inverse. Keeping the encoding here makes codegen and the round-trip test
+/// share one definition.
+pub fn atn_blob_bytes(atn: &Atn) -> List<u8> {
+    let words = serialize_atn(atn);
+    let mut bytes: List<u8> = [];
+    for let w of &words {
+        let v = *w;
+        bytes.push((v & 0xff) as u8);
+        bytes.push(((v >> 8) & 0xff) as u8);
+        bytes.push(((v >> 16) & 0xff) as u8);
+        bytes.push(((v >> 24) & 0xff) as u8);
+    }
+    return bytes;
+}
+
 fn state_kind_name(kind: i32) -> String {
     if kind == ATN_BASIC {
         return "Basic";

@@ -1810,6 +1810,11 @@ impl<'a> Unparser<'a> {
                 self.output.push_str(raw);
                 self.output.push('"');
             }
+            Literal::Bytes(raw) => {
+                self.output.push_str("b\"");
+                self.output.push_str(raw);
+                self.output.push('"');
+            }
             Literal::Char(raw) => {
                 self.output.push('\'');
                 self.output.push_str(raw);
@@ -3598,6 +3603,11 @@ fn unparse_literal_into(lit: &Literal, output: &mut String) {
         Literal::Number(repr) => output.push_str(repr),
         Literal::String(raw) => {
             output.push('"');
+            output.push_str(raw);
+            output.push('"');
+        }
+        Literal::Bytes(raw) => {
+            output.push_str("b\"");
             output.push_str(raw);
             output.push('"');
         }
