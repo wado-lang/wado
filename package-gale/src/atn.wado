@@ -966,9 +966,9 @@ pub fn atn_blob_bytes(atn: &Atn) -> List<u8> {
     for let w of &words {
         let v = *w;
         bytes.push((v & 0xff) as u8);
-        bytes.push(((v >> 8) & 0xff) as u8);
-        bytes.push(((v >> 16) & 0xff) as u8);
-        bytes.push(((v >> 24) & 0xff) as u8);
+        bytes.push((v >> 8 & 0xff) as u8);
+        bytes.push((v >> 16 & 0xff) as u8);
+        bytes.push((v >> 24 & 0xff) as u8);
     }
     return bytes;
 }
