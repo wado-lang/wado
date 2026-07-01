@@ -2863,15 +2863,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // Variadic tuple impl (`impl<..T: Trait> Trait for
                         // [..T]`, e.g. `Eq`/`Ord` for tuples in
                         // core:prelude/tuple.wado): every entry in
-                        // `concrete_type_args` is an instantiation of the
-                        // SAME variadic parameter, so each one is checked
-                        // against that parameter's bounds. Without this, the
-                        // `ast::Type::Generic` arm above never matches a
-                        // `Type::Tuple`-shaped impl, `bounds_satisfied` stays
-                        // trivially `true`, and no element's bound is ever
-                        // checked via `type_implements_trait` — so an
-                        // on_bound trait (`Eq`/`Ord`) never gets recorded for
-                        // that element type (WEP 2026-06-25-trait-derivation).
+                        // `concrete_type_args` instantiates the same variadic
+                        // parameter, so each is checked against its bounds.
+                        // The `ast::Type::Generic` arm above never matches
+                        // here, so without this arm a tuple element's bound
+                        // is never checked and an on_bound trait (`Eq`/`Ord`)
+                        // never gets recorded for it.
                         for elem in elements {
                             let ast::Type::TypePackSpread(name, _) = elem else {
                                 continue;

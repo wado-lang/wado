@@ -460,14 +460,10 @@ pub fn synthesize_serde(project: &mut Package) {
 /// `impl Trait for T;` marker's request already lives — so the drain loop
 /// above sees one uniform list regardless of which path produced an entry.
 ///
-/// These requests accumulate on the one `TypeTable` every module's
-/// `Rc<RefCell<…>>` handle shares (see `TypeTable::bound_driven_synth_requests`),
-/// keyed nominally so a generic declaration collapses every instantiation
-/// into one entry; `synthesis::traits::synthesize_traits` reads the same
-/// set (as a snapshot, not a drain — see that method's doc) for its own
-/// `Eq` / `Ord` entries, so this pass only consumes the `Serialize` /
-/// `Deserialize` ones (matched by trait name) and leaves the rest for that
-/// pass to claim.
+/// Reads `TypeTable::bound_driven_synth_requests` as a snapshot, not a
+/// drain: `synthesis::traits::synthesize_traits` reads the same shared set
+/// for its `Eq` / `Ord` entries, so this pass only consumes the `Serialize`
+/// / `Deserialize` ones (matched by trait name) and leaves the rest.
 fn distribute_bound_driven_requests(project: &mut Package) {
     let Some(type_table) = project
         .tir_modules

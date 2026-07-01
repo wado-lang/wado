@@ -855,12 +855,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Whether an `impl Trait for Type;` marker's trait name resolves to
     /// `Eq` or `Ord`. Handled separately from [`Self::classify_synth_trait`]:
-    /// unlike `Serialize` / `Deserialize` / `From`, an `Eq` / `Ord` marker
-    /// does not go through a [`tir::SynthesisRequest`] drained by a
-    /// dedicated synthesis pass — it validates eligibility immediately (see
-    /// [`Self::record_eq_ord_explicit_request`]) and records directly into
-    /// the same bound-driven request set a `T: Eq` / `T: Ord` bound already
-    /// feeds (`docs/wep-2026-06-25-trait-derivation.md`).
+    /// unlike `Serialize` / `Deserialize` / `From`, this marker validates
+    /// eligibility immediately (see [`Self::record_eq_ord_explicit_request`])
+    /// instead of going through a drained [`tir::SynthesisRequest`].
     fn classify_eq_ord_marker(&self, trait_type: &ast::Type) -> Option<String> {
         use crate::compiler_item::CompilerItem;
         let base = trait_type.head_base_name()?;

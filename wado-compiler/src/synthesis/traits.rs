@@ -302,13 +302,10 @@ pub fn synthesize_traits(project: Package) -> Package {
     let mut project = project;
     let trait_env = project.trait_env.clone();
 
-    // Bound-driven requests (WEP 2026-06-25-trait-derivation): read the set
-    // `Elaborator::type_implements_trait_inner` and the explicit
-    // `impl Eq for T;` / `impl Ord for T;` marker path both feed, and keep
-    // only the `Eq` / `Ord` entries. This is a snapshot, not a drain —
-    // `synthesis::serde_synth::synthesize_serde` reads the same shared set
-    // for its `Serialize` / `Deserialize` entries, and runs after this pass,
-    // so consuming the set here would silently lose its entries.
+    // Bound-driven requests (WEP 2026-06-25-trait-derivation): snapshot the
+    // shared set (not a drain — `synthesis::serde_synth::synthesize_serde`
+    // reads the same set for its `Serialize` / `Deserialize` entries after
+    // this pass runs) and keep only the `Eq` / `Ord` entries.
     let (eq_trait_name, ord_trait_name) = match project.tir_modules.values().next() {
         Some(m) => {
             let tt = m.type_table.borrow();
@@ -382,16 +379,13 @@ pub(crate) struct SynthesisCtx<'env, 'pend, 'req> {
     /// module's impl.
     pub(crate) pending: &'pend mut IndexSet<(String, ModuleSource, String)>,
     /// `(type_name, module, trait_name)` triples that a real `T: Eq` /
-    /// `T: Ord` bound (or an explicit `impl Eq for T;` / `impl Ord for T;`
-    /// marker) actually demanded, drained once from
-    /// `TypeTable::bound_driven_synth_requests` before this pass starts
-    /// (WEP 2026-06-25-trait-derivation). `Eq` / `Ord` stay `automatic`
-    /// *policy* — a bound is satisfied the moment fields structurally
-    /// qualify, no marker needed — but an impl is now emitted only for a
-    /// pair actually recorded here, not for every declared type, so this
-    /// gates `generate_enum_trait_impls` / `generate_struct_eq_ord_impls` /
-    /// `generate_variant_eq_impls` (Default / Inspect / Display / their
-    /// `Alt` siblings stay unconditional).
+    /// `T: Ord` bound or explicit marker actually demanded (WEP
+    /// 2026-06-25-trait-derivation), snapshotted from
+    /// `TypeTable::bound_driven_synth_requests` before this pass starts.
+    /// Gates `generate_enum_trait_impls` / `generate_struct_eq_ord_impls` /
+    /// `generate_variant_eq_impls` — an impl is emitted only for a pair
+    /// recorded here, not for every declared type. Default / Inspect /
+    /// Display and their `Alt` siblings stay unconditional.
     pub(crate) requested: &'req IndexSet<(String, ModuleSource, String)>,
     /// Module currently being synthesised. Auto-derived impls live in this
     /// module by convention.
@@ -472,15 +466,10 @@ impl SynthesisCtx<'_, '_, '_> {
 
     /// Like [`Self::has_impl`], but for the `Eq` / `Ord` sub-passes only: an
     /// empty `impl Trait for Type;` marker does not count as "already
-    /// implemented" (see `TraitEnv::has_methodful_impl`). Unlike `Serialize`
-    /// / `Deserialize` — whose marker is drained into a `SynthesisRequest`
-    /// and never consulted through `has_impl` at all — an `Eq` / `Ord`
-    /// marker is validated and recorded directly into the same bound-driven
-    /// request set a real `T: Eq` / `T: Ord` bound feeds (see
-    /// `Elaborator::record_eq_ord_explicit_request`), so it *does* reach
-    /// `trait_env`'s AST-layer impl index like any other `Item::Impl` — and
-    /// plain `has_impl` would treat that as "already implemented," which
-    /// would permanently block the very body the marker asks for.
+    /// implemented" (see `TraitEnv::has_methodful_impl`). An `Eq` / `Ord`
+    /// marker reaches `trait_env`'s AST-layer impl index like any other
+    /// `Item::Impl`, so plain `has_impl` would treat it as "already
+    /// implemented" and permanently block the body it's asking for.
     pub(crate) fn has_real_impl(&self, type_name: &str, trait_name: &str) -> bool {
         if self.trait_env.has_methodful_impl(type_name, trait_name) {
             return true;

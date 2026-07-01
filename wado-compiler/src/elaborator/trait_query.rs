@@ -488,19 +488,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether `type_id` is *structurally* derivable for `trait_name` (`Eq`
     /// or `Ord`) — every field (struct) or every non-unit case payload
     /// (variant) recursively satisfies `trait_name`; a plain enum is always
-    /// eligible (no fields to fail). Mirrors the auto-derive branches in
-    /// [`Self::type_implements_trait_inner`], but — unlike that function —
-    /// ignores whether an impl already exists for `type_id` itself.
-    ///
-    /// That distinction is the reason this function exists as a separate
-    /// query: [`Self::type_implements_trait`] answers "is this bound
-    /// satisfied," which is `true` the moment *any* impl exists, including
-    /// an explicit `impl Eq for T;` marker with no validated fields behind
-    /// it. Validating that very marker needs the opposite question — "would
-    /// this hold structurally, ignoring the marker" — so it can be rejected
-    /// outright when a field/case is not eligible, matching the "guarantee"
-    /// the marker exists to provide (see
-    /// `docs/wep-2026-06-25-trait-derivation.md`).
+    /// eligible. Mirrors the auto-derive branches in
+    /// [`Self::type_implements_trait_inner`], but ignores whether an impl
+    /// already exists for `type_id` itself — needed as a separate query
+    /// because [`Self::type_implements_trait`] would see an explicit
+    /// `impl Eq for T;` marker as "already satisfied" and never validate the
+    /// fields the marker is meant to guarantee.
     pub(super) fn structurally_derivable_for_explicit_request(
         &self,
         ctx: &AnnotateCtx,
@@ -622,26 +615,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Bound-driven request tracking (WEP 2026-06-25-trait-derivation).
-        // `Eq` / `Ord` keep `automatic` *policy* (a structural match here
-        // always reports the bound satisfied, same as before this WEP) but
-        // `synthesis::traits` now emits an impl only for a `(type, trait)`
-        // actually recorded, rather than for every declared type — so every
-        // structural match, for both `automatic` and `on_bound` traits, must
-        // record. `Serialize` / `Deserialize` additionally require no
-        // explicit impl already existing (checked at each call site below)
-        // before recording — the WEP's "no applicable manual impl exists
-        // (else that wins)" rule. `Eq` / `Ord` don't need that guard here:
-        // `synthesis::traits`'s own `has_impl` / `record_impl` dedup already
-        // skips regenerating over a hand-written impl, so recording
-        // redundantly alongside one is harmless.
-        //
-        // Keyed nominally (`name` + `module_source`, not `TypeId`): for a
-        // generic struct/variant this is the *base declaration*, matched by
-        // `SynthesisCtx::has_impl`'s own dedup key, so many concrete
-        // instantiations of e.g. `Pair<T, U>` all collapse onto one request
-        // for `Pair` — exactly the one impl `synthesis::traits` emits per
-        // declaration today, reused across every instantiation after
-        // monomorphize.
+        // Every structural match records a request, for both `Eq`/`Ord` and
+        // `Serialize`/`Deserialize`, so `synthesis::traits` /
+        // `serde_synth` emit an impl only where one was actually recorded.
+        // `Serialize`/`Deserialize` additionally require no explicit impl
+        // already existing before recording (checked at each call site);
+        // `Eq`/`Ord` don't need that guard — `synthesis::traits`'s own dedup
+        // already skips a hand-written impl, so recording redundantly is
+        // harmless. Keyed nominally (name + module, not `TypeId`) so a
+        // generic struct/variant's many instantiations collapse onto one
+        // request against the base declaration.
         let record_request = |name: &str, module_source: &ModuleSource, trait_name: &str| -> bool {
             self.tysys
                 .type_table
@@ -841,17 +824,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // `on_bound` serde synthesis intentionally does not extend to
-        // `GenericInstance` (a user-defined generic struct/variant
-        // instantiation, e.g. `Wrapper<Foo>`) — unlike `Eq`/`Ord` above,
-        // whose existing generic synthesis is unaffected by this change and
-        // needs no such carve-out. Serde's generic-struct `Deserialize`
-        // synthesis has a documented, pre-existing gap where the per-field
-        // machinery does not consume `type_params` for substitution (see
-        // docs/wep-2026-02-28-serde.md, "Generic struct Deserialize
-        // synthesis"); recording a `GenericInstance` request here would run
-        // straight into it. Built-in generics (`List<T>`, `Option<T>`, …) are
-        // unaffected regardless: they carry their own hand-written impls,
-        // found by the plain lookup below.
+        // `GenericInstance` (e.g. `Wrapper<Foo>`) — unlike `Eq`/`Ord` above.
+        // Serde's generic-struct `Deserialize` has a documented pre-existing
+        // gap where the per-field machinery doesn't substitute `type_params`
+        // (docs/wep-2026-02-28-serde.md, "Generic struct Deserialize
+        // synthesis"); recording a request here would hit it. Built-in
+        // generics (`List<T>`, `Option<T>`, …) carry their own hand-written
+        // impls regardless, found by the plain lookup below.
 
         // Get the type name and type args for looking up implementations
         let (type_name, type_args) = match &resolved {

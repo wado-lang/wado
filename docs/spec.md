@@ -2274,11 +2274,11 @@ for let { x, y } of points {
 
 **Auto-derived Traits:**
 
-Structs derive `Eq` (field-wise equality) and `Ord` (lexicographic comparison by field declaration order) when all fields implement those traits. The impl is synthesized on demand — only where a `==`/`<` call site, a bound, or an explicit `impl Eq for T;` / `impl Ord for T;` marker actually needs it, not unconditionally for every declared struct. The explicit marker is also a guarantee: it is a compile error if any field is not itself eligible. A user-provided `impl Eq` or `impl Ord` takes precedence over the auto-derived implementation. See [Bound-Driven Eq / Ord](#bound-driven-eq--ord) and [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
+Structs derive `Eq` (field-wise equality) and `Ord` (lexicographic comparison by field declaration order) when all fields implement those traits. The impl is synthesized on demand — only where a `==`/`<` call site, a bound, or an explicit `impl Eq for T;` / `impl Ord for T;` marker needs it, not for every declared struct. The explicit marker is also a guarantee: a compile error if any field is ineligible. A user-provided `impl Eq` or `impl Ord` takes precedence. See [Bound-Driven Eq / Ord](#bound-driven-eq--ord) and [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 
 For generic structs, the auto-derived impls have trait bounds on the type parameters: `impl<T: Eq> Eq for Foo<T>`, `impl<T: Ord> Ord for Foo<T>`.
 
-Variants derive `Eq` (not `Ord`) the same on-demand way, when all payload types implement `Eq`. The generated `eq` method checks that both values are the same case and, for cases with payloads, compares the payloads. A user-provided `impl Eq` takes precedence over the auto-derived implementation. For generic variants, the auto-derived impls have trait bounds on the type parameters: `impl<T: Eq> Eq for Maybe<T>`.
+Variants derive `Eq` (not `Ord`) the same on-demand way, when all payload types implement `Eq`. The generated `eq` method checks that both values are the same case and, for cases with payloads, compares the payloads. A user-provided `impl Eq` takes precedence. For generic variants, the auto-derived impls have trait bounds on the type parameters: `impl<T: Eq> Eq for Maybe<T>`.
 
 #### Struct Field Defaults
 
@@ -3189,7 +3189,7 @@ Struct field names are serialized verbatim by default (identity); see [Serializa
 
 ### Bound-Driven Serialize / Deserialize
 
-The marker above is no longer required: a `T: Serialize` bound (a generic function call, a field of another type, …) is satisfied structurally when every field or case of `T` itself satisfies the trait — the same on-demand model `Eq` / `Ord` use (see below). This is how an anonymous struct, which has no name to write `impl Serialize for …;` against, ever becomes serializable:
+The marker above is no longer required: a `T: Serialize` bound is satisfied structurally when every field or case of `T` itself satisfies the trait — the same on-demand model `Eq` / `Ord` use (see below). This is how an anonymous struct, which has no name to write `impl Serialize for …;` against, ever becomes serializable:
 
 ```wado
 use { to_string } from "core:json";
@@ -3199,13 +3199,13 @@ let json = to_string(&Point { x: 1, y: 2 }); // Ok("{\"x\":1,\"y\":2}")
 let anon = to_string(&{ x: 1, y: 2 });        // Ok("{\"x\":1,\"y\":2}") — anonymous struct
 ```
 
-The explicit marker `impl Serialize for T;` remains valid and still wins over structural synthesis — write it to force the impl into existence with no bound present, or to attach `#[serde(rename_all = "...")]` and similar customization. Unlike `Eq` / `Ord`'s marker (below), it does not pre-validate eligibility: an ineligible field is a compile error at the bound site, not at the marker. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
+The explicit marker `impl Serialize for T;` remains valid and still wins over structural synthesis — write it to force the impl with no bound present, or to attach `#[serde(rename_all = "...")]` and similar customization. Unlike `Eq` / `Ord`'s marker (below), it does not pre-validate eligibility: an ineligible field is a compile error at the bound site, not at the marker. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 
 ### Bound-Driven Eq / Ord
 
-`Eq` / `Ord` derive the same on-demand way: the impl for `T` is synthesized only where a `==` / `<` call site, a bound, or an explicit marker actually needs it — not unconditionally for every declared struct, enum, or variant. No existing `==` / `<` call site changes behavior; a bound was already satisfied the moment fields qualified, and still is.
+`Eq` / `Ord` derive the same on-demand way: the impl for `T` is synthesized only where a `==` / `<` call site, a bound, or an explicit marker needs it, not for every declared type. No existing call site changes behavior.
 
-The explicit marker `impl Eq for T;` / `impl Ord for T;` is a hard guarantee, not just a request: it validates `T` structurally at the marker's own span and is a compile error, with a reason chain, if any field or case is not itself eligible:
+The explicit marker `impl Eq for T;` / `impl Ord for T;` is a hard guarantee, not just a request: it validates `T` structurally at the marker's own span and is a compile error, with a reason chain, if any field or case is ineligible:
 
 ```wado
 struct Handler { cb: fn(i32) -> i32 }

@@ -655,26 +655,18 @@ pub struct TypeTable {
     ///
     /// A sparse [`TypeMap`] keyed by the decl-backed `TypeId`.
     symbol_by_type: TypeMap<crate::ast::AstId>,
-    /// `(type_name, module, trait_name)` triples that satisfied a bound
-    /// structurally during elaboration — `T: Serialize` / `T: Deserialize`
-    /// (`on_bound` policy) or `T: Eq` / `T: Ord` (`automatic` policy, but
-    /// still request-tracked so `synthesis::traits` only emits an impl for
-    /// types actually demanded) — with no explicit `impl Trait for T;`
-    /// marker yet in the project (see
-    /// `docs/wep-2026-06-25-trait-derivation.md`). Keyed nominally rather
-    /// than by `TypeId` so a generic struct/variant (many concrete
-    /// instantiations, one declaration) records once against its own
-    /// declaration — the same key shape `synthesis::traits::SynthesisCtx`
-    /// already dedupes impls by.
+    /// `(type_name, module, trait_name)` triples that satisfied a `T:
+    /// Serialize` / `T: Deserialize` / `T: Eq` / `T: Ord` bound structurally
+    /// during elaboration (bound-driven synthesis, see
+    /// `docs/wep-2026-06-25-trait-derivation.md`). Keyed nominally, not by
+    /// `TypeId`, so a generic struct/variant records once against its own
+    /// declaration regardless of instantiation count.
     ///
-    /// Elaboration runs one fresh `Elaborator` per module (see
-    /// `elaborator/orchestration.rs`), so this list — living on the one
-    /// `TypeTable` every module's `Rc<RefCell<…>>` handle shares — is the
-    /// only place a bound check in module A can durably record a fact
-    /// about a type defined in module B. Drained once by
-    /// `synthesis::serde_synth::synthesize_serde` (for `Serialize` /
-    /// `Deserialize`) and by `synthesis::traits::synthesize_traits` (for
-    /// `Eq` / `Ord`), each filtering for the trait names it owns.
+    /// Lives on the one `TypeTable` every module's `Rc<RefCell<…>>` handle
+    /// shares, since elaboration runs one fresh `Elaborator` per module.
+    /// Read by both `synthesis::serde_synth::synthesize_serde` and
+    /// `synthesis::traits::synthesize_traits`, each filtering for the trait
+    /// names it owns.
     bound_driven_synth_requests: IndexSet<(String, ModuleSource, String)>,
 }
 

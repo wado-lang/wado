@@ -963,15 +963,11 @@ impl TraitEnv {
     /// AST layer — unlike [`Self::impl_module_for`], an empty `impl Trait for
     /// Type;` marker does not count.
     ///
-    /// `impl_index` indexes a marker exactly like a real impl (both are
-    /// `Item::Impl`), which is correct for most callers — a marker still
-    /// declares the type "wants" the trait. But `Eq` / `Ord` synthesis
-    /// gating (WEP 2026-06-25-trait-derivation) needs the opposite question:
-    /// a marker for these two traits is itself a *request* for a synthesized
-    /// body, so treating its presence as "already implemented" would
-    /// permanently block the very body it asks for. `Serialize` /
-    /// `Deserialize` don't need this: their marker is drained into a
-    /// [`crate::tir::SynthesisRequest`] instead of gated through this index.
+    /// `impl_index` indexes a marker exactly like a real impl. That's fine
+    /// for most callers, but `Eq` / `Ord` synthesis gating (WEP
+    /// 2026-06-25-trait-derivation) needs the opposite question: a marker
+    /// for these two traits is itself a request for the body, so treating
+    /// it as "already implemented" would permanently block that body.
     pub(crate) fn has_methodful_impl(&self, type_name: &str, trait_name: &str) -> bool {
         self.impl_index.get(type_name).is_some_and(|entries| {
             entries.iter().any(|entry| {

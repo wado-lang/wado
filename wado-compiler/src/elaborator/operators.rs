@@ -343,21 +343,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Newtypes of structs need trait-based comparison via the base type's impl.
             //
             // `Enum` is deliberately absent: its `==` lowers to a native
-            // discriminant compare (no method dispatch, so no `Eq` bound to
-            // check here — see `lower_comparisons_in_module`, which only
-            // ever rewrites Struct/Variant/GenericInstance). `Variant` must
-            // be present, though: unlike `Enum`, it carries payload data, so
-            // its `==`/`Ord` genuinely dispatch to a synthesized
-            // `VariantName^Eq::eq` / `^Ord::cmp` — going through
-            // `resolve_trait_method_for_op` here is what makes that
-            // dispatch's `T: Eq` / `T: Ord` obligation visible to
-            // `type_implements_trait`, which is what records the
-            // bound-driven synthesis request (WEP
-            // 2026-06-25-trait-derivation). Without this arm, a plain
-            // (non-generic) variant's comparison silently fell through to
-            // `try_lower_comparison` at monomorphize time — after synthesis
-            // already ran — so the request was never recorded and the
-            // method it called was never generated.
+            // discriminant compare, no method dispatch involved. `Variant`
+            // must be present: it carries payload data, so its `==`/`Ord`
+            // dispatch to a synthesized method, and only going through
+            // `resolve_trait_method_for_op` here records the bound-driven
+            // synthesis request (WEP 2026-06-25-trait-derivation) — otherwise
+            // a plain variant's comparison falls through to
+            // `try_lower_comparison` at monomorphize time, after synthesis
+            // already ran, and the method is never generated.
             let struct_name = match &left_type {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
