@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782911576775,
+  "lastUpdate": 1782914162991,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -36885,6 +36885,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/233f671765bbd0ca4c718fe73635c3bb2b7f20ab"
         },
         "date": 1782911576160,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15276,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457444,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bed6442e2ff711b1eb06efd3819ab3a80d8b1fd3",
+          "message": "Merge pull request #1484 from wado-lang/claude/unused-diagnostics-pub-8pxr58\n\nfix(compiler): treat `pub` as a liveness root, like `export`",
+          "timestamp": "2026-07-01T22:47:31+09:00",
+          "tree_id": "f5314fa4bbbcd9bbce5c398a317a4c0d809136c1",
+          "url": "https://github.com/wado-lang/wado/commit/bed6442e2ff711b1eb06efd3819ab3a80d8b1fd3"
+        },
+        "date": 1782914162310,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
