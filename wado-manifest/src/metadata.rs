@@ -70,9 +70,8 @@ pub fn metadata_sections(
     if let Some(licenses) = license_expression(pkg) {
         out.push(MetadataSection::new("licenses", licenses));
     }
-    // Ship the verbatim text only for a `license-file` (LicenseRef); an SPDX
-    // `license` is looked up by id and carries no text. `license`/`license-file`
-    // are mutually exclusive, so gating on `license_file` also excludes SPDX.
+    // Gate on `license_file`, not just `license_text`: an SPDX `license` has no
+    // text to ship, and the two fields are mutually exclusive.
     if let (Some(_), Some(text)) = (&pkg.license_file, license_text) {
         out.push(MetadataSection::new(LICENSE_SECTION, text));
     }

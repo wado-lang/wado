@@ -131,8 +131,7 @@ pub(crate) fn license_file_base_dir(package_root: &Path) -> PathBuf {
         .unwrap_or_else(|| package_root.to_path_buf())
 }
 
-/// Whether a manifest's own `[package]` sets a license slot (`license` or
-/// `license-file`) — i.e. the license is the package's own, not inherited.
+/// Whether `[package]` sets `license` or `license-file` directly.
 fn own_manifest_declares_license_slot(content: &str) -> bool {
     let Ok(table) = content.parse::<toml::Table>() else {
         return false;
@@ -780,8 +779,7 @@ authors = ["Alice"]
             &member_dir.join("wado.toml"),
             "[package]\nname = \"core\"\nlib = \"src/lib.wado\"\n",
         );
-        // The member declares no license slot, so it inherits `license-file`,
-        // which resolves against the workspace root, not the member directory.
+        // No license slot of its own, so it inherits the workspace's.
         assert_eq!(license_file_base_dir(&member_dir), tmp.path());
     }
 
@@ -794,7 +792,6 @@ authors = ["Alice"]
             &member_dir.join("wado.toml"),
             "[package]\nname = \"core\"\nlib = \"src/lib.wado\"\nlicense-file = \"OWN-LICENSE\"\n",
         );
-        // The member overrides with its own `license-file`, resolved locally.
         assert_eq!(license_file_base_dir(&member_dir), member_dir);
     }
 
