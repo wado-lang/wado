@@ -2818,89 +2818,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &concrete_type_args,
             |found_trait_name| found_trait_name == trait_name,
             |s, impl_ref, mapping, _declared| {
-                // Check trait bounds on type parameters (e.g., impl<T: Eq> Eq for List<T>)
+                // Check trait bounds on type parameters (e.g., impl<T: Eq> Eq for List<T>).
+                // Shared with `lookup_method_info_uncached`'s inherent-impl
+                // lookup and `find_trait_impl_for_type_with_args`, so a gap
+                // fixed for one AST shape (`Type::Generic` /
+                // `Type::Reference` / `Type::MutReference` / `Type::Tuple`)
+                // is fixed for every caller.
                 let impl_block = s.get_impl_block(impl_ref);
-                if !impl_block.type_params.iter().all(|p| p.bounds.is_empty())
-                    && !concrete_type_args.is_empty()
-                {
-                    let bounds_map: IndexMap<&str, Vec<String>> = impl_block
-                        .type_params
-                        .iter()
-                        .filter(|p| !p.bounds.is_empty())
-                        .map(|p| {
-                            (
-                                p.name.as_str(),
-                                p.bounds.iter().map(|b| b.name.clone()).collect(),
-                            )
-                        })
-                        .collect();
-
-                    let mut bounds_satisfied = true;
-                    if let ast::Type::Generic(generic) = &impl_block.ty {
-                        for (i, arg) in generic.args.iter().enumerate() {
-                            if let ast::Type::Named(named) = arg
-                                && let Some(bounds) = bounds_map.get(named.name.as_str())
-                                && let Some(&type_arg) = concrete_type_args.get(i)
-                            {
-                                if matches!(
-                                    s.tysys.type_table.borrow().get(type_arg),
-                                    ResolvedType::TypeParam { .. }
-                                ) {
-                                    continue;
-                                }
-                                for bound in bounds {
-                                    if !s.type_implements_trait(&s.annotate_ctx, type_arg, bound) {
-                                        bounds_satisfied = false;
-                                        break;
-                                    }
-                                }
-                            }
-                            if !bounds_satisfied {
-                                break;
-                            }
-                        }
-                    } else if let ast::Type::Tuple(elements) = &impl_block.ty {
-                        // Variadic tuple impl (`impl<..T: Trait> Trait for
-                        // [..T]`, e.g. `Eq`/`Ord` for tuples in
-                        // core:prelude/tuple.wado): every entry in
-                        // `concrete_type_args` instantiates the same variadic
-                        // parameter, so each is checked against its bounds.
-                        // The `ast::Type::Generic` arm above never matches
-                        // here, so without this arm a tuple element's bound
-                        // is never checked and an on_bound trait (`Eq`/`Ord`)
-                        // never gets recorded for it.
-                        for elem in elements {
-                            let ast::Type::TypePackSpread(name, _) = elem else {
-                                continue;
-                            };
-                            let Some(bounds) = bounds_map.get(name.as_str()) else {
-                                continue;
-                            };
-                            for &type_arg in &concrete_type_args {
-                                if matches!(
-                                    s.tysys.type_table.borrow().get(type_arg),
-                                    ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-                                ) {
-                                    continue;
-                                }
-                                for bound in bounds {
-                                    if !s.type_implements_trait(&s.annotate_ctx, type_arg, bound) {
-                                        bounds_satisfied = false;
-                                        break;
-                                    }
-                                }
-                                if !bounds_satisfied {
-                                    break;
-                                }
-                            }
-                            if !bounds_satisfied {
-                                break;
-                            }
-                        }
-                    }
-                    if !bounds_satisfied {
-                        return None;
-                    }
+                if !s.check_impl_block_bounds(
+                    &impl_block.type_params,
+                    &impl_block.ty,
+                    Some(&concrete_type_args),
+                ) {
+                    return None;
                 }
 
                 // Gather everything we need from the impl block up front, then

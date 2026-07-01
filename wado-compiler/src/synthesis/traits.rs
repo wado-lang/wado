@@ -306,25 +306,31 @@ pub fn synthesize_traits(project: Package) -> Package {
     // shared set (not a drain — `synthesis::serde_synth::synthesize_serde`
     // reads the same set for its `Serialize` / `Deserialize` entries after
     // this pass runs) and keep only the `Eq` / `Ord` entries.
-    let (eq_trait_name, ord_trait_name) = match project.tir_modules.values().next() {
-        Some(m) => {
-            let tt = m.type_table.borrow();
-            let items = tt.compiler_items();
-            (
-                items.trait_name(CompilerItem::Eq).to_string(),
-                items.trait_name(CompilerItem::Ord).to_string(),
-            )
-        }
-        None => (String::new(), String::new()),
-    };
-    let requested: IndexSet<(String, ModuleSource, String)> = project
+    //
+    // `TypeTable` is shared (one `Rc<RefCell<…>>` per project, cloned onto
+    // every module) so any loaded module's handle reaches the same table;
+    // `build_tir` always populates at least the entry module before this
+    // pass runs, so `tir_modules` is never empty here.
+    let first_module = project
         .tir_modules
         .values()
         .next()
-        .map(|m| m.type_table.borrow().bound_driven_synth_requests())
-        .unwrap_or_default()
+        .expect("tir_modules must contain at least the entry module during synthesis");
+    let (eq_trait_name, ord_trait_name) = {
+        let tt = first_module.type_table.borrow();
+        let items = tt.compiler_items();
+        (
+            items.trait_name(CompilerItem::Eq).to_string(),
+            items.trait_name(CompilerItem::Ord).to_string(),
+        )
+    };
+    let requested: IndexSet<(String, ModuleSource, String)> = first_module
+        .type_table
+        .borrow()
+        .bound_driven_synth_requests(|trait_name| {
+            trait_name == eq_trait_name || trait_name == ord_trait_name
+        })
         .into_iter()
-        .filter(|(_, _, trait_name)| *trait_name == eq_trait_name || *trait_name == ord_trait_name)
         .collect();
 
     // In-pass dedup: each sub-pass records `(type_name, module, trait_name)`
@@ -471,7 +477,10 @@ impl SynthesisCtx<'_, '_, '_> {
     /// `Item::Impl`, so plain `has_impl` would treat it as "already
     /// implemented" and permanently block the body it's asking for.
     pub(crate) fn has_real_impl(&self, type_name: &str, trait_name: &str) -> bool {
-        if self.trait_env.has_methodful_impl(type_name, trait_name) {
+        if self
+            .trait_env
+            .has_methodful_impl(type_name, trait_name, &self.module)
+        {
             return true;
         }
         self.pending.contains(&(
@@ -479,6 +488,14 @@ impl SynthesisCtx<'_, '_, '_> {
             self.module.clone(),
             trait_name.to_string(),
         ))
+    }
+
+    /// `true` when `impl <trait_name> for <type_name>` should be generated
+    /// now: some bound/marker asked for it ([`Self::is_requested`]) and no
+    /// real impl already covers it ([`Self::has_real_impl`]). The single
+    /// combined gate for every `Eq` / `Ord` generation call site.
+    pub(crate) fn should_synthesize(&self, type_name: &str, trait_name: &str) -> bool {
+        self.is_requested(type_name, trait_name) && !self.has_real_impl(type_name, trait_name)
     }
 }
 
@@ -644,18 +661,14 @@ fn generate_enum_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
         let enum_type = type_table.make_enum(enum_name.clone(), module_source.clone());
         let ref_enum_type = type_table.make_ref(enum_type);
 
-        if ctx.is_requested(enum_name, &eq_trait_name)
-            && !ctx.has_real_impl(enum_name, &eq_trait_name)
-        {
+        if ctx.should_synthesize(enum_name, &eq_trait_name) {
             let func =
                 generate_enum_eq_fn(enum_name, enum_type, ref_enum_type, &eq_trait_name, *span);
             generated_functions.push(Rc::new(RefCell::new(func)));
             ctx.record_impl(enum_name, &eq_trait_name);
         }
 
-        if ctx.is_requested(enum_name, &ord_trait_name)
-            && !ctx.has_real_impl(enum_name, &ord_trait_name)
-        {
+        if ctx.should_synthesize(enum_name, &ord_trait_name) {
             let ordering_type =
                 type_table.make_compiler_enum(crate::compiler_item::CompilerItem::Ordering);
             let func = generate_enum_ord_fn(
@@ -709,7 +722,7 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
         let struct_type = tt.make_struct(name.clone(), module_source.clone());
         let ref_struct_type = tt.make_ref(struct_type);
 
-        if ctx.is_requested(name, &eq_trait_name) && !ctx.has_real_impl(name, &eq_trait_name) {
+        if ctx.should_synthesize(name, &eq_trait_name) {
             let func = generate_struct_eq_fn(
                 name,
                 &[],
@@ -725,7 +738,7 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
             ctx.record_impl(name, &eq_trait_name);
         }
 
-        if ctx.is_requested(name, &ord_trait_name) && !ctx.has_real_impl(name, &ord_trait_name) {
+        if ctx.should_synthesize(name, &ord_trait_name) {
             let ordering_type = tt.make_compiler_enum(crate::compiler_item::CompilerItem::Ordering);
             let func = generate_struct_ord_fn(
                 name,
@@ -752,7 +765,7 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
             tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
         let ref_struct_type = tt.make_ref(struct_type);
 
-        if ctx.is_requested(name, &eq_trait_name) && !ctx.has_real_impl(name, &eq_trait_name) {
+        if ctx.should_synthesize(name, &eq_trait_name) {
             let func = generate_struct_eq_fn(
                 name,
                 type_params,
@@ -768,7 +781,7 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
             ctx.record_impl(name, &eq_trait_name);
         }
 
-        if ctx.is_requested(name, &ord_trait_name) && !ctx.has_real_impl(name, &ord_trait_name) {
+        if ctx.should_synthesize(name, &ord_trait_name) {
             let ordering_type = tt.make_compiler_enum(crate::compiler_item::CompilerItem::Ordering);
             let func = generate_struct_ord_fn(
                 name,
@@ -930,7 +943,7 @@ fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
 
     let variant_infos = collect_variant_cases(module);
     for (name, cases, span) in &variant_infos {
-        if !ctx.is_requested(name, &eq_trait_name) || ctx.has_real_impl(name, &eq_trait_name) {
+        if !ctx.should_synthesize(name, &eq_trait_name) {
             continue;
         }
         let variant_type = tt.make_variant(name.clone(), module_source.clone());
@@ -952,7 +965,7 @@ fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
 
     let generic_variant_infos = collect_generic_variant_cases(module);
     for (name, type_params, cases, span) in &generic_variant_infos {
-        if !ctx.is_requested(name, &eq_trait_name) || ctx.has_real_impl(name, &eq_trait_name) {
+        if !ctx.should_synthesize(name, &eq_trait_name) {
             continue;
         }
         let type_param_ids = make_type_param_ids(type_params, &mut tt);

@@ -1053,24 +1053,46 @@ impl TypeTable {
     /// `T: <trait_name>` bound structurally (bound-driven synthesis). A
     /// no-op if already recorded for this triple — the same type is
     /// typically discovered from many call sites and, recursively, from
-    /// every type that embeds it.
+    /// every type that embeds it, so the borrowed pre-check avoids
+    /// allocating a fresh `(String, ModuleSource, String)` key on repeat
+    /// discoveries of the same fact.
     pub fn record_bound_driven_synth_request(
         &mut self,
-        type_name: String,
-        module_source: ModuleSource,
-        trait_name: String,
+        type_name: &str,
+        module_source: &ModuleSource,
+        trait_name: &str,
     ) {
-        self.bound_driven_synth_requests
-            .insert((type_name, module_source, trait_name));
+        let already_recorded = self
+            .bound_driven_synth_requests
+            .iter()
+            .any(|(n, m, t)| n == type_name && m == module_source && t == trait_name);
+        if !already_recorded {
+            self.bound_driven_synth_requests.insert((
+                type_name.to_string(),
+                module_source.clone(),
+                trait_name.to_string(),
+            ));
+        }
     }
 
-    /// Every request recorded by [`Self::record_bound_driven_synth_request`]
-    /// so far. A snapshot, not a drain: `synthesis::serde_synth::synthesize_serde`
-    /// and `synthesis::traits::synthesize_traits` each read this same set and
-    /// filter for the trait names they own, so consuming it here would
-    /// silently drop whichever of the two runs second.
-    pub fn bound_driven_synth_requests(&self) -> Vec<(String, ModuleSource, String)> {
-        self.bound_driven_synth_requests.iter().cloned().collect()
+    /// Requests recorded by [`Self::record_bound_driven_synth_request`] so
+    /// far whose trait name satisfies `matches`. A snapshot, not a drain:
+    /// `synthesis::serde_synth::synthesize_serde` and
+    /// `synthesis::traits::synthesize_traits` each read this same shared
+    /// set and filter for the trait names they own, so consuming it here
+    /// would silently drop whichever of the two runs second. Filtering
+    /// before cloning (rather than cloning the whole set into a `Vec` and
+    /// filtering that) means each caller only clones the entries it
+    /// actually keeps.
+    pub fn bound_driven_synth_requests(
+        &self,
+        mut matches: impl FnMut(&str) -> bool,
+    ) -> Vec<(String, ModuleSource, String)> {
+        self.bound_driven_synth_requests
+            .iter()
+            .filter(|(_, _, trait_name)| matches(trait_name))
+            .cloned()
+            .collect()
     }
 
     /// Canonical name of a registered struct / trait / variant / enum

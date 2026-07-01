@@ -363,6 +363,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             drop(tt);
                             self.tysys.struct_name_for_type(*base_type)
                         }
+                        // A newtype of a variant (e.g. `type Alias = SomeVariant;`)
+                        // needs the same Variant-dispatch path as a direct
+                        // `ResolvedType::Variant` comparison above —
+                        // `struct_name_for_type` doesn't cover `Variant`, so
+                        // read the name straight off the resolved ultimate type.
+                        ResolvedType::Variant { name, .. } => Some(name.clone()),
                         _ => None,
                     }
                 }

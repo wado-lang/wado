@@ -959,21 +959,41 @@ impl TraitEnv {
         pick_module_union(ast, syn, type_module)
     }
 
-    /// Whether a **methodful** `impl trait_name for type_name` exists at the
-    /// AST layer — unlike [`Self::impl_module_for`], an empty `impl Trait for
-    /// Type;` marker does not count.
+    /// Whether a **methodful** `impl trait_name for type_name` exists in
+    /// `module_source` at the AST layer — unlike [`Self::impl_module_for`],
+    /// an empty `impl Trait for Type;` marker does not count.
     ///
     /// `impl_index` indexes a marker exactly like a real impl. That's fine
     /// for most callers, but `Eq` / `Ord` synthesis gating (WEP
     /// 2026-06-25-trait-derivation) needs the opposite question: a marker
     /// for these two traits is itself a request for the body, so treating
     /// it as "already implemented" would permanently block that body.
-    pub(crate) fn has_methodful_impl(&self, type_name: &str, trait_name: &str) -> bool {
+    ///
+    /// Scoped by `module_source` rather than matching any candidate
+    /// regardless of module: `impl_index` is keyed by bare type name, so
+    /// two unrelated same-named types in different modules (e.g. two
+    /// independent `struct Widget` declarations) share one bucket. Unlike
+    /// [`Self::impl_module_for`] (which picks a dispatch target and may
+    /// fall back to an unrelated module's entry when the hint doesn't
+    /// match, since some impl is a valid answer for routing a call this
+    /// gate must answer "does *this* module's own declaration already have
+    /// a real impl" — a fallback would silently reuse a different type's
+    /// impl and skip synthesizing this one's. Every real Eq/Ord impl in the
+    /// stdlib is co-located with its target type's own declaration, so a
+    /// strict match costs nothing in practice.
+    pub(crate) fn has_methodful_impl(
+        &self,
+        type_name: &str,
+        trait_name: &str,
+        module_source: &ModuleSource,
+    ) -> bool {
         self.impl_index.get(type_name).is_some_and(|entries| {
             entries.iter().any(|entry| {
-                self.impl_headers.get(entry).is_some_and(|header| {
-                    header.trait_name.as_deref() == Some(trait_name) && !header.methods.is_empty()
-                })
+                entry.0 == *module_source
+                    && self.impl_headers.get(entry).is_some_and(|header| {
+                        header.trait_name.as_deref() == Some(trait_name)
+                            && !header.methods.is_empty()
+                    })
             })
         })
     }

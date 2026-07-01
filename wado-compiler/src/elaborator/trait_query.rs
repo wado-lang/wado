@@ -500,20 +500,48 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_id: TypeId,
         trait_name: &str,
     ) -> bool {
+        // Variants derive `Eq` only, never `Ord` (mirrors the `is_eq` gate
+        // on the `Variant` / generic-variant arms of
+        // `type_implements_trait_inner`) — without this, `impl Ord for
+        // SomeVariant;` would be wrongly accepted here (every payload
+        // happens to satisfy whatever `trait_name` is passed) and only
+        // fail later, at a `<` use site, defeating the marker's guarantee.
+        let is_eq = {
+            let tt = self.tysys.type_table.borrow();
+            trait_name == tt.compiler_items().trait_name(CompilerItem::Eq)
+        };
+        // A field/case type that resolves to the impl block's own
+        // (necessarily unconstrained — an explicit bound would already
+        // satisfy `type_implements_trait` on its own) type parameter is
+        // trivially eligible here: `impl<T> Eq for Wrapper<T>;` validates
+        // the *shape* of `Wrapper`, not a bound on `T`, matching how the
+        // compiler auto-derives `impl<T: Eq> Eq for Wrapper<T>` once some
+        // concrete instantiation actually demands it. Mirrors the
+        // `TypeParam` / `TypePack` skip in `find_arithmetic_trait_impl`'s
+        // bound-checking.
+        let trivially_eligible = |concrete: TypeId| {
+            matches!(
+                self.tysys.type_table.borrow().get(concrete),
+                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+            )
+        };
         let resolved = self.tysys.type_table.borrow().get(type_id).clone();
         match &resolved {
             ResolvedType::Enum { .. } => true,
             ResolvedType::Variant {
                 name,
                 module_source,
-            } => self
-                .lookup_variant_case_in(name, module_source)
-                .is_some_and(|info| {
-                    info.cases.iter().all(|c| {
-                        c.payload == TypeTable::UNIT
-                            || self.type_implements_trait(ctx, c.payload, trait_name)
-                    })
-                }),
+            } => {
+                is_eq
+                    && self
+                        .lookup_variant_case_in(name, module_source)
+                        .is_some_and(|info| {
+                            info.cases.iter().all(|c| {
+                                c.payload == TypeTable::UNIT
+                                    || self.type_implements_trait(ctx, c.payload, trait_name)
+                            })
+                        })
+            }
             ResolvedType::Struct {
                 name,
                 module_source,
@@ -539,9 +567,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .collect();
                     info.fields.iter().all(|(_, field_tid, _)| {
                         let concrete = param_map.get(field_tid).copied().unwrap_or(*field_tid);
-                        self.type_implements_trait(ctx, concrete, trait_name)
+                        trivially_eligible(concrete)
+                            || self.type_implements_trait(ctx, concrete, trait_name)
                     })
-                } else if let Some(info) = self.lookup_variant_case_in(name, module_source) {
+                } else if is_eq
+                    && let Some(info) = self.lookup_variant_case_in(name, module_source)
+                {
                     let param_map: IndexMap<TypeId, TypeId> = info
                         .type_param_type_ids
                         .iter()
@@ -553,11 +584,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             return true;
                         }
                         let concrete = param_map.get(&c.payload).copied().unwrap_or(c.payload);
-                        self.type_implements_trait(ctx, concrete, trait_name)
+                        trivially_eligible(concrete)
+                            || self.type_implements_trait(ctx, concrete, trait_name)
                     })
                 } else {
                     false
                 }
+            }
+            ResolvedType::Newtype { base_type, .. } => {
+                self.type_implements_trait(ctx, *base_type, trait_name)
+            }
+            ResolvedType::Flags { .. } => {
+                self.type_implements_trait(ctx, TypeTable::U32, trait_name)
             }
             _ => false,
         }
@@ -629,11 +667,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.tysys
                 .type_table
                 .borrow_mut()
-                .record_bound_driven_synth_request(
-                    name.to_string(),
-                    module_source.clone(),
-                    trait_name.to_string(),
-                );
+                .record_bound_driven_synth_request(name, module_source, trait_name);
             true
         };
 
@@ -1346,6 +1380,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 for bound in bounds {
                     if !self.type_implements_trait(&self.annotate_ctx, type_arg, bound) {
                         return false;
+                    }
+                }
+            }
+        } else if let ast::Type::Tuple(elements) = impl_ty {
+            // Variadic tuple impl (`impl<..T: Trait> Trait for [..T]`, e.g.
+            // `Eq`/`Ord` for tuples in core:prelude/tuple.wado): every entry
+            // in `type_args` instantiates the same variadic parameter, so
+            // each is checked against its bounds.
+            for elem in elements {
+                let ast::Type::TypePackSpread(name, _) = elem else {
+                    continue;
+                };
+                let Some(bounds) = bounds_map.get(name.as_str()) else {
+                    continue;
+                };
+                for &type_arg in type_args {
+                    if matches!(
+                        self.tysys.type_table.borrow().get(type_arg),
+                        ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+                    ) {
+                        continue;
+                    }
+                    for bound in bounds {
+                        if !self.type_implements_trait(&self.annotate_ctx, type_arg, bound) {
+                            return false;
+                        }
                     }
                 }
             }

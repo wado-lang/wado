@@ -900,11 +900,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             self.tysys
                 .type_table
                 .borrow_mut()
-                .record_bound_driven_synth_request(
-                    target_type_name.to_string(),
-                    module_source,
-                    trait_name.to_string(),
-                );
+                .record_bound_driven_synth_request(target_type_name, &module_source, trait_name);
         } else {
             let reason = self.trait_unimpl_reason_chain(target_type_id, trait_name);
             let _ = self

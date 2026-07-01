@@ -487,6 +487,17 @@ fn distribute_bound_driven_requests(project: &mut Package) {
         )
     };
 
+    // Fetch (and filter to just ours — Eq/Ord entries are
+    // `synthesize_traits`'s to claim) before scanning every type in the
+    // project below; a program with no bound-driven serde requests at all
+    // skips that scan entirely.
+    let requests = type_table.borrow().bound_driven_synth_requests(|trait_name| {
+        Some(trait_name) == serialize_name.as_deref() || Some(trait_name) == deserialize_name.as_deref()
+    });
+    if requests.is_empty() {
+        return;
+    }
+
     // One pass to resolve every declared struct/enum/variant/flags name to
     // its `TypeId` (`SynthesisRequest` needs one), instead of an O(requests
     // × types) rescan per entry.
@@ -516,14 +527,14 @@ fn distribute_bound_driven_requests(project: &mut Package) {
             .collect()
     };
 
-    let requests = type_table.borrow().bound_driven_synth_requests();
     for (target_type_name, module_source, trait_name) in requests {
+        // Every entry in `requests` already satisfies the filter above, so
+        // it matches `serialize_name` or `deserialize_name` — never both
+        // (the two are always distinct trait names) and never neither.
         let trait_ref = if Some(trait_name.as_str()) == serialize_name.as_deref() {
             SynthTrait::Serialize
-        } else if Some(trait_name.as_str()) == deserialize_name.as_deref() {
-            SynthTrait::Deserialize
         } else {
-            continue; // Not ours (e.g. Eq/Ord) — synthesize_traits claims it.
+            SynthTrait::Deserialize
         };
         let Some(&target_type_id) = by_name.get(&(target_type_name.clone(), module_source.clone()))
         else {
