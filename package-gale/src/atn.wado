@@ -13,14 +13,20 @@
 //! decision states, EBNF loop states). It does NOT read ANTLR4's
 //! implementation (License hygiene, `AGENTS.md`).
 //!
-//! Embedding (decided design): the ATN is serialized to one flat `i32`
-//! blob (`serialize_atn`) that the generated parser decodes once at
-//! construction (`runtime/atn.wado::atn_decode`) into SoA arrays. The blob
-//! layout's constants (state kinds, transition kinds) are
-//! the single source of truth in `runtime/atn.wado` — that module is embedded
-//! verbatim into every parser and so cannot import from here, whereas this
-//! compiler-side module freely `use`s it. `atn_test.wado` pins the
-//! `serialize_atn` -> `atn_decode` round-trip.
+//! Embedding (decided design): the ATN is serialized to a packed,
+//! column-oriented byte blob (`atn_blob_bytes`) that the generated parser
+//! decodes once at construction (`runtime/atn.wado::atn_decode`) into SoA
+//! arrays. Only fields the runtime simulator actually reads are carried —
+//! `num_tokens` and each state's `rule`/`decision` and each rule's `stop`
+//! state are compile-time-only (dump/debug, `build_token_kinds`) and never
+//! serialized. Field widths match real value ranges (`u8` for the small
+//! kind enums, `u16` for everything else) rather than a uniform `i32`; see
+//! `atn_blob_bytes`'s doc comment for the exact layout. The blob layout's
+//! constants (state kinds, transition kinds) are the single source of truth
+//! in `runtime/atn.wado` — that module is embedded verbatim into every
+//! parser and so cannot import from here, whereas this compiler-side module
+//! freely `use`s it. `atn_test.wado` pins the `atn_blob_bytes` -> `atn_decode`
+//! round-trip.
 
 use { Grammar, ParserRule, Alternative, Element, RepeatKind } from "./ir.wado";
 use { LoweredGrammar, Rule, LeftRecursiveRule, LrAlt } from "./gir.wado";
@@ -923,53 +929,128 @@ fn build_repeat(
     };
 }
 
-/// Serialize the ATN to a flat `i32` blob (see module doc for the format).
-pub fn serialize_atn(atn: &Atn) -> List<i32> {
-    let mut out: List<i32> = [];
-    out.push(atn.num_tokens);
-    out.push(atn.rule_start.len());
-    for let s of &atn.rule_start {
-        out.push(*s);
-    }
-    for let s of &atn.rule_stop {
-        out.push(*s);
-    }
-    out.push(atn.decision_state.len());
-    for let d of &atn.decision_state {
-        out.push(*d);
-    }
-    out.push(atn.states.len());
-    for let st of &atn.states {
-        out.push(st.kind);
-        out.push(st.rule);
-        out.push(st.decision);
-        out.push(st.transitions.len());
-        for let t of &st.transitions {
-            out.push(t.kind);
-            out.push(t.target);
-            out.push(t.label);
-            out.push(t.follow);
-            out.push(t.prec);
-        }
-    }
-    return out;
+/// Append `v` as a single byte. Asserts `v` fits `u8` (0..=255) so a
+/// too-large value fails loudly at generation time instead of silently
+/// truncating — only the tiny state/transition kind enums use this width.
+fn push_u8(bytes: &mut List<u8>, v: i32) {
+    assert 0 <= v <= 255, `ATN blob: value {v} exceeds u8 range`;
+    bytes.push(v as u8);
 }
 
-/// The serialized ATN as a packed little-endian byte blob (4 bytes per `i32`
-/// word). This is the wire form the generated parser embeds as a `b"..."`
-/// byte-string literal and `atn_decode` reads back; `atn_bytes_to_words` is the
-/// inverse. Keeping the encoding here makes codegen and the round-trip test
-/// share one definition.
+/// Append `v` as 2 little-endian bytes. Asserts `v` fits `u16` (0..=65535).
+/// Every count and state/rule/token index in the blob uses this width.
+fn push_u16(bytes: &mut List<u8>, v: i32) {
+    assert 0 <= v <= 65535, `ATN blob: value {v} exceeds u16 range`;
+    bytes.push((v & 0xff) as u8);
+    bytes.push((v >> 8 & 0xff) as u8);
+}
+
+/// Append `v` as 3 little-endian bytes. Asserts `v` fits `u24` (0..=16777215).
+/// `label`/`follow` need this width, not `u16`: the *parser* ATN uses `label`
+/// as a small token-kind index, but the *lexer* ATN (`latn.wado`) reuses the
+/// same `AtnTransition` fields to carry a Unicode scalar range (`label` =
+/// low, `follow` = high, up to `CHAR_MAX` = `0x10FFFF`) — one wire format,
+/// one decoder, so the field must be wide enough for its widest use.
+fn push_u24(bytes: &mut List<u8>, v: i32) {
+    assert 0 <= v <= 16777215, `ATN blob: value {v} exceeds u24 range`;
+    bytes.push((v & 0xff) as u8);
+    bytes.push((v >> 8 & 0xff) as u8);
+    bytes.push((v >> 16 & 0xff) as u8);
+}
+
+/// Append a `target` field biased by +1 so the sentinel -1 (unset/no value)
+/// round-trips through the unsigned `u16` wire encoding — `atn_decode`
+/// reverses it with an unconditional `- 1`, no branch needed. `push_u16`'s
+/// own range check catches the case where `v` is large enough that `v + 1`
+/// would overflow `u16`; the assert here only guards the other end (no
+/// value here is ever below the -1 sentinel).
+fn push_u16_biased(bytes: &mut List<u8>, v: i32) {
+    assert v >= -1, `ATN blob: biased value {v} below sentinel -1`;
+    push_u16(bytes, v + 1);
+}
+
+/// Append a `label`/`follow` field biased by +1 (see `push_u16_biased`);
+/// `push_u24` catches `v + 1` overflow.
+fn push_u24_biased(bytes: &mut List<u8>, v: i32) {
+    assert v >= -1, `ATN blob: biased value {v} below sentinel -1`;
+    push_u24(bytes, v + 1);
+}
+
+/// Serialize the ATN into the packed, column-oriented (SoA) byte blob the
+/// generated parser embeds as a `b"..."` byte-string literal and
+/// `atn_decode` reads back. Layout (all fields little-endian, listed in
+/// wire order):
+///
+/// ```text
+/// nrules: u16, ndec: u16, nstates: u16,
+/// rule_start[nrules]: u16,
+/// decision_state[ndec]: u16,
+/// state_kind[nstates]: u8,
+/// state_tr_count[nstates]: u16,
+/// tr_kind[ntrans_total]: u8,
+/// tr_target[ntrans_total]: u16 (+1 bias),
+/// tr_label[ntrans_total]: u24 (+1 bias),
+/// tr_follow[ntrans_total]: u24 (+1 bias),
+/// tr_prec[ntrans_total]: u16,
+/// ```
+///
+/// `ntrans_total` is not stored: it's the sum of `state_tr_count`, which
+/// precedes the transition columns, so `atn_decode` derives it (and
+/// `state_tr_start`, a running prefix sum) while reading that column.
+/// Fields the runtime simulator never reads — `num_tokens`, each state's
+/// `rule`/`decision`, each rule's `stop` state — are compile-time-only
+/// (dump/debug, `build_token_kinds`) and are not part of the blob at all.
+/// One pass over `atn.states` (and each state's `transitions`) fills seven
+/// per-column byte accumulators; a final handful of bulk `extend_from_slice`
+/// calls assembles them into the wire order above, so no field is walked
+/// more than once and no accumulator grows by repeated doubling.
 pub fn atn_blob_bytes(atn: &Atn) -> List<u8> {
-    let words = serialize_atn(atn);
-    let mut bytes: List<u8> = [];
-    for let w of &words {
-        let v = *w;
-        bytes.push((v & 0xff) as u8);
-        bytes.push((v >> 8 & 0xff) as u8);
-        bytes.push((v >> 16 & 0xff) as u8);
-        bytes.push((v >> 24 & 0xff) as u8);
+    let nrules = atn.rule_start.len();
+    let ndec = atn.decision_state.len();
+    let nstates = atn.states.len();
+    let mut ntrans_total = 0;
+    for let st of &atn.states {
+        ntrans_total += st.transitions.len();
     }
+
+    let mut state_kind: List<u8> = List::with_capacity(nstates);
+    let mut state_tr_count: List<u8> = List::with_capacity(nstates * 2);
+    let mut tr_kind: List<u8> = List::with_capacity(ntrans_total);
+    let mut tr_target: List<u8> = List::with_capacity(ntrans_total * 2);
+    let mut tr_label: List<u8> = List::with_capacity(ntrans_total * 3);
+    let mut tr_follow: List<u8> = List::with_capacity(ntrans_total * 3);
+    let mut tr_prec: List<u8> = List::with_capacity(ntrans_total * 2);
+    for let st of &atn.states {
+        push_u8(&mut state_kind, st.kind);
+        push_u16(&mut state_tr_count, st.transitions.len());
+        for let t of &st.transitions {
+            push_u8(&mut tr_kind, t.kind);
+            push_u16_biased(&mut tr_target, t.target);
+            push_u24_biased(&mut tr_label, t.label);
+            push_u24_biased(&mut tr_follow, t.follow);
+            push_u16(&mut tr_prec, t.prec);
+        }
+    }
+
+    let total = 6 + nrules * 2 + ndec * 2 + state_kind.len() + state_tr_count.len() + tr_kind.len()
+        + tr_target.len() + tr_label.len() + tr_follow.len() + tr_prec.len();
+    let mut bytes: List<u8> = List::with_capacity(total);
+    push_u16(&mut bytes, nrules);
+    push_u16(&mut bytes, ndec);
+    push_u16(&mut bytes, nstates);
+    for let s of &atn.rule_start {
+        push_u16(&mut bytes, *s);
+    }
+    for let d of &atn.decision_state {
+        push_u16(&mut bytes, *d);
+    }
+    bytes.extend_from_slice(state_kind.as_slice());
+    bytes.extend_from_slice(state_tr_count.as_slice());
+    bytes.extend_from_slice(tr_kind.as_slice());
+    bytes.extend_from_slice(tr_target.as_slice());
+    bytes.extend_from_slice(tr_label.as_slice());
+    bytes.extend_from_slice(tr_follow.as_slice());
+    bytes.extend_from_slice(tr_prec.as_slice());
     return bytes;
 }
 

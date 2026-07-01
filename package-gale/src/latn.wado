@@ -6,13 +6,12 @@
 //! recurses into itself (nested comments, `CMT : '/*' (CMT | .)+? '*' '/'`).
 //!
 //! Reuses the `Atn` / `AtnState` / `AtnTransition` structs and the
-//! `serialize_atn` blob format from `atn.wado` (the runtime decodes both
+//! `atn_blob_bytes` blob format from `atn.wado` (the runtime decodes both
 //! the parser and lexer blobs with the same `atn_decode`). The only
 //! difference is the alphabet: lexer atoms are Unicode scalar *ranges*
 //! carried in `ATN_TR_ATOM` as `label` = low, `follow` = high (the parser
-//! uses `label` = token kind, `follow` = -1). `num_tokens` / decisions are
-//! unused — the Pike VM keys priority off transition order, not decision
-//! numbers.
+//! uses `label` = token kind, `follow` = -1). Decisions are unused — the
+//! Pike VM keys priority off transition order, not decision numbers.
 //!
 //! Clean-room: textbook Thompson construction (rule start/stop, block
 //! start/end, EBNF loop states), greedy vs non-greedy encoded purely by
