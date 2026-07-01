@@ -157,7 +157,7 @@ introduced.
   the only countermeasures, and they are weaker than opt-in.
 - Errors move from the (absent) impl site to the bound site; reason chains are
   what keep them legible.
-- Coherence: a *future* `Reflect`-based rewrite of the synthesized body (see
+- Coherence: a _future_ `Reflect`-based rewrite of the synthesized body (see
   below) must not let a blanket `impl<T: Reflect> Trait for T` conflict with
   concrete impls (e.g. a primitive's own `impl Serialize`) — that rides on the
   coherence rules still open in the Reflect / variadic WEPs. The mechanism
@@ -173,9 +173,9 @@ introduced.
   used — **not** against [`Reflect` derivation](./wep-2026-06-13-reflect-derivation.md),
   which remains unbuilt. The original plan was to land this after migrating
   serde onto a generic `Reflect`-based impl (§5 of that WEP), but the two
-  turned out to be independent: this WEP only changes *when* a request for
+  turned out to be independent: this WEP only changes _when_ a request for
   the existing synthesizer is created (a bound match, not just a written
-  marker), not *how* the body is written. A future `Reflect`-based rewrite of
+  marker), not _how_ the body is written. A future `Reflect`-based rewrite of
   the body is still free to land later against the same request-recording
   plumbing.
 - Diagnostics: [reason chains](./wep-2026-06-02-diagnostic-reason-chains.md) for
