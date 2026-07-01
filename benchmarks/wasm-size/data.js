@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782869602971,
+  "lastUpdate": 1782870579693,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -36665,6 +36665,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/86cd2c74d436d4c3b1aae90d573a0993fc960287"
         },
         "date": 1782869602301,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15276,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457444,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "97f741001b2b961d046ad15437f4f81627baf637",
+          "message": "Merge pull request #1479 from wado-lang/claude/wado-puelish-testing-7lcvez\n\nfeat(manifest): publish to OCI and embed license-file text",
+          "timestamp": "2026-07-01T10:38:28+09:00",
+          "tree_id": "ca40c7fdf8fedb3ebdde6a5ede8d26400176f330",
+          "url": "https://github.com/wado-lang/wado/commit/97f741001b2b961d046ad15437f4f81627baf637"
+        },
+        "date": 1782870579364,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
