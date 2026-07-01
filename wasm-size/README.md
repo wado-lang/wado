@@ -29,7 +29,7 @@ Compares WebAssembly binary sizes across different languages.
 | c¹       |        2,209 |
 | zig      |        4,449 |
 | moonbit¹ |       22,884 |
-| rust     |       40,380 |
+| rust     |       40,379 |
 
 ### pi_approx
 
@@ -39,7 +39,7 @@ Compares WebAssembly binary sizes across different languages.
 | zig      |       10,608 |
 | c¹       |       14,315 |
 | moonbit¹ |       32,940 |
-| rust     |       59,786 |
+| rust     |       59,785 |
 
 ### zlib
 
@@ -50,7 +50,7 @@ Reads gzip data from stdin and decompresses it.
 | wado     |       15,276 | stdin + gzip decompress (core:zlib)    |
 | zig      |       20,072 | stdin + gzip decompress (std.compress) |
 | c¹       |       30,238 | stdin + gzip decompress (zlib 1.3.1)   |
-| rust     |       88,875 | stdin + gzip decompress (zlib-rs)      |
+| rust     |       88,874 | stdin + gzip decompress (zlib-rs)      |
 
 ### sqlite_highlight
 
@@ -58,11 +58,12 @@ Reads SQL from stdin and writes syntax-highlighted HTML to stdout.
 
 | Language | Size (bytes) | Notes                                       |
 | -------- | -----------: | ------------------------------------------- |
-| wado     |      288,503 | Gale-generated highlighter from `SQLite.g4` |
+| wado     |      371,011 | Gale-generated highlighter from `SQLite.g4` |
 | rust¹    |    3,482,397 | tree-sitter + tree-sitter-sequel            |
 
-¹ Carried over from a previous report; not re-measured this round (these
-builds need `wasi-sdk`). Sizes are toolchain- but not host-dependent.
+¹ Carried over from a previous report; not re-measured this round (C and
+Rust's tree-sitter parser need `wasi-sdk`; Moonbit needs a separate manual
+install — see Requirements). Sizes are toolchain- but not host-dependent.
 
 ## Usage
 
