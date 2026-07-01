@@ -855,9 +855,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Whether an `impl Trait for Type;` marker's trait name resolves to
     /// `Eq` or `Ord`. Handled separately from [`Self::classify_synth_trait`]:
-    /// unlike `Serialize` / `Deserialize` / `From`, this marker validates
-    /// eligibility immediately (see [`Self::record_eq_ord_explicit_request`])
-    /// instead of going through a drained [`tir::SynthesisRequest`].
+    /// its request lands in the shared `bound_driven_synth_requests` set
+    /// (see [`Self::record_eq_ord_explicit_request`]) rather than a drained
+    /// [`tir::SynthesisRequest`]. `Serialize` / `Deserialize` markers also
+    /// validate through [`Self::validate_explicit_derive_eligibility`], but
+    /// at their own call site (`resolve_module`'s `impl`-item handling)
+    /// rather than here, since they still need `classify_synth_trait`'s
+    /// request shape (`type_params`, generic template support). `From` has
+    /// no structural-eligibility notion at all and validates neither way.
     fn classify_eq_ord_marker(&self, trait_type: &ast::Type) -> Option<String> {
         use crate::compiler_item::CompilerItem;
         let base = trait_type.head_base_name()?;
@@ -871,36 +876,28 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Validate and record an explicit `impl Eq for T;` / `impl Ord for T;`
-    /// marker. Unlike a `T: Eq` bound (satisfied the moment fields
-    /// structurally qualify), the marker is the user's explicit guarantee
-    /// that `T` derives the trait — so ineligibility is a hard error at the
-    /// marker's own span, not a deferred bound-check failure elsewhere.
-    fn record_eq_ord_explicit_request(
+    /// Validate that `target_type_id` is structurally eligible to derive
+    /// `trait_name` (`Eq`, `Ord`, `Serialize`, or `Deserialize`), emitting a
+    /// hard [`types::TypeError::ExplicitDeriveNotEligible`] at `span` if
+    /// not. Unlike a bound (satisfied the moment fields structurally
+    /// qualify, or simply unsatisfied elsewhere), an explicit marker is the
+    /// user's guarantee that the type derives the trait — so ineligibility
+    /// is an error at the marker's own span, not a deferred bound-check
+    /// failure. Returns whether `target_type_id` is eligible.
+    fn validate_explicit_derive_eligibility(
         &mut self,
         trait_type: &ast::Type,
         trait_name: &str,
-        target_ty: &ast::Type,
+        target_type_id: TypeId,
         target_type_name: &str,
         span: crate::token::Span,
-    ) {
-        let target_type_id = self.resolve_type(target_ty);
+    ) -> bool {
         if self.structurally_derivable_for_explicit_request(
             &self.annotate_ctx,
             target_type_id,
             trait_name,
         ) {
-            let module_source = match self.tysys.type_table.borrow().get(target_type_id) {
-                tir::ResolvedType::Struct { module_source, .. }
-                | tir::ResolvedType::Enum { module_source, .. }
-                | tir::ResolvedType::Variant { module_source, .. }
-                | tir::ResolvedType::GenericInstance { module_source, .. } => module_source.clone(),
-                _ => self.current_module_source.clone(),
-            };
-            self.tysys
-                .type_table
-                .borrow_mut()
-                .record_bound_driven_synth_request(target_type_name, &module_source, trait_name);
+            true
         } else {
             let reason = self.trait_unimpl_reason_chain(target_type_id, trait_name);
             let _ = self
@@ -911,7 +908,41 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     reason,
                     span,
                 });
+            false
         }
+    }
+
+    /// Validate and record an explicit `impl Eq for T;` / `impl Ord for T;`
+    /// marker.
+    fn record_eq_ord_explicit_request(
+        &mut self,
+        trait_type: &ast::Type,
+        trait_name: &str,
+        target_ty: &ast::Type,
+        target_type_name: &str,
+        span: crate::token::Span,
+    ) {
+        let target_type_id = self.resolve_type(target_ty);
+        if !self.validate_explicit_derive_eligibility(
+            trait_type,
+            trait_name,
+            target_type_id,
+            target_type_name,
+            span,
+        ) {
+            return;
+        }
+        let module_source = match self.tysys.type_table.borrow().get(target_type_id) {
+            tir::ResolvedType::Struct { module_source, .. }
+            | tir::ResolvedType::Enum { module_source, .. }
+            | tir::ResolvedType::Variant { module_source, .. }
+            | tir::ResolvedType::GenericInstance { module_source, .. } => module_source.clone(),
+            _ => self.current_module_source.clone(),
+        };
+        self.tysys
+            .type_table
+            .borrow_mut()
+            .record_bound_driven_synth_request(target_type_name, &module_source, trait_name);
     }
 
     /// Record a coercion decision for the expression at `ast_id`. Called
@@ -1649,23 +1680,54 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 match self.classify_synth_trait(trait_type) {
                                     Some(trait_ref) => {
                                         let target_type_id = self.resolve_type(&impl_block.ty);
-                                        let type_params: Vec<_> = self
-                                            .annotate_ctx
-                                            .trait_ctx
-                                            .type_params
-                                            .iter()
-                                            .map(|(name, &(index, type_id))| {
-                                                (name.clone(), index, type_id)
-                                            })
-                                            .collect();
-                                        let req = crate::tir::SynthesisRequest {
-                                            trait_ref,
-                                            target_type_name: struct_name.clone(),
-                                            target_type_id,
-                                            type_params,
-                                            span: impl_block.span,
-                                        };
-                                        self.record_pending_synthesis_request(req);
+                                        // `Serialize` / `Deserialize` markers validate
+                                        // structurally at their own span, same guarantee
+                                        // `classify_eq_ord_marker`'s branch above gives
+                                        // `Eq` / `Ord` (WEP 2026-06-25-trait-derivation).
+                                        // `From` has no structural-eligibility notion, so
+                                        // it skips straight to building the request.
+                                        let serde_trait_name =
+                                            {
+                                                use crate::compiler_item::CompilerItem;
+                                                let tt = self.tysys.type_table.borrow();
+                                                let items = tt.compiler_items();
+                                                match trait_ref {
+                                                    tir::SynthTrait::Serialize => items
+                                                        .trait_name_opt(CompilerItem::Serialize),
+                                                    tir::SynthTrait::Deserialize => items
+                                                        .trait_name_opt(CompilerItem::Deserialize),
+                                                    tir::SynthTrait::From { .. } => None,
+                                                }
+                                                .map(str::to_string)
+                                            };
+                                        let eligible = serde_trait_name.is_none_or(|name| {
+                                            self.validate_explicit_derive_eligibility(
+                                                trait_type,
+                                                &name,
+                                                target_type_id,
+                                                &struct_name,
+                                                impl_block.span,
+                                            )
+                                        });
+                                        if eligible {
+                                            let type_params: Vec<_> = self
+                                                .annotate_ctx
+                                                .trait_ctx
+                                                .type_params
+                                                .iter()
+                                                .map(|(name, &(index, type_id))| {
+                                                    (name.clone(), index, type_id)
+                                                })
+                                                .collect();
+                                            let req = crate::tir::SynthesisRequest {
+                                                trait_ref,
+                                                target_type_name: struct_name.clone(),
+                                                target_type_id,
+                                                type_params,
+                                                span: impl_block.span,
+                                            };
+                                            self.record_pending_synthesis_request(req);
+                                        }
                                     }
                                     None => {
                                         let _ = self.logger.error(

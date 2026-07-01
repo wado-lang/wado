@@ -1,0 +1,20 @@
+// Test: an explicit `impl Serialize for T;` marker on a variant is a hard
+// compile error when a case payload is not structurally eligible — variants
+// are serde-eligible (unlike `Ord`, which rejects them outright), but every
+// non-unit payload must still qualify (WEP: Trait Derivation Policy).
+use { Serialize } from "core:serde";
+
+variant Shape {
+    Callback(fn(i32) -> i32),
+    Point,
+}
+
+impl Serialize for Shape;
+
+export fn run() {
+    let s = Shape::Point;
+    let _ = s;
+}
+
+__DATA__
+{"compile_error": "cannot derive `Serialize` for `Shape`: not every field/case implements `Serialize`"}

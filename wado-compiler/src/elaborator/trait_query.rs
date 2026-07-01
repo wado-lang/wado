@@ -485,10 +485,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Whether `type_id` is *structurally* derivable for `trait_name` (`Eq`
-    /// or `Ord`) — every field (struct) or every non-unit case payload
-    /// (variant) recursively satisfies `trait_name`; a plain enum is always
-    /// eligible. Mirrors the auto-derive branches in
+    /// Whether `type_id` is *structurally* derivable for `trait_name` (`Eq`,
+    /// `Ord`, `Serialize`, or `Deserialize`) — every field (struct) or every
+    /// non-unit case payload (variant) recursively satisfies `trait_name`; a
+    /// plain enum is always eligible. Mirrors the auto-derive branches in
     /// [`Self::type_implements_trait_inner`], but ignores whether an impl
     /// already exists for `type_id` itself — needed as a separate query
     /// because [`Self::type_implements_trait`] would see an explicit
@@ -500,13 +500,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_id: TypeId,
         trait_name: &str,
     ) -> bool {
-        // Variants derive `Eq` only, never `Ord` (mirrors
-        // `type_implements_trait_inner`'s `Variant` arms). Without this,
-        // `impl Ord for SomeVariant;` would be wrongly accepted here and
-        // only fail later, at a `<` use site.
-        let is_eq = {
+        // Variants derive `Eq` and `Serialize` / `Deserialize`, never `Ord`
+        // (mirrors `type_implements_trait_inner`'s `Variant` arms). Without
+        // this, `impl Ord for SomeVariant;` would be wrongly accepted here
+        // and only fail later, at a `<` use site.
+        let variant_eligible = {
             let tt = self.tysys.type_table.borrow();
-            trait_name == tt.compiler_items().trait_name(CompilerItem::Eq)
+            let items = tt.compiler_items();
+            trait_name == items.trait_name(CompilerItem::Eq)
+                || items.trait_name_opt(CompilerItem::Serialize) == Some(trait_name)
+                || items.trait_name_opt(CompilerItem::Deserialize) == Some(trait_name)
         };
         // A field/case type resolving to the impl block's own (necessarily
         // unconstrained) type parameter is trivially eligible: `impl<T> Eq
@@ -526,7 +529,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
             } => {
-                is_eq
+                variant_eligible
                     && self
                         .lookup_variant_case_in(name, module_source)
                         .is_some_and(|info| {
@@ -564,7 +567,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         trivially_eligible(concrete)
                             || self.type_implements_trait(ctx, concrete, trait_name)
                     })
-                } else if is_eq && let Some(info) = self.lookup_variant_case_in(name, module_source)
+                } else if variant_eligible
+                    && let Some(info) = self.lookup_variant_case_in(name, module_source)
                 {
                     let param_map: IndexMap<TypeId, TypeId> = info
                         .type_param_type_ids
