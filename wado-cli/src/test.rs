@@ -694,6 +694,11 @@ pub(crate) struct TestResult {
     pub(crate) outcome: TestOutcome,
     pub(crate) error: Option<String>,
     pub(crate) duration: Duration,
+    /// Captured guest stdout/stderr (see `runtime::create_test_store`).
+    /// Empty when nothing was printed, or when the test never got as far
+    /// as calling its test function (`fail_result`'s setup-time failures).
+    pub(crate) stdout: String,
+    pub(crate) stderr: String,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -1606,6 +1611,8 @@ fn fail_result(job: &TestJob, error: String, start: Instant) -> TestResult {
         outcome: TestOutcome::Fail,
         error: Some(error),
         duration: start.elapsed(),
+        stdout: String::new(),
+        stderr: String::new(),
     }
 }
 
@@ -1628,10 +1635,11 @@ async fn run_single_test(job: &TestJob, preopened_dirs: &[(String, String)]) -> 
     let start = Instant::now();
     let module = job.module.as_ref();
 
-    let mut store = match runtime::create_store(&module.engine, preopened_dirs, &[]) {
-        Ok(s) => s,
-        Err(e) => return fail_result(job, format!("failed to set up store: {e}"), start),
-    };
+    let (mut store, stdout_pipe, stderr_pipe) =
+        match runtime::create_test_store(&module.engine, preopened_dirs) {
+            Ok(v) => v,
+            Err(e) => return fail_result(job, format!("failed to set up store: {e}"), start),
+        };
 
     let deadline_ticks = (job.timeout_ms / EPOCH_INTERVAL_MS).max(1);
     store.set_epoch_deadline(deadline_ticks);
@@ -1699,6 +1707,8 @@ async fn run_single_test(job: &TestJob, preopened_dirs: &[(String, String)]) -> 
         outcome,
         error,
         duration: start.elapsed(),
+        stdout: String::from_utf8_lossy(&stdout_pipe.contents()).into_owned(),
+        stderr: String::from_utf8_lossy(&stderr_pipe.contents()).into_owned(),
     }
 }
 
@@ -1832,6 +1842,8 @@ pub(crate) struct FailEntry {
     pub(crate) file_path: String,
     pub(crate) display_name: String,
     pub(crate) error: Option<String>,
+    pub(crate) stdout: String,
+    pub(crate) stderr: String,
 }
 
 /// Tally + per-entry detail produced by [`display_test_results`].
@@ -1843,6 +1855,37 @@ pub(crate) struct RunReport {
     pub(crate) todo_resolved: u32,
     pub(crate) todo_entries: Vec<TodoEntry>,
     pub(crate) fail_entries: Vec<FailEntry>,
+}
+
+/// Render a test's captured stdout/stderr (see `runtime::create_test_store`)
+/// as `stdout:`/`stderr:` labelled blocks, every line prefixed by `indent`.
+/// Empty for a stream that captured nothing; `None` if both are empty.
+pub(crate) fn format_captured_output(stdout: &str, stderr: &str, indent: &str) -> Option<String> {
+    if stdout.is_empty() && stderr.is_empty() {
+        return None;
+    }
+    let mut out = String::new();
+    if !stdout.is_empty() {
+        out.push_str(&format!("{indent}stdout:\n"));
+        for line in stdout.lines() {
+            out.push_str(&format!("{indent}  {line}\n"));
+        }
+    }
+    if !stderr.is_empty() {
+        out.push_str(&format!("{indent}stderr:\n"));
+        for line in stderr.lines() {
+            out.push_str(&format!("{indent}  {line}\n"));
+        }
+    }
+    out.pop(); // drop the trailing newline; callers print with println!
+    Some(out)
+}
+
+/// Print a test's captured stdout/stderr — see [`format_captured_output`].
+pub(crate) fn print_captured_output(stdout: &str, stderr: &str, indent: &str) {
+    if let Some(block) = format_captured_output(stdout, stderr, indent) {
+        println!("{block}");
+    }
 }
 
 /// Print per-file/per-test results in source order while accumulating
@@ -1876,6 +1919,7 @@ pub(crate) fn display_test_results(
             match result.outcome {
                 TestOutcome::Pass => {
                     println!("  ok   {} ({dur})", result.display_name);
+                    print_captured_output(&result.stdout, &result.stderr, "    ");
                     report.test_passed += 1;
                 }
                 TestOutcome::Fail => {
@@ -1884,6 +1928,8 @@ pub(crate) fn display_test_results(
                         file_path: result.file_path.clone(),
                         display_name: result.display_name.clone(),
                         error: result.error.clone(),
+                        stdout: result.stdout.clone(),
+                        stderr: result.stderr.clone(),
                     });
                     report.test_failed += 1;
                 }
@@ -1892,6 +1938,7 @@ pub(crate) fn display_test_results(
                         "  \x1b[33m·\x1b[0m {} \x1b[33m# TODO\x1b[0m ({dur})",
                         result.display_name
                     );
+                    print_captured_output(&result.stdout, &result.stderr, "    ");
                     report.todo_pending += 1;
                     report.todo_entries.push(TodoEntry {
                         file_path: result.file_path.clone(),
@@ -1907,6 +1954,7 @@ pub(crate) fn display_test_results(
                     if let Some(ref error) = result.error {
                         println!("    {error}");
                     }
+                    print_captured_output(&result.stdout, &result.stderr, "    ");
                     report.todo_resolved += 1;
                     report.todo_entries.push(TodoEntry {
                         file_path: result.file_path.clone(),
@@ -1931,6 +1979,7 @@ pub(crate) fn print_failure_section(fail_entries: &[FailEntry]) {
         if let Some(ref error) = entry.error {
             println!("---- {} ({}) ----", entry.display_name, entry.file_path);
             println!("{error}");
+            print_captured_output(&entry.stdout, &entry.stderr, "");
             println!();
         }
     }

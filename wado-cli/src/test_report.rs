@@ -381,11 +381,17 @@ impl TestReporter for HeartbeatReporter {
             TestOutcome::Fail => {
                 self.state.tests_failed.fetch_add(1, Ordering::Relaxed);
                 let dur = test::format_duration(result.duration);
-                let detail = result
+                let mut detail = result
                     .error
                     .as_ref()
                     .map(|e| format!("\n  {e}"))
                     .unwrap_or_default();
+                if let Some(captured) =
+                    test::format_captured_output(&result.stdout, &result.stderr, "  ")
+                {
+                    detail.push('\n');
+                    detail.push_str(&captured);
+                }
                 self.announce(&format!(
                     "not ok  {} :: {} ({dur}){detail}",
                     result.file_path, result.display_name
@@ -423,12 +429,31 @@ impl TestReporter for HeartbeatReporter {
 /// wasm backtraces) needs no escaping. `indent` is the Test Point's own
 /// indentation — the block markers sit at `indent` + 2 spaces, matching
 /// the spec's "YAML indented 2 spaces past its Test Point" rule.
-fn yaml_block(indent: &str, message: &str) -> Vec<String> {
-    let mut lines = vec![format!("{indent}  ---"), format!("{indent}  message: |")];
-    for line in message.lines() {
-        lines.push(format!("{indent}    {line}"));
+fn yaml_block(indent: &str, fields: &[(&str, &str)]) -> Vec<String> {
+    let mut lines = vec![format!("{indent}  ---")];
+    for (key, value) in fields {
+        lines.push(format!("{indent}  {key}: |"));
+        for line in value.lines() {
+            lines.push(format!("{indent}    {line}"));
+        }
     }
     lines.push(format!("{indent}  ..."));
+    lines
+}
+
+/// `# stdout:`/`# stderr:` comment lines for a test's captured output
+/// (see `runtime::create_test_store`) — used for outcomes that don't
+/// already carry a YAML diagnostic block (only a `not ok` Fail does).
+fn captured_output_comments(stdout: &str, stderr: &str) -> Vec<String> {
+    let mut lines = Vec::new();
+    if !stdout.is_empty() {
+        lines.push("# stdout:".to_string());
+        lines.extend(stdout.lines().map(|l| format!("# {l}")));
+    }
+    if !stderr.is_empty() {
+        lines.push("# stderr:".to_string());
+        lines.extend(stderr.lines().map(|l| format!("# {l}")));
+    }
     lines
 }
 
@@ -629,7 +654,7 @@ impl TestReporter for TapReporter {
                 self.comment(&format!("FAILED to compile {path} ({dur})"));
                 let mut block = vec![format!("not ok - {path} (compile failed)")];
                 if let Some(msg) = detail {
-                    block.extend(yaml_block("", &msg));
+                    block.extend(yaml_block("", &[("message", &msg)]));
                 }
                 self.doc().register_standalone(block.join("\n"));
             }
@@ -652,7 +677,7 @@ impl TestReporter for TapReporter {
                 self.comment(&format!("FAILED to load {path} ({dur})"));
                 let mut block = vec![format!("not ok - {path} (load failed)")];
                 if let Some(msg) = detail {
-                    block.extend(yaml_block("", &msg));
+                    block.extend(yaml_block("", &[("message", &msg)]));
                 }
                 self.doc().register_standalone(block.join("\n"));
             }
@@ -666,8 +691,18 @@ impl TestReporter for TapReporter {
             TestOutcome::Pass => (vec![format!("ok - {name} ({dur})")], false),
             TestOutcome::Fail => {
                 let mut l = vec![format!("not ok - {name} ({dur})")];
+                let mut fields: Vec<(&str, &str)> = Vec::new();
                 if let Some(ref msg) = result.error {
-                    l.extend(yaml_block("", msg));
+                    fields.push(("message", msg));
+                }
+                if !result.stdout.is_empty() {
+                    fields.push(("stdout", &result.stdout));
+                }
+                if !result.stderr.is_empty() {
+                    fields.push(("stderr", &result.stderr));
+                }
+                if !fields.is_empty() {
+                    l.extend(yaml_block("", &fields));
                 }
                 (l, true)
             }
@@ -679,6 +714,12 @@ impl TestReporter for TapReporter {
                 false,
             ),
         };
+        // Non-failing outcomes have no YAML block to carry captured output,
+        // so surface it as plain comments instead (Fail already folded it
+        // into the block above, alongside the failure message).
+        if !matches!(result.outcome, TestOutcome::Fail) {
+            lines.extend(captured_output_comments(&result.stdout, &result.stderr));
+        }
         // One subtest nesting level: 4-space indent on every body line,
         // diagnostic blocks included.
         for line in &mut lines {

@@ -370,6 +370,71 @@ fn test_test_heartbeat_is_default_and_reports_failure_immediately() {
 }
 
 #[test]
+fn test_test_heartbeat_discards_output_from_passing_tests() {
+    // A passing test's own stdout is captured (not left to race directly
+    // onto the real stdout — see `runtime::create_test_store`); heartbeat
+    // discards it since there's nothing that needs attention.
+    wado()
+        .args(["test", "wado-cli/tests/fixtures/test_stdout.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("hello from the test body").not());
+}
+
+#[test]
+fn test_test_heartbeat_shows_captured_stderr_on_failure() {
+    // A failing test's captured stderr is attached to its immediate
+    // failure notice — not just discarded like a passing test's output.
+    wado()
+        .args(["test", "wado-cli/tests/fixtures/test_fail.wado"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("stderr:"))
+        .stdout(predicate::str::contains("this should fail"));
+}
+
+#[test]
+fn test_test_verbose_shows_captured_stdout_inline() {
+    // verbose is a full transcript: a passing test's own stdout prints
+    // right under its `ok` line, in order, instead of being discarded or
+    // racing directly onto the real stdout.
+    wado()
+        .args([
+            "test",
+            "--format",
+            "verbose",
+            "wado-cli/tests/fixtures/test_stdout.wado",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("ok   prints and passes"))
+        .stdout(predicate::str::contains("stdout:"))
+        .stdout(predicate::str::contains("hello from the test body"));
+}
+
+#[test]
+fn test_test_tap_renders_captured_output_as_comments_or_yaml_fields() {
+    // TAP allows arbitrary `#` comments, so a passing test's captured
+    // stdout renders as one; a failing test's captured stderr instead
+    // becomes a `stderr:` field in the same YAML block as `message:`,
+    // since that's the one place TAP already gathers rich diagnostics.
+    wado()
+        .args([
+            "test",
+            "--format",
+            "tap",
+            "wado-cli/tests/fixtures/test_stdout.wado",
+            "wado-cli/tests/fixtures/test_fail.wado",
+        ])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("# stdout:"))
+        .stdout(predicate::str::contains("# hello from the test body"))
+        .stdout(predicate::str::contains("stderr: |"))
+        .stdout(predicate::str::contains("this should fail"));
+}
+
+#[test]
 fn test_test_heartbeat_reports_skip_for_files_without_test_blocks() {
     // A file with zero `test` blocks still compiles and loads; the
     // `skip` axis (not silently folded into `load: N ok`) is how a
