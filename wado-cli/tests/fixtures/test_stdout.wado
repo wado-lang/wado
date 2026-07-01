@@ -1,0 +1,11 @@
+// A passing test that prints. Used to verify that a test's own stdout is
+// captured (not left to race directly onto the host's stdout) and that
+// each `--format` decides for itself whether/how to show it.
+
+use { println } from "core:cli";
+
+test "prints and passes" {
+    println("hello from the test body");
+    let x = 1;
+    assert x == 1;
+}

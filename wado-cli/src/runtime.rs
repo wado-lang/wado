@@ -8,6 +8,7 @@ use wasmtime::{
     ProfilingStrategy, Store,
 };
 use wasmtime_wasi::filesystem::WasiFilesystemCtx;
+use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpView};
@@ -73,6 +74,24 @@ pub struct WasiState {
     tls: WasiTlsCtx,
 }
 
+/// Per-guest stdout/stderr capacity for [`WasiState::new_capturing_stdio`].
+/// Overflow traps the guest (see that constructor's doc) rather than
+/// silently truncating, so this just needs to be generous enough that
+/// realistic test output (assertion diagnostics, a benchmark's own
+/// printed stats) never gets anywhere near it.
+const CAPTURED_STDIO_CAPACITY: usize = 1024 * 1024;
+
+/// Selects where a [`WasiState`]'s stdout/stderr go.
+enum Stdio {
+    /// Pass through to the host's real stdout/stderr.
+    Inherit,
+    /// Redirect into in-memory pipes a caller reads back later.
+    Captured {
+        stdout: MemoryOutputPipe,
+        stderr: MemoryOutputPipe,
+    },
+}
+
 impl WasiState {
     /// Create a new WASI state with preopened directories and program arguments.
     /// `preopened_dirs`: `(host_path, guest_path)` pairs.
@@ -89,7 +108,40 @@ impl WasiState {
     ///
     /// Returns an error if a preopened directory cannot be opened.
     pub fn new(preopened_dirs: &[(String, String)], args: &[String]) -> Result<Self> {
-        Self::build(preopened_dirs, args, true)
+        Self::build(preopened_dirs, args, true, Stdio::Inherit)
+    }
+
+    /// Like [`Self::new`], but captures the guest's stdout/stderr into
+    /// in-memory pipes instead of inheriting the host's, so a caller can
+    /// read back what the guest printed after it exits. Used by `wado
+    /// test` to attribute a test's own output to its result instead of
+    /// letting it race directly onto the host's real stdout/stderr
+    /// alongside every other concurrently-running test.
+    ///
+    /// Capacity-bounded (`CAPTURED_STDIO_CAPACITY`): a guest that writes
+    /// past the cap traps rather than blocking, so a runaway test can't
+    /// deadlock the caller, who only reads the pipes back after the
+    /// guest's `Store` is done with them.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a preopened directory cannot be opened.
+    pub fn new_capturing_stdio(
+        preopened_dirs: &[(String, String)],
+        args: &[String],
+    ) -> Result<(Self, MemoryOutputPipe, MemoryOutputPipe)> {
+        let stdout = MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY);
+        let stderr = MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY);
+        let state = Self::build(
+            preopened_dirs,
+            args,
+            true,
+            Stdio::Captured {
+                stdout: stdout.clone(),
+                stderr: stderr.clone(),
+            },
+        )?;
+        Ok((state, stdout, stderr))
     }
 
     /// Like [`Self::new`], but reuses pre-opened directories from
@@ -130,9 +182,18 @@ impl WasiState {
         preopened_dirs: &[(String, String)],
         args: &[String],
         inherit_env: bool,
+        stdio: Stdio,
     ) -> Result<Self> {
         let mut builder = WasiCtx::builder();
-        builder.inherit_stdio();
+        match stdio {
+            Stdio::Inherit => {
+                builder.inherit_stdio();
+            }
+            Stdio::Captured { stdout, stderr } => {
+                builder.stdout(stdout);
+                builder.stderr(stderr);
+            }
+        }
         if inherit_env {
             builder.inherit_env();
         }
@@ -404,6 +465,22 @@ pub fn create_store(
     args: &[String],
 ) -> Result<Store<WasiState>> {
     Ok(Store::new(engine, WasiState::new(preopened_dirs, args)?))
+}
+
+/// Like [`create_store`], but the guest's stdout/stderr are captured into
+/// in-memory pipes instead of inherited — used by `wado test` so a
+/// test's own prints can be attributed to its result instead of racing
+/// directly onto the host's real stdout/stderr.
+///
+/// # Errors
+///
+/// Returns an error if a preopened directory cannot be opened.
+pub fn create_test_store(
+    engine: &Engine,
+    preopened_dirs: &[(String, String)],
+) -> Result<(Store<WasiState>, MemoryOutputPipe, MemoryOutputPipe)> {
+    let (state, stdout, stderr) = WasiState::new_capturing_stdio(preopened_dirs, &[])?;
+    Ok((Store::new(engine, state), stdout, stderr))
 }
 
 /// Create a Linker with WASI P3 and HTTP bindings.

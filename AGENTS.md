@@ -49,7 +49,6 @@ mise run report-wasm-size  # hello_world, pi_approx, zlib, and so on
 - Perform red/green TDD.
 - A compiler bug is always P0 — no exceptions. The instant you suspect one, stop all other work, and as the top priority write a minimal reproducible e2e fixture, file the issue, and fix it. A workaround that lets the current task proceed is never a reason to skip or defer any of these.
 - A pre-existing issue — whether you find it or a reviewer points it out — must be fixed, with TDD when practical.
-- Don't pipe long-running commands (`mise run …`, `cargo test`, etc.) into `tail` or `head`. Redirect to a file and inspect it afterwards if you need to trim output.
 - Use plain `cargo build` / `cargo run` / `cargo test` (the `dev` profile) for iteration. `Cargo.toml` raises `opt-level` on `wado-compiler`, `wado-dev-tools`, and `cranelift-codegen` so dev-build runtime is close to release for the parts that matter, while compile time stays much lower. `--release` is for distributing binaries, not for the inner dev loop.
 - Use the `rust` skill when writing Rust.
 - Use the `wado` skill when writing Wado code or designing Wado language features.
@@ -156,6 +155,18 @@ wado compile --allocator debug file.wado     # debug allocator
 ```sh
 wado run file.wado  # run a CLI program with wasmtime
 ```
+
+### Test Command
+
+`wado test` discovers and runs `test` blocks (compiled against the `test` world, see Target World above).
+
+```sh
+wado test                    # discover and run every .wado test in the project
+wado test file.wado          # run tests in one file
+wado test --filter '**/json*.wado'  # run tests in files matching a wildcard
+```
+
+A failure or resolved `#[TODO]` prints its own one-line notice immediately, otherwise a digest (`N/Total files · tests, failed, todo, skip · ETA`) prints every 5s, ending in a `compile:`/`load:`/`skip:`/`test:` summary. `tail`ing the last line or two is enough to read the current state of a long run.
 
 ### Serve Command
 

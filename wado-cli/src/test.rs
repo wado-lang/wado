@@ -25,6 +25,10 @@ use crate::compiler_host::KilnComponentCache;
 use crate::discover;
 use crate::manifest as project_manifest;
 use crate::runtime::{self, WasiState};
+use crate::test_report::{
+    CompileEvent, HeartbeatReporter, LoadEvent, PackageDoneArgs, TapReporter, TestReporter,
+    VerboseReporter,
+};
 use wado_compiler::LogLevel;
 
 const DEFAULT_TIMEOUT_MS: u64 = 5000;
@@ -56,6 +60,33 @@ pub struct TestOptions {
     pub test_name_filters: Vec<String>,
     pub param_overrides: wado_compiler::hashmap::IndexMap<String, String>,
     pub param_policy: wado_compiler::param_resolution::ParamPolicy,
+    pub format: TestFormat,
+}
+
+/// `--format` selects how a run's progress is rendered.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum TestFormat {
+    /// Per-file compile/load lines streamed live; per-test results and
+    /// summary sections printed as one batch per package.
+    Verbose,
+    /// Immediate one-line notices for failures/resolved TODOs, a 5s
+    /// heartbeat digest otherwise, and a final summary — meant to be
+    /// tailed. The default.
+    Heartbeat,
+    /// TAP14 document: one Test Point per file (a `# Subtest:` block for
+    /// files with `test` blocks), for CI/tooling consumption.
+    Tap,
+}
+
+impl TestFormat {
+    fn parse(s: &str) -> Option<Self> {
+        match s {
+            "verbose" => Some(Self::Verbose),
+            "heartbeat" => Some(Self::Heartbeat),
+            "tap" => Some(Self::Tap),
+            _ => None,
+        }
+    }
 }
 
 impl TestOptions {
@@ -98,6 +129,7 @@ enum Opt {
     OptIterations,
     LogLevel,
     Allocator,
+    Format,
     Dir,
     NoDir,
     NoRun,
@@ -116,6 +148,7 @@ impl Opt {
         Self::OptIterations,
         Self::LogLevel,
         Self::Allocator,
+        Self::Format,
         Self::Dir,
         Self::NoDir,
         Self::NoRun,
@@ -154,6 +187,12 @@ impl Opt {
             Self::OptIterations => args::OPT_ITERATIONS_SPEC,
             Self::LogLevel => args::LOG_LEVEL_SPEC,
             Self::Allocator => args::ALLOCATOR_SPEC,
+            Self::Format => args::OptSpec {
+                long: Some("format"),
+                short: None,
+                value: Some("<name>"),
+                desc: "Output format: heartbeat (default), verbose, tap",
+            },
             Self::Dir => args::DIR_SPEC,
             Self::NoDir => args::NO_DIR_SPEC,
             Self::NoRun => args::OptSpec {
@@ -372,6 +411,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let mut no_dir = false;
     let mut no_run = false;
     let mut no_cache = false;
+    let mut format = TestFormat::Heartbeat;
     let mut param_args = args::ParamArgs::default();
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
@@ -411,6 +451,14 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
                 }
                 Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser)?,
                 Opt::Allocator => allocator = Some(args::require_string(&mut parser)?),
+                Opt::Format => {
+                    let val = args::require_string(&mut parser)?;
+                    format = TestFormat::parse(&val).ok_or_else(|| {
+                        CliExit::error(format!(
+                            "--format requires heartbeat, verbose, or tap, got '{val}'"
+                        ))
+                    })?;
+                }
                 Opt::Dir => {
                     preopened_dirs.push(args::parse_dir_arg(&mut parser)?);
                     explicit_dirs = true;
@@ -500,6 +548,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         test_name_filters,
         param_overrides: param_args.overrides,
         param_policy: param_args.policy,
+        format,
     })
 }
 
@@ -531,8 +580,8 @@ struct LoadedModule {
 
 /// Non-TODO module that failed `Component::new`/`create_linker` or whose
 /// load worker panicked. Counted on the `load` axis; does not abort the run.
-struct LoadFailure {
-    path: String,
+pub(crate) struct LoadFailure {
+    pub(crate) path: String,
 }
 
 /// Pipeline-wide resource caps.
@@ -631,20 +680,25 @@ struct TestJob {
 /// `TodoPending` trapped as expected, `TodoResolved` passed unexpectedly
 /// (consider dropping the `#[TODO]`).
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum TestOutcome {
+pub(crate) enum TestOutcome {
     Pass,
     Fail,
     TodoPending,
     TodoResolved,
 }
 
-struct TestResult {
-    file_path: String,
-    test_name: String,
-    display_name: String,
-    outcome: TestOutcome,
-    error: Option<String>,
-    duration: Duration,
+pub(crate) struct TestResult {
+    pub(crate) file_path: String,
+    pub(crate) test_name: String,
+    pub(crate) display_name: String,
+    pub(crate) outcome: TestOutcome,
+    pub(crate) error: Option<String>,
+    pub(crate) duration: Duration,
+    /// Captured guest stdout/stderr (see `runtime::create_test_store`).
+    /// Empty when nothing was printed, or when the test never got as far
+    /// as calling its test function (`fail_result`'s setup-time failures).
+    pub(crate) stdout: String,
+    pub(crate) stderr: String,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -718,15 +772,15 @@ fn parse_timeout_segment(rest: &str) -> (Option<u64>, &str) {
 
 /// A `#![TODO]` module that failed to compile.
 /// Treated as a passing result since the module is expected to have errors.
-struct TodoCompileError {
-    path: String,
+pub(crate) struct TodoCompileError {
+    pub(crate) path: String,
 }
 
 /// A non-TODO module that failed to compile.
 /// Counted on the `compile` axis of the summary; does not abort the run so
 /// other files still get a chance to compile and report.
-struct CompileFailure {
-    path: String,
+pub(crate) struct CompileFailure {
+    pub(crate) path: String,
 }
 
 /// Per-file outcome from the **compile** stage.
@@ -777,9 +831,9 @@ impl ParsedTest {
 async fn compile_artifact(
     path: String,
     flags: Arc<CompileFlags>,
-    overall_start: Instant,
     observer: Arc<StageObserver>,
     kiln_cache: Arc<KilnComponentCache>,
+    reporter: Arc<dyn TestReporter>,
 ) -> CompileOutcome {
     let compile_start = Instant::now();
     let panic_or_result = AssertUnwindSafe(compile::try_compile_with_kiln_cache(
@@ -791,32 +845,40 @@ async fn compile_artifact(
     .await;
     let compile_duration = compile_start.elapsed();
     observer.add_work(compile_duration);
-    let elapsed = format_duration(overall_start.elapsed());
-    let dur = format_duration(compile_duration);
 
     let compile_result = match panic_or_result {
         Ok(r) => r,
         Err(payload) => {
             let cause = format_panic_payload(&payload);
-            eprintln!("[{elapsed}] FAILED to compile {path} ({dur}): panicked: {cause}");
+            reporter.on_compile(
+                &path,
+                CompileEvent::Failed {
+                    detail: Some(format!("panicked: {cause}")),
+                },
+                compile_duration,
+            );
             return CompileOutcome::CompileFailure(CompileFailure { path });
         }
     };
 
     match compile_result {
         Ok(result) => {
-            println!("[{elapsed}] Compiled {path} ({dur})");
+            reporter.on_compile(&path, CompileEvent::Ok, compile_duration);
             CompileOutcome::Compiled(CompiledArtifact {
                 path,
                 wasm: result.wasm,
             })
         }
         Err(failure) if failure.is_todo_module => {
-            println!("[{elapsed}] Compiled {path} (TODO module, compile error expected, {dur})");
+            reporter.on_compile(&path, CompileEvent::TodoModule, compile_duration);
             CompileOutcome::TodoCompileError(TodoCompileError { path })
         }
         Err(_) => {
-            eprintln!("[{elapsed}] FAILED to compile {path} ({dur})");
+            reporter.on_compile(
+                &path,
+                CompileEvent::Failed { detail: None },
+                compile_duration,
+            );
             CompileOutcome::CompileFailure(CompileFailure { path })
         }
     }
@@ -838,9 +900,9 @@ async fn compile_artifact(
 fn load_module(
     artifact: CompiledArtifact,
     opt_level: wasmtime::OptLevel,
-    overall_start: Instant,
     module_permit: OwnedSemaphorePermit,
     observer: Arc<StageObserver>,
+    reporter: &Arc<dyn TestReporter>,
 ) -> LoadOutcome {
     let load_start = Instant::now();
     let panic_or_result = std::panic::catch_unwind(AssertUnwindSafe(|| -> Result<_> {
@@ -851,16 +913,17 @@ fn load_module(
     }));
     let load_duration = load_start.elapsed();
     observer.add_work(load_duration);
-    let elapsed = format_duration(overall_start.elapsed());
-    let load_dur = format_duration(load_duration);
 
     let load_result = match panic_or_result {
         Ok(r) => r,
         Err(payload) => {
             let cause = format_panic_payload(&payload);
-            eprintln!(
-                "[{elapsed}] FAILED to load {} ({load_dur}): panicked: {cause}",
-                artifact.path
+            reporter.on_load(
+                &artifact.path,
+                LoadEvent::Failed {
+                    detail: Some(format!("panicked: {cause}")),
+                },
+                load_duration,
             );
             return LoadOutcome::LoadFailure(LoadFailure {
                 path: artifact.path,
@@ -870,8 +933,6 @@ fn load_module(
 
     match load_result {
         Ok((engine, component, linker)) => {
-            println!("[{elapsed}] Loaded {} ({load_dur})", artifact.path);
-
             // Recover original (lossless) test names from the custom section
             // the compiler embeds. Keyed by kebab export name. The compiler
             // emits an entry for every test export, so a discovered test
@@ -902,6 +963,13 @@ fn load_module(
                 }
             }
 
+            reporter.on_load(
+                &artifact.path,
+                LoadEvent::Ok {
+                    test_count: tests.len(),
+                },
+                load_duration,
+            );
             LoadOutcome::Loaded(LoadedModule {
                 path: artifact.path,
                 engine,
@@ -912,9 +980,12 @@ fn load_module(
             })
         }
         Err(e) => {
-            eprintln!(
-                "[{elapsed}] FAILED to load {} ({load_dur}): {e}",
-                artifact.path
+            reporter.on_load(
+                &artifact.path,
+                LoadEvent::Failed {
+                    detail: Some(format!("{e}")),
+                },
+                load_duration,
             );
             LoadOutcome::LoadFailure(LoadFailure {
                 path: artifact.path,
@@ -957,12 +1028,12 @@ async fn run_compile_stage(
     flags: Arc<CompileFlags>,
     parallelism: usize,
     cpu_budget: Arc<Semaphore>,
-    overall_start: Instant,
     observer: Arc<StageObserver>,
     artifact_tx: mpsc::Sender<CompiledArtifact>,
     todo_tx: mpsc::Sender<TodoCompileError>,
     cfail_tx: mpsc::Sender<CompileFailure>,
     kiln_cache: Arc<KilnComponentCache>,
+    reporter: Arc<dyn TestReporter>,
 ) -> usize {
     let mut compiled_count = 0_usize;
 
@@ -973,6 +1044,7 @@ async fn run_compile_stage(
             let observer_inner = Arc::clone(&observer);
             let cpu_budget = Arc::clone(&cpu_budget);
             let kiln_cache = Arc::clone(&kiln_cache);
+            let reporter = Arc::clone(&reporter);
             // Spawn each per-fixture worker as an independent task so
             // its progress is not gated by `buffer_unordered`'s outer
             // polling state. If the outer loop is briefly parked on
@@ -988,6 +1060,7 @@ async fn run_compile_stage(
                     .await
                     .expect("cpu semaphore closed");
                 let path_for_failure = path.clone();
+                let reporter_for_join_err = Arc::clone(&reporter);
                 tokio::task::spawn_blocking(move || {
                     let panic_or_runtime = std::panic::catch_unwind(AssertUnwindSafe(|| {
                         tokio::runtime::Builder::new_current_thread()
@@ -998,24 +1071,28 @@ async fn run_compile_stage(
                         Ok(Ok(rt)) => rt.block_on(compile_artifact(
                             path,
                             flags,
-                            overall_start,
                             observer_inner,
                             kiln_cache,
+                            reporter,
                         )),
                         Ok(Err(e)) => {
-                            let elapsed = format_duration(overall_start.elapsed());
-                            eprintln!(
-                                "[{elapsed}] FAILED to compile {path}: \
-                                 unable to create compile runtime: {e}"
+                            reporter.on_compile(
+                                &path,
+                                CompileEvent::Failed {
+                                    detail: Some(format!("unable to create compile runtime: {e}")),
+                                },
+                                Duration::ZERO,
                             );
                             CompileOutcome::CompileFailure(CompileFailure { path })
                         }
                         Err(payload) => {
                             let cause = format_panic_payload(&payload);
-                            let elapsed = format_duration(overall_start.elapsed());
-                            eprintln!(
-                                "[{elapsed}] FAILED to compile {path}: \
-                                 compile worker panicked: {cause}"
+                            reporter.on_compile(
+                                &path,
+                                CompileEvent::Failed {
+                                    detail: Some(format!("compile worker panicked: {cause}")),
+                                },
+                                Duration::ZERO,
                             );
                             CompileOutcome::CompileFailure(CompileFailure { path })
                         }
@@ -1023,10 +1100,12 @@ async fn run_compile_stage(
                 })
                 .await
                 .unwrap_or_else(|join_err| {
-                    let elapsed = format_duration(overall_start.elapsed());
-                    eprintln!(
-                        "[{elapsed}] FAILED to compile {path_for_failure}: \
-                         blocking-task join error: {join_err}"
+                    reporter_for_join_err.on_compile(
+                        &path_for_failure,
+                        CompileEvent::Failed {
+                            detail: Some(format!("blocking-task join error: {join_err}")),
+                        },
+                        Duration::ZERO,
                     );
                     CompileOutcome::CompileFailure(CompileFailure {
                         path: path_for_failure,
@@ -1078,13 +1157,14 @@ async fn run_load_stage(
     parallelism: usize,
     cpu_budget: Arc<Semaphore>,
     modules_budget: Arc<Semaphore>,
-    overall_start: Instant,
     observer: Arc<StageObserver>,
     loaded_tx: mpsc::Sender<Arc<LoadedModule>>,
     lfail_tx: mpsc::Sender<LoadFailure>,
     epoch_ticker: Arc<EpochTicker>,
-) -> usize {
+    reporter: Arc<dyn TestReporter>,
+) -> (usize, usize) {
     let mut ok_count = 0_usize;
+    let mut skip_count = 0_usize;
 
     let mut stream = receiver_stream(artifact_rx)
         .map(|artifact| {
@@ -1093,6 +1173,8 @@ async fn run_load_stage(
             let modules_budget = Arc::clone(&modules_budget);
             let observer_inner = Arc::clone(&observer);
             let path_for_failure = artifact.path.clone();
+            let reporter = Arc::clone(&reporter);
+            let reporter_for_join_err = Arc::clone(&reporter);
             // Each load worker is its own task so its progress is not
             // gated by `buffer_unordered`'s outer poll.
             tokio::spawn(async move {
@@ -1115,17 +1197,19 @@ async fn run_load_stage(
                     load_module(
                         artifact,
                         opt_level,
-                        overall_start,
                         module_permit,
                         observer_inner,
+                        &reporter,
                     )
                 })
                 .await
                 .unwrap_or_else(|join_err| {
-                    let elapsed = format_duration(overall_start.elapsed());
-                    eprintln!(
-                        "[{elapsed}] FAILED to load {path_for_failure}: \
-                         blocking-task join error: {join_err}"
+                    reporter_for_join_err.on_load(
+                        &path_for_failure,
+                        LoadEvent::Failed {
+                            detail: Some(format!("blocking-task join error: {join_err}")),
+                        },
+                        Duration::ZERO,
                     );
                     LoadOutcome::LoadFailure(LoadFailure {
                         path: path_for_failure,
@@ -1140,6 +1224,9 @@ async fn run_load_stage(
         match outcome {
             LoadOutcome::Loaded(module) => {
                 ok_count += 1;
+                if module.tests.is_empty() {
+                    skip_count += 1;
+                }
                 epoch_ticker.register(&module.engine);
                 if loaded_tx.send(Arc::new(module)).await.is_ok() {
                     observer.record_output();
@@ -1152,7 +1239,7 @@ async fn run_load_stage(
             }
         }
     }
-    ok_count
+    (ok_count, skip_count)
 }
 
 /// **Stage 3 driver** — consume `LoadedModule`s as they stream in,
@@ -1172,6 +1259,7 @@ async fn run_execute_stage(
     preopened_dirs: Arc<Vec<(String, String)>>,
     observer: Arc<StageObserver>,
     result_tx: mpsc::Sender<TestResult>,
+    reporter: Arc<dyn TestReporter>,
 ) {
     // Each loaded module fans out into 0+ test jobs. `flat_map` keeps
     // backpressure honest: as soon as one module's jobs are queued, the
@@ -1231,6 +1319,7 @@ async fn run_execute_stage(
     while let Some(join_result) = stream.next().await {
         let result = join_result.expect("test task panicked");
         observer.add_work(result.duration);
+        reporter.on_test_result(&result);
         if result_tx.send(result).await.is_ok() {
             observer.record_output();
         }
@@ -1242,10 +1331,10 @@ async fn run_execute_stage(
 /// streaming design, these overlap heavily — each duration is the wall
 /// time from the stage's first input to its last output.
 #[derive(Default, Clone, Copy)]
-struct StageTimings {
-    compile: Duration,
-    load: Duration,
-    execute: Duration,
+pub(crate) struct StageTimings {
+    pub(crate) compile: Duration,
+    pub(crate) load: Duration,
+    pub(crate) execute: Duration,
 }
 
 impl StageTimings {
@@ -1272,6 +1361,10 @@ impl StageTimings {
 struct PipelineOutcome {
     compiled_count: usize,
     load_ok: usize,
+    /// Files that loaded successfully but declared zero `test` blocks.
+    /// Already counted within `load_ok`; tracked separately so the
+    /// summary can call them out instead of silently absorbing them.
+    skip_files: usize,
     test_results: Vec<TestResult>,
     todo_compile_errors: Vec<TodoCompileError>,
     compile_failures: Vec<CompileFailure>,
@@ -1364,8 +1457,8 @@ async fn run_pipeline(
     load_jobs: usize,
     execute_jobs: usize,
     preopened_dirs: Arc<Vec<(String, String)>>,
-    overall_start: Instant,
     no_run: bool,
+    reporter: Arc<dyn TestReporter>,
 ) -> PipelineOutcome {
     let opt_level = flags.opt_level.to_wasmtime();
     let budget = Arc::new(PipelineBudget::new(
@@ -1407,15 +1500,15 @@ async fn run_pipeline(
         flags.clone(),
         compile_jobs,
         budget.cpu.clone(),
-        overall_start,
         compile_observer.clone(),
         artifact_tx,
         todo_tx,
         cfail_tx,
         kiln_cache,
+        reporter.clone(),
     );
 
-    let load_future: Pin<Box<dyn Future<Output = usize> + Send>> =
+    let load_future: Pin<Box<dyn Future<Output = (usize, usize)> + Send>> =
         if let Some(ticker) = epoch_ticker.as_ref() {
             Box::pin(run_load_stage(
                 artifact_rx,
@@ -1423,11 +1516,11 @@ async fn run_pipeline(
                 load_jobs,
                 budget.cpu.clone(),
                 budget.modules.clone(),
-                overall_start,
                 load_observer.clone(),
                 loaded_tx,
                 lfail_tx,
                 ticker.clone(),
+                reporter.clone(),
             ))
         } else {
             // Drain the artifact channel so compile-stage producers don't
@@ -1438,7 +1531,7 @@ async fn run_pipeline(
             Box::pin(async move {
                 let mut rx = artifact_rx;
                 while rx.recv().await.is_some() {}
-                0
+                (0, 0)
             })
         };
 
@@ -1450,6 +1543,7 @@ async fn run_pipeline(
             preopened_dirs,
             execute_observer.clone(),
             result_tx,
+            reporter.clone(),
         ))
     } else {
         drop(result_tx);
@@ -1475,7 +1569,7 @@ async fn run_pipeline(
     let result_task = tokio::spawn(collect_into_vec(result_rx));
 
     let compiled_count = compile_task.await.expect("compile stage panicked");
-    let load_ok = load_task.await.expect("load stage panicked");
+    let (load_ok, skip_files) = load_task.await.expect("load stage panicked");
     execute_task.await.expect("execute stage panicked");
     let todos = todo_task.await.expect("todo collector panicked");
     let cfails = cfail_task.await.expect("cfail collector panicked");
@@ -1487,6 +1581,7 @@ async fn run_pipeline(
     PipelineOutcome {
         compiled_count,
         load_ok,
+        skip_files,
         test_results: results,
         todo_compile_errors: todos,
         compile_failures: cfails,
@@ -1516,6 +1611,8 @@ fn fail_result(job: &TestJob, error: String, start: Instant) -> TestResult {
         outcome: TestOutcome::Fail,
         error: Some(error),
         duration: start.elapsed(),
+        stdout: String::new(),
+        stderr: String::new(),
     }
 }
 
@@ -1538,10 +1635,11 @@ async fn run_single_test(job: &TestJob, preopened_dirs: &[(String, String)]) -> 
     let start = Instant::now();
     let module = job.module.as_ref();
 
-    let mut store = match runtime::create_store(&module.engine, preopened_dirs, &[]) {
-        Ok(s) => s,
-        Err(e) => return fail_result(job, format!("failed to set up store: {e}"), start),
-    };
+    let (mut store, stdout_pipe, stderr_pipe) =
+        match runtime::create_test_store(&module.engine, preopened_dirs) {
+            Ok(v) => v,
+            Err(e) => return fail_result(job, format!("failed to set up store: {e}"), start),
+        };
 
     let deadline_ticks = (job.timeout_ms / EPOCH_INTERVAL_MS).max(1);
     store.set_epoch_deadline(deadline_ticks);
@@ -1609,6 +1707,8 @@ async fn run_single_test(job: &TestJob, preopened_dirs: &[(String, String)]) -> 
         outcome,
         error,
         duration: start.elapsed(),
+        stdout: String::from_utf8_lossy(&stdout_pipe.contents()).into_owned(),
+        stderr: String::from_utf8_lossy(&stderr_pipe.contents()).into_owned(),
     }
 }
 
@@ -1618,7 +1718,7 @@ fn is_epoch_deadline_error(err: &wasmtime::Error) -> bool {
 }
 
 /// Format a duration in human-readable form with appropriate units.
-fn format_duration(d: Duration) -> String {
+pub(crate) fn format_duration(d: Duration) -> String {
     let secs = d.as_secs_f64();
     if secs >= 1.0 {
         format!("{secs:.2}s")
@@ -1635,16 +1735,17 @@ fn format_duration(d: Duration) -> String {
 /// the summary line can show, e.g., a load-stage regression independent
 /// from a wado-side compile error.
 #[derive(Default)]
-struct PackageTotals {
-    compile_ok: usize,
-    compile_failed: usize,
-    load_ok: usize,
-    load_failed: usize,
-    test_passed: u32,
-    test_failed: u32,
-    todo_pending: u32,
-    todo_resolved: u32,
-    timings: StageTimings,
+pub(crate) struct PackageTotals {
+    pub(crate) compile_ok: usize,
+    pub(crate) compile_failed: usize,
+    pub(crate) load_ok: usize,
+    pub(crate) load_failed: usize,
+    pub(crate) skip_files: usize,
+    pub(crate) test_passed: u32,
+    pub(crate) test_failed: u32,
+    pub(crate) todo_pending: u32,
+    pub(crate) todo_resolved: u32,
+    pub(crate) timings: StageTimings,
 }
 
 impl PackageTotals {
@@ -1653,6 +1754,7 @@ impl PackageTotals {
         self.compile_failed += other.compile_failed;
         self.load_ok += other.load_ok;
         self.load_failed += other.load_failed;
+        self.skip_files += other.skip_files;
         self.test_passed += other.test_passed;
         self.test_failed += other.test_failed;
         self.todo_pending += other.todo_pending;
@@ -1661,39 +1763,58 @@ impl PackageTotals {
     }
 }
 
-/// Print the per-stage tally lines (`compile:` / `load:` / `test:` /
-/// optionally `todo:`). The `load:` line is suppressed when the stage
-/// didn't run (e.g. `--no-run`) so the no-run output stays as concise
-/// as before.
-fn print_three_axis(totals: &PackageTotals, duration: Option<&str>) {
+/// Build the per-stage tally lines (`compile:` / `load:` / `test:` /
+/// optionally `skip:`/`todo:`/wall time), each including its `[cpu: …]`
+/// work-time tag. Shared by every reporter so the numbers — including
+/// the compile/load/execute timing — never drift between `verbose`,
+/// `heartbeat`, and `tap` (which renders each line as a `#` comment).
+/// The `load:` line is suppressed when the stage didn't run (e.g.
+/// `--no-run`) so the no-run output stays as concise as before.
+pub(crate) fn format_three_axis_lines(
+    totals: &PackageTotals,
+    duration: Option<&str>,
+) -> Vec<String> {
     let compile_dur = format_stage_duration(totals.timings.compile);
     let load_dur = format_stage_duration(totals.timings.load);
     let execute_dur = format_stage_duration(totals.timings.execute);
-    println!(
+    let mut lines = vec![format!(
         "compile: {} ok, {} failed{compile_dur}",
         totals.compile_ok, totals.compile_failed
-    );
+    )];
     let load_total = totals.load_ok + totals.load_failed;
     if load_total > 0 {
-        println!(
+        lines.push(format!(
             "load:    {} ok, {} failed{load_dur}",
             totals.load_ok, totals.load_failed
-        );
+        ));
     }
-    println!(
+    if totals.skip_files > 0 {
+        lines.push(format!(
+            "skip:    {} files (no test blocks)",
+            totals.skip_files
+        ));
+    }
+    lines.push(format!(
         "test:    {} passed, {} failed{execute_dur}",
         totals.test_passed, totals.test_failed
-    );
+    ));
     let todo_total = totals.todo_pending + totals.todo_resolved;
     if todo_total > 0 {
         let mut todo_line = format!("todo:    {} pending", totals.todo_pending);
         if totals.todo_resolved > 0 {
             todo_line.push_str(&format!(", {} resolved", totals.todo_resolved));
         }
-        println!("{todo_line}");
+        lines.push(todo_line);
     }
     if let Some(d) = duration {
-        println!("(wall: {d})");
+        lines.push(format!("(wall: {d})"));
+    }
+    lines
+}
+
+pub(crate) fn print_three_axis(totals: &PackageTotals, duration: Option<&str>) {
+    for line in format_three_axis_lines(totals, duration) {
+        println!("{line}");
     }
 }
 
@@ -1710,33 +1831,66 @@ fn format_stage_duration(d: Duration) -> String {
 }
 
 /// One entry in the post-summary "TODO tests" section.
-struct TodoEntry {
-    file_path: String,
-    display_name: String,
-    resolved: bool,
+pub(crate) struct TodoEntry {
+    pub(crate) file_path: String,
+    pub(crate) display_name: String,
+    pub(crate) resolved: bool,
 }
 
 /// One entry in the post-summary "failures:" section.
-struct FailEntry {
-    file_path: String,
-    display_name: String,
-    error: Option<String>,
+pub(crate) struct FailEntry {
+    pub(crate) file_path: String,
+    pub(crate) display_name: String,
+    pub(crate) error: Option<String>,
+    pub(crate) stdout: String,
+    pub(crate) stderr: String,
 }
 
 /// Tally + per-entry detail produced by [`display_test_results`].
 #[derive(Default)]
-struct RunReport {
-    test_passed: u32,
-    test_failed: u32,
-    todo_pending: u32,
-    todo_resolved: u32,
-    todo_entries: Vec<TodoEntry>,
-    fail_entries: Vec<FailEntry>,
+pub(crate) struct RunReport {
+    pub(crate) test_passed: u32,
+    pub(crate) test_failed: u32,
+    pub(crate) todo_pending: u32,
+    pub(crate) todo_resolved: u32,
+    pub(crate) todo_entries: Vec<TodoEntry>,
+    pub(crate) fail_entries: Vec<FailEntry>,
+}
+
+/// Render a test's captured stdout/stderr (see `runtime::create_test_store`)
+/// as `stdout:`/`stderr:` labelled blocks, every line prefixed by `indent`.
+/// Empty for a stream that captured nothing; `None` if both are empty.
+pub(crate) fn format_captured_output(stdout: &str, stderr: &str, indent: &str) -> Option<String> {
+    if stdout.is_empty() && stderr.is_empty() {
+        return None;
+    }
+    let mut out = String::new();
+    if !stdout.is_empty() {
+        out.push_str(&format!("{indent}stdout:\n"));
+        for line in stdout.lines() {
+            out.push_str(&format!("{indent}  {line}\n"));
+        }
+    }
+    if !stderr.is_empty() {
+        out.push_str(&format!("{indent}stderr:\n"));
+        for line in stderr.lines() {
+            out.push_str(&format!("{indent}  {line}\n"));
+        }
+    }
+    out.pop(); // drop the trailing newline; callers print with println!
+    Some(out)
+}
+
+/// Print a test's captured stdout/stderr — see [`format_captured_output`].
+pub(crate) fn print_captured_output(stdout: &str, stderr: &str, indent: &str) {
+    if let Some(block) = format_captured_output(stdout, stderr, indent) {
+        println!("{block}");
+    }
 }
 
 /// Print per-file/per-test results in source order while accumulating
 /// totals and the entries needed for the post-run summary sections.
-fn display_test_results(
+pub(crate) fn display_test_results(
     pkg_paths: &[String],
     results_by_file: &IndexMap<&str, Vec<&TestResult>>,
     todo_error_by_path: &IndexMap<&str, &TodoCompileError>,
@@ -1765,6 +1919,7 @@ fn display_test_results(
             match result.outcome {
                 TestOutcome::Pass => {
                     println!("  ok   {} ({dur})", result.display_name);
+                    print_captured_output(&result.stdout, &result.stderr, "    ");
                     report.test_passed += 1;
                 }
                 TestOutcome::Fail => {
@@ -1773,6 +1928,8 @@ fn display_test_results(
                         file_path: result.file_path.clone(),
                         display_name: result.display_name.clone(),
                         error: result.error.clone(),
+                        stdout: result.stdout.clone(),
+                        stderr: result.stderr.clone(),
                     });
                     report.test_failed += 1;
                 }
@@ -1781,6 +1938,7 @@ fn display_test_results(
                         "  \x1b[33m·\x1b[0m {} \x1b[33m# TODO\x1b[0m ({dur})",
                         result.display_name
                     );
+                    print_captured_output(&result.stdout, &result.stderr, "    ");
                     report.todo_pending += 1;
                     report.todo_entries.push(TodoEntry {
                         file_path: result.file_path.clone(),
@@ -1796,6 +1954,7 @@ fn display_test_results(
                     if let Some(ref error) = result.error {
                         println!("    {error}");
                     }
+                    print_captured_output(&result.stdout, &result.stderr, "    ");
                     report.todo_resolved += 1;
                     report.todo_entries.push(TodoEntry {
                         file_path: result.file_path.clone(),
@@ -1809,7 +1968,7 @@ fn display_test_results(
     report
 }
 
-fn print_failure_section(fail_entries: &[FailEntry]) {
+pub(crate) fn print_failure_section(fail_entries: &[FailEntry]) {
     if fail_entries.is_empty() {
         return;
     }
@@ -1820,6 +1979,7 @@ fn print_failure_section(fail_entries: &[FailEntry]) {
         if let Some(ref error) = entry.error {
             println!("---- {} ({}) ----", entry.display_name, entry.file_path);
             println!("{error}");
+            print_captured_output(&entry.stdout, &entry.stderr, "");
             println!();
         }
     }
@@ -1829,7 +1989,7 @@ fn print_failure_section(fail_entries: &[FailEntry]) {
     }
 }
 
-fn print_todo_section(todo_entries: &[TodoEntry], todo_resolved: u32) {
+pub(crate) fn print_todo_section(todo_entries: &[TodoEntry], todo_resolved: u32) {
     if todo_entries.is_empty() {
         return;
     }
@@ -1858,7 +2018,7 @@ fn print_todo_section(todo_entries: &[TodoEntry], todo_resolved: u32) {
     }
 }
 
-fn print_compile_failures_section(failures: &[CompileFailure]) {
+pub(crate) fn print_compile_failures_section(failures: &[CompileFailure]) {
     if failures.is_empty() {
         return;
     }
@@ -1869,7 +2029,7 @@ fn print_compile_failures_section(failures: &[CompileFailure]) {
     }
 }
 
-fn print_load_failures_section(failures: &[LoadFailure]) {
+pub(crate) fn print_load_failures_section(failures: &[LoadFailure]) {
     if failures.is_empty() {
         return;
     }
@@ -1878,6 +2038,22 @@ fn print_load_failures_section(failures: &[LoadFailure]) {
     for entry in failures {
         println!("    {}", entry.path);
     }
+}
+
+/// Tally test outcomes into the four counts `PackageTotals` needs. Pure
+/// and format-independent: every reporter displays a run differently, but
+/// they all must agree on what counts as a pass/fail for the exit code.
+fn tally_test_results(results: &[TestResult]) -> (u32, u32, u32, u32) {
+    let (mut passed, mut failed, mut todo_pending, mut todo_resolved) = (0u32, 0u32, 0u32, 0u32);
+    for r in results {
+        match r.outcome {
+            TestOutcome::Pass => passed += 1,
+            TestOutcome::Fail => failed += 1,
+            TestOutcome::TodoPending => todo_pending += 1,
+            TestOutcome::TodoResolved => todo_resolved += 1,
+        }
+    }
+    (passed, failed, todo_pending, todo_resolved)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1889,14 +2065,11 @@ async fn run_one_package(
     load_jobs: usize,
     execute_jobs: usize,
     preopened_dirs: Arc<Vec<(String, String)>>,
-    overall_start: Instant,
     show_banner: bool,
     no_run: bool,
+    reporter: Arc<dyn TestReporter>,
 ) -> PackageTotals {
-    if show_banner {
-        println!();
-        println!("=== package: {} ===", pkg_run.label);
-    }
+    reporter.on_package_start(pkg_run, show_banner);
 
     let outcome = run_pipeline(
         &pkg_run.paths,
@@ -1906,14 +2079,15 @@ async fn run_one_package(
         load_jobs,
         execute_jobs,
         preopened_dirs,
-        overall_start,
         no_run,
+        reporter.clone(),
     )
     .await;
 
     let PipelineOutcome {
         compiled_count,
         load_ok,
+        skip_files,
         test_results,
         todo_compile_errors,
         compile_failures,
@@ -1933,75 +2107,44 @@ async fn run_one_package(
     let compile_failed = compile_failures.len();
     let load_failed = load_failures.len();
 
-    // `--no-run`: stages 2 and 3 were short-circuited. The compile stage
-    // wrote each fixture's `<primary>.kiln.json` as a side effect, which
-    // is the whole point of the flag. We still surface compile failures
-    // (so a stale-cache run that fails to compile isn't silently
-    // swallowed) and `#![TODO]` modules whose expected compile-error
-    // fired (so the TODO surface stays visible in summary parity with
-    // the normal-run path — only test-level TODO resolution is
-    // unobservable here, since we never executed any tests).
-    if no_run {
-        let todo_entries: Vec<TodoEntry> = todo_compile_errors
-            .iter()
-            .map(|e| TodoEntry {
-                file_path: e.path.clone(),
-                display_name: "#![TODO] module".to_string(),
-                resolved: false,
-            })
-            .collect();
+    // `--no-run`: stages 2 and 3 were short-circuited, so there are no
+    // test results — only the TODO-module compile-error axis is
+    // observable here.
+    let totals = if no_run {
         let todo_pending = u32::try_from(todo_compile_errors.len()).unwrap_or(u32::MAX);
-
-        print_compile_failures_section(&compile_failures);
-        print_todo_section(&todo_entries, 0);
-        let totals = PackageTotals {
+        PackageTotals {
             compile_ok,
             compile_failed,
             todo_pending,
             timings,
             ..PackageTotals::default()
-        };
-        println!();
-        print_three_axis(&totals, None);
-        return totals;
-    }
-
-    // Group results by file for display. Iteration order doesn't matter —
-    // display walks `pkg_run.paths` and looks each one up here.
-    let mut results_by_file: IndexMap<&str, Vec<&TestResult>> = IndexMap::default();
-    for result in &test_results {
-        results_by_file
-            .entry(result.file_path.as_str())
-            .or_default()
-            .push(result);
-    }
-    let todo_error_by_path: IndexMap<&str, &TodoCompileError> = todo_compile_errors
-        .iter()
-        .map(|e| (e.path.as_str(), e))
-        .collect();
-
-    let report = display_test_results(&pkg_run.paths, &results_by_file, &todo_error_by_path);
-    print_failure_section(&report.fail_entries);
-    print_todo_section(&report.todo_entries, report.todo_resolved);
-    print_compile_failures_section(&compile_failures);
-    print_load_failures_section(&load_failures);
-
-    let totals = PackageTotals {
-        compile_ok,
-        compile_failed,
-        load_ok,
-        load_failed,
-        test_passed: report.test_passed,
-        test_failed: report.test_failed,
-        todo_pending: report.todo_pending,
-        todo_resolved: report.todo_resolved,
-        timings,
+        }
+    } else {
+        let (test_passed, test_failed, todo_pending, todo_resolved) =
+            tally_test_results(&test_results);
+        PackageTotals {
+            compile_ok,
+            compile_failed,
+            load_ok,
+            load_failed,
+            skip_files,
+            test_passed,
+            test_failed,
+            todo_pending,
+            todo_resolved,
+            timings,
+        }
     };
 
-    // Per-package summary (no duration; the aggregate or the run itself
-    // owns the elapsed-time line).
-    println!();
-    print_three_axis(&totals, None);
+    reporter.on_package_done(PackageDoneArgs {
+        pkg_run,
+        totals: &totals,
+        test_results: &test_results,
+        todo_compile_errors: &todo_compile_errors,
+        compile_failures: &compile_failures,
+        load_failures: &load_failures,
+        no_run,
+    });
 
     totals
 }
@@ -2054,6 +2197,7 @@ async fn prewarm_stdlib_snapshot_on_workers(parallelism: usize) {
 pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     let overall_start = Instant::now();
     let multi_pkg = opts.package_runs.len() > 1;
+    let format = opts.format;
     let flags = Arc::new(opts.compile_flags());
     let jobs = opts.jobs;
     let no_run = opts.no_run;
@@ -2086,6 +2230,13 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     // `spawn_blocking` tasks can re-use.
     prewarm_stdlib_snapshot_on_workers(compile_jobs).await;
 
+    let total_files: usize = package_runs.iter().map(|r| r.paths.len()).sum();
+    let reporter: Arc<dyn TestReporter> = match format {
+        TestFormat::Verbose => Arc::new(VerboseReporter::new(overall_start)),
+        TestFormat::Heartbeat => Arc::new(HeartbeatReporter::new(overall_start, total_files)),
+        TestFormat::Tap => Arc::new(TapReporter::new(overall_start, total_files)),
+    };
+
     let mut grand = PackageTotals::default();
     for pkg_run in &package_runs {
         let totals = run_one_package(
@@ -2096,22 +2247,15 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
             load_jobs,
             execute_jobs,
             preopened_dirs.clone(),
-            overall_start,
             multi_pkg,
             no_run,
+            reporter.clone(),
         )
         .await;
         grand.merge(&totals);
     }
 
-    let total_dur = format_duration(overall_start.elapsed());
-    if multi_pkg {
-        println!();
-        println!("=== aggregate ===");
-        print_three_axis(&grand, Some(&total_dur));
-    } else {
-        println!("(wall: {total_dur})");
-    }
+    reporter.on_run_done(&grand, multi_pkg, overall_start.elapsed());
 
     if grand.compile_failed > 0
         || grand.load_failed > 0

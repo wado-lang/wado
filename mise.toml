@@ -204,16 +204,17 @@ set -xe -o pipefail
 # nested package. In CI, package-gale runs in its own per-optlevel jobs
 # (test-gale-o1/o2/o3), so we exclude it here to keep this job fast.
 # Locally we include everything so a single `mise run test-wado` covers
-# it all.
+# it all. CI also switches to `--format tap` for its machine-readable
+# per-test output; the default `heartbeat` format is for local/agent use.
 #
 # benchmark/* test blocks use only inline data — the `Preopens`-driven
 # file reads sit in `export fn run()`, which the test world does not
 # invoke — so they need no `--dir` setup of their own.
-excludes=()
+extra_args=()
 if [ -n "${CI:-}" ]; then
-    excludes+=(--exclude 'package-gale/**')
+    extra_args+=(--exclude 'package-gale/**' --format tap)
 fi
-cargo run -p wado-cli -- test "${excludes[@]}"
+cargo run -p wado-cli -- test "${extra_args[@]}"
 """
 
 [tasks.test-gale-o1]
@@ -221,7 +222,11 @@ description = "Run package-gale tests with -O1"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-cargo run -p wado-cli -- test -O1 package-gale
+extra_args=()
+if [ -n "${CI:-}" ]; then
+    extra_args+=(--format tap)
+fi
+cargo run -p wado-cli -- test -O1 package-gale "${extra_args[@]}"
 """
 
 [tasks.test-gale-o2]
@@ -229,7 +234,11 @@ description = "Run package-gale tests with -O2"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-cargo run -p wado-cli -- test -O2 package-gale
+extra_args=()
+if [ -n "${CI:-}" ]; then
+    extra_args+=(--format tap)
+fi
+cargo run -p wado-cli -- test -O2 package-gale "${extra_args[@]}"
 """
 
 [tasks.test-gale-o3]
@@ -237,7 +246,11 @@ description = "Run package-gale tests with -O3"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-cargo run -p wado-cli -- test -O3 package-gale
+extra_args=()
+if [ -n "${CI:-}" ]; then
+    extra_args+=(--format tap)
+fi
+cargo run -p wado-cli -- test -O3 package-gale "${extra_args[@]}"
 """
 
 [tasks.test-cov]
