@@ -157,6 +157,22 @@ wado compile --allocator debug file.wado     # debug allocator
 wado run file.wado  # run a CLI program with wasmtime
 ```
 
+### Test Command
+
+`wado test` discovers and runs `test` blocks (compiled against the `test` world, see Target World above).
+
+```sh
+wado test                    # discover and run every .wado test in the project
+wado test file.wado          # run tests in one file
+wado test --filter '**/json*.wado'  # run tests in files matching a wildcard
+```
+
+`--format <name>` selects how progress is rendered:
+
+- `compact` (default): a failure or resolved `#[TODO]` prints its own one-line notice immediately; otherwise a heartbeat digest (`N/Total files · tests, failed, todo, skip · ETA`) prints every 5s. A run always ends with a `compile:`/`load:`/`skip:`/`test:` summary. Tailing just the last line or two is enough to read the current state of a long run — this is the point of the format, so prefer it (over redirect-then-inspect) when watching `wado test` live.
+- `verbose`: per-file `Compiled`/`Loaded` lines streamed live, then every test result and the summary sections printed once the run drains.
+- `tap`: a [TAP version 14](https://testanything.org/tap-version-14-specification.html) document — one Test Point per file (a `# Subtest:` block for files with `test` blocks), for CI/tooling consumption.
+
 ### Serve Command
 
 Use `wado serve` to run a Wado HTTP service (wasi:http/service world):
