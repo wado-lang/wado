@@ -570,8 +570,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         trivially_eligible(concrete)
                             || self.type_implements_trait(ctx, concrete, trait_name)
                     })
-                } else if is_eq
-                    && let Some(info) = self.lookup_variant_case_in(name, module_source)
+                } else if is_eq && let Some(info) = self.lookup_variant_case_in(name, module_source)
                 {
                     let param_map: IndexMap<TypeId, TypeId> = info
                         .type_param_type_ids

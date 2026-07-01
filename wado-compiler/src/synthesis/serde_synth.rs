@@ -491,9 +491,12 @@ fn distribute_bound_driven_requests(project: &mut Package) {
     // `synthesize_traits`'s to claim) before scanning every type in the
     // project below; a program with no bound-driven serde requests at all
     // skips that scan entirely.
-    let requests = type_table.borrow().bound_driven_synth_requests(|trait_name| {
-        Some(trait_name) == serialize_name.as_deref() || Some(trait_name) == deserialize_name.as_deref()
-    });
+    let requests = type_table
+        .borrow()
+        .bound_driven_synth_requests(|trait_name| {
+            Some(trait_name) == serialize_name.as_deref()
+                || Some(trait_name) == deserialize_name.as_deref()
+        });
     if requests.is_empty() {
         return;
     }
