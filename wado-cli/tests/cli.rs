@@ -353,6 +353,76 @@ fn test_test_failing() {
 }
 
 #[test]
+fn test_test_compact_is_default_and_reports_failure_immediately() {
+    // `compact` is the default `--format`: no per-file `Compiled`/`Loaded`
+    // log lines and no per-test `ok`/`FAILED` lines (that's `verbose`
+    // territory) — but a failing test still gets its own `not ok` line,
+    // not just a buried count in the final summary.
+    wado()
+        .args(["test", "wado-cli/tests/fixtures/test_fail.wado"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("not ok"))
+        .stdout(predicate::str::contains("failing"))
+        .stdout(predicate::str::contains("1 passed, 1 failed"))
+        .stdout(predicate::str::contains("Compiled").not())
+        .stdout(predicate::str::contains("Running tests in").not());
+}
+
+#[test]
+fn test_test_compact_reports_skip_for_files_without_test_blocks() {
+    // A file with zero `test` blocks still compiles and loads; the
+    // `skip` axis (not silently folded into `load: N ok`) is how a
+    // developer notices "this file has no tests" rather than assuming
+    // it was covered.
+    wado()
+        .args([
+            "test",
+            "wado-cli/tests/fixtures/test_no_test_blocks.wado",
+            "wado-compiler/tests/fixtures/test_decl.wado",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "skip:    1 files (no test blocks)",
+        ))
+        .stdout(predicate::str::contains("2 passed, 0 failed"));
+}
+
+#[test]
+fn test_test_tap_format_produces_a_tap14_document() {
+    // `--format tap`: a leading version + plan (file count, known
+    // upfront), one top-level Test Point per file — `# SKIP` for a
+    // file with no `test` blocks, a `# Subtest:` block (with its own
+    // leading plan) for a file with tests, and diagnostics as a YAML
+    // block under a failing Test Point.
+    wado()
+        .args([
+            "test",
+            "--format",
+            "tap",
+            "wado-cli/tests/fixtures/test_no_test_blocks.wado",
+            "wado-compiler/tests/fixtures/test_decl.wado",
+            "wado-cli/tests/fixtures/test_fail.wado",
+        ])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("TAP version 14"))
+        .stdout(predicate::str::contains("1..3"))
+        .stdout(predicate::str::contains(
+            "ok - wado-cli/tests/fixtures/test_no_test_blocks.wado # SKIP no test blocks",
+        ))
+        .stdout(predicate::str::contains(
+            "# Subtest: wado-compiler/tests/fixtures/test_decl.wado",
+        ))
+        .stdout(predicate::str::contains(
+            "not ok - wado-cli/tests/fixtures/test_fail.wado",
+        ))
+        .stdout(predicate::str::contains("      ---"))
+        .stdout(predicate::str::contains("      message: |"));
+}
+
+#[test]
 fn test_test_filter_keeps_matching_path() {
     // --filter is a path-based wildcard. `*` does not cross path
     // separators (consistent with shell glob and `.gitignore`); use `**`
@@ -394,6 +464,8 @@ fn test_test_compile_failure_reported_on_compile_axis() {
     wado()
         .args([
             "test",
+            "--format",
+            "verbose",
             "wado-cli/tests/fixtures/test_compile_error.wado",
             "wado-compiler/tests/fixtures/test_decl.wado",
         ])
@@ -438,6 +510,8 @@ fn test_test_no_run_surfaces_todo_compile_errors() {
         .args([
             "test",
             "--no-run",
+            "--format",
+            "verbose",
             "wado-compiler/tests/fixtures/module_attr_todo_compile_error.wado",
         ])
         .assert()
