@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782870579693,
+  "lastUpdate": 1782893384210,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -36709,6 +36709,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/97f741001b2b961d046ad15437f4f81627baf637"
         },
         "date": 1782870579364,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15276,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457444,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cfcafd57178083aeb557b7dbe18af679fb3c6fd4",
+          "message": "Merge pull request #1480 from wado-lang/claude/wado-compiler-o3-perf-rd7hvv\n\nperf(compiler): speed up -O3 NIR-engine passes on large functions",
+          "timestamp": "2026-07-01T17:01:32+09:00",
+          "tree_id": "7154b612c28161f287e7c9edb14fae1a8348979d",
+          "url": "https://github.com/wado-lang/wado/commit/cfcafd57178083aeb557b7dbe18af679fb3c6fd4"
+        },
+        "date": 1782893383559,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
