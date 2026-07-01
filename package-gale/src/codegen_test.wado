@@ -699,16 +699,21 @@ Y : 'Y' ;
 }
 
 test "trace option instruments the scan tournament and alt picks" {
-    // A rule whose alts share a prefix (`X a Y?` vs `X`) lowers to the
-    // longest-match scan tournament. Trace must surface the per-alt scan
-    // lengths and the committed winner so a mis-prediction is visible.
+    // A rule whose alts share an opaque rule-ref prefix (`b X` vs `b Y`)
+    // lowers to the longest-match scan tournament (the disambiguating token
+    // is hidden inside `b`, and neither alt is at-end relative to the other,
+    // so it is not an ATN-routed `AtEndConflict`). Trace must surface the
+    // per-alt scan lengths and the committed winner so a mis-prediction is
+    // visible.
     let input = "grammar T;
 r : a EOF ;
-a : X a Y?
-  | X
+a : b X
+  | b Y
   ;
+b : Z Z ;
 X : 'X' ;
 Y : 'Y' ;
+Z : 'Z' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let traced = generate(&mut grammar, &GenerateOptions { highlight: false, trace: true }).source;
@@ -1099,8 +1104,12 @@ ifStmt : 'if' 'y' statement ('else' statement)?? ;
     // The non-greedy `??` enter/skip decision is taken at runtime by the
     // ATN simulator (full context), not by a static first-set peek — so the
     // shape is still a single `Option<T>` if (not a `while` loop), but the
-    // condition is the simulator call.
-    assert str_contains(&body, &"if atn_ng_optional_enter(");
+    // condition is the simulator call. The decision number is stamped at
+    // compile time (`atn_predict_with_stack`), retiring the old
+    // `atn_ng_optional_enter` exit-first BlockStart search.
+    assert str_contains(&body, &"if atn_predict_with_stack(&ATN_SIM,");
+    assert str_contains(&body, &") == 1");
+    assert !str_contains(&body, &"atn_ng_optional_enter(");
     assert !str_contains(&body, &"if p.peek_kind() == TK_LIT_ELSE");
     assert !str_contains(&body, &"while p.peek_kind() == TK_LIT_ELSE");
 }
@@ -1215,7 +1224,43 @@ WS : ' ' -> skip ;
 test "non-greedy ?? inside a left-recursive rule threads min_prec" {
     let mut g = parse(QQ_IN_LR_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    // The atom fn carries `min_prec`, and the `??` enter check forwards it.
+    // The atom fn carries `min_prec`, and the `??` enter check forwards it
+    // to the simulator (stamped decision number, `== 1` for ENTER).
     assert str_contains(&output, &"fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32");
-    assert str_contains(&output, &"atn_ng_optional_enter(&ATN_SIM, 0, &p.atn_stack, &p.kinds, p.pos, TK_EOF, min_prec)");
+    assert str_contains(&output, &", &p.atn_stack, &p.kinds, p.pos, TK_EOF, min_prec) == 1");
+    assert str_contains(&output, &"atn_predict_with_stack(&ATN_SIM,");
+}
+
+// Two non-greedy `??` in one rule must emit two distinct ATN decision numbers.
+global TWO_QQ_CODEGEN_G4: String = "
+grammar T;
+s : 'a' ('b')?? 'c' ('d')?? EOF ;
+WS : ' ' -> skip ;
+";
+
+test "multiple ?? in a rule emit distinct ATN decision numbers" {
+    let mut g = parse(TWO_QQ_CODEGEN_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_s__inner(");
+    assert str_contains(&body, &"atn_predict_with_stack(&ATN_SIM, 0, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0) == 1");
+    assert str_contains(&body, &"atn_predict_with_stack(&ATN_SIM, 1, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0) == 1");
+    assert !str_contains(&body, &"atn_ng_optional_enter(");
+}
+
+// A multi-alt `AtEndConflict` must route through the ATN simulator, not the
+// `_sd_best_i` longest-match tournament.
+global AT_END_CONFLICT_G4: String = "
+grammar T;
+s : x 'c' ;
+x : 'a' 'b' | 'a' 'b' 'c' ;
+WS : ' ' -> skip ;
+";
+
+test "at-end-conflict multi-alt rule routes through the ATN simulator" {
+    let mut g = parse(AT_END_CONFLICT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_x__inner(");
+    assert str_contains(&body, &"let _atn_alt = atn_predict_with_stack(&ATN_SIM,");
+    assert str_contains(&body, &"if _atn_alt ==");
+    assert !str_contains(&body, &"_sd_best_i");
 }

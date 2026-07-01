@@ -295,6 +295,14 @@ fn generate_textmate_grammar(def: &SyntaxDefinition) -> serde_json::Value {
             "strings": {
                 "patterns": [
                     {
+                        "name": "string.quoted.double.byte.wado",
+                        "begin": "b\"",
+                        "end": "\"",
+                        "patterns": [
+                            { "include": "#string-escapes" }
+                        ]
+                    },
+                    {
                         "name": "string.quoted.double.wado",
                         "begin": "\"",
                         "end": "\"",
@@ -331,6 +339,10 @@ fn generate_textmate_grammar(def: &SyntaxDefinition) -> serde_json::Value {
                     {
                         "name": "constant.character.escape.wado",
                         "match": "\\\\[nrt\\\\\"'0`{}]"
+                    },
+                    {
+                        "name": "constant.character.escape.hex.wado",
+                        "match": "\\\\x[0-9a-fA-F]{2}"
                     },
                     {
                         "name": "constant.character.escape.unicode.wado",

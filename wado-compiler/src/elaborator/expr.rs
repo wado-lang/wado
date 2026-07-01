@@ -283,6 +283,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 string_type
             }
+            Literal::Bytes(raw) => {
+                let array_u8_type = self.tysys.type_table.borrow_mut().make_list(TypeTable::U8);
+                if let Err(message) = util::unescape_bytes(raw) {
+                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                        message,
+                        span: lit.span,
+                    });
+                }
+                array_u8_type
+            }
             Literal::Null => self
                 .tysys
                 .type_table

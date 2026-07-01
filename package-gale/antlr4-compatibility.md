@@ -246,7 +246,50 @@ contract obligation, but doing it ANTLR4's way naively is too slow for
 the very descriptor that needs it — so Gale uses a **hybrid**. This
 section records that design decision and its known approximation gaps;
 the implementation lives in `runtime/atn.wado` and is cross-referenced
-from [`AGENTS.md`](./AGENTS.md) / [`TODO.md`](./TODO.md).
+from [`AGENTS.md`](./AGENTS.md).
+
+Why a runtime simulator at all: the static FOLLOW + K-prefix path always
+has edges — not a tuning gap but a decidability one. The lookahead
+language of a recursive ambiguous prefix is non-regular, so the
+per-decision lookahead DFA built by subset construction over the ATN does
+not converge to a finite machine (ANTLR3's static LL(\*) failed here;
+ANTLR4 replaced it with a runtime ALL(\*) simulator). Gale keeps the
+static compiled fast path for every decision static prediction already
+resolves and routes only the residual cold sites through the simulator.
+
+**The simulator decides exactly three parser sites; everything else keeps
+the compiled fast path:**
+
+1. A **left-recursive rule's loop entry** — via the dedicated O(1)
+   `atn_lr_loop_decision` (below), with the complete simulator as the
+   documented fallback.
+2. A **non-greedy `??`** — `atn_predict_with_stack`, keyed to the `??`'s
+   own ATN decision number (`assign_atn_decisions` → `Atn.decision_sites`
+   → `GenContext::atn_decision_site`), so several `??` in one rule each
+   predict independently.
+3. A **multi-alt `AtEndConflict`** — one alt returns to the caller while
+   another continues past the same lookahead, the one ambiguity the
+   longest-match scan tournament resolves unsoundly (its longest pick can
+   steal a token the caller needs, e.g. `s : x 'c' ; x : 'a' 'b' | 'a'
+   'b' 'c'` on `a b c`). `grammar_has_at_end_conflict` (run before
+   `build_atn`) detects it and forces the ATN build; the rule emitter
+   routes the decision through `atn_predict_with_stack` keyed on the rule
+   body decision (`rule_body_decision` → `GenContext::atn_rule_body_decision`).
+   Every **other** ambiguity reason (`OpaqueRuleRef`, `MaxDepth`,
+   `ConfigExplosion`, `MultiAtEnd`, `NoViableAlt`) keeps the sound
+   tournament — its longest-match agrees with ANTLR4 for those across the
+   whole corpus. Route one through the simulator only if a descriptor ever
+   shows the tournament resolving it wrongly. Regression fixtures:
+   `tests/grammars/ll_longest_vs_context.g4`,
+   `tests/grammars/ll_optional_non_greedy_multi.g4`.
+
+**ATN embedding.** The reachable whole-grammar ATN is serialized
+(`serialize_atn`) to one compact `i32` array `global` (`ATN_DATA`),
+decoded once at parser construction (`atn_decode`) into the flat parallel
+`List<i32>` SoA arrays the simulator walks (`AtnSim`). Smallest artifact,
+cheapest init; `gale dump --atn` plus a serialize/deserialize round-trip
+test (`atn_test.wado`) cover readability. Emitted only when a grammar
+needs it; non-ATN grammars are byte-identical to before.
 
 ### Two mechanisms
 
@@ -293,17 +336,19 @@ simulator plan. The performance invariant is preserved throughout.
 
 **Closed (correct fix + regression test):**
 
-| Edge                                                                                                    | Resolution                                                                                                                                                                                         |
-| ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `~X` (`NOT_ATOM`) treated as "matches anything" (`~COMMA` mandates `COMMA`)                             | FIRST carries the **excluded** label (`rule_first_neg` / `atn_first_admits`); tests `token != excluded`                                                                                            |
-| Scan stack pushed only for a rule's own self-ref operand                                                | every scan rule call pushes its exact return state (`needs_scan_atn`), mirroring the parse-side wrapper                                                                                            |
-| Nullable-atom LR rule trapped at decode (the guard blocked _correct_ behaviour)                         | removed: a nullable atom legitimately puts the loop operator in FIRST, so walk precedence edges in FIRST                                                                                           |
-| `lr_loop_entry_decision` returned the first `STAR_LOOP_ENTRY` (wrong for an atom `*`)                   | select the entry by its **precedence enter edges**                                                                                                                                                 |
-| Packed-key depth limit (998 caller frames; 254 precedence levels)                                       | collision-free power-of-two bit-pack (pr/alt 11b, rs/state 20b ≈ 1M); assert is encoding-capacity only                                                                                             |
-| Speculative repeat-recovery `_parse_R` missing `atn_ret_pending`                                        | stamp the call's exact return state before the recovery parse (diagnostic-only path)                                                                                                               |
-| Open-ended (`.` / `~X`-led, empty static `suffix_first`) LR suffix in an ATN-class rule                 | `valid_lr_alts` built over the same real-suffix set as the enter edges, so the edge index lines up; rule forced ATN-class. Superset case; fixtures `lr_complement_op.g4`, `lr_wildcard_postfix.g4` |
-| Self-reference nested inside a Group/Repeat LR-suffix element (wrong precedence floor)                  | `build_lr_suffix_element` recurses through the container, deciding each self-ref's precedence floor (`conflict_min` vs `0`) from its own follow                                                    |
-| Non-greedy `??` inside a left-recursive rule (prediction at `min_prec 0` ignored the raised precedence) | `atn_ng_optional_enter` takes `min_prec` and forwards it to `atn_predict_with_stack`, so the decision honors the loop's precedence floor                                                           |
+| Edge                                                                                                                             | Resolution                                                                                                                                                                                                     |
+| -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `~X` (`NOT_ATOM`) treated as "matches anything" (`~COMMA` mandates `COMMA`)                                                      | FIRST carries the **excluded** label (`rule_first_neg` / `atn_first_admits`); tests `token != excluded`                                                                                                        |
+| Scan stack pushed only for a rule's own self-ref operand                                                                         | every scan rule call pushes its exact return state (`needs_scan_atn`), mirroring the parse-side wrapper                                                                                                        |
+| Nullable-atom LR rule trapped at decode (the guard blocked _correct_ behaviour)                                                  | removed: a nullable atom legitimately puts the loop operator in FIRST, so walk precedence edges in FIRST                                                                                                       |
+| `lr_loop_entry_decision` returned the first `STAR_LOOP_ENTRY` (wrong for an atom `*`)                                            | select the entry by its **precedence enter edges**                                                                                                                                                             |
+| Packed-key depth limit (998 caller frames; 254 precedence levels)                                                                | collision-free power-of-two bit-pack (pr/alt 11b, rs/state 20b ≈ 1M); assert is encoding-capacity only                                                                                                         |
+| Speculative repeat-recovery `_parse_R` missing `atn_ret_pending`                                                                 | stamp the call's exact return state before the recovery parse (diagnostic-only path)                                                                                                                           |
+| Open-ended (`.` / `~X`-led, empty static `suffix_first`) LR suffix in an ATN-class rule                                          | `valid_lr_alts` built over the same real-suffix set as the enter edges, so the edge index lines up; rule forced ATN-class. Superset case; fixtures `lr_complement_op.g4`, `lr_wildcard_postfix.g4`             |
+| Self-reference nested inside a Group/Repeat LR-suffix element (wrong precedence floor)                                           | `build_lr_suffix_element` recurses through the container, deciding each self-ref's precedence floor (`conflict_min` vs `0`) from its own follow                                                                |
+| Non-greedy `??` inside a left-recursive rule (prediction at `min_prec 0` ignored the raised precedence)                          | the `??`'s `atn_predict_with_stack` call forwards `min_prec`, so the decision honors the loop's precedence floor                                                                                               |
+| Several non-greedy `??` in one rule (the unique-exit-first search collapsed to greedy ENTER)                                     | each `??` carries its own ATN decision number (`assign_atn_decisions` → `Atn.decision_sites`), emitted into `atn_predict_with_stack(sim, decision, …)`; fixture `ll_optional_non_greedy_multi.g4`              |
+| Multi-alt `AtEndConflict` mis-resolved by longest-match (an alt returns to the caller, the longer alt steals the caller's token) | `grammar_has_at_end_conflict` forces the ATN build; the rule emitter routes the decision through `atn_predict_with_stack` on the rule body decision (`rule_body_decision`); fixture `ll_longest_vs_context.g4` |
 
 **Open — runtime precision (fall back, don't panic):** these mispredict
 on _valid_ input the heuristic can't resolve, where a panic would reject

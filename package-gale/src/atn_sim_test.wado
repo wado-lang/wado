@@ -7,7 +7,7 @@
 //! + edge ordering), and the full-context (real rule-stack) cases that bind
 //! the dangling-`else` per caller context (the closing tests).
 
-use { build_atn, build_token_kinds, serialize_atn, Atn } from "./atn.wado";
+use { build_atn, build_token_kinds, atn_blob_bytes, Atn } from "./atn.wado";
 use {
     atn_decode,
     atn_adaptive_predict,
@@ -121,7 +121,7 @@ WS : (' '|'\\n') -> channel(HIDDEN);
 test "predict resolves a two-token shared-prefix decision" {
     let g = parse(K2_G4).unwrap();
     let atn = build_atn(&g);
-    let sim = atn_decode(&serialize_atn(&atn));
+    let sim = atn_decode(&atn_blob_bytes(&atn));
     let d = rule_block_decision(&atn, 0);
     assert d >= 0, "rule `a` must have an alternation decision";
     // kinds: ID=0, WS=1, EOF=2, ERROR=3, '('=4, ')'=5, '['=6, ']'=7.
@@ -145,7 +145,7 @@ test "non-greedy ?? picks the exit alt on the dangling-else conflict" {
     let atn = build_atn(&g);
     let tk = build_token_kinds(&g);
     let eof = tk.0["TK_EOF"];
-    let sim = atn_decode(&serialize_atn(&atn));
+    let sim = atn_decode(&atn_blob_bytes(&atn));
     let d = optional_decision(&atn);
     assert d >= 0, "the `??` must produce an optional decision";
     // 'else'=7, 'x'=4 — both alts stay viable to EOF (true ambiguity).
@@ -163,7 +163,7 @@ test "greedy ? picks the enter alt on the same conflict" {
     let atn = build_atn(&g);
     let tk = build_token_kinds(&g);
     let eof = tk.0["TK_EOF"];
-    let sim = atn_decode(&serialize_atn(&atn));
+    let sim = atn_decode(&atn_blob_bytes(&atn));
     let d = optional_decision(&atn);
     assert d >= 0, "the `?` must produce an optional decision";
     let toks: List<Token> = [
@@ -191,7 +191,7 @@ test "full-context: inner ifStatement ?? skips the else (binds to outer)" {
     assign_atn_call_sites(&mut g);
     let atn = build_atn(&g);
     let eof = build_token_kinds(&g).0["TK_EOF"];
-    let sim = atn_decode(&serialize_atn(&atn));
+    let sim = atn_decode(&atn_blob_bytes(&atn));
     let d = optional_decision(&atn);
     let csr = &atn.call_site_returns;
     // Inner ifStatement reached via
@@ -210,7 +210,7 @@ test "full-context: outer ifStatement ?? consumes the else" {
     assign_atn_call_sites(&mut g);
     let atn = build_atn(&g);
     let eof = build_token_kinds(&g).0["TK_EOF"];
-    let sim = atn_decode(&serialize_atn(&atn));
+    let sim = atn_decode(&atn_blob_bytes(&atn));
     let d = optional_decision(&atn);
     let csr = &atn.call_site_returns;
     // Outermost ifStatement: start >(cs0) statement >(cs1) ifStatement.
@@ -233,7 +233,7 @@ test "LR loop-entry prediction terminates (no naive left recursion)" {
     let g = parse(LR_G4).unwrap();
     let atn = build_atn(&g);
     let eof = build_token_kinds(&g).0["TK_EOF"];
-    let sim = atn_decode(&serialize_atn(&atn));
+    let sim = atn_decode(&atn_blob_bytes(&atn));
     let d = loop_entry_decision(&atn, 0);
     assert d >= 0, "expr must have an LR loop-entry decision";
     // After the first atom, input continues with `'+' INT` (tk: INT=0,
@@ -257,7 +257,7 @@ test "precedence pruning gates LR loop-entry enter alts by min_prec" {
     let g = parse(LR_G4).unwrap();
     let atn = build_atn(&g);
     let eof = build_token_kinds(&g).0["TK_EOF"];
-    let sim = atn_decode(&serialize_atn(&atn));
+    let sim = atn_decode(&atn_blob_bytes(&atn));
     let d = loop_entry_decision(&atn, 0);
     // Tokens after the first atom: `'+' INT` (INT=0, '*'=4, '+'=5).
     let toks: List<Token> = [
@@ -281,7 +281,7 @@ test "LR loop decision: precedence gates enter/exit" {
     let g = parse(LR_G4).unwrap();
     let atn = build_atn(&g);
     let eof = build_token_kinds(&g).0["TK_EOF"];
-    let sim = atn_decode(&serialize_atn(&atn));
+    let sim = atn_decode(&atn_blob_bytes(&atn));
     let d = loop_entry_decision(&atn, 0);
     let empty: List<i32> = [];
     // After the first atom, `'+' INT` (INT=0, '*'=4, '+'=5). The exit edge is
@@ -311,7 +311,7 @@ WS : ' ' -> skip ;
 test "atn_lr_loop_decision: ~SEMI suffix excludes the SEMI token" {
     let g = parse(LR_NEG_G4).unwrap();
     let atn = build_atn(&g);
-    let sim = atn_decode(&serialize_atn(&atn));
+    let sim = atn_decode(&atn_blob_bytes(&atn));
     let d = loop_entry_decision(&atn, 0);
     assert d >= 0, "rule `e` must have a loop-entry decision";
     // kinds (lexer order): INT=0, SEMI=1, WS=2, EOF=3.
@@ -338,7 +338,7 @@ test "atn_lr_loop_decision: ~SEMI suffix excludes the SEMI token" {
 test "CfgSet packed key handles a deep caller stack" {
     let g = parse(K2_G4).unwrap();
     let atn = build_atn(&g);
-    let sim = atn_decode(&serialize_atn(&atn));
+    let sim = atn_decode(&atn_blob_bytes(&atn));
     let d = rule_block_decision(&atn, 0);
     assert d >= 0, "rule `a` must have an alternation decision";
     let mut deep: List<i32> = [];
@@ -369,7 +369,7 @@ WS : ' ' -> skip ;
 test "atn_decode: a nullable atom LR rule carries the operator in its FIRST" {
     let g = parse(LR_NULLABLE_ATOM_G4).unwrap();
     let atn = build_atn(&g);
-    let sim = atn_decode(&serialize_atn(&atn));
+    let sim = atn_decode(&atn_blob_bytes(&atn));
     // kinds (lexer order): ID=0, WS=1, EOF=2, ERROR=3, '+'=4. Rule 0 is `e`.
     assert sim.rule_first[0].contains(&4), "e's FIRST must include '+' (a is nullable)";
     assert sim.rule_first[0].contains(&0), "e's FIRST must include ID (via a)";

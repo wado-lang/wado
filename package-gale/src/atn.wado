@@ -3,8 +3,10 @@
 //! This is the codegen-side representation of the grammar as an NFA, the
 //! foundation of the hybrid runtime ATN simulator (see the "ATN-class
 //! grammars" section of `TODO.md`). The simulator runs only at the cold
-//! decisions that need it — today, non-greedy `??` (the static fast path
-//! handles everything else); the ATN is the data it walks.
+//! decisions that need it — today, non-greedy `??` (each one keyed to its own
+//! decision number via `assign_atn_decisions` -> `Atn.decision_sites`) and an
+//! ATN-class LR rule's loop entry; the static fast path handles everything
+//! else. The ATN is the data it walks.
 //!
 //! Clean-room: the construction here follows the textbook Thompson-style
 //! NFA-for-a-grammar (rule-start/stop states, alternation block-start
@@ -89,6 +91,14 @@ pub struct Atn {
     /// exact return state around each rule call. Empty when call sites were
     /// not assigned (`assign_atn_call_sites` not run).
     pub call_site_returns: List<i32>,
+    /// Compile-time correspondence `atn_decision -> decision number`, indexed
+    /// by the surface `RepeatElement.atn_decision` / `GroupElement.atn_decision`
+    /// id (`-1` for any id whose node marked no decision, e.g. a single-alt
+    /// group). NOT part of the serialized blob — codegen reads it to emit each
+    /// `??`'s exact `atn_predict_with_stack(sim, decision, …)` call, retiring
+    /// the runtime "unique exit-first BlockStart" search. Empty when decision
+    /// sites were not assigned (`assign_atn_decisions` not run).
+    pub decision_sites: List<i32>,
 }
 
 /// The loop-entry (`STAR_LOOP_ENTRY`) decision number for parser rule
@@ -123,6 +133,20 @@ pub fn lr_loop_entry_decision(atn: &Atn, rule: i32) -> i32 {
     return -1;
 }
 
+/// The decision number of parser rule `rule`'s top-level alternation (the
+/// `BlockStart` directly off its `RuleStart`), or -1 if the rule body marks
+/// no decision (a single-alt rule). Codegen uses this to route an `AtEndConflict`
+/// multi-alt `Ambiguous` site through `atn_predict_with_stack`. For an LR rule
+/// this is the atom block's decision, not the loop entry (`lr_loop_entry_decision`).
+pub fn rule_body_decision(atn: &Atn, rule: i32) -> i32 {
+    let start = atn.rule_start[rule];
+    if atn.states[start].transitions.is_empty() {
+        return -1;
+    }
+    let body = atn.states[start].transitions[0].target;
+    return atn.states[body].decision;
+}
+
 /// An empty ATN placeholder. Used by codegen as the `needs_atn == false`
 /// default so the `Atn` variable is always initialized without paying for a
 /// build the grammar does not need.
@@ -134,7 +158,15 @@ pub fn empty_atn() -> Atn {
         decision_state: [],
         num_tokens: 0,
         call_site_returns: [],
+        decision_sites: [],
     };
+}
+
+fn sparse_set(list: &mut List<i32>, idx: i32, val: i32) {
+    while list.len() <= idx {
+        list.push(-1);
+    }
+    list[idx] = val;
 }
 
 /// Mutable accumulator used during construction.
@@ -146,6 +178,7 @@ struct AtnBuilder {
     kinds: TreeMap<String, i32>,
     num_tokens: i32,
     call_site_returns: List<i32>,
+    decision_sites: List<i32>,
 }
 
 impl AtnBuilder {
@@ -156,18 +189,13 @@ impl AtnBuilder {
     }
 
     /// Record that the surface call site `call_site` returns to ATN state
-    /// `return_state`. Grows `call_site_returns` (sparsely, with -1 fillers)
-    /// so it can be indexed directly by id. A `call_site` of -1 (unassigned
-    /// `RuleRefElement`, e.g. a unit test that skipped `assign_atn_call_sites`)
-    /// is ignored.
+    /// `return_state`. A `call_site` of -1 (unassigned `RuleRefElement`, e.g. a
+    /// unit test that skipped `assign_atn_call_sites`) is ignored.
     fn record_call_site(&mut self, call_site: i32, return_state: i32) {
         if call_site < 0 {
             return;
         }
-        while self.call_site_returns.len() <= call_site {
-            self.call_site_returns.push(-1);
-        }
-        self.call_site_returns[call_site] = return_state;
+        sparse_set(&mut self.call_site_returns, call_site, return_state);
     }
 
     /// Allocate a fresh decision number and bind it to `state`.
@@ -175,6 +203,19 @@ impl AtnBuilder {
         let d = self.decision_state.len();
         self.decision_state.push(state);
         self.states[state].decision = d;
+    }
+
+    /// Allocate a fresh decision number for `state` (like `mark_decision`) and
+    /// record the surface decision-site `site -> decision` correspondence so
+    /// codegen can emit the exact decision number. A `site` of -1 (a node with
+    /// no stamped id, e.g. a rule body / LR atom block) only marks the decision.
+    fn mark_decision_for_site(&mut self, state: i32, site: i32) {
+        let d = self.decision_state.len();
+        self.mark_decision(state);
+        if site < 0 {
+            return;
+        }
+        sparse_set(&mut self.decision_sites, site, d);
     }
 
     fn add_eps(&mut self, from: i32, to: i32) {
@@ -192,6 +233,7 @@ impl AtnBuilder {
         return -1;
     }
 }
+
 
 /// Build the name -> token-kind-id map, driven by the same
 /// `lexer_gen::token_slot_order` that numbers the generated `TK_*`
@@ -242,6 +284,7 @@ pub fn build_atn_with(grammar: &Grammar, lowered: &LoweredGrammar) -> Atn {
         kinds: tk.0,
         num_tokens: tk.1,
         call_site_returns: [],
+        decision_sites: [],
     };
 
     let nrules = grammar.parser_rules.len();
@@ -264,7 +307,7 @@ pub fn build_atn_with(grammar: &Grammar, lowered: &LoweredGrammar) -> Atn {
         let rule = &grammar.parser_rules[r];
         let body = match &lowered.parser_rules[r] {
             LeftRecursive(lr) => build_lr_body(&mut b, rule, lr, r, &rule_index),
-            _ => build_alternation(&mut b, &rule.alternatives, r, &rule_index),
+            _ => build_alternation(&mut b, &rule.alternatives, r, &rule_index, -1),
         };
         b.add_eps(b.rule_start[r], body.0);
         b.add_eps(body.1, b.rule_stop[r]);
@@ -277,6 +320,7 @@ pub fn build_atn_with(grammar: &Grammar, lowered: &LoweredGrammar) -> Atn {
         decision_state: b.decision_state,
         num_tokens: b.num_tokens,
         call_site_returns: b.call_site_returns,
+        decision_sites: b.decision_sites,
     };
 }
 
@@ -319,7 +363,7 @@ fn build_lr_body(
             atom_alts.push(rule.alternatives[i]);
         }
     }
-    let atom_seg = build_alternation(b, &atom_alts, r, rule_index);
+    let atom_seg = build_alternation(b, &atom_alts, r, rule_index, -1);
 
     let entry = b.new_state(ATN_STAR_LOOP_ENTRY, r);
     let loop_end = b.new_state(ATN_LOOP_END, r);
@@ -436,6 +480,7 @@ fn build_lr_suffix_element(
             follow_has,
             r,
             rule_index,
+            g.atn_decision,
         ),
         Repeat(rep) => {
             // For `*` / `+` the body can be followed by another iteration
@@ -456,6 +501,7 @@ fn build_lr_suffix_element(
                 iter_has,
                 r,
                 rule_index,
+                rep.atn_decision,
             );
         },
         // A self-ref nested under `Not` is not a rule operand; build generically.
@@ -473,11 +519,12 @@ fn build_alternation_prec(
     follow_has: bool,
     r: i32,
     rule_index: &TreeMap<String, i32>,
+    site: i32,
 ) -> [i32, i32] {
     let start = b.new_state(ATN_BLOCK_START, r);
     let end = b.new_state(ATN_BLOCK_END, r);
     if alts.len() > 1 {
-        b.mark_decision(start);
+        b.mark_decision_for_site(start, site);
     }
     for let alt of alts {
         let seg = build_sequence_prec(b, &alt.elements, rule_name, lr_first, conflict_min, follow_has, r, rule_index);
@@ -527,12 +574,13 @@ fn build_repeat_prec(
     iter_has: bool,
     r: i32,
     rule_index: &TreeMap<String, i32>,
+    site: i32,
 ) -> [i32, i32] {
     return match kind {
         Optional => {
             let start = b.new_state(ATN_BLOCK_START, r);
             let end = b.new_state(ATN_BLOCK_END, r);
-            b.mark_decision(start);
+            b.mark_decision_for_site(start, site);
             let seg = build_lr_suffix_element(b, inner, rule_name, lr_first, conflict_min, iter_has, r, rule_index);
             if non_greedy {
                 b.add_eps(start, end);
@@ -547,7 +595,7 @@ fn build_repeat_prec(
         Star => {
             let entry = b.new_state(ATN_STAR_LOOP_ENTRY, r);
             let end = b.new_state(ATN_LOOP_END, r);
-            b.mark_decision(entry);
+            b.mark_decision_for_site(entry, site);
             let seg = build_lr_suffix_element(b, inner, rule_name, lr_first, conflict_min, iter_has, r, rule_index);
             let back = b.new_state(ATN_STAR_LOOP_BACK, r);
             if non_greedy {
@@ -565,7 +613,7 @@ fn build_repeat_prec(
             let seg = build_lr_suffix_element(b, inner, rule_name, lr_first, conflict_min, iter_has, r, rule_index);
             let back = b.new_state(ATN_PLUS_LOOP_BACK, r);
             let end = b.new_state(ATN_LOOP_END, r);
-            b.mark_decision(back);
+            b.mark_decision_for_site(back, site);
             b.add_eps(seg.1, back);
             if non_greedy {
                 b.add_eps(back, end);
@@ -711,11 +759,12 @@ fn build_alternation(
     alts: &List<Alternative>,
     rule: i32,
     rule_index: &TreeMap<String, i32>,
+    site: i32,
 ) -> [i32, i32] {
     let start = b.new_state(ATN_BLOCK_START, rule);
     let end = b.new_state(ATN_BLOCK_END, rule);
     if alts.len() > 1 {
-        b.mark_decision(start);
+        b.mark_decision_for_site(start, site);
     }
     for let alt of alts {
         let seg = build_sequence(b, &alt.elements, rule, rule_index);
@@ -773,10 +822,10 @@ fn build_element(b: &mut AtnBuilder, elem: &Element, rule: i32, rule_index: &Tre
             b.record_call_site(rr.atn_call_site, to);
             [from, to];
         },
-        Group(g) => build_alternation(b, &g.alternatives, rule, rule_index),
+        Group(g) => build_alternation(b, &g.alternatives, rule, rule_index, g.atn_decision),
         Label(lab) => build_element(b, &lab.element, rule, rule_index),
         Not(n) => not_segment(b, &n.element, rule),
-        Repeat(rep) => build_repeat(b, rep.kind, rep.non_greedy, &rep.element, rule, rule_index),
+        Repeat(rep) => build_repeat(b, rep.kind, rep.non_greedy, &rep.element, rule, rule_index, rep.atn_decision),
     };
 }
 
@@ -821,12 +870,13 @@ fn build_repeat(
     inner: &Element,
     rule: i32,
     rule_index: &TreeMap<String, i32>,
+    site: i32,
 ) -> [i32, i32] {
     return match kind {
         Optional => {
             let start = b.new_state(ATN_BLOCK_START, rule);
             let end = b.new_state(ATN_BLOCK_END, rule);
-            b.mark_decision(start);
+            b.mark_decision_for_site(start, site);
             let seg = build_element(b, inner, rule, rule_index);
             if non_greedy {
                 b.add_eps(start, end);
@@ -841,7 +891,7 @@ fn build_repeat(
         Star => {
             let entry = b.new_state(ATN_STAR_LOOP_ENTRY, rule);
             let end = b.new_state(ATN_LOOP_END, rule);
-            b.mark_decision(entry);
+            b.mark_decision_for_site(entry, site);
             let seg = build_element(b, inner, rule, rule_index);
             let back = b.new_state(ATN_STAR_LOOP_BACK, rule);
             if non_greedy {
@@ -859,7 +909,7 @@ fn build_repeat(
             let seg = build_element(b, inner, rule, rule_index);
             let back = b.new_state(ATN_PLUS_LOOP_BACK, rule);
             let end = b.new_state(ATN_LOOP_END, rule);
-            b.mark_decision(back);
+            b.mark_decision_for_site(back, site);
             b.add_eps(seg.1, back);
             if non_greedy {
                 b.add_eps(back, end);
@@ -903,6 +953,24 @@ pub fn serialize_atn(atn: &Atn) -> List<i32> {
         }
     }
     return out;
+}
+
+/// The serialized ATN as a packed little-endian byte blob (4 bytes per `i32`
+/// word). This is the wire form the generated parser embeds as a `b"..."`
+/// byte-string literal and `atn_decode` reads back; `atn_bytes_to_words` is the
+/// inverse. Keeping the encoding here makes codegen and the round-trip test
+/// share one definition.
+pub fn atn_blob_bytes(atn: &Atn) -> List<u8> {
+    let words = serialize_atn(atn);
+    let mut bytes: List<u8> = [];
+    for let w of &words {
+        let v = *w;
+        bytes.push((v & 0xff) as u8);
+        bytes.push((v >> 8 & 0xff) as u8);
+        bytes.push((v >> 16 & 0xff) as u8);
+        bytes.push((v >> 24 & 0xff) as u8);
+    }
+    return bytes;
 }
 
 fn state_kind_name(kind: i32) -> String {

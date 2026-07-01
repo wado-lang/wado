@@ -1,0 +1,30 @@
+// Regression (#1472): LICM must not hoist `self.xs` (and its `.used` length) out
+// of a loop that grows the same list through a `&mut` alias `r = &mut self.xs`.
+// The guard reads `self.xs.len()` while `r.push(-1)` mutates it opaquely; hoisting
+// froze the guard, spinning until `List::grow` ran the heap out of memory.
+
+struct Acc {
+    xs: List<i32>,
+    tag: i32,
+}
+
+impl Acc {
+    fn grow(&mut self, idx: i32) {
+        let r = &mut self.xs;
+        while self.xs.len() <= idx {
+            r.push(-1);
+        }
+        self.xs[idx] = 42;
+    }
+}
+
+export fn run() {
+    let mut a = Acc { xs: [], tag: 7 };
+    a.grow(3);
+    assert a.xs.len() == 4, `len = {a.xs.len()}`;
+    assert a.xs[3] == 42, `xs[3] = {a.xs[3]}`;
+    assert a.tag == 7;
+}
+
+__DATA__
+{"stdout": ""}

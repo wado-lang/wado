@@ -673,6 +673,14 @@ pub struct RepeatOp {
     /// no longer baked here — it arrives at runtime via the `follow`
     /// argument the caller threads in.
     pub gate_caller_follow: bool,
+    /// Surface `RepeatElement.atn_decision` id, threaded from lowering. For a
+    /// non-greedy `??` (which routes its enter/skip decision through the
+    /// runtime ATN simulator), codegen maps this id to the rule's ATN decision
+    /// number (`GenContext::atn_decision_site`, from `Atn.decision_sites`) and
+    /// emits `atn_predict_with_stack(sim, decision, …)` — giving each `??` in a
+    /// rule its own decision instead of the retired unique-exit-first search.
+    /// -1 when decision sites were not assigned. See `TODO.md`.
+    pub atn_decision: i32 = -1,
 }
 
 pub struct GroupOp {

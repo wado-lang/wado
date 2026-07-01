@@ -68,6 +68,9 @@ pub enum TokenKind {
     Ident(String),
     /// String literal: raw source text between the quotes (escape sequences not interpreted).
     StringLit(String),
+    /// Byte-string literal `b"..."`: raw source text between the quotes (escape
+    /// sequences not interpreted). Lowers to a constant `List<u8>`.
+    ByteStringLit(String),
     TemplateStringLit(Vec<TemplateTokenPart>), // Structured template string parts
     /// Char literal: raw source text between the quotes (escape sequences not interpreted).
     CharLit(String),
@@ -262,15 +265,15 @@ impl Span {
 /// against committed kiln json after the bump lands.
 pub fn canonical_token_bytes(out: &mut Vec<u8>, kind: &TokenKind) {
     use TokenKind::{
-        AmpEq, Ampersand, And, Arrow, As, Assert, Async, Break, Caret, CaretEq, CharLit, Colon,
-        ColonColon, Comma, Const, Continue, Dot, DotDot, DotDotDot, DotDotEq, DotDotLt, Effect,
-        Else, Enum, Eof, Eq, EqEq, Export, False, FatArrow, Flags, Fn, For, From, Global, Gt, GtEq,
-        GtGt, Hash, Ident, If, Impl, Import, In, Interface, Internal, LBrace, LBracket, LParen,
-        Let, Loop, Lt, LtEq, LtLt, Match, Matches, Minus, MinusEq, Mut, Not, NotEq, Null,
-        NumberLit, Of, Or, Percent, PercentEq, Pipe, PipeEq, Plus, PlusEq, Pub, Question, RBrace,
-        RBracket, RParen, Reactive, Resource, Return, Semicolon, ShlEq, ShrEq, Slash, SlashEq,
-        Star, StarEq, Stores, StringLit, Struct, TemplateStringLit, Tilde, Trait, True, Type,
-        Unique, Use, Variant, While, With, World,
+        AmpEq, Ampersand, And, Arrow, As, Assert, Async, Break, ByteStringLit, Caret, CaretEq,
+        CharLit, Colon, ColonColon, Comma, Const, Continue, Dot, DotDot, DotDotDot, DotDotEq,
+        DotDotLt, Effect, Else, Enum, Eof, Eq, EqEq, Export, False, FatArrow, Flags, Fn, For, From,
+        Global, Gt, GtEq, GtGt, Hash, Ident, If, Impl, Import, In, Interface, Internal, LBrace,
+        LBracket, LParen, Let, Loop, Lt, LtEq, LtLt, Match, Matches, Minus, MinusEq, Mut, Not,
+        NotEq, Null, NumberLit, Of, Or, Percent, PercentEq, Pipe, PipeEq, Plus, PlusEq, Pub,
+        Question, RBrace, RBracket, RParen, Reactive, Resource, Return, Semicolon, ShlEq, ShrEq,
+        Slash, SlashEq, Star, StarEq, Stores, StringLit, Struct, TemplateStringLit, Tilde, Trait,
+        True, Type, Unique, Use, Variant, While, With, World,
     };
     // `Error` is excluded: it only appears in malformed lex output, which
     // kiln gates out before reaching this function. Omitting it from the
@@ -340,6 +343,7 @@ pub fn canonical_token_bytes(out: &mut Vec<u8>, kind: &TokenKind) {
         // Literals with payload
         Ident(s) => write_payload(out, b'P', "Ident", s.as_bytes()),
         StringLit(s) => write_payload(out, b'P', "StringLit", s.as_bytes()),
+        ByteStringLit(s) => write_payload(out, b'P', "ByteStringLit", s.as_bytes()),
         CharLit(s) => write_payload(out, b'P', "CharLit", s.as_bytes()),
         NumberLit(s) => write_payload(out, b'P', "NumberLit", s.as_bytes()),
         TemplateStringLit(parts) => {

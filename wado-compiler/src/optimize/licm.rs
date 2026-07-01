@@ -86,6 +86,14 @@ impl ModifiedVars {
     /// pointee's `field_idx` is written in the loop — directly via an alias, or
     /// opaquely by a call that received the pointee by `&mut`. By-value roots
     /// are covered by the `fully`/`fields`/alias machinery.
+    ///
+    /// The opaque-`&mut`-call case is type-keyed and restricted to plain structs:
+    /// any `&Struct`/`&mut Struct` read of a clobbered struct type is treated as
+    /// aliasing. Generic instances (`List`/`String`) are deliberately excluded
+    /// here — type-keying them would block reads of an unrelated read-only
+    /// `&List` whenever any same-typed list is mutated in the loop (e.g. a lookup
+    /// `table` while building `out`). Their cascade hazard is handled precisely
+    /// in `licm_loop` via [`Self::is_clobbered_gc_value`] on hoist locals.
     fn is_reference_field_aliasing_written(
         &self,
         root_type: TypeId,
@@ -95,11 +103,26 @@ impl ModifiedVars {
         match type_table.get(root_type) {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 let pointee = strip_references(*inner, type_table);
-                self.clobbered_pointee_types.contains(&pointee)
-                    || self.written_field_types.contains(&(pointee, field_idx))
+                let struct_clobbered =
+                    matches!(type_table.get(pointee), ResolvedType::Struct { .. })
+                        && self.clobbered_pointee_types.contains(&pointee);
+                struct_clobbered || self.written_field_types.contains(&(pointee, field_idx))
             }
             _ => false,
         }
+    }
+
+    /// True when `value_type`'s pointee is a GC heap object `&mut`-clobbered by an
+    /// opaque call in the loop. Used only for hoist locals: a hoisted handle
+    /// (`_licm = obj.list`, an aliasing copy) whose object is then mutated
+    /// through another alias has opaquely-changing fields (e.g. a `List`'s
+    /// length), so cascade-hoisting `_licm.used` would freeze a loop guard
+    /// (#1472). The handle hoist itself stays — only its sub-field hoist is
+    /// blocked, so the common "hoist a String/List handle, mutate through it"
+    /// pattern is unaffected.
+    fn is_clobbered_gc_value(&self, value_type: TypeId, type_table: &TypeTable) -> bool {
+        let pointee = strip_references(value_type, type_table);
+        is_gc_heap_type(pointee, type_table) && self.clobbered_pointee_types.contains(&pointee)
     }
 
     fn extend_full(&mut self, other: &IndexSet<u32>) {
@@ -316,6 +339,11 @@ fn licm_block(
     changed
 }
 
+/// Name prefix for every LICM-created hoist local. Used to recognize a hoisted
+/// handle from any prior LICM invocation (the index threshold is per-invocation,
+/// but these locals persist), so its clobbered-object sub-fields stay un-hoisted.
+const LICM_HOIST_PREFIX: &str = "_licm_";
+
 /// Apply LICM to a single loop, returning hoisting statement ids to prepend.
 fn licm_loop(
     engine: &mut Engine,
@@ -358,8 +386,13 @@ fn licm_loop(
             &mut next_local,
         );
 
-        // Step 3.5: Drop `x.f` candidates where `x` is a reference and that
-        // pointee field is written elsewhere in the loop.
+        // Step 3.5: Drop `x.f` candidates that would be unsound to hoist:
+        // (a) `x` is a struct reference whose pointee field is aliasing-written;
+        // (b) `x` is a LICM hoist local (an aliasing handle from a prior
+        //     iteration) whose GC-heap object is `&mut`-clobbered in the loop, so
+        //     its sub-fields change opaquely (#1472 cascade). Pre-existing roots
+        //     are not subject to (b): a read-only `&List` lookup must stay
+        //     hoistable even when a same-typed list is mutated nearby.
         candidates.retain(|c| {
             let locals = engine.locals();
             let root_ty = if (c.local_index as usize) < locals.len() {
@@ -367,7 +400,12 @@ fn licm_loop(
             } else {
                 c.type_id
             };
-            !modified_vars.is_reference_field_aliasing_written(root_ty, c.field_index, type_table)
+            if modified_vars.is_reference_field_aliasing_written(root_ty, c.field_index, type_table)
+            {
+                return false;
+            }
+            let is_hoist_local = c.local_name.starts_with(LICM_HOIST_PREFIX);
+            !(is_hoist_local && modified_vars.is_clobbered_gc_value(root_ty, type_table))
         });
 
         if candidates.is_empty() {
@@ -396,7 +434,11 @@ fn licm_loop(
                 }
             };
 
-            let hoist_name = format!("_licm_{}_{}", candidate.field_name, engine.locals().len());
+            let hoist_name = format!(
+                "{LICM_HOIST_PREFIX}{}_{}",
+                candidate.field_name,
+                engine.locals().len()
+            );
             let new_local_index = engine.alloc_local(
                 hoist_name.clone(),
                 candidate.type_id,
@@ -741,8 +783,10 @@ fn record_mut_ref_clobber_operand(
     }
 }
 
-/// If `expr` is a `&mut`-reference to a struct passed to a call, record its
-/// pointee as clobbered.
+/// If `expr` is a `&mut`-reference to a heap object passed to a call, record its
+/// pointee as clobbered. Covers both plain structs and generic instances
+/// (`List<T>`, `String`, …) — a `&mut List<i32>` method like `push` mutates the
+/// pointee just as a `&mut Node` method does (issue #1472).
 fn record_mut_ref_clobber(
     body: &Body,
     e: ExprId,
@@ -761,7 +805,12 @@ fn record_mut_ref_clobber(
             _ => break,
         }
     }
-    if saw_mut && matches!(type_table.get(ty), ResolvedType::Struct { .. }) {
+    if saw_mut
+        && matches!(
+            type_table.get(ty),
+            ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. }
+        )
+    {
         modified.insert_clobbered_pointee_type(ty);
     }
 }

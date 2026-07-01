@@ -348,6 +348,10 @@
           "name": "constant.character.escape.wado"
         },
         {
+          "match": "\\\\x[0-9a-fA-F]{2}",
+          "name": "constant.character.escape.hex.wado"
+        },
+        {
           "match": "\\\\u[0-9a-fA-F]{4}",
           "name": "constant.character.escape.unicode.wado"
         },
@@ -359,6 +363,16 @@
     },
     "strings": {
       "patterns": [
+        {
+          "begin": "b\"",
+          "end": "\"",
+          "name": "string.quoted.double.byte.wado",
+          "patterns": [
+            {
+              "include": "#string-escapes"
+            }
+          ]
+        },
         {
           "begin": "\"",
           "end": "\"",

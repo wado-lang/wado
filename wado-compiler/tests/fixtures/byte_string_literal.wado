@@ -1,0 +1,37 @@
+// Rust-style byte-string literal `b"..."` lowers to a constant `List<u8>`
+// via the data-segment path (the same `BytesLiteral` lowering `#include_bytes`
+// uses), so a large constant byte blob never becomes a builder/push chain.
+export fn run() {
+    let a: List<u8> = b"abc";
+    assert a.len() == 3;
+    assert a[0] == 97;
+    assert a[1] == 98;
+    assert a[2] == 99;
+
+    // Escapes: \xNN hex byte, plus the standard string escapes.
+    let b: List<u8> = b"\x00\xff\n\t\\\"\0";
+    assert b.len() == 7;
+    assert b[0] == 0;
+    assert b[1] == 255;
+    assert b[2] == 10;
+    assert b[3] == 9;
+    assert b[4] == 92;
+    assert b[5] == 34;
+    assert b[6] == 0;
+
+    // Escapes shared with string literals via the common decoder
+    // (`\r`, `\b`, `\f`, `\/`), so byte strings accept the same set.
+    let c: List<u8> = b"\r\b\f/";
+    assert c.len() == 4;
+    assert c[0] == 13;
+    assert c[1] == 8;
+    assert c[2] == 12;
+    assert c[3] == 47;
+
+    // Empty byte literal.
+    let e: List<u8> = b"";
+    assert e.len() == 0;
+}
+
+__DATA__
+{"stdout": ""}

@@ -634,9 +634,10 @@ fn classify_token(
 
         // Literals
         TokenKind::NumberLit(_) => (token_type::NUMBER, 0),
-        TokenKind::StringLit(_) | TokenKind::TemplateStringLit(_) | TokenKind::CharLit(_) => {
-            (token_type::STRING, 0)
-        }
+        TokenKind::StringLit(_)
+        | TokenKind::ByteStringLit(_)
+        | TokenKind::TemplateStringLit(_)
+        | TokenKind::CharLit(_) => (token_type::STRING, 0),
 
         // Operators (the highlightable subset; the registry's
         // `is_highlight_operator` flag excludes punctuation-like tokens).

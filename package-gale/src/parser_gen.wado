@@ -35,8 +35,10 @@ use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec, str_lit } from "./wad
 use { TreeSet } from "core:collections";
 use {
     PredictionNode,
+    AmbiguityReason,
     build_group_prediction_tree,
     prediction_collect_all_indices,
+    prediction_contains_at_end_conflict,
     MAX_LOOKAHEAD_DEPTH,
 } from "./prediction.wado";
 use {
@@ -2063,10 +2065,78 @@ fn gen_scan_op_elements_in_block(
     }
 }
 
+/// A rule's non-LR alt indices, their FIRST sets, and the overlap groups over
+/// them — the shared front matter of both the AtEndConflict detection
+/// (`rule_has_at_end_conflict`) and the multi-alt emit (`gen_parse_fn`), so the
+/// two cannot drift on how a rule's alternatives are grouped.
+fn rule_overlap_groups(
+    rule: &ParserRule,
+    lowered_rule: &Rule,
+    ctx: &mut GenContext,
+) -> [List<i32>, List<List<String>>, List<List<i32>>] {
+    let mut non_lr_indices: List<i32> = [];
+    match lowered_rule {
+        Simple(_) => {
+            non_lr_indices.push(0);
+        },
+        MultiAlt(m) => {
+            for let alt of &m.alts {
+                non_lr_indices.push(alt.alt_index);
+            }
+        },
+        LeftRecursive(l) => {
+            for let alt of &l.atom.alts {
+                non_lr_indices.push(alt.alt_index);
+            }
+        },
+    }
+    let mut first_sets: List<List<String>> = [];
+    for let idx of non_lr_indices {
+        let mut visiting: List<String> = [];
+        first_sets.push(ctx.first_of_alt(&rule.alternatives[idx], &mut visiting));
+    }
+    let groups = compute_overlap_groups(&first_sets);
+    return [non_lr_indices, first_sets, groups];
+}
+
+/// Whether any non-LR multi-alt rule's prediction contains an `AtEndConflict`
+/// ambiguity — the one longest-match-tournament-unsound site that must route to
+/// the runtime ATN simulator (an alt returns to the caller while another
+/// continues, so the tournament's longest pick can steal a token the caller
+/// needs). Run before `build_atn` so codegen builds the ATN
+/// (`GenContext::mark_needs_atn`) and the rule emitter routes those sites
+/// through `atn_predict_with_stack`. Shares `rule_overlap_groups` with
+/// `gen_parse_fn`, so detection and emission agree on the grouping.
+pub fn grammar_has_at_end_conflict(grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) -> bool {
+    for let mut r = 0; r < grammar.parser_rules.len(); r += 1 {
+        if rule_has_at_end_conflict(&grammar.parser_rules[r], &lowered.parser_rules[r], ctx) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn rule_has_at_end_conflict(rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) -> bool {
+    if let MultiAlt(_) = lowered_rule {
+    } else {
+        return false;
+    }
+    let g = rule_overlap_groups(rule, lowered_rule, ctx);
+    let non_lr_indices = g.0;
+    let first_sets = g.1;
+    let groups = g.2;
+    for let group of &groups {
+        if group.len() > 1 {
+            let tree = build_group_prediction_tree(&rule.alternatives, group, &first_sets, &non_lr_indices, ctx);
+            if prediction_contains_at_end_conflict(&tree) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) {
-    // Track which rule's body we are emitting so a non-greedy `??` inside it
-    // can pass its owning rule index to `atn_ng_optional_enter` (the caller
-    // stack holds return states, not rule indices).
     ctx.set_current_rule_index(ctx.rule_index_of(&rule.name));
     // Phase 4 — dispatch on the GIR `Rule` variant. Each shape gets
     // its own focused emit entry; the existing internal helpers
@@ -2437,29 +2507,10 @@ fn gen_parse_fn_named(
     // Project the lowered rule's alt partition into surface alt
     // indices. For LR rules, atom alts are non-LR; for `Simple` /
     // `MultiAlt` rules every alt is non-LR.
-    let mut non_lr_indices: List<i32> = [];
-    match lowered_rule {
-        Simple(_) => {
-            non_lr_indices.push(0);
-        },
-        MultiAlt(m) => {
-            for let alt of &m.alts {
-                non_lr_indices.push(alt.alt_index);
-            }
-        },
-        LeftRecursive(l) => {
-            for let alt of &l.atom.alts {
-                non_lr_indices.push(alt.alt_index);
-            }
-        },
-    }
-
-    let mut first_sets: List<List<String>> = [];
-    for let idx of non_lr_indices {
-        let mut visiting: List<String> = [];
-        first_sets.push(ctx.first_of_alt(&rule.alternatives[idx], &mut visiting));
-    }
-    let mut groups = compute_overlap_groups(&first_sets);
+    let og = rule_overlap_groups(rule, lowered_rule, ctx);
+    let non_lr_indices = og.0;
+    let first_sets = og.1;
+    let mut groups = og.2;
     let has_overlaps = has_multi_alt_groups(&groups);
 
     if has_overlaps {
@@ -3732,7 +3783,7 @@ fn gen_op_storable_optional(
             rep_op,
             inner_elem,
             ctx,
-            &atn_optional_enter_cond(ctx),
+            &atn_optional_enter_cond(ctx, rep_op),
         );
         return;
     }
@@ -3781,12 +3832,19 @@ fn gen_op_storable_optional(
     };
 }
 
-/// Runtime entry condition for a non-greedy `??`: the ATN simulator
-/// decides enter vs skip with full context. The current rule is read from
-/// `p.atn_stack`'s top at runtime, so no compile-time decision number is
-/// needed.
-fn atn_optional_enter_cond(ctx: &GenContext) -> String {
+/// Runtime entry condition for a non-greedy `??`: the ATN simulator decides
+/// enter vs skip with full context. The exact ATN decision number is stamped
+/// at compile time (`RepeatElement.atn_decision` -> `Atn.decision_sites`), so
+/// each `??` predicts its own decision — several `??` in one rule no longer
+/// collide on the retired "unique exit-first BlockStart" search. Non-greedy
+/// optional edges are ordered `[exit=0, enter=1]`, so ENTER iff the simulator
+/// returns alt 1.
+fn atn_optional_enter_cond(ctx: &GenContext, rep_op: &RepeatOp) -> String {
     let rule = ctx.current_rule_index();
+    let decision = ctx.atn_decision_site(rep_op.atn_decision);
+    if decision < 0 {
+        return "true";
+    }
     // A non-greedy `??` predicts enter-vs-skip with the rule's live
     // precedence: inside a left-recursive rule the parser can be invoked with
     // a raised `min_prec`, so the prediction must prune LR enter edges below
@@ -3796,7 +3854,7 @@ fn atn_optional_enter_cond(ctx: &GenContext) -> String {
     // always invoked at 0 and its fns carry no `min_prec` parameter — pass the
     // literal `0` there.
     let prec_arg = if ctx.lr_loop_entry_decision(rule) >= 0 { "min_prec" } else { "0" };
-    return `atn_ng_optional_enter(&ATN_SIM, {rule}, &p.atn_stack, &p.kinds, p.pos, TK_EOF, {prec_arg})`;
+    return `atn_predict_with_stack(&ATN_SIM, {decision}, &p.atn_stack, &p.kinds, p.pos, TK_EOF, {prec_arg}) == 1`;
 }
 
 /// Wrap a raw Optional entry condition with the runtime caller-FOLLOW
@@ -3849,7 +3907,7 @@ fn gen_op_transparent_optional(
 
     // Non-greedy `??`: runtime ATN decision (see gen_op_storable_optional).
     if rep.non_greedy && ctx.needs_atn() {
-        gen_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &atn_optional_enter_cond(ctx));
+        gen_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &atn_optional_enter_cond(ctx, rep_op));
         return;
     }
 
@@ -5968,6 +6026,32 @@ fn emit_spec_alt_preamble(w: &mut CodeWriter) {
     w.line(&"let _spec_code = p.pending_code;");
 }
 
+/// Emit the per-alt index dispatch shared by the longest-match tournament
+/// (`var` = `_sd_best_i`) and the AtEndConflict ATN route (`var` = `_atn_alt`):
+/// a single `trace_pick`, one `if {var} == {idx} { return _alt_{idx} }` per
+/// alt, then an unconditional fallthrough to the last alt (its parse path
+/// surfaces a useful diagnostic when `var` matched nothing).
+fn emit_index_pick_dispatch(
+    w: &mut CodeWriter,
+    var: &String,
+    sorted_indices: &List<i32>,
+    fn_name: &String,
+    rule_display: &String,
+    ctx: &GenContext,
+) {
+    if ctx.is_trace() {
+        w.line(&`trace_pick(p, &{str_lit(*rule_display)}, {*var});`);
+    }
+    for let mut i = 0; i < sorted_indices.len(); i += 1 {
+        let idx = sorted_indices[i];
+        w.begin(&`if {*var} == {idx}`);
+        w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
+        w.end();
+    }
+    let last_idx = sorted_indices[sorted_indices.len() - 1];
+    w.line(&`return {*fn_name}_alt_{last_idx}(p{follow_sep(ctx.emit_follow())});`);
+}
+
 /// Emit one speculative alt attempt. The alt runs under `speculating` so a
 /// deeper mismatch records no recovery edits and only sets `recovering`; on
 /// failure the cursor, builder, and pending error are rolled back to the
@@ -6043,6 +6127,30 @@ fn gen_prediction_code_inner(
         let mut sorted_indices = a.alts.sorted();
         sort_group_by_element_count(&mut sorted_indices, alts);
         if skip == 0 {
+            // Route only a top-level non-LR rule-body `AtEndConflict` through the
+            // simulator. Deliberately scoped, not silent: an LR atom-block
+            // conflict (`lr_loop_entry_decision >= 0`, so `atn_rule_body_decision`
+            // is -1 by construction — the atom edge indices exclude the LR alts)
+            // and a nested-`Group` conflict stay on the tournament, which keeps
+            // emitting its OverlapTournament warning. Generalising needs an
+            // atom-relative→grammar index map / group-level routing; revisit if a
+            // descriptor needs it (none do).
+            let _amb_rule = ctx.current_rule_index();
+            let _amb_route = if let AtEndConflict = a.reason {
+                ctx.needs_atn()
+                    && ctx.lr_loop_entry_decision(_amb_rule) < 0
+                    && ctx.atn_rule_body_decision(_amb_rule) >= 0;
+            } else {
+                false;
+            };
+            if _amb_route {
+                let dec = ctx.atn_rule_body_decision(_amb_rule);
+                w.line(
+                    &`let _atn_alt = atn_predict_with_stack(&ATN_SIM, {dec}, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0);`,
+                );
+                emit_index_pick_dispatch(w, &"_atn_alt", &sorted_indices, fn_name, rule_display, ctx);
+                return;
+            }
             // Check if any alternatives have scan functions available.
             // If ALL non-last alternatives have scans, we run a longest-match
             // scan tournament: scan each, parse the winner. If some have
@@ -6098,20 +6206,7 @@ fn gen_prediction_code_inner(
                         w.line(&`_sd_best_i = {idx};`);
                         w.end();
                     }
-                    if ctx.is_trace() {
-                        w.line(&`trace_pick(p, &{str_lit(*rule_display)}, _sd_best_i);`);
-                    }
-                    for let mut i = 0; i < sorted_indices.len(); i += 1 {
-                        let idx = sorted_indices[i];
-                        w.begin(&`if _sd_best_i == {idx}`);
-                        w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
-                        w.end();
-                    }
-                    // Fall through: no alt's scan succeeded. Emit error via
-                    // the last alt's parse path (which produces a useful
-                    // diagnostic).
-                    let last_idx = sorted_indices[sorted_indices.len() - 1];
-                    w.line(&`return {*fn_name}_alt_{last_idx}(p{follow_sep(ctx.emit_follow())});`);
+                    emit_index_pick_dispatch(w, &"_sd_best_i", &sorted_indices, fn_name, rule_display, ctx);
                 } else {
                     // Some scans are partial — scan success is a hint,
                     // not a guarantee. Use save/restore with scan guards.

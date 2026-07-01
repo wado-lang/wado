@@ -1,6 +1,6 @@
 use { parse } from "./g4/parser.wado";
 use { build_latn } from "./latn.wado";
-use { serialize_atn } from "./atn.wado";
+use { atn_blob_bytes } from "./atn.wado";
 use { atn_decode } from "./runtime/atn.wado";
 use { latn_match } from "./runtime/latn.wado";
 
@@ -15,7 +15,7 @@ fn cmt_match(grammar_src: String, input: String) -> i32 {
 fn match_rule(grammar_src: String, rule: String, input: String) -> i32 {
     let g = parse(grammar_src).unwrap();
     let built = build_latn(&g);
-    let blob = serialize_atn(&built.atn);
+    let blob = atn_blob_bytes(&built.atn);
     let sim = atn_decode(&blob);
     let idx = built.rule_index.get(rule).unwrap();
     let chars: List<char> = input.chars().collect();

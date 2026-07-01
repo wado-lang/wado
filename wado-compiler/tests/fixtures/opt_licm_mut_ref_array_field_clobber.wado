@@ -1,0 +1,36 @@
+// Regression guard (#1472, BuiltinArray case): a loop reading an array element
+// through `self.arr` while mutating it through a `&mut` alias must observe every
+// mutation. Hoisting the array handle is sound (the hoist local aliases the same
+// array; the element read re-executes), but hoisting the element read itself
+// would freeze the guard and spin forever. A future pass that learns to hoist
+// pure array reads must not reintroduce that.
+
+#[inline("never")]
+fn bump(p: &mut Array<i32>) {
+    p.set(0, p.get(0) + 1);
+}
+
+struct Buf {
+    arr: Array<i32>,
+    tag: i32,
+}
+
+impl Buf {
+    #[inline("never")]
+    fn go(&mut self) {
+        let r = &mut self.arr;
+        while self.arr.get(0) < 5 {
+            bump(r);
+        }
+    }
+}
+
+export fn run() {
+    let mut b = Buf { arr: Array::filled(1, 0), tag: 7 };
+    b.go();
+    assert b.arr.get(0) == 5, `v = {b.arr.get(0)}`;
+    assert b.tag == 7;
+}
+
+__DATA__
+{"stdout": ""}

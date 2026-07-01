@@ -1508,6 +1508,19 @@ let path = "path/to/file.txt";
 let escaped = "Line 1\nLine 2\tTabbed";
 ```
 
+**Byte strings** use a `b` prefix and create a constant `List<u8>`:
+
+```wado
+let magic: List<u8> = b"\x89PNG\r\n";   // Type: List<u8>, value [137, 80, 78, 71, 13, 10]
+```
+
+The content must be ASCII; each `\xNN` escape (two hex digits) or source
+character contributes one byte, and the standard escapes (`\n`, `\t`, `\\`,
+`\"`, `\0`, `\r`, `\'`) are also accepted. A byte string lowers directly to a
+constant data segment — never an element-by-element builder — so a large blob
+costs nothing to optimize. (`#include_bytes("path")` produces the same
+`List<u8>` from a file.)
+
 #### Escape Sequences
 
 Escape sequences are shared between character and string literals:

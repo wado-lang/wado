@@ -436,6 +436,14 @@ impl WildcardElement {
 pub struct GroupElement {
     pub alternatives: List<Alternative>,
     pub options: List<GrammarOption>,
+    /// Unique decision-site id, assigned by `assign_atn_decisions` (parallel
+    /// to `atn_call_site`). Ties this group's alternation BlockStart to its
+    /// ATN decision number: `build_atn` records `atn_decision -> decision` in
+    /// `Atn.decision_sites`, and codegen reads it to emit
+    /// `atn_predict_with_stack(sim, decision, …)` for an ATN-class multi-alt
+    /// group. -1 until assigned (and for single-alt groups, which mark no
+    /// decision). See `TODO.md` "ATN-class grammars".
+    pub atn_decision: i32 = -1,
 }
 
 impl GroupElement {
@@ -448,6 +456,15 @@ pub struct RepeatElement {
     pub kind: RepeatKind,
     pub element: Element,
     pub non_greedy: bool,
+    /// Unique decision-site id, assigned by `assign_atn_decisions` (parallel
+    /// to `atn_call_site`). Ties this repeat's loop/optional decision state to
+    /// its ATN decision number: `build_atn` records `atn_decision -> decision`
+    /// in `Atn.decision_sites`, and codegen reads it to emit
+    /// `atn_predict_with_stack(sim, decision, …)` for a non-greedy `??` —
+    /// retiring the runtime "unique exit-first BlockStart" search, so several
+    /// `??` in one rule each get their own decision. -1 until assigned. See
+    /// `TODO.md` "ATN-class grammars".
+    pub atn_decision: i32 = -1,
 }
 
 pub struct LabelElement {
@@ -840,6 +857,79 @@ fn stamp_call_sites_element(elem: &Element, next: &mut i32) -> Element {
         Group(g) => Element::Group(GroupElement {
             alternatives: stamp_call_sites_alternatives(&g.alternatives, next),
             options: g.options,
+        }),
+        _ => *elem,
+    };
+}
+
+/// Assign every parser-rule `RepeatElement` / `GroupElement` a unique,
+/// increasing `atn_decision` id (a depth-first walk over rules, alternatives,
+/// and nested elements — the same traversal as `assign_atn_call_sites`). The
+/// id is the stable correspondence key between a surface decision-bearing node
+/// and its ATN decision number: `build_atn` records `atn_decision -> decision`
+/// in `Atn.decision_sites`, and codegen reads it to emit
+/// `atn_predict_with_stack(sim, decision, …)` for the node (a non-greedy `??`,
+/// or an ATN-class multi-alt group).
+///
+/// Runs on the `generate()` path after `assign_atn_call_sites` (so its in-place
+/// rebuild of `Repeat` / `Group` does not clobber the freshly stamped ids) and
+/// before lowering / `build_atn`. Value semantics: each rule's alternatives are
+/// rebuilt with stamped elements and reassigned. Idempotent re-runs re-number
+/// from 0. The `atn_call_site` ids stamped on nested `RuleRef`s survive because
+/// the `RuleRef` arm returns the element unchanged.
+pub fn assign_atn_decisions(grammar: &mut Grammar) {
+    let mut next: i32 = 0;
+    for let mut ri = 0; ri < grammar.parser_rules.len(); ri += 1 {
+        let stamped = stamp_decisions_alternatives(&grammar.parser_rules[ri].alternatives, &mut next);
+        grammar.parser_rules[ri].alternatives = stamped;
+    }
+}
+
+fn stamp_decisions_alternatives(alts: &List<Alternative>, next: &mut i32) -> List<Alternative> {
+    let mut out: List<Alternative> = [];
+    for let alt of alts {
+        let mut elems: List<Element> = [];
+        for let e of &alt.elements {
+            elems.push(stamp_decisions_element(e, next));
+        }
+        out.push(Alternative { label: alt.label, options: alt.options, elements: elems });
+    }
+    return out;
+}
+
+/// Stamp this element (and any nested elements) with decision-site ids. Only
+/// `Repeat` and `Group` consume an id (they are the surface nodes `build_atn`
+/// can mark a decision for); other wrappers recurse, leaves pass through.
+fn stamp_decisions_element(elem: &Element, next: &mut i32) -> Element {
+    return match *elem {
+        Repeat(rep) => {
+            let id = *next;
+            *next += 1;
+            Element::Repeat(RepeatElement {
+                kind: rep.kind,
+                element: stamp_decisions_element(&rep.element, next),
+                non_greedy: rep.non_greedy,
+                atn_decision: id,
+            });
+        },
+        Group(g) => {
+            let id = *next;
+            *next += 1;
+            Element::Group(GroupElement {
+                alternatives: stamp_decisions_alternatives(&g.alternatives, next),
+                options: g.options,
+                atn_decision: id,
+            });
+        },
+        Label(lab) => Element::Label(LabelElement {
+            name: lab.name,
+            list: lab.list,
+            element: stamp_decisions_element(&lab.element, next),
+            snake_name: lab.snake_name,
+            field_name: lab.field_name,
+        }),
+        Not(n) => Element::Not(NotElement {
+            element: stamp_decisions_element(&n.element, next),
         }),
         _ => *elem,
     };

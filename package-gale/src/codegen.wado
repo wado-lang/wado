@@ -6,16 +6,23 @@ use {
     normalize_caches,
     canonicalize_empty_alt_groups,
     assign_atn_call_sites,
+    assign_atn_decisions,
 } from "./ir.wado";
 use { rule_type_name, all_alts_are_single_token } from "./gen_util.wado";
 use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
-use { gen_parser, gen_kind_set_helpers, gen_follow_mask_globals, gen_sync_set_globals } from "./parser_gen.wado";
+use {
+    gen_parser,
+    gen_kind_set_helpers,
+    gen_follow_mask_globals,
+    gen_sync_set_globals,
+    grammar_has_at_end_conflict,
+} from "./parser_gen.wado";
 use { gen_node_kinds, gen_alt_enums, gen_string_tree_helper } from "./cst_gen.wado";
 use { gen_highlight } from "./highlight_gen.wado";
 use { GenContext, sets_overlap } from "./gen_context.wado";
 use { CodeWriter, StructSpec, VariantSpec, EnumSpec, Vis } from "./wadopoet.wado";
 use { lower } from "./lower.wado";
-use { build_atn_with, serialize_atn, Atn, empty_atn, lr_loop_entry_decision } from "./atn.wado";
+use { build_atn_with, atn_blob_bytes, Atn, empty_atn, lr_loop_entry_decision, rule_body_decision } from "./atn.wado";
 use { build_latn, grammar_needs_latn, LatnResult } from "./latn.wado";
 use { TreeMap } from "core:collections";
 use {
@@ -78,6 +85,9 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // return states) is keyed consistently. Runs after canonicalization (the
     // numbered shape is the post-canonicalization one) and before lowering.
     assign_atn_call_sites(grammar);
+    // Must run after `assign_atn_call_sites` (its `Repeat` / `Group` rebuild
+    // would otherwise reset the freshly stamped decision-site ids).
+    assign_atn_decisions(grammar);
     normalize_caches(grammar);
     // Pre-size the output buffer from the grammar's rule count so the
     // bulk of `String::push_str` calls in `CodeWriter::line` don't
@@ -99,15 +109,29 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // emit can push each rule call's exact return state (`call_site_returns`)
     // and `gen_atn_data_global` can serialize the very same ATN. Gate-free
     // grammars skip this entirely.
+    // Route a multi-alt `AtEndConflict` through the simulator (see
+    // `gen_prediction_code_inner`); the detection forces the ATN build. Skipped
+    // when lowering already requested the ATN — the build happens regardless.
+    if !ctx.needs_atn() && grammar_has_at_end_conflict(grammar, &lowered, &mut ctx) {
+        ctx.mark_needs_atn();
+    }
     let mut atn = empty_atn();
     if ctx.needs_atn() {
         atn = build_atn_with(grammar, &lowered);
         ctx.set_atn_call_site_returns(&atn.call_site_returns);
+        ctx.set_atn_decision_sites(&atn.decision_sites);
         let mut lr_decs: List<i32> = [];
+        let mut body_decs: List<i32> = [];
         for let mut r = 0; r < grammar.parser_rules.len(); r += 1 {
-            lr_decs.push(lr_loop_entry_decision(&atn, r));
+            let lr_dec = lr_loop_entry_decision(&atn, r);
+            lr_decs.push(lr_dec);
+            // -1 for LR rules: the atom-block decision's edge indices exclude the
+            // LR alts, so they would not equal the grammar alt indices `_alt_N`
+            // uses (AtEndConflict routing is non-LR only).
+            body_decs.push(if lr_dec >= 0 { -1 } else { rule_body_decision(&atn, r) });
         }
         ctx.set_lr_loop_entry_decisions(&lr_decs);
+        ctx.set_atn_rule_body_decisions(&body_decs);
     }
     // Lexer ATN: built when a lexer rule's non-greedy body recurses into
     // itself (the nested-comment class static lexing cannot decide). The
@@ -198,21 +222,29 @@ fn gen_latn_data_global(w: &mut CodeWriter, atn: &Atn) {
     w.blank();
 }
 
-/// Emit `global <data_name>: List<i32> = [...serialized blob...];` and
+/// Emit `global <data_name>: List<u8> = b"...packed blob...";` and
 /// `global <sim_name>: AtnSim = atn_decode(&<data_name>);`. Shared by the
 /// parser (`ATN_*`) and lexer (`LATN_*`) ATN blobs — same wire format and
 /// decoder; only the atom semantics differ.
 fn emit_atn_blob_global(w: &mut CodeWriter, atn: &Atn, data_name: &String, sim_name: &String) {
-    let blob = serialize_atn(atn);
-    let mut body = String::with_capacity(blob.len() * 6);
-    for let mut i = 0; i < blob.len(); i += 1 {
-        if i > 0 {
-            body.push_str(&", ");
-        }
-        body.push_str(&`{blob[i]}`);
+    // Emit the ATN as a `b"..."` byte-string literal (the packed little-endian
+    // wire form from `atn_blob_bytes`). Unlike an `[i32, …]` array literal —
+    // which lowers to an N-element builder/push chain the optimizer must walk —
+    // a byte literal lowers straight to a constant data segment, so even a
+    // 40k-word ATN keeps generated-parser compile time flat and the Wasm small.
+    let bytes = atn_blob_bytes(atn);
+    let mut body = String::with_capacity(bytes.len() * 4);
+    for let b of &bytes {
+        push_hex_byte(&mut body, *b);
     }
-    w.line(&`global {*data_name}: List<i32> = [{body}];`);
+    w.line(&`global {*data_name}: List<u8> = b"{body}";`);
     w.line(&`global {*sim_name}: AtnSim = atn_decode(&{*data_name});`);
+}
+
+/// Append the `\xNN` byte escape (lowercase, zero-padded to two digits) for
+/// byte `b` to `out`.
+fn push_hex_byte(out: &mut String, b: u8) {
+    out.push_str(&`\\x{b:02x}`);
 }
 
 fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {

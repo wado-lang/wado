@@ -149,6 +149,49 @@ pub(super) fn unescape_string(raw: &str) -> Result<String, String> {
     Ok(result)
 }
 
+/// Interpret the raw content of a byte-string literal `b"..."` (between quotes,
+/// without the quotes) into the bytes it denotes.
+///
+/// `\xNN` (two hex digits) yields one raw byte; every other escape shares the
+/// string decoder ([`unescape_one`]) and must resolve to an ASCII value.
+/// Non-ASCII source characters and escapes above U+007F (e.g. `\u{100}`) are
+/// rejected — a byte string is ASCII plus `\xNN`.
+pub(super) fn unescape_bytes(raw: &str) -> Result<Vec<u8>, String> {
+    let mut out = Vec::new();
+    let mut chars = raw.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            if chars.peek() == Some(&'x') {
+                chars.next();
+                let hi = chars
+                    .next()
+                    .ok_or_else(|| "unterminated `\\x` escape".to_string())?;
+                let lo = chars
+                    .next()
+                    .ok_or_else(|| "unterminated `\\x` escape".to_string())?;
+                let byte = u8::from_str_radix(&format!("{hi}{lo}"), 16)
+                    .map_err(|_| format!("invalid `\\x` escape: \\x{hi}{lo}"))?;
+                out.push(byte);
+            } else {
+                let decoded = unescape_one(&mut chars)? as u32;
+                if decoded > 0x7f {
+                    return Err(format!(
+                        "escape resolves to U+{decoded:04X}, out of byte range; use `\\xNN`"
+                    ));
+                }
+                out.push(decoded as u8);
+            }
+        } else if ch.is_ascii() {
+            out.push(ch as u8);
+        } else {
+            return Err(format!(
+                "non-ASCII character in byte string: '{ch}' (use a `\\xNN` escape)"
+            ));
+        }
+    }
+    Ok(out)
+}
+
 /// Interpret the raw content of a char literal (between quotes, without the quotes).
 ///
 /// Returns the resulting `char`, or an error message.

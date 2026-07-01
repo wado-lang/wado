@@ -209,6 +209,10 @@ impl<'a> Lexer<'a> {
         };
 
         let kind = match ch {
+            // Byte-string literal `b"..."` (before the identifier rule so the
+            // leading `b` is not lexed as an identifier).
+            'b' if self.peek_second() == Some('"') => self.lex_byte_string(),
+
             // Identifiers and keywords
             'a'..='z' | 'A'..='Z' | '_' => self.lex_ident_or_keyword(),
 
@@ -889,28 +893,44 @@ impl<'a> Lexer<'a> {
         let start = self.pos;
         let start_line = self.line;
         let start_column = self.column;
-
         self.advance(); // consume opening "
-        let content_start = self.pos;
+        let raw = self.scan_quoted_raw(start, start_line, start_column);
+        TokenKind::StringLit(raw)
+    }
 
+    /// Lex a byte-string literal `b"..."`. The leading `b` is still pending
+    /// (dispatched here because the next char is `"`, so it cannot be an
+    /// identifier). Same raw scan as a string; lowers to `List<u8>`.
+    fn lex_byte_string(&mut self) -> TokenKind {
+        let start = self.pos;
+        let start_line = self.line;
+        let start_column = self.column;
+        self.advance(); // consume `b`
+        self.advance(); // consume opening "
+        let raw = self.scan_quoted_raw(start, start_line, start_column);
+        TokenKind::ByteStringLit(raw)
+    }
+
+    /// Scan the raw content of a `"`-quoted literal up to and including the
+    /// closing quote, with the opening quote already consumed. Escape sequences
+    /// are skipped (not interpreted); the returned text is the source between
+    /// the quotes. `start*` locate the opening quote for the unterminated-error
+    /// span. Multi-line literals are legal, so EOF is the only recovery.
+    fn scan_quoted_raw(&mut self, start: usize, start_line: usize, start_column: usize) -> String {
+        let content_start = self.pos;
         loop {
             match self.peek() {
                 None => {
-                    // Unterminated: emit a `StringLit` covering everything we
-                    // managed to read. Multi-line strings are legal, so we
-                    // cannot break on newline; EOF is the only safe recovery.
                     self.errors.push(LexError {
                         kind: LexErrorKind::UnterminatedString,
                         span: self.span_from(start, start_line, start_column),
                     });
-                    let raw = self.input[content_start..self.pos].to_string();
-                    return TokenKind::StringLit(raw);
+                    return self.input[content_start..self.pos].to_string();
                 }
                 Some((_, '"')) => {
                     let content_end = self.pos;
                     self.advance();
-                    let raw = self.input[content_start..content_end].to_string();
-                    return TokenKind::StringLit(raw);
+                    return self.input[content_start..content_end].to_string();
                 }
                 Some((_, '\\')) => {
                     self.advance();
@@ -921,6 +941,13 @@ impl<'a> Lexer<'a> {
                 }
             }
         }
+    }
+
+    /// Peek the character after the current one without consuming.
+    fn peek_second(&self) -> Option<char> {
+        let mut it = self.chars.clone();
+        it.next();
+        it.peek().map(|&(_, c)| c)
     }
 
     /// Advance past one escape sequence (after the leading `\` has been consumed).
@@ -1320,6 +1347,26 @@ mod tests {
         let tokens = tokens(r#""Hello, world!""#);
 
         assert!(matches!(&tokens[0].kind, TokenKind::StringLit(raw) if raw == "Hello, world!"));
+    }
+
+    #[test]
+    fn test_byte_string_literal() {
+        // `b"..."` is a byte string; raw content is kept (escapes uninterpreted).
+        let bs = tokens(r#"b"a\x00b""#);
+        assert!(
+            matches!(&bs[0].kind, TokenKind::ByteStringLit(raw) if raw == r"a\x00b"),
+            "got {:?}",
+            bs[0].kind
+        );
+
+        // A bare `b` not followed by `"` is still an identifier.
+        let ident = tokens("b + 1");
+        assert!(matches!(&ident[0].kind, TokenKind::Ident(s) if s == "b"));
+
+        // An identifier ending in `b` is not mistaken for a byte string.
+        let suffixed = tokens(r#"ab"x""#);
+        assert!(matches!(&suffixed[0].kind, TokenKind::Ident(s) if s == "ab"));
+        assert!(matches!(&suffixed[1].kind, TokenKind::StringLit(raw) if raw == "x"));
     }
 
     #[test]

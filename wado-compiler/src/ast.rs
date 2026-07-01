@@ -2444,6 +2444,9 @@ pub enum Literal {
     Number(String),
     /// String literal: raw source text between quotes (escape sequences not interpreted).
     String(String),
+    /// Byte-string literal `b"..."`: raw source text between quotes (escape
+    /// sequences not interpreted). Lowers to a constant `List<u8>`.
+    Bytes(String),
     /// Char literal: raw source text between quotes (escape sequences not interpreted).
     Char(String),
     Bool(bool),
