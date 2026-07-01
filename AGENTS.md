@@ -166,6 +166,8 @@ wado test file.wado          # run tests in one file
 wado test --filter '**/json*.wado'  # run tests in files matching a wildcard
 ```
 
+A failure or resolved `#[TODO]` prints its own one-line notice immediately, otherwise a digest (`N/Total files · tests, failed, todo, skip · ETA`) prints every 5s, ending in a `compile:`/`load:`/`skip:`/`test:` summary. `tail`ing the last line or two is enough to read the current state of a long run.
+
 ### Serve Command
 
 Use `wado serve` to run a Wado HTTP service (wasi:http/service world):
