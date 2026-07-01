@@ -1,0 +1,27 @@
+// Regression: bound-driven Serialize synthesis must be genuinely
+// on-demand — a declared type nothing ever serializes must get no
+// synthesized impl. `serde_bound_driven.wado` only exercises the
+// positive (used) case, so a regression to unconditional synthesis
+// would still pass it.
+use { to_string } from "core:json";
+
+struct UsedForSerialize {
+    x: i32,
+}
+
+struct NotUsedAtAll {
+    y: i32,
+}
+
+export fn run() {
+    let a = UsedForSerialize { x: 1 };
+    let _ = to_string(&a);
+
+    let _unused = NotUsedAtAll { y: 2 };
+}
+
+__DATA__
+{
+    "wir_expect:O0": ["UsedForSerialize^Serialize::serialize"],
+    "wir_not_expect:O0": ["NotUsedAtAll^Serialize::serialize", "NotUsedAtAll^Deserialize::deserialize"]
+}

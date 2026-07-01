@@ -1,0 +1,19 @@
+// Test: a bound-driven `Deserialize` failure reason-chains from the bound
+// site to the offending nested field (WEP: Trait Derivation Policy, point 3;
+// WEP: Diagnostic Reason Chains).
+use { from_string } from "core:json";
+
+struct Inner {
+    f: fn() -> i32,
+}
+
+struct Outer {
+    inner: Inner,
+}
+
+export fn run() {
+    let r = from_string::<Outer>(`\{"inner":\{"f":null\}\}`);
+}
+
+__DATA__
+{"compile_error": "`Outer` does not implement `Deserialize` because field `inner` of type `Inner` does not implement `Deserialize`"}

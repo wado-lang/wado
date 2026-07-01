@@ -1,13 +1,15 @@
-// Test: compile error when Serialize is not implemented for a type
-use { Serialize } from "core:serde";
+// Test: compile error when a struct field's type cannot be serialized.
+// A plain data field would now satisfy `Serialize` structurally (bound-driven
+// synthesis, WEP: Trait Derivation Policy) with no explicit impl required, so
+// this uses a field type — a function — that can never implement Serialize.
 use { to_string } from "core:json";
 
 struct NoSerialize {
-    value: i32,
+    cb: fn(i32) -> i32,
 }
 
 export fn run() {
-    let x = NoSerialize { value: 42 };
+    let x = NoSerialize { cb: |v: i32| v };
     let r = to_string::<NoSerialize>(&x);
 }
 

@@ -2287,11 +2287,11 @@ for let { x, y } of points {
 
 **Auto-derived Traits:**
 
-Structs auto-derive `Eq` (field-wise equality) and `Ord` (lexicographic comparison by field declaration order) when all fields implement those traits. A user-provided `impl Eq` or `impl Ord` takes precedence over the auto-derived implementation.
+Structs derive `Eq` (field-wise equality) and `Ord` (lexicographic comparison by field declaration order) when all fields implement those traits, synthesized on demand rather than for every struct — see [Bound-Driven Eq / Ord](#bound-driven-eq--ord). A user-provided `impl Eq` or `impl Ord` takes precedence.
 
 For generic structs, the auto-derived impls have trait bounds on the type parameters: `impl<T: Eq> Eq for Foo<T>`, `impl<T: Ord> Ord for Foo<T>`.
 
-Variants auto-derive `Eq` when all payload types implement `Eq`. The generated `eq` method checks that both values are the same case and, for cases with payloads, compares the payloads. A user-provided `impl Eq` takes precedence over the auto-derived implementation. For generic variants, the auto-derived impls have trait bounds on the type parameters: `impl<T: Eq> Eq for Maybe<T>`.
+Variants derive `Eq` only (not `Ord`) the same on-demand way, when all payload types implement `Eq`: both values must be the same case, and payloads (if any) are compared. A user-provided `impl Eq` takes precedence. For generic variants, the auto-derived impls have trait bounds on the type parameters: `impl<T: Eq> Eq for Maybe<T>`.
 
 #### Struct Field Defaults
 
@@ -2999,7 +2999,7 @@ match c {
 }
 ```
 
-Enums auto-derive `Display` (case name), `Eq` (discriminant equality), and `Ord` (declaration order).
+Enums auto-derive `Display` (case name) unconditionally. `Eq` (discriminant equality) and `Ord` (declaration order) derive the same on-demand way as for structs — see [Auto-derived Traits](#structs) above.
 
 Enums can have `impl` blocks:
 
@@ -3182,7 +3182,7 @@ Wado provides a format-agnostic serialization framework via `core:serde` and a J
 
 ### Compiler-Synthesized `impl`
 
-The syntax `impl Trait for Type;` (semicolon instead of block) signals that the compiler generates the method body:
+The syntax `impl Trait for Type;` (semicolon instead of block) signals that the compiler generates the method body. Supported traits: `From`, `Serialize`, `Deserialize`, `Eq`, `Ord`.
 
 ```wado
 use { Serialize, Deserialize } from "core:serde";
@@ -3196,12 +3196,38 @@ impl Serialize for User;      // compiler generates serialize method
 impl Deserialize for User;    // compiler generates deserialize method
 ```
 
-The compiler inspects the struct definition and synthesizes the appropriate method body. This is a compile error if:
+The compiler inspects the type definition (struct, enum, variant, or flags) and synthesizes the appropriate method body. This is a compile error if a field or case's type doesn't implement the required trait.
 
-- The type is not a struct (enums and variants are not yet supported for synthesis)
-- The struct contains fields whose types don't implement the required trait
+Struct field names are serialized verbatim by default (identity); see [Serialization Names](./wep-2026-02-28-serde.md#serialization-names) for `rename` / `rename_all` overrides.
 
-Struct field names are converted from `snake_case` to `camelCase` for serialization (e.g., `user_name` → `"userName"`).
+### Bound-Driven Serialize / Deserialize
+
+The marker above is optional: a `T: Serialize` bound is satisfied structurally once every field or case of `T` satisfies the trait — the same on-demand model `Eq` / `Ord` use (below). This is how an anonymous struct, which has no name for a marker, becomes serializable:
+
+```wado
+use { to_string } from "core:json";
+
+struct Point { x: i32, y: i32 }              // no impl marker needed
+let json = to_string(&Point { x: 1, y: 2 }); // Ok("{\"x\":1,\"y\":2}")
+let anon = to_string(&{ x: 1, y: 2 });        // Ok("{\"x\":1,\"y\":2}") — anonymous struct
+```
+
+The explicit marker `impl Serialize for T;` still works — write it to force the impl with no bound present, or to attach `#[serde(rename_all = "...")]` customization. Unlike `Eq` / `Ord`'s marker (below), it doesn't pre-validate: an ineligible field is a compile error at the bound site, not the marker. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
+
+### Bound-Driven Eq / Ord
+
+`Eq` / `Ord` derive the same on-demand way: the impl for `T` is synthesized only where a `==` / `<` call site, a bound, or an explicit marker needs it — not for every declared type. No existing call site's behavior changes.
+
+The explicit marker `impl Eq for T;` / `impl Ord for T;` is a hard guarantee, not just a request: a compile error, with a reason chain, at the marker's own span if any field or case is ineligible:
+
+```wado
+struct Handler { cb: fn(i32) -> i32 }
+
+impl Eq for Handler;
+// compile error: cannot derive `Eq` for `Handler`: not every field/case implements `Eq`
+```
+
+See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 
 ### JSON Module (`core:json`)
 

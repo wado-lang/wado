@@ -1,0 +1,20 @@
+// Test: a bound-driven `Serialize` failure reason-chains from the bound site
+// to the offending nested field (WEP: Trait Derivation Policy, point 3;
+// WEP: Diagnostic Reason Chains).
+use { to_string } from "core:json";
+
+struct Inner {
+    f: fn() -> i32,
+}
+
+struct Outer {
+    inner: Inner,
+}
+
+export fn run() {
+    let o = Outer { inner: Inner { f: || 1 } };
+    let r = to_string(&o);
+}
+
+__DATA__
+{"compile_error": "`Outer` does not implement `Serialize` because field `inner` of type `Inner` does not implement `Serialize`"}

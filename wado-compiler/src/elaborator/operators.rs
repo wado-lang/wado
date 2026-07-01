@@ -341,9 +341,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Get struct name for trait lookup.
             // Newtypes of primitives (e.g. type Radians = f64) use primitive comparison.
             // Newtypes of structs need trait-based comparison via the base type's impl.
+            //
+            // `Enum` is deliberately absent: its `==` lowers to a native
+            // discriminant compare, no method dispatch involved. `Variant`
+            // must be present: it carries payload data, so its `==`/`Ord`
+            // dispatch to a synthesized method, and only going through
+            // `resolve_trait_method_for_op` here records the bound-driven
+            // synthesis request (WEP 2026-06-25-trait-derivation) — otherwise
+            // a plain variant's comparison falls through to
+            // `try_lower_comparison` at monomorphize time, after synthesis
+            // already ran, and the method is never generated.
             let struct_name = match &left_type {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
+                ResolvedType::Variant { name, .. } => Some(name.clone()),
                 ResolvedType::Newtype { base_type, .. } => {
                     let tt = self.tysys.type_table.borrow();
                     let ultimate = tt.get_ultimate_base_type(*base_type);
@@ -352,6 +363,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             drop(tt);
                             self.tysys.struct_name_for_type(*base_type)
                         }
+                        // A newtype of a variant (e.g. `type Alias = SomeVariant;`)
+                        // needs the same Variant-dispatch path as a direct
+                        // `ResolvedType::Variant` comparison above —
+                        // `struct_name_for_type` doesn't cover `Variant`, so
+                        // read the name straight off the resolved ultimate type.
+                        ResolvedType::Variant { name, .. } => Some(name.clone()),
                         _ => None,
                     }
                 }

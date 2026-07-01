@@ -1,0 +1,30 @@
+// Regression: bound-driven Eq/Ord synthesis must be genuinely on-demand —
+// a declared type nothing ever compares must get no synthesized impl.
+// Every other Eq/Ord fixture only exercises the positive (used) case, so
+// a regression to unconditional synthesis would still pass them all.
+//
+// Checked at -O0: at -O2 the optimizer constant-folds this comparison
+// away (both operands are compile-time-known literals), which would make
+// `UsedForEq^Eq::eq` absent too and defeat the check for an unrelated
+// reason.
+struct UsedForEq {
+    x: i32,
+}
+
+struct NotUsedAtAll {
+    y: i32,
+}
+
+export fn run() {
+    let a = UsedForEq { x: 1 };
+    let b = UsedForEq { x: 1 };
+    assert a == b;
+
+    let _unused = NotUsedAtAll { y: 2 };
+}
+
+__DATA__
+{
+    "wir_expect:O0": ["UsedForEq^Eq::eq"],
+    "wir_not_expect:O0": ["NotUsedAtAll^Eq::eq", "NotUsedAtAll^Ord::cmp"]
+}

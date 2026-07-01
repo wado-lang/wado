@@ -79,16 +79,22 @@ The elaborator covers trait selection, generic inference, method dispatch, coerc
 
 `synthesis::synthesize` (`synthesis.rs`) generates synthetic TIR that the user does not write:
 
-| Sub-pass           | File                           | Output                                                                  |
-| ------------------ | ------------------------------ | ----------------------------------------------------------------------- |
-| Trait auto-derives | `synthesis/traits.rs`          | `Eq`, `Ord`, `Display`, `Inspect` impls for user types                  |
-| `From` adapters    | `synthesis/from_synth.rs`      | `From` impls from `impl From<T> for U;` declarations                    |
-| Serde              | `synthesis/serde_synth.rs`     | `Serialize` / `Deserialize` for body-less `impl Trait for T;`           |
-| Template strings   | `synthesis/template.rs`        | Expands template strings into `Display::fmt` / `Inspect::inspect` calls |
-| Effect dispatch    | `synthesis/effect_dispatch.rs` | Per-effect dispatch infrastructure for handler resolution               |
-| CM bindings        | `synthesis/cm_binding/`        | Component Model boundary adapters (lift / lower / async export)         |
+| Sub-pass           | File                           | Output                                                                                               |
+| ------------------ | ------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| Trait auto-derives | `synthesis/traits.rs`          | `Eq` / `Ord` for bound-driven requests (below); `Display` / `Inspect` unconditionally for user types |
+| `From` adapters    | `synthesis/from_synth.rs`      | `From` impls from `impl From<T> for U;` declarations                                                 |
+| Serde              | `synthesis/serde_synth.rs`     | `Serialize` / `Deserialize` for body-less `impl Trait for T;` and for bound-driven requests (below)  |
+| Template strings   | `synthesis/template.rs`        | Expands template strings into `Display::fmt` / `Inspect::inspect` calls                              |
+| Effect dispatch    | `synthesis/effect_dispatch.rs` | Per-effect dispatch infrastructure for handler resolution                                            |
+| CM bindings        | `synthesis/cm_binding/`        | Component Model boundary adapters (lift / lower / async export)                                      |
 
 Synthesized impls are recorded back into the shared `TraitEnv` so subsequent phases query a single source of truth.
+
+Bound-driven requests ([WEP 2026-06-25-trait-derivation](./wep-2026-06-25-trait-derivation.md)) originate during Annotate: `Elaborator::type_implements_trait_inner` (`elaborator/trait_query.rs`) records a `(type, trait)` pair on `TypeTable::bound_driven_synth_requests` whenever a `T: Serialize`/`Deserialize`/`Eq`/`Ord` bound is satisfied structurally with no explicit impl. The set is shared project-wide (one per `TypeTable`, since each module gets a fresh `Elaborator`).
+
+Two passes read the same set as a snapshot, not a drain (consuming it would starve whichever runs second): `serde_synth::synthesize_serde` claims `Serialize`/`Deserialize`; `traits::synthesize_traits` claims `Eq`/`Ord`, gating generation on set membership (`SynthesisCtx::is_requested`) instead of its former unconditional sweep.
+
+An explicit `impl Eq for T;`/`impl Ord for T;` marker validates immediately at its own span (`Elaborator::record_eq_ord_explicit_request`) — a compile error if `T` isn't structurally eligible, stronger than serde's marker, which defers to the bound site. Since the marker is itself an `Item::Impl`, generation gates on `SynthesisCtx::has_real_impl` rather than the general `has_impl`, so a body-less marker isn't mistaken for "already implemented" and left unsynthesized.
 
 ## Effect and Stores Checks
 

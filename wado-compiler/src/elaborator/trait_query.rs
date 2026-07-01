@@ -359,13 +359,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Explain *why* `type_id` does not implement `trait_name` by walking the
-    /// auto-derive structure. Each returned entry is one step of a reason
-    /// chain, deepest cause last; an empty result means no structural
+    /// auto-derive / `on_bound` structure. Each returned entry is one step of a
+    /// reason chain, deepest cause last; an empty result means no structural
     /// explanation is available (the type is itself a leaf — e.g. a function
     /// type — whose non-conformance the headline message already states).
     ///
-    /// Only the `Eq` / `Ord` auto-derive paths are explained, since those are
-    /// the structural-conformance rules a diagnostic can usefully unfold.
+    /// Only the `Eq` / `Ord` (`automatic` policy) and `Serialize` /
+    /// `Deserialize` (`on_bound` policy) structural-conformance rules are
+    /// explained, since those are the ones a diagnostic can usefully unfold.
     pub(super) fn trait_unimpl_reason_chain(
         &self,
         type_id: TypeId,
@@ -388,16 +389,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
 
-        let (eq_name, ord_name) = {
+        let (eq_name, ord_name, serialize_name, deserialize_name) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
                 items.trait_name(CompilerItem::Eq).to_string(),
                 items.trait_name(CompilerItem::Ord).to_string(),
+                items
+                    .trait_name_opt(CompilerItem::Serialize)
+                    .map(str::to_string),
+                items
+                    .trait_name_opt(CompilerItem::Deserialize)
+                    .map(str::to_string),
             )
         };
         let is_eq = trait_name == eq_name;
         let is_eq_or_ord = is_eq || trait_name == ord_name;
+        let is_serde = Some(trait_name) == serialize_name.as_deref()
+            || Some(trait_name) == deserialize_name.as_deref();
+        // Struct fields walk for both `automatic` (Eq/Ord) and `on_bound`
+        // (Serialize/Deserialize) structural rules; variants only ever
+        // unfold for `Eq`, `Serialize`, and `Deserialize` (`Ord` is not
+        // auto-derived for variants at all, see the bound-check above).
+        let walk_struct_fields = is_eq_or_ord || is_serde;
+        let walk_variant_cases = is_eq || is_serde;
 
         let resolved = self.tysys.type_table.borrow().get(type_id).clone();
 
@@ -408,7 +423,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 ..
-            } if is_eq_or_ord => {
+            } if walk_struct_fields => {
                 let Some(info) = self.lookup_struct_fields_in(name, module_source) else {
                     return;
                 };
@@ -421,7 +436,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 type_args,
-            } if is_eq_or_ord => {
+            } if walk_struct_fields => {
                 let Some(info) = self.lookup_struct_fields_in(name, module_source) else {
                     return;
                 };
@@ -442,7 +457,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Variant {
                 name,
                 module_source,
-            } if is_eq => {
+            } if walk_variant_cases => {
                 let Some(info) = self.lookup_variant_case_in(name, module_source) else {
                     return;
                 };
@@ -467,6 +482,115 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.collect_trait_unimpl_reason(member_tid, trait_name, chain);
                 return;
             }
+        }
+    }
+
+    /// Whether `type_id` is *structurally* derivable for `trait_name` (`Eq`
+    /// or `Ord`) — every field (struct) or every non-unit case payload
+    /// (variant) recursively satisfies `trait_name`; a plain enum is always
+    /// eligible. Mirrors the auto-derive branches in
+    /// [`Self::type_implements_trait_inner`], but ignores whether an impl
+    /// already exists for `type_id` itself — needed as a separate query
+    /// because [`Self::type_implements_trait`] would see an explicit
+    /// `impl Eq for T;` marker as "already satisfied" and never validate the
+    /// fields the marker is meant to guarantee.
+    pub(super) fn structurally_derivable_for_explicit_request(
+        &self,
+        ctx: &AnnotateCtx,
+        type_id: TypeId,
+        trait_name: &str,
+    ) -> bool {
+        // Variants derive `Eq` only, never `Ord` (mirrors
+        // `type_implements_trait_inner`'s `Variant` arms). Without this,
+        // `impl Ord for SomeVariant;` would be wrongly accepted here and
+        // only fail later, at a `<` use site.
+        let is_eq = {
+            let tt = self.tysys.type_table.borrow();
+            trait_name == tt.compiler_items().trait_name(CompilerItem::Eq)
+        };
+        // A field/case type resolving to the impl block's own (necessarily
+        // unconstrained) type parameter is trivially eligible: `impl<T> Eq
+        // for Wrapper<T>;` validates the *shape* of `Wrapper`, not a bound
+        // on `T` — matching how the compiler auto-derives `impl<T: Eq> Eq
+        // for Wrapper<T>` once some concrete instantiation demands it.
+        let trivially_eligible = |concrete: TypeId| {
+            matches!(
+                self.tysys.type_table.borrow().get(concrete),
+                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+            )
+        };
+        let resolved = self.tysys.type_table.borrow().get(type_id).clone();
+        match &resolved {
+            ResolvedType::Enum { .. } => true,
+            ResolvedType::Variant {
+                name,
+                module_source,
+            } => {
+                is_eq
+                    && self
+                        .lookup_variant_case_in(name, module_source)
+                        .is_some_and(|info| {
+                            info.cases.iter().all(|c| {
+                                c.payload == TypeTable::UNIT
+                                    || self.type_implements_trait(ctx, c.payload, trait_name)
+                            })
+                        })
+            }
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } => self
+                .lookup_struct_fields_in(name, module_source)
+                .is_some_and(|info| {
+                    info.fields
+                        .iter()
+                        .all(|(_, tid, _)| self.type_implements_trait(ctx, *tid, trait_name))
+                }),
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+            } => {
+                if let Some(info) = self.lookup_struct_fields_in(name, module_source) {
+                    let param_map: IndexMap<TypeId, TypeId> = info
+                        .type_param_type_ids
+                        .iter()
+                        .zip(type_args.iter())
+                        .map(|(param, arg)| (*param, *arg))
+                        .collect();
+                    info.fields.iter().all(|(_, field_tid, _)| {
+                        let concrete = param_map.get(field_tid).copied().unwrap_or(*field_tid);
+                        trivially_eligible(concrete)
+                            || self.type_implements_trait(ctx, concrete, trait_name)
+                    })
+                } else if is_eq && let Some(info) = self.lookup_variant_case_in(name, module_source)
+                {
+                    let param_map: IndexMap<TypeId, TypeId> = info
+                        .type_param_type_ids
+                        .iter()
+                        .zip(type_args.iter())
+                        .map(|(param, arg)| (*param, *arg))
+                        .collect();
+                    info.cases.iter().all(|c| {
+                        if c.payload == TypeTable::UNIT {
+                            return true;
+                        }
+                        let concrete = param_map.get(&c.payload).copied().unwrap_or(c.payload);
+                        trivially_eligible(concrete)
+                            || self.type_implements_trait(ctx, concrete, trait_name)
+                    })
+                } else {
+                    false
+                }
+            }
+            ResolvedType::Newtype { base_type, .. } => {
+                self.type_implements_trait(ctx, *base_type, trait_name)
+            }
+            ResolvedType::Flags { .. } => {
+                self.type_implements_trait(ctx, TypeTable::U32, trait_name)
+            }
+            _ => false,
         }
     }
 
@@ -502,6 +626,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let is_eq = |n: &str| n == eq_name;
         let is_eq_or_ord = |n: &str| n == eq_name || n == ord_name;
 
+        // `Serialize` / `Deserialize`: looked up with `_opt`, not
+        // `trait_name` — unlike the always-on prelude traits above, they
+        // are only registered when a program actually imports `core:serde`.
+        let (serialize_name, deserialize_name) = {
+            let tt = self.tysys.type_table.borrow();
+            let items = tt.compiler_items();
+            (
+                items
+                    .trait_name_opt(CompilerItem::Serialize)
+                    .map(str::to_string),
+                items
+                    .trait_name_opt(CompilerItem::Deserialize)
+                    .map(str::to_string),
+            )
+        };
+        let is_serde = |n: &str| {
+            Some(n) == serialize_name.as_deref() || Some(n) == deserialize_name.as_deref()
+        };
+
+        // Bound-driven request tracking (WEP 2026-06-25-trait-derivation).
+        // Every structural match records a request, for both `Eq`/`Ord` and
+        // `Serialize`/`Deserialize`, so `synthesis::traits` /
+        // `serde_synth` emit an impl only where one was actually recorded.
+        // `Serialize`/`Deserialize` additionally require no explicit impl
+        // already existing before recording (checked at each call site);
+        // `Eq`/`Ord` don't need that guard — `synthesis::traits`'s own dedup
+        // already skips a hand-written impl, so recording redundantly is
+        // harmless. Keyed nominally (name + module, not `TypeId`) so a
+        // generic struct/variant's many instantiations collapse onto one
+        // request against the base declaration.
+        let record_request = |name: &str, module_source: &ModuleSource, trait_name: &str| -> bool {
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .record_bound_driven_synth_request(name, module_source, trait_name);
+            true
+        };
+
         // Primitives have built-in implementations for certain traits
         if let ResolvedType::Primitive(prim) = &resolved {
             if is_eq_or_ord(trait_name) {
@@ -519,10 +681,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // All enums automatically implement Eq and Ord
-        if let ResolvedType::Enum { .. } = &resolved
+        if let ResolvedType::Enum {
+            name,
+            module_source,
+        } = &resolved
             && is_eq_or_ord(trait_name)
         {
-            return true;
+            return record_request(name, module_source, trait_name);
+        }
+
+        // Enums have no fields, so — like Eq/Ord above — they are always
+        // structurally eligible for on_bound serde traits.
+        if let ResolvedType::Enum {
+            name,
+            module_source,
+        } = &resolved
+            && is_serde(trait_name)
+            && !self.find_trait_impl_for_type(name, trait_name)
+        {
+            return record_request(name, module_source, trait_name);
         }
 
         // Variants auto-implement Eq when all payload types implement Eq
@@ -538,7 +715,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     || self.type_implements_trait(ctx, c.payload, trait_name)
             });
             if all_impl {
-                return true;
+                return record_request(name, module_source, trait_name);
+            }
+        }
+
+        // Variants auto-implement Serialize/Deserialize (on_bound) when no
+        // explicit impl exists and every non-unit payload implements the
+        // trait.
+        if let ResolvedType::Variant {
+            name,
+            module_source,
+        } = &resolved
+            && is_serde(trait_name)
+            && !self.find_trait_impl_for_type(name, trait_name)
+            && let Some(info) = self.lookup_variant_case_in(name, module_source)
+        {
+            let all_impl = info.cases.iter().all(|c| {
+                c.payload == TypeTable::UNIT
+                    || self.type_implements_trait(ctx, c.payload, trait_name)
+            });
+            if all_impl {
+                return record_request(name, module_source, trait_name);
             }
         }
 
@@ -556,7 +753,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .all(|tid| self.type_implements_trait(ctx, *tid, trait_name));
             if all_impl {
-                return true;
+                return record_request(name, module_source, trait_name);
             }
         }
 
@@ -571,8 +768,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return true;
         }
 
-        // Generic structs auto-implement Eq/Ord when all fields implement the trait
-        // (with type params substituted by concrete type args)
+        // Structs auto-implement Serialize/Deserialize (on_bound) when no
+        // explicit impl exists and every field implements the trait. This is
+        // also how an anonymous struct — which has no spellable name to
+        // write `impl Serialize for …;` against — ever satisfies the bound:
+        // it is a plain `ResolvedType::Struct` like any other, just with a
+        // compiler-synthesized name (see `resolve_anonymous_struct_literal`).
+        if let ResolvedType::Struct {
+            name,
+            module_source,
+            ..
+        } = &resolved
+            && is_serde(trait_name)
+            && !self.find_trait_impl_for_type(name, trait_name)
+            && let Some(info) = self.lookup_struct_fields_in(name, module_source)
+        {
+            let field_types: Vec<TypeId> = info.fields.iter().map(|(_, tid, _)| *tid).collect();
+            let all_impl = field_types
+                .iter()
+                .all(|tid| self.type_implements_trait(ctx, *tid, trait_name));
+            if all_impl {
+                return record_request(name, module_source, trait_name);
+            }
+        }
+
+        // Generic structs auto-implement Eq/Ord when all fields implement the
+        // trait (with type params substituted by concrete type args).
+        // Recorded against the base declaration (see the note on
+        // `record_request` above), not this specific instantiation.
         if let ResolvedType::GenericInstance {
             name,
             module_source,
@@ -593,12 +816,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.type_implements_trait(ctx, concrete_tid, trait_name)
             });
             if all_impl {
-                return true;
+                return record_request(name, module_source, trait_name);
             }
         }
 
-        // Generic variants auto-implement Eq when all payload types implement Eq
-        // (with type params substituted by concrete type args)
+        // Generic variants auto-implement Eq when all payload types implement
+        // Eq (with type params substituted by concrete type args). Recorded
+        // against the base declaration, same rationale as generic structs
+        // above.
         if let ResolvedType::GenericInstance {
             name,
             module_source,
@@ -621,9 +846,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.type_implements_trait(ctx, concrete_tid, trait_name)
             });
             if all_impl {
-                return true;
+                return record_request(name, module_source, trait_name);
             }
         }
+
+        // `on_bound` serde synthesis intentionally does not extend to
+        // `GenericInstance` (e.g. `Wrapper<Foo>`) — unlike `Eq`/`Ord` above.
+        // Serde's generic-struct `Deserialize` has a documented pre-existing
+        // gap where the per-field machinery doesn't substitute `type_params`
+        // (docs/wep-2026-02-28-serde.md, "Generic struct Deserialize
+        // synthesis"); recording a request here would hit it. Built-in
+        // generics (`List<T>`, `Option<T>`, …) carry their own hand-written
+        // impls regardless, found by the plain lookup below.
 
         // Get the type name and type args for looking up implementations
         let (type_name, type_args) = match &resolved {
@@ -695,10 +929,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let base_id = *base_type;
                 return self.type_implements_trait(ctx, base_id, trait_name);
             }
-            ResolvedType::Flags { name, .. } => {
+            ResolvedType::Flags {
+                name,
+                module_source,
+            } => {
                 // Check for a direct impl on the flags type first (e.g., impl Serialize for Perms)
                 if self.find_trait_impl_for_type(name, trait_name) {
                     return true;
+                }
+                // Flags have no fields (a bitmask over u32), so — like enums
+                // — they are always structurally eligible for on_bound serde
+                // traits. Record a request for the flags type itself (not
+                // just u32) so an actual `Perms::serialize` gets synthesized;
+                // the u32 fallback below still answers every other trait.
+                if is_serde(trait_name) {
+                    return record_request(name, module_source, trait_name);
                 }
                 // Fall back to u32's trait implementation
                 return self.type_implements_trait(ctx, TypeTable::U32, trait_name);
@@ -1128,6 +1373,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 for bound in bounds {
                     if !self.type_implements_trait(&self.annotate_ctx, type_arg, bound) {
                         return false;
+                    }
+                }
+            }
+        } else if let ast::Type::Tuple(elements) = impl_ty {
+            // Variadic tuple impl (`impl<..T: Trait> Trait for [..T]`, e.g.
+            // `Eq`/`Ord` for tuples in core:prelude/tuple.wado): every entry
+            // in `type_args` instantiates the same variadic parameter, so
+            // each is checked against its bounds.
+            for elem in elements {
+                let ast::Type::TypePackSpread(name, _) = elem else {
+                    continue;
+                };
+                let Some(bounds) = bounds_map.get(name.as_str()) else {
+                    continue;
+                };
+                for &type_arg in type_args {
+                    if matches!(
+                        self.tysys.type_table.borrow().get(type_arg),
+                        ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+                    ) {
+                        continue;
+                    }
+                    for bound in bounds {
+                        if !self.type_implements_trait(&self.annotate_ctx, type_arg, bound) {
+                            return false;
+                        }
                     }
                 }
             }

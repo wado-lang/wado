@@ -1,187 +1,169 @@
 # Trait Derivation Policy — Bound-Driven Synthesis
 
-Status: Draft
+Status: Implemented for `Serialize` / `Deserialize` / `Eq` / `Ord` over struct,
+variant, enum, and flags types, including anonymous structs (`Eq` / `Ord` are
+struct/variant/enum only — flags erase to `u32` and need no impl of their
+own). Not yet extended to `GenericInstance` for `Serialize` / `Deserialize`,
+or to a policy declaration for user-defined traits. See Open Questions.
 
 ## Context
 
-Wado derives type-directed traits for user types, but with two inconsistent
-**request policies** — the rule for _when_ a derived impl comes into existence
-for a type `T`:
+Wado derives type-directed traits under two inconsistent policies — the rule
+for _when_ a derived impl exists for a type `T`:
 
-- Automatic, no request: `Inspect` / `InspectAlt` are synthesized for every type;
-  `Display` / `DisplayAlt` fall back to them; `Eq` / `Ord` are derived when all
-  fields qualify; `Default` is derived when all fields have defaults. The user
-  writes nothing.
-- Explicit request: `Serialize` / `Deserialize` exist for a type only if the user
-  writes the empty marker `impl Serialize for T;`. A bare `T: Serialize` bound
-  does not bring the impl into being.
+- Automatic: `Inspect` / `InspectAlt` / `Eq` / `Ord` / `Default` synthesize
+  unconditionally for every eligible type, whether or not the program uses
+  them.
+- Explicit: `Serialize` / `Deserialize` exist only if the user writes the
+  empty marker `impl Serialize for T;`. A bare `T: Serialize` bound does not
+  trigger synthesis.
 
-This split is ad hoc. Serde forces a marker line per type — `impl Serialize for
-Foo;` — purely to satisfy bounds the compiler could discharge structurally,
-exactly as it already does for `Inspect`. `Inspect` / `Display` are effectively
-satisfied on demand; serde is the outlier that still needs a manual marker.
+The split is ad hoc: serde's marker is boilerplate the compiler could
+discharge structurally (as it already does for `Inspect`), and it makes
+anonymous-struct serialization impossible (no name to write a marker
+against). `Eq` / `Ord`, meanwhile, synthesize for every declared type
+regardless of use — compile-time and code-size waste for types the program
+never compares.
 
-This is distinct from, and composes with,
+Orthogonal to
 [Library-Defined Derivation (`Reflect`)](./wep-2026-06-13-reflect-derivation.md),
-which decides the _mechanism_ — every derivation becomes a generic library `impl`
-over a compiler-synthesized `Reflect`. That WEP answers "how is the impl written";
-this WEP answers "when is it instantiated for a given `T`". The two are
-orthogonal: once serde is a generic impl over `Reflect`, the only remaining
-question is whether a `T: Serialize` obligation may instantiate it automatically.
+which decides _how_ an impl is written. This WEP decides _when_ one is
+instantiated for a given `T`.
 
 ### Forcing functions
 
-- Ergonomics: structured logging wants `field(k, anyValue)` and structured
-  results to work without per-type marker boilerplate.
-- Anonymous structs: the efficient field path in
-  [`core:log`](./wep-2026-06-25-core-log.md) passes `{ user_id, ip }` as an
-  anonymous struct. An anonymous struct has no name, so `impl Serialize for …`
-  is unwritable. Bound-driven synthesis is the _only_ way such a value can
-  satisfy `T: Serialize`. This policy is therefore a hard prerequisite for that
-  path, not merely a convenience.
+- Anonymous structs have no name, so `impl Serialize for …` is unwritable —
+  bound-driven synthesis is the only way to satisfy `T: Serialize`. A hard
+  prerequisite for the efficient field path in
+  [`core:log`](./wep-2026-06-25-core-log.md).
+- `Eq` / `Ord` synthesizing for every declared type costs compile time and
+  code size with no compensating benefit (unlike `Inspect`, which exists so
+  `{x:?}` always works everywhere).
 
 ## Decision
 
 ### A per-trait derivation policy
 
-Introduce an explicit, named axis — the **derivation policy** — that a derivable
-trait declares. It governs only _request semantics_; the derivation body is the
-generic `Reflect`-based impl from the Reflect WEP.
+| Policy      | A `T: Trait` obligation is satisfied by …                | Examples                                                    |
+| ----------- | -------------------------------------------------------- | ----------------------------------------------------------- |
+| `automatic` | structural synthesis, always; the impl always exists     | `Inspect`, `InspectAlt`, `Display`, `DisplayAlt`, `Default` |
+| `on_bound`  | structural synthesis, on demand when a bound requires it | `Serialize`, `Deserialize`, `Eq`, `Ord` (the change)        |
+| `explicit`  | only a written `impl Trait for T;` (or full manual impl) | default for user traits                                     |
 
-| Policy      | A `T: Trait` obligation is satisfied for a derivable `T` by … | Examples (proposed)                             |
-| ----------- | ------------------------------------------------------------- | ----------------------------------------------- |
-| `automatic` | structural synthesis, always; the impl is always present      | `Inspect`, `InspectAlt`, `Eq`, `Ord`, `Default` |
-| `on_bound`  | structural synthesis, on demand when the bound requires it    | `Serialize`, `Deserialize` (the change)         |
-| `explicit`  | only a written `impl Trait for T;` (or full manual impl)      | (default for user traits)                       |
-
-Across all policies:
-
-- A hand-written `impl Trait for T { … }` always wins (the existing override
-  rule), and customization markers (`#[serde(rename_all)]`, …) attach to it.
-- The explicit marker `impl Trait for T;` remains valid for every policy. Under
-  `on_bound` it is no longer _required_, but it is still useful to force an impl
-  into existence where no bound would (a component `export` boundary, pinning
-  coherence, or documentation intent).
-- `automatic` and `on_bound` differ only in eagerness: `automatic` impls are
-  always available (so reflective tooling and `{x:?}` always work); `on_bound`
-  impls materialize only where a bound demands one, so a type never silently
-  acquires the capability unless something asks for it.
+- A hand-written `impl Trait for T { … }` always wins.
+- The explicit marker `impl Trait for T;` stays valid under every policy —
+  optional under `on_bound`, but still useful to force an impl into
+  existence with no bound present. For `Eq` / `Ord` it's also a hard
+  guarantee: a compile error if any field/case is ineligible, unlike a bound
+  (simply unsatisfied) or the structural rule (nothing to reject).
+- `automatic` and `on_bound` differ only in eagerness. For `Eq` / `Ord` this
+  is invisible at the bound-check level — `T: Eq` was already satisfied the
+  moment fields qualified, and every `==` / `<` call site is unchanged. The
+  only difference is whether a body gets emitted for a type nothing asked
+  about.
 
 ### Bound-driven synthesis semantics
 
-For a trait with `on_bound` policy, an obligation `T: Trait` is discharged as if
-a blanket `impl<T> Trait for T where T: Reflect { … }` existed (the generic body
-from the Reflect WEP), subject to:
+An `on_bound` obligation `T: Trait` is satisfied structurally: no manual impl
+exists, and every field/case of `T` satisfies `Trait` recursively. On
+failure, the error reason-chains from the bound site to the offending
+field/case ([Diagnostic Reason Chains](./wep-2026-06-02-diagnostic-reason-chains.md)).
+See [Synthesis](./compiler.md#synthesis) for the recording/generation
+mechanism.
 
-1. No applicable manual impl exists (else that wins).
-2. `T` is structurally derivable for `Trait` — every field/case type itself
-   satisfies `Trait` (recursively, via the same rule).
-3. On failure, the error reason-chains from the bound site to the offending
-   field/case, via
-   [Diagnostic Reason Chains](./wep-2026-06-02-diagnostic-reason-chains.md), e.g.
-   "`Event: Serialize` requires `Metadata: Serialize` requires `Badge: Serialize`
-   — `Badge` is not serializable and has no `impl`."
+The explicit marker differs by family: `impl Eq for T;` / `impl Ord for T;`
+validates `T` structurally before recording and is a hard compile error if
+ineligible. Serde's marker does not pre-validate (a gap; see Open
+Questions).
 
-This is whole-program and monomorphized; there is no orphan rule to violate
-because there are no separately-compiled crates. Synthesis happens once per
-`(trait, type)` actually required, so no dead impls are emitted (consistent with
-[Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md)).
+Whole-program and monomorphized, so there's no orphan rule to violate.
+`GenericInstance` is out of scope for `Serialize` / `Deserialize` —
+elaboration only sees the generic template, so a request keyed by a concrete
+instantiation wouldn't resolve to a body (the same gap
+[Serde](./wep-2026-02-28-serde.md) tracks for generic-struct `Deserialize`).
+`Eq` / `Ord` are unaffected: their generic synthesis predates this WEP and
+already records against the base declaration.
 
 ### Policy assignment
 
-- `Inspect` / `InspectAlt` / `Eq` / `Ord` / `Default` stay `automatic` —
-  unchanged behavior; this WEP only _names_ what they already do.
-- `Serialize` / `Deserialize` move from `explicit` to `on_bound`. This is the
-  substantive change: the marker `impl Serialize for T;` becomes optional, and
-  any `T: Serialize` bound (including from an anonymous struct) is satisfiable.
-- User-defined derivable traits default to `explicit`, and may opt into
-  `automatic` / `on_bound` (the declaration syntax is an open question below).
+- `Inspect` / `InspectAlt` / `Default` stay `automatic` — no behavior change.
+- `Serialize` / `Deserialize` move from `explicit` to `on_bound`.
+- `Eq` / `Ord` move from `automatic` to `on_bound`: an impl is generated only
+  for a `(type, trait)` pair some call site, bound, or marker actually
+  demands.
+- User-defined traits default to `explicit`; opting into `automatic` /
+  `on_bound` is an open question (see below).
 
-### The trust-boundary opt-out
+### The trust boundary
 
-`Serialize` / `Deserialize` cross a data boundary (wire, storage), so making them
-`on_bound` means a type becomes serializable the moment some code asks — and a
-later field addition silently extends the wire shape. This is precisely why Rust
-`serde` and Swift `Codable` are opt-in, and why `Inspect` (debug-only, low stakes)
-being automatic is not a precedent that transfers for free.
+`Serialize` / `Deserialize` cross a wire/storage boundary, so `on_bound`
+means a type becomes serializable the moment some code asks, and a later
+field addition silently extends the wire shape — why Rust `serde` and Swift
+`Codable` are opt-in. Wado accepts the trade-off: its whole-program model has
+no downstream consumers to surprise. A manual impl or field-level `#[hidden]`
+remain the levers for tighter control; no dedicated opt-out is introduced.
 
-Mitigations keep `on_bound` safe:
-
-- A type-level opt-out (e.g. `#[no_derive(Serialize, Deserialize)]`) makes a
-  `T: Serialize` bound fail with a clear "opted out" message instead of
-  synthesizing — for types that must never cross the boundary.
-- Field-level `#[hidden]` (already honored by `Inspect`) excludes a field from
-  the synthesized serialization, the existing redaction lever.
-- A manual impl always overrides, for full control.
-
-Wado's whole-program model (no published crates, no downstream consumers who
-could be surprised by a wire-shape change) materially lowers the risk relative to
-Rust. The recommendation is `on_bound` with the opt-out; whether the opt-out
-should instead be opt-_in_ for `Deserialize` (the untrusted-input direction,
-which also carries `#[validate]` enforcement) is the main open decision.
+`Eq` / `Ord` cross no data boundary — `on_bound` only changes _when_ their
+impl is generated, never what any `==` / `<` call site returns. Their
+motivation is pure compile-time / code size, with no opt-out to weigh.
 
 ## Consequences
 
 ### Benefits
 
-- One uniform model replaces the current ad-hoc split; each derivable trait has a
-  declared, legible policy.
-- Removes serde's per-type marker boilerplate, matching the zero-ceremony
-  experience of `Inspect`.
-- Unblocks anonymous-struct serialization, a prerequisite for the efficient field
-  path in [`core:log`](./wep-2026-06-25-core-log.md).
-- No macros, no dynamic reflection; synthesis stays static and monomorphized,
-  reusing the Reflect mechanism.
+- One uniform model replaces the ad-hoc split.
+- Removes serde's per-type marker boilerplate and unblocks anonymous-struct
+  serialization.
+- Removes `Eq` / `Ord` compile-time and code-size waste on types the program
+  never compares.
+- No macros, no dynamic reflection; synthesis stays static and monomorphized.
 
 ### Trade-offs
 
-- `Serialize` / `Deserialize` crossing to `on_bound` weakens the explicit opt-in
-  that today bounds the wire surface; the opt-out and `#[hidden]` are the
-  countermeasures, and they are weaker than opt-in.
-- Errors move from the (absent) impl site to the bound site; reason chains are
-  what keep them legible.
-- Coherence: a policy-driven blanket synthesis must not conflict with concrete
-  impls (e.g. a primitive's own `impl Serialize`). This rides on the coherence
-  rules still open in the Reflect / variadic WEPs (concrete-impl-wins,
-  no-overlap) and does not add a new coherence regime of its own.
+- `Serialize` / `Deserialize` crossing to `on_bound` weakens the opt-in that
+  bounds the wire surface today; `#[hidden]` and a manual impl are the only
+  countermeasures.
+- Errors move from the (absent) impl site to the bound site; reason chains
+  keep them legible.
+- A future `Reflect`-based rewrite of the synthesized body must not let a
+  blanket `impl<T: Reflect> Trait for T` conflict with concrete impls — an
+  open coherence question the shipped mechanism doesn't hit yet, since it
+  instantiates the existing per-type synthesizer directly.
+- `Eq` / `Ord` no longer exist "for free" without a direct use site; a type
+  intended for future comparison needs the explicit marker to guarantee the
+  impl in advance.
 
 ### Relationship and prerequisites
 
-- Mechanism: [`Reflect` derivation](./wep-2026-06-13-reflect-derivation.md) §1–§3
-  (Reflect synthesis + metadata) and §5 (serde migrated to a generic impl over
-  `Reflect`). Bound-driven synthesis is "instantiate that generic impl at the
-  bound site," so it is a thin policy layer on top and should land after the
-  serde-over-Reflect migration.
-- Diagnostics: [reason chains](./wep-2026-06-02-diagnostic-reason-chains.md) for
-  the field-level failure path.
+Ships directly against the existing bespoke synthesizers
+(`synthesis::serde_synth`, `synthesis::traits`), not against
+[`Reflect`](./wep-2026-06-13-reflect-derivation.md), which remains unbuilt.
+The original plan was to land this after migrating serde onto a
+`Reflect`-based impl, but the two turned out independent — this WEP only
+changes _when_ a request is created, not _how_ the body is written. A future
+`Reflect`-based rewrite can land later against the same plumbing.
 
 ## Alternatives Considered
 
-### Keep `Serialize` explicit (status quo)
-
-Lowest risk, strongest wire-surface discipline, but inconsistent with the
-automatic traits, boilerplate-heavy, and — decisively — makes anonymous-struct
-serialization impossible (no name to mark). Rejected as the long-term model.
-
-### Make every derivable trait `automatic`
-
-Maximum ergonomics, but erases the trust-boundary distinction entirely; a private
-type silently becomes wire-serializable with no opt-out point. Rejected; the
-policy axis exists precisely to treat `Inspect` and `Serialize` differently.
-
-### A `#[derive(Serialize)]` attribute
-
-The Rust/Go-macro shape. Rejected: Wado has no derive macros, and the Reflect
-mechanism already makes derivation a library impl — a triggering attribute would
-duplicate what an `on_bound` policy expresses without one, and `impl Serialize
-for T;` already serves as the explicit-request form when one is wanted.
+- **Keep `Serialize` explicit (status quo).** Lowest risk, but inconsistent
+  with the automatic traits and makes anonymous-struct serialization
+  impossible. Rejected.
+- **Make every derivable trait `automatic`.** Maximum ergonomics, but erases
+  the trust-boundary distinction — a private type would silently become
+  wire-serializable with no opt-out. Rejected.
+- **A `#[derive(Serialize)]` attribute.** Wado has no derive macros, and
+  `impl Serialize for T;` already serves as the explicit form. Rejected.
+- **Keep `Eq` / `Ord` automatic (status quo).** Simplest, but pays synthesis
+  cost for every declared type regardless of use, with no offsetting
+  benefit. Rejected.
 
 ## Open Questions
 
-- Declaration syntax for a trait's policy (an attribute on the trait? a keyword?
-  a property of being `Reflect`-derivable?).
-- `Deserialize` direction: `on_bound` with opt-out, or opt-in, given it ingests
-  untrusted data and carries `#[validate]` enforcement.
-- Opt-out spelling (`#[no_derive(...)]` vs other) and whether it is per-trait.
-- Coherence interaction with concrete impls, inherited from the Reflect /
-  variadic coherence items.
+- Declaration syntax for a user-defined trait's policy.
+- `GenericInstance` is not yet `on_bound`-eligible for `Serialize` /
+  `Deserialize` (`Eq` / `Ord` are unaffected).
+- `Serialize` / `Deserialize`'s explicit marker does not pre-validate
+  structurally the way `Eq` / `Ord`'s does — whether to close this gap is
+  open.
+- Coherence interaction with concrete impls, relevant once a `Reflect`-based
+  rewrite of the synthesized body lands.

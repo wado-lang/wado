@@ -1,13 +1,16 @@
-// Test: compile error when Deserialize is not implemented for a type
-use { Deserialize } from "core:serde";
+// Test: compile error when a struct field's type cannot be deserialized.
+// A plain data field would now satisfy `Deserialize` structurally
+// (bound-driven synthesis, WEP: Trait Derivation Policy) with no explicit impl
+// required, so this uses a field type — a function — that can never
+// implement Deserialize.
 use { from_string } from "core:json";
 
 struct NoDeserialize {
-    value: i32,
+    cb: fn(i32) -> i32,
 }
 
 export fn run() {
-    let r = from_string::<NoDeserialize>(`\{"value":42\}`);
+    let r = from_string::<NoDeserialize>(`\{"cb":null\}`);
 }
 
 __DATA__

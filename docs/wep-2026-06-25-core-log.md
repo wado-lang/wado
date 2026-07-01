@@ -381,7 +381,7 @@ shows up. Only the field argument changes, so it is an internal swap.
       sinks (`TextSink`, `JsonSink`, `NopSink`, `CaptureSink`), layers (`Context`,
       `Filter`), the `#[param]` level globals, and a stdlib bootstrap that
       installs the default sink at the entry point.
-- [ ] Optional (ergonomics): bound-driven serde derivation
+- [x] Optional (ergonomics): bound-driven serde derivation
       ([Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md)).
 - [ ] Efficient field passing (perf-gated): anonymous structs, erased serde, serde flatten.
 - [ ] Automatic cross-task current-span propagation (async-gated).

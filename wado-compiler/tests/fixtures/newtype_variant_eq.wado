@@ -1,0 +1,20 @@
+// Regression: a newtype/alias over a variant type must dispatch `==`/`<`
+// through the same Variant-Eq/Ord path a direct variant comparison uses.
+// The newtype's ultimate-base match previously only recognized Struct /
+// GenericInstance, so a variant base fell through to a raw primitive
+// compare on GC struct refs and crashed the compiler (ICE).
+
+variant Shape {
+    Circle(i32),
+    Point,
+}
+
+type ShapeAlias = Shape;
+
+test "newtype of a variant dispatches Eq correctly" {
+    let a = Shape::Circle(1) as ShapeAlias;
+    let b = Shape::Circle(1) as ShapeAlias;
+    let c = Shape::Point as ShapeAlias;
+    assert a == b;
+    assert a != c;
+}

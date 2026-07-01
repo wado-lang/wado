@@ -1,0 +1,17 @@
+// Test: variants derive `Eq` only, never `Ord` — an explicit `impl Ord for
+// T;` marker on a variant must be rejected at the marker's own span, not
+// silently accepted and left to fail later at a `<`/`>` use site.
+variant Shape {
+    Circle(i32),
+    Point,
+}
+
+impl Ord for Shape;
+
+export fn run() {
+    let a = Shape::Circle(1);
+    let _ = a;
+}
+
+__DATA__
+{"compile_error": "cannot derive `Ord` for `Shape`: not every field/case implements `Ord`"}

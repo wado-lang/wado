@@ -7,15 +7,16 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::compiler_item::{CompilerItem, CompilerItems};
-use crate::hashmap::IndexSet;
+use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName, mangle_local_trait_method};
 use crate::package::Package;
 use crate::tir::{
-    CallArg, FunctionKind, FunctionRef, InlineHint, SynthTrait, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt,
-    TirStmtKind, TirStructField, TirTemplatePart, TirTypeParam, TypeId, TypeTable,
+    CallArg, FunctionKind, FunctionRef, InlineHint, ResolvedType, SynthTrait, SynthesisRequest,
+    TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm, TirModule,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirStructField, TirTemplatePart, TirTypeParam,
+    TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -384,6 +385,8 @@ fn serialized_case_name(
 }
 
 pub fn synthesize_serde(project: &mut Package) {
+    distribute_bound_driven_requests(project);
+
     for module in project.tir_modules.values_mut() {
         let requests: Vec<_> = module.synthesis_requests.drain(..).collect();
         if requests.is_empty() {
@@ -448,6 +451,106 @@ pub fn synthesize_serde(project: &mut Package) {
         }
 
         module.functions.extend(generated);
+    }
+}
+
+/// Distribute bound-driven `Serialize` / `Deserialize` requests (WEP
+/// 2026-06-25-trait-derivation) into the `synthesis_requests` of each
+/// request's own defining module — exactly where an explicit
+/// `impl Trait for T;` marker's request already lives — so the drain loop
+/// above sees one uniform list regardless of which path produced an entry.
+///
+/// Reads `TypeTable::bound_driven_synth_requests` as a snapshot, not a
+/// drain: `synthesis::traits::synthesize_traits` reads the same shared set
+/// for its `Eq` / `Ord` entries, so this pass only consumes the `Serialize`
+/// / `Deserialize` ones (matched by trait name) and leaves the rest.
+fn distribute_bound_driven_requests(project: &mut Package) {
+    let Some(type_table) = project
+        .tir_modules
+        .values()
+        .next()
+        .map(|m| m.type_table.clone())
+    else {
+        return;
+    };
+
+    let (serialize_name, deserialize_name) = {
+        let tt = type_table.borrow();
+        let items = tt.compiler_items();
+        (
+            items
+                .trait_name_opt(CompilerItem::Serialize)
+                .map(str::to_string),
+            items
+                .trait_name_opt(CompilerItem::Deserialize)
+                .map(str::to_string),
+        )
+    };
+
+    // Fetch and filter to just ours (Eq/Ord entries belong to
+    // `synthesize_traits`) before the scan below, so a program with no
+    // bound-driven serde requests skips it entirely.
+    let requests = type_table
+        .borrow()
+        .bound_driven_synth_requests(|trait_name| {
+            Some(trait_name) == serialize_name.as_deref()
+                || Some(trait_name) == deserialize_name.as_deref()
+        });
+    if requests.is_empty() {
+        return;
+    }
+
+    // One pass to resolve every declared struct/enum/variant/flags name to
+    // its `TypeId` (`SynthesisRequest` needs one), instead of an O(requests
+    // × types) rescan per entry.
+    let by_name: IndexMap<(String, ModuleSource), TypeId> = {
+        let tt = type_table.borrow();
+        tt.all_types()
+            .filter_map(|(id, resolved)| match resolved {
+                ResolvedType::Struct {
+                    name,
+                    module_source,
+                    ..
+                }
+                | ResolvedType::Enum {
+                    name,
+                    module_source,
+                }
+                | ResolvedType::Variant {
+                    name,
+                    module_source,
+                }
+                | ResolvedType::Flags {
+                    name,
+                    module_source,
+                } => Some(((name.clone(), module_source.clone()), id)),
+                _ => None,
+            })
+            .collect()
+    };
+
+    for (target_type_name, module_source, trait_name) in requests {
+        // `requests` is already filtered to serialize_name/deserialize_name,
+        // so the else branch below is always Deserialize.
+        let trait_ref = if Some(trait_name.as_str()) == serialize_name.as_deref() {
+            SynthTrait::Serialize
+        } else {
+            SynthTrait::Deserialize
+        };
+        let Some(&target_type_id) = by_name.get(&(target_type_name.clone(), module_source.clone()))
+        else {
+            continue;
+        };
+        let Some(module) = project.tir_modules.get_mut(&module_source) else {
+            continue;
+        };
+        module.synthesis_requests.push(SynthesisRequest {
+            trait_ref,
+            target_type_name,
+            target_type_id,
+            type_params: Vec::new(),
+            span: Span::default(),
+        });
     }
 }
 

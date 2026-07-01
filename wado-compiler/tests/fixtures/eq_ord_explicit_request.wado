@@ -1,0 +1,83 @@
+// Test: explicit `impl Eq for T;` / `impl Ord for T;` markers (WEP: Trait
+// Derivation Policy) force the derive into existence and are otherwise
+// interchangeable with the structural (bound-driven) auto-derive.
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Eq for Point;
+impl Ord for Point;
+
+test "explicit Eq marker works like auto-derive" {
+    let a = Point { x: 1, y: 2 };
+    let b = Point { x: 1, y: 2 };
+    let c = Point { x: 3, y: 4 };
+    assert a == b;
+    assert a != c;
+}
+
+test "explicit Ord marker works like auto-derive" {
+    let a = Point { x: 1, y: 2 };
+    let b = Point { x: 3, y: 4 };
+    assert a < b;
+    assert b > a;
+}
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+impl Eq for Color;
+impl Ord for Color;
+
+test "explicit Eq/Ord markers on an enum" {
+    assert Color::Red == Color::Red;
+    assert Color::Red != Color::Blue;
+    assert Color::Red < Color::Blue;
+}
+
+type Meters = f64;
+
+impl Eq for Meters;
+
+test "explicit Eq marker on a newtype delegates to its base type" {
+    let a = 1.0 as Meters;
+    let b = 1.0 as Meters;
+    let c = 2.0 as Meters;
+    assert a == b;
+    assert a != c;
+}
+
+flags Perms {
+    Read,
+    Write,
+    Execute,
+}
+
+impl Eq for Perms;
+impl Ord for Perms;
+
+test "explicit Eq/Ord markers on flags delegate to u32" {
+    let a = Perms::Read;
+    let b = Perms::Read;
+    assert a == b;
+    assert a != Perms::Write;
+}
+
+struct Pair<T> {
+    tag: i32,
+    value: T,
+}
+
+impl<T> Eq for Pair<T>;
+
+test "explicit Eq marker on a generic struct with an unconstrained param" {
+    let a = Pair { tag: 1, value: 42 };
+    let b = Pair { tag: 1, value: 42 };
+    let c = Pair { tag: 1, value: 7 };
+    assert a == b;
+    assert a != c;
+}

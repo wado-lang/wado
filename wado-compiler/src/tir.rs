@@ -655,6 +655,19 @@ pub struct TypeTable {
     ///
     /// A sparse [`TypeMap`] keyed by the decl-backed `TypeId`.
     symbol_by_type: TypeMap<crate::ast::AstId>,
+    /// `(type_name, module, trait_name)` triples that satisfied a `T:
+    /// Serialize` / `T: Deserialize` / `T: Eq` / `T: Ord` bound structurally
+    /// during elaboration (bound-driven synthesis, see
+    /// `docs/wep-2026-06-25-trait-derivation.md`). Keyed nominally, not by
+    /// `TypeId`, so a generic struct/variant records once against its own
+    /// declaration regardless of instantiation count.
+    ///
+    /// Lives on the one `TypeTable` every module's `Rc<RefCell<…>>` handle
+    /// shares, since elaboration runs one fresh `Elaborator` per module.
+    /// Read by both `synthesis::serde_synth::synthesize_serde` and
+    /// `synthesis::traits::synthesize_traits`, each filtering for the trait
+    /// names it owns.
+    bound_driven_synth_requests: IndexSet<(String, ModuleSource, String)>,
 }
 
 impl Default for TypeTable {
@@ -740,6 +753,7 @@ impl TypeTable {
             struct_name_index: IndexMap::default(),
             type_by_symbol: IndexMap::default(),
             symbol_by_type: TypeMap::default(),
+            bound_driven_synth_requests: IndexSet::default(),
         };
 
         // Pre-populate primitive types matching the constants above
@@ -1033,6 +1047,47 @@ impl TypeTable {
     /// declaration.
     pub fn compiler_items_mut(&mut self) -> &mut crate::compiler_item::CompilerItems {
         &mut self.compiler_items
+    }
+
+    /// Record that `type_name` (declared in `module_source`) satisfied a
+    /// `T: <trait_name>` bound structurally (bound-driven synthesis). A
+    /// no-op if already recorded for this triple — the same type is
+    /// typically rediscovered from many call sites, so the pre-check
+    /// avoids reallocating the key each time.
+    pub fn record_bound_driven_synth_request(
+        &mut self,
+        type_name: &str,
+        module_source: &ModuleSource,
+        trait_name: &str,
+    ) {
+        let already_recorded = self
+            .bound_driven_synth_requests
+            .iter()
+            .any(|(n, m, t)| n == type_name && m == module_source && t == trait_name);
+        if !already_recorded {
+            self.bound_driven_synth_requests.insert((
+                type_name.to_string(),
+                module_source.clone(),
+                trait_name.to_string(),
+            ));
+        }
+    }
+
+    /// Requests recorded by [`Self::record_bound_driven_synth_request`] so
+    /// far whose trait name satisfies `matches`. A snapshot, not a drain:
+    /// `synthesize_serde` and `synthesize_traits` each read this same
+    /// shared set and filter for the trait names they own, so consuming it
+    /// here would drop whichever runs second. Filtering before cloning
+    /// means each caller only clones the entries it keeps.
+    pub fn bound_driven_synth_requests(
+        &self,
+        mut matches: impl FnMut(&str) -> bool,
+    ) -> Vec<(String, ModuleSource, String)> {
+        self.bound_driven_synth_requests
+            .iter()
+            .filter(|(_, _, trait_name)| matches(trait_name))
+            .cloned()
+            .collect()
     }
 
     /// Canonical name of a registered struct / trait / variant / enum
