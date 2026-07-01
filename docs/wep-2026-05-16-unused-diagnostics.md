@@ -37,11 +37,6 @@ The reachability roots for "unused" in Wado are not what rustc uses:
   monomorphisation clones, auto-derived impls) are not source-authored
   and must not be reported regardless of reachability.
 
-(This WEP originally predates the `pub` / `internal` split introduced by
-[Visibility](./wep-2026-06-25-visibility-internal-pub-export.md); at the time
-`pub` named the package-internal scope now called `internal`. The root
-policy below reflects the current ladder.)
-
 Without explicit lints, three problems persist: silent dead code
 accumulates across refactors, unused imports pollute namespace
 resolution and slow type checking, and the LSP cannot offer the
@@ -141,24 +136,17 @@ monomorphisation clones, auto-derived impls — are not in `Semantics` at all
 appear in either the live set or the unused set. The optimize-time DCE
 continues to remove them silently.
 
-`pub` (`Visibility::Public`) _is_ a root, exactly like `export`. This is the
-one place the two root sets intentionally diverge: `optimize/dce.rs` strips
-dead code from a single compiled artifact, and a Wado-to-Wado dependency is
-today always consumed from source (see [Package Manifest](./wep-2026-02-14-package-manifest.md) §"Wado-to-Wado
-Optimization"), so a `pub` item the consumer's own build never reaches is
-genuinely dead in _that_ artifact — the consumer recompiles the dependency
-and captures real reachability from its own roots. Preserving `pub` items in
-a standalone published `.wasm` (the not-yet-implemented provider-metadata
-path) is deferred; `compute_reachable_from_entries` will need a matching
-`pub` root when it lands.
+`pub` (`Visibility::Public`) _is_ a root, exactly like `export`. The one
+divergence from `optimize/dce.rs`: a Wado-to-Wado dependency is today always
+consumed from source (see [Package Manifest](./wep-2026-02-14-package-manifest.md)
+§"Wado-to-Wado Optimization"), so `compute_reachable_from_entries` does not
+root `pub` yet — the consumer's own build supplies real reachability from
+its own roots. Preserving `pub` for a standalone published `.wasm` (provider
+metadata) is deferred.
 
-`internal` (`Visibility::Internal`) is never a root — it is package-internal
-visibility, never package-external API, so an unreferenced `internal fn` is
-dead code regardless of the entry-point kind. Before the `pub` / `internal`
-split (see
-[Visibility](./wep-2026-06-25-visibility-internal-pub-export.md)), `pub`
-itself played this exact role; this is a straight rename, not a policy
-change to `internal`.
+`internal` (`Visibility::Internal`) is never a root: it is package-internal
+visibility only, so an unreferenced `internal fn` is dead code regardless of
+entry-point kind.
 
 ### Stdlib exclusion
 
@@ -597,8 +585,3 @@ through the diagnostics path.
   `liveness` only consults edges recorded during `annotate`; adding
   new edge kinds is part of the language feature that introduces
   them.
-- Risk: users coming from Rust expect `pub fn` in a `lib` package to be a
-  public API root — since the `pub` / `internal` split
-  ([Visibility](./wep-2026-06-25-visibility-internal-pub-export.md)) this is
-  exactly what `pub` is; `internal fn` is the package-internal case Rust
-  users should instead expect to see reported dead when unreferenced.

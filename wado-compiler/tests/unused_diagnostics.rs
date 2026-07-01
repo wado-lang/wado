@@ -341,10 +341,8 @@ test "unrelated" {
 
 #[test]
 fn pub_function_with_no_caller_is_not_reported() {
-    // Since wep-2026-06-25-visibility-internal-pub-export.md, `pub` crosses
-    // the package boundary (the Wado-native library API) exactly like
-    // `export` crosses the CM boundary, so it is a liveness root even with no
-    // in-package caller.
+    // `pub` crosses the package boundary (the Wado-native library API), like
+    // `export` crosses the CM boundary, so it is a liveness root.
     let diags = unused_for(
         r#"
 pub fn library_api() -> i32 { return 1; }
@@ -375,9 +373,8 @@ export fn run() {}
 
 #[test]
 fn internal_function_with_no_caller_is_reported_dead() {
-    // `internal` is package-internal only (the role `pub` used to play before
-    // the 2026-06-25 visibility redesign), so it is not a root: an
-    // unreferenced `internal fn` is still dead code.
+    // `internal` is package-internal-only visibility, not a liveness root:
+    // an unreferenced `internal fn` is still dead code.
     let diags = unused_for(
         r#"
 internal fn helper() -> i32 { return 1; }

@@ -4,10 +4,8 @@
 //! [`wep-2026-05-16-unused-diagnostics.md`] (policy) and
 //! [`wep-2026-05-26-elaborator-rearchitecture.md`] (mechanism). The pass
 //! runs after `annotate_bodies` and before `reify`, computing source-level
-//! reachability from the package-external boundary — `pub` and `export`
-//! items (see
-//! [`wep-2026-06-25-visibility-internal-pub-export.md`]) — over the call
-//! graph the elaborator recorded in `references`.
+//! reachability from the package-external boundary (`pub` and `export`
+//! items) over the call graph the elaborator recorded in `references`.
 //!
 //! # Current scope
 //!
@@ -41,11 +39,11 @@ use crate::token::Span;
 
 /// Result of the source-level liveness analysis.
 ///
-/// Reachability is computed from two independent root sets over the same call
-/// graph: `E` = reachable from production roots (world exports, `pub` /
-/// `export` items, `#[export]`, methods, struct-field defaults), `T` =
-/// reachable from `test` blocks. Each
-/// user-authored free function / global is then classified:
+/// Reachability is computed from two independent root sets over the same
+/// call graph: `E` = reachable from production roots (world exports, `pub`
+/// / `export` items, `#[export]`, methods, struct-field defaults), `T` =
+/// reachable from `test` blocks. Each user-authored free function / global
+/// is then classified:
 ///
 /// - **live** (`∈ E`): used by production. Not reported.
 /// - **test-only** (`∈ T \ E`): used by tests but not production → `test_only_items`.
@@ -95,11 +93,9 @@ pub(crate) fn compute(
                 Item::Function(func) => {
                     let key = func.id;
                     graph.add_function_edges(func, references, &key);
-                    // `export` forces `Visibility::Public` at parse time
-                    // (`export ⟹ pub`), so checking visibility also covers it;
-                    // `has_export_attr` / `world_export_names` catch roots that
-                    // carry no visibility modifier at all (a raw Wasm export,
-                    // or a misdeclared entry point missing `export`/`pub`).
+                    // `export` implies `Visibility::Public`, so this subsumes
+                    // `is_export`; the other two catch roots with no visibility
+                    // modifier (a raw Wasm export, or a misdeclared entry point).
                     if func.visibility.is_public()
                         || has_export_attr(func)
                         || world_export_names.contains(&func.name)
