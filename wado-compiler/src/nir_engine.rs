@@ -42,6 +42,41 @@ pub struct LocalUses {
     pub reads: Vec<ExprId>,
 }
 
+/// Route `node` to its slot among 4 parallel per-arena-kind slices. The
+/// shared dispatch behind every dense per-node buffer in this module (parent
+/// links, in-worklist bits): a `NodeRef` names one of 4 arenas, so a lookup
+/// always reduces to "pick the matching slice, index by the id".
+fn arena_slot<'a, T>(
+    node: NodeRef,
+    exprs: &'a [T],
+    stmts: &'a [T],
+    blocks: &'a [T],
+    pats: &'a [T],
+) -> &'a T {
+    match node {
+        NodeRef::Expr(id) => &exprs[id.index()],
+        NodeRef::Stmt(id) => &stmts[id.index()],
+        NodeRef::Block(id) => &blocks[id.index()],
+        NodeRef::Pat(id) => &pats[id.index()],
+    }
+}
+
+/// Mutable counterpart of [`arena_slot`].
+fn arena_slot_mut<'a, T>(
+    node: NodeRef,
+    exprs: &'a mut [T],
+    stmts: &'a mut [T],
+    blocks: &'a mut [T],
+    pats: &'a mut [T],
+) -> &'a mut T {
+    match node {
+        NodeRef::Expr(id) => &mut exprs[id.index()],
+        NodeRef::Stmt(id) => &mut stmts[id.index()],
+        NodeRef::Block(id) => &mut blocks[id.index()],
+        NodeRef::Pat(id) => &mut pats[id.index()],
+    }
+}
+
 /// The reusable scratch buffers an [`Engine`] session needs: the parent map,
 /// use index, and worklist. Constructing an engine for every dirty function in
 /// every engine-based pass — `peephole` twice per fixed-point iteration,
@@ -73,11 +108,11 @@ pub struct EngineBuffers {
 }
 
 impl EngineBuffers {
-    /// Clear every buffer and size the parent / queued-bit maps to `body`'s
-    /// current node counts, readying them for a fresh session. Capacity is
-    /// retained, so a reused `EngineBuffers` allocates only when a body is
-    /// larger than any seen before.
-    fn reset_for(&mut self, body: &Body) {
+    /// Clear every buffer and size the parent / queued-bit / use-index maps to
+    /// `body`'s current node and local counts, readying them for a fresh
+    /// session. Capacity is retained, so a reused `EngineBuffers` allocates
+    /// only when a body is larger than any seen before.
+    fn reset_for(&mut self, body: &Body, local_count: usize) {
         let fill = |v: &mut Vec<Option<NodeRef>>, len: usize| {
             v.clear();
             v.resize(len, None);
@@ -94,7 +129,12 @@ impl EngineBuffers {
         fill_bit(&mut self.stmt_queued, body.stmts.len());
         fill_bit(&mut self.block_queued, body.blocks.len());
         fill_bit(&mut self.pat_queued, body.pats.len());
+        // Pre-sized to `local_count` like the vecs above, so `build_uses`
+        // (which visits locals in body order, not index order) doesn't grow
+        // `uses` through several reallocations; `uses_entry` still grows it
+        // further on demand for a local `alloc_local`d past this count.
         self.uses.clear();
+        self.uses.resize_with(local_count, LocalUses::default);
         self.worklist.clear();
     }
 
@@ -110,22 +150,24 @@ impl EngineBuffers {
 
     /// Whether `node` currently has an in-worklist bit set.
     fn is_queued(&self, node: NodeRef) -> bool {
-        match node {
-            NodeRef::Expr(id) => self.expr_queued[id.index()],
-            NodeRef::Stmt(id) => self.stmt_queued[id.index()],
-            NodeRef::Block(id) => self.block_queued[id.index()],
-            NodeRef::Pat(id) => self.pat_queued[id.index()],
-        }
+        *arena_slot(
+            node,
+            &self.expr_queued,
+            &self.stmt_queued,
+            &self.block_queued,
+            &self.pat_queued,
+        )
     }
 
     /// Set `node`'s in-worklist bit.
     fn set_queued(&mut self, node: NodeRef, value: bool) {
-        match node {
-            NodeRef::Expr(id) => self.expr_queued[id.index()] = value,
-            NodeRef::Stmt(id) => self.stmt_queued[id.index()] = value,
-            NodeRef::Block(id) => self.block_queued[id.index()] = value,
-            NodeRef::Pat(id) => self.pat_queued[id.index()] = value,
-        }
+        *arena_slot_mut(
+            node,
+            &mut self.expr_queued,
+            &mut self.stmt_queued,
+            &mut self.block_queued,
+            &mut self.pat_queued,
+        ) = value;
     }
 }
 
@@ -200,7 +242,7 @@ impl<'a> Engine<'a> {
         buf: &'a mut EngineBuffers,
         locals: &'a mut Vec<NirLocal>,
     ) -> Self {
-        buf.reset_for(body);
+        buf.reset_for(body, locals.len());
         let mut engine = Self {
             body,
             buf,
@@ -580,11 +622,9 @@ impl<'a> Engine<'a> {
             pat_parent,
             ..
         } = &mut *self.buf;
-        let mut set = |child: NodeRef, parent: NodeRef| match child {
-            NodeRef::Expr(id) => expr_parent[id.index()] = Some(parent),
-            NodeRef::Stmt(id) => stmt_parent[id.index()] = Some(parent),
-            NodeRef::Block(id) => block_parent[id.index()] = Some(parent),
-            NodeRef::Pat(id) => pat_parent[id.index()] = Some(parent),
+        let mut set = |child: NodeRef, parent: NodeRef| {
+            *arena_slot_mut(child, expr_parent, stmt_parent, block_parent, pat_parent) =
+                Some(parent);
         };
         for id in body.exprs.keys() {
             let parent = NodeRef::Expr(id);
@@ -676,12 +716,13 @@ impl<'a> Engine<'a> {
     /// The parent of a node (the nearest id-bearing ancestor), or `None` for
     /// the body root.
     pub fn parent_of(&self, node: NodeRef) -> Option<NodeRef> {
-        match node {
-            NodeRef::Expr(id) => self.buf.expr_parent[id.index()],
-            NodeRef::Stmt(id) => self.buf.stmt_parent[id.index()],
-            NodeRef::Block(id) => self.buf.block_parent[id.index()],
-            NodeRef::Pat(id) => self.buf.pat_parent[id.index()],
-        }
+        *arena_slot(
+            node,
+            &self.buf.expr_parent,
+            &self.buf.stmt_parent,
+            &self.buf.block_parent,
+            &self.buf.pat_parent,
+        )
     }
 
     /// Every `Local { index }` expression node naming `local`.
@@ -714,12 +755,13 @@ impl<'a> Engine<'a> {
     }
 
     fn set_parent(&mut self, child: NodeRef, parent: Option<NodeRef>) {
-        match child {
-            NodeRef::Expr(id) => self.buf.expr_parent[id.index()] = parent,
-            NodeRef::Stmt(id) => self.buf.stmt_parent[id.index()] = parent,
-            NodeRef::Block(id) => self.buf.block_parent[id.index()] = parent,
-            NodeRef::Pat(id) => self.buf.pat_parent[id.index()] = parent,
-        }
+        *arena_slot_mut(
+            child,
+            &mut self.buf.expr_parent,
+            &mut self.buf.stmt_parent,
+            &mut self.buf.block_parent,
+            &mut self.buf.pat_parent,
+        ) = parent;
     }
 
     /// Edit API: rewrite an expression node's kind in place. The id is stable,
@@ -1705,5 +1747,75 @@ mod tests {
             popped += 1;
         }
         assert_eq!(popped, total);
+    }
+
+    /// `alloc_block`/`alloc_pat` push a `false` into `block_queued`/`pat_queued`
+    /// alongside the existing `block_parent`/`pat_parent` push. Neither path is
+    /// exercised by any other test (`clone_expr_deep_copies_into_fresh_nodes`
+    /// only clones a `Binary` over literal operands, never reaching
+    /// `clone_block`/`clone_pat`), so a regression that drops or reorders the
+    /// `_queued` push would panic here (out-of-bounds index in `enqueue`'s
+    /// `is_queued` check) instead of on real optimizer input.
+    #[test]
+    fn alloc_block_and_alloc_pat_extend_the_queued_bitsets() {
+        let mut body = sample_body();
+        let mut __buf_eng = EngineBuffers::default();
+        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
+        // Drain the worklist seeded at construction so only the freshly
+        // `alloc_*`'d nodes remain below.
+        while eng.pop().is_some() {}
+
+        let new_block = eng.alloc_block(Vec::new(), Span::default());
+        let new_pat = eng.alloc_pat(PatKind::Wildcard, Span::default());
+
+        // Fresh nodes start unparented — `alloc_block`/`alloc_pat` only parent
+        // their *children* (there are none here), not themselves.
+        assert_eq!(eng.parent_of(NodeRef::Block(new_block)), None);
+        assert_eq!(eng.parent_of(NodeRef::Pat(new_pat)), None);
+
+        // Both were enqueued by their `alloc_*` call; draining the worklist
+        // must surface exactly them, in allocation order.
+        let mut popped = Vec::new();
+        while let Some(n) = eng.pop() {
+            popped.push(n);
+        }
+        assert_eq!(
+            popped,
+            vec![NodeRef::Block(new_block), NodeRef::Pat(new_pat)]
+        );
+    }
+
+    /// `uses_entry` grows `EngineBuffers::uses` on demand for a local
+    /// `alloc_local`'d after `reset_for` pre-sized it to the session's initial
+    /// local count. No other test calls `alloc_local`, so this growth path was
+    /// previously untested — a regression in `uses_entry`'s bounds check or
+    /// `resize_with` length would surface here rather than only on a real
+    /// program that allocates a local mid-pass.
+    #[test]
+    fn alloc_local_extends_the_use_index_past_reset_fors_initial_size() {
+        // An empty body (not `sample_body()`, which already occupies local
+        // index 0 for `x`) so the newly `alloc_local`'d index doesn't collide
+        // with a pre-existing `Local` mention.
+        let mut body = mk_body(|_| Vec::new());
+        let mut __buf_eng = EngineBuffers::default();
+        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
+
+        // The session starts with 0 locals (`__locals_eng` is empty), so
+        // `reset_for` pre-sizes `uses` to length 0; `alloc_local` mints an
+        // index beyond that.
+        let new_local = eng.alloc_local("y".to_string(), TypeTable::I32, false);
+        assert_eq!(new_local, 0);
+        let read = eng.alloc_expr(
+            ExprKind::Local {
+                index: new_local,
+                name: "y".to_string(),
+            },
+            TypeTable::I32,
+            Span::default(),
+        );
+        assert_eq!(eng.local_reads(new_local), &[read]);
+        assert_eq!(eng.local_def(new_local), None);
     }
 }
