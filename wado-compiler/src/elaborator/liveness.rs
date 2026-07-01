@@ -4,8 +4,10 @@
 //! [`wep-2026-05-16-unused-diagnostics.md`] (policy) and
 //! [`wep-2026-05-26-elaborator-rearchitecture.md`] (mechanism). The pass
 //! runs after `annotate_bodies` and before `reify`, computing source-level
-//! reachability from the export boundary over the call graph the elaborator
-//! recorded in `references`.
+//! reachability from the package-external boundary — `pub` and `export`
+//! items (see
+//! [`wep-2026-06-25-visibility-internal-pub-export.md`]) — over the call
+//! graph the elaborator recorded in `references`.
 //!
 //! # Current scope
 //!
@@ -40,8 +42,9 @@ use crate::token::Span;
 /// Result of the source-level liveness analysis.
 ///
 /// Reachability is computed from two independent root sets over the same call
-/// graph: `E` = reachable from production roots (world exports, `#[export]`,
-/// methods, struct-field defaults), `T` = reachable from `test` blocks. Each
+/// graph: `E` = reachable from production roots (world exports, `pub` /
+/// `export` items, `#[export]`, methods, struct-field defaults), `T` =
+/// reachable from `test` blocks. Each
 /// user-authored free function / global is then classified:
 ///
 /// - **live** (`∈ E`): used by production. Not reported.
@@ -92,7 +95,12 @@ pub(crate) fn compute(
                 Item::Function(func) => {
                     let key = func.id;
                     graph.add_function_edges(func, references, &key);
-                    if func.is_export
+                    // `export` forces `Visibility::Public` at parse time
+                    // (`export ⟹ pub`), so checking visibility also covers it;
+                    // `has_export_attr` / `world_export_names` catch roots that
+                    // carry no visibility modifier at all (a raw Wasm export,
+                    // or a misdeclared entry point missing `export`/`pub`).
+                    if func.visibility.is_public()
                         || has_export_attr(func)
                         || world_export_names.contains(&func.name)
                     {
@@ -113,6 +121,9 @@ pub(crate) fn compute(
                 Item::Global(global) => {
                     let key = global.id;
                     graph.add_expr_edges(&global.initializer, references, &key);
+                    if global.visibility.is_public() {
+                        graph.seed_export(key);
+                    }
                     if user && !module_allows_dead && !attrs_allow_dead_code(&global.attributes) {
                         graph.report_candidates.push(key);
                     }
@@ -180,8 +191,8 @@ pub(crate) fn compute(
 struct Graph {
     /// `owner -> called items`.
     edges: IndexMap<AstId, Vec<AstId>>,
-    /// Production roots (world exports, `#[export]`, methods, struct-field
-    /// defaults) — seeds of the `E` closure.
+    /// Production roots (world exports, `pub` / `export` items, `#[export]`,
+    /// methods, struct-field defaults) — seeds of the `E` closure.
     export_seeds: Vec<AstId>,
     /// `test` block roots — seeds of the `T` closure.
     test_seeds: Vec<AstId>,
