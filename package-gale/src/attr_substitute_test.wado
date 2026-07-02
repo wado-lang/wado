@@ -1,0 +1,35 @@
+use { splice_attrs } from "./attr_substitute.wado";
+use { resolve_attrs } from "./attr_resolve.wado";
+use { parse } from "./g4/parser.wado";
+
+test "splice_attrs rewrites resolved spans to expressions" {
+    let g = parse("grammar T;
+r returns [int v] : a=e ;
+e returns [int v] : ID ;
+").unwrap();
+    let body = &" $v = $a.v; ";
+    let refs = resolve_attrs(body, &g.parser_rules[0], &g.parser_rules).unwrap();
+    // Codegen would map $v -> vals.v and $a.v -> a.v (rule-label vals field).
+    let repls: List<String> = ["vals.v", "a.v"];
+    let out = splice_attrs(body, &refs, &repls);
+    assert out == " vals.v = a.v; ", `out: '{out}'`;
+}
+
+test "splice_attrs leaves a ref-free body verbatim" {
+    let body = &" p.emit(\"hi\"); ";
+    let out = splice_attrs(body, &[], &[]);
+    assert out == " p.emit(\"hi\"); ", `out: '{out}'`;
+}
+
+test "splice_attrs handles adjacent and end-anchored references" {
+    let g = parse("grammar T;
+r : x=ID ;
+").unwrap();
+    // Two refs to $x.text back to back.
+    let body = &"$x.text$x.text";
+    let refs = resolve_attrs(body, &g.parser_rules[0], &g.parser_rules).unwrap();
+    assert refs.len() == 2;
+    let repls: List<String> = ["A", "B"];
+    let out = splice_attrs(body, &refs, &repls);
+    assert out == "AB", `out: '{out}'`;
+}
