@@ -44,7 +44,7 @@ mise run report-wasm-size  # hello_world, pi_approx, zlib, and so on
 
 - Write all documentation and comments in English, and keep them concise — cut filler and low-information words.
   - Comments: don't write them. Make them unnecessary through clear structure, naming, and function decomposition that make intent obvious.
-  - Docs: lead with the information; drop throat-clearing, restating the obvious, and redundant phrasing.
+  - Docs: keep them concise. Don't document implementation details.
 - Avoid ad-hoc workarounds. Write proper code based on a sound design.
 - Perform red/green TDD.
 - A compiler bug is always P0 — no exceptions. The instant you suspect one, stop all other work, and as the top priority write a minimal reproducible e2e fixture, file the issue, and fix it. A workaround that lets the current task proceed is never a reason to skip or defer any of these.
