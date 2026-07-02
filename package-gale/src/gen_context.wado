@@ -144,6 +144,8 @@ pub struct GenContext {
     /// multi-alt scan/pick/try decisions) — the `trace: true` generator
     /// option. Off by default.
     trace: bool,
+    rule_follow_kinds: TreeMap<String, List<String>>,
+    rule_follow_exact: bool,
 }
 
 impl GenContext {
@@ -177,6 +179,8 @@ impl GenContext {
             lr_loop_entry_decisions: [],
             atn_rule_body_decisions: [],
             trace: false,
+            rule_follow_kinds: TreeMap::new(),
+            rule_follow_exact: false,
         };
     }
 
@@ -230,6 +234,39 @@ impl GenContext {
     /// exists. (`ATN_SIM` itself is emitted whenever `needs_atn`.)
     pub fn needs_scan_atn(&self) -> bool {
         return self.needs_scan_atn_seen;
+    }
+
+    pub fn set_rule_follow(&mut self, kinds: TreeMap<String, List<String>>, exact: bool) {
+        self.rule_follow_kinds = kinds;
+        self.rule_follow_exact = exact;
+    }
+
+    pub fn at_end_conflict_routes(&self, rule_name: &String, branch_tokens: &List<String>) -> bool {
+        if !self.rule_follow_exact {
+            return true;
+        }
+        if !self.rule_follow_kinds.contains_key(*rule_name) {
+            return true;
+        }
+        let follow = self.rule_follow_kinds[*rule_name];
+        for let t of branch_tokens {
+            if follow.contains(t) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    pub fn emits_at_end_conflict_via_atn(
+        &self,
+        rule_index: i32,
+        rule_name: &String,
+        branch_tokens: &List<String>,
+    ) -> bool {
+        return self.needs_atn()
+            && self.lr_loop_entry_decision(rule_index) < 0
+            && self.atn_rule_body_decision(rule_index) >= 0
+            && self.at_end_conflict_routes(rule_name, branch_tokens);
     }
 
     /// Store the ATN call-site → return-state correspondence after the ATN

@@ -231,7 +231,7 @@ fn contribute_for_element(
 /// Effective follow at position `i` in `elements`:
 /// `first(elements[i+1..]) ∪ (suffix deep-nullable → outer_follow)`.
 fn local_follow(elements: &List<Element>, i: i32, ctx: &mut GenContext, outer_follow: &FollowSet) -> FollowSet {
-    let suffix_first = ctx.first_of_elements_from(elements, i + 1);
+    let suffix_first = ctx.deep_first_of_elements_from(elements, i + 1);
     let mut kinds = TreeSet::<String>::new();
     for let k of &suffix_first {
         kinds.insert(*k);

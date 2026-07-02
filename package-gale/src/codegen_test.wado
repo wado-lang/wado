@@ -1265,3 +1265,72 @@ test "at-end-conflict multi-alt rule routes through the ATN simulator" {
     assert str_contains(&body, &"if _atn_alt ==");
     assert !str_contains(&body, &"_sd_best_i");
 }
+
+global AT_END_DISJOINT_G4: String = "
+grammar T;
+s : x 'd' ;
+x : 'a' 'b' | 'a' 'b' 'c' ;
+WS : ' ' -> skip ;
+";
+
+test "FOLLOW-disjoint at-end conflict keeps the static tournament" {
+    let mut g = parse(AT_END_DISJOINT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_x__inner(");
+    assert str_contains(&body, &"_sd_best_i");
+    assert !str_contains(&body, &"atn_predict_with_stack");
+    assert !str_contains(&output, &"global ATN_SIM");
+}
+
+global AT_END_NULLABLE_GAP_G4: String = "
+grammar T;
+s : x nb 'c' ;
+x : 'a' 'b' | 'a' 'b' 'c' ;
+nb : 'w'? ;
+WS : ' ' -> skip ;
+";
+
+test "at-end conflict routes through the ATN when a nullable rule hides the caller token" {
+    let mut g = parse(AT_END_NULLABLE_GAP_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_x__inner(");
+    assert str_contains(&body, &"let _atn_alt = atn_predict_with_stack(&ATN_SIM,");
+    assert !str_contains(&body, &"_sd_best_i");
+}
+
+global AT_END_WILDCARD_FOLLOW_G4: String = "
+grammar T;
+s : x . ;
+x : 'a' 'b' | 'a' 'b' 'c' ;
+WS : ' ' -> skip ;
+";
+
+test "wildcard caller suffix keeps the at-end conflict on the ATN" {
+    let mut g = parse(AT_END_WILDCARD_FOLLOW_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_x__inner(");
+    assert str_contains(&body, &"let _atn_alt = atn_predict_with_stack(&ATN_SIM,");
+    assert !str_contains(&body, &"_sd_best_i");
+}
+
+test "non-LR ATN grammar opts out of the decoder's LR tables" {
+    let mut g = parse(AT_END_CONFLICT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    assert str_contains(&output, &"global ATN_SIM: AtnSim = atn_decode(&b\"");
+    assert str_contains(&output, &"\", false);");
+}
+
+global LR_WILDCARD_CODEGEN_G4: String = "
+grammar T;
+prog : e EOF ;
+e : e '+' e | e . | INT ;
+INT : [0-9]+ ;
+WS : ' ' -> skip ;
+";
+
+test "ATN-class LR grammar keeps the decoder's LR tables" {
+    let mut g = parse(LR_WILDCARD_CODEGEN_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    assert str_contains(&output, &"global ATN_SIM: AtnSim = atn_decode(&b\"");
+    assert str_contains(&output, &"\", true);");
+}

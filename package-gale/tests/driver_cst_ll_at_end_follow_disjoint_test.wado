@@ -1,0 +1,23 @@
+use g from "./grammars/ll_at_end_follow_disjoint.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/cst_ll_at_end_follow_disjoint",
+        },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+}
+
+test "tree: at-end alt wins when the continuation is absent" {
+    assert_tree(&"a b d", &"(s (x a b) d)");
+}
+
+test "tree: continuing alt wins by longest match" {
+    assert_tree(&"a b c d", &"(s (x a b c) d)");
+}
