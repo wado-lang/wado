@@ -44,8 +44,8 @@ use crate::token::Span;
 
 use super::condition_implication::{
     Binds, BoundKey, build_copy_bindings, eliminate_condition, ge_check_operands, is_panic_block,
-    node_modifies, parse_bound, parse_cmp, parse_var_offset, resolve, resolve_panic_ids,
-    stmt_modifies,
+    node_modifies, opaque_local, parse_break_guard_head, parse_cmp, parse_var_offset, resolve,
+    resolve_panic_ids, stmt_modifies,
 };
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::dce::{build_callee_descriptors, callee_descriptor};
@@ -62,6 +62,8 @@ struct Plan {
     loop_stmt: StmtId,
     /// The loop body block.
     loop_body: BlockId,
+    /// Index of the guard statement within the loop body.
+    guard_idx: usize,
     /// Guard variable `i`.
     var: u32,
     /// Guard bound local `H`.
@@ -73,15 +75,12 @@ struct Plan {
     check_bound: u32,
 }
 
-/// A fast arm produced by [`apply_version`], queued for the fill idiom.
+/// The two blocks [`apply_version`] produces for a versioned loop: the version
+/// `if`'s then-block (holding exactly the fast `Loop` stmt) and the fast loop's
+/// body. The guard fields the fill idiom needs live on the paired [`Plan`].
 struct FastArm {
-    /// The version `if`'s then-block (holds exactly the fast `Loop` stmt).
     then_block: BlockId,
-    /// The fast loop's body block.
     fast_body: BlockId,
-    var: u32,
-    bound: u32,
-    guard_le: bool,
 }
 
 /// Version eligible loops in every function. Returns whether anything changed.
@@ -100,15 +99,15 @@ pub(super) fn version_loops(project: &mut NirPackage) -> bool {
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
-        if func.body.is_none() {
+        let Some(body_ref) = func.body.as_ref() else {
+            continue;
+        };
+        if !body_contains_loop(body_ref) {
             continue;
         }
         let stores_aliased = func.stores_aliased_locals.clone();
         let NirFunction { body, locals, .. } = &mut *func;
         let body = body.as_mut().expect("checked above");
-        if !body_contains_loop(body) {
-            continue;
-        }
         let mut engine = Engine::new(body, &mut buffers, locals);
         engine.set_value_graph_type_table(&type_table);
         engine.set_panic_callee_ids(&panic_ids);
@@ -148,8 +147,8 @@ pub(super) fn version_loops(project: &mut NirPackage) -> bool {
 
         // Fill idiom over the cleaned fast arms; sweep again if it fired.
         let mut filled = false;
-        for arm in &fast_arms {
-            filled |= try_fill_idiom(&mut engine, &binds, &descriptors, fill_id, arm);
+        for (plan, arm) in plans.iter().zip(&fast_arms) {
+            filled |= try_fill_idiom(&mut engine, &binds, &descriptors, fill_id, plan, arm);
         }
         if filled {
             engine.run(&rules);
@@ -213,32 +212,9 @@ fn parse_loop_guard(
     binds: &Binds,
     loop_body: BlockId,
 ) -> Option<(usize, u32, u32, bool)> {
-    let stmts = &engine.body.blocks[loop_body].stmts;
-    let guard_idx = stmts.iter().position(|s| {
-        !matches!(
-            engine.body.stmts[*s].kind,
-            StmtKind::Let { .. } | StmtKind::LetDestructure { .. }
-        )
-    })?;
-    let StmtKind::If {
-        condition,
-        then_block,
-        else_block: None,
-    } = &engine.body.stmts[stmts[guard_idx]].kind
-    else {
-        return None;
-    };
-    let (cond, gthen) = (*condition, *then_block);
-    if engine.body.blocks[gthen].stmts.len() != 1
-        || !matches!(
-            engine.body.stmts[engine.body.blocks[gthen].stmts[0]].kind,
-            StmtKind::Break { .. }
-        )
-    {
-        return None;
-    }
+    let (guard_idx, cond) = parse_break_guard_head(engine, loop_body)?;
     let inner = peel_not(engine, binds, cond)?;
-    let (var, off, bound, op) = parse_cmp_any(engine, binds, inner)?;
+    let (var, off, bound, op) = parse_cmp(engine, binds, inner)?;
     if off != 0 {
         return None;
     }
@@ -289,32 +265,6 @@ fn peel_not(engine: &Engine, binds: &Binds, op: Operand) -> Option<Operand> {
             _ => None,
         },
     }
-}
-
-/// [`parse_cmp`] extended to promoted (`Operand::Value`) comparisons.
-fn parse_cmp_any(
-    engine: &Engine,
-    binds: &Binds,
-    op: Operand,
-) -> Option<(u32, i64, BoundKey, NirBinaryOp)> {
-    if let Some(r) = parse_cmp(engine, binds, op) {
-        return Some(r);
-    }
-    if let Operand::Value(v) = resolve(engine, binds, op)
-        && let ValueKind::Binary {
-            op: bop, lhs, rhs, ..
-        } = engine.body.values.kind(v)
-        && matches!(
-            bop,
-            NirBinaryOp::Lt | NirBinaryOp::LtEq | NirBinaryOp::Gt | NirBinaryOp::GtEq
-        )
-    {
-        let (bop, lhs, rhs) = (*bop, *lhs, *rhs);
-        let (var, off) = parse_var_offset(engine, binds, Operand::Value(lhs))?;
-        let bound = parse_bound(engine, binds, Operand::Value(rhs))?;
-        return Some((var, off, bound, bop));
-    }
-    None
 }
 
 /// Collect check holders `if (var >= B) { panic }` (or `!(var < B)`) nested
@@ -374,13 +324,7 @@ fn parse_raw_local(engine: &Engine, op: Operand) -> Option<u32> {
             ExprKind::Local { index, .. } => Some(*index),
             _ => None,
         },
-        Operand::Value(v) => match engine.body.values.kind(v) {
-            ValueKind::Opaque(o) => match engine.body.values.opaque_source(*o) {
-                Some(crate::nir_value_graph::OpaqueSource::Local(l)) => Some(l),
-                Some(crate::nir_value_graph::OpaqueSource::Expr(_)) | None => None,
-            },
-            _ => None,
-        },
+        Operand::Value(v) => opaque_local(engine, v),
     }
 }
 
@@ -438,6 +382,7 @@ fn analyze_loop(
         parent,
         loop_stmt,
         loop_body,
+        guard_idx,
         var,
         bound: h,
         guard_le,
@@ -459,6 +404,8 @@ fn local_read(engine: &mut Engine, index: u32, span: Span) -> Operand {
 fn apply_version(engine: &mut Engine, binds: &Binds, plan: &Plan) -> FastArm {
     let span = engine.body.stmts[plan.loop_stmt].span;
     let fast_body = engine.clone_block(plan.loop_body);
+    // `fast_body` is a structural clone of `plan.loop_body`, so the guard/check
+    // layout `analyze_loop` recorded on `plan` holds verbatim — no re-parse.
     eliminate_checks_in_fast(engine, binds, plan, fast_body);
 
     let fast_stmt = engine.alloc_stmt(StmtKind::Loop { body: fast_body }, span);
@@ -506,9 +453,6 @@ fn apply_version(engine: &mut Engine, binds: &Binds, plan: &Plan) -> FastArm {
     FastArm {
         then_block,
         fast_body,
-        var: plan.var,
-        bound: plan.bound,
-        guard_le: plan.guard_le,
     }
 }
 
@@ -516,13 +460,12 @@ fn apply_version(engine: &mut Engine, binds: &Binds, plan: &Plan) -> FastArm {
 /// `BranchPruneRule` removes the dead panic arms), and constify the
 /// single-purpose `let __cond = <cmp>` temp feeding each check — in the fast
 /// arm the comparison is provably constant, so this is exact for any reader.
+/// `fast_body` is a clone of `plan.loop_body`, so `plan`'s guard layout applies.
 fn eliminate_checks_in_fast(engine: &mut Engine, binds: &Binds, plan: &Plan, fast_body: BlockId) {
-    let Some((guard_idx, var, h, _)) = parse_loop_guard(engine, binds, fast_body) else {
-        return;
-    };
+    let (var, h) = (plan.var, plan.bound);
     let mut checks: Vec<(NodeRef, Operand, u32)> = Vec::new();
     let stmts = engine.body.blocks[fast_body].stmts.clone();
-    for &s in stmts.iter().skip(guard_idx + 1) {
+    for &s in stmts.iter().skip(plan.guard_idx + 1) {
         if stmt_modifies(engine, s, var, BoundKey::Local(h)) {
             break;
         }
@@ -635,8 +578,15 @@ fn try_fill_idiom(
     binds: &Binds,
     descriptors: &[FunctionRef],
     fill_id: crate::nir::FuncId,
+    plan: &Plan,
     arm: &FastArm,
 ) -> bool {
+    // The fill form needs the guard at index 0 (no leading lets); `plan` carries
+    // the guard layout from analysis, and `arm.fast_body` is its structural clone.
+    let (var, h, guard_le) = (plan.var, plan.bound, plan.guard_le);
+    if plan.guard_idx != 0 {
+        return false;
+    }
     // The then-block must still hold exactly the fast loop statement.
     let then_stmts = engine.body.blocks[arm.then_block].stmts.clone();
     let [loop_stmt] = then_stmts[..] else {
@@ -649,14 +599,7 @@ fn try_fill_idiom(
         return false;
     }
     let stmts = engine.body.blocks[arm.fast_body].stmts.clone();
-    // Shape: guard first (no leading lets for the fill form), then pure
-    // lets, one array_set, and the `i += 1` increment last.
-    let Some((guard_idx, var, h, guard_le)) = parse_loop_guard(engine, binds, arm.fast_body) else {
-        return false;
-    };
-    if guard_idx != 0 || var != arm.var || h != arm.bound || guard_le != arm.guard_le {
-        return false;
-    }
+    // Shape: guard first, then pure lets, one array_set, and `i += 1` last.
     let n = stmts.len();
     if n < 3 {
         return false;
@@ -764,7 +707,6 @@ fn try_fill_idiom(
             return false;
         }
     }
-    // Build the replacement.
     let span = engine.body.stmts[loop_stmt].span;
     let ty = engine.locals()[var as usize].type_id;
     let one = engine.body.values.int_typed(1, ty);
@@ -788,7 +730,6 @@ fn try_fill_idiom(
         }
     };
 
-    // count = upper - i
     let upper_for_len = upper(engine);
     let i_read = local_read(engine, var, span);
     let count = engine.alloc_expr(

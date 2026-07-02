@@ -197,7 +197,7 @@ pub(super) fn resolve(engine: &Engine, binds: &Binds, op: Operand) -> Operand {
 
 /// The `Local idx` an `Opaque` value sources from, if any (pool read — not
 /// `value_of`).
-fn opaque_local(engine: &Engine, v: crate::nir_value_graph::ValueId) -> Option<u32> {
+pub(super) fn opaque_local(engine: &Engine, v: crate::nir_value_graph::ValueId) -> Option<u32> {
     if let ValueKind::Opaque(o) = engine.body.values.kind(v)
         && let Some(crate::nir_value_graph::OpaqueSource::Local(i)) =
             engine.body.values.opaque_source(*o)
@@ -397,25 +397,81 @@ fn bound_offset_over(
 }
 
 /// Parse a condition (through copy temps) as `(var + off) OP bound`. Returns
-/// `(var_local, off, bound, op)`.
+/// `(var_local, off, bound, op)`. Handles both the skeleton form and a
+/// **promoted** `Operand::Value` comparison (decomposed through the value pool),
+/// so a post-`promote_fields` guard/check condition parses the same as a
+/// skeleton one.
 pub(super) fn parse_cmp(
     engine: &Engine,
     binds: &Binds,
     cond: Operand,
 ) -> Option<(u32, i64, BoundKey, NirBinaryOp)> {
-    let ce = resolve(engine, binds, cond).as_expr()?;
-    if let ExprKind::Binary { left, op, right } = &engine.body.exprs[ce].kind {
-        let op = *op;
-        if matches!(
+    let is_cmp = |op: NirBinaryOp| {
+        matches!(
             op,
             NirBinaryOp::Lt | NirBinaryOp::LtEq | NirBinaryOp::Gt | NirBinaryOp::GtEq
-        ) {
-            let (var, off) = parse_var_offset(engine, binds, *left)?;
-            let bound = parse_bound(engine, binds, *right)?;
-            return Some((var, off, bound, op));
+        )
+    };
+    match resolve(engine, binds, cond) {
+        Operand::Expr(ce) => {
+            if let ExprKind::Binary { left, op, right } = &engine.body.exprs[ce].kind
+                && is_cmp(*op)
+            {
+                let op = *op;
+                let (var, off) = parse_var_offset(engine, binds, *left)?;
+                let bound = parse_bound(engine, binds, *right)?;
+                return Some((var, off, bound, op));
+            }
+            None
+        }
+        Operand::Value(v) => {
+            if let ValueKind::Binary { op, lhs, rhs, .. } = engine.body.values.kind(v)
+                && is_cmp(*op)
+            {
+                let (op, lhs, rhs) = (*op, *lhs, *rhs);
+                let (var, off) = parse_var_offset(engine, binds, Operand::Value(lhs))?;
+                let bound = parse_bound(engine, binds, Operand::Value(rhs))?;
+                return Some((var, off, bound, op));
+            }
+            None
         }
     }
-    None
+}
+
+/// The loop-guard head both structural BCE and loop versioning recognise:
+/// after any leading `let`s, the first statement is `if !<cond> { break }` with
+/// a single-statement break then-block. Returns the guard's statement index and
+/// the (still-negated) condition operand. One shared definition keeps the two
+/// passes from drifting on what a loop guard looks like.
+pub(super) fn parse_break_guard_head(
+    engine: &Engine,
+    loop_body: BlockId,
+) -> Option<(usize, Operand)> {
+    let stmts = &engine.body.blocks[loop_body].stmts;
+    let guard_idx = stmts.iter().position(|s| {
+        !matches!(
+            engine.body.stmts[*s].kind,
+            StmtKind::Let { .. } | StmtKind::LetDestructure { .. }
+        )
+    })?;
+    let StmtKind::If {
+        condition,
+        then_block,
+        else_block: None,
+    } = &engine.body.stmts[stmts[guard_idx]].kind
+    else {
+        return None;
+    };
+    let (cond, gthen) = (*condition, *then_block);
+    if engine.body.blocks[gthen].stmts.len() != 1
+        || !matches!(
+            engine.body.stmts[engine.body.blocks[gthen].stmts[0]].kind,
+            StmtKind::Break { .. }
+        )
+    {
+        return None;
+    }
+    Some((guard_idx, cond))
 }
 
 /// Parse a bounds-check condition (through copy temps) that **panics when the
@@ -634,34 +690,10 @@ pub(super) fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: Bou
 /// the skeleton reads plus a position-aware "no modification of `var`/`bound`
 /// between the guard and the check" scan. No value graph, no promotion.
 fn structural_loop_guard(engine: &mut Engine, loop_body: BlockId, binds: &Binds) -> bool {
+    let Some((guard_idx, gcond)) = parse_break_guard_head(engine, loop_body) else {
+        return false;
+    };
     let stmts = engine.body.blocks[loop_body].stmts.clone();
-    let guard_idx = stmts.iter().position(|s| {
-        !matches!(
-            engine.body.stmts[*s].kind,
-            StmtKind::Let { .. } | StmtKind::LetDestructure { .. }
-        )
-    });
-    let Some(guard_idx) = guard_idx else {
-        return false;
-    };
-    // Guard: `if !(var < bound) { break }` (single-stmt break then-block).
-    let StmtKind::If {
-        condition,
-        then_block,
-        else_block: None,
-    } = &engine.body.stmts[stmts[guard_idx]].kind
-    else {
-        return false;
-    };
-    let (gcond, gthen) = (*condition, *then_block);
-    if engine.body.blocks[gthen].stmts.len() != 1
-        || !matches!(
-            engine.body.stmts[engine.body.blocks[gthen].stmts[0]].kind,
-            StmtKind::Break { .. }
-        )
-    {
-        return false;
-    }
     let Some(ge) = gcond.as_expr() else {
         return false;
     };
