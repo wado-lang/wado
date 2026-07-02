@@ -19,6 +19,16 @@
 //! alias machinery directly and the freshly substituted expressions feed
 //! back into the same fix-point loop where `copy_prop` / `const_fold` /
 //! `dce` can fold them further.
+//!
+//! - **Adjacent-use box elision** (`elide_adjacent_box_locals`): the same
+//!   single-field substitution but for a `StructNew{[inner]}` whose `inner`
+//!   reads the heap (which `is_pure_for_elision` refuses to move). It is sound
+//!   here because it works on ordered statement lists and only fires when every
+//!   op evaluated between the def and its single use is pure and unconditional.
+//!   This targets the `Box<T>` locals lowering mints for `&primitive` payload
+//!   bindings (`match r { Token(i) => f(*i) }`), which never reach NIR — the
+//!   boxing scheme (`lower::plan::boxing`) runs during NIR→WIR lowering — so the
+//!   NIR `elide_box_local` pass cannot see them.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirInstr, WirPackage, WirTypeDef};
@@ -414,5 +424,378 @@ impl WirMutVisitor for FlattenSeqAssignments {
                 other => body.push(other),
             }
         }
+    }
+}
+
+// -----------------------------------------------------------------------
+// Adjacent-use box elision
+// -----------------------------------------------------------------------
+
+/// Result of walking a using statement for the single `StructGet(box)` use in
+/// left-to-right evaluation order.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BoxUseWalk {
+    /// The use was reached with only pure, unconditional ops evaluated before it.
+    Found,
+    /// The whole subtree is pure and contains no use (safe to evaluate the
+    /// moved heap read *after* it).
+    Pure,
+    /// A call, heap write, or conditional/unknown construct is evaluated before
+    /// the use (or the use sits in a conditionally-evaluated position). Moving
+    /// the heap-read initializer here could change what it reads or whether it
+    /// traps.
+    Blocked,
+}
+
+/// Elide single-field (`Box<T>`) struct locals whose initializer reads the heap,
+/// when the def and its single use are adjacent in a straight-line region.
+///
+/// See the module docs. Runs to a fix-point per function: each iteration
+/// recomputes the whole-function def/use `stats` (a read-only oracle) and
+/// substitutes every non-overlapping adjacent box into its use.
+pub(super) fn elide_adjacent_box_locals(module: &mut WirPackage) {
+    for func in &mut module.functions {
+        let Some(body) = &mut func.body else {
+            continue;
+        };
+        loop {
+            let mut stats: IndexMap<String, LocalStats> = IndexMap::default();
+            let mut candidates: IndexMap<String, Candidate> = IndexMap::default();
+            for instr in body.iter() {
+                collect_stats(instr, &mut stats, &mut candidates, 1, 1);
+            }
+            if candidates.is_empty() {
+                break;
+            }
+            let candidate_names: IndexSet<String> = candidates.keys().cloned().collect();
+            let mut elider = AdjacentBoxElider {
+                stats: &stats,
+                candidate_names: &candidate_names,
+                changed: false,
+            };
+            elider.visit_body(body);
+            if !elider.changed {
+                break;
+            }
+        }
+    }
+}
+
+struct AdjacentBoxElider<'a> {
+    stats: &'a IndexMap<String, LocalStats>,
+    candidate_names: &'a IndexSet<String>,
+    changed: bool,
+}
+
+impl WirMutVisitor for AdjacentBoxElider<'_> {
+    fn visit_body(&mut self, body: &mut Vec<WirInstr>) {
+        // Recurse into nested bodies first, then process this statement list.
+        self.walk_body(body);
+        self.process_stmt_list(body);
+    }
+}
+
+impl AdjacentBoxElider<'_> {
+    fn process_stmt_list(&mut self, stmts: &mut [WirInstr]) {
+        for p in 0..stmts.len() {
+            let Some((name, field, inner)) = self.describe_box_def(&stmts[p]) else {
+                continue;
+            };
+            let Some(k) = find_adjacent_box_use(stmts, p + 1, &name, &field) else {
+                continue;
+            };
+            if substitute_box_use(&mut stmts[k], &name, &field, &inner) {
+                stmts[p] = WirInstr::Nop;
+                self.changed = true;
+            }
+        }
+    }
+
+    /// Recognise `LocalSet(name, StructNew{[inner]})` where `name` is defined
+    /// once, read exactly once, and that read is a `StructGet(LocalGet(name), f)`.
+    /// Returns `(name, field, inner)` — a clone of the single-field initializer.
+    fn describe_box_def(&self, stmt: &WirInstr) -> Option<(String, String, WirInstr)> {
+        let WirInstr::LocalSet { name, value } = stmt else {
+            return None;
+        };
+        let WirInstr::StructNew { fields, .. } = value.as_ref() else {
+            return None;
+        };
+        if fields.len() != 1 {
+            return None;
+        }
+        let s = self.stats.get(name)?;
+        if s.defs != 1 || s.structget_uses != 1 || s.total_localgets != 1 {
+            return None;
+        }
+        if s.field_uses.len() != 1 {
+            return None;
+        }
+        let inner = &fields[0];
+        // Never move an initializer that reads another box candidate: the other
+        // box may be elided in the same pass, and reordering across it is not
+        // covered by the adjacency proof.
+        if inner_refs_any_candidate(inner, self.candidate_names, name) {
+            return None;
+        }
+        let field = s.field_uses.keys().next()?.clone();
+        Some((name.clone(), field, inner.clone()))
+    }
+}
+
+/// Find the single `StructGet(LocalGet(name), field)` use. The use must be the
+/// leftmost side effect of the *immediately following* non-Nop statement — every
+/// op evaluated before it there must be pure and unconditional
+/// (`BoxUseWalk::Found`). Restricting to the adjacent statement means the scan
+/// never skips over a statement, so no reordering happens across statement
+/// boundaries at all — only the (bounded) reorder inside the single using
+/// statement, governed by [`leftmost_box_use`].
+fn find_adjacent_box_use(
+    stmts: &[WirInstr],
+    from: usize,
+    name: &str,
+    field: &str,
+) -> Option<usize> {
+    let k = (from..stmts.len()).find(|&k| !matches!(stmts[k], WirInstr::Nop))?;
+    match leftmost_box_use(&stmts[k], name, field) {
+        BoxUseWalk::Found => Some(k),
+        BoxUseWalk::Pure | BoxUseWalk::Blocked => None,
+    }
+}
+
+/// Is `instr` the target `StructGet(LocalGet(name), field)`?
+fn is_box_use(instr: &WirInstr, name: &str, field: &str) -> bool {
+    matches!(
+        instr,
+        WirInstr::StructGet { field_name, expr, .. }
+            if field_name == field
+                && matches!(expr.as_ref(), WirInstr::LocalGet { name: n, .. } if n == name)
+    )
+}
+
+/// A node whose *own* operation writes memory or performs a call. Its operand
+/// children are evaluated (in order) before the effect, so a use found in an
+/// operand is still valid; a use reaching past the effect is not.
+fn is_effect_barrier(instr: &WirInstr) -> bool {
+    matches!(
+        instr,
+        WirInstr::Call { .. }
+            | WirInstr::CallIndirect { .. }
+            | WirInstr::CallRef { .. }
+            | WirInstr::LocalSet { .. }
+            | WirInstr::LocalTee { .. }
+            | WirInstr::GlobalSet { .. }
+            | WirInstr::StructSet { .. }
+            | WirInstr::ArraySet { .. }
+            | WirInstr::ArrayCopy { .. }
+            | WirInstr::ArrayFill { .. }
+            | WirInstr::MemoryFill { .. }
+            | WirInstr::MemoryGrow(_)
+            | WirInstr::TableSet { .. }
+            | WirInstr::MultiValueLocalBind { .. }
+            | WirInstr::I32Store { .. }
+            | WirInstr::I32Store8 { .. }
+            | WirInstr::I32Store16 { .. }
+            | WirInstr::I64Store { .. }
+            | WirInstr::V128Store { .. }
+    )
+}
+
+/// A node that evaluates children conditionally or transfers control, so the
+/// straight-line "leftmost" reasoning does not apply. A use anywhere inside is
+/// unsafe to anchor on (it may run conditionally, dropping a trap the
+/// unconditional box init would have produced).
+fn is_control_barrier(instr: &WirInstr) -> bool {
+    matches!(
+        instr,
+        WirInstr::Block { .. }
+            | WirInstr::Loop { .. }
+            | WirInstr::If { .. }
+            | WirInstr::BranchHint { .. }
+            | WirInstr::Br { .. }
+            | WirInstr::BrIf { .. }
+            | WirInstr::BrTable { .. }
+            | WirInstr::Return { .. }
+            | WirInstr::Unreachable
+            | WirInstr::ColdPath
+            | WirInstr::Select { .. }
+    )
+}
+
+/// Walk `instr` in evaluation order looking for the single box use. See
+/// [`BoxUseWalk`]. Every effectful / control-flow node is classified as a
+/// barrier ([`is_effect_barrier`] / [`is_control_barrier`]); everything else is
+/// a pure, unconditional node whose operand children are evaluated left to
+/// right (arithmetic, SIMD, reads, casts, allocations, `Drop`, `Seq`, …). The
+/// pure-by-default arm is sound only because the barrier lists cover every
+/// write, call, and branch; a trap or heap *read* evaluated before the use is
+/// harmless, since the moved initializer is a side-effect-free read.
+fn leftmost_box_use(instr: &WirInstr, name: &str, field: &str) -> BoxUseWalk {
+    if is_box_use(instr, name, field) {
+        return BoxUseWalk::Found;
+    }
+    if is_control_barrier(instr) {
+        return BoxUseWalk::Blocked;
+    }
+    // Walk operand children left to right, short-circuiting once the use is
+    // Found or a nested barrier Blocks. `for_each_child` yields children in
+    // evaluation order.
+    let mut acc = BoxUseWalk::Pure;
+    instr.for_each_child(&mut |c| {
+        if acc == BoxUseWalk::Pure {
+            acc = leftmost_box_use(c, name, field);
+        }
+    });
+    if is_effect_barrier(instr) {
+        // Operands ran before the effect: honour a use there, but the effect
+        // itself blocks anything reaching past it.
+        match acc {
+            BoxUseWalk::Found => BoxUseWalk::Found,
+            BoxUseWalk::Pure | BoxUseWalk::Blocked => BoxUseWalk::Blocked,
+        }
+    } else {
+        acc
+    }
+}
+
+/// Replace the first `StructGet(LocalGet(name), field)` in `instr` with `inner`.
+/// The candidate has exactly one such use, so the first pre-order match is it.
+fn substitute_box_use(instr: &mut WirInstr, name: &str, field: &str, inner: &WirInstr) -> bool {
+    if is_box_use(instr, name, field) {
+        *instr = inner.clone();
+        return true;
+    }
+    let mut done = false;
+    instr.for_each_boxed_child_mut(&mut |child| {
+        if !done {
+            done = substitute_box_use(child, name, field, inner);
+        }
+    });
+    done
+}
+
+#[cfg(test)]
+mod adjacent_box_tests {
+    use super::*;
+    use crate::wir::{WirFuncId, WirType, WirTypeId};
+    use std::rc::Rc;
+
+    const NAME: &str = "b";
+    const FIELD: &str = "value";
+
+    fn tid() -> WirTypeId {
+        WirTypeId::new(0, Rc::from("Box"))
+    }
+    fn lget(name: &str) -> WirInstr {
+        WirInstr::LocalGet {
+            name: name.to_string(),
+            result_ty: WirType::I32,
+        }
+    }
+    /// The target `StructGet(LocalGet("b"), "value")`.
+    fn use_box() -> WirInstr {
+        WirInstr::StructGet {
+            type_id: tid(),
+            field_name: FIELD.to_string(),
+            expr: Box::new(lget(NAME)),
+            result_ty: WirType::I32,
+        }
+    }
+    fn call(args: Vec<WirInstr>) -> WirInstr {
+        WirInstr::Call {
+            func_id: WirFuncId::new(0, Rc::from("f")),
+            args,
+        }
+    }
+    fn walk(instr: &WirInstr) -> BoxUseWalk {
+        leftmost_box_use(instr, NAME, FIELD)
+    }
+
+    /// `f(other, *b)` — the use is a later call arg after a pure `LocalGet`.
+    /// Found: nothing side-effecting runs before the use.
+    #[test]
+    fn found_use_after_pure_arg() {
+        let instr = call(vec![lget("other"), use_box()]);
+        assert!(matches!(walk(&instr), BoxUseWalk::Found));
+    }
+
+    /// `sum + *b` — the use is the right operand of a pure add. Found.
+    #[test]
+    fn found_use_in_arithmetic() {
+        let instr = WirInstr::I32Add(Box::new(lget("sum")), Box::new(use_box()));
+        assert!(matches!(walk(&instr), BoxUseWalk::Found));
+    }
+
+    /// `f(g(), *b)` — a call is evaluated before the use, and it could mutate
+    /// what the boxed initializer reads. Blocked.
+    #[test]
+    fn blocked_by_call_before_use() {
+        let instr = call(vec![call(vec![]), use_box()]);
+        assert!(matches!(walk(&instr), BoxUseWalk::Blocked));
+    }
+
+    /// `*b` nested inside an `If` — the use is conditionally evaluated, so
+    /// moving the (possibly-trapping) box init there could drop a trap. Blocked.
+    #[test]
+    fn blocked_by_conditional() {
+        let instr = WirInstr::If {
+            condition: Box::new(WirInstr::I32Const(1)),
+            result: Some(WirType::I32),
+            then_body: vec![use_box()],
+            else_body: Some(vec![WirInstr::I32Const(0)]),
+        };
+        assert!(matches!(walk(&instr), BoxUseWalk::Blocked));
+    }
+
+    /// A heap write before the use blocks: the write could change what the
+    /// boxed read observes if moved after it.
+    #[test]
+    fn blocked_by_heap_write_before_use() {
+        let write = WirInstr::StructSet {
+            type_id: tid(),
+            field_name: "f".to_string(),
+            expr: Box::new(lget("obj")),
+            value: Box::new(WirInstr::I32Const(1)),
+        };
+        // `(struct.set …, *b)` modelled as a two-arg call so both are siblings.
+        let instr = call(vec![write, use_box()]);
+        assert!(matches!(walk(&instr), BoxUseWalk::Blocked));
+    }
+
+    /// A statement with no box use and no side effect is Pure — the scan may
+    /// safely skip it (it never does in practice, but the classification must
+    /// not report a spurious barrier).
+    #[test]
+    fn pure_when_no_use() {
+        let instr = WirInstr::I32Add(Box::new(lget("x")), Box::new(WirInstr::I32Const(1)));
+        assert!(matches!(walk(&instr), BoxUseWalk::Pure));
+    }
+
+    /// A heap read (non-target `StructGet`) before the use is fine — reads
+    /// never change what another read observes, and a trap aborts before the
+    /// pure moved read matters. Found.
+    #[test]
+    fn found_use_after_heap_read() {
+        let other_read = WirInstr::StructGet {
+            type_id: tid(),
+            field_name: "other".to_string(),
+            expr: Box::new(lget("obj")),
+            result_ty: WirType::I32,
+        };
+        let instr = call(vec![other_read, use_box()]);
+        assert!(matches!(walk(&instr), BoxUseWalk::Found));
+    }
+
+    /// End-to-end substitution: `substitute_box_use` replaces the single use
+    /// with the initializer and reports success.
+    #[test]
+    fn substitute_replaces_single_use() {
+        let inner = WirInstr::I32Const(42);
+        let mut instr = call(vec![lget("other"), use_box()]);
+        assert!(substitute_box_use(&mut instr, NAME, FIELD, &inner));
+        let WirInstr::Call { args, .. } = &instr else {
+            panic!("expected call");
+        };
+        assert!(matches!(args[1], WirInstr::I32Const(42)));
     }
 }

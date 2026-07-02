@@ -1,0 +1,54 @@
+// Test: adjacent-use box elision (wir/elide_adjacent_box_locals)
+//
+// Matching a `&variant` binds each primitive payload by reference, which
+// lowering materialises as a `Box<T>` struct built during NIR→WIR lowering
+// (never visible to the NIR `elide_box_local` pass). When such a binding is only
+// dereferenced and its single use is adjacent to the binding with only pure code
+// in between, the box allocation is redundant: the payload read can move to the
+// use site unchanged. This pass elides it.
+//
+// `sum_leaves` walks a `&List<Node>` doing exactly the `match r { Token(i) =>
+// f(*i) }` shape from Gale's `highlight_walk`. The elision must fire (no
+// `Box<i32>` payload allocation survives) while the result stays correct.
+
+use { println, Stdout } from "core:cli";
+
+variant Node {
+    Token(i32),
+    Missing(i32),
+    Group(i32),
+}
+
+#[inline("never")]
+fn twice(x: i32) -> i32 {
+    return x * 2;
+}
+
+#[inline("never")]
+fn sum_leaves(nodes: &List<Node>) -> i32 {
+    let mut sum = 0;
+    for let node of nodes {
+        match node {
+            // Each arm derefs the by-ref payload binding once, adjacent to it.
+            Token(i) => sum = sum + twice(*i),
+            Missing(i) => sum = sum + *i,
+            Group(i) => sum = sum + *i,
+        }
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    let nodes: List<Node> = [Node::Token(3), Node::Missing(5), Node::Group(7)];
+    // 3*2 + 5 + 7 = 18
+    assert sum_leaves(&nodes) == 18;
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_not_expect:O2": [
+        "Box<i32>\" { value: ref.cast"
+    ]
+}

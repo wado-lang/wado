@@ -56,7 +56,8 @@ use const_global::promote_const_global_inits;
 use dedupe_const_globals::dedupe_const_globals;
 use elide_local::elide_write_only_locals;
 use elide_struct::{
-    elide_multi_field_struct_locals, elide_single_field_struct_locals, flatten_seq_assignments,
+    elide_adjacent_box_locals, elide_multi_field_struct_locals, elide_single_field_struct_locals,
+    flatten_seq_assignments,
 };
 use init_guard::remove_trivial_init_globals;
 use nullable_ref::lower_nullable_refs;
@@ -131,6 +132,13 @@ pub fn optimize_wir(
     // `LocalSet(x, StructNew{[inner]})` read only via StructGet — substitute `inner`.
     wir_pass("wir/elide_single_field_struct", module, profiler, |m| {
         elide_single_field_struct_locals(m);
+    });
+
+    // Adjacent-use box elision: kill the `Box<T>` locals lowering mints for
+    // `&primitive` payload bindings (`match r { Token(i) => f(*i) }`), whose
+    // initializer reads the heap so `elide_single_field_struct` leaves them.
+    wir_pass("wir/elide_adjacent_box_locals", module, profiler, |m| {
+        elide_adjacent_box_locals(m);
     });
 
     // Phase 3: forward constant struct fields. List literals arrive as
