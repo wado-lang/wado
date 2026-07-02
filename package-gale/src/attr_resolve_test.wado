@@ -1,0 +1,77 @@
+use { resolve_attrs, AttrTarget } from "./attr_resolve.wado";
+use { parse } from "./g4/parser.wado";
+
+test "resolve_attrs classifies labels, refs, attrs, and specials" {
+    let g = parse("grammar T;
+r returns [int v] : a=e op=B { $v = $a.v; } ;
+e returns [int v] : ID ;
+").unwrap();
+    let rule = &g.parser_rules[0];
+    let body = &" $v = $a.v; ";
+    let refs = resolve_attrs(body, rule, &g.parser_rules).unwrap();
+    // $v (returns attr), $a (rule label), .v (a's returns field)
+    assert refs.len() == 2, `count: {refs.len()}`;
+    assert refs[0].name == "v" && refs[0].target matches { RuleAttr }, "v is a returns attr";
+    assert refs[1].name == "a" && refs[1].target matches { RuleLabel }, "a is a rule label";
+    if let Some(m) = &refs[1].member {
+        assert *m == "v", `member: {*m}`;
+    }
+}
+
+test "resolve_attrs resolves token labels and token members" {
+    let g = parse("grammar T;
+r : x=ID { print($x.text); } ;
+").unwrap();
+    let refs = resolve_attrs(&" print($x.text); ", &g.parser_rules[0], &g.parser_rules).unwrap();
+    assert refs.len() == 1;
+    assert refs[0].target matches { TokenLabel }, "x is a token label";
+}
+
+test "resolve_attrs resolves unlabeled token and rule refs" {
+    let g = parse("grammar T;
+r : e ID ;
+e : ID ;
+").unwrap();
+    let refs = resolve_attrs(&" $e.start $ID.text ", &g.parser_rules[0], &g.parser_rules).unwrap();
+    assert refs.len() == 2;
+    assert refs[0].name == "e" && refs[0].target matches { RuleRef }, "e is a rule ref";
+    assert refs[1].name == "ID" && refs[1].target matches { TokenRef }, "ID is a token ref";
+}
+
+test "resolve_attrs list label" {
+    let g = parse("grammar T;
+r : (xs+=ID)* ;
+").unwrap();
+    let refs = resolve_attrs(&" $xs ", &g.parser_rules[0], &g.parser_rules).unwrap();
+    assert refs.len() == 1;
+    assert refs[0].target matches { ListLabel }, "xs is a list label";
+}
+
+test "resolve_attrs errors on an unknown reference" {
+    let g = parse("grammar T;
+r : ID ;
+").unwrap();
+    let res = resolve_attrs(&" $nope ", &g.parser_rules[0], &g.parser_rules);
+    assert res.is_err(), "unknown $nope must be an error";
+}
+
+test "resolve_attrs errors on an invalid token member" {
+    let g = parse("grammar T;
+r : x=ID ;
+").unwrap();
+    let res = resolve_attrs(&" $x.bogus ", &g.parser_rules[0], &g.parser_rules);
+    assert res.is_err(), "invalid token member must be an error";
+}
+
+test "resolve_attrs errors on an unknown rule member" {
+    let g = parse("grammar T;
+r : e ;
+e returns [int v] : ID ;
+").unwrap();
+    // `.w` is not a field of e's returns nor a rule pseudo-member.
+    let res = resolve_attrs(&" $e.w ", &g.parser_rules[0], &g.parser_rules);
+    assert res.is_err(), "unknown rule member must be an error";
+    // `.v` (declared) and `.start` (pseudo) both resolve.
+    assert resolve_attrs(&" $e.v ", &g.parser_rules[0], &g.parser_rules).is_ok();
+    assert resolve_attrs(&" $e.start ", &g.parser_rules[0], &g.parser_rules).is_ok();
+}

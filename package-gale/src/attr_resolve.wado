@@ -1,0 +1,262 @@
+//! Attribute resolution for action / predicate bodies.
+//!
+//! Consumes the raw `$ident(.ident)?` references `attr_scan` finds and
+//! resolves each against a per-rule environment (action.md, "Attribute
+//! resolution"): element labels, rule args / returns / locals, unlabeled
+//! element references by name, and the ANTLR specials. The result is a
+//! `ResolvedAttr` per reference — a target classification plus the member
+//! and the fragment span the substitution engine later rewrites. An
+//! unresolvable reference is a loud error, never a silent passthrough.
+
+use {
+    ParserRule,
+    Element,
+    Alternative,
+    AttrDecl,
+} from "./ir.wado";
+use { AttrRef, find_attr_refs } from "./attr_scan.wado";
+
+/// What a `$name` reference resolves to. Determines how the substitution
+/// engine rewrites it (value-channel field, context-API call, ...).
+pub variant AttrTarget {
+    /// A parser special: `$text`, `$ctx`, `$start`, `$stop`, `$_p`.
+    ParserSpecial,
+    /// A lexer special: `$text`, `$type`, `$channel`, `$mode`.
+    LexerSpecial,
+    /// A rule argument / returns / locals attribute (a value-channel field).
+    RuleAttr,
+    /// A single-value label (`x=E`) bound to a token reference.
+    TokenLabel,
+    /// A single-value label (`x=e`) bound to a rule reference.
+    RuleLabel,
+    /// A list label (`x+=E`).
+    ListLabel,
+    /// An unlabeled token reference by name (`$ID`).
+    TokenRef,
+    /// An unlabeled rule reference by name (`$e`).
+    RuleRef,
+}
+
+/// A resolved attribute reference: its target classification, the base
+/// name, the `.member` suffix (validated), and the fragment span to rewrite.
+pub struct ResolvedAttr {
+    pub target: AttrTarget,
+    pub name: String,
+    pub member: Option<String> = null,
+    pub start: i32,
+    pub end: i32,
+}
+
+struct LabelInfo {
+    name: String,
+    list: bool,
+    is_token: bool,
+    /// For a single-value rule label, the referenced rule name (for member
+    /// validation against that rule's `returns`). Empty otherwise.
+    rule_name: String,
+}
+
+/// The attribute environment of one parser rule: the names it defines.
+pub struct AttrEnv {
+    labels: List<LabelInfo>,
+    attrs: List<String>,
+    token_refs: List<String>,
+    rule_refs: List<String>,
+}
+
+/// Resolve every attribute reference in `body` against `rule`'s environment.
+/// `rules` is the parser-rule table, used to validate a rule member against
+/// the referenced rule's `returns` fields. Returns the resolved list, or an
+/// error message naming the first unresolvable reference / member.
+pub fn resolve_attrs(
+    body: &String,
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+) -> Result<List<ResolvedAttr>, String> {
+    let env = build_attr_env(rule);
+    let refs = find_attr_refs(body);
+    let mut out: List<ResolvedAttr> = [];
+    for let r of &refs {
+        let resolved = resolve_one(r, &env, rules)?;
+        out.push(resolved);
+    }
+    return Result::<List<ResolvedAttr>, String>::Ok(out);
+}
+
+fn resolve_one(
+    r: &AttrRef,
+    env: &AttrEnv,
+    rules: &List<ParserRule>,
+) -> Result<ResolvedAttr, String> {
+    // Labels shadow same-named element refs (ANTLR resolves an explicit
+    // label first).
+    for let lab of &env.labels {
+        if lab.name == r.name {
+            let target = if lab.list {
+                AttrTarget::ListLabel
+            } else if lab.is_token {
+                AttrTarget::TokenLabel
+            } else {
+                AttrTarget::RuleLabel
+            };
+            check_member(r, &target, &lab.rule_name, rules)?;
+            return ok_attr(r, target);
+        }
+    }
+    if contains(&env.attrs, &r.name) {
+        check_member(r, &AttrTarget::RuleAttr, &"", rules)?;
+        return ok_attr(r, AttrTarget::RuleAttr);
+    }
+    if is_parser_special(&r.name) {
+        check_member(r, &AttrTarget::ParserSpecial, &"", rules)?;
+        return ok_attr(r, AttrTarget::ParserSpecial);
+    }
+    if contains(&env.token_refs, &r.name) {
+        check_member(r, &AttrTarget::TokenRef, &"", rules)?;
+        return ok_attr(r, AttrTarget::TokenRef);
+    }
+    if contains(&env.rule_refs, &r.name) {
+        check_member(r, &AttrTarget::RuleRef, &r.name, rules)?;
+        return ok_attr(r, AttrTarget::RuleRef);
+    }
+    return Result::<ResolvedAttr, String>::Err(`unresolved attribute reference '${r.name}'`);
+}
+
+fn ok_attr(r: &AttrRef, target: AttrTarget) -> Result<ResolvedAttr, String> {
+    return Result::<ResolvedAttr, String>::Ok(ResolvedAttr {
+        target,
+        name: r.name,
+        member: r.member,
+        start: r.start,
+        end: r.end,
+    });
+}
+
+/// Validate `r.member` against what `target` legally exposes. A token-like
+/// target admits the token member set; a rule-like target admits the rule
+/// pseudo-members plus the referenced rule's `returns` fields; specials and
+/// scalar attrs admit no member.
+fn check_member(
+    r: &AttrRef,
+    target: &AttrTarget,
+    rule_name: &String,
+    rules: &List<ParserRule>,
+) -> Result<(), String> {
+    let member = match &r.member {
+        Some(m) => *m,
+        None => return Result::<(), String>::Ok(()),
+    };
+    let ok = match *target {
+        TokenLabel => is_token_member(&member),
+        TokenRef => is_token_member(&member),
+        RuleLabel => is_rule_member(&member, rule_name, rules),
+        RuleRef => is_rule_member(&member, rule_name, rules),
+        // `$text.foo` etc. — specials and scalar attrs are leaves.
+        ParserSpecial => false,
+        LexerSpecial => false,
+        RuleAttr => false,
+        ListLabel => false,
+    };
+    if ok {
+        return Result::<(), String>::Ok(());
+    }
+    return Result::<(), String>::Err(`invalid member '.${member}' on '${r.name}'`);
+}
+
+fn is_token_member(m: &String) -> bool {
+    return *m == "text" || *m == "type" || *m == "line" || *m == "pos"
+        || *m == "index" || *m == "channel" || *m == "int";
+}
+
+fn is_rule_member(m: &String, rule_name: &String, rules: &List<ParserRule>) -> bool {
+    if *m == "text" || *m == "ctx" || *m == "start" || *m == "stop" {
+        return true;
+    }
+    for let rule of rules {
+        if rule.name == *rule_name {
+            for let d of &rule.returns_decls {
+                if d.name == *m {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+fn is_parser_special(name: &String) -> bool {
+    return *name == "text" || *name == "ctx" || *name == "start"
+        || *name == "stop" || *name == "_p";
+}
+
+fn contains(names: &List<String>, name: &String) -> bool {
+    for let n of names {
+        if *n == *name {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Build a rule's attribute environment by collecting its declared
+/// attributes and walking its alternatives for labels and unlabeled refs.
+pub fn build_attr_env(rule: &ParserRule) -> AttrEnv {
+    let mut attrs: List<String> = [];
+    for let d of &rule.args {
+        attrs.push(d.name);
+    }
+    for let d of &rule.returns_decls {
+        attrs.push(d.name);
+    }
+    for let d of &rule.locals_decls {
+        attrs.push(d.name);
+    }
+    let mut labels: List<LabelInfo> = [];
+    let mut token_refs: List<String> = [];
+    let mut rule_refs: List<String> = [];
+    for let alt of &rule.alternatives {
+        for let e of &alt.elements {
+            collect_env_element(e, &mut labels, &mut token_refs, &mut rule_refs);
+        }
+    }
+    return AttrEnv { labels, attrs, token_refs, rule_refs };
+}
+
+fn collect_env_element(
+    elem: &Element,
+    labels: &mut List<LabelInfo>,
+    token_refs: &mut List<String>,
+    rule_refs: &mut List<String>,
+) {
+    match *elem {
+        Label(lab) => {
+            let [is_token, rule_name] = classify_labeled(&lab.element);
+            labels.push(LabelInfo { name: lab.name, list: lab.list, is_token, rule_name });
+        },
+        RuleRef(rr) => rule_refs.push(rr.name),
+        TokenRef(tr) => token_refs.push(tr.name),
+        Group(g) => {
+            for let alt of &g.alternatives {
+                for let e of &alt.elements {
+                    collect_env_element(e, labels, token_refs, rule_refs);
+                }
+            }
+        },
+        Repeat(rep) => collect_env_element(&rep.element, labels, token_refs, rule_refs),
+        Not(n) => collect_env_element(&n.element, labels, token_refs, rule_refs),
+        _ => {},
+    }
+}
+
+/// Classify a labeled element as token-bound or rule-bound. A `TokenRef`
+/// or `Literal` is a token; a `RuleRef` is a rule (returning its name for
+/// member validation). Other shapes default to token-like (no rule members).
+fn classify_labeled(elem: &Element) -> [bool, String] {
+    return match *elem {
+        RuleRef(rr) => [false, rr.name],
+        TokenRef(_) => [true, ""],
+        Literal(_) => [true, ""],
+        Not(n) => classify_labeled(&n.element),
+        _ => [true, ""],
+    };
+}
