@@ -37,7 +37,33 @@ wit-encoder = { version = "0.251" }
 wasm-compose = { version = "0.251" }
 semver = { version = "1" }
 spdx = { version = "0.13" }
-wasmtime = { version = "=46.0.1", features = ["async", "component-model", "component-model-async"] }
+# Default features minus `cache` (wasmtime's disk cache is unused — Kiln is
+# wado's cache — and it drags in zstd-sys), `coredump`, `debug-builtins`, and
+# `debug` (guest DWARF debugging; wado never sets `Config::debug_info`).
+wasmtime = { version = "=46.0.1", default-features = false, features = [
+    "anyhow",
+    "async",
+    "backtrace",
+    "gc",
+    "gc-copying",
+    "gc-drc",
+    "gc-null",
+    "wat",
+    "profiling",
+    "parallel-compilation",
+    "cranelift",
+    "pooling-allocator",
+    "demangle",
+    "addr2line",
+    "runtime",
+    "component-model",
+    "component-model-async",
+    "threads",
+    "stack-switching",
+    "std",
+    "compile-time-builtins",
+    "wit-parser",
+] }
 wasmtime-wasi = { version = "=46.0.1", features = ["p3"] }
 wasmtime-wasi-http = { version = "=46.0.1", features = ["p3"] }
 wasmtime-wasi-tls = { version = "=46.0.1", default-features = false, features = ["p3", "rustls"] }
