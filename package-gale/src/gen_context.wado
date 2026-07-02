@@ -145,9 +145,9 @@ pub struct GenContext {
     /// option. Off by default.
     trace: bool,
     /// When set, parser emit executes retained actions (Stage C) instead of
-    /// discarding them: the `execute_actions` generator option, narrowed by
-    /// codegen to grammars whose action language Gale can currently emit.
-    /// Off by default, so actionless / option-off grammars stay byte-identical.
+    /// discarding them: true for grammars whose action language Gale can
+    /// currently emit (`language = Wado`). Actionless / other-language
+    /// grammars stay byte-identical.
     emit_actions: bool,
     /// `action_id`s codegen has handled (emitted, or already raised a loud
     /// diagnostic for). A post-emit sweep warns for any stamped parser action
@@ -380,10 +380,9 @@ impl GenContext {
         return self.trace;
     }
 
-    /// Enable action execution in the generated parser (the
-    /// `execute_actions` generator option, narrowed to an emittable action
-    /// language). Read by `gen_parser_struct` (the `output` buffer + `emit`
-    /// method), the parse entry (`output` on `ParseResult`), and
+    /// Enable action execution in the generated parser (set for an emittable
+    /// action language). Read by `gen_parser_struct` (the `output` buffer +
+    /// `emit` method), the parse entry (`output` on `ParseResult`), and
     /// `gen_alt_elements` (the interleaved action bodies).
     pub fn set_emit_actions(&mut self, on: bool) {
         self.emit_actions = on;

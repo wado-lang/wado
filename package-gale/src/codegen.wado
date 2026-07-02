@@ -55,11 +55,6 @@ pub struct GenerateOptions {
     /// decisions. Off by default; enabled by `gale gen --trace` or the
     /// `trace: true` Kiln generator option.
     pub trace: bool = false,
-    /// Execute retained `{ ... }` actions in the generated parser instead of
-    /// discarding them (Stage C). Off by default; codegen further narrows it
-    /// to grammars whose action language it can currently emit (`language =
-    /// Wado`). See `package-gale/action.md`.
-    pub execute_actions: bool = false,
 }
 
 /// Result of a codegen pass: the generated `.wado` source plus the
@@ -114,7 +109,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
     let mut ctx = GenContext::new(&grammar.parser_rules, &lit_tokens);
     ctx.set_trace(options.trace);
-    ctx.set_emit_actions(options.execute_actions && action_language_is_emittable(grammar));
+    ctx.set_emit_actions(action_language_is_emittable(grammar));
     let lowered = lower(grammar, &lit_tokens, &mut ctx);
     // Build the ATN up front when the grammar needs the simulator, so parser
     // emit can push each rule call's exact return state (`call_site_returns`)

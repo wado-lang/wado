@@ -1,14 +1,13 @@
 //! Stage C: a `language = Wado` print action executes during the parse and
 //! its text is surfaced on `ParseResult.output`. Drives the end-to-end path:
-//! `execute_actions` generator option → `Parser.emit` / `output` field →
-//! action body emitted inline (guarded on `!p.speculating`) → threaded onto
-//! the returned `ParseResult`.
+//! `Parser.emit` / `output` field → action body emitted inline (guarded on
+//! `!p.speculating`) → threaded onto the returned `ParseResult`.
 
 use wa from "./grammars/wado_action.g4"
     with {
         generator: {
             module: "../src/generator.wado",
-            options: { highlight: false, execute_actions: true },
+            options: { highlight: false },
             output_dir: "./generated/action_emit",
         },
     };

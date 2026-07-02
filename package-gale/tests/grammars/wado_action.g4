@@ -1,9 +1,8 @@
 // Source: Gale test fixture (Stage C action execution)
 // License: same as the Gale package
 //
-// A `language = Wado` grammar with a print-style action. With the
-// `execute_actions` generator option on, the action runs during the parse
-// and its text lands in `ParseResult.output`.
+// A `language = Wado` grammar with a print-style action: the action runs
+// during the parse and its text lands in `ParseResult.output`.
 grammar WadoAction;
 
 options { language = Wado; }
