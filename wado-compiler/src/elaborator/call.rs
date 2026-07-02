@@ -1157,6 +1157,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
+        // Fill any still-unbound type param that declares a default
+        // (`fn f<T = Fallback>(...)`) with its default type, before the
+        // bound check and the defer/report step below. A value default on
+        // the same parameter (`v: T = Fallback {}`) leaves nothing to infer
+        // `T` from at an omitted-argument call site, so without this the
+        // unbound `TypeParam` reaches codegen and traps. Filling first also
+        // lets `check_function_type_arg_bounds` see the concrete default and
+        // record any bound-driven synthesis request (e.g. `Serialize`).
+        self.fill_defaulted_fn_type_args(&callee, &mut type_args);
+
         // Check trait bounds on function type arguments
         if !type_args.is_empty() {
             self.check_function_type_arg_bounds(&callee, &type_args, call.span);
@@ -1981,6 +1991,51 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ),
             span,
         });
+    }
+
+    /// Substitute the declared default type (`fn f<T = Fallback>`) into any
+    /// dense type-arg slot still left unbound by call-site inference. The
+    /// dense index space matches [`Self::defer_or_report_uninferred_fn_type_args`]
+    /// (non-effect, non-`fn`-bound params in declaration order). Seeds an
+    /// empty `type_args` first so a fully-omitted turbofish is handled too;
+    /// non-defaulted slots keep their unbound `TypeParam`, leaving the
+    /// defer/report step to handle them exactly as before.
+    fn fill_defaulted_fn_type_args(&mut self, callee: &CalleeRef, type_args: &mut Vec<TypeId>) {
+        let params = self.lookup_function_type_params(callee);
+        let space: Vec<&ast::GenericParam> =
+            params.iter().filter(|p| p.is_real_type_param()).collect();
+        if !space.iter().any(|p| p.default.is_some()) {
+            return;
+        }
+        let n = space.len();
+        let defaults: Vec<Option<TypeId>> = space
+            .iter()
+            .map(|p| p.default.as_ref().map(|ty| self.resolve_type(ty)))
+            .collect();
+        if type_args.is_empty() {
+            *type_args = space
+                .iter()
+                .enumerate()
+                .map(|(i, p)| {
+                    self.tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_type_param(p.name.clone(), i as u32)
+                })
+                .collect();
+        }
+        if type_args.len() != n {
+            // Pack / effect interleaving produced a non-dense list; don't
+            // risk a misaligned substitution.
+            return;
+        }
+        for (i, slot) in type_args.iter_mut().enumerate() {
+            if self.is_unbound_type_param(*slot)
+                && let Some(default_ty) = defaults[i]
+            {
+                *slot = default_ty;
+            }
+        }
     }
 
     /// Defer (mint inference holes) or report unresolved free-function type
