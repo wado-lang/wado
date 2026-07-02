@@ -110,6 +110,7 @@ pub(super) struct FlagsMemberData {
 #[derive(Clone)]
 pub(crate) struct FlagsInfo {
     pub(super) type_id: TypeId,
+    pub(super) module_source: ModuleSource,
     pub(super) members: Vec<FlagsMemberData>,
 }
 
@@ -1575,6 +1576,20 @@ impl<'a> TypeLookup<'a> {
 
     pub(super) fn flags_case(&self, name: &str) -> Option<&'a FlagsInfo> {
         self.lookup_ref(name, Some(self.local_flags_cases), self.all_flags_cases)
+    }
+
+    pub(super) fn flags_case_in(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<&'a FlagsInfo> {
+        self.lookup_ref_in(
+            name,
+            module_source,
+            self.local_flags_cases,
+            self.all_flags_cases,
+            |info| &info.module_source,
+        )
     }
 
     pub(super) fn resource_type(&self, name: &str) -> Option<&'a ResourceInfo> {

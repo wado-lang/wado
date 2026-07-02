@@ -1,5 +1,5 @@
 grammar T;
-s @after {<ToStringTree("$ctx"):writeln()>} : expr EOF;
+s @after {System.out.println($ctx.toStringTree(this));} : expr EOF;
 expr:
     a=expr '*' a=expr #Factor
     | b+=expr ',' b+=expr #Comma

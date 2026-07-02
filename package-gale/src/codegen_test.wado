@@ -3,6 +3,7 @@ use {
     GrammarKind,
     GrammarOption,
     OptionValue,
+    ActionSource,
     NamedAction,
     ParserRule,
     Alternative,
@@ -941,7 +942,7 @@ test "metadata comment formats string and int option values" {
         options: [
             GrammarOption { name: "tokenVocab", value: OptionValue::Str("foo.g4") },
             GrammarOption { name: "k", value: OptionValue::Int(3) },
-            GrammarOption { name: "init", value: OptionValue::Action("some code;") },
+            GrammarOption { name: "init", value: OptionValue::Action(ActionSource { text: "some code;" }) },
         ],
         named_actions: [],
         pending_refs: [],

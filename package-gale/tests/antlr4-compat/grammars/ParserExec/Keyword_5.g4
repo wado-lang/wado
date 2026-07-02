@@ -1,4 +1,4 @@
 grammar T;
 
-program : addErrorListener*{<writeln("$text")>} EOF ;
+program : addErrorListener*{System.out.println($text);} EOF ;
 addErrorListener: 'break;' | 'continue;' | 'return;' ;

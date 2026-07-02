@@ -1,3 +1,3 @@
 lexer grammar L;
-I : (~[ab \n]|'a')  {<writeln("\"I\"")>} ;
+I : (~[ab \n]|'a')  {System.out.println("I");} ;
 WS : [ \n\u000D]+ -> skip ;

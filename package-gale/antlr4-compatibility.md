@@ -173,9 +173,12 @@ against ANTLR4 4.x.y` comment in the emitted test file so any diff in
 the oracle's answer surfaces in commit history.
 
 For grammars that contain action bodies (`{ ... }` or `{ ... }?`),
-the extractor strips them before invoking the oracle: ANTLR4's Java
-target would otherwise fail to compile a StringTemplate directive
-like `<writeln("$text")>`, and the action body has no effect on
+the extractor strips them before invoking the oracle. Extracted
+grammars carry Java action bodies (see "Action-template expansion"
+below), but the oracle compares parse trees: an executed action's
+prints would interleave with TestRig's tree output, and the expanded
+Java is pinned against `javac` only opportunistically — stripping
+keeps the oracle input minimal since the action body has no effect on
 parse-tree shape. The stripper is balanced-brace aware (skips `{` /
 `}` inside `'...'`, `[...]`, `/*...*/`, `//...`) so character ranges
 and lexer set literals are preserved.
@@ -457,9 +460,32 @@ tests/antlr4-compat/stage_b_oracle/<Category>/<Name>_test.wado
                     standard Wado test harness)
 ```
 
-The Wado script is self-contained: no `wado.toml`, no kiln, no
-imports from `package-gale/src`. It only uses `wadopoet::CodeWriter`
-to emit Wado source, plus `core:cli` and `wasi:filesystem` for I/O.
+The Wado script is self-contained: no `wado.toml`, no kiln. It uses
+`wadopoet::CodeWriter` to emit Wado source, a few `package-gale/src`
+helpers (`action_strip`, `action_templates`, `ident`), plus `core:cli`
+and `wasi:filesystem` for I/O.
+
+### Action-template expansion
+
+Upstream descriptors write action bodies, semantic predicates, and
+`returns`/`locals`/arg declarations in the testsuite's target-agnostic
+StringTemplate helper vocabulary (`<writeln("$e.v")>`, `<True()>`,
+`<StringList()>`, ...), which the upstream harness expands per target
+before `antlr4` ever sees the grammar. The extractor performs the same
+step for the Java target at extract time
+(`src/g4/action_templates.wado`), so the committed `.g4` files carry
+real Java action bodies instead of testsuite-only notation. The
+expansion table was pinned clean-room — helper names, descriptor
+`[output]`s, and the public ANTLR4 runtime API; never the upstream
+`.stg` files (License hygiene in [`AGENTS.md`](./AGENTS.md)). An
+unknown helper is left verbatim and warned to stderr: either add it to
+the table or triage the descriptor into `[skip]`.
+
+`scripts/expand_action_templates_in_place.wado` applies the identical
+transform to the committed corpus without `vendor/antlr4` (used for the
+initial conversion; on an expanded corpus it must report 0 rewrites).
+It cannot re-derive expansions — after a table change, regenerate via
+the vendor extract.
 
 ### Files
 

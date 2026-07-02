@@ -1,8 +1,8 @@
 grammar T;
-@parser::members {<InitBooleanMember("enumKeyword",True())>}
+@parser::members {boolean enumKeyword = true;}
 primary
-    :   ID {<AppendStr("\"ID \"", "$ID.text"):writeln()>}
-    |   {<GetMember("enumKeyword"):Not()>}? 'enum' {<writeln("\"enum\"")>}
+    :   ID {System.out.println("ID " + $ID.text);}
+    |   {!(this.enumKeyword)}? 'enum' {System.out.println("enum");}
     ;
 ID : [a-z]+ ;
 WS : [ \t\n\r]+ -> skip ;

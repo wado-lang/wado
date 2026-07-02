@@ -2,7 +2,7 @@ grammar Test;
 
 expression
 @after {
-<AssertIsList("$args")>
+java.util.List<?> __assertIsList = $args;
 }
     : op=NOT args+=expression
     | args+=expression (op=AND args+=expression)+

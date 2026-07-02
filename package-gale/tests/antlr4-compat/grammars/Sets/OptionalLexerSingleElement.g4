@@ -1,3 +1,3 @@
 grammar T;
-a : A {<InputText():writeln()>} ;
+a : A {System.out.println(_input.getText());} ;
 A : 'b'? 'c' ;

@@ -1,7 +1,7 @@
 grammar T;
 s
-@init {<LL_EXACT_AMBIG_DETECTION()>}
-@after {<DumpDFA()>}
+@init {getInterpreter().setPredictionMode(PredictionMode.LL_EXACT_AMBIG_DETECTION);}
+@after {dumpDFA();}
    : '{' stat* '}' ;
 stat: 'if' ID 'then' stat ('else' ID)?
        | 'return'

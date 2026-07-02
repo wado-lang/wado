@@ -1,7 +1,7 @@
 grammar T;
 prog
-@init {<LL_EXACT_AMBIG_DETECTION()>}
-   : expr expr {<writeln("\"alt 1\"")>}
+@init {getInterpreter().setPredictionMode(PredictionMode.LL_EXACT_AMBIG_DETECTION);}
+   : expr expr {System.out.println("alt 1");}
    | expr
    ;
 expr: '@'

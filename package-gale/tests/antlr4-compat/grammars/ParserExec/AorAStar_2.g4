@@ -1,6 +1,6 @@
 grammar T;
 a : (ID|ID)* {
-<writeln("$text")>
+System.out.println($text);
 };
 ID : 'a'..'z'+;
 WS : (' '|'\n') -> skip;

@@ -1,5 +1,5 @@
 grammar T;
-s : q=e {<writeln("$e.v")>};
+s : q=e {System.out.println($e.v);};
 e returns [int v]
   : a=e op='*' b=e {$v = $a.v * $b.v;}  # mult
   | a=e '+' b=e {$v = $a.v + $b.v;}     # add

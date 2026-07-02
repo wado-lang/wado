@@ -1,5 +1,5 @@
 grammar T;
-s @after {<DumpDFA()>}
+s @after {dumpDFA();}
   : ('$' a | '@' b)+ ;
 a : e ID ;
 b : e INT ID ;

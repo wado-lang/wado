@@ -1,2 +1,2 @@
 parser grammar S;
-a @after {<InitIntVar("x","0")>} : B;
+a @after {int x = 0;} : B;

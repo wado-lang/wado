@@ -1,2 +1,2 @@
 grammar T;
-a : ('a'|'b')* 'c' {<InputText():writeln()>} ;
+a : ('a'|'b')* 'c' {System.out.println(_input.getText());} ;

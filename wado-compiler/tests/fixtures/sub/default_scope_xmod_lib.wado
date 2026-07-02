@@ -1,0 +1,50 @@
+//! Dependency module for `default_field_xmod_variant_case.wado` and
+//! `default_arg_xmod_variant_case.wado`: declares types whose default
+//! expressions reference qualified paths (`Mode::Fast`, `Color::Red`) and a
+//! module-private global. Consumers deliberately do NOT import `Mode` /
+//! `Color`, so the defaults must resolve in this module's scope.
+
+global DEFAULT_RETRIES: i32 = 3;
+
+pub struct Window {
+    pub lo: i32,
+    pub hi: i32,
+}
+
+pub variant Mode {
+    Fast,
+    Slow,
+}
+
+pub enum Color {
+    Red,
+    Green,
+}
+
+pub struct Job {
+    pub name: String,
+    pub mode: Mode = Mode::Fast,
+    pub color: Color = Color::Red,
+    pub retries: i32 = DEFAULT_RETRIES,
+    /// Struct-literal default: the type name `Window` must also resolve in
+    /// this module when the consumer never imports it.
+    pub window: Window = Window { lo: 1, hi: 9 },
+}
+
+pub fn mode_score(m: &Mode) -> i32 {
+    return match *m {
+        Fast => 10,
+        Slow => 1,
+    };
+}
+
+pub fn color_score(c: &Color) -> i32 {
+    return match *c {
+        Red => 100,
+        Green => 200,
+    };
+}
+
+pub fn speed(base: i32, mode: Mode = Mode::Slow) -> i32 {
+    return base * mode_score(&mode);
+}

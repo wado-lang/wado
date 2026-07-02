@@ -1,10 +1,10 @@
 grammar T;
 s
 @init {
-<BuildParseTrees()>
+setBuildParseTree(true);
 }
 @after {
-<ToStringTree("$r.ctx"):writeln()>
+System.out.println($r.ctx.toStringTree(this));
 }
   : r=a ;
 a : b 'x'

@@ -1,2 +1,2 @@
 grammar T;
-a : 'a' ('b'|'z'{<Pass()>})* EOF ;
+a : 'a' ('b'|'z'{})* EOF ;

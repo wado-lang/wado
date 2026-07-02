@@ -1,5 +1,5 @@
 grammar M;
 import S;
-a : A {<Append("\"M.a: \"","$A"):writeln()>};
-A : 'abc' {<writeln("\"M.A\"")>};
+a : A {System.out.println("M.a: " + $A);};
+A : 'abc' {System.out.println("M.A");};
 WS : (' '|'\n') -> skip ;

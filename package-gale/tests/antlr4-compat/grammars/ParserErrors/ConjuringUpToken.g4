@@ -1,2 +1,2 @@
 grammar T;
-a : 'a' x='b' {<Append("\"conjured=\"","$x"):writeln()>} 'c' ;
+a : 'a' x='b' {System.out.println("conjured=" + $x);} 'c' ;

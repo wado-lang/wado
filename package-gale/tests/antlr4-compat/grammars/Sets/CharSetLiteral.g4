@@ -1,4 +1,4 @@
 grammar T;
-a : (A {<writeln("$A.text")>})+ ;
+a : (A {System.out.println($A.text);})+ ;
 A : [AaBb] ;
 WS : (' '|'\n')+ -> skip ;

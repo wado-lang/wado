@@ -1,10 +1,10 @@
 grammar T;
 prog
-@init {<LL_EXACT_AMBIG_DETECTION()>}
+@init {getInterpreter().setPredictionMode(PredictionMode.LL_EXACT_AMBIG_DETECTION);}
    : expr_or_assign*;
 expr_or_assign
-   : expr '++' {<writeln("\"fail.\"")>}
-   |  expr {<AppendStr("\"pass: \"","$expr.text"):writeln()>}
+   : expr '++' {System.out.println("fail.");}
+   |  expr {System.out.println("pass: " + $expr.text);}
    ;
 expr: expr_primary ('<-' ID)?;
 expr_primary

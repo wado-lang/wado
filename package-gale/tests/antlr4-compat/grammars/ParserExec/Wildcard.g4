@@ -1,7 +1,7 @@
 grammar T;
 a : (assign|.)+ EOF ;
 assign : ID '=' INT ';' {
-<writeln("$text")>
+System.out.println($text);
 } ;
 ID : 'a'..'z'+ ;
 INT : '0'..'9'+;

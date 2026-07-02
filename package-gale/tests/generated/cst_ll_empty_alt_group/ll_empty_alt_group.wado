@@ -1208,12 +1208,11 @@ global ATN_MERGE_CACHE_STRIDE: i64 = 1000000;
 /// The decoded ATN, in struct-of-arrays form. Decoded once from the
 /// serialized blob (into the module-level `ATN_SIM` in a generated
 /// parser) and read (never mutated) during prediction. Carries only the
-/// fields prediction actually reads — `num_tokens`, per-state `rule`, and
-/// per-state `decision` are compile-time-only (dump/debug, token-kind
-/// numbering) on the codegen-side `Atn`/`AtnState` and never make it into
-/// the blob, and a rule's stop state is identified by `state_kind ==
-/// ATN_RULE_STOP` rather than a stored `rule_stop`, so that isn't carried
-/// either. See `atn.wado::atn_blob_bytes` for the wire layout.
+/// fields prediction reads: `num_tokens` and per-state `rule`/`decision`
+/// are compile-time-only (dump/debug, token-kind numbering) on the
+/// codegen-side `Atn`/`AtnState`, and a rule's stop state is identified by
+/// `state_kind == ATN_RULE_STOP` rather than a stored `rule_stop` — none of
+/// the four are in the blob. See `atn.wado::atn_blob_bytes` for the layout.
 pub struct AtnSim {
     pub state_kind: List<i32>,
     pub state_tr_start: List<i32>,
@@ -1445,18 +1444,17 @@ fn edge_lists_eq(a: &List<[i32, i32, i32]>, b: &List<[i32, i32, i32]>) -> bool {
     return true;
 }
 
-/// Read one byte at `pos` of the packed ATN blob as an unsigned `i32`
-/// (0..=255). `atn_decode` is the sole caller and always derives `pos` from
-/// the blob's own layout, so this skips `List`'s bounds-checked `[]` in
-/// favor of `get_byte_unchecked` — the underlying Wasm GC array still traps
-/// on a genuine out-of-bounds read, so a malformed blob still fails loudly.
+/// Unsigned byte at `pos` (0..=255). `atn_decode` is the sole caller and
+/// always derives `pos` from the blob's own layout, so this skips `List`'s
+/// bounds-checked `[]` for `get_byte_unchecked` — the underlying Wasm GC
+/// array still traps on a genuine out-of-bounds read, so a malformed blob
+/// still fails loudly.
 #[allow(dead_code)]
 fn atn_read_u8(bytes: &List<u8>, pos: i32) -> i32 {
     return bytes.get_byte_unchecked(pos) as i32;
 }
 
-/// Read one little-endian 2-byte value at `pos` as an unsigned `i32`
-/// (0..=65535).
+/// Little-endian 2-byte value at `pos` (0..=65535).
 #[allow(dead_code)]
 fn atn_read_u16(bytes: &List<u8>, pos: i32) -> i32 {
     let b0 = bytes.get_byte_unchecked(pos) as i32;
@@ -1464,11 +1462,11 @@ fn atn_read_u16(bytes: &List<u8>, pos: i32) -> i32 {
     return b0 | b1 << 8;
 }
 
-/// Read one little-endian 3-byte value at `pos` as an unsigned `i32`
-/// (0..=16777215). Used for `tr_label`/`tr_follow` only: the *lexer* ATN
-/// (`latn.wado`) reuses those `AtnTransition` fields for a Unicode scalar
-/// range (up to `CHAR_MAX` = `0x10FFFF`), wider than the *parser* ATN's
-/// small token-kind index, so the shared decoder must fit the wider case.
+/// Little-endian 3-byte value at `pos` (0..=16777215). Used for
+/// `tr_label`/`tr_follow` only: the *lexer* ATN (`latn.wado`) reuses those
+/// fields for a Unicode scalar range (up to `CHAR_MAX` = `0x10FFFF`), wider
+/// than the *parser* ATN's small token-kind index, so the shared decoder
+/// must fit the wider case.
 #[allow(dead_code)]
 fn atn_read_u24(bytes: &List<u8>, pos: i32) -> i32 {
     let b0 = bytes.get_byte_unchecked(pos) as i32;
@@ -1477,18 +1475,15 @@ fn atn_read_u24(bytes: &List<u8>, pos: i32) -> i32 {
     return b0 | b1 << 8 | b2 << 16;
 }
 
-/// Decode the serialized ATN blob into `AtnSim`. Mirrors the column-oriented
-/// layout `atn.wado::atn_blob_bytes` writes: header counts, then
-/// `rule_start`/`decision_state`, then the per-state columns
-/// (`state_kind`: u8, `state_tr_count`: u16), then the per-transition
-/// columns (`tr_kind`: u8, `tr_target`: u16, `tr_label`/`tr_follow`: u24,
-/// `tr_prec`: u16 — `tr_target`/`tr_label`/`tr_follow` carry a +1 bias for
-/// the -1 sentinel). `ntrans_total` isn't stored — it's the running sum of
-/// `state_tr_count`, which precedes the transition columns, so it (and
-/// `state_tr_start`, a running prefix sum) falls out while reading that
-/// column. Each column is read directly off the packed bytes into a
-/// `with_capacity`-presized `List`: one pass, no intermediate word array,
-/// nothing grows by doubling.
+/// Decode the serialized ATN blob into `AtnSim`, mirroring the column order
+/// `atn.wado::atn_blob_bytes` writes (header counts, `rule_start`,
+/// `decision_state`, then the per-state and per-transition columns — see
+/// that function's doc for the exact per-field widths and the -1 bias).
+/// `ntrans_total` isn't stored: it's the running sum of `state_tr_count`,
+/// which precedes the transition columns, so it (and `state_tr_start`, a
+/// running prefix sum) falls out while reading that column. Each column is
+/// read directly off the packed bytes into a `with_capacity`-presized
+/// `List`: one pass, no intermediate word array, nothing grows by doubling.
 #[allow(dead_code)]
 pub fn atn_decode(bytes: &List<u8>) -> AtnSim {
     let mut p = 0;

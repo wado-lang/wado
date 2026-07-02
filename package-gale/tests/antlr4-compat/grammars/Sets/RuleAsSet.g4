@@ -1,2 +1,2 @@
 grammar T;
-a @after {<InputText():writeln()>} : 'a' | 'b' |'c' ;
+a @after {System.out.println(_input.getText());} : 'a' | 'b' |'c' ;

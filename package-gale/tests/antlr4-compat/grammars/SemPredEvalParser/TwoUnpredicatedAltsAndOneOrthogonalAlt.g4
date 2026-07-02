@@ -1,9 +1,9 @@
 grammar T;
-s : {<LL_EXACT_AMBIG_DETECTION()>} a ';' a ';' a;
-a : INT {<writeln("\"alt 1\"")>}
-  | ID {<writeln("\"alt 2\"")>} // must pick this one for ID since pred is false
-  | ID {<writeln("\"alt 3\"")>}
-  | {<False()>}? ID {<writeln("\"alt 4\"")>}
+s : {getInterpreter().setPredictionMode(PredictionMode.LL_EXACT_AMBIG_DETECTION);} a ';' a ';' a;
+a : INT {System.out.println("alt 1");}
+  | ID {System.out.println("alt 2");} // must pick this one for ID since pred is false
+  | ID {System.out.println("alt 3");}
+  | {false}? ID {System.out.println("alt 4");}
   ;
 ID : 'a'..'z'+ ;
 INT : '0'..'9'+;
