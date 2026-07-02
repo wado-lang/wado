@@ -849,51 +849,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.classify_on_bound_trait(base).map(|_| base.to_string())
     }
 
-    /// Validate that `target_type_id` is structurally eligible to derive
-    /// `trait_name` (`Eq`, `Ord`, `Serialize`, or `Deserialize`), emitting a
-    /// hard [`types::TypeError::ExplicitDeriveNotEligible`] at `span` if
-    /// not. Unlike a bound (satisfied the moment fields structurally
-    /// qualify, or simply unsatisfied elsewhere), an explicit marker is the
-    /// user's guarantee that the type derives the trait — so ineligibility
-    /// is an error at the marker's own span, not a deferred bound-check
-    /// failure. Returns whether `target_type_id` is eligible.
-    fn validate_explicit_derive_eligibility(
-        &mut self,
-        trait_type: &ast::Type,
-        trait_name: &str,
-        target_type_id: TypeId,
-        target_type_name: &str,
-        span: crate::token::Span,
-    ) -> bool {
-        if self.structurally_derivable_for_explicit_request(
-            &self.annotate_ctx,
-            target_type_id,
-            trait_name,
-        ) {
-            true
-        } else {
-            let reason = self.trait_unimpl_reason_chain(target_type_id, trait_name);
-            let _ = self
-                .logger
-                .error(types::TypeError::ExplicitDeriveNotEligible {
-                    trait_name: self.get_type_name_full(trait_type),
-                    type_name: target_type_name.to_string(),
-                    reason,
-                    span,
-                });
-            false
-        }
-    }
-
     /// Validate and record an explicit `on_bound`-trait marker (`impl Eq
     /// for T;` / `impl Ord for T;` / `impl Serialize for T;` / `impl
-    /// Deserialize for T;`) into the same `bound_driven_synth_requests`
-    /// set a real `T: Trait` bound records into. Note this records
-    /// unconditionally at the marker's own declaration — a marker forces a
-    /// body into existence with no other reference present; genuinely
-    /// deferring that to first use is the placeholder-based redesign in
-    /// WEP 2026-06-25-trait-derivation's "Discovery Mechanism", not
-    /// implemented yet.
+    /// Deserialize for T;`). Three outcomes: structurally eligible →
+    /// record into the same `bound_driven_synth_requests` set a real
+    /// `T: Trait` bound records into; ineligible but already covered by a
+    /// methodful impl → accept silently (the guarantee holds, synthesis
+    /// has nothing to add); neither → hard error at the marker's own span
+    /// (unlike a bound, which is simply unsatisfied elsewhere).
+    ///
+    /// Note an eligible marker records unconditionally at its own
+    /// declaration — it forces a body into existence with no other
+    /// reference present; genuinely deferring that to first use is the
+    /// placeholder-based redesign in WEP 2026-06-25-trait-derivation's
+    /// "Discovery Mechanism", not implemented yet.
     ///
     /// The request is keyed by the *target type's* defining module (the
     /// synthesis drains distribute per defining module), not the module
@@ -906,27 +875,61 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         target_type_name: &str,
         span: crate::token::Span,
     ) {
-        if !self.validate_explicit_derive_eligibility(
-            trait_type,
-            trait_name,
-            target_type_id,
-            target_type_name,
-            span,
-        ) {
+        // The target failed to resolve (`resolve_type` already emitted the
+        // real error, e.g. missing type arguments); validating the
+        // error-recovery id would only add a bogus "cannot derive" error
+        // on top.
+        if target_type_id == tir::TypeTable::ERROR {
             return;
         }
-        let module_source = match self.tysys.type_table.borrow().get(target_type_id) {
-            tir::ResolvedType::Struct { module_source, .. }
-            | tir::ResolvedType::Enum { module_source, .. }
-            | tir::ResolvedType::Variant { module_source, .. }
-            | tir::ResolvedType::Flags { module_source, .. }
-            | tir::ResolvedType::GenericInstance { module_source, .. } => module_source.clone(),
-            _ => self.current_module_source.clone(),
-        };
-        self.tysys
-            .type_table
-            .borrow_mut()
-            .record_bound_driven_synth_request(target_type_name, &module_source, trait_name);
+        if self.structurally_derivable_for_explicit_request(
+            &self.annotate_ctx,
+            target_type_id,
+            trait_name,
+        ) {
+            let module_source = match self.tysys.type_table.borrow().get(target_type_id) {
+                tir::ResolvedType::Struct { module_source, .. }
+                | tir::ResolvedType::Enum { module_source, .. }
+                | tir::ResolvedType::Variant { module_source, .. }
+                | tir::ResolvedType::Newtype { module_source, .. }
+                | tir::ResolvedType::Flags { module_source, .. }
+                | tir::ResolvedType::GenericInstance { module_source, .. } => module_source.clone(),
+                // Only the nominal kinds above pass eligibility validation
+                // (everything else fails `structural_derive_members` or the
+                // Newtype / Flags delegation arms), so reaching here with
+                // any other kind is a validator/keying mismatch — the bug
+                // family that silently dropped cross-module flags requests
+                // before `Flags` was added to this match. Fail loudly.
+                other => unreachable!(
+                    "explicit derive marker validated for non-nominal type `{other:?}`"
+                ),
+            };
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .record_bound_driven_synth_request(target_type_name, &module_source, trait_name);
+            return;
+        }
+        // Not structurally derivable, but a methodful impl anywhere still
+        // satisfies the marker's guarantee (e.g. `impl Serialize for i32;`
+        // — `core:serde` ships the real impl, and structural derivation
+        // has nothing to say about a primitive). Accept without recording
+        // so synthesis never shadows the real impl.
+        if self.has_real_trait_impl_for_type(target_type_name, trait_name) {
+            return;
+        }
+        // Neither derivable nor already implemented: the marker's
+        // guarantee is broken. Unlike a bound (simply unsatisfied
+        // elsewhere), this is an error at the marker's own span.
+        let reason = self.trait_unimpl_reason_chain(target_type_id, trait_name);
+        let _ = self
+            .logger
+            .error(types::TypeError::ExplicitDeriveNotEligible {
+                trait_name: self.get_type_name_full(trait_type),
+                type_name: target_type_name.to_string(),
+                reason,
+                span,
+            });
     }
 
     /// Handle an `impl Trait for Type;` marker (`is_synthesize_request`):

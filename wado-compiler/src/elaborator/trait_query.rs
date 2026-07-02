@@ -37,6 +37,27 @@ impl OnBoundTrait {
     }
 }
 
+/// A structural member visited by
+/// [`Elaborator::walk_structural_derive_members`], borrowing the field or
+/// case name so the hot conformance walks allocate nothing; diagnostics
+/// build a label on demand via [`Self::describe`].
+#[derive(Clone, Copy)]
+enum StructuralMember<'a> {
+    /// A struct field.
+    Field(&'a str),
+    /// A variant case's (non-unit) payload.
+    Case(&'a str),
+}
+
+impl StructuralMember<'_> {
+    fn describe(self) -> String {
+        match self {
+            Self::Field(name) => format!("field `{name}`"),
+            Self::Case(name) => format!("variant `{name}`"),
+        }
+    }
+}
+
 /// Free-function form of [`Elaborator::canonical_decl_key`], callable from
 /// any module that has the inputs in hand. Reify uses this for trait
 /// default-method synthesis (it has no `Elaborator` instance but does carry
@@ -413,22 +434,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         };
         let resolved = self.tysys.type_table.borrow().get(type_id).clone();
-        let Some(members) = self.structural_derive_members(&resolved, tr) else {
-            return;
-        };
 
-        // Report the first member that breaks the trait, then recurse to
-        // explain that member in turn.
-        for (label, member_tid) in members {
-            if !self.type_implements_trait(&self.annotate_ctx, member_tid, trait_name) {
-                let owner = self.tysys.type_id_to_string(type_id);
-                let member_ty = self.tysys.type_id_to_string(member_tid);
-                chain.push(format!(
-                    "`{owner}` does not implement `{trait_name}` because {label} of type `{member_ty}` does not implement `{trait_name}`"
-                ));
-                self.collect_trait_unimpl_reason(member_tid, trait_name, chain);
-                return;
+        // Find the first member that breaks the trait, then report it and
+        // recurse to explain that member in turn.
+        let mut failing: Option<(String, TypeId)> = None;
+        self.walk_structural_derive_members(&resolved, tr, &mut |member, member_tid| {
+            if self.type_implements_trait(&self.annotate_ctx, member_tid, trait_name) {
+                true
+            } else {
+                failing = Some((member.describe(), member_tid));
+                false
             }
+        });
+        if let Some((label, member_tid)) = failing {
+            let owner = self.tysys.type_id_to_string(type_id);
+            let member_ty = self.tysys.type_id_to_string(member_tid);
+            chain.push(format!(
+                "`{owner}` does not implement `{trait_name}` because {label} of type `{member_ty}` does not implement `{trait_name}`"
+            ));
+            self.collect_trait_unimpl_reason(member_tid, trait_name, chain);
         }
     }
 
@@ -453,18 +477,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The structural members whose recursive conformance decides whether
-    /// `resolved` auto-derives `tr` — struct fields, or a variant's
-    /// non-unit case payloads, with a generic instance's type parameters
-    /// substituted by its type arguments. Each member carries a diagnostic
-    /// label (``field `x` `` / ``variant `Y` ``) for reason chains.
+    /// Walk the structural members whose recursive conformance decides
+    /// whether `resolved` auto-derives `tr` — struct fields, or a
+    /// variant's non-unit case payloads, with a generic instance's type
+    /// parameters substituted by its type arguments. `visit` is called
+    /// per member and stops the walk by returning `false`, so a
+    /// conformance check pays nothing past the first failing member and
+    /// allocates no labels — [`StructuralMember::describe`] builds the
+    /// diagnostic label only where a consumer wants one.
     ///
-    /// `None` means the (type kind, trait) pair has no structural derive
-    /// rule at all: `Ord` on a variant (payload ordering is not derived),
-    /// a nominal kind outside this table (newtypes and flags delegate to
-    /// their base representation instead — see the consumers), or a name
-    /// whose field/case info isn't registered. An empty vector means
-    /// derivable with nothing left to check (enums).
+    /// Substitution is intentionally shallow (a member that *is* a type
+    /// parameter maps to its argument; a parameter nested inside a
+    /// container, e.g. `List<T>`, stays as written): conformance of such
+    /// members holds via the type-param arms of
+    /// [`Self::type_implements_trait_inner`] and the bounded-impl checks,
+    /// and the deep alternative (`Self::substitute_type_params_by_map`)
+    /// interns new types per call — too expensive for a query on the
+    /// bound-check hot path.
+    ///
+    /// Returns `None` when the (type kind, trait) pair has no structural
+    /// derive rule at all: `Ord` on a variant (payload ordering is not
+    /// derived), `Eq` / `Ord` on flags (they erase to `u32`; only serde
+    /// needs a body for the flag names), a nominal kind outside this table
+    /// (newtypes delegate to their base type — see the consumers), or a
+    /// name whose field/case info isn't registered. `Some(true)` means
+    /// every visited member passed (trivially so for enums and flags,
+    /// which have no members); `Some(false)` means `visit` rejected one.
     ///
     /// The single structural rule shared by all three consumers:
     /// [`Self::type_implements_trait_inner`] (bound checks, which also
@@ -472,52 +510,56 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// [`Self::structurally_derivable_for_explicit_request`] (marker
     /// validation), and [`Self::collect_trait_unimpl_reason`]
     /// (diagnostics).
-    fn structural_derive_members(
+    fn walk_structural_derive_members(
         &self,
         resolved: &ResolvedType,
         tr: OnBoundTrait,
-    ) -> Option<Vec<(String, TypeId)>> {
-        let substituted =
-            |param_ids: &[TypeId], type_args: &[TypeId]| -> IndexMap<TypeId, TypeId> {
-                param_ids
-                    .iter()
-                    .zip(type_args.iter())
-                    .map(|(param, arg)| (*param, *arg))
-                    .collect()
-            };
-        let struct_members = |info: &super::types::StructFieldInfo,
-                              param_map: &IndexMap<TypeId, TypeId>|
-         -> Vec<(String, TypeId)> {
-            info.fields
+        visit: &mut dyn FnMut(StructuralMember<'_>, TypeId) -> bool,
+    ) -> Option<bool> {
+        let subst = |param_ids: &[TypeId], type_args: &[TypeId], tid: TypeId| -> TypeId {
+            param_ids
                 .iter()
-                .map(|(fname, tid, _)| {
-                    let concrete = param_map.get(tid).copied().unwrap_or(*tid);
-                    (format!("field `{fname}`"), concrete)
-                })
-                .collect()
+                .position(|param| *param == tid)
+                .and_then(|i| type_args.get(i).copied())
+                .unwrap_or(tid)
         };
-        let variant_members = |info: &super::types::VariantInfo,
-                               param_map: &IndexMap<TypeId, TypeId>|
-         -> Vec<(String, TypeId)> {
+        let walk_struct = |info: &super::types::StructFieldInfo,
+                           type_args: &[TypeId],
+                           visit: &mut dyn FnMut(StructuralMember<'_>, TypeId) -> bool|
+         -> bool {
+            info.fields.iter().all(|(fname, tid, _)| {
+                let concrete = subst(&info.type_param_type_ids, type_args, *tid);
+                visit(StructuralMember::Field(fname), concrete)
+            })
+        };
+        let walk_variant = |info: &super::types::VariantInfo,
+                            type_args: &[TypeId],
+                            visit: &mut dyn FnMut(StructuralMember<'_>, TypeId) -> bool|
+         -> bool {
             info.cases
                 .iter()
                 .filter(|c| c.payload != TypeTable::UNIT)
-                .map(|c| {
-                    let concrete = param_map.get(&c.payload).copied().unwrap_or(c.payload);
-                    (format!("variant `{}`", c.name), concrete)
+                .all(|c| {
+                    let concrete = subst(&info.type_param_type_ids, type_args, c.payload);
+                    visit(StructuralMember::Case(&c.name), concrete)
                 })
-                .collect()
         };
-        let no_subst = IndexMap::default();
         match resolved {
-            ResolvedType::Enum { .. } => Some(Vec::new()),
+            ResolvedType::Enum { .. } => Some(true),
+            ResolvedType::Flags { .. } => {
+                if tr.is_serde() {
+                    Some(true)
+                } else {
+                    None
+                }
+            }
             ResolvedType::Struct {
                 name,
                 module_source,
                 ..
             } => {
                 let info = self.lookup_struct_fields_in(name, module_source)?;
-                Some(struct_members(info, &no_subst))
+                Some(walk_struct(info, &[], visit))
             }
             ResolvedType::Variant {
                 name,
@@ -527,7 +569,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return None;
                 }
                 let info = self.lookup_variant_case_in(name, module_source)?;
-                Some(variant_members(info, &no_subst))
+                Some(walk_variant(info, &[], visit))
             }
             ResolvedType::GenericInstance {
                 name,
@@ -535,13 +577,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 type_args,
             } => {
                 if let Some(info) = self.lookup_struct_fields_in(name, module_source) {
-                    let param_map = substituted(&info.type_param_type_ids, type_args);
-                    Some(struct_members(info, &param_map))
+                    Some(walk_struct(info, type_args, visit))
                 } else if tr != OnBoundTrait::Ord
                     && let Some(info) = self.lookup_variant_case_in(name, module_source)
                 {
-                    let param_map = substituted(&info.type_param_type_ids, type_args);
-                    Some(variant_members(info, &param_map))
+                    Some(walk_variant(info, type_args, visit))
                 } else {
                     None
                 }
@@ -580,10 +620,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // `None` also rejects `impl Ord for SomeVariant;` here — a
                 // hard error at the marker instead of a deferred failure at
                 // a `<` use site.
-                let Some(members) = self.structural_derive_members(nominal, tr) else {
-                    return false;
-                };
-                members.iter().all(|(_, member)| {
+                self.walk_structural_derive_members(nominal, tr, &mut |_, member| {
                     // A member resolving to the impl block's own
                     // (necessarily unconstrained) type parameter is
                     // trivially eligible: `impl<T> Eq for Wrapper<T>;`
@@ -592,10 +629,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `impl<T: Eq> Eq for Wrapper<T>` once some concrete
                     // instantiation demands it.
                     matches!(
-                        self.tysys.type_table.borrow().get(*member),
+                        self.tysys.type_table.borrow().get(member),
                         ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-                    ) || self.type_implements_trait(ctx, *member, trait_name)
-                })
+                    ) || self.type_implements_trait(ctx, member, trait_name)
+                }) == Some(true)
             }
         }
     }
@@ -628,7 +665,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let on_bound = self.classify_on_bound_trait(trait_name);
         let is_eq = on_bound == Some(OnBoundTrait::Eq);
         let is_eq_or_ord = is_eq || on_bound == Some(OnBoundTrait::Ord);
-        let is_serde = on_bound.is_some_and(OnBoundTrait::is_serde);
 
         // Primitives have built-in implementations for certain traits
         if let ResolvedType::Primitive(prim) = &resolved {
@@ -648,11 +684,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Structural auto-derive for the `on_bound` traits (WEP
         // 2026-06-25-trait-derivation): a nominal type satisfies the bound
-        // when every member listed by `structural_derive_members` does, and
-        // satisfaction records a synthesis request. The request is keyed
-        // nominally (name + module, not `TypeId`) so a generic type's many
-        // instantiations collapse onto one request against the base
-        // declaration.
+        // when every member visited by `walk_structural_derive_members`
+        // does, and satisfaction records a synthesis request. The request
+        // is keyed nominally (name + module, not `TypeId`) so a generic
+        // type's many instantiations collapse onto one request against the
+        // base declaration.
         //
         // `Eq`/`Ord` record even when a hand-written impl exists —
         // `synthesis::traits`' own dedup (`has_real_impl`) skips those —
@@ -676,6 +712,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
             }
+            | ResolvedType::Flags {
+                name,
+                module_source,
+            }
             | ResolvedType::GenericInstance {
                 name,
                 module_source,
@@ -696,10 +736,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && (matches!(resolved, ResolvedType::GenericInstance { .. })
                     || self.has_real_trait_impl_for_type(name, trait_name));
             if !serde_blocked
-                && let Some(members) = self.structural_derive_members(resolved, tr)
-                && members
-                    .iter()
-                    .all(|(_, member)| self.type_implements_trait(ctx, *member, trait_name))
+                && self.walk_structural_derive_members(resolved, tr, &mut |_, member| {
+                    self.type_implements_trait(ctx, member, trait_name)
+                }) == Some(true)
             {
                 self.tysys
                     .type_table
@@ -708,7 +747,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return true;
             }
             // On failure fall through to the plain impl lookup below — a
-            // hand-written impl can still satisfy the bound.
+            // hand-written impl can still satisfy the bound (and flags fall
+            // back to their `u32` erasure for the non-serde traits).
         }
 
         // Structs auto-implement Default when every field has a declared
@@ -792,27 +832,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let base_id = *base_type;
                 return self.type_implements_trait(ctx, base_id, trait_name);
             }
-            ResolvedType::Flags {
-                name,
-                module_source,
-            } => {
-                // Check for a direct impl on the flags type first (e.g., impl Serialize for Perms)
+            ResolvedType::Flags { name, .. } => {
+                // The serde traits were already answered (and recorded) by
+                // the unified `on_bound` block above; here check for a
+                // direct impl on the flags type (e.g. a hand-written
+                // `impl Inspect for Perms`) before falling back to the
+                // `u32` erasure.
                 if self.find_trait_impl_for_type(name, trait_name) {
                     return true;
                 }
-                // Flags have no fields (a bitmask over u32), so — like enums
-                // — they are always structurally eligible for on_bound serde
-                // traits. Record a request for the flags type itself (not
-                // just u32) so an actual `Perms::serialize` gets synthesized;
-                // the u32 fallback below still answers every other trait.
-                if is_serde {
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .record_bound_driven_synth_request(name, module_source, trait_name);
-                    return true;
-                }
-                // Fall back to u32's trait implementation
                 return self.type_implements_trait(ctx, TypeTable::U32, trait_name);
             }
             _ => return false,
@@ -827,11 +855,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Like [`Self::find_trait_impl_for_type`], but an empty `impl Trait for
-    /// Type;` marker does not count — only a real (methodful) impl does,
-    /// concrete or blanket. The serde auto-derive gate in
-    /// [`Self::type_implements_trait_inner`] needs exactly this question: a
-    /// marker is a request *for* the auto-derived body, not a competing
-    /// impl, while a real impl anywhere must win over synthesis.
+    /// Type;` marker does not count — only a real (methodful) concrete
+    /// impl, or an applicable blanket impl, does. The serde auto-derive
+    /// gate in [`Self::type_implements_trait_inner`] needs exactly this
+    /// question: a marker is a request *for* the auto-derived body, not a
+    /// competing impl, while a real impl anywhere must win over synthesis.
+    /// The methodfulness check applies to the concrete half only; the
+    /// blanket half matches any bounds-satisfying `impl<T: Bound> Trait for
+    /// T`, which suffices because a body-less blanket *marker* never
+    /// survives marker validation (its bare-type-param target is rejected
+    /// at the marker's own span).
     ///
     /// Module-agnostic like `find_trait_impl_for_type` (an impl of a
     /// stdlib-provided trait such as `Serialize` routinely lives in a

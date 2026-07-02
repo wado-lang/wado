@@ -17,8 +17,8 @@
 //!
 //! See WEP 2026-04-12 §"M6.5 stage 2".
 use crate::ast::{
-    AstId, CallExpr, Expr, IdentExpr, ImplBlock, Item, LetStmt, Module, NamedType, Pattern, Stmt,
-    TryOpExpr, Type, UseDecl, UseItem,
+    AstId, CallExpr, Expr, IdentExpr, Item, LetStmt, Module, NamedType, Pattern, Stmt, TryOpExpr,
+    Type, UseDecl, UseItem,
 };
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::IndexMap;
@@ -50,76 +50,6 @@ pub fn check_loaded<H: CompilerHost>(
         count += check_module(module, entry_module, source, logger);
     }
     count
-}
-
-/// If the target world is `core:kiln/generator` and the entry module
-/// declares `pub struct Options`, ensure an `impl Deserialize for Options;`
-/// forward-decl is present so the elaborator registers the trait impl and
-/// `bind_request::<Options>` typechecks. Idempotent: skipped when the
-/// user already wrote the impl.
-///
-/// Runs post-load, pre-annotate so the elaborator sees the synthesized
-/// `Item::Impl` during its ordinary walk. The injected AST ids come
-/// from [`Module::alloc_ast_id`], which extends the parser's dense
-/// per-module range — any symbol-lookup machinery keyed on
-/// `(ModuleSource, AstId)` still finds the node.
-pub fn inject_deserialize_impl(
-    target_world: Option<&str>,
-    entry_module: &ModuleSource,
-    modules: &mut IndexMap<ModuleSource, Module>,
-) {
-    if target_world != Some(KILN_GENERATOR_WORLD) {
-        return;
-    }
-
-    let Some(module) = modules.get_mut(entry_module) else {
-        return;
-    };
-
-    let has_options_struct = module
-        .items
-        .iter()
-        .any(|it| matches!(it, Item::Struct(s) if s.name == "Options"));
-    if !has_options_struct {
-        return;
-    }
-
-    let already_impld = module.items.iter().any(|it| {
-        if let Item::Impl(block) = it
-            && let Some(tt) = &block.trait_type
-            && type_name(tt) == Some("Deserialize")
-            && type_name(&block.ty) == Some("Options")
-        {
-            return true;
-        }
-        false
-    });
-    if already_impld {
-        return;
-    }
-
-    let span = synthesized_span();
-    let trait_id = module.alloc_ast_id();
-    let target_id = module.alloc_ast_id();
-    let impl_id = module.alloc_ast_id();
-
-    let trait_type = Type::Named(NamedType::new(trait_id, "Deserialize".to_string(), span));
-    let target_ty = Type::Named(NamedType::new(target_id, "Options".to_string(), span));
-
-    let block = ImplBlock {
-        id: impl_id,
-        type_params: Vec::new(),
-        trait_type: Some(trait_type),
-        ty: target_ty,
-        associated_types: Vec::new(),
-        constants: Vec::new(),
-        methods: Vec::new(),
-        is_synthesize_request: true,
-        has_rest: false,
-        span,
-    };
-
-    module.items.push(Item::Impl(block));
 }
 
 /// Rewrite a kiln generator's `fn generate(req: Request<T>) -> Result<...>`
@@ -303,14 +233,6 @@ fn ensure_kiln_imports(module: &mut Module, span: Span, needed: &[&str]) {
         span,
     };
     module.items.insert(0, Item::Use(decl));
-}
-
-fn type_name(ty: &Type) -> Option<&str> {
-    match ty {
-        Type::Named(n) => Some(n.name.as_str()),
-        Type::Generic(g) => Some(g.name.as_str()),
-        _ => None,
-    }
 }
 
 fn synthesized_span() -> Span {

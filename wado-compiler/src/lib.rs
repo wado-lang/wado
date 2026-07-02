@@ -577,17 +577,7 @@ fn compile_after_load<H: CompilerHost>(
         return Err(Bail);
     }
 
-    // === Phase 1b: Kiln `impl Deserialize for Options;` auto-injection ===
-    // Ensures the elaborator sees an impl record for `Options: Deserialize`
-    // so `bind_request::<Options>(raw)` typechecks without the user having
-    // to write `impl Deserialize for Options;` by hand. Idempotent.
-    kiln::import_check::inject_deserialize_impl(
-        options.target_world.as_deref(),
-        &load_result.entry_module_source,
-        &mut load_result.modules,
-    );
-
-    // === Phase 1c: Kiln `Request<T>` adapter rewrite ===
+    // === Phase 1b: Kiln `Request<T>` adapter rewrite ===
     // Lets authors write `fn generate(req: Request<Options>)` and have
     // the compiler inject the `bind_request::<Options>(req)?`
     // boilerplate at the top of the body. The v1 explicit

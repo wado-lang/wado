@@ -41,15 +41,10 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
         from_synth::synthesize_from(module);
     }
 
-    // Kiln generators need `Options::deserialize` to decode the canonical
-    // JSON wire form, but the author does not write
-    // `impl Deserialize for Options;` explicitly by hand — the loader
-    // injects that marker post-load (`kiln::import_check::inject_deserialize_impl`),
-    // which now flows through the same bound-driven request path as any
-    // other `Serialize`/`Deserialize` marker (WEP 2026-06-25-trait-derivation),
-    // so no separate pre-`serde_synth` push is needed here.
-
-    // Generate Serialize/Deserialize impls from `impl Trait for Type;` requests.
+    // Generate Serialize/Deserialize impls from bound-driven requests
+    // (WEP 2026-06-25-trait-derivation). Kiln generators are covered by
+    // the same mechanism: `bind_request::<Options>`'s `T: Deserialize`
+    // bound records the `Options` request like any other bound.
     serde_synth::synthesize_serde(&mut project);
 
     // Snapshot the synthesis-layer impls (auto-derives + From/serde adapters)
