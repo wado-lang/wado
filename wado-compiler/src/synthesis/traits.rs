@@ -502,8 +502,8 @@ impl SynthesisCtx<'_, '_, '_> {
 
     /// Like [`Self::has_impl`], but a body-less `impl Trait for Type;` marker
     /// does not count — only a methodful impl (in any module) or one this pass
-    /// already generated. Used by the format sub-passes (Inspect / InspectAlt /
-    /// Display / DisplayAlt), where a format marker is a conformance check that
+    /// already generated. Used by the format sub-passes (`Inspect` /
+    /// `InspectAlt` / `Display` / `DisplayAlt`), where a format marker is a conformance check that
     /// must NOT suppress the auto-derived body (unlike a real `impl Display for
     /// String { … }`, which must). Module-agnostic on the methodful side so a
     /// cross-module manual impl (e.g. `impl Display for String` in
