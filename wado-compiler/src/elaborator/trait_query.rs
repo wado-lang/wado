@@ -16,13 +16,6 @@ use super::trait_env::AnnotateCtx;
 use super::types::{MethodInfo, ResolvedTraitMethod, TraitMethodMatch, TypeError};
 use super::tysys::TypeSystem;
 
-/// The four traits under the `on_bound` derivation policy (WEP
-/// 2026-06-25-trait-derivation): a `T: Trait` obligation can be satisfied
-/// structurally — every field / non-unit case payload recursively satisfies
-/// the trait — and structural satisfaction records a synthesis request.
-/// Classified from a trait name by [`Elaborator::classify_on_bound_trait`];
-/// the shared structural rule lives in
-/// [`Elaborator::structural_derive_members`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum OnBoundTrait {
     Eq,
@@ -37,15 +30,9 @@ impl OnBoundTrait {
     }
 }
 
-/// A structural member visited by
-/// [`Elaborator::walk_structural_derive_members`], borrowing the field or
-/// case name so the hot conformance walks allocate nothing; diagnostics
-/// build a label on demand via [`Self::describe`].
 #[derive(Clone, Copy)]
 enum StructuralMember<'a> {
-    /// A struct field.
     Field(&'a str),
-    /// A variant case's (non-unit) payload.
     Case(&'a str),
 }
 
@@ -435,8 +422,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let resolved = self.tysys.type_table.borrow().get(type_id).clone();
 
-        // Find the first member that breaks the trait, then report it and
-        // recurse to explain that member in turn.
         let mut failing: Option<(String, TypeId)> = None;
         self.walk_structural_derive_members(&resolved, tr, &mut |member, member_tid| {
             if self.type_implements_trait(&self.annotate_ctx, member_tid, trait_name) {
@@ -456,11 +441,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Classify `trait_name` under the `on_bound` derivation policy,
-    /// resolving through the compiler-item registry so a stdlib rename
-    /// flows here. `Serialize` / `Deserialize` resolve with `_opt` —
-    /// unlike the always-on prelude traits, they are only registered when
-    /// the program imports `core:serde`.
     pub(super) fn classify_on_bound_trait(&self, trait_name: &str) -> Option<OnBoundTrait> {
         let tt = self.tysys.type_table.borrow();
         let items = tt.compiler_items();
@@ -477,39 +457,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Walk the structural members whose recursive conformance decides
-    /// whether `resolved` auto-derives `tr` — struct fields, or a
-    /// variant's non-unit case payloads, with a generic instance's type
-    /// parameters substituted by its type arguments. `visit` is called
-    /// per member and stops the walk by returning `false`, so a
-    /// conformance check pays nothing past the first failing member and
-    /// allocates no labels — [`StructuralMember::describe`] builds the
-    /// diagnostic label only where a consumer wants one.
-    ///
-    /// Substitution is intentionally shallow (a member that *is* a type
-    /// parameter maps to its argument; a parameter nested inside a
-    /// container, e.g. `List<T>`, stays as written): conformance of such
-    /// members holds via the type-param arms of
-    /// [`Self::type_implements_trait_inner`] and the bounded-impl checks,
-    /// and the deep alternative (`Self::substitute_type_params_by_map`)
-    /// interns new types per call — too expensive for a query on the
-    /// bound-check hot path.
-    ///
-    /// Returns `None` when the (type kind, trait) pair has no structural
-    /// derive rule at all: `Ord` on a variant (payload ordering is not
-    /// derived), `Eq` / `Ord` on flags (they erase to `u32`; only serde
-    /// needs a body for the flag names), a nominal kind outside this table
-    /// (newtypes delegate to their base type — see the consumers), or a
-    /// name whose field/case info isn't registered. `Some(true)` means
-    /// every visited member passed (trivially so for enums and flags,
-    /// which have no members); `Some(false)` means `visit` rejected one.
-    ///
-    /// The single structural rule shared by all three consumers:
-    /// [`Self::type_implements_trait_inner`] (bound checks, which also
-    /// gate on existing impls and record requests),
-    /// [`Self::structurally_derivable_for_explicit_request`] (marker
-    /// validation), and [`Self::collect_trait_unimpl_reason`]
-    /// (diagnostics).
     fn walk_structural_derive_members(
         &self,
         resolved: &ResolvedType,
@@ -590,15 +537,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Whether `type_id` is *structurally* derivable for `trait_name` (`Eq`,
-    /// `Ord`, `Serialize`, or `Deserialize`) — every member listed by
-    /// [`Self::structural_derive_members`] recursively satisfies
-    /// `trait_name`; newtypes and flags delegate to their base
-    /// representation. Ignores whether an impl already exists for `type_id`
-    /// itself — needed as a separate query because
-    /// [`Self::type_implements_trait`] would see an explicit `impl Eq for
-    /// T;` marker as "already satisfied" and never validate the fields the
-    /// marker is meant to guarantee.
     pub(super) fn structurally_derivable_for_explicit_request(
         &self,
         ctx: &AnnotateCtx,
@@ -617,17 +555,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.type_implements_trait(ctx, TypeTable::U32, trait_name)
             }
             nominal => {
-                // `None` also rejects `impl Ord for SomeVariant;` here — a
-                // hard error at the marker instead of a deferred failure at
-                // a `<` use site.
                 self.walk_structural_derive_members(nominal, tr, &mut |_, member| {
-                    // A member resolving to the impl block's own
-                    // (necessarily unconstrained) type parameter is
-                    // trivially eligible: `impl<T> Eq for Wrapper<T>;`
-                    // validates the *shape* of `Wrapper`, not a bound on
-                    // `T` — matching how the compiler auto-derives
-                    // `impl<T: Eq> Eq for Wrapper<T>` once some concrete
-                    // instantiation demands it.
                     matches!(
                         self.tysys.type_table.borrow().get(member),
                         ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
@@ -653,9 +581,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return false;
         }
 
-        // The `on_bound` traits classify via `classify_on_bound_trait`;
-        // `Default` resolves through the compiler-item registry the same
-        // way, so a stdlib rename does not silently disable auto-impl.
         let default_name = {
             let tt = self.tysys.type_table.borrow();
             tt.compiler_items()
@@ -682,22 +607,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.find_trait_impl_for_type(&type_name, trait_name);
         }
 
-        // Structural auto-derive for the `on_bound` traits (WEP
-        // 2026-06-25-trait-derivation): a nominal type satisfies the bound
-        // when every member visited by `walk_structural_derive_members`
-        // does, and satisfaction records a synthesis request. The request
-        // is keyed nominally (name + module, not `TypeId`) so a generic
-        // type's many instantiations collapse onto one request against the
-        // base declaration.
-        //
-        // `Eq`/`Ord` record even when a hand-written impl exists —
-        // `synthesis::traits`' own dedup (`has_real_impl`) skips those —
-        // while `Serialize`/`Deserialize` must gate here: their drain would
-        // otherwise synthesize a body in the type's module that shadows the
-        // real impl, which may live in another module (e.g. `core:serde`'s
-        // `impl Serialize for i128` for the prelude's `i128`). The gate
-        // deliberately ignores a body-less `impl Trait for T;` marker: the
-        // marker is itself a request for this body, not a competing impl.
         if let Some(tr) = on_bound
             && let ResolvedType::Enum {
                 name,
@@ -722,11 +631,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ..
             } = resolved
         {
-            // The serde-only real-impl gate described above (which also
-            // keeps auto-derive away from built-in generics like `List<T>`
-            // / `Option<T>` — their hand-written impls are found by the
-            // plain lookup below). Generic types derive `Serialize` /
-            // `Deserialize` via base-declaration templates like `Eq` / `Ord`.
             let serde_blocked =
                 tr.is_serde() && self.has_real_trait_impl_for_type(name, trait_name);
             if !serde_blocked
@@ -740,9 +644,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .record_bound_driven_synth_request(name, module_source, trait_name);
                 return true;
             }
-            // On failure fall through to the plain impl lookup below — a
-            // hand-written impl can still satisfy the bound (and flags fall
-            // back to their `u32` erasure for the non-serde traits).
         }
 
         // Structs auto-implement Default when every field has a declared
@@ -827,11 +728,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return self.type_implements_trait(ctx, base_id, trait_name);
             }
             ResolvedType::Flags { name, .. } => {
-                // The serde traits were already answered (and recorded) by
-                // the unified `on_bound` block above; here check for a
-                // direct impl on the flags type (e.g. a hand-written
-                // `impl Inspect for Perms`) before falling back to the
-                // `u32` erasure.
                 if self.find_trait_impl_for_type(name, trait_name) {
                     return true;
                 }
@@ -848,27 +744,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.find_trait_impl_for_type_with_args(type_name, trait_name, None)
     }
 
-    /// Like [`Self::find_trait_impl_for_type`], but an empty `impl Trait for
-    /// Type;` marker does not count — only a real (methodful) concrete
-    /// impl, or an applicable blanket impl, does. The serde auto-derive
-    /// gate in [`Self::type_implements_trait_inner`] needs exactly this
-    /// question: a marker is a request *for* the auto-derived body, not a
-    /// competing impl, while a real impl anywhere must win over synthesis.
-    /// The methodfulness check applies to the concrete half only; the
-    /// blanket half matches any bounds-satisfying `impl<T: Bound> Trait for
-    /// T`, which suffices because a body-less blanket *marker* never
-    /// survives marker validation (its bare-type-param target is rejected
-    /// at the marker's own span).
-    ///
-    /// Module-agnostic like `find_trait_impl_for_type` (an impl of a
-    /// stdlib-provided trait such as `Serialize` routinely lives in a
-    /// different module than the type it targets, e.g. `core:serde`
-    /// providing `impl Serialize for i128` for the `i128` struct declared
-    /// in `core:prelude/int128.wado`), unlike
-    /// [`super::trait_env::TraitEnv::has_methodful_impl`], which is
-    /// strictly module-scoped for synthesis-time dedup. Both share
-    /// `impl_index`'s bare-name keying and its documented same-named-types
-    /// caveat.
     pub(super) fn has_real_trait_impl_for_type(&self, type_name: &str, trait_name: &str) -> bool {
         self.tysys
             .trait_env
@@ -915,9 +790,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.blanket_trait_impl_applies(type_name, trait_name)
     }
 
-    /// The blanket-impl half of [`Self::find_trait_impl_for_type_with_args`]:
-    /// whether some `impl<T: Bound> Trait for T` covers `type_name`, i.e.
-    /// the concrete type satisfies every bound on the blanket parameter.
     fn blanket_trait_impl_applies(&self, type_name: &str, trait_name: &str) -> bool {
         let trait_env = self.tysys.trait_env.clone();
         for entry in &trait_env.blanket_impl_index {

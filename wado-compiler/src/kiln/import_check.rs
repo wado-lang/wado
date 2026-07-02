@@ -26,7 +26,6 @@ use crate::logger::Logger;
 use crate::module_source::ModuleSource;
 use crate::token::Span;
 
-/// Target world that identifies a Kiln generator package.
 pub const KILN_GENERATOR_WORLD: &str = "core:kiln/generator";
 
 /// Run the Kiln generator import-refusal check against every loaded

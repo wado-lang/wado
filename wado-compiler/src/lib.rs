@@ -578,11 +578,6 @@ fn compile_after_load<H: CompilerHost>(
     }
 
     // === Phase 1b: Kiln `Request<T>` adapter rewrite ===
-    // Lets authors write `fn generate(req: Request<Options>)` and have
-    // the compiler inject the `bind_request::<Options>(req)?`
-    // boilerplate at the top of the body. The v1 explicit
-    // `fn generate(raw: RawRequest)` path is unchanged; this phase is a
-    // no-op when the param is not `Request<T>`.
     kiln::import_check::inject_kiln_request_adapter(
         options.target_world.as_deref(),
         &load_result.entry_module_source,

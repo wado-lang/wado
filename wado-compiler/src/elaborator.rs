@@ -805,22 +805,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.decls.pending_synthesis_requests.push(req);
     }
 
-    /// Whether an `impl Trait for Type;` marker requests a `From` adapter
-    /// (`impl From<Source> for Type;`), resolving `Source` to a [`TypeId`]
-    /// so no downstream pass re-parses the mangled trait name. `From` is
-    /// the one marker kind still carried by a [`tir::SynthesisRequest`];
-    /// the `on_bound` traits go through
-    /// [`Self::classify_on_bound_marker`] instead. Returns `None` for a
-    /// malformed `From` reference (zero or multiple type arguments) as well
-    /// as for unrelated traits, letting the caller emit the
-    /// unsupported-trait diagnostic.
     fn classify_from_marker(&mut self, trait_type: &ast::Type) -> Option<tir::SynthTrait> {
         use crate::compiler_item::CompilerItem;
         let base = trait_type.head_base_name()?;
         {
-            // `trait_name_opt` keeps the anchor optional so a program that
-            // never imports the prelude's `From` cannot trip a registry
-            // panic here.
             let tt = self.tysys.type_table.borrow();
             if tt.compiler_items().trait_name_opt(CompilerItem::From) != Some(base) {
                 return None;
@@ -836,37 +824,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Whether an `impl Trait for Type;` marker's trait name resolves to
-    /// one of the `on_bound` traits (`Eq` / `Ord` / `Serialize` /
-    /// `Deserialize`). Their markers all validate structural eligibility
-    /// immediately at the marker's span and record into the shared
-    /// bound-driven request set (see
-    /// [`Self::record_explicit_derive_request`]); `From` is the one
-    /// remaining marker kind with its own [`tir::SynthesisRequest`] channel
-    /// ([`Self::classify_from_marker`]).
     fn classify_on_bound_marker(&self, trait_type: &ast::Type) -> Option<String> {
         let base = trait_type.head_base_name()?;
         self.classify_on_bound_trait(base).map(|_| base.to_string())
     }
 
-    /// Validate and record an explicit `on_bound`-trait marker (`impl Eq
-    /// for T;` / `impl Ord for T;` / `impl Serialize for T;` / `impl
-    /// Deserialize for T;`). Three outcomes: structurally eligible →
-    /// record into the same `bound_driven_synth_requests` set a real
-    /// `T: Trait` bound records into; ineligible but already covered by a
-    /// methodful impl → accept silently (the guarantee holds, synthesis
-    /// has nothing to add); neither → hard error at the marker's own span
-    /// (unlike a bound, which is simply unsatisfied elsewhere).
-    ///
-    /// Note an eligible marker records unconditionally at its own
-    /// declaration — it forces a body into existence with no other
-    /// reference present; genuinely deferring that to first use is the
-    /// placeholder-based redesign in WEP 2026-06-25-trait-derivation's
-    /// "Discovery Mechanism", not implemented yet.
-    ///
-    /// The request is keyed by the *target type's* defining module (the
-    /// synthesis drains distribute per defining module), not the module
-    /// the marker happens to be written in.
     fn record_explicit_derive_request(
         &mut self,
         trait_type: &ast::Type,
@@ -875,10 +837,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         target_type_name: &str,
         span: crate::token::Span,
     ) {
-        // The target failed to resolve (`resolve_type` already emitted the
-        // real error, e.g. missing type arguments); validating the
-        // error-recovery id would only add a bogus "cannot derive" error
-        // on top.
         if target_type_id == tir::TypeTable::ERROR {
             return;
         }
@@ -894,12 +852,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 | tir::ResolvedType::Newtype { module_source, .. }
                 | tir::ResolvedType::Flags { module_source, .. }
                 | tir::ResolvedType::GenericInstance { module_source, .. } => module_source.clone(),
-                // Only the nominal kinds above pass eligibility validation
-                // (everything else fails `structural_derive_members` or the
-                // Newtype / Flags delegation arms), so reaching here with
-                // any other kind is a validator/keying mismatch — the bug
-                // family that silently dropped cross-module flags requests
-                // before `Flags` was added to this match. Fail loudly.
                 other => unreachable!(
                     "explicit derive marker validated for non-nominal type `{other:?}`"
                 ),
@@ -910,17 +862,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .record_bound_driven_synth_request(target_type_name, &module_source, trait_name);
             return;
         }
-        // Not structurally derivable, but a methodful impl anywhere still
-        // satisfies the marker's guarantee (e.g. `impl Serialize for i32;`
-        // — `core:serde` ships the real impl, and structural derivation
-        // has nothing to say about a primitive). Accept without recording
-        // so synthesis never shadows the real impl.
         if self.has_real_trait_impl_for_type(target_type_name, trait_name) {
             return;
         }
-        // Neither derivable nor already implemented: the marker's
-        // guarantee is broken. Unlike a bound (simply unsatisfied
-        // elsewhere), this is an error at the marker's own span.
         let reason = self.trait_unimpl_reason_chain(target_type_id, trait_name);
         let _ = self
             .logger
@@ -932,20 +876,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             });
     }
 
-    /// Handle an `impl Trait for Type;` marker (`is_synthesize_request`):
-    /// validate and record it, or reject the trait as unsupported. The
-    /// `on_bound` traits (`Eq` / `Ord` / `Serialize` / `Deserialize`)
-    /// validate structural eligibility at the marker's own span and record
-    /// into the shared bound-driven request set — the same channel a
-    /// `T: Trait` bound uses (WEP 2026-06-25-trait-derivation) — while
-    /// `From` records a [`tir::SynthesisRequest`] on
-    /// `sem.decls.pending_synthesis_requests`, which `reify_module` emits
-    /// as `tir_module.synthesis_requests`.
-    ///
-    /// The caller (`resolve_module`'s impl-item walk) has already
-    /// registered the block's type parameters into
-    /// `annotate_ctx.trait_ctx`, so `resolve_type(&impl_block.ty)` sees
-    /// them (`impl<T> Eq for Pair<T>;`).
     fn resolve_synthesize_request_marker(
         &mut self,
         impl_block: &ast::ImplBlock,
@@ -1707,8 +1637,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         }
                     }
 
-                    // `impl Trait for Type;` — record the synthesis request
-                    // and skip the (empty) body walk.
                     if impl_block.is_synthesize_request {
                         self.resolve_synthesize_request_marker(impl_block, &struct_name);
                         self.annotate_ctx.trait_ctx = saved_trait_ctx;

@@ -41,10 +41,6 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
         from_synth::synthesize_from(module);
     }
 
-    // Generate Serialize/Deserialize impls from bound-driven requests
-    // (WEP 2026-06-25-trait-derivation). Kiln generators are covered by
-    // the same mechanism: `bind_request::<Options>`'s `T: Deserialize`
-    // bound records the `Options` request like any other bound.
     serde_synth::synthesize_serde(&mut project);
 
     // Snapshot the synthesis-layer impls (auto-derives + From/serde adapters)

@@ -396,12 +396,6 @@ pub fn synthesize_serde(project: &mut Package) {
             let tt = module.type_table.borrow();
             SerdeStdlibNames::from_compiler_items(tt.compiler_items())
         };
-        // `requests` cannot contain duplicates: every entry comes one-per-
-        // element from `TypeTable::bound_driven_synth_requests` (an
-        // `IndexSet`, so markers and bounds for the same pair collapse at
-        // record time), and `from_synth` drains every `From` entry before
-        // this pass runs. The snapshot only guards against a request whose
-        // method a user impl in this module already defines.
         let existing = collect_existing_trait_methods(module);
         let mut generated = Vec::new();
 
@@ -1123,12 +1117,6 @@ fn generate_struct_serialize(
 
     let mut tt = module.type_table.borrow_mut();
 
-    // For a generic struct the receiver is the generic instance over the
-    // struct's own type parameters (`&Wrapper<T>`), and the function below
-    // carries them as `impl_type_params` — the same generic-template shape
-    // `synthesis::traits` emits for `Eq` / `Ord`, instantiated per concrete
-    // type by monomorphize. Field types stay as the declared `TypeParam`
-    // ids so substitution reaches them.
     let struct_type = if struct_def.type_params.is_empty() {
         req.target_type_id
     } else {
@@ -1144,10 +1132,6 @@ fn generate_struct_serialize(
         )
     };
     let ref_self_type = tt.make_ref(struct_type);
-    // Method type params are numbered after the impl's, matching reify's
-    // `next_idx = impl_type_params.len()` for user-written generic impls —
-    // otherwise `S` would collide with the struct's first type parameter
-    // (both index 0) during monomorphize substitution.
     let s_index = struct_def.type_params.len() as u32;
     let s_type_param = tt.make_type_param("S".to_string(), s_index);
     let mut_ref_s = tt.make_mut_ref(s_type_param);
@@ -1362,13 +1346,6 @@ fn generate_struct_deserialize(
 
     let mut tt = module.type_table.borrow_mut();
 
-    // For a generic struct the return type and the built struct literal are
-    // the generic instance over the struct's own type parameters
-    // (`Wrapper<T>`), carried below as `impl_type_params` and instantiated
-    // per concrete type by monomorphize — the same shape
-    // `generate_struct_serialize` uses. The `FieldSchema` selector
-    // (`next_field::<…>`) keeps the *base* type instead (see
-    // `base_struct_type` below).
     let base_struct_type = req.target_type_id;
     let struct_type = if struct_def.type_params.is_empty() {
         base_struct_type
@@ -1404,8 +1381,6 @@ fn generate_struct_deserialize(
         .find_enum_type(&names.deserialize_error_kind, &serde_module)
         .unwrap_or(TypeTable::I32);
     let result_struct_err = tt.make_result(struct_type, deser_error_type);
-    // `D` is numbered after the struct's own type params, matching reify's
-    // `next_idx = impl_type_params.len()` — see `generate_struct_serialize`.
     let d_index = struct_def.type_params.len() as u32;
     let d_type_param = tt.make_type_param("D".to_string(), d_index);
     let mut_ref_d = tt.make_mut_ref(d_type_param);
@@ -1437,14 +1412,7 @@ fn generate_struct_deserialize(
         .iter()
         .map(|(_, _, type_id, _)| tt.type_name(*type_id))
         .collect();
-    // The struct type spelling drives the `next_field::<StructType>()` type
-    // argument that selects this struct's `FieldSchema::lookup` at
-    // monomorphization. The `FieldSchema` impl is keyed on the *base* type
-    // name (the `lookup` / `positional_at` bodies never reference the type
-    // parameters — field names don't vary with `T`), so a generic struct's
-    // selector stays the base type too, keeping one shared non-generic
-    // `Wrapper^FieldSchema::lookup` rather than one per instantiation.
-    let struct_type_name = tt.type_name(base_struct_type);
+    let base_struct_type_name = tt.type_name(base_struct_type);
 
     let compiler_items = tt.compiler_items().clone();
     drop(tt);
@@ -1549,18 +1517,7 @@ fn generate_struct_deserialize(
     {
         let tt = module.type_table.borrow();
         for (i, (field_name, _, type_id, _)) in fields.iter().enumerate() {
-            // A field with a declared default expression (WEP 2026-04-11) or
-            // `#[serde(default)]` gets pre-initialized to that fallback,
-            // which the loop overwrites when the field is present.
-            //
-            // A required field (tracked by a `seen` flag) needs no such
-            // pre-init: it is either assigned in the loop or its absence
-            // returns a missing-field error before the struct literal is
-            // built, so the slot is provably dead until assigned. Skipping
-            // it also avoids emitting a `null` placeholder for a generic
-            // field `T` — which would be a `nullref` where a monomorphized
-            // primitive (`T = i32`) expects a value. Wasm zero-inits the
-            // local, so the dead read is well-typed for every concrete `T`.
+            let is_required = seen_locals[i].is_some();
             let default_val = match struct_def
                 .fields
                 .get(i)
@@ -1573,9 +1530,7 @@ fn generate_struct_deserialize(
                     relocate_default_locals(&mut v, &mut next_local, &mut locals);
                     Some(v)
                 }
-                None if seen_locals[i].is_none() => {
-                    Some(default_value_for_type(*type_id, &tt, span))
-                }
+                None if !is_required => Some(default_value_for_type(*type_id, &tt, span)),
                 None => None,
             };
             if let Some(default_val) = default_val {
@@ -1602,7 +1557,7 @@ fn generate_struct_deserialize(
         &names.deserialize_struct,
         &names.m_deserialize_struct_next_field,
         serde_module.clone(),
-        vec![struct_type_name],
+        vec![base_struct_type_name],
         vec![base_struct_type],
         vec![],
         result_opt_i32_err,
@@ -2483,9 +2438,6 @@ fn generate_variant_family_deserialize(
     // `wire_names` is the rename-applied name matched against the input tag.
     cases: Vec<(String, u32, TypeId)>,
     wire_names: Vec<String>,
-    // The type's own type parameters — non-empty only for generic variants
-    // (enums are always plain discriminants). Drive the same generic-template
-    // shape as `generate_struct_deserialize`; empty for the non-generic case.
     type_params: &[TirTypeParam],
     kind: DeserConstruct,
 ) -> TirFunction {
@@ -2506,11 +2458,6 @@ fn generate_variant_family_deserialize(
     };
     let mut tt = module.type_table.borrow_mut();
 
-    // A generic variant's return type and constructed value use the generic
-    // instance over its own type parameters (`Maybe<T>`), carried as
-    // `impl_type_params` and instantiated per concrete type by monomorphize
-    // — same shape as `generate_struct_deserialize`. Enums are never generic
-    // (`type_params` empty), so `target_type` stays the base id.
     let target_type = if type_params.is_empty() {
         req.target_type_id
     } else {
@@ -2531,8 +2478,6 @@ fn generate_variant_family_deserialize(
         .find_enum_type(&names.deserialize_error_kind, &serde_module)
         .unwrap_or(TypeTable::I32);
     let result_target_err = tt.make_result(target_type, deser_error_type);
-    // `D` is numbered after the type's own params — see
-    // `generate_struct_deserialize`.
     let d_index = type_params.len() as u32;
     let d_type_param = tt.make_type_param("D".to_string(), d_index);
     let mut_ref_d = tt.make_mut_ref(d_type_param);
@@ -2963,10 +2908,6 @@ fn generate_variant_serialize(
 
     let mut tt = module.type_table.borrow_mut();
 
-    // Generic variants mirror generic structs (see `generate_struct_serialize`):
-    // the receiver is the generic instance over the variant's own type
-    // parameters, carried as `impl_type_params` below, and `S` is numbered
-    // after them.
     let variant_type = if variant_def.type_params.is_empty() {
         req.target_type_id
     } else {
