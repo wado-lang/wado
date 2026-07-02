@@ -1,0 +1,28 @@
+// Loop-versioned BCE, slow path: when the runtime residual `limit < used`
+// fails, the original checked loop runs and the assert fires at the first
+// out-of-bounds index with the standard message — versioning must not
+// change the panic's timing, index, or text.
+
+use { Stdout } from "core:cli";
+
+fn fill_to(xs: &mut List<i32>, limit: i32) {
+    for let mut i = 0; i <= limit; i += 1 {
+        xs[i] = 1;
+    }
+}
+
+export fn run() with Stdout {
+    let mut xs = List::<i32>::filled(5, 0);
+    fill_to(&mut xs, 10);
+}
+
+__DATA__
+{
+    "stderr_contains": [
+        "Assertion failed in List::index_assign",
+        "index out of bounds",
+        "index: 5",
+        "self.used: 5"
+    ],
+    "trapped": true
+}

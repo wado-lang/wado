@@ -1,0 +1,32 @@
+// Loop-versioned BCE, invariance guard: the check bound (`xs.used`) shrinks
+// inside the loop (`pop`), so the residual evaluated at loop entry
+// (`limit < used`) says nothing about later iterations — the loop must NOT
+// be versioned. The per-iteration assert stays live and fires when `i`
+// catches up with the shrunken `used`, exactly as at `-O0`.
+
+use { Stdout } from "core:cli";
+
+fn write_while_shrinking(xs: &mut List<i32>, limit: i32) {
+    for let mut i = 0; i <= limit; i += 1 {
+        xs[i] = i;
+        xs.pop();
+    }
+}
+
+export fn run() with Stdout {
+    let mut xs = List::<i32>::filled(10, 0);
+    // used at entry is 10 > limit, so a wrongly-hoisted residual would pass;
+    // each iteration pops, and the checked loop panics at i == 5, used == 5.
+    write_while_shrinking(&mut xs, 8);
+}
+
+__DATA__
+{
+    "stderr_contains": [
+        "Assertion failed in List::index_assign",
+        "index out of bounds",
+        "index: 5",
+        "self.used: 5"
+    ],
+    "trapped": true
+}

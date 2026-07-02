@@ -125,7 +125,7 @@ pub(super) fn eliminate_post_promote(project: &mut crate::nir_package::NirPackag
 /// compared **syntactically** (no value graph). Two `BoundKey`s are equal iff
 /// they denote the same program object by structure.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum BoundKey {
+pub(super) enum BoundKey {
     Local(u32),
     /// `root_local . field_index` — a field read of a by-value local.
     Field(u32, u32),
@@ -134,12 +134,12 @@ enum BoundKey {
 /// Copy/CSE temp bindings: a single-assignment local `t` bound by
 /// `let t = <op>` maps to `<op>`. Lets the structural matcher see through the
 /// `let __cond = i < n; if !__cond { panic }` shape CSE produces.
-type Binds = crate::hashmap::IndexMap<u32, Operand>;
+pub(super) type Binds = crate::hashmap::IndexMap<u32, Operand>;
 
 /// Build [`Binds`] over `body`: every `let t = <value>` whose `t` is never
 /// reassigned (`Assign` / `&mut`). Conservative — a reassigned temp is excluded,
 /// so resolving through it can never read a stale value.
-fn build_copy_bindings(body: &crate::nir_arena::Body) -> Binds {
+pub(super) fn build_copy_bindings(body: &crate::nir_arena::Body) -> Binds {
     let mut reassigned = crate::hashmap::IndexSet::default();
     let mut record = |node: NodeRef| {
         if let NodeRef::Expr(e) = node {
@@ -182,7 +182,7 @@ fn build_copy_bindings(body: &crate::nir_arena::Body) -> Binds {
 }
 
 /// Resolve an operand through [`Binds`] (bounded depth).
-fn resolve(engine: &Engine, binds: &Binds, op: Operand) -> Operand {
+pub(super) fn resolve(engine: &Engine, binds: &Binds, op: Operand) -> Operand {
     let mut cur = op;
     for _ in 0..8 {
         let Some(e) = cur.as_expr() else { break };
@@ -212,7 +212,7 @@ fn opaque_local(engine: &Engine, v: crate::nir_value_graph::ValueId) -> Option<u
 /// a `local.field` read over a by-value local root. Handles both the skeleton
 /// form and a **promoted** `Operand::Value` (the freeze promotes a `FieldAccess`
 /// bound), decomposed through the value **pool** (`body.values`, not `value_of`).
-fn parse_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<BoundKey> {
+pub(super) fn parse_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<BoundKey> {
     match resolve(engine, binds, op) {
         Operand::Expr(e) => match &engine.body.exprs[e].kind {
             ExprKind::Local { index, .. } => Some(BoundKey::Local(*index)),
@@ -254,7 +254,7 @@ fn parse_const_i64(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64> {
 /// local is offset 0; `+ const` accumulates through `Binary(Add)` (either side).
 /// Bounded recursion via the copy-temp chain. Lets `arr[q]` where `q = p + 2`,
 /// `p = pos + 1` decompose to `(pos, 3)`.
-fn parse_var_offset(engine: &Engine, binds: &Binds, op: Operand) -> Option<(u32, i64)> {
+pub(super) fn parse_var_offset(engine: &Engine, binds: &Binds, op: Operand) -> Option<(u32, i64)> {
     match resolve(engine, binds, op) {
         Operand::Expr(e) => match &engine.body.exprs[e].kind {
             ExprKind::Local { index, .. } => Some((*index, 0)),
@@ -398,7 +398,7 @@ fn bound_offset_over(
 
 /// Parse a condition (through copy temps) as `(var + off) OP bound`. Returns
 /// `(var_local, off, bound, op)`.
-fn parse_cmp(
+pub(super) fn parse_cmp(
     engine: &Engine,
     binds: &Binds,
     cond: Operand,
@@ -435,7 +435,7 @@ fn parse_check(engine: &Engine, binds: &Binds, cond: Operand) -> Option<(u32, i6
 /// **promoted** comparison (`Operand::Value`, decomposed through the value
 /// **pool** — never `value_of`). Operands are returned raw (caller decides how
 /// to parse each side).
-fn ge_check_operands(engine: &Engine, binds: &Binds, cond: Operand) -> Option<(Operand, Operand)> {
+pub(super) fn ge_check_operands(engine: &Engine, binds: &Binds, cond: Operand) -> Option<(Operand, Operand)> {
     match resolve(engine, binds, cond) {
         Operand::Expr(ce) => match &engine.body.exprs[ce].kind {
             ExprKind::Binary {
@@ -569,13 +569,13 @@ fn bound_root(b: BoundKey) -> Option<u32> {
 /// over-approximation: a false "modifies" only forgoes an elimination. The
 /// guard/check's own `panic(msg)` is a free call on neither root, so it does not
 /// trip this — keeping a clean check eliminable.
-fn stmt_modifies(engine: &Engine, s: StmtId, var: u32, bound: BoundKey) -> bool {
+pub(super) fn stmt_modifies(engine: &Engine, s: StmtId, var: u32, bound: BoundKey) -> bool {
     node_modifies(engine, NodeRef::Stmt(s), var, bound)
 }
 
 /// [`stmt_modifies`] over an arbitrary node subtree (e.g. the right operand of a
 /// short-circuit `||`).
-fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: BoundKey) -> bool {
+pub(super) fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: BoundKey) -> bool {
     let roots = [Some(var), bound_root(bound)];
     let is_root = |l: u32| roots.contains(&Some(l));
     let mut hit = false;
@@ -1029,7 +1029,7 @@ fn force_condition_false(engine: &mut Engine, holder: NodeRef) {
 /// condition through [`set_false`] (graph-maintaining redirect, keeping the
 /// default path byte-identical), a promoted condition through
 /// [`force_condition_false`].
-fn eliminate_condition(engine: &mut Engine, holder: NodeRef, condition: Operand) {
+pub(super) fn eliminate_condition(engine: &mut Engine, holder: NodeRef, condition: Operand) {
     match condition {
         Operand::Expr(ce) => set_false(engine, ce),
         Operand::Value(_) => force_condition_false(engine, holder),
@@ -1038,7 +1038,7 @@ fn eliminate_condition(engine: &mut Engine, holder: NodeRef, condition: Operand)
 
 /// Check if a block traps (bounds check failure path): a `panic`, or the bare
 /// `unreachable` that `-f bare-asserts` lowers an assertion failure into.
-fn is_panic_block(engine: &Engine, block: BlockId) -> bool {
+pub(super) fn is_panic_block(engine: &Engine, block: BlockId) -> bool {
     engine.body.blocks[block]
         .stmts
         .iter()
