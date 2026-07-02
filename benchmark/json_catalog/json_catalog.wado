@@ -76,7 +76,7 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     assert performance_count(&catalog) == 243;
 
     b.run("ser", || encode_json(&catalog).len());
-    let events = b.run("de", || event_count(&parse_catalog(json_data.as_byte_slice())));
+    let events = b.run("de", || event_count(&parse_catalog(json_data)));
     assert events == 184;
     b.println(`round-tripped {events} events`);
 }

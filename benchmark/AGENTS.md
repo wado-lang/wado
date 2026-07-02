@@ -54,6 +54,15 @@ View guest profiles at https://profiler.firefox.com/. See `README.md` for full d
 
 After running benchmarks, update `README.md` with the new results. Use the `/benchmark` skill or run `mise run benchmark-all` and `mise run report-wasm-size`, then update the tables in `README.md` accordingly.
 
+Run the suite three times, capturing each to a log, then use `pick.ts` to select the best of the runs per row (best of three absorbs cloud-VM noise):
+
+```sh
+for i in 1 2 3; do mise run all > run$i.log 2>&1; done
+node pick.ts run1.log run2.log run3.log
+```
+
+`pick.ts` keys each row by (task, implementation, phase) and picks the run with the lowest ms/iter — the true best throughput — so a rounding tie between runs can't select the wrong ms/iter.
+
 ## Structure
 
 Each benchmark has its own directory with implementations in all languages side by side. The `zlib/` directory also contains a Rust (`Cargo.toml` + `zlib_rs.rs`) native reference. The `json_*` directories contain JSON ser/de benchmarks with Rust `serde_json` as the native reference; the `cbor/` directory holds the CBOR ser/de benchmarks (twitter, canada, catalog) with `serde_cbor` (Rust) as the reference. Each `json_*` directory defines a shared schema module (`twitter_schema.wado`, `canada_schema.wado`, `catalog_schema.wado`) imported by both the JSON and CBOR benchmarks, so the two codecs are compared over identical data types.

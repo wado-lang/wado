@@ -58,8 +58,8 @@ fn encode_cbor(fc: &FeatureCollection) -> ByteList {
     };
 }
 
-fn decode_cbor(bytes: ByteSlice) -> FeatureCollection {
-    return match cbor_from_bytes::<FeatureCollection, ByteSlice>(bytes) {
+fn decode_cbor<S: AsByteSlice>(bytes: S) -> FeatureCollection {
+    return match cbor_from_bytes::<FeatureCollection, S>(bytes) {
         Ok(fc) => fc,
         Err(e) => panic(`CBOR decode error: {e.message}`),
     };
@@ -70,7 +70,7 @@ test "smoke" {
         "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"name\":\"x\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[0.0,0.0],[1.0,1.0]]]}}]}",
     );
     let cbor = encode_cbor(&fc);
-    let back = decode_cbor(cbor.as_byte_slice());
+    let back = decode_cbor(cbor);
     assert count_points(&back) == 2;
 }
 
@@ -80,7 +80,6 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     let fc = parse_canada(json_data);
 
     let cbor = encode_cbor(&fc);
-    let cbor_view = cbor.as_byte_slice();
 
     let mut b = Benchmark {
         name: "cbor-canada",
@@ -89,7 +88,7 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     b.println(`{json_size} bytes JSON -> {cbor.len()} bytes CBOR payload`);
 
     b.run("ser", || encode_cbor(&fc).len());
-    let total_points = b.run("de", || count_points(&decode_cbor(cbor_view)));
+    let total_points = b.run("de", || count_points(&decode_cbor(cbor)));
     assert total_points == 55563;
     b.println(`round-tripped {total_points} coordinate points`);
 }

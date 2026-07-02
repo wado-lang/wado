@@ -58,8 +58,8 @@ fn encode_cbor(catalog: &CitmCatalog) -> ByteList {
     };
 }
 
-fn decode_cbor(bytes: ByteSlice) -> CitmCatalog {
-    return match cbor_from_bytes::<CitmCatalog, ByteSlice>(bytes) {
+fn decode_cbor<S: AsByteSlice>(bytes: S) -> CitmCatalog {
+    return match cbor_from_bytes::<CitmCatalog, S>(bytes) {
         Ok(c) => c,
         Err(e) => panic(`CBOR decode error: {e.message}`),
     };
@@ -70,7 +70,7 @@ test "smoke" {
         "{\"areaNames\":{},\"audienceSubCategoryNames\":{},\"blockNames\":{},\"events\":{},\"performances\":[],\"seatCategoryNames\":{},\"subTopicNames\":{},\"subjectNames\":{},\"topicNames\":{},\"topicSubTopics\":{},\"venueNames\":{}}",
     );
     let cbor = encode_cbor(&catalog);
-    let back = decode_cbor(cbor.as_byte_slice());
+    let back = decode_cbor(cbor);
     assert event_count(&back) == 0;
 }
 
@@ -82,7 +82,6 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     assert performance_count(&catalog) == 243;
 
     let cbor = encode_cbor(&catalog);
-    let cbor_view = cbor.as_byte_slice();
 
     let mut b = Benchmark {
         name: "cbor-catalog",
@@ -91,7 +90,7 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     b.println(`{json_size} bytes JSON -> {cbor.len()} bytes CBOR payload`);
 
     b.run("ser", || encode_cbor(&catalog).len());
-    let events = b.run("de", || event_count(&decode_cbor(cbor_view)));
+    let events = b.run("de", || event_count(&decode_cbor(cbor)));
     assert events == 184;
     b.println(`round-tripped {events} events`);
 }
