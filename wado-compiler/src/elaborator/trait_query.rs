@@ -474,28 +474,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     pub(super) fn classify_on_bound_trait(&self, trait_name: &str) -> Option<OnBoundTrait> {
-        let tt = self.tysys.type_table.borrow();
-        let items = tt.compiler_items();
-        if trait_name == items.trait_name(CompilerItem::Eq) {
-            Some(OnBoundTrait::Eq)
-        } else if trait_name == items.trait_name(CompilerItem::Ord) {
-            Some(OnBoundTrait::Ord)
-        } else if items.trait_name_opt(CompilerItem::Serialize) == Some(trait_name) {
-            Some(OnBoundTrait::Serialize)
-        } else if items.trait_name_opt(CompilerItem::Deserialize) == Some(trait_name) {
-            Some(OnBoundTrait::Deserialize)
-        } else if trait_name == items.trait_name(CompilerItem::Default) {
-            Some(OnBoundTrait::Default)
-        } else if trait_name == items.trait_name(CompilerItem::Inspect) {
-            Some(OnBoundTrait::Inspect)
-        } else if trait_name == items.trait_name(CompilerItem::InspectAlt) {
-            Some(OnBoundTrait::InspectAlt)
-        } else if trait_name == items.trait_name(CompilerItem::Display) {
-            Some(OnBoundTrait::Display)
-        } else if trait_name == items.trait_name(CompilerItem::DisplayAlt) {
-            Some(OnBoundTrait::DisplayAlt)
-        } else {
-            None
+        let (on_bound, item) = {
+            let tt = self.tysys.type_table.borrow();
+            let items = tt.compiler_items();
+            if trait_name == items.trait_name(CompilerItem::Eq) {
+                (OnBoundTrait::Eq, CompilerItem::Eq)
+            } else if trait_name == items.trait_name(CompilerItem::Ord) {
+                (OnBoundTrait::Ord, CompilerItem::Ord)
+            } else if items.trait_name_opt(CompilerItem::Serialize) == Some(trait_name) {
+                (OnBoundTrait::Serialize, CompilerItem::Serialize)
+            } else if items.trait_name_opt(CompilerItem::Deserialize) == Some(trait_name) {
+                (OnBoundTrait::Deserialize, CompilerItem::Deserialize)
+            } else if trait_name == items.trait_name(CompilerItem::Default) {
+                (OnBoundTrait::Default, CompilerItem::Default)
+            } else if trait_name == items.trait_name(CompilerItem::Inspect) {
+                (OnBoundTrait::Inspect, CompilerItem::Inspect)
+            } else if trait_name == items.trait_name(CompilerItem::InspectAlt) {
+                (OnBoundTrait::InspectAlt, CompilerItem::InspectAlt)
+            } else if trait_name == items.trait_name(CompilerItem::Display) {
+                (OnBoundTrait::Display, CompilerItem::Display)
+            } else if trait_name == items.trait_name(CompilerItem::DisplayAlt) {
+                (OnBoundTrait::DisplayAlt, CompilerItem::DisplayAlt)
+            } else {
+                return None;
+            }
+        };
+        // The name matches a compiler trait, but a user may declare a trait of
+        // the same name (e.g. `trait Display { … }`). Only classify as
+        // `on_bound` when the name actually resolves — local-first, in the
+        // current module — to the compiler item's own declaration; otherwise
+        // the bound refers to the user trait and must go through ordinary
+        // impl lookup. Without this guard a user `T: Display` bound would be
+        // wrongly satisfied by the total-format short-circuit.
+        let resolved_module = self.canonical_decl_key(trait_name).0;
+        let compiler_module = {
+            let tt = self.tysys.type_table.borrow();
+            tt.compiler_items().trait_module(item).cloned()
+        };
+        match compiler_module {
+            Some(m) if m == resolved_module => Some(on_bound),
+            _ => None,
         }
     }
 
