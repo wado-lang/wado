@@ -124,6 +124,33 @@ don't decode/build what the grammar never reads. The residual cost of even
 flat resident data (~+0.9 ms/parse per 160 KB) is a Wado-runtime GC
 characteristic, tracked outside Gale.
 
+## `syntax_highlight` is GC-bound: ~77% of wall-clock is collection (2026-07)
+
+Measure GC time directly by swapping the collector (`wado run --collector
+<null|copying|drc>`): `null` never collects, so `copying − null` is the
+collection cost. `null` leaks, so use a fixed-iteration driver (40×
+`highlight`), not the auto-tuned harness (which OOMs the GC heap under `null`).
+
+| collector           | ms/iter | note                          |
+| ------------------- | ------: | ----------------------------- |
+| `null` (no GC)      |    ~5.3 | pure compute + bump-allocate  |
+| `copying` (default) |   ~23.0 | **+17.7 ms = ~77% is GC**     |
+| `drc`               |    ~234 | pathological here — never use |
+
+So the benchmark is GC-bound, and the copying collector's cost is the **live
+set it traces/copies each cycle** — the whole CST during build-and-walk — not
+the allocation _count_. This explains why cutting transient allocations does
+not move wall-clock: a `Box`/node that dies before the next collection is never
+copied, so it is free under `copying` regardless of how many there are. The
+lever is the live CST footprint (§1), not allocation volume.
+
+Corollary — measured on the compiler-side `wir/elide_adjacent_box_locals` pass
+(elides the `Box<i32>` a `&primitive` payload binding lowers to, e.g.
+`highlight_walk`'s `Token(i) => hl_visit_token(*i)`): it removes thousands of
+per-token box allocs and shaves ~0.7 ms/iter off the `null` (bump-alloc) path,
+but is **within noise under `copying`** — the boxes never entered the live set.
+A correct, general optimizer win; not a lever for this GC-bound benchmark.
+
 ## What would move the needle
 
 Ordered by profile self-time. None are mutually exclusive.
