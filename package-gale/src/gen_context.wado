@@ -144,6 +144,16 @@ pub struct GenContext {
     /// multi-alt scan/pick/try decisions) — the `trace: true` generator
     /// option. Off by default.
     trace: bool,
+    /// Whole-grammar classical FOLLOW kinds per rule (`follow_env::build`),
+    /// set by codegen before at-end detection and parser emit; consumed by
+    /// `at_end_conflict_routes`.
+    rule_follow_kinds: TreeMap<String, List<String>>,
+    /// False when the surface grammar contains a parser-side wildcard / `~X`
+    /// element: their FIRST cannot be enumerated, so the computed FOLLOW
+    /// under-approximates and `at_end_conflict_routes` must stay conservative
+    /// (route every at-end conflict to the ATN). Also false until
+    /// `set_rule_follow` runs.
+    rule_follow_exact: bool,
 }
 
 impl GenContext {
@@ -177,6 +187,8 @@ impl GenContext {
             lr_loop_entry_decisions: [],
             atn_rule_body_decisions: [],
             trace: false,
+            rule_follow_kinds: TreeMap::new(),
+            rule_follow_exact: false,
         };
     }
 
@@ -230,6 +242,40 @@ impl GenContext {
     /// exists. (`ATN_SIM` itself is emitted whenever `needs_atn`.)
     pub fn needs_scan_atn(&self) -> bool {
         return self.needs_scan_atn_seen;
+    }
+
+    /// Store the whole-grammar per-rule FOLLOW kinds (`follow_env::build`)
+    /// plus whether they are exact — false when a parser-side wildcard / `~X`
+    /// makes the analysis under-approximate. Codegen sets this once, before
+    /// at-end detection and parser emit.
+    pub fn set_rule_follow(&mut self, kinds: TreeMap<String, List<String>>, exact: bool) {
+        self.rule_follow_kinds = kinds;
+        self.rule_follow_exact = exact;
+    }
+
+    /// Whether an `AtEndConflict` with divergence tokens `branch_tokens` in
+    /// `rule_name` must route through the runtime ATN simulator. True when a
+    /// divergence token can also continue a caller (`branch_tokens ∩
+    /// FOLLOW(rule) ≠ ∅` — only the actual caller context can decide), or
+    /// conservatively when FOLLOW is unknown / inexact. When the sets are
+    /// disjoint, the longest-match tournament is provably sound: if the
+    /// continuing alt's scan succeeds, the at-end pick would die in the
+    /// caller on the very next token, so taking the longer alt is either
+    /// right or fails a parse that had no viable reading anyway.
+    pub fn at_end_conflict_routes(&self, rule_name: &String, branch_tokens: &List<String>) -> bool {
+        if !self.rule_follow_exact {
+            return true;
+        }
+        if !self.rule_follow_kinds.contains_key(*rule_name) {
+            return true;
+        }
+        let follow = self.rule_follow_kinds[*rule_name];
+        for let t of branch_tokens {
+            if follow.contains(t) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// Store the ATN call-site → return-state correspondence after the ATN

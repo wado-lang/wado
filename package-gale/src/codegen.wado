@@ -3,11 +3,14 @@ use {
     Alternative,
     OptionValue,
     LexerRule,
+    ParserRule,
+    Element,
     normalize_caches,
     canonicalize_empty_alt_groups,
     assign_atn_call_sites,
     assign_atn_decisions,
 } from "./ir.wado";
+use { build as build_follow_env } from "./follow_env.wado";
 use { rule_type_name, all_alts_are_single_token } from "./gen_util.wado";
 use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
 use {
@@ -109,9 +112,31 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // emit can push each rule call's exact return state (`call_site_returns`)
     // and `gen_atn_data_global` can serialize the very same ATN. Gate-free
     // grammars skip this entirely.
-    // Route a multi-alt `AtEndConflict` through the simulator (see
-    // `gen_prediction_code_inner`); the detection forces the ATN build. Skipped
-    // when lowering already requested the ATN — the build happens regardless.
+    // Whole-grammar FOLLOW for the at-end-conflict routing refinement: a
+    // conflict whose divergence tokens no caller can continue stays on the
+    // static tournament (`GenContext::at_end_conflict_routes`), so e.g.
+    // SQLite's `UNION` vs `UNION ALL` needs no ATN at all. Seeded from the
+    // first parser rule (the `pub fn parse` entry). A parser-side wildcard /
+    // `~X` has an unenumerable FIRST, so FOLLOW would under-approximate;
+    // flag it inexact and route every conflict conservatively.
+    if !grammar.parser_rules.is_empty() {
+        let fenv = build_follow_env(&grammar.parser_rules, &mut ctx, &grammar.parser_rules[0].name);
+        let mut follow_kinds = TreeMap::<String, List<String>>::new();
+        for let rule of &grammar.parser_rules {
+            let fs = fenv.rule_follow(&rule.name);
+            let mut kinds: List<String> = [];
+            for let k of &fs.kinds {
+                kinds.push(k);
+            }
+            follow_kinds[rule.name] = kinds;
+        }
+        ctx.set_rule_follow(follow_kinds, !grammar_has_open_first_element(&grammar.parser_rules));
+    }
+    // Route a context-dependent multi-alt `AtEndConflict` through the
+    // simulator (see `gen_prediction_code_inner`); the detection forces the
+    // ATN build. Skipped when lowering already requested the ATN — the build
+    // happens regardless, and the emitter re-applies the same routing
+    // predicate per site.
     if !ctx.needs_atn() && grammar_has_at_end_conflict(grammar, &lowered, &mut ctx) {
         ctx.mark_needs_atn();
     }
@@ -198,10 +223,55 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     };
 }
 
+/// True when any parser rule contains a `.` wildcard or `~X` complement —
+/// elements whose FIRST cannot be enumerated (`first_of_element` returns
+/// `[]`), which would make the computed FOLLOW under-approximate.
+fn grammar_has_open_first_element(parser_rules: &List<ParserRule>) -> bool {
+    for let rule of parser_rules {
+        for let alt of &rule.alternatives {
+            for let e of &alt.elements {
+                if element_has_open_first(e) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+fn element_has_open_first(e: &Element) -> bool {
+    return match *e {
+        Wildcard(_) => true,
+        Not(_) => true,
+        Label(l) => element_has_open_first(&l.element),
+        Repeat(r) => element_has_open_first(&r.element),
+        Group(g) => {
+            for let alt of &g.alternatives {
+                for let inner of &alt.elements {
+                    if element_has_open_first(inner) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        },
+        RuleRef(_) => false,
+        TokenRef(_) => false,
+        Literal(_) => false,
+    };
+}
+
 /// Emit the decoded `ATN_SIM` global: the serialized whole-grammar ATN the
 /// inlined runtime decodes once, at construction, into the module-level sim.
 fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, emit_scan_globals: bool) {
-    emit_atn_blob_global(w, atn, &"ATN_SIM");
+    // `atn_decode`'s `lr_tables` argument mirrors `emit_scan_globals`
+    // (== an ATN-class LR rule exists): only then does the generated parser
+    // call `atn_lr_loop_decision`, the sole reader of the decoder's
+    // FIRST/nullable fixpoint and `state_cont_*` cache. Passing `false`
+    // spares a `??` / at-end-conflict grammar the fixpoint and its
+    // permanently live per-state lists (a GC-tracing tax on every cycle).
+    let lr_tables = if emit_scan_globals { "true" } else { "false" };
+    emit_atn_blob_global(w, atn, &"ATN_SIM", &`, {lr_tables}`);
     // The mutable scan caller stack. The scan emit pushes/pops it around
     // operand scans so an ATN-class LR rule's scan loop can route through
     // `atn_lr_loop_decision` exactly like the parse side. Only needed when an
@@ -215,9 +285,10 @@ fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, emit_scan_globals: bool) {
 
 /// Emit the decoded `LATN_SIM` global for the runtime lexer simulator. Same
 /// blob format and decoder as the parser ATN; only the atom semantics differ
-/// (char ranges vs token kinds).
+/// (char ranges vs token kinds). No `lr_tables` argument: a lexer ATN has no
+/// precedence edges, so the decoder skips the LR fixpoint on its own.
 fn gen_latn_data_global(w: &mut CodeWriter, atn: &Atn) {
-    emit_atn_blob_global(w, atn, &"LATN_SIM");
+    emit_atn_blob_global(w, atn, &"LATN_SIM", &"");
     w.blank();
 }
 
@@ -233,13 +304,13 @@ fn gen_latn_data_global(w: &mut CodeWriter, atn: &Atn) {
 /// collectible immediately — and this costs nothing at compile time:
 /// `array.new_data` fires the same way whether the literal is a global's
 /// initializer or a nested call argument.
-fn emit_atn_blob_global(w: &mut CodeWriter, atn: &Atn, sim_name: &String) {
+fn emit_atn_blob_global(w: &mut CodeWriter, atn: &Atn, sim_name: &String, extra_args: &String) {
     let bytes = atn_blob_bytes(atn);
     let mut body = String::with_capacity(bytes.len() * 4);
     for let b of &bytes {
         push_hex_byte(&mut body, *b);
     }
-    w.line(&`global {*sim_name}: AtnSim = atn_decode(&b"{body}");`);
+    w.line(&`global {*sim_name}: AtnSim = atn_decode(&b"{body}"{*extra_args});`);
 }
 
 /// Append the `\xNN` byte escape (lowercase, zero-padded to two digits) for

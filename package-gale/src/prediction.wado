@@ -56,6 +56,13 @@ pub enum AmbiguityReason {
 pub struct AmbiguousNode {
     pub alts: List<i32>,
     pub reason: AmbiguityReason,
+    /// For `AtEndConflict` only: the union of the explicit branches' tokens
+    /// at the conflict point — the tokens on which some alt continues while
+    /// another is at end. The routing decision intersects this with the
+    /// rule's whole-grammar FOLLOW (`GenContext::at_end_conflict_routes`):
+    /// disjoint means the longest-match tournament is provably sound and the
+    /// site stays static. Empty for every other reason.
+    pub branch_tokens: List<String> = [],
 }
 
 /// Build an `Ambiguous` node carrying its halt reason. Keeps the many
@@ -208,9 +215,25 @@ fn strip_dead_consume(node: PredictionNode) -> PredictionNode {
             if prediction_contains_ambiguous(&child) {
                 let mut indices: List<i32> = [];
                 prediction_collect_all_indices(&child, &mut indices);
-                // Preserve the halt reason from the collapsed subtree: the
-                // consume itself isn't the cause, the inner Ambiguous is.
-                ambiguous(indices, prediction_first_ambiguous_reason(&child));
+                // Preserve the halt reason — and any at-end divergence
+                // tokens, which drive the FOLLOW-routing decision — from the
+                // collapsed subtree: the consume itself isn't the cause, the
+                // inner Ambiguous is.
+                let mut sites: List<List<String>> = [];
+                prediction_at_end_conflicts(&child, &mut sites);
+                let mut branch_tokens: List<String> = [];
+                for let site of &sites {
+                    for let t of site {
+                        if !branch_tokens.contains(t) {
+                            branch_tokens.push(*t);
+                        }
+                    }
+                }
+                PredictionNode::Ambiguous(AmbiguousNode {
+                    alts: indices,
+                    reason: prediction_first_ambiguous_reason(&child),
+                    branch_tokens,
+                });
             } else {
                 PredictionNode::Consume(ConsumeNode { element: c.element, child });
             }
@@ -245,29 +268,29 @@ fn prediction_contains_ambiguous(node: &PredictionNode) -> bool {
     };
 }
 
-/// True iff `node` contains an `Ambiguous` leaf whose reason is
-/// `AtEndConflict` — the one case the longest-match scan tournament gets
+/// Collect the `branch_tokens` of every `Ambiguous(AtEndConflict)` leaf in
+/// `node` — the one ambiguity the longest-match scan tournament can get
 /// wrong (an alt returns to the caller while another continues, so the
-/// tournament's longest pick can steal a token the caller needs). These
-/// sites route to the runtime ATN simulator; every other ambiguity reason
-/// keeps the tournament. See `TODO.md` "ATN-class grammars".
-pub fn prediction_contains_at_end_conflict(node: &PredictionNode) -> bool {
-    return match *node {
-        Ambiguous(a) => match a.reason {
-            AtEndConflict => true,
-            _ => false,
+/// tournament's longest pick can steal a token the caller needs). Whether a
+/// site actually routes to the runtime ATN simulator is decided by
+/// intersecting its tokens with the rule's FOLLOW
+/// (`GenContext::at_end_conflict_routes`); every other ambiguity reason
+/// keeps the tournament.
+pub fn prediction_at_end_conflicts(node: &PredictionNode, out: &mut List<List<String>>) {
+    match *node {
+        Ambiguous(a) => {
+            if let AtEndConflict = a.reason {
+                out.push(a.branch_tokens);
+            }
         },
-        Consume(c) => prediction_contains_at_end_conflict(&c.child),
+        Consume(c) => prediction_at_end_conflicts(&c.child, out),
         Dispatch(d) => {
             for let b of &d.branches {
-                if prediction_contains_at_end_conflict(&b.child) {
-                    return true;
-                }
+                prediction_at_end_conflicts(&b.child, out);
             }
-            return false;
         },
-        Leaf(_) => false,
-    };
+        Leaf(_) => {},
+    }
 }
 
 pub fn prediction_collect_all_indices(node: &PredictionNode, out: &mut List<i32>) {
@@ -822,7 +845,19 @@ fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &m
     }
 
     if at_end_alts.len() >= 1 && branches.len() >= 1 {
-        return ambiguous(alts, AmbiguityReason::AtEndConflict);
+        let mut branch_tokens: List<String> = [];
+        for let b of &branches {
+            for let t of &b.tokens {
+                if !branch_tokens.contains(t) {
+                    branch_tokens.push(*t);
+                }
+            }
+        }
+        return PredictionNode::Ambiguous(AmbiguousNode {
+            alts,
+            reason: AmbiguityReason::AtEndConflict,
+            branch_tokens,
+        });
     }
 
     if branches.len() == 0 {

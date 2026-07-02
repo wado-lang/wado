@@ -85,6 +85,45 @@ So the CST — walk it, build it — is the overwhelming majority at **~57%**, w
 `highlight_walk` alone the single largest frame at ~29%. After the §2 lexer fix
 and the classify collapse, the standing prize is squarely the CST representation.
 
+## Permanently live GC data taxes every collection (2026-07)
+
+The at-end-conflict routing added for ATN-class grammars (#1475) regressed
+`sqlite_parse` 2.4 → 4.3 ms/iter (release host) **without the simulator ever
+being hot**: the parse-loop ATN work was ~4 predictions/iter (~0.04 ms) and
+the per-rule `atn_stack` push/pop measured free. The regression was the
+decoded `ATN_SIM` global itself — `state_cont_first(_neg)` held one inner
+`List<i32>` per state (2 × 3,677 for SQLite, ~7.4K permanently live objects)
+— which the copying collector re-traces on **every** GC cycle, and the parse
+loop's allocation rate makes cycles frequent. Identical wasm for the hot
+functions (`tree_build_node` etc.) ran ~3–6× slower in self-time purely from
+that resident graph.
+
+Controlled measurements (release host, per-parse steady state, 13366-byte
+fixture; baseline 2.40 ms):
+
+| resident dummy graph              | ms/parse |
+| --------------------------------- | -------: |
+| none                              |     2.40 |
+| 1 flat `List<i32>`, 160 KB        |     3.30 |
+| 7,400 lists × ~55 i32 (ATN shape) |     4.79 |
+
+Fixes shipped: (1) an `AtEndConflict` routes to the simulator only when a
+divergence token intersects the rule's whole-grammar FOLLOW
+(`GenContext::at_end_conflict_routes`) — FOLLOW-disjoint conflicts (SQLite's
+`UNION` vs `UNION ALL`) keep the tournament and the grammar carries no ATN;
+(2) `state_cont_*` flattened to offset/count columns and the whole LR
+fixpoint gated behind `atn_decode(…, lr_tables)` = `needs_scan_atn`, so a
+`??` / at-end-only grammar decodes no LR tables at all. Post-fix,
+`sqlite_parse` is back to 2.4 ms/iter with the generated parser
+byte-identical to pre-#1475.
+
+**Standing rule:** treat module-lifetime GC-reachable data (globals holding
+lists-of-lists, big caches) as a per-collection tax on every allocating hot
+loop, not as free one-time cost — prefer flat columns over nested lists, and
+don't decode/build what the grammar never reads. The residual cost of even
+flat resident data (~+0.9 ms/parse per 160 KB) is a Wado-runtime GC
+characteristic, tracked outside Gale.
+
 ## What would move the needle
 
 Ordered by profile self-time. None are mutually exclusive.

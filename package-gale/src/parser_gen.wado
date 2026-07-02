@@ -38,7 +38,7 @@ use {
     AmbiguityReason,
     build_group_prediction_tree,
     prediction_collect_all_indices,
-    prediction_contains_at_end_conflict,
+    prediction_at_end_conflicts,
     MAX_LOOKAHEAD_DEPTH,
 } from "./prediction.wado";
 use {
@@ -2100,13 +2100,17 @@ fn rule_overlap_groups(
 }
 
 /// Whether any non-LR multi-alt rule's prediction contains an `AtEndConflict`
-/// ambiguity — the one longest-match-tournament-unsound site that must route to
-/// the runtime ATN simulator (an alt returns to the caller while another
-/// continues, so the tournament's longest pick can steal a token the caller
-/// needs). Run before `build_atn` so codegen builds the ATN
+/// ambiguity that actually routes to the runtime ATN simulator — the one
+/// longest-match-tournament-unsound site (an alt returns to the caller while
+/// another continues, so the tournament's longest pick can steal a token the
+/// caller needs). A conflict routes only when a divergence token can also
+/// continue a caller (`GenContext::at_end_conflict_routes`, fed by the
+/// whole-grammar FOLLOW `set_rule_follow` installed); a FOLLOW-disjoint
+/// conflict keeps the tournament, since the longest pick is then provably
+/// sound. Run before `build_atn` so codegen builds the ATN
 /// (`GenContext::mark_needs_atn`) and the rule emitter routes those sites
-/// through `atn_predict_with_stack`. Shares `rule_overlap_groups` with
-/// `gen_parse_fn`, so detection and emission agree on the grouping.
+/// through `atn_predict_with_stack`. Shares `rule_overlap_groups` and the
+/// routing predicate with `gen_parse_fn`, so detection and emission agree.
 pub fn grammar_has_at_end_conflict(grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) -> bool {
     for let mut r = 0; r < grammar.parser_rules.len(); r += 1 {
         if rule_has_at_end_conflict(&grammar.parser_rules[r], &lowered.parser_rules[r], ctx) {
@@ -2128,8 +2132,12 @@ fn rule_has_at_end_conflict(rule: &ParserRule, lowered_rule: &Rule, ctx: &mut Ge
     for let group of &groups {
         if group.len() > 1 {
             let tree = build_group_prediction_tree(&rule.alternatives, group, &first_sets, &non_lr_indices, ctx);
-            if prediction_contains_at_end_conflict(&tree) {
-                return true;
+            let mut conflicts: List<List<String>> = [];
+            prediction_at_end_conflicts(&tree, &mut conflicts);
+            for let tokens of &conflicts {
+                if ctx.at_end_conflict_routes(&rule.name, tokens) {
+                    return true;
+                }
             }
         }
     }
@@ -6128,18 +6136,22 @@ fn gen_prediction_code_inner(
         sort_group_by_element_count(&mut sorted_indices, alts);
         if skip == 0 {
             // Route only a top-level non-LR rule-body `AtEndConflict` through the
-            // simulator. Deliberately scoped, not silent: an LR atom-block
-            // conflict (`lr_loop_entry_decision >= 0`, so `atn_rule_body_decision`
-            // is -1 by construction — the atom edge indices exclude the LR alts)
-            // and a nested-`Group` conflict stay on the tournament, which keeps
-            // emitting its OverlapTournament warning. Generalising needs an
-            // atom-relative→grammar index map / group-level routing; revisit if a
-            // descriptor needs it (none do).
+            // simulator, and only when a divergence token can continue a caller
+            // (`at_end_conflict_routes` — the same predicate the detection uses,
+            // so a FOLLOW-disjoint conflict keeps the tournament even when a
+            // `??` elsewhere already forced the ATN). Deliberately scoped, not
+            // silent: an LR atom-block conflict (`lr_loop_entry_decision >= 0`,
+            // so `atn_rule_body_decision` is -1 by construction — the atom edge
+            // indices exclude the LR alts) and a nested-`Group` conflict stay on
+            // the tournament, which keeps emitting its OverlapTournament
+            // warning. Generalising needs an atom-relative→grammar index map /
+            // group-level routing; revisit if a descriptor needs it (none do).
             let _amb_rule = ctx.current_rule_index();
             let _amb_route = if let AtEndConflict = a.reason {
                 ctx.needs_atn()
                     && ctx.lr_loop_entry_decision(_amb_rule) < 0
-                    && ctx.atn_rule_body_decision(_amb_rule) >= 0;
+                    && ctx.atn_rule_body_decision(_amb_rule) >= 0
+                    && ctx.at_end_conflict_routes(rule_display, &a.branch_tokens);
             } else {
                 false;
             };

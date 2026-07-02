@@ -116,10 +116,21 @@ pub struct AtnSim {
     pub rule_first_open: List<bool>,
     /// Per-state continuation FIRST / nullability: the per-state analogue of
     /// `rule_*`, cached at decode so the LR loop-entry decision is array
-    /// lookups, not a DFS per call. Empty unless the ATN has precedence edges.
+    /// lookups, not a DFS per call. Empty unless the ATN has precedence edges
+    /// (and `lr_tables` is set — see `atn_decode`).
+    ///
+    /// The FIRST / `~X`-exclusion labels are flat columns indexed by
+    /// `state_cont_*_start` / `state_cont_*_count` (the `state_tr_*` /
+    /// `tr_*` layout): per-state inner lists would put thousands of
+    /// permanently live objects on the GC heap, and the copying collector
+    /// re-traces every one of them on every cycle for the module's lifetime.
     pub state_cont_nullable: List<bool>,
-    pub state_cont_first: List<List<i32>>,
-    pub state_cont_first_neg: List<List<i32>>,
+    pub state_cont_first_start: List<i32>,
+    pub state_cont_first_count: List<i32>,
+    pub state_cont_neg_start: List<i32>,
+    pub state_cont_neg_count: List<i32>,
+    pub cont_first_label: List<i32>,
+    pub cont_neg_label: List<i32>,
     pub state_cont_first_open: List<bool>,
 }
 
@@ -362,8 +373,14 @@ fn atn_read_u24(bytes: &List<u8>, pos: i32) -> i32 {
 /// running prefix sum) falls out while reading that column. Each column is
 /// read directly off the packed bytes into a `with_capacity`-presized
 /// `List`: one pass, no intermediate word array, nothing grows by doubling.
+///
+/// `lr_tables` gates the FIRST/nullable fixpoint and the `state_cont_*`
+/// cache, which serve only `atn_lr_loop_decision`: codegen passes `false`
+/// when the grammar has no ATN-class LR rule (the simulator is needed only
+/// for a `??` or an at-end conflict), skipping the fixpoint and its
+/// permanently live per-state lists.
 #[allow(dead_code)]
-pub fn atn_decode(bytes: &List<u8>) -> AtnSim {
+pub fn atn_decode(bytes: &List<u8>, lr_tables: bool = true) -> AtnSim {
     let mut p = 0;
     let nrules = atn_read_u16(bytes, p);
     p += 2;
@@ -442,8 +459,12 @@ pub fn atn_decode(bytes: &List<u8>) -> AtnSim {
         rule_first_neg: [],
         rule_first_open: [],
         state_cont_nullable: [],
-        state_cont_first: [],
-        state_cont_first_neg: [],
+        state_cont_first_start: [],
+        state_cont_first_count: [],
+        state_cont_neg_start: [],
+        state_cont_neg_count: [],
+        cont_first_label: [],
+        cont_neg_label: [],
         state_cont_first_open: [],
     };
     for let mut r = 0; r < nrules_count; r += 1 {
@@ -464,7 +485,7 @@ pub fn atn_decode(bytes: &List<u8>) -> AtnSim {
             break;
         }
     }
-    if has_precedence {
+    if lr_tables && has_precedence {
         atn_compute_first_nullable(&mut sim);
         atn_compute_state_cont(&mut sim);
     }
@@ -485,8 +506,16 @@ fn atn_compute_state_cont(sim: &mut AtnSim) {
         let mut fneg: List<i32> = [];
         let open = atn_cont_first(sim, st, &mut v2, &mut f, &mut fneg);
         sim.state_cont_nullable.push(nullable);
-        sim.state_cont_first.push(f);
-        sim.state_cont_first_neg.push(fneg);
+        sim.state_cont_first_start.push(sim.cont_first_label.len());
+        sim.state_cont_first_count.push(f.len());
+        for let t of &f {
+            sim.cont_first_label.push(*t);
+        }
+        sim.state_cont_neg_start.push(sim.cont_neg_label.len());
+        sim.state_cont_neg_count.push(fneg.len());
+        for let x of &fneg {
+            sim.cont_neg_label.push(*x);
+        }
         sim.state_cont_first_open.push(open);
     }
 }
@@ -630,20 +659,28 @@ fn atn_cont_first(sim: &AtnSim, state: i32, visited: &mut List<i32>, out: &mut L
     return open;
 }
 
-/// Whether the FIRST set described by (`out`, `open`, `neg`) admits token `t`:
-/// an explicit atom match, a true wildcard, or a `~X` exclusion whose excluded
-/// label is not `t` (matching `atn_move`'s `token != label && token != eof`).
+/// Whether `state`'s cached continuation FIRST admits token `t`: an explicit
+/// atom match, a true wildcard, or a `~X` exclusion whose excluded label is
+/// not `t` (matching `atn_move`'s `token != label && token != eof`). Reads
+/// the flat `state_cont_*` columns, so it is meaningful only after the
+/// decoder's LR fixpoint ran (see `atn_decode`'s `lr_tables`).
 #[allow(dead_code)]
-fn atn_first_admits(out: &List<i32>, open: bool, neg: &List<i32>, t: i32, eof: i32) -> bool {
-    if open && t != eof {
+fn atn_state_cont_admits(sim: &AtnSim, state: i32, t: i32, eof: i32) -> bool {
+    if sim.state_cont_first_open[state] && t != eof {
         return true;
     }
-    if out.contains(&t) {
-        return true;
+    let fs = sim.state_cont_first_start[state];
+    let fc = sim.state_cont_first_count[state];
+    for let mut j = 0; j < fc; j += 1 {
+        if sim.cont_first_label[fs + j] == t {
+            return true;
+        }
     }
     if t != eof {
-        for let x of neg {
-            if *x != t {
+        let ns = sim.state_cont_neg_start[state];
+        let nc = sim.state_cont_neg_count[state];
+        for let mut j = 0; j < nc; j += 1 {
+            if sim.cont_neg_label[ns + j] != t {
                 return true;
             }
         }
@@ -1070,13 +1107,7 @@ pub fn atn_lr_loop_decision(
                 continue;
             }
             let tgt = sim.tr_target[s + j];
-            if atn_first_admits(
-                &sim.state_cont_first[tgt],
-                sim.state_cont_first_open[tgt],
-                &sim.state_cont_first_neg[tgt],
-                t,
-                eof,
-            ) {
+            if atn_state_cont_admits(sim, tgt, t, eof) {
                 return j;
             }
         }
@@ -1100,13 +1131,7 @@ fn atn_caller_mandates(sim: &AtnSim, rule_stack: &List<i32>, t: i32, eof: i32) -
             i -= 1;
             continue;
         }
-        return atn_first_admits(
-            &sim.state_cont_first[ret],
-            sim.state_cont_first_open[ret],
-            &sim.state_cont_first_neg[ret],
-            t,
-            eof,
-        );
+        return atn_state_cont_admits(sim, ret, t, eof);
     }
     return false;
 }

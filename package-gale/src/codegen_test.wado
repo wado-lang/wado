@@ -1264,3 +1264,73 @@ test "at-end-conflict multi-alt rule routes through the ATN simulator" {
     assert str_contains(&body, &"if _atn_alt ==");
     assert !str_contains(&body, &"_sd_best_i");
 }
+
+// A FOLLOW-disjoint at-end conflict stays on the static tournament: the only
+// token that lets the continuing alt proceed ('c') cannot continue any caller
+// (FOLLOW(x) = {'d'}), so when the longer alt scans, the at-end pick would
+// die in the caller anyway — longest-match is provably sound and the grammar
+// needs no ATN at all.
+global AT_END_DISJOINT_G4: String = "
+grammar T;
+s : x 'd' ;
+x : 'a' 'b' | 'a' 'b' 'c' ;
+WS : ' ' -> skip ;
+";
+
+test "FOLLOW-disjoint at-end conflict keeps the static tournament" {
+    let mut g = parse(AT_END_DISJOINT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_x__inner(");
+    assert str_contains(&body, &"_sd_best_i");
+    assert !str_contains(&body, &"atn_predict_with_stack");
+    assert !str_contains(&output, &"global ATN_SIM");
+}
+
+// A wildcard caller suffix (`s : x . ;`) admits any token, but
+// `first_of_element(Wildcard)` cannot enumerate that, so the computed FOLLOW
+// under-approximates. The refinement must detect the open-FIRST element and
+// keep the conflict on the ATN — a static tournament here would steal the
+// wildcard's token ('c' after 'a b').
+global AT_END_WILDCARD_FOLLOW_G4: String = "
+grammar T;
+s : x . ;
+x : 'a' 'b' | 'a' 'b' 'c' ;
+WS : ' ' -> skip ;
+";
+
+test "wildcard caller suffix keeps the at-end conflict on the ATN" {
+    let mut g = parse(AT_END_WILDCARD_FOLLOW_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_x__inner(");
+    assert str_contains(&body, &"let _atn_alt = atn_predict_with_stack(&ATN_SIM,");
+    assert !str_contains(&body, &"_sd_best_i");
+}
+
+// The decoder's LR loop-entry tables (`rule_first` / `state_cont_*`) serve
+// only `atn_lr_loop_decision`. A grammar that needs the simulator for a `??`
+// or an at-end conflict — but has no ATN-class LR rule — opts out via
+// `atn_decode`'s second argument: the fixpoint's per-state lists would live
+// as GC roots for the module's lifetime and tax every collection.
+test "non-LR ATN grammar opts out of the decoder's LR tables" {
+    let mut g = parse(AT_END_CONFLICT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    assert str_contains(&output, &"global ATN_SIM: AtnSim = atn_decode(&b\"");
+    assert str_contains(&output, &"\", false);");
+}
+
+// A `.`-led LR suffix routes the loop entry through `atn_lr_loop_decision`
+// (the lr_wildcard_postfix shape), which reads the LR tables — keep them.
+global LR_WILDCARD_CODEGEN_G4: String = "
+grammar T;
+prog : e EOF ;
+e : e '+' e | e . | INT ;
+INT : [0-9]+ ;
+WS : ' ' -> skip ;
+";
+
+test "ATN-class LR grammar keeps the decoder's LR tables" {
+    let mut g = parse(LR_WILDCARD_CODEGEN_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    assert str_contains(&output, &"global ATN_SIM: AtnSim = atn_decode(&b\"");
+    assert str_contains(&output, &"\", true);");
+}
