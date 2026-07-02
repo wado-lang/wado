@@ -39,9 +39,9 @@ Sieve of Eratosthenes up to 10M (array operations).
 
 | Implementation | Throughput      | ms/iter   | vs best |
 | -------------- | --------------- | --------- | ------- |
-| C              | 199.52 M nums/s | 50.119 ms | 1.00x   |
-| JavaScript     | 167.21 M nums/s | 59.804 ms | 1.19x   |
-| **Wado**       | 125.28 M nums/s | 79.821 ms | 1.59x   |
+| C              | 239.54 M nums/s | 41.747 ms | 1.00x   |
+| JavaScript     | 165.98 M nums/s | 60.247 ms | 1.44x   |
+| **Wado**       | 133.74 M nums/s | 74.772 ms | 1.79x   |
 
 ## Float-to-String
 
