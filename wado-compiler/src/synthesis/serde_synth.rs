@@ -975,9 +975,6 @@ fn default_value_for_type(
     let default_trait_name = type_table
         .compiler_trait_name(crate::compiler_item::CompilerItem::Default)
         .to_string();
-    // Record the `Default` reference so `synthesize_defaults` (which runs after
-    // serde) generates the body: `Default` is `on_bound`, and this emitted
-    // `Field::default()` may be the only site that needs it.
     requested_defaults.push((base_name.clone(), module_source.clone()));
     let mut method_info =
         LocalMethodName::new(base_name, Some(default_trait_name), "default".to_string());

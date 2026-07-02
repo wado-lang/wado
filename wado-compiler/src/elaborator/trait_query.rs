@@ -34,11 +34,6 @@ impl OnBoundTrait {
         matches!(self, Self::Serialize | Self::Deserialize)
     }
 
-    /// The format family (`Inspect` / `InspectAlt` / `Display` / `DisplayAlt`).
-    /// Total: every type is structurally formattable, so a `T: <format>` bound
-    /// always holds and needs no field recursion to decide. `Display` /
-    /// `DisplayAlt` synthesize a fallback delegating to `Inspect` /
-    /// `InspectAlt`.
     pub(super) fn is_format(self) -> bool {
         matches!(
             self,
@@ -46,13 +41,11 @@ impl OnBoundTrait {
         )
     }
 
-    /// Whether structural eligibility is decided by recursing through the
-    /// type's fields/cases (each must itself implement the trait). True for
-    /// `Eq` / `Ord` / serde; false for `Default` (eligibility is "every field
-    /// carries a default expression") and the format traits (total, decided
-    /// without recursion).
     pub(super) fn is_field_recursive(self) -> bool {
-        !matches!(self, Self::Default) && !self.is_format()
+        matches!(
+            self,
+            Self::Eq | Self::Ord | Self::Serialize | Self::Deserialize
+        )
     }
 }
 
@@ -446,9 +439,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(tr) = self.classify_on_bound_trait(trait_name) else {
             return;
         };
-        // `Default` fails structurally when a field lacks a default expression,
-        // not because a field type is non-`Default`; the headline error already
-        // states which field, so no recursive field-type chain applies.
         if !tr.is_field_recursive() {
             return;
         }
@@ -474,8 +464,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     pub(super) fn classify_on_bound_trait(&self, trait_name: &str) -> Option<OnBoundTrait> {
-        // Match the bare name against each compiler trait, capturing the
-        // trait's own declaring module in the same borrow.
         let (on_bound, compiler_module) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
@@ -504,36 +492,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 None
             }
         }?;
-        // The name matches a compiler trait by spelling, but a user may declare
-        // or import a trait of the same name (e.g. the `trait_bound_fn_violation`
-        // fixture's local `trait Display`). Resolve which trait declaration the
-        // name refers to in this module's scope: a local declaration wins, else
-        // an explicit import brings the declaration from elsewhere. Both are
-        // O(1) probes of the trait-decl index (which keys every trait
-        // declaration, compiler and user, by `(module, name)`). If the name
-        // resolves to no local/imported trait declaration, it is the ambient
-        // compiler trait; if it resolves to the compiler item's own module
-        // (including inside that very module), it is the compiler trait; only a
-        // resolution to a *different* module is a user shadow.
+        match self.scoped_trait_decl_module(trait_name) {
+            Some(module) => (*module == compiler_module).then_some(on_bound),
+            None => Some(on_bound),
+        }
+    }
+
+    /// The trait declaration `trait_name` binds to in scope (local, else an
+    /// explicit import); `None` when it falls through to the ambient compiler
+    /// trait. Lets a same-name user `trait` be distinguished from the compiler's.
+    fn scoped_trait_decl_module(&self, trait_name: &str) -> Option<&ModuleSource> {
         let trait_env = &self.tysys.trait_env;
         let declares = |module: &ModuleSource| {
             trait_env
                 .decl_index
                 .contains_key(&(module.clone(), trait_name.to_string()))
         };
-        let scoped_module = if declares(&self.current_module_source) {
-            Some(&self.current_module_source)
-        } else {
-            self.sem
-                .imports
-                .imported_type_sources
-                .get(trait_name)
-                .filter(|src| declares(src))
-        };
-        match scoped_module {
-            Some(module) => (*module == compiler_module).then_some(on_bound),
-            None => Some(on_bound),
+        if declares(&self.current_module_source) {
+            return Some(&self.current_module_source);
         }
+        self.sem
+            .imports
+            .imported_type_sources
+            .get(trait_name)
+            .filter(|src| declares(src))
     }
 
     fn walk_structural_derive_members(
@@ -625,23 +607,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(tr) = self.classify_on_bound_trait(trait_name) else {
             return false;
         };
-        // The format traits are total: an `impl Inspect for T;` (etc.) marker
-        // always validates.
         if tr.is_format() {
             return true;
         }
-        // `Default` is eligible when the struct's every field carries a default
-        // expression — a different rule from the field-recursion the other
-        // `on_bound` traits use. The marker validates against the same
-        // predicate `S::default()` resolution consults.
-        if !tr.is_field_recursive() {
-            return matches!(
-                self.tysys.type_table.borrow().get(type_id),
-                ResolvedType::Struct { .. }
-            ) && {
-                let name = self.tysys.type_table.borrow().type_name(type_id);
-                self.auto_derive_default_struct_type(&name).is_some()
-            };
+        if tr == OnBoundTrait::Default {
+            return self.is_defaultable_struct(type_id);
         }
         let resolved = self.tysys.type_table.borrow().get(type_id).clone();
         match &resolved {
@@ -662,24 +632,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    fn is_defaultable_struct(&self, type_id: TypeId) -> bool {
+        let name = {
+            let tt = self.tysys.type_table.borrow();
+            if !matches!(tt.get(type_id), ResolvedType::Struct { .. }) {
+                return false;
+            }
+            tt.type_name(type_id)
+        };
+        self.auto_derive_default_struct_type(&name).is_some()
+    }
+
     fn type_implements_trait_inner(
         &self,
         ctx: &AnnotateCtx,
         resolved: &ResolvedType,
         trait_name: &str,
     ) -> bool {
-        // Classify once — reused by the format short-circuit, the primitive
-        // fast paths, the structural on_bound arm, and the Default arm below.
         let on_bound = self.classify_on_bound_trait(trait_name);
 
-        // The format traits are total (WEP 2026-06-25): every type is
-        // structurally formattable — the automatic policy already generated an
-        // `Inspect` body for every type kind, and `Display` falls back to it —
-        // so a `T: Inspect` / `T: Display` (and the `Alt` siblings) obligation
-        // always holds, for a type parameter or any concrete type alike. A
-        // referenced-but-unsynthesized format body would fail loud at
-        // monomorphize; totality is upheld by the synthesis passes covering
-        // every type kind.
         if on_bound.is_some_and(OnBoundTrait::is_format) {
             return true;
         }
@@ -753,13 +724,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Structs auto-implement Default when every field has a declared
-        // default expression (`= expr`) — the synthesis pass emits the body.
-        // Share the eligibility predicate with the method-lookup helper so
-        // the bound check and `S::default()` resolution agree. Record the
-        // bound-driven request so `on_bound` synthesis (WEP 2026-06-25)
-        // generates the body only where a `T: Default` bound or a marker
-        // actually needs it.
         if let ResolvedType::Struct {
             name,
             module_source,

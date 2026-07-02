@@ -323,9 +323,7 @@ pub fn synthesize_traits(project: Package) -> Package {
             items.trait_name(CompilerItem::Ord).to_string(),
         )
     };
-    // `Default` is drained separately by `synthesize_defaults`, which runs
-    // after `serde_synth` so that a `Default::default()` serde emits for a
-    // missing field is recorded in time (see `synthesis::synthesize`).
+    // `Default` is drained later by `synthesize_defaults` (after `serde_synth`).
     let requested: IndexSet<(String, ModuleSource, String)> = first_module
         .type_table
         .borrow()
@@ -369,16 +367,9 @@ pub fn synthesize_traits(project: Package) -> Package {
     project
 }
 
-/// Drain the `Default` bound-driven requests, generating one
-/// `Struct^Default::default()` body per requested defaults-eligible struct.
-///
-/// Runs as its own pass (in `synthesis::synthesize`) *after* `serde_synth`,
-/// because a `Deserialize` body emits `Field::default()` for a missing
-/// non-required field and records that request only then — later than
-/// `synthesize_traits`' snapshot. Draining `Default` here means every request,
-/// whether recorded during Annotate (a `T: Default` bound, an `S::default()`
-/// call, an `impl Default for S;` marker) or during serde synthesis, is served
-/// from one place.
+/// Generate `Struct^Default::default()` for each requested defaults-eligible
+/// struct. A separate pass from `synthesize_traits` because `serde_synth`'s
+/// `Deserialize` bodies record `Default` requests only after that snapshot.
 pub fn synthesize_defaults(project: &mut Package) {
     let trait_env = project.trait_env.clone();
     let first_module = project
@@ -519,8 +510,7 @@ impl SynthesisCtx<'_, '_, '_> {
         ))
     }
 
-    /// `true` when this pass already emitted `impl <trait_name> for
-    /// <type_name>` in the current module (the in-pass dedup key).
+    /// `true` when this pass already emitted `<trait_name> for <type_name>`.
     fn pending_has(&self, type_name: &str, trait_name: &str) -> bool {
         self.pending.contains(&(
             type_name.to_string(),
@@ -529,15 +519,10 @@ impl SynthesisCtx<'_, '_, '_> {
         ))
     }
 
-    /// Whether a *methodful* impl already covers `<trait_name> for
-    /// <type_name>` — a body-less `impl Trait for Type;` marker does not count
-    /// (it reaches `trait_env`'s impl index like any `Item::Impl`, so the
-    /// broader [`Self::has_impl`] would treat the marker as "implemented" and
-    /// block the very body it asks for), nor does a same-name impl generated
-    /// this pass. `scope` picks module-scoped ([`ImplScope::CurrentModule`],
-    /// for `Eq` / `Ord` / `Default` dedup) or module-agnostic
-    /// ([`ImplScope::AnyModule`], for the format sub-passes, so a cross-module
-    /// manual `impl Display for String` still suppresses the fallback).
+    /// `true` when a *methodful* impl already covers `<trait_name> for
+    /// <type_name>` (within `scope`) or this pass emitted one. A body-less
+    /// `impl Trait for Type;` marker does not count — it must not block the
+    /// body it asks for.
     fn has_methodful_impl(&self, type_name: &str, trait_name: &str, scope: ImplScope) -> bool {
         let real = match scope {
             ImplScope::CurrentModule => {
@@ -555,22 +540,15 @@ impl SynthesisCtx<'_, '_, '_> {
         self.has_methodful_impl(type_name, trait_name, ImplScope::CurrentModule)
     }
 
-    /// Module-agnostic methodful check, for the format sub-passes.
     pub(crate) fn has_methodful_impl_anywhere(&self, type_name: &str, trait_name: &str) -> bool {
         self.has_methodful_impl(type_name, trait_name, ImplScope::AnyModule)
     }
 
-    /// `true` when `impl <trait_name> for <type_name>` should be generated
-    /// now: some bound/marker asked for it ([`Self::is_requested`]) and no
-    /// real impl already covers it ([`Self::has_real_impl`]). The single
-    /// combined gate for every `Eq` / `Ord` / `Default` generation call site.
     pub(crate) fn should_synthesize(&self, type_name: &str, trait_name: &str) -> bool {
         self.is_requested(type_name, trait_name) && !self.has_real_impl(type_name, trait_name)
     }
 }
 
-/// Whether a "real impl already covers this" query counts impls in the current
-/// module only, or in any module. See [`SynthesisCtx::has_methodful_impl`].
 #[derive(Clone, Copy)]
 enum ImplScope {
     CurrentModule,
@@ -933,10 +911,6 @@ fn generate_struct_default_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<
         .collect();
 
     for (name, fields, span) in &infos {
-        // On_bound (WEP 2026-06-25): emit only where a `T: Default` bound,
-        // a `S::default()` call, or an `impl Default for S;` marker recorded
-        // the request — not for every defaults-eligible struct. A body-less
-        // marker does not count as a real impl (`should_synthesize`).
         if !ctx.should_synthesize(name, &default_trait_name) {
             continue;
         }

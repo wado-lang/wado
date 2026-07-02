@@ -2902,11 +2902,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Auto-derived `Default::default()` — no user impl block exists, but
-        // the synthesis pass emits one in the struct's own module. Record the
-        // bound-driven request (WEP 2026-06-25) so `on_bound` synthesis emits
-        // the body: a direct `S::default()` reaches here without any
-        // `T: Default` bound check to record it.
         if method_name == "default" && self.auto_derive_default_struct_type(struct_name).is_some() {
             let default_trait_name = self
                 .tysys
