@@ -19,10 +19,54 @@ pub variant OptionValue {
     Str(String),
     /// Decimal integer literal.
     Int(i64),
-    /// Host-language action block `{ ... }`. The stored text is the raw
-    /// body between the braces (delimiters excluded); Gale does not parse
-    /// action-language code.
-    Action(String),
+    /// Host-language action block `{ ... }`. Carries the raw body between
+    /// the braces (delimiters excluded) plus its source span; Gale does not
+    /// parse action-language code.
+    Action(ActionSource),
+}
+
+/// A verbatim host-language fragment retained from the `.g4` source: an
+/// action body, a semantic-predicate body, a rule-argument expression list,
+/// or a named-action body. `text` is the source between the delimiters
+/// (delimiters excluded); the fragment's language is grammar-wide
+/// (`Grammar.action_language`), not per-fragment. See `action.md`.
+pub struct ActionSource {
+    pub text: String = "",
+    /// Source span of the whole block in the `.g4` (delimiters included),
+    /// for diagnostics and later translation.
+    pub span: Span = Span { start: 0, end: 0 },
+    /// Stable id assigned by a later normalize pass (parallel to
+    /// `atn_call_site`); names the emitted action fn. -1 until assigned.
+    pub action_id: i32 = -1,
+}
+
+/// One declaration in a rule's `[...]` arguments, `returns [...]`, or
+/// `locals [...]` list. `type_text` is the opaque host-language type
+/// (`int`, `List<String>`); `name` is the attribute name. Splitting the
+/// list into declarations is ANTLR attribute-definition syntax
+/// (angle/bracket-aware comma split), not host-language parsing.
+pub struct AttrDecl {
+    pub type_text: String,
+    pub name: String,
+    pub span: Span,
+}
+
+/// A `catch [decl] { body }` exception handler on a parser rule. Retained
+/// for IR completeness; execution under Gale's resilient-parse model is a
+/// separate decision (see `action.md`), so nothing consumes this yet.
+pub struct CatchClause {
+    pub decl_text: String,
+    pub body: ActionSource,
+}
+
+/// The host language of a grammar's action / predicate bodies, from
+/// `options { language = X }`. Default `Java` matches ANTLR4's default
+/// target and the descriptor corpus; `Wado` selects the identity
+/// translator. See `action.md`.
+pub variant ActionLanguage {
+    Java,
+    Wado,
+    Other(String),
 }
 
 /// GrammarOption is a single `key = value ;` entry from an ANTLR4
@@ -42,6 +86,10 @@ pub struct NamedAction {
     /// for a bare `@name { ... }` action.
     pub scope: Option<String>,
     pub name: String,
+    /// The `{ ... }` body. Retained for later translation (e.g. `@members`
+    /// field/method declarations); defaulted empty so pre-Stage-C code and
+    /// tests that don't populate it keep compiling.
+    pub body: ActionSource = ActionSource {},
 }
 
 /// GrammarKind records which of ANTLR4's three grammar-header forms the
@@ -116,8 +164,11 @@ pub struct Grammar {
     /// (`caseInsensitive`, `language`, `tokenVocab`, `superClass`, ...).
     pub options: List<GrammarOption>,
     /// Grammar-level `@name { ... }` / `@scope::name { ... }` actions,
-    /// in declaration order. Action bodies themselves are discarded.
+    /// in declaration order.
     pub named_actions: List<NamedAction>,
+    /// Host language of action / predicate bodies (`options { language = X }`).
+    /// Defaulted `Java` (ANTLR4's default target and the corpus's language).
+    pub action_language: ActionLanguage = ActionLanguage::Java,
     /// Rule / token references encountered during parse that have not
     /// yet been resolved against a rule table. `check_references`
     /// walks these and reports undefined refs. Populated by `parse()`;
@@ -301,6 +352,17 @@ pub struct ParserRule {
     /// Equivalent to `rule_type_name(name)`; populated so codegen never
     /// re-runs `to_pascal_case` for the same rule name.
     pub type_name: String = "",
+    /// Rule signature and prequel actions, retained for the action pipeline
+    /// (see `action.md`). All defaulted so codegen that ignores them and
+    /// literal-constructing tests keep compiling unchanged.
+    pub args: List<AttrDecl> = [],
+    pub returns_decls: List<AttrDecl> = [],
+    pub locals_decls: List<AttrDecl> = [],
+    pub init_action: Option<ActionSource> = null,   // @init
+    pub after_action: Option<ActionSource> = null,  // @after
+    pub throws: List<String> = [],
+    pub catches: List<CatchClause> = [],            // retained, execution parked
+    pub finally_action: Option<ActionSource> = null, // retained, execution parked
 }
 
 impl ParserRule {
@@ -377,6 +439,9 @@ pub struct RuleRefElement {
     /// assigned. (Foundation for the full-context LR loop-entry predictor —
     /// see `TODO.md` P4.2.)
     pub atn_call_site: i32 = -1,
+    /// Call-site argument list `rule[expr, ...]` (`a[$i]`, `e[4]`) as raw
+    /// host text. Retained for the action pipeline; `null` when absent.
+    pub arg_action: Option<ActionSource> = null,
 }
 
 impl RuleRefElement {
@@ -627,7 +692,13 @@ pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
     let mut named_actions: List<NamedAction> = [];
     let mut pending_refs: List<PendingRef> = [];
     let mut source_files: List<String> = [];
+    // Carry a non-default action language from whichever split declares one
+    // (the parser grammar usually holds the actions); last non-Java wins.
+    let mut action_language = ActionLanguage::Java;
     for let g of grammars {
+        if !(g.action_language matches { Java }) {
+            action_language = g.action_language;
+        }
         // Concatenate source paths so every input contributes a provenance entry.
         for let sf of &g.source_files {
             source_files.push(*sf);
@@ -717,6 +788,7 @@ pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
         channels,
         options,
         named_actions,
+        action_language,
         pending_refs,
         source_files,
     };
@@ -837,6 +909,7 @@ fn stamp_call_sites_element(elem: &Element, next: &mut i32) -> Element {
                 snake_name: rr.snake_name,
                 field_name: rr.field_name,
                 atn_call_site: id,
+                arg_action: rr.arg_action,
             });
         },
         Label(lab) => Element::Label(LabelElement {

@@ -3,6 +3,8 @@ use {
     GrammarKind,
     GrammarOption,
     OptionValue,
+    ActionSource,
+    ActionLanguage,
     NamedAction,
     ParserRule,
     Alternative,
@@ -21,6 +23,7 @@ use {
     LexerElement,
     Visibility,
 } from "./ir.wado";
+use { Span } from "./runtime/lex.wado";
 use { generate, GenerateOptions } from "./codegen.wado";
 use { DiagnosticKind } from "./gir.wado";
 use { parse } from "./g4/parser.wado";
@@ -941,7 +944,7 @@ test "metadata comment formats string and int option values" {
         options: [
             GrammarOption { name: "tokenVocab", value: OptionValue::Str("foo.g4") },
             GrammarOption { name: "k", value: OptionValue::Int(3) },
-            GrammarOption { name: "init", value: OptionValue::Action("some code;") },
+            GrammarOption { name: "init", value: OptionValue::Action(ActionSource { text: "some code;" }) },
         ],
         named_actions: [],
         pending_refs: [],

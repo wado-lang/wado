@@ -2,6 +2,7 @@ use {
     Grammar,
     GrammarOption,
     OptionValue,
+    ActionLanguage,
     ParserRule,
     Alternative,
     Element,
@@ -547,6 +548,91 @@ expr[int _p] returns [int v] throws E1 locals [int i] : ID ;";
     assert g.parser_rules.len() == 1;
 }
 
+test "prequel args / returns / locals retained as AttrDecls" {
+    let input = "grammar Test;
+expr[int _p, String name] returns [int v, List<String> ignored] locals [int i] : ID ;";
+    let g = parse(input).unwrap();
+    let r = &g.parser_rules[0];
+    assert r.args.len() == 2, `args: {r.args.len()}`;
+    assert r.args[0].type_text == "int" && r.args[0].name == "_p", `arg0: {r.args[0].type_text}/{r.args[0].name}`;
+    assert r.args[1].type_text == "String" && r.args[1].name == "name", `arg1: {r.args[1].type_text}/{r.args[1].name}`;
+    assert r.returns_decls.len() == 2, `returns: {r.returns_decls.len()}`;
+    assert r.returns_decls[0].type_text == "int" && r.returns_decls[0].name == "v";
+    // The comma inside List<String> must not split the declaration.
+    assert r.returns_decls[1].type_text == "List<String>" && r.returns_decls[1].name == "ignored",
+        `ret1: {r.returns_decls[1].type_text}/{r.returns_decls[1].name}`;
+    assert r.locals_decls.len() == 1 && r.locals_decls[0].name == "i";
+    assert r.throws.len() == 0;
+}
+
+test "prequel throws list retained" {
+    let input = "grammar Test;
+expr throws E1, pkg.E2 : ID ;";
+    let g = parse(input).unwrap();
+    let r = &g.parser_rules[0];
+    assert r.throws.len() == 2, `throws: {r.throws.len()}`;
+    assert r.throws[0] == "E1" && r.throws[1] == "pkg.E2", `throws: {r.throws[0]}, {r.throws[1]}`;
+}
+
+test "prequel @init / @after bodies retained" {
+    let input = "grammar Test;
+expr @init { int x = 0; } @after { print(x); } : ID ;";
+    let g = parse(input).unwrap();
+    let r = &g.parser_rules[0];
+    assert r.init_action matches { Some(_) }, "init missing";
+    assert r.after_action matches { Some(_) }, "after missing";
+    if let Some(a) = &r.init_action {
+        assert a.text == " int x = 0; ", `init body: '{a.text}'`;
+    }
+}
+
+test "catch / finally clauses retained on the rule" {
+    let input = "grammar Test;
+expr : ID ; catch [E1 e] { h1(e); } catch [E2 e] { h2(e); } finally { done(); }";
+    let g = parse(input).unwrap();
+    let r = &g.parser_rules[0];
+    assert r.catches.len() == 2, `catches: {r.catches.len()}`;
+    assert r.catches[0].decl_text == "E1 e", `decl0: '{r.catches[0].decl_text}'`;
+    assert r.catches[0].body.text == " h1(e); ", `body0: '{r.catches[0].body.text}'`;
+    assert r.finally_action matches { Some(_) }, "finally missing";
+}
+
+test "rule-ref call-site arg action retained" {
+    let input = "grammar Test;
+s : a[$i] ;
+a[int i] : ID ;";
+    let g = parse(input).unwrap();
+    let s = &g.parser_rules[0];
+    if let RuleRef(rr) = &s.alternatives[0].elements[0] {
+        assert rr.arg_action matches { Some(_) }, "arg_action missing";
+        if let Some(a) = &rr.arg_action {
+            assert a.text == "$i", `arg: '{a.text}'`;
+        }
+    } else {
+        panic("expected a rule ref");
+    }
+}
+
+test "named action bodies retained" {
+    let input = "grammar Test;
+@members { int count = 0; }
+start : 'a' ;";
+    let g = parse(input).unwrap();
+    assert g.named_actions.len() == 1;
+    assert g.named_actions[0].name == "members";
+    assert g.named_actions[0].body.text == " int count = 0; ", `body: '{g.named_actions[0].body.text}'`;
+}
+
+test "action language defaults to Java" {
+    let g = parse("grammar Test;\nr : ID ;").unwrap();
+    assert g.action_language matches { Java };
+}
+
+test "action language from options language = Wado" {
+    let g = parse("grammar Test;\noptions { language = Wado; }\nr : ID ;").unwrap();
+    assert g.action_language matches { Wado };
+}
+
 test "parser rule with at_init and at_after" {
     let input = "grammar Test;
 expr @init { x = 0; } @after { print(x); } : ID ;";
@@ -694,7 +780,7 @@ rule : ID ;";
     let g = parse(input).unwrap();
     assert g.options.len() == 1;
     if let Action(body) = &g.options[0].value {
-        assert *body == "some code;", `got action body: '{*body}'`;
+        assert body.text == "some code;", `got action body: '{body.text}'`;
     } else {
         panic("expected Action option value");
     }
