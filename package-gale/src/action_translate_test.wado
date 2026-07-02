@@ -51,6 +51,34 @@ r returns [i32 v] : ID { $v = 1; } ;
     assert res.is_err(), "$v needs vals in scope";
 }
 
+test "translate camelCase label uses the snake_case binding" {
+    let g = parse("grammar T;
+r : myTok=ID { print($myTok.text); } ;
+ID : [a-z]+ ;
+").unwrap();
+    let out = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" print($myTok.text); ", false).unwrap();
+    assert out == " print(p.token_text(my_tok)); ", `out: '{out}'`;
+}
+
+test "translate rejects a cross-rule member when the child returns no vals" {
+    let g = parse("grammar T;
+r : a=e { print($a.v); } ;
+e returns [i32 v] : A | B ;
+").unwrap();
+    // e is multi-alt → does not expose a value channel → $a.v must not emit a.v.
+    let res = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" print($a.v); ", false);
+    assert res.is_err(), "cross-rule member on a non-vals child must be an error";
+}
+
+test "translate rejects a value-channel field with a non-Wado type" {
+    let g = parse("grammar T;
+r returns [int v] : ID { $v = 1; } ;
+").unwrap();
+    // `int` is not a Wado type → no default → the field is not emittable.
+    let res = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" $v = 1; ", true);
+    assert res.is_err(), "non-Wado field type must be an error, not an uncompilable struct";
+}
+
 test "translate rejects rule-argument refs (not yet threaded)" {
     let g = parse("grammar T;
 r[i32 n] : ID { $n = 2; } ;

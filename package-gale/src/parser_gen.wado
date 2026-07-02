@@ -108,6 +108,7 @@ use {
     rule_returns_vals,
     vals_struct_name,
     wado_type_default,
+    field_in_vals,
 } from "./action_translate.wado";
 use { unwrap_label } from "./lr_util.wado";
 use { compute_shapes_for_alt, shape_lookahead_signature_for_alt, rebind_op_field } from "./lower.wado";
@@ -157,7 +158,7 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // recomputing the classification at every emit site.
     gen_parser_struct(w, ctx.is_trace(), ctx.needs_atn(), ctx.emit_actions());
     if ctx.emit_actions() {
-        gen_vals_structs(w, grammar, ctx);
+        gen_vals_structs(w, grammar);
     }
     if ctx.is_trace() {
         gen_trace_helpers(w);
@@ -174,6 +175,64 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // `follow_yields` / `FollowArg`). The follow-mask globals are
     // emitted by `gen_follow_mask_globals` at the end of codegen.
     gen_parse_entry(w, lowered, ctx);
+    // Any stamped parser action codegen did not handle (nested group, LR
+    // suffix, single-token multi-alt, multi-alt prequel) is surfaced loudly
+    // rather than silently discarded.
+    warn_unhandled_actions(grammar, ctx);
+}
+
+fn warn_unhandled_actions(grammar: &Grammar, ctx: &mut GenContext) {
+    if !ctx.emit_actions() {
+        return;
+    }
+    for let rule of &grammar.parser_rules {
+        let mut ids: List<i32> = [];
+        collect_rule_action_ids(rule, &mut ids);
+        for let id of &ids {
+            if !ctx.action_was_seen(*id) {
+                ctx.warn(
+                    &`action {*id}`,
+                    DiagnosticKind::UnsupportedAction,
+                    `action {*id} in rule '{rule.name}' is on a code path that does not yet execute actions (nested group, LR suffix, single-token multi-alt, or multi-alt prequel)`,
+                );
+            }
+        }
+    }
+}
+
+fn collect_rule_action_ids(rule: &ParserRule, out: &mut List<i32>) {
+    if let Some(a) = &rule.init_action {
+        out.push(a.action_id);
+    }
+    if let Some(a) = &rule.after_action {
+        out.push(a.action_id);
+    }
+    for let alt of &rule.alternatives {
+        collect_alt_action_ids(alt, out);
+    }
+}
+
+fn collect_alt_action_ids(alt: &Alternative, out: &mut List<i32>) {
+    for let a of &alt.actions {
+        out.push(a.source.action_id);
+    }
+    for let e of &alt.elements {
+        collect_element_action_ids(e, out);
+    }
+}
+
+fn collect_element_action_ids(elem: &Element, out: &mut List<i32>) {
+    match *elem {
+        Group(g) => {
+            for let alt of &g.alternatives {
+                collect_alt_action_ids(alt, out);
+            }
+        },
+        Repeat(rep) => collect_element_action_ids(&rep.element, out),
+        Label(lab) => collect_element_action_ids(&lab.element, out),
+        Not(n) => collect_element_action_ids(&n.element, out),
+        _ => {},
+    }
 }
 
 /// Public `parse` entry under the emitter: tokenize, run the start
@@ -315,8 +374,7 @@ fn emit_diag_prologue(w: &mut CodeWriter) {
 /// Emit a `<Rule>Vals` struct per rule that exposes a value channel. Fields
 /// are the rule's returns then locals, each with a defaulted Wado type, so
 /// the rule function can default-construct `<Rule>Vals {}`.
-fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar, ctx: &mut GenContext) {
-    let _ = ctx;
+fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar) {
     for let rule of &grammar.parser_rules {
         if !rule_returns_vals(rule) {
             continue;
@@ -331,10 +389,14 @@ fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar, ctx: &mut GenContext)
 
 fn gen_vals_fields(w: &mut CodeWriter, decls: &List<AttrDecl>) {
     for let d of decls {
+        // Fields with no Wado default are skipped (a reference to one is a
+        // loud error in the translator), so the struct default-constructs.
+        if !field_in_vals(d) {
+            continue;
+        }
         let def = match wado_type_default(&d.type_text) {
             Some(v) => v,
-            // `rule_value_channel_ready` already excluded no-default types.
-            None => panic("gen_vals_fields: no default for value-channel type"),
+            None => panic("gen_vals_fields: field_in_vals/wado_type_default disagree"),
         };
         w.line(&`{d.name}: {d.type_text} = {def},`);
     }
@@ -3025,9 +3087,33 @@ fn gen_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before: i32
         }
         match a.kind {
             Action => gen_action_body(w, &a.source, ctx),
-            Predicate => gen_predicate_guard(w, &a.source, ctx),
+            Predicate => {
+                // An alt-initial predicate in a multi-alt rule is a
+                // prediction gate (it chooses which alt to take). Gale's
+                // prediction ignores predicates, so emitting it as an inline
+                // guard here could reject a valid parse; surface it loudly
+                // until prediction-time gating lands (Phase 2 proper).
+                if before == 0 && current_rule_is_multi_alt(ctx) {
+                    ctx.mark_action_seen(a.source.action_id);
+                    ctx.warn(
+                        &`action {a.source.action_id}`,
+                        DiagnosticKind::UnsupportedAction,
+                        `predicate {a.source.action_id}: alt-initial predicates in a multi-alt rule need prediction-time gating (not yet supported)`,
+                    );
+                } else {
+                    gen_predicate_guard(w, &a.source, ctx);
+                }
+            },
         }
     }
+}
+
+fn current_rule_is_multi_alt(ctx: &GenContext) -> bool {
+    let ridx = ctx.current_rule_index();
+    if ridx < 0 {
+        return false;
+    }
+    return ctx.parser_rules()[ridx].alternatives.len() > 1;
 }
 
 /// Emit one action body under the identity translator (`language = Wado`):
@@ -3039,6 +3125,7 @@ fn gen_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before: i32
 /// (`$a.v`). A reference the translator cannot emit yet is a loud
 /// `UnsupportedAction` diagnostic rather than invalid `$x`.
 fn gen_action_body(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext) {
+    ctx.mark_action_seen(src.action_id);
     if let Some(code) = translate_action_or_warn(src, ctx) {
         emit_action_stmt(w, &code);
     }
@@ -3076,6 +3163,7 @@ fn translate_action_or_warn(src: &ActionSource, ctx: &mut GenContext) -> Option<
 /// take is Phase 2 proper; this serves mid-alt predicates and single-alt-rule
 /// gates, where a false predicate is a parse failure at that point.
 fn gen_predicate_guard(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext) {
+    ctx.mark_action_seen(src.action_id);
     let cond = match translate_action_or_warn(src, ctx) {
         Some(c) => c,
         None => return,

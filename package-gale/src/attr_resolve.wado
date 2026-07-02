@@ -43,6 +43,10 @@ pub struct ResolvedAttr {
     pub target: AttrTarget,
     pub name: String,
     pub member: Option<String> = null,
+    /// For a `RuleLabel` / `RuleRef`, the referenced parser rule's name (so
+    /// codegen can check it exposes a value channel and resolve the member
+    /// against its `returns`). Empty for non-rule targets.
+    pub rule_name: String = "",
     pub start: i32,
     pub end: i32,
 }
@@ -100,33 +104,34 @@ fn resolve_one(
                 AttrTarget::RuleLabel
             };
             check_member(r, &target, &lab.rule_name, rules)?;
-            return ok_attr(r, target);
+            return ok_attr(r, target, &lab.rule_name);
         }
     }
     if contains(&env.attrs, &r.name) {
         check_member(r, &AttrTarget::RuleAttr, &"", rules)?;
-        return ok_attr(r, AttrTarget::RuleAttr);
+        return ok_attr(r, AttrTarget::RuleAttr, &"");
     }
     if is_parser_special(&r.name) {
         check_member(r, &AttrTarget::ParserSpecial, &"", rules)?;
-        return ok_attr(r, AttrTarget::ParserSpecial);
+        return ok_attr(r, AttrTarget::ParserSpecial, &"");
     }
     if contains(&env.token_refs, &r.name) {
         check_member(r, &AttrTarget::TokenRef, &"", rules)?;
-        return ok_attr(r, AttrTarget::TokenRef);
+        return ok_attr(r, AttrTarget::TokenRef, &"");
     }
     if contains(&env.rule_refs, &r.name) {
         check_member(r, &AttrTarget::RuleRef, &r.name, rules)?;
-        return ok_attr(r, AttrTarget::RuleRef);
+        return ok_attr(r, AttrTarget::RuleRef, &r.name);
     }
     return Result::<ResolvedAttr, String>::Err(`unresolved attribute reference '${r.name}'`);
 }
 
-fn ok_attr(r: &AttrRef, target: AttrTarget) -> Result<ResolvedAttr, String> {
+fn ok_attr(r: &AttrRef, target: AttrTarget, rule_name: &String) -> Result<ResolvedAttr, String> {
     return Result::<ResolvedAttr, String>::Ok(ResolvedAttr {
         target,
         name: r.name,
         member: r.member,
+        rule_name: *rule_name,
         start: r.start,
         end: r.end,
     });

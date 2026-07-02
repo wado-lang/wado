@@ -149,6 +149,12 @@ pub struct GenContext {
     /// codegen to grammars whose action language Gale can currently emit.
     /// Off by default, so actionless / option-off grammars stay byte-identical.
     emit_actions: bool,
+    /// `action_id`s codegen has handled (emitted, or already raised a loud
+    /// diagnostic for). A post-emit sweep warns for any stamped parser action
+    /// left unhandled, so an action on a not-yet-supported code path (nested
+    /// group, LR suffix, single-token multi-alt, multi-alt prequel) surfaces
+    /// loudly instead of vanishing silently.
+    action_seen: List<i32>,
     rule_follow_kinds: TreeMap<String, List<String>>,
     rule_follow_exact: bool,
 }
@@ -185,6 +191,7 @@ impl GenContext {
             atn_rule_body_decisions: [],
             trace: false,
             emit_actions: false,
+            action_seen: [],
             rule_follow_kinds: TreeMap::new(),
             rule_follow_exact: false,
         };
@@ -385,6 +392,21 @@ impl GenContext {
     /// Whether retained actions should be executed rather than discarded.
     pub fn emit_actions(&self) -> bool {
         return self.emit_actions;
+    }
+
+    /// Record that codegen handled this action id (emitted or diagnosed).
+    pub fn mark_action_seen(&mut self, id: i32) {
+        self.action_seen.push(id);
+    }
+
+    /// Whether an action id was handled by codegen.
+    pub fn action_was_seen(&self, id: i32) -> bool {
+        for let s of &self.action_seen {
+            if *s == id {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// Record a prediction-strategy diagnostic for `rule`, deduped on

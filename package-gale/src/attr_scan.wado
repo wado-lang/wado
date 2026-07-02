@@ -14,6 +14,7 @@ use {
     scan_string,
     scan_line_comment,
     scan_block_comment,
+    scan_balanced,
     is_id_start_char,
     is_id_continue_char,
 } from "./g4/scan.wado";
@@ -33,50 +34,91 @@ pub struct AttrRef {
 
 /// Locate every `$ident(.ident)?` reference in `body`, in source order.
 /// String literals and comments are skipped so their contents never yield
-/// a reference. A lone `$` not followed by an identifier is host text.
+/// a reference. Backtick template strings are skipped too, EXCEPT their
+/// `{ ... }` interpolation regions, where `$refs` are Wado expressions to
+/// substitute — a literal `$` in template text is not a reference. A lone
+/// `$` not followed by an identifier is host text.
 pub fn find_attr_refs(body: &String) -> List<AttrRef> {
     let chars: List<char> = body.chars().collect();
-    let n = chars.len();
     let mut out: List<AttrRef> = [];
-    let mut i = 0;
-    while i < n {
+    scan_refs(&chars, 0, chars.len(), &mut out);
+    return out;
+}
+
+fn scan_refs(chars: &List<char>, start: i32, end: i32, out: &mut List<AttrRef>) {
+    let mut i = start;
+    while i < end {
         let c = chars[i];
         if c == '\'' || c == '"' {
-            i = scan_string(&chars, i);
+            i = scan_string(chars, i);
             continue;
         }
-        if c == '/' && i + 1 < n && chars[i + 1] == '/' {
-            i = scan_line_comment(&chars, i);
+        if c == '`' {
+            i = scan_template(chars, i, end, out);
             continue;
         }
-        if c == '/' && i + 1 < n && chars[i + 1] == '*' {
-            i = scan_block_comment(&chars, i);
+        if c == '/' && i + 1 < end && chars[i + 1] == '/' {
+            i = scan_line_comment(chars, i);
             continue;
         }
-        if c == '$' && i + 1 < n && is_id_start_char(chars[i + 1]) {
-            let start = i;
+        if c == '/' && i + 1 < end && chars[i + 1] == '*' {
+            i = scan_block_comment(chars, i);
+            continue;
+        }
+        if c == '$' && i + 1 < end && is_id_start_char(chars[i + 1]) {
+            let start_ref = i;
             let mut j = i + 1;
-            while j < n && is_id_continue_char(chars[j]) {
+            while j < end && is_id_continue_char(chars[j]) {
                 j += 1;
             }
-            let name = collect_range(&chars, i + 1, j);
+            let name = collect_range(chars, i + 1, j);
             let mut member: Option<String> = null;
-            let mut end = j;
-            if j + 1 < n && chars[j] == '.' && is_id_start_char(chars[j + 1]) {
+            let mut ref_end = j;
+            if j + 1 < end && chars[j] == '.' && is_id_start_char(chars[j + 1]) {
                 let mut k = j + 1;
-                while k < n && is_id_continue_char(chars[k]) {
+                while k < end && is_id_continue_char(chars[k]) {
                     k += 1;
                 }
-                member = Option::<String>::Some(collect_range(&chars, j + 1, k));
-                end = k;
+                member = Option::<String>::Some(collect_range(chars, j + 1, k));
+                ref_end = k;
             }
-            out.push(AttrRef { name, member, start, end });
-            i = end;
+            out.push(AttrRef { name, member, start: start_ref, end: ref_end });
+            i = ref_end;
             continue;
         }
         i += 1;
     }
-    return out;
+}
+
+/// Skip a backtick template, scanning only its `{ ... }` interpolation regions
+/// for references. `pos` points at the opening backtick; returns the index
+/// just past the closing backtick.
+fn scan_template(chars: &List<char>, pos: i32, end: i32, out: &mut List<AttrRef>) -> i32 {
+    let mut i = pos + 1;
+    while i < end {
+        let c = chars[i];
+        if c == '\\' && i + 1 < end {
+            i += 2;
+            continue;
+        }
+        if c == '`' {
+            return i + 1;
+        }
+        if c == '{' {
+            match scan_balanced(chars, i, '{', '}') {
+                Some(e) => {
+                    scan_refs(chars, i + 1, e - 1, out);
+                    i = e;
+                },
+                None => {
+                    i += 1;
+                },
+            }
+            continue;
+        }
+        i += 1;
+    }
+    return end;
 }
 
 fn collect_range(chars: &List<char>, start: i32, end: i32) -> String {

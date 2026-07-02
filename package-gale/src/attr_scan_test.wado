@@ -38,6 +38,19 @@ test "find_attr_refs skips single-quoted char and block comments" {
     assert refs[0].name == "keep";
 }
 
+test "find_attr_refs skips a literal dollar in backtick text but scans interpolations" {
+    // `$amount` is literal template text (not a ref); `$v` inside {} is a ref.
+    let refs = find_attr_refs(&"p.emit(`cost $amount, v={$v} done`)");
+    assert refs.len() == 1, `count: {refs.len()}`;
+    assert refs[0].name == "v", `name: {refs[0].name}`;
+}
+
+test "find_attr_refs scans nested member refs inside a backtick interpolation" {
+    let refs = find_attr_refs(&"`{$a.v + $b.v}`");
+    assert refs.len() == 2, `count: {refs.len()}`;
+    assert refs[0].name == "a" && refs[1].name == "b";
+}
+
 test "find_attr_refs treats a lone dollar as host text" {
     let refs = find_attr_refs(&"a $ b $$ c");
     assert refs.len() == 0, `count: {refs.len()}`;
