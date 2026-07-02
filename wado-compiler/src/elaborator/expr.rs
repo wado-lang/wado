@@ -620,10 +620,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let prefix = &ident.name[..pos];
         let suffix = &ident.name[pos + 2..];
 
-        let variant_info = match in_module {
-            Some(m) => self.lookup_variant_case_in(prefix, m).cloned(),
-            None => self.lookup_variant_case(prefix).cloned(),
-        };
+        // Pick the module-scoped (`_in`) lookup when resolving in a foreign
+        // declaring module (the default-expression fallback), else the
+        // current-scope lookup.
+        macro_rules! lookup_case {
+            ($scoped:ident, $current:ident) => {
+                match in_module {
+                    Some(m) => self.$scoped(prefix, m).cloned(),
+                    None => self.$current(prefix).cloned(),
+                }
+            };
+        }
+
+        let variant_info = lookup_case!(lookup_variant_case_in, lookup_variant_case);
         if let Some(variant_info) = variant_info {
             // Find the case by name
             if let Some((_case_index, case_data)) = variant_info
@@ -683,10 +692,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Check for enum case: Color::Red (enums have no payload)
-        let enum_info = match in_module {
-            Some(m) => self.lookup_enum_case_in(prefix, m).cloned(),
-            None => self.lookup_enum_case(prefix).cloned(),
-        };
+        let enum_info = lookup_case!(lookup_enum_case_in, lookup_enum_case);
         if let Some(enum_info) = enum_info
             && let Some(case_data) = enum_info.find_case(suffix).cloned()
         {
@@ -704,10 +710,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Check for flags member: PathFlags::SymlinkFollow
         // Flags members are bitmask integers (1 << index) represented as IntLiteral
-        let flags_info = match in_module {
-            Some(m) => self.lookup_flags_case_in(prefix, m).cloned(),
-            None => self.lookup_flags_case(prefix).cloned(),
-        };
+        let flags_info = lookup_case!(lookup_flags_case_in, lookup_flags_case);
         if let Some(flags_info) = flags_info
             && let Some(member) = flags_info
                 .members

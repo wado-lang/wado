@@ -41,7 +41,7 @@ use {
 } from "../ir.wado";
 use { G4Token } from "./token.wado";
 use { tokenize_chars, resolve_unicode_escape } from "./lexer.wado";
-use { scan_balanced } from "./scan.wado";
+use { scan_balanced, is_id_continue_char } from "./scan.wado";
 
 pub struct G4Parser {
     tokens: List<Token>,
@@ -684,22 +684,11 @@ impl G4Parser {
         return Result::<(), ParseError>::Ok(());
     }
 
-    /// Skip a `{ ... }` block of host-language code. The G4 lexer is unaware
-    /// of the host language, so a literal `}` inside a string or comment in
-    /// the action body would terminate `skip_braced_block` early if we walked
-    /// the token stream. Instead, re-scan from the source char array, which
-    /// `scan_balanced` does with full string- and comment-awareness.
+    /// Skip a `{ ... }` block of host-language code — `extract_action`
+    /// without retaining the captured body. Used where the action element
+    /// still has no IR slot (inline alt / lexer actions, pending Phase 1a-ii).
     fn skip_braced_block(&mut self) {
-        let tok = self.peek();
-        let start = tok.span.start;
-        let end = scan_balanced_or_end(&self.chars, start, '{', '}');
-        self.advance();  // consume the original `{` token
-        // Advance past every token whose start lies inside the re-scanned
-        // range. The lexer may have produced multiple tokens (and Error
-        // tokens for unrecognized chars like `"`) that we now skip in one go.
-        while !self.at_eof() && self.tokens[self.pos].span.start < end {
-            self.pos += 1;
-        }
+        let _ = self.extract_action('{', '}');
     }
 
     /// Same traversal as `skip_braced_block`, but capture the block as an
@@ -1688,22 +1677,13 @@ fn action_language_from_options(options: &List<GrammarOption>) -> ActionLanguage
                 Action(_) => null,
             };
             if let Some(v) = name {
-                let lower = to_lower_ascii(&v);
-                if lower == "java" { return ActionLanguage::Java; }
-                if lower == "wado" { return ActionLanguage::Wado; }
+                if v.eq_ignore_ascii_case("java") { return ActionLanguage::Java; }
+                if v.eq_ignore_ascii_case("wado") { return ActionLanguage::Wado; }
                 return ActionLanguage::Other(v);
             }
         }
     }
     return ActionLanguage::Java;
-}
-
-fn to_lower_ascii(s: &String) -> String {
-    let mut out = String::with_capacity(s.len());
-    for let c of s.chars() {
-        out.push(c.to_ascii_lowercase());
-    }
-    return out;
 }
 
 /// Captured `catch` / `finally` clauses following a rule body.
@@ -1783,14 +1763,14 @@ fn split_attr_decl(seg: &String, span: Span) -> Option<AttrDecl> {
     }
     // Trim trailing whitespace, then take the trailing identifier run as name.
     let mut end = n;
-    while end > 0 && is_ws_char(chars[end - 1]) {
+    while end > 0 && chars[end - 1].is_ascii_whitespace() {
         end -= 1;
     }
     if end == 0 {
         return null;
     }
     let mut name_start = end;
-    while name_start > 0 && is_ident_char(chars[name_start - 1]) {
+    while name_start > 0 && is_id_continue_char(chars[name_start - 1]) {
         name_start -= 1;
     }
     let mut name = String::with_capacity(end - name_start);
@@ -1798,26 +1778,18 @@ fn split_attr_decl(seg: &String, span: Span) -> Option<AttrDecl> {
         name.push(chars[k]);
     }
     let mut type_end = name_start;
-    while type_end > 0 && is_ws_char(chars[type_end - 1]) {
+    while type_end > 0 && chars[type_end - 1].is_ascii_whitespace() {
         type_end -= 1;
     }
     let mut type_text = String::with_capacity(type_end);
     let mut ts = 0;
-    while ts < type_end && is_ws_char(chars[ts]) {
+    while ts < type_end && chars[ts].is_ascii_whitespace() {
         ts += 1;
     }
     for let mut k = ts; k < type_end; k += 1 {
         type_text.push(chars[k]);
     }
     return Option::<AttrDecl>::Some(AttrDecl { type_text, name, span });
-}
-
-fn is_ws_char(c: char) -> bool {
-    return c == ' ' || c == '\t' || c == '\n' || c == '\r';
-}
-
-fn is_ident_char(c: char) -> bool {
-    return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_';
 }
 
 fn scan_balanced_or_end(chars: &List<char>, start: i32, open: char, close: char) -> i32 {

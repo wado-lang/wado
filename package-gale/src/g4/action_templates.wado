@@ -36,7 +36,7 @@
 //! idempotent. An unknown `<IDENT(...)>` is left verbatim and reported in
 //! `warnings` — loud, never a silent guess.
 
-use { scan_string, scan_line_comment, scan_block_comment } from "./scan.wado";
+use { scan_string, scan_line_comment, scan_block_comment, is_id_start_char, is_id_continue_char } from "./scan.wado";
 
 pub struct ExpandOutcome {
     pub text: String,
@@ -293,8 +293,8 @@ fn expand_helper(name: &String, recv: &Option<String>, args: &List<String>) -> R
     }
     if *name == "Concat" {
         let r = require_receiver(recv, name)?;
-        let a = require_args(args, 1, name)?;
-        return Result::Ok(`{r}{a[0]}`);
+        require_args(args, 1, name)?;
+        return Result::Ok(`{r}{args[0]}`);
     }
     if *name == "Not" {
         let r = require_receiver(recv, name)?;
@@ -302,8 +302,8 @@ fn expand_helper(name: &String, recv: &Option<String>, args: &List<String>) -> R
     }
     if *name == "SubContextLocal" {
         let r = require_receiver(recv, name)?;
-        let a = require_args(args, 2, name)?;
-        return Result::Ok(`{r}.{a[0]}.{a[1]}`);
+        require_args(args, 2, name)?;
+        return Result::Ok(`{r}.{args[0]}.{args[1]}`);
     }
 
     // Everything below is receiver-free.
@@ -321,8 +321,8 @@ fn expand_helper(name: &String, recv: &Option<String>, args: &List<String>) -> R
         return Result::Ok("");
     }
     if *name == "ToStringTree" {
-        let a = require_args(args, 1, name)?;
-        return Result::Ok(`{a[0]}.toStringTree(this)`);
+        require_args(args, 1, name)?;
+        return Result::Ok(`{args[0]}.toStringTree(this)`);
     }
     if *name == "InputText" {
         return Result::Ok("_input.getText()");
@@ -331,15 +331,15 @@ fn expand_helper(name: &String, recv: &Option<String>, args: &List<String>) -> R
         return Result::Ok("getText()");
     }
     if *name == "PlusText" {
-        let a = require_args(args, 1, name)?;
-        return Result::Ok(`"{a[0]}" + getText()`);
+        require_args(args, 1, name)?;
+        return Result::Ok(`"{args[0]}" + getText()`);
     }
     if *name == "Column" {
         return Result::Ok("getCharPositionInLine()");
     }
     if *name == "TokenStartColumnEquals" {
-        let a = require_args(args, 1, name)?;
-        return Result::Ok(`_tokenStartCharPositionInLine == {a[0]}`);
+        require_args(args, 1, name)?;
+        return Result::Ok(`_tokenStartCharPositionInLine == {args[0]}`);
     }
     if *name == "LL_EXACT_AMBIG_DETECTION" {
         return Result::Ok("getInterpreter().setPredictionMode(PredictionMode.LL_EXACT_AMBIG_DETECTION);");
@@ -371,84 +371,84 @@ fn expand_helper(name: &String, recv: &Option<String>, args: &List<String>) -> R
     }
     if *name == "AssertIsList" {
         // Compile-time check that the expression has a List type.
-        let a = require_args(args, 1, name)?;
-        return Result::Ok(`java.util.List<?> __assertIsList = {a[0]};`);
+        require_args(args, 1, name)?;
+        return Result::Ok(`java.util.List<?> __assertIsList = {args[0]};`);
     }
     if *name == "Cast" {
-        let a = require_args(args, 2, name)?;
-        return Result::Ok(`(({a[0]}){a[1]})`);
+        require_args(args, 2, name)?;
+        return Result::Ok(`(({args[0]}){args[1]})`);
     }
     if *name == "ContextRuleFunction" {
-        let a = require_args(args, 2, name)?;
-        return Result::Ok(`{a[0]}.{a[1]}`);
+        require_args(args, 2, name)?;
+        return Result::Ok(`{args[0]}.{args[1]}`);
     }
     if *name == "ContextListFunction" {
-        let a = require_args(args, 2, name)?;
-        return Result::Ok(`{a[0]}.{a[1]}()`);
+        require_args(args, 2, name)?;
+        return Result::Ok(`{args[0]}.{args[1]}()`);
     }
     if *name == "Production" || *name == "Result" || *name == "VarRef" {
-        let a = require_args(args, 1, name)?;
-        return Result::Ok(a[0]);
+        require_args(args, 1, name)?;
+        return Result::Ok(args[0]);
     }
     if *name == "ParserToken" {
-        let a = require_args(args, 2, name)?;
-        return Result::Ok(`{a[0]}.{a[1]}`);
+        require_args(args, 2, name)?;
+        return Result::Ok(`{args[0]}.{args[1]}`);
     }
     if *name == "LANotEquals" {
-        let a = require_args(args, 2, name)?;
-        return Result::Ok(`_input.LA({a[0]}) != {a[1]}`);
+        require_args(args, 2, name)?;
+        return Result::Ok(`_input.LA({args[0]}) != {args[1]}`);
     }
     if *name == "TextEquals" {
-        let a = require_args(args, 1, name)?;
-        return Result::Ok(`getText().equals("{a[0]}")`);
+        require_args(args, 1, name)?;
+        return Result::Ok(`getText().equals("{args[0]}")`);
     }
     if *name == "LTEquals" {
-        let a = require_args(args, 2, name)?;
-        return Result::Ok(`_input.LT({a[0]}).getText().equals({a[1]})`);
+        require_args(args, 2, name)?;
+        return Result::Ok(`_input.LT({args[0]}).getText().equals({args[1]})`);
     }
     if *name == "ValEquals" {
-        let a = require_args(args, 2, name)?;
-        return Result::Ok(`{a[0]} == {a[1]}`);
+        require_args(args, 2, name)?;
+        return Result::Ok(`{args[0]} == {args[1]}`);
     }
     if *name == "AssignLocal" {
-        let a = require_args(args, 2, name)?;
-        return Result::Ok(`{a[0]} = {a[1]};`);
+        require_args(args, 2, name)?;
+        return Result::Ok(`{args[0]} = {args[1]};`);
     }
     if *name == "InitIntVar" || *name == "InitIntMember" {
-        let a = require_args(args, 2, name)?;
-        return Result::Ok(`int {a[0]} = {a[1]};`);
+        require_args(args, 2, name)?;
+        return Result::Ok(`int {args[0]} = {args[1]};`);
     }
     if *name == "InitBooleanMember" {
-        let a = require_args(args, 2, name)?;
-        return Result::Ok(`boolean {a[0]} = {a[1]};`);
+        require_args(args, 2, name)?;
+        return Result::Ok(`boolean {args[0]} = {args[1]};`);
     }
     if *name == "GetMember" {
-        let a = require_args(args, 1, name)?;
-        return Result::Ok(`this.{a[0]}`);
+        require_args(args, 1, name)?;
+        return Result::Ok(`this.{args[0]}`);
     }
     if *name == "SetMember" {
-        let a = require_args(args, 2, name)?;
-        return Result::Ok(`this.{a[0]} = {a[1]};`);
+        require_args(args, 2, name)?;
+        return Result::Ok(`this.{args[0]} = {args[1]};`);
     }
     if *name == "AddMember" {
-        let a = require_args(args, 2, name)?;
-        return Result::Ok(`this.{a[0]} += {a[1]};`);
+        require_args(args, 2, name)?;
+        return Result::Ok(`this.{args[0]} += {args[1]};`);
     }
     if *name == "MemberEquals" {
-        let a = require_args(args, 2, name)?;
-        return Result::Ok(`this.{a[0]} == {a[1]}`);
+        require_args(args, 2, name)?;
+        return Result::Ok(`this.{args[0]} == {args[1]}`);
     }
     if *name == "ModMemberEquals" {
-        let a = require_args(args, 3, name)?;
-        return Result::Ok(`this.{a[0]} % {a[1]} == {a[2]}`);
+        require_args(args, 3, name)?;
+        return Result::Ok(`this.{args[0]} % {args[1]} == {args[2]}`);
     }
     if *name == "ModMemberNotEquals" {
-        let a = require_args(args, 3, name)?;
-        return Result::Ok(`this.{a[0]} % {a[1]} != {a[2]}`);
+        require_args(args, 3, name)?;
+        return Result::Ok(`this.{args[0]} % {args[1]} != {args[2]}`);
     }
     if *name == "IntArg" {
-        let a = require_args(args, 1, name)?;
-        return Result::Ok(`int {a[0]}`);
+        require_args(args, 1, name)?;
+        return Result::Ok(`int {args[0]}`);
     }
     if *name == "StringType" {
         return Result::Ok("String");
@@ -457,8 +457,8 @@ fn expand_helper(name: &String, recv: &Option<String>, args: &List<String>) -> R
         return Result::Ok("List<String>");
     }
     if *name == "Append" || *name == "AppendStr" {
-        let a = require_args(args, 2, name)?;
-        return Result::Ok(`{a[0]} + {a[1]}`);
+        require_args(args, 2, name)?;
+        return Result::Ok(`{args[0]} + {args[1]}`);
     }
     return Result::Err(`unknown template helper '{*name}'`);
 }
@@ -483,17 +483,19 @@ fn require_receiver(recv: &Option<String>, name: &String) -> Result<String, Stri
     };
 }
 
-fn require_args(args: &List<String>, count: i32, name: &String) -> Result<List<String>, String> {
+/// Validate the argument count; callers then index `args` directly (no
+/// list copy). `?`-propagates the arity error.
+fn require_args(args: &List<String>, count: i32, name: &String) -> Result<(), String> {
     if args.len() != count {
         return Result::Err(`template helper '{*name}' expects {count} argument(s), got {args.len()}`);
     }
-    return Result::Ok(*args);
+    return Result::Ok(());
 }
 
 fn skip_ws(chars: &List<char>, pos: i32) -> i32 {
     let n = chars.len();
     let mut i = pos;
-    while i < n && (chars[i] == ' ' || chars[i] == '\t' || chars[i] == '\n' || chars[i] == '\r') {
+    while i < n && chars[i].is_ascii_whitespace() {
         i += 1;
     }
     return i;
@@ -505,12 +507,4 @@ fn push_span(out: &mut String, chars: &List<char>, start: i32, end: i32) {
         out.push(chars[i]);
         i += 1;
     }
-}
-
-fn is_id_start_char(c: char) -> bool {
-    return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_';
-}
-
-fn is_id_continue_char(c: char) -> bool {
-    return is_id_start_char(c) || c >= '0' && c <= '9';
 }
