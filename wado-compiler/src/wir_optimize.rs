@@ -134,9 +134,6 @@ pub fn optimize_wir(
         elide_single_field_struct_locals(m);
     });
 
-    // Adjacent-use box elision: kill the `Box<T>` locals lowering mints for
-    // `&primitive` payload bindings (`match r { Token(i) => f(*i) }`), whose
-    // initializer reads the heap so `elide_single_field_struct` leaves them.
     wir_pass("wir/elide_adjacent_box_locals", module, profiler, |m| {
         elide_adjacent_box_locals(m);
     });

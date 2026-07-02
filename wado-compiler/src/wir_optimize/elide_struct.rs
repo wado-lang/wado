@@ -13,22 +13,17 @@
 //! iteration of the fixed-point loop is O(N) in body size, replacing the previous
 //! per-candidate re-walks (O(C · N)).
 //!
-//! The relaxed adjacent-use variant — `elide_adjacent_single_use_struct_locals`,
-//! which used `ModRef::can_move_past` to tolerate intervening unrelated stmts —
-//! moved to NIR (`optimize/elide_box_local.rs`). At NIR it consults the
-//! alias machinery directly and the freshly substituted expressions feed
-//! back into the same fix-point loop where `copy_prop` / `const_fold` /
-//! `dce` can fold them further.
+//! The relaxed intervening-stmt variant — `elide_adjacent_single_use_struct_locals`,
+//! which used `ModRef::can_move_past` — moved to NIR (`optimize/elide_box_local.rs`),
+//! where it consults the alias machinery directly.
 //!
 //! - **Adjacent-use box elision** (`elide_adjacent_box_locals`): the same
-//!   single-field substitution but for a `StructNew{[inner]}` whose `inner`
-//!   reads the heap (which `is_pure_for_elision` refuses to move). It is sound
-//!   here because it works on ordered statement lists and only fires when every
-//!   op evaluated between the def and its single use is pure and unconditional.
-//!   This targets the `Box<T>` locals lowering mints for `&primitive` payload
-//!   bindings (`match r { Token(i) => f(*i) }`), which never reach NIR — the
-//!   boxing scheme (`lower::plan::boxing`) runs during NIR→WIR lowering — so the
-//!   NIR `elide_box_local` pass cannot see them.
+//!   single-field substitution for a heap-reading `inner` (which
+//!   `is_pure_for_elision` refuses), sound because it moves `inner` only into a
+//!   single-use site whose preceding ops are all pure and unconditional. Targets
+//!   the `Box<T>` locals lowering mints for `&primitive` payload bindings
+//!   (`match r { Token(i) => f(*i) }`); these are born during NIR→WIR lowering
+//!   (`lower::plan::boxing`), so NIR's `elide_box_local` never sees them.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirInstr, WirPackage, WirTypeDef};
@@ -427,32 +422,22 @@ impl WirMutVisitor for FlattenSeqAssignments {
     }
 }
 
-// -----------------------------------------------------------------------
-// Adjacent-use box elision
-// -----------------------------------------------------------------------
-
-/// Result of walking a using statement for the single `StructGet(box)` use in
-/// left-to-right evaluation order.
+/// Outcome of scanning a using statement in evaluation order for the box's use.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum BoxUseWalk {
-    /// The use was reached with only pure, unconditional ops evaluated before it.
+    /// The use is reached with only pure, unconditional ops before it.
     Found,
-    /// The whole subtree is pure and contains no use (safe to evaluate the
-    /// moved heap read *after* it).
+    /// Pure subtree with no use.
     Pure,
-    /// A call, heap write, or conditional/unknown construct is evaluated before
-    /// the use (or the use sits in a conditionally-evaluated position). Moving
-    /// the heap-read initializer here could change what it reads or whether it
-    /// traps.
+    /// A call, write, or conditional is reached before the use, or the use is
+    /// conditionally evaluated.
     Blocked,
 }
 
-/// Elide single-field (`Box<T>`) struct locals whose initializer reads the heap,
-/// when the def and its single use are adjacent in a straight-line region.
-///
-/// See the module docs. Runs to a fix-point per function: each iteration
-/// recomputes the whole-function def/use `stats` (a read-only oracle) and
-/// substitutes every non-overlapping adjacent box into its use.
+/// Elide single-field (`Box<T>`) struct locals with a heap-reading initializer
+/// when the def and its single use are adjacent in straight-line code — the case
+/// [`elide_single_field_struct_locals`] refuses because `inner` is not pure.
+/// Fix-point per function over the monotonic def/use `stats` oracle.
 pub(super) fn elide_adjacent_box_locals(module: &mut WirPackage) {
     for func in &mut module.functions {
         let Some(body) = &mut func.body else {
@@ -489,7 +474,6 @@ struct AdjacentBoxElider<'a> {
 
 impl WirMutVisitor for AdjacentBoxElider<'_> {
     fn visit_body(&mut self, body: &mut Vec<WirInstr>) {
-        // Recurse into nested bodies first, then process this statement list.
         self.walk_body(body);
         self.process_stmt_list(body);
     }
@@ -511,9 +495,9 @@ impl AdjacentBoxElider<'_> {
         }
     }
 
-    /// Recognise `LocalSet(name, StructNew{[inner]})` where `name` is defined
-    /// once, read exactly once, and that read is a `StructGet(LocalGet(name), f)`.
-    /// Returns `(name, field, inner)` — a clone of the single-field initializer.
+    /// `LocalSet(name, StructNew{[inner]})` defined once, read once as
+    /// `StructGet(LocalGet(name), field)`, with an `inner` safe to relocate to
+    /// the use site (no own effect, no other-candidate read).
     fn describe_box_def(&self, stmt: &WirInstr) -> Option<(String, String, WirInstr)> {
         let WirInstr::LocalSet { name, value } = stmt else {
             return None;
@@ -532,10 +516,7 @@ impl AdjacentBoxElider<'_> {
             return None;
         }
         let inner = &fields[0];
-        // Never move an initializer that reads another box candidate: the other
-        // box may be elided in the same pass, and reordering across it is not
-        // covered by the adjacency proof.
-        if inner_refs_any_candidate(inner, self.candidate_names, name) {
+        if inner_has_effect(inner) || inner_refs_any_candidate(inner, self.candidate_names, name) {
             return None;
         }
         let field = s.field_uses.keys().next()?.clone();
@@ -543,13 +524,25 @@ impl AdjacentBoxElider<'_> {
     }
 }
 
-/// Find the single `StructGet(LocalGet(name), field)` use. The use must be the
-/// leftmost side effect of the *immediately following* non-Nop statement — every
-/// op evaluated before it there must be pure and unconditional
-/// (`BoxUseWalk::Found`). Restricting to the adjacent statement means the scan
-/// never skips over a statement, so no reordering happens across statement
-/// boundaries at all — only the (bounded) reorder inside the single using
-/// statement, governed by [`leftmost_box_use`].
+/// Whether `inner`'s subtree performs a call or write ([`is_effect_barrier`]).
+/// Relocating such an effect past the intervening reads the adjacency walk
+/// classifies as pure would reorder it; heap reads and pure computation cannot.
+fn inner_has_effect(instr: &WirInstr) -> bool {
+    if is_effect_barrier(instr) {
+        return true;
+    }
+    let mut found = false;
+    instr.for_each_child(&mut |c| {
+        if !found && inner_has_effect(c) {
+            found = true;
+        }
+    });
+    found
+}
+
+/// Index of the use when it is the leftmost effect of the immediately-following
+/// non-Nop statement — the only statement the pass reorders across (none: the
+/// reorder is confined inside that one statement, per [`leftmost_box_use`]).
 fn find_adjacent_box_use(
     stmts: &[WirInstr],
     from: usize,
@@ -573,9 +566,8 @@ fn is_box_use(instr: &WirInstr, name: &str, field: &str) -> bool {
     )
 }
 
-/// A node whose *own* operation writes memory or performs a call. Its operand
-/// children are evaluated (in order) before the effect, so a use found in an
-/// operand is still valid; a use reaching past the effect is not.
+/// A node whose own operation calls or writes. Its operands evaluate before that
+/// effect, so a use in an operand is still valid; a use past the effect is not.
 fn is_effect_barrier(instr: &WirInstr) -> bool {
     matches!(
         instr,
@@ -601,10 +593,8 @@ fn is_effect_barrier(instr: &WirInstr) -> bool {
     )
 }
 
-/// A node that evaluates children conditionally or transfers control, so the
-/// straight-line "leftmost" reasoning does not apply. A use anywhere inside is
-/// unsafe to anchor on (it may run conditionally, dropping a trap the
-/// unconditional box init would have produced).
+/// A node that evaluates children conditionally or transfers control, so a use
+/// inside it may run conditionally and cannot anchor an elision.
 fn is_control_barrier(instr: &WirInstr) -> bool {
     matches!(
         instr,
@@ -622,14 +612,11 @@ fn is_control_barrier(instr: &WirInstr) -> bool {
     )
 }
 
-/// Walk `instr` in evaluation order looking for the single box use. See
-/// [`BoxUseWalk`]. Every effectful / control-flow node is classified as a
-/// barrier ([`is_effect_barrier`] / [`is_control_barrier`]); everything else is
-/// a pure, unconditional node whose operand children are evaluated left to
-/// right (arithmetic, SIMD, reads, casts, allocations, `Drop`, `Seq`, …). The
-/// pure-by-default arm is sound only because the barrier lists cover every
-/// write, call, and branch; a trap or heap *read* evaluated before the use is
-/// harmless, since the moved initializer is a side-effect-free read.
+/// Classify `instr` for the box use in evaluation order. Nodes not covered by
+/// [`is_effect_barrier`] / [`is_control_barrier`] are pure and evaluate their
+/// operands left to right; the barrier lists must stay exhaustive over every
+/// call, write, and branch for the pure-by-default arm to be sound. A trap or
+/// heap read before the use is harmless — the relocated initializer is effect-free.
 fn leftmost_box_use(instr: &WirInstr, name: &str, field: &str) -> BoxUseWalk {
     if is_box_use(instr, name, field) {
         return BoxUseWalk::Found;
@@ -637,29 +624,20 @@ fn leftmost_box_use(instr: &WirInstr, name: &str, field: &str) -> BoxUseWalk {
     if is_control_barrier(instr) {
         return BoxUseWalk::Blocked;
     }
-    // Walk operand children left to right, short-circuiting once the use is
-    // Found or a nested barrier Blocks. `for_each_child` yields children in
-    // evaluation order.
     let mut acc = BoxUseWalk::Pure;
     instr.for_each_child(&mut |c| {
         if acc == BoxUseWalk::Pure {
             acc = leftmost_box_use(c, name, field);
         }
     });
-    if is_effect_barrier(instr) {
-        // Operands ran before the effect: honour a use there, but the effect
-        // itself blocks anything reaching past it.
-        match acc {
-            BoxUseWalk::Found => BoxUseWalk::Found,
-            BoxUseWalk::Pure | BoxUseWalk::Blocked => BoxUseWalk::Blocked,
-        }
-    } else {
-        acc
+    match (is_effect_barrier(instr), acc) {
+        (_, BoxUseWalk::Found) => BoxUseWalk::Found,
+        (true, _) => BoxUseWalk::Blocked,
+        (false, other) => other,
     }
 }
 
-/// Replace the first `StructGet(LocalGet(name), field)` in `instr` with `inner`.
-/// The candidate has exactly one such use, so the first pre-order match is it.
+/// Replace the box's single `StructGet(LocalGet(name), field)` use with `inner`.
 fn substitute_box_use(instr: &mut WirInstr, name: &str, field: &str, inner: &WirInstr) -> bool {
     if is_box_use(instr, name, field) {
         *instr = inner.clone();
@@ -784,6 +762,32 @@ mod adjacent_box_tests {
         };
         let instr = call(vec![other_read, use_box()]);
         assert!(matches!(walk(&instr), BoxUseWalk::Found));
+    }
+
+    /// The moved initializer must be free of calls and writes: a heap read is
+    /// relocatable, but a `Call` or a `LocalTee`/write is not (its effect would
+    /// be reordered past the intervening pure reads the walk allows).
+    #[test]
+    fn inner_effect_gate() {
+        // pure heap read (the intended payload-read case) → relocatable
+        let read = WirInstr::StructGet {
+            type_id: tid(),
+            field_name: "payload_0".to_string(),
+            expr: Box::new(lget("scrut")),
+            result_ty: WirType::I32,
+        };
+        assert!(!inner_has_effect(&read));
+        // a call → not relocatable
+        assert!(inner_has_effect(&call(vec![])));
+        // a call nested inside otherwise-pure arithmetic → not relocatable
+        let nested = WirInstr::I32Add(Box::new(lget("x")), Box::new(call(vec![])));
+        assert!(inner_has_effect(&nested));
+        // a local.tee (write) → not relocatable
+        let tee = WirInstr::LocalTee {
+            name: "v".to_string(),
+            value: Box::new(WirInstr::I32Const(1)),
+        };
+        assert!(inner_has_effect(&tee));
     }
 
     /// End-to-end substitution: `substitute_box_use` replaces the single use
