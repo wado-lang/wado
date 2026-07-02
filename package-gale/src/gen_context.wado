@@ -257,7 +257,12 @@ impl GenContext {
         return false;
     }
 
-    pub fn emits_at_end_conflict_via_atn(&self, rule_index: i32, rule_name: &String, branch_tokens: &List<String>) -> bool {
+    pub fn emits_at_end_conflict_via_atn(
+        &self,
+        rule_index: i32,
+        rule_name: &String,
+        branch_tokens: &List<String>,
+    ) -> bool {
         return self.needs_atn()
             && self.lr_loop_entry_decision(rule_index) < 0
             && self.atn_rule_body_decision(rule_index) >= 0
