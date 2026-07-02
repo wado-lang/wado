@@ -1,0 +1,40 @@
+// A generic `impl<T> Effect for Struct<T>` must be installable as an effect
+// handler for a concrete instantiation (e.g. `Holder<i32>`).
+//
+// Regression: the handler impl-presence check looked up the impl index by the
+// full instantiated type name (`Holder<i32>`), which only matches concrete
+// impls, so generic impls were rejected with "handler value of type
+// 'Holder<i32>' does not implement interface 'Greeter'".
+
+interface Greeter {
+    fn greet(name: String) -> String;
+}
+
+struct Holder<T> {
+    payload: T,
+}
+
+impl<T> Greeter for Holder<T> {
+    fn greet(&self, name: String) -> String {
+        resume `hi {name}`;
+    }
+}
+
+test "generic impl handles an effect for Holder<i32>" {
+    let h = Holder { payload: 1 };
+    let s = with Greeter => &h do {
+        Greeter::greet("bob");
+    };
+    assert s == "hi bob";
+}
+
+test "generic impl handles an effect for Holder<String>" {
+    let h = Holder { payload: "x" };
+    let s = with Greeter => &h do {
+        Greeter::greet("ann");
+    };
+    assert s == "hi ann";
+}
+
+__DATA__
+{"test": {}}
