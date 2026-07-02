@@ -730,11 +730,10 @@ impl<'a> Builder<'a> {
         } else {
             self.mut_escaped.iter().copied().collect()
         };
-        // Mint the fresh opaques in a canonical order (ascending local index),
-        // not `mut_escaped`'s alias-set insertion order. Opaque `ValueId`s are
-        // allocated in mint order, so this keeps the whole value graph — and the
-        // CSE / extraction it feeds — a deterministic function of the program,
-        // independent of how the alias sets were built (issue #1440).
+        // Mint the opaques by ascending local index, not `mut_escaped`'s
+        // insertion order: opaque `ValueId`s are handed out in mint order, so
+        // this keeps the value graph a deterministic function of the program
+        // regardless of how the alias sets were built (#1440).
         targets.sort_unstable();
         for l in targets {
             self.heap_state.bump_local(l);
@@ -2204,8 +2203,6 @@ mod tests {
         assert_eq!(body.values.type_of(v), Some(TypeTable::I32));
     }
 
-    // ----- Order-independent CSE (issue #1440) -----
-
     /// `f(); a + b`, where locals `a` (0) and `b` (1) are both mutably escaped:
     /// the call re-mints an opaque for each, and the `a + b` that follows reads
     /// those post-call opaques. Opaque `ValueId`s are handed out in mint order,
@@ -2291,7 +2288,6 @@ mod tests {
             body.values.values
         };
 
-        // Same set, opposite insertion order: the graph must be byte-identical.
         assert_eq!(build_with(&escaped([0, 1])), build_with(&escaped([1, 0])));
     }
 }
