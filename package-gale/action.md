@@ -249,7 +249,10 @@ Recovery invariants with actions present:
     - [x] `@init` (rule entry) / `@after` (after body) for single-alt rules, sharing the rule's `vals` local; execution order pinned by a driver test.
     - [ ] Runtime context API surface (`p.la`/`lt`/`rule_text`/`input_text`/…) and `$text`/`$ctx`-backed substitution.
     - [ ] `@init` / `@after` for multi-alt / LR rules.
-- [ ] Phase 2 — predicates in prediction (`SemPredEvalParser` / `SemPredEvalLexer` descriptors are the acceptance suite).
+- [~] Phase 2 — predicates in prediction (`SemPredEvalParser` / `SemPredEvalLexer` descriptors are the acceptance suite).
+  - [x] Inline runtime guard for mid-alt / single-alt-rule predicates: a `{cond}?` compiles to `if !p.speculating { if !(<cond>) { p.no_viable(...); return; } }`, so a false predicate fails the parse into normal recovery. Substitution applies to the condition (identity translator).
+  - [ ] Prediction-time gating: alt-initial predicates choosing which alt to take (static dispatch / scan tournament / ATN), the `SemPredEvalParser` acceptance suite.
+  - [ ] `pred_<id>` effect-free standalone fns; lexer predicates.
 - [ ] Phase 3 — java2wado for the corpus subset + members translation.
 - [ ] Phase 4 — lexer actions / position-sensitive predicates + SuperClass trait (`tokenVocab` falls out).
 

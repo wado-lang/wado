@@ -3011,10 +3011,10 @@ fn gen_alt_elements(
     gen_alt_actions_at(w, actions, elements.len(), ctx);
 }
 
-/// Emit every retained action whose position is `before` (it runs after
-/// `elements[before - 1]` and before `elements[before]`). No-op unless
-/// action execution is on. Predicates are gated in prediction (Phase 2),
-/// not executed inline here.
+/// Emit every retained action / predicate whose position is `before` (it
+/// runs after `elements[before - 1]` and before `elements[before]`). No-op
+/// unless action execution is on. Predicates emit an inline runtime guard
+/// (a false one fails the parse); prediction-time gating is Phase 2 proper.
 fn gen_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before: i32, ctx: &mut GenContext) {
     if !ctx.emit_actions() {
         return;
@@ -3025,7 +3025,7 @@ fn gen_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before: i32
         }
         match a.kind {
             Action => gen_action_body(w, &a.source, ctx),
-            Predicate => {},
+            Predicate => gen_predicate_guard(w, &a.source, ctx),
         }
     }
 }
@@ -3039,9 +3039,17 @@ fn gen_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before: i32
 /// (`$a.v`). A reference the translator cannot emit yet is a loud
 /// `UnsupportedAction` diagnostic rather than invalid `$x`.
 fn gen_action_body(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext) {
+    if let Some(code) = translate_action_or_warn(src, ctx) {
+        emit_action_stmt(w, &code);
+    }
+}
+
+/// Translate an action / predicate body's `$`-references, or warn (loud) and
+/// return `null` if a reference cannot be emitted. A ref-free body passes
+/// through verbatim (the identity translator on Wado host text).
+fn translate_action_or_warn(src: &ActionSource, ctx: &mut GenContext) -> Option<String> {
     if find_attr_refs(&src.text).len() == 0 {
-        emit_action_stmt(w, &src.text);
-        return;
+        return Option::Some(src.text);
     }
     let ridx = ctx.current_rule_index();
     if ridx < 0 {
@@ -3050,13 +3058,38 @@ fn gen_action_body(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext)
             DiagnosticKind::UnsupportedAction,
             `action {src.action_id} references attributes outside a rule context`,
         );
-        return;
+        return null;
     }
     let vals_in_scope = rule_returns_vals(&ctx.parser_rules()[ridx]);
-    match translate_wado_action(&ctx.parser_rules()[ridx], ctx.parser_rules(), &src.text, vals_in_scope) {
-        Ok(code) => emit_action_stmt(w, &code),
-        Err(msg) => ctx.warn(&`action {src.action_id}`, DiagnosticKind::UnsupportedAction, msg),
+    return match translate_wado_action(&ctx.parser_rules()[ridx], ctx.parser_rules(), &src.text, vals_in_scope) {
+        Ok(code) => Option::Some(code),
+        Err(msg) => {
+            ctx.warn(&`action {src.action_id}`, DiagnosticKind::UnsupportedAction, msg);
+            null;
+        },
+    };
+}
+
+/// Emit a semantic predicate `{cond}?` as an inline runtime guard: when the
+/// (translated) condition is false during a real (non-speculative) parse, the
+/// rule fails into normal recovery. Prediction-time gating of which alt to
+/// take is Phase 2 proper; this serves mid-alt predicates and single-alt-rule
+/// gates, where a false predicate is a parse failure at that point.
+fn gen_predicate_guard(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext) {
+    let cond = match translate_action_or_warn(src, ctx) {
+        Some(c) => c,
+        None => return,
+    };
+    w.begin(&"if !p.speculating");
+    w.begin(&`if !({cond})`);
+    w.line(&`p.no_viable("failed semantic predicate", p.peek_span(), []);`);
+    if current_rule_returns_vals(ctx) {
+        w.line(&"return vals;");
+    } else {
+        w.line(&"return;");
     }
+    w.end();
+    w.end();
 }
 
 fn emit_action_stmt(w: &mut CodeWriter, code: &String) {
