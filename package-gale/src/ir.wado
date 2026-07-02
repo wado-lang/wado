@@ -1112,7 +1112,12 @@ fn empty_alt_group_as_optional(g: &GroupElement) -> Option<Element> {
     // `('else' statement)??` form (Binding1). A single-element body's
     // wrapper is flattened again by the transparent-group lowering.
     let inner = Element::Group(GroupElement::new([
-        Alternative { label: null, options: body_alt.options, elements: body_alt.elements },
+        Alternative {
+            label: null,
+            options: body_alt.options,
+            elements: body_alt.elements,
+            actions: body_alt.actions,
+        },
     ]));
     return Option::<Element>::Some(Element::Repeat(RepeatElement {
         kind: RepeatKind::Optional,

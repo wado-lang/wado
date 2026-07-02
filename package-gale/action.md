@@ -255,3 +255,4 @@ Recovery invariants with actions present:
 - `catch` / `finally` execution semantics under Gale's resilient-parse model (no exceptions in Wado) — parked, IR retains them.
 - Effect-generic parse functions (user actions with real effects via handlers) — future extension.
 - License hygiene: template-helper semantics and any oracle pinning stay jar-black-box only (documented in `src/g4/action_templates.wado`).
+- Retention gaps to close when Phase 1b/2 consumes `actions` (harmless today, codegen discards): (a) `empty_alt_group_as_optional` folds a predicate-only empty branch `( {p}? | A )` into an Optional, dropping the gate — the empty-alt test keys on `elements.is_empty()` only, and making it action-aware changes lowering structure, so it needs the predicate's execution semantics; (b) `gen_lexer_non_greedy_repeat` builds a synthesized suffix `LexerAlternative` from an element slice without carrying/re-basing the suffix's `AltAction` `before_index`.

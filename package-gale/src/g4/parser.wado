@@ -971,6 +971,21 @@ impl G4Parser {
         return Result::<List<Alternative>, ParseError>::Ok(alts);
     }
 
+    /// Capture a `{ ... }` action or `{ ... }?` predicate at the current
+    /// `{` as an `AltAction` positioned before `before_index` elements,
+    /// consuming the trailing `?` for a predicate. Shared by parser-rule
+    /// and lexer-rule alternatives so the two capture paths cannot drift;
+    /// any `<...>` element options that follow are handled by the caller.
+    fn capture_alt_action(&mut self, before_index: i32) -> AltAction {
+        let source = self.extract_action('{', '}');
+        let mut kind = ActionKind::Action;
+        if self.is_kind(G4Token::Question) {
+            kind = ActionKind::Predicate;
+            self.advance();
+        }
+        return AltAction { kind, source, before_index };
+    }
+
     fn parse_alternative(&mut self) -> Result<Alternative, ParseError> {
         let mut elements: List<Element> = [];
         let mut options: List<GrammarOption> = [];
@@ -990,13 +1005,7 @@ impl G4Parser {
             // element. The body stays out of `elements`, so the element
             // sequence and every index-based analysis over it are unchanged.
             if self.is_kind(G4Token::LBrace) {
-                let source = self.extract_action('{', '}');
-                let mut kind = ActionKind::Action;
-                if self.is_kind(G4Token::Question) {
-                    kind = ActionKind::Predicate;
-                    self.advance();
-                }
-                actions.push(AltAction { kind, source, before_index: elements.len() });
+                actions.push(self.capture_alt_action(elements.len()));
                 // ANTLR4 attaches element options to action blocks and
                 // semantic predicates: `{ ... }<p=3>` and `{ ... }?<fail='…'>`.
                 // Promote them to the enclosing alternative — that is where
@@ -1384,13 +1393,7 @@ impl G4Parser {
             // Action block `{ ... }` / predicate `{ ... }?` — retained in the
             // sidecar, positioned before the next element (see `AltAction`).
             if self.is_kind(G4Token::LBrace) {
-                let source = self.extract_action('{', '}');
-                let mut kind = ActionKind::Action;
-                if self.is_kind(G4Token::Question) {
-                    kind = ActionKind::Predicate;
-                    self.advance();
-                }
-                actions.push(AltAction { kind, source, before_index: elements.len() });
+                actions.push(self.capture_alt_action(elements.len()));
                 continue;
             }
             // Skip element options <...>
