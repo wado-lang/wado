@@ -43,7 +43,11 @@
 //! loop (`match_to_switch_globals`); `-O0` skips the loop and lowers everything
 //! via `match_to_switch_all`.
 //!
-//! Once after the loop converges: `field_scalarize` (Hot Field Scalarization).
+//! Once after the loop converges: `field_scalarize` (Hot Field Scalarization),
+//! then `promote_fields`, the post-promote structural BCE rerun, and
+//! `loop_version_bce` (loop-versioned BCE: statically-unprovable in-loop
+//! bounds asserts get a runtime residual guard and a checkless fast clone;
+//! a constant-fill fast loop collapses to `array.fill`).
 //!
 //! Outside the loop ([`optimize`]): Dead Code Elimination (`dce`, around the
 //! loop) plus the always-on post-optimization rewrites the Wasm backend
@@ -75,6 +79,7 @@ mod gate;
 mod inline;
 mod labeled_block_fusion;
 mod licm;
+mod loop_version_bce;
 mod match_to_switch;
 mod mod_ref;
 mod multi_value_return;
@@ -306,6 +311,16 @@ pub fn optimize(
                 changed = true;
             }
             changed
+        });
+        // Loop-versioned BCE: a check whose bound is loop-invariant but not
+        // statically related to the loop guard (the relation lives at the
+        // call site) is deleted in a fast clone guarded by the runtime
+        // residual `H < B`; the original loop is kept as the slow arm. Runs
+        // after `cond_impl_post_promote` so only statically-unprovable
+        // checks are versioned, and before `select_lowering`, which
+        // reshapes conditions out of matcher form.
+        run_pass("nir/loop_version_bce", &mut project, profiler, |p| {
+            loop_version_bce::version_loops(p)
         });
     }
 

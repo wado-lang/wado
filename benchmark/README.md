@@ -3,7 +3,9 @@
 Performance comparison of Wado (Wasm/wasmtime) against native compilers.
 
 Environment: Wado 2026-06-30, wasmtime 46.0.1, gcc 13.3.0, rustc 1.96.0,
-Node.js v24.14.1, Bun 1.3.14, Linux x86_64.
+Node.js v24.14.1, Bun 1.3.14, Linux x86_64. Sieve re-measured with
+Wado 2026-07-02 (loop-versioned BCE); its three rows are from one run
+on a slower machine — compare within the table.
 
 Throughput is work per second (higher is better), with per-iteration time in
 parentheses. Native rows are optimized builds (C `gcc -O3`, Rust release, Wado
@@ -35,11 +37,11 @@ Count primes up to 1M (integer arithmetic, trial division).
 
 Sieve of Eratosthenes up to 10M (array operations).
 
-| Implementation | Throughput      | ms/iter    | vs best |
-| -------------- | --------------- | ---------- | ------- |
-| C              | 271.58 M nums/s | 36.822 ms  | 1.00x   |
-| JavaScript     | 197.02 M nums/s | 50.757 ms  | 1.38x   |
-| **Wado**       | 95.84 M nums/s  | 104.339 ms | 2.83x   |
+| Implementation | Throughput      | ms/iter   | vs best |
+| -------------- | --------------- | --------- | ------- |
+| C              | 239.54 M nums/s | 41.747 ms | 1.00x   |
+| JavaScript     | 165.98 M nums/s | 60.247 ms | 1.44x   |
+| **Wado**       | 133.74 M nums/s | 74.772 ms | 1.79x   |
 
 ## Float-to-String
 
