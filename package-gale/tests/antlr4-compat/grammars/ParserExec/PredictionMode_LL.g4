@@ -1,7 +1,7 @@
 grammar T;
 
 r
-   : (a b | a) EOF {<ToStringTree("$ctx"):writeln()>}
+   : (a b | a) EOF {System.out.println($ctx.toStringTree(this));}
    ;
 a
    : X Y?

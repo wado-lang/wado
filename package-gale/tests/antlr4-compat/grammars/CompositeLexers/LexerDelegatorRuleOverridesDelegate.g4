@@ -1,4 +1,4 @@
 lexer grammar M;
 import S;
-A : 'a' B {<writeln("\"M.A\"")>} ;
+A : 'a' B {System.out.println("M.A");} ;
 WS : (' '|'\n') -> skip ;

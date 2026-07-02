@@ -1,2 +1,2 @@
 lexer grammar L;
-T : 'a' {<True()>}? ;
+T : 'a' {true}? ;

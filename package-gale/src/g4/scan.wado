@@ -116,3 +116,15 @@ pub fn scan_balanced(chars: &List<char>, open_idx: i32, open: char, close: char)
     }
     return null;
 }
+
+/// ASCII identifier-start predicate (`[A-Za-z_]`), shared by the g4
+/// frontend's char-level scanners. Whitespace uses `char::is_ascii_whitespace`
+/// directly; digit-only checks stay inline as `c >= '0' && c <= '9'`.
+pub fn is_id_start_char(c: char) -> bool {
+    return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_';
+}
+
+/// ASCII identifier-continue predicate (`[A-Za-z0-9_]`).
+pub fn is_id_continue_char(c: char) -> bool {
+    return is_id_start_char(c) || c >= '0' && c <= '9';
+}

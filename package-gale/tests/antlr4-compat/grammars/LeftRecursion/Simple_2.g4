@@ -1,5 +1,5 @@
 grammar T;
-s @after {<ToStringTree("$ctx"):writeln()>} : a ;
+s @after {System.out.println($ctx.toStringTree(this));} : a ;
 a : a ID
   | ID
   ;

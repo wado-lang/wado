@@ -1,0 +1,33 @@
+// Loop-versioned BCE, boundary cases: a zero-iteration loop (`limit < 0`)
+// must leave the list and every local untouched (the fill idiom guards its
+// one-shot `array.fill` on loop entry), and `limit == used - 1` is the
+// exact-fit fast path.
+
+use { println, Stdout } from "core:cli";
+
+fn fill_to(xs: &mut List<i32>, limit: i32) {
+    for let mut i = 0; i <= limit; i += 1 {
+        xs[i] = 1;
+    }
+}
+
+fn total(xs: &List<i32>) -> i32 {
+    let mut sum = 0;
+    for let x of *xs {
+        sum += x;
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    let mut xs = List::<i32>::filled(4, 0);
+    fill_to(&mut xs, -1);
+    println(`{total(&xs)}`);
+    fill_to(&mut xs, 3);
+    println(`{total(&xs)}`);
+}
+
+__DATA__
+{
+    "stdout": "0\n4\n"
+}

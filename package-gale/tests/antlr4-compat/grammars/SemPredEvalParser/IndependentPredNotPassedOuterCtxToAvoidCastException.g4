@@ -2,8 +2,8 @@ grammar T;
 s : b ';' |  b '.' ;
 b : a ;
 a
-  : {<False()>}? ID {<writeln("\"alt 1\"")>}
-  | {<True()>}? ID {<writeln("\"alt 2\"")>}
+  : {false}? ID {System.out.println("alt 1");}
+  | {true}? ID {System.out.println("alt 2");}
  ;
 ID : 'a'..'z'+ ;
 INT : '0'..'9'+;

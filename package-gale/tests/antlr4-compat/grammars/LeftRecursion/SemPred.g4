@@ -1,6 +1,6 @@
 grammar T;
-s @after {<ToStringTree("$ctx"):writeln()>} : a ;
-a : a {<True()>}? ID
+s @after {System.out.println($ctx.toStringTree(this));} : a ;
+a : a {true}? ID
   | ID
   ;
 ID : 'a'..'z'+ ;

@@ -325,6 +325,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         flags_decl.name.clone(),
                         FlagsInfo {
                             type_id: flags_type,
+                            module_source: self.current_module_source.clone(),
                             members,
                         },
                     );

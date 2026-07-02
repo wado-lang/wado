@@ -1,2 +1,2 @@
 grammar T;
-a : t=('x'|'y') {<writeln("$t.text")>} ;
+a : t=('x'|'y') {System.out.println($t.text);} ;

@@ -46,7 +46,7 @@ The Stage B′ pipeline covers 78 tests across `FullContextParsing`, `LeftRecurs
 
 Remaining:
 
-- **Extend coverage to the remaining parser categories** (`ParseTrees`, `Listeners`) and re-triage `[stage_b_oracle_skip]` / `[stage_b_oracle_todo]` after each re-extract. A small set fail the oracle even after action stripping because they carry StringTemplate directives outside action bodies (e.g. `ParserExec/ReservedWordsEscaping`'s `returns [<IntArg("")> return_]`); record those in `[stage_b_oracle_skip]` with the javac error.
+- **Extend coverage to the remaining parser categories** (`ParseTrees`, `Listeners`) and re-triage `[stage_b_oracle_skip]` / `[stage_b_oracle_todo]` after each re-extract. Several `[stage_b_oracle_skip]` entries were recorded because StringTemplate directives sat outside action bodies where the stripper cannot reach (`returns [<StringList()> ignored]`, `returns [<IntArg("return")>]`); extract-time action-template expansion (see `antlr4-compatibility.md`) now turns those into plain Java type slots, so re-triage them at the next JDK-equipped re-extract — some should graduate from skip.
 
 ## Composite (slave-grammar) descriptors
 
@@ -59,12 +59,14 @@ All 17 `CompositeLexers` / `CompositeParsers` descriptors short-circuit on `pars
 
 Gale **recognises** but **silently discards** the contents of `{ ... }` action blocks and `{ ... }?` semantic predicates. The g4 parser accepts them, so grammars containing them (`ANTLRv4Lexer`, `RustLexer`, `RustParser`, `TypeScriptLexer`, `TypeScriptParser`) load cleanly — but the generated lexer/parser behaves as if every predicate were `true` and every action a no-op. That is wrong for:
 
-- `RustLexer.RAW_STRING_LITERAL` — the closing `#` count must match the opening `#` count, enforced by a predicate; without it Gale mistokenizes Rust raw strings.
-- TypeScript's regex-vs-division disambiguation and other context-sensitive lexer (3) and parser (17) rules.
+- Rust's `>>` / `>>=` token splitting in generics (`{this.NextGT()}?`) and float-literal disambiguation (`{this.FloatLiteralPossible()}?`); without them Gale mis-parses nested generics. (Raw-string `#`-count matching is _not_ a Stage C case — `RAW_STRING_CONTENT` is a recursive fragment, a LATN concern.)
+- TypeScript's regex-vs-division disambiguation and other context-sensitive lexer and parser rules.
+
+All of these call `this.<method>()` against a hand-written `superClass` base that lives outside the `.g4` — executing them needs the SuperClass-trait mechanism below, not just action translation. The descriptor corpus is the other consumer: since extract-time action-template expansion landed (`antlr4-compatibility.md`), those grammars carry plain Java action bodies (`System.out.println($e.v);`, `this.i % 2 == 0`), so a Java-subset translator can target them directly with no testsuite-notation layer in between.
 
 Stage C is a hard prerequisite for treating Gale as a drop-in ANTLR4 replacement, for any lexer-level optimization (a fast tokenizer is meaningless if it tokenizes incorrectly), and for `Grammar.options.superClass` / `tokenVocab`. It also unblocks composite-descriptor `[output]` comparison and parser descriptors whose `[output]` is purely action-print stdout.
 
-Sketch:
+Design lives in [`action.md`](./action.md) (draft). Original sketch:
 
 - Extend the IR so `OptionValue::Action` and per-alt action / predicate elements carry a language-tagged source fragment instead of a placeholder string.
 - Add a pluggable "action translator" interface; ship at minimum an identity translator for Wado-written action bodies.

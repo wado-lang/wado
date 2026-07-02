@@ -1,3 +1,3 @@
 parser grammar T;
 tokens { C, B, A } // reverse order
-y : A {<writeln("\"T.y\"")>};
+y : A {System.out.println("T.y");};

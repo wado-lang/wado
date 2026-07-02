@@ -1,0 +1,45 @@
+// A generic function forwarding its own type param to a defaulted callee
+// must not have the callee's default clobber the forwarded param — the
+// forward is resolved per-instantiation by the monomorphizer.
+//
+// Regression: default-fill treated the forwarded (unbound) `TypeParam` as
+// "needs default" and pinned it to the default type, producing invalid core
+// Wasm ("type mismatch: expected (ref $type), found (ref $type)").
+
+use { Serialize } from "core:serde";
+use { Value, to_value } from "core:value";
+use { to_string } from "core:json";
+
+struct NoFields {}
+
+fn box_fields<T: Serialize = NoFields>(fields: T = NoFields {}) -> Value {
+    return match to_value(&fields) {
+        Ok(v) => v,
+        Err(_) => Value::Null,
+    };
+}
+
+fn outer<T: Serialize = NoFields>(fields: T = NoFields {}) -> Value {
+    return box_fields(fields);
+}
+
+test "forwarding an omitted default through two layers" {
+    let v = outer();
+    if let Ok(s) = to_string(&v) {
+        assert s == `\{\}`;
+    } else {
+        panic("serialize failed");
+    }
+}
+
+test "forwarding a concrete anonymous struct through two layers" {
+    let v = outer({ a: 1 });
+    if let Ok(s) = to_string(&v) {
+        assert s == `\{"a":1\}`;
+    } else {
+        panic("serialize failed");
+    }
+}
+
+__DATA__
+{"test": {}}

@@ -1,0 +1,22 @@
+// A default that references an earlier type param (`<T, U = T>`) is resolved
+// with the callee's type params in scope, so `U`'s default `T` binds to the
+// callee's own `TypeParam` and then picks up `T`'s inferred type. Here `U`
+// appears only in the return type, so nothing but the default can bind it.
+
+struct Wrap<T> {
+    v: T,
+}
+
+fn wrap<T, U = T>(v: T) -> Wrap<U> {
+    return Wrap { v: v as U };
+}
+
+test "U defaults to T and is filled from T's inferred type" {
+    let w = wrap(7);
+    assert w.v == 7;
+    let w2 = wrap(true);
+    assert w2.v == true;
+}
+
+__DATA__
+{"test": {}}

@@ -1,9 +1,9 @@
 grammar T;
-@parser::members {<InitIntMember("i","0")>}
+@parser::members {int i = 0;}
 s : a[2] a[1];
 a[int i]
-  : {<ValEquals("$i","1")>}? ID
-  | {<ValEquals("$i","2")>}? ID
+  : {$i == 1}? ID
+  | {$i == 2}? ID
   ;
 ID : 'a'..'z'+ ;
 INT : '0'..'9'+;

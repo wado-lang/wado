@@ -1,5 +1,5 @@
 grammar T;
-s @after {<ToStringTree("$ctx"):writeln()>} : expr EOF ;
+s @after {System.out.println($ctx.toStringTree(this));} : expr EOF ;
 expr : literal
      | op expr
      | expr op expr

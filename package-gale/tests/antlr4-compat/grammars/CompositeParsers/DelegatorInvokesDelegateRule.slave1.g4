@@ -1,2 +1,2 @@
 parser grammar S;
-a : B {<writeln("\"S.a\"")>};
+a : B {System.out.println("S.a");};

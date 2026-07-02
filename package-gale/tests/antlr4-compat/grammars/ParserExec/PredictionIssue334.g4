@@ -1,9 +1,9 @@
 grammar T;
 file_ @init{
-<BailErrorStrategy()>
+setErrorHandler(new BailErrorStrategy());
 }
 @after {
-<ToStringTree("$ctx"):writeln()>
+System.out.println($ctx.toStringTree(this));
 }
   :   item (SEMICOLON item)* SEMICOLON? EOF ;
 item : A B?;

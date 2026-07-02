@@ -1,5 +1,5 @@
 grammar T;
-s @after {<ToStringTree("$ctx"):writeln()>} : declarator EOF ; // must indicate EOF can follow
+s @after {System.out.println($ctx.toStringTree(this));} : declarator EOF ; // must indicate EOF can follow
 declarator
         : declarator '[' e ']'
         | declarator '[' ']'

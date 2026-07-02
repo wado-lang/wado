@@ -1,3 +1,3 @@
 grammar T;
-a : LETTERS {<InputText():writeln()>} ;
+a : LETTERS {System.out.println(_input.getText());} ;
 LETTERS : 'a' ~('b')+ 'c';

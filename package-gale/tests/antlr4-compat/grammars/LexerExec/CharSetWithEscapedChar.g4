@@ -1,3 +1,3 @@
 lexer grammar L;
-DASHBRACK : [\-\]]+ {<writeln("\"DASHBRACK\"")>} ;
+DASHBRACK : [\-\]]+ {System.out.println("DASHBRACK");} ;
 WS : [ \n]+ -> skip ;

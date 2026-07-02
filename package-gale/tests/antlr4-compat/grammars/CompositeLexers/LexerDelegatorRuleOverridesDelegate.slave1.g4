@@ -1,3 +1,3 @@
 lexer grammar S;
-A : 'a' {<writeln("\"S.A\"")>} ;
-B : 'b' {<writeln("\"S.B\"")>} ;
+A : 'a' {System.out.println("S.A");} ;
+B : 'b' {System.out.println("S.B");} ;

@@ -1,0 +1,18 @@
+//! Regression: a function-parameter default whose expression is a
+//! qualified type path (`Mode::Slow`) must resolve in the callee's
+//! declaring module when the call site's module does NOT import the
+//! type. Same root cause as `default_field_xmod_variant_case.wado`:
+//! the annotate-phase `default_scope_module` fallback only handled bare
+//! identifiers, so `speed(7)` errored with "unknown identifier
+//! 'Mode::Slow'" attributed to this file. `Mode` is deliberately NOT
+//! imported here — importing it would mask the bug by making the
+//! qualified path resolvable in this module's own scope.
+
+use { speed } from "./sub/default_scope_xmod_lib.wado";
+
+export fn run() {
+    assert speed(7) == 7;
+}
+
+__DATA__
+{"stdout": ""}

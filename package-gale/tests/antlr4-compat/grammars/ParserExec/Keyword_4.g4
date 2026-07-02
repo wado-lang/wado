@@ -1,4 +1,4 @@
 grammar T;
 
-program : ruleIndexMap*{<writeln("$text")>} EOF ;
+program : ruleIndexMap*{System.out.println($text);} EOF ;
 ruleIndexMap: 'break;' | 'continue;' | 'return;' ;

@@ -1,8 +1,8 @@
 grammar T;
 s : a a a; // do 3x: once in ATN, next in DFA then INT in ATN
-a : {<False()>}? ID {<writeln("\"alt 1\"")>}
-  | {<True()>}?  ID {<writeln("\"alt 2\"")>}
-  | INT{<writeln("\"alt 3\"")>}
+a : {false}? ID {System.out.println("alt 1");}
+  | {true}?  ID {System.out.println("alt 2");}
+  | INT{System.out.println("alt 3");}
   ;
 ID : 'a'..'z'+ ;
 INT : '0'..'9'+;

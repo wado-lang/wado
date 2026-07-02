@@ -1,5 +1,5 @@
 grammar T;
-s @after {<ToStringTree("$ctx"):writeln()>} : e;
+s @after {System.out.println($ctx.toStringTree(this));} : e;
 e : a=e op=('*'|'/') b=e  {}
   | INT {}
   | '(' x=e ')' {}

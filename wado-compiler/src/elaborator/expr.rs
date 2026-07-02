@@ -456,97 +456,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Check for qualified variant case names like Color::Red (without parentheses)
-        if let Some(pos) = ident.name.find("::") {
-            let prefix = &ident.name[..pos];
-            let suffix = &ident.name[pos + 2..];
-
-            if let Some(variant_info) = self.lookup_variant_case(prefix).cloned() {
-                // Find the case by name
-                if let Some((_case_index, case_data)) = variant_info
-                    .cases
-                    .iter()
-                    .enumerate()
-                    .find(|(_, c)| c.name == suffix)
-                    .map(|(i, c)| (i, c.clone()))
-                {
-                    self.record_qualified_case(ident, prefix, case_data.ast_id);
-                    // Unit variant - payload must be unit type
-                    let payload_is_unit = matches!(
-                        self.tysys.type_table.borrow().get(case_data.payload),
-                        ResolvedType::Unit
-                    );
-                    if !payload_is_unit {
-                        let _ = self.logger.error(TypeError::ArgumentCountMismatch {
-                            expected: 1,
-                            found: 0,
-                            span: ident.span,
-                        });
-                        return TypeTable::ERROR;
-                    }
-
-                    // Infer variant type for generic variants
-                    let variant_type = if variant_info.type_params.is_empty() {
-                        self.tysys.type_table.borrow_mut().make_variant(
-                            variant_info.name.clone(),
-                            variant_info.module_source.clone(),
-                        )
-                    } else {
-                        self.infer_variant_type_args(
-                            prefix,
-                            &variant_info,
-                            &case_data,
-                            None,
-                            expected_type,
-                            &[],
-                            &[],
-                        )
-                    };
-
-                    // Stage 5 (Gap 1): record generic type args for
-                    // payload-less variant references that compile to a
-                    // `VariantConstruct` (e.g. `Option::<i32>::None`).
-                    let type_args = match self.tysys.type_table.borrow().get(variant_type) {
-                        ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
-                        _ => Vec::new(),
-                    };
-                    self.record_generic_instantiation(ident.id, type_args, variant_type);
-
-                    // Stage 7-B: reify rebuilds the payload-less
-                    // `VariantConstruct` from the AST + recorded generic
-                    // instantiation. Not an l-value.
-                    return variant_type;
-                }
-            }
-
-            // Check for enum case: Color::Red (enums have no payload)
-            if let Some(enum_info) = self.lookup_enum_case(prefix).cloned()
-                && let Some(case_data) = enum_info.find_case(suffix).cloned()
-            {
-                self.record_qualified_case(ident, prefix, case_data.ast_id);
-                // Use canonical name (not import alias) for consistent TypeId interning
-                let enum_type = self
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_enum(enum_info.name.clone(), enum_info.module_source);
-
-                // Stage 7-B: reify rebuilds the `EnumConstruct`. Not an l-value.
-                return enum_type;
-            }
-
-            // Check for flags member: PathFlags::SymlinkFollow
-            // Flags members are bitmask integers (1 << index) represented as IntLiteral
-            if let Some(flags_info) = self.lookup_flags_case(prefix).cloned()
-                && let Some(member) = flags_info
-                    .members
-                    .iter()
-                    .find(|m| m.name == suffix)
-                    .cloned()
-            {
-                self.record_qualified_case(ident, prefix, member.ast_id);
-                // Stage 7-B: reify rebuilds the flags-member `IntLiteral`.
-                return flags_info.type_id;
-            }
+        if ident.name.contains("::")
+            && let Some(result) = self.resolve_qualified_case(ident, None, expected_type)
+        {
+            return result;
         }
 
         // Check for global variables in current module
@@ -609,12 +522,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Fallback: when resolving a default expression, look up the
         // identifier in the callee's lexical scope (see
         // `default_scope_module`). This gives defaults access to the
-        // definition module's private globals and functions.
+        // definition module's private globals and functions, and to
+        // qualified type paths (`Mode::Fast`) whose type the use site
+        // never imported (issue #1486).
         if let Some(fallback) = self.default_scope_module.clone()
             && fallback != self.current_module_source
-            && let Some(result) = self.resolve_ident_in_fallback_module(&ident.name, &fallback)
         {
-            return result;
+            if let Some(result) = self.resolve_ident_in_fallback_module(&ident.name, &fallback) {
+                return result;
+            }
+            if ident.name.contains("::")
+                && let Some(result) =
+                    self.resolve_qualified_case(ident, Some(&fallback), expected_type)
+            {
+                return result;
+            }
         }
 
         // Unknown variable - report error
@@ -652,6 +574,153 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 _ => {}
             }
+        }
+        None
+    }
+
+    /// Resolve a struct-literal type name in the default-expression scope
+    /// (`default_scope_module`): first a struct the declaring module defines,
+    /// then one it imports (via its symbol table). Returns the canonical
+    /// struct name and its defining module. `None` when no default scope is
+    /// active or the name doesn't resolve there.
+    fn lookup_struct_in_default_scope(&mut self, name: &str) -> Option<(String, ModuleSource)> {
+        let fallback = self.default_scope_module.clone()?;
+        if fallback == self.current_module_source {
+            return None;
+        }
+        if self.lookup_struct_fields_in(name, &fallback).is_some() {
+            return Some((name.to_string(), fallback));
+        }
+        if let Some(symbol) = self.symbols.lookup(&fallback, name)
+            && let crate::symbol::SymbolKind::Struct(_) = &symbol.kind
+        {
+            return Some((symbol.name.clone(), symbol.module_source().clone()));
+        }
+        None
+    }
+
+    /// Resolve a qualified case reference `Type::Case` — a payload-less
+    /// variant case, an enum case, or a flags member. With `in_module: None`
+    /// the type name resolves in the current scope (imports + local); with
+    /// `Some(module)` it resolves against that module's own declarations —
+    /// the default-expression fallback (`default_scope_module`), where the
+    /// use site may not import the type at all (issue #1486).
+    ///
+    /// Returns `None` when the prefix names no known variant/enum/flags type
+    /// (the caller falls through to other interpretations), and
+    /// `Some(TypeTable::ERROR)` when the reference resolved but is invalid
+    /// (a payload-carrying variant case used without arguments).
+    fn resolve_qualified_case(
+        &mut self,
+        ident: &ast::IdentExpr,
+        in_module: Option<&ModuleSource>,
+        expected_type: Option<TypeId>,
+    ) -> Option<TypeId> {
+        let pos = ident.name.find("::")?;
+        let prefix = &ident.name[..pos];
+        let suffix = &ident.name[pos + 2..];
+
+        // Pick the module-scoped (`_in`) lookup when resolving in a foreign
+        // declaring module (the default-expression fallback), else the
+        // current-scope lookup.
+        macro_rules! lookup_case {
+            ($scoped:ident, $current:ident) => {
+                match in_module {
+                    Some(m) => self.$scoped(prefix, m).cloned(),
+                    None => self.$current(prefix).cloned(),
+                }
+            };
+        }
+
+        let variant_info = lookup_case!(lookup_variant_case_in, lookup_variant_case);
+        if let Some(variant_info) = variant_info {
+            // Find the case by name
+            if let Some((_case_index, case_data)) = variant_info
+                .cases
+                .iter()
+                .enumerate()
+                .find(|(_, c)| c.name == suffix)
+                .map(|(i, c)| (i, c.clone()))
+            {
+                self.record_qualified_case(ident, prefix, case_data.ast_id);
+                // Unit variant - payload must be unit type
+                let payload_is_unit = matches!(
+                    self.tysys.type_table.borrow().get(case_data.payload),
+                    ResolvedType::Unit
+                );
+                if !payload_is_unit {
+                    let _ = self.logger.error(TypeError::ArgumentCountMismatch {
+                        expected: 1,
+                        found: 0,
+                        span: ident.span,
+                    });
+                    return Some(TypeTable::ERROR);
+                }
+
+                // Infer variant type for generic variants
+                let variant_type = if variant_info.type_params.is_empty() {
+                    self.tysys.type_table.borrow_mut().make_variant(
+                        variant_info.name.clone(),
+                        variant_info.module_source.clone(),
+                    )
+                } else {
+                    self.infer_variant_type_args(
+                        prefix,
+                        &variant_info,
+                        &case_data,
+                        None,
+                        expected_type,
+                        &[],
+                        &[],
+                    )
+                };
+
+                // Stage 5 (Gap 1): record generic type args for
+                // payload-less variant references that compile to a
+                // `VariantConstruct` (e.g. `Option::<i32>::None`).
+                let type_args = match self.tysys.type_table.borrow().get(variant_type) {
+                    ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
+                    _ => Vec::new(),
+                };
+                self.record_generic_instantiation(ident.id, type_args, variant_type);
+
+                // Stage 7-B: reify rebuilds the payload-less
+                // `VariantConstruct` from the AST + recorded generic
+                // instantiation. Not an l-value.
+                return Some(variant_type);
+            }
+        }
+
+        // Check for enum case: Color::Red (enums have no payload)
+        let enum_info = lookup_case!(lookup_enum_case_in, lookup_enum_case);
+        if let Some(enum_info) = enum_info
+            && let Some(case_data) = enum_info.find_case(suffix).cloned()
+        {
+            self.record_qualified_case(ident, prefix, case_data.ast_id);
+            // Use canonical name (not import alias) for consistent TypeId interning
+            let enum_type = self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .make_enum(enum_info.name.clone(), enum_info.module_source);
+
+            // Stage 7-B: reify rebuilds the `EnumConstruct`. Not an l-value.
+            return Some(enum_type);
+        }
+
+        // Check for flags member: PathFlags::SymlinkFollow
+        // Flags members are bitmask integers (1 << index) represented as IntLiteral
+        let flags_info = lookup_case!(lookup_flags_case_in, lookup_flags_case);
+        if let Some(flags_info) = flags_info
+            && let Some(member) = flags_info
+                .members
+                .iter()
+                .find(|m| m.name == suffix)
+                .cloned()
+        {
+            self.record_qualified_case(ident, prefix, member.ast_id);
+            // Stage 7-B: reify rebuilds the flags-member `IntLiteral`.
+            return Some(flags_info.type_id);
         }
         None
     }
@@ -2996,6 +3065,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
                 (name.clone(), self.current_module_source.clone())
             }
+        } else if let Some(resolved) = self.lookup_struct_in_default_scope(name) {
+            // Default-expression fallback (`default_scope_module`, issue
+            // #1486): a struct literal inside a foreign default resolves its
+            // type name in the declaring module's scope — covering both a
+            // struct the declaring module defines and one it imports
+            // (`span: Span = Span { ... }` where `Span` comes from a `use`).
+            resolved
         } else {
             // The struct name is neither locally defined nor imported.
             // Emit a clear diagnostic instead of silently falling back to

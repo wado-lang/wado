@@ -1,4 +1,4 @@
 lexer grammar L;
-I : .*? ('a' | 'ab') {<Text():writeln()>} ;
+I : .*? ('a' | 'ab') {System.out.println(getText());} ;
 WS : (' '|'\n') -> skip ;
-J : . {<Text():writeln()>};
+J : . {System.out.println(getText());};

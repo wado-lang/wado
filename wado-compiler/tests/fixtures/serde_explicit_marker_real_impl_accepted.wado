@@ -1,0 +1,30 @@
+// Test: an explicit marker on a type whose trait is already covered by a
+// real (methodful) impl is accepted as a redundant no-op — not rejected
+// with a bogus "not every field/case implements" error, and not shadowed
+// by a synthesized body (WEP: Trait Derivation Policy). `Handler` is not
+// structurally derivable (a function field never implements `Serialize`),
+// but the hand-written impl satisfies the marker's guarantee.
+use { Serialize, Serializer, SerializeError } from "core:serde";
+use { to_string } from "core:json";
+
+struct Handler {
+    cb: fn(i32) -> i32,
+}
+
+impl Serialize for Handler {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_string(&"handler");
+    }
+}
+
+impl Serialize for Handler;
+
+test "redundant marker over a real impl is a no-op" {
+    let h = Handler { cb: |x: i32| x };
+    let r = to_string(&h);
+    if let Ok(s) = r {
+        assert s == `"handler"`;
+    } else {
+        panic("serialize Handler failed");
+    }
+}

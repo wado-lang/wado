@@ -1,0 +1,33 @@
+// Loop-versioned BCE + fill idiom: inside `fill_and_sum` the guard bound
+// (`limit`) and the check bound (`xs.used`) are unrelated — the relation
+// lives at the call site — so no static elimination applies. The loop is
+// versioned on the runtime residual `limit < used`; the fast arm drops the
+// assert, and the constant-fill loop collapses to a single `array.fill`
+// (`7, (limit + 1) - i` pins the synthesized offset/count shape).
+
+use { println, Stdout } from "core:cli";
+
+fn fill_and_sum(xs: &mut List<i32>, limit: i32) -> i32 {
+    for let mut i = 0; i <= limit; i += 1 {
+        xs[i] = 7;
+    }
+    let mut sum = 0;
+    for let mut n = 0; n <= limit; n += 1 {
+        sum += xs[n];
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    let mut xs = List::<i32>::filled(11, 0);
+    println(`{fill_and_sum(&mut xs, 10)}`);
+}
+
+__DATA__
+{
+    "stdout": "77\n",
+    "wir_expect:O2": [
+        "builtin::array_fill<i32>(",
+        "7, (limit + 1) - i)"
+    ]
+}

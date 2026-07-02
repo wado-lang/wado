@@ -83,18 +83,21 @@ The elaborator covers trait selection, generic inference, method dispatch, coerc
 | ------------------ | ------------------------------ | ---------------------------------------------------------------------------------------------------- |
 | Trait auto-derives | `synthesis/traits.rs`          | `Eq` / `Ord` for bound-driven requests (below); `Display` / `Inspect` unconditionally for user types |
 | `From` adapters    | `synthesis/from_synth.rs`      | `From` impls from `impl From<T> for U;` declarations                                                 |
-| Serde              | `synthesis/serde_synth.rs`     | `Serialize` / `Deserialize` for body-less `impl Trait for T;` and for bound-driven requests (below)  |
+| Serde              | `synthesis/serde_synth.rs`     | `Serialize` / `Deserialize` for bound-driven requests (below; body-less markers record there too)    |
 | Template strings   | `synthesis/template.rs`        | Expands template strings into `Display::fmt` / `Inspect::inspect` calls                              |
 | Effect dispatch    | `synthesis/effect_dispatch.rs` | Per-effect dispatch infrastructure for handler resolution                                            |
 | CM bindings        | `synthesis/cm_binding/`        | Component Model boundary adapters (lift / lower / async export)                                      |
 
 Synthesized impls are recorded back into the shared `TraitEnv` so subsequent phases query a single source of truth.
 
-Bound-driven requests ([WEP 2026-06-25-trait-derivation](./wep-2026-06-25-trait-derivation.md)) originate during Annotate: `Elaborator::type_implements_trait_inner` (`elaborator/trait_query.rs`) records a `(type, trait)` pair on `TypeTable::bound_driven_synth_requests` whenever a `T: Serialize`/`Deserialize`/`Eq`/`Ord` bound is satisfied structurally with no explicit impl. The set is shared project-wide (one per `TypeTable`, since each module gets a fresh `Elaborator`).
+Bound-driven requests ([WEP 2026-06-25-trait-derivation](./wep-2026-06-25-trait-derivation.md)) originate during Annotate, from two funnels into the shared `TypeTable::bound_driven_synth_requests` set (one per `TypeTable`, project-wide, since each module gets a fresh `Elaborator`):
 
-Two passes read the same set as a snapshot, not a drain (consuming it would starve whichever runs second): `serde_synth::synthesize_serde` claims `Serialize`/`Deserialize`; `traits::synthesize_traits` claims `Eq`/`Ord`, gating generation on set membership (`SynthesisCtx::is_requested`) instead of its former unconditional sweep.
+- A satisfied bound: `Elaborator::type_implements_trait_inner` (`elaborator/trait_query.rs`) records a `(type, trait)` pair whenever a `T: Serialize`/`Deserialize`/`Eq`/`Ord` bound is satisfied structurally. The structural rule itself — which members must recursively conform — lives in one walker, `structural_derive_members`, shared with marker validation and reason-chain diagnostics, so the three can't drift.
+- A body-less marker: `impl Eq for T;`/`impl Ord for T;`/`impl Serialize for T;`/`impl Deserialize for T;` all validate structural eligibility immediately at the marker's own span (`Elaborator::record_explicit_derive_request` — a compile error if `T` isn't eligible) and then record into the same set, keyed by the target type's defining module.
 
-An explicit `impl Eq for T;`/`impl Ord for T;` marker validates immediately at its own span (`Elaborator::record_eq_ord_explicit_request`) — a compile error if `T` isn't structurally eligible, stronger than serde's marker, which defers to the bound site. Since the marker is itself an `Item::Impl`, generation gates on `SynthesisCtx::has_real_impl` rather than the general `has_impl`, so a body-less marker isn't mistaken for "already implemented" and left unsynthesized.
+Two passes read the set as a snapshot, not a drain (consuming it would starve whichever runs second): `serde_synth::synthesize_serde` claims `Serialize`/`Deserialize`; `traits::synthesize_traits` claims `Eq`/`Ord`, gating generation on set membership (`SynthesisCtx::is_requested`) instead of its former unconditional sweep.
+
+A body-less marker is itself an `Item::Impl` and lands in `TraitEnv`'s impl indexes like any other, so every gate that means "a real impl already covers this" must count only methodful impls: `SynthesisCtx::has_real_impl` (module-scoped, for `Eq`/`Ord` generation dedup) and `Elaborator::has_real_trait_impl_for_type` (module-agnostic — a serde impl legitimately lives outside the type's module, e.g. `core:serde`'s `impl Serialize for i128` — gating serde auto-derive so a synthesized body never shadows a hand-written impl).
 
 ## Effect and Stores Checks
 
@@ -215,23 +218,23 @@ Kiln is the compiler's mechanism for turning external schemas (`.proto`, `.graph
 
 The compiler-side pieces live in `src/kiln/`:
 
-| Module             | Concern                                                                                         |
-| ------------------ | ----------------------------------------------------------------------------------------------- |
-| `invocation.rs`    | Canonical `Invocation` representation (declaration site + options + schema paths)               |
-| `inline.rs`        | Collects inline `use … with { generator: … }` invocations (`InvocationIndex`)                   |
-| `plan.rs`          | DAG + topological sort of invocations; rejects cycles                                           |
-| `cache.rs`         | Cache-key composition over schemas, options, and the generator's identity hash                  |
-| `header.rs`        | Generated-file `#![generated]` header emission and parsing                                      |
-| `metadata.rs`      | Persisted per-invocation cache state (`<primary>.kiln.json`)                                    |
-| `options.rs`       | Extracts an `OptionsDescriptor` from a generator's `pub struct Options`                         |
-| `options_check.rs` | Validates user-supplied options against the descriptor                                          |
-| `import_check.rs`  | Refuses `wasi:*` imports inside generator packages; injects `Deserialize`/`Request<T>` adapters |
+| Module             | Concern                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------ |
+| `invocation.rs`    | Canonical `Invocation` representation (declaration site + options + schema paths)    |
+| `inline.rs`        | Collects inline `use … with { generator: … }` invocations (`InvocationIndex`)        |
+| `plan.rs`          | DAG + topological sort of invocations; rejects cycles                                |
+| `cache.rs`         | Cache-key composition over schemas, options, and the generator's identity hash       |
+| `header.rs`        | Generated-file `#![generated]` header emission and parsing                           |
+| `metadata.rs`      | Persisted per-invocation cache state (`<primary>.kiln.json`)                         |
+| `options.rs`       | Extracts an `OptionsDescriptor` from a generator's `pub struct Options`              |
+| `options_check.rs` | Validates user-supplied options against the descriptor                               |
+| `import_check.rs`  | Refuses `wasi:*` imports inside generator packages; injects the `Request<T>` adapter |
 
 The pipeline driver (`run_generator`, file persistence, `wado.lock` handling) lives in `wado-cli`; `wado-compiler` exports only the pure-data pieces above so it stays `wasm32-unknown-unknown`-clean.
 
 `compile_after_load` integrates Kiln at three spots:
 
-- **Phase 1a–1c (pre-analysis):** when the entry module's target world is `core:kiln/generator`, `import_check` rejects forbidden imports, auto-injects `impl Deserialize for Options;`, and rewrites `fn generate(req: Request<Options>)` to insert the `bind_request` boilerplate. This lets generator authors write idiomatic Wado without per-package adapter code.
+- **Phases 1a–1b (pre-analysis):** when the entry module's target world is `core:kiln/generator`, `import_check` rejects forbidden imports and rewrites `fn generate(req: Request<Options>)` to insert the `bind_request` boilerplate. `Options::deserialize` needs no dedicated hook: `bind_request::<Options>`'s `T: Deserialize` bound records the bound-driven synthesis request like any other bound (WEP 2026-06-25-trait-derivation).
 - **Phase 6c (post-annotate):** if the target world is `core:kiln/generator`, `extract_options_descriptor` walks the resolved `pub struct Options` and produces the descriptor that the CLI provider caches on disk so it can answer `describe-options` without a second compile.
 - **Module loading:** when an import target matches an entry in the caller-supplied `InvocationIndex`, the loader resolves it to `ModuleSource::Redirected { uri }` and asks the host to load the generated bytes. This is how `use Foo from "schema.proto" with { generator: ... }` gets wired up after generation.
 

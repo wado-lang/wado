@@ -1,7 +1,7 @@
 grammar T;
 ifStatement
 @after {
-<AssertIsList({<ContextListFunction("$ctx","elseIfStatement")>})>
+java.util.List<?> __assertIsList = $ctx.elseIfStatement();
 }
     : 'if' expression
       ( ( 'then'

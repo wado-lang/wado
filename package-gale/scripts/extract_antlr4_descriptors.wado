@@ -34,7 +34,7 @@ use {
 } from "wasi:filesystem";
 use { ErrorCode } from "wasi:filesystem/types.wado";
 use { CodeWriter } from "../src/wadopoet.wado";
-use { strip_action_bodies } from "../src/g4/action_strip.wado";
+use { expand_action_templates } from "../src/g4/action_templates.wado";
 use { to_snake_case } from "../src/ident.wado";
 
 // ===== Constants =====
@@ -482,6 +482,18 @@ fn write_file_string(dir: &Descriptor, path: &String, content: &String) -> Resul
         return Result::Err(e);
     }
     return Result::Ok(());
+}
+
+/// Expand testsuite StringTemplate helpers (`<writeln(...)>` etc.) in an
+/// extracted grammar into their Java-target form. Unknown helpers are left
+/// verbatim; each one is reported to stderr so it can be added to the
+/// table in `src/g4/action_templates.wado` or triaged into `[skip]`.
+fn expand_grammar_templates(key: &String, grammar: &String) -> String with Stderr {
+    let outcome = expand_action_templates(grammar);
+    for let w of outcome.warnings {
+        eprintln(`extract: {*key}: {w}`);
+    }
+    return outcome.text;
 }
 
 /// Remove a regular file. `Err(NoEntry)` is treated like other errors — the
@@ -1276,11 +1288,20 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
                 },
             };
 
-            let parsed = parse_descriptor_text(&raw);
+            let mut parsed = parse_descriptor_text(&raw);
             if parsed.grammar.is_empty() {
                 eprintln(`extract: {key} has no [grammar] section, skipping`);
                 category_errors += 1;
                 continue;
+            }
+
+            // Bake the Java-target expansion of the testsuite's
+            // StringTemplate helpers (`<writeln(...)>`, `<True()>`, ...)
+            // into the extracted grammar, so the committed corpus carries
+            // real action bodies. Unknown helpers stay verbatim and warn.
+            parsed.grammar = expand_grammar_templates(&key, &parsed.grammar);
+            for let mut i = 0; i < parsed.slave_grammars.len(); i += 1 {
+                parsed.slave_grammars[i] = expand_grammar_templates(&key, &parsed.slave_grammars[i]);
             }
 
             // Write the main grammar.

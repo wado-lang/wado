@@ -1,5 +1,5 @@
 grammar T;
 cppCompilationUnit : content+ EOF;
-content: anything | {<False()>}? .;
+content: anything | {false}? .;
 anything: ANY_CHAR;
 ANY_CHAR: [_a-zA-Z0-9];

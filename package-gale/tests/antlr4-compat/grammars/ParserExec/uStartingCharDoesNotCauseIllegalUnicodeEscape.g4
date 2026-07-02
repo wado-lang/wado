@@ -1,2 +1,2 @@
 grammar u;
-u : 'u' {<writeln("$text")>};
+u : 'u' {System.out.println($text);};
