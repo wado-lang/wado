@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783006561275,
+  "lastUpdate": 1783008546750,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -37325,6 +37325,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/857fbb291928724a6ccd931953f1c9cc758d7454"
         },
         "date": 1783006560609,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15323,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288551,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d30d155ac8863bf884cece741511ab9a36daa984",
+          "message": "Merge pull request #1497 from wado-lang/claude/benchmark-restructure-y63fdu\n\nfeat(benchmark): restructure into four sections with JSON/CBOR ser/de",
+          "timestamp": "2026-07-03T01:00:37+09:00",
+          "tree_id": "9a4247874a0d582a18ad1332e937bbf5d3dc2cc0",
+          "url": "https://github.com/wado-lang/wado/commit/d30d155ac8863bf884cece741511ab9a36daa984"
+        },
+        "date": 1783008546344,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
