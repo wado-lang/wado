@@ -231,13 +231,6 @@ fn contribute_for_element(
 /// Effective follow at position `i` in `elements`:
 /// `first(elements[i+1..]) ∪ (suffix deep-nullable → outer_follow)`.
 fn local_follow(elements: &List<Element>, i: i32, ctx: &mut GenContext, outer_follow: &FollowSet) -> FollowSet {
-    // Deep, not shallow: `first_of_elements_from` stops at the first element
-    // whose *top-level* shape isn't a `?`/`*` Repeat, so it drops the FIRST of
-    // everything past a nullable `RuleRef` / `Group` (e.g. `x nb 'c'` with
-    // `nb : 'w'?`). That under-approximates FOLLOW, and the routing treats a
-    // token absent from FOLLOW as caller-irrelevant, so it would wrongly keep a
-    // context-dependent at-end conflict on the static tournament. The deep walk
-    // matches the `tail_is_nullable_deep` gate used just below.
     let suffix_first = ctx.deep_first_of_elements_from(elements, i + 1);
     let mut kinds = TreeSet::<String>::new();
     for let k of &suffix_first {

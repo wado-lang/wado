@@ -1242,14 +1242,7 @@ pub struct AtnSim {
     pub rule_first_open: List<bool>,
     /// Per-state continuation FIRST / nullability: the per-state analogue of
     /// `rule_*`, cached at decode so the LR loop-entry decision is array
-    /// lookups, not a DFS per call. Empty unless the ATN has precedence edges
-    /// (and `lr_tables` is set — see `atn_decode`).
-    ///
-    /// The FIRST / `~X`-exclusion labels are flat columns indexed by
-    /// `state_cont_*_start` / `state_cont_*_count` (the `state_tr_*` /
-    /// `tr_*` layout): per-state inner lists would put thousands of
-    /// permanently live objects on the GC heap, and the copying collector
-    /// re-traces every one of them on every cycle for the module's lifetime.
+    /// lookups, not a DFS per call. Empty unless the ATN has precedence edges.
     pub state_cont_nullable: List<bool>,
     pub state_cont_first_start: List<i32>,
     pub state_cont_first_count: List<i32>,
@@ -1499,12 +1492,6 @@ fn atn_read_u24(bytes: &List<u8>, pos: i32) -> i32 {
 /// running prefix sum) falls out while reading that column. Each column is
 /// read directly off the packed bytes into a `with_capacity`-presized
 /// `List`: one pass, no intermediate word array, nothing grows by doubling.
-///
-/// `lr_tables` gates the FIRST/nullable fixpoint and the `state_cont_*`
-/// cache, which serve only `atn_lr_loop_decision`: codegen passes `false`
-/// when the grammar has no ATN-class LR rule (the simulator is needed only
-/// for a `??` or an at-end conflict), skipping the fixpoint and its
-/// permanently live per-state lists.
 #[allow(dead_code)]
 pub fn atn_decode(bytes: &List<u8>, lr_tables: bool = true) -> AtnSim {
     let mut p = 0;
@@ -1785,11 +1772,6 @@ fn atn_cont_first(sim: &AtnSim, state: i32, visited: &mut List<i32>, out: &mut L
     return open;
 }
 
-/// Whether `state`'s cached continuation FIRST admits token `t`: an explicit
-/// atom match, a true wildcard, or a `~X` exclusion whose excluded label is
-/// not `t` (matching `atn_move`'s `token != label && token != eof`). Reads
-/// the flat `state_cont_*` columns, so it is meaningful only after the
-/// decoder's LR fixpoint ran (see `atn_decode`'s `lr_tables`).
 #[allow(dead_code)]
 fn atn_state_cont_admits(sim: &AtnSim, state: i32, t: i32, eof: i32) -> bool {
     if sim.state_cont_first_open[state] && t != eof {
