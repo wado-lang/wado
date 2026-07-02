@@ -343,11 +343,11 @@ pub(crate) fn build_scoped(
     out
 }
 
-/// Whether `id`'s value (resolved through its e-class) is a constant literal — a
-/// build-context-free value safe to freeze into an operand at the early freeze
-/// (see `extract::freeze_pure_arith`'s constant-leaf promotion).
+/// Whether `id`'s value is a constant literal — a build-context-free value safe
+/// to freeze into an operand at the early freeze (see
+/// `extract::freeze_pure_arith`'s constant-leaf promotion).
 pub(crate) fn is_const_value(pool: &ValuePool, id: ValueId) -> bool {
-    is_const_kind(pool.kind(pool.find_imm(id)))
+    is_const_kind(pool.kind(id))
 }
 
 /// Whether a `ValueKind` is a constant literal (carries no build-local context).
@@ -721,7 +721,7 @@ impl<'a> Builder<'a> {
     /// `mut_escaped` receiver's field version stable across it.
     fn bump_call_effects(&mut self, call: ExprId) {
         let pure = self.pure_calls.contains(&call);
-        let targets: Vec<u32> = if pure {
+        let mut targets: Vec<u32> = if pure {
             self.mut_escaped
                 .iter()
                 .filter(|l| self.untrackable.contains(*l))
@@ -730,6 +730,12 @@ impl<'a> Builder<'a> {
         } else {
             self.mut_escaped.iter().copied().collect()
         };
+        // Mint the fresh opaques in a canonical order (ascending local index),
+        // not `mut_escaped`'s alias-set insertion order. Opaque `ValueId`s are
+        // allocated in mint order, so this keeps the whole value graph — and the
+        // CSE / extraction it feeds — a deterministic function of the program,
+        // independent of how the alias sets were built (issue #1440).
+        targets.sort_unstable();
         for l in targets {
             self.heap_state.bump_local(l);
             // A `&mut`-escaped local's *scalar* value can also be overwritten by
@@ -856,11 +862,11 @@ impl<'a> Builder<'a> {
         id
     }
 
-    /// Walk an operand: a promoted pure value resolves through the pool; an
-    /// effectful subtree walks its skeleton.
+    /// Walk an operand: a promoted pure value is its own id; an effectful
+    /// subtree walks its skeleton.
     fn walk_operand(&mut self, op: Operand) -> Option<ValueId> {
         match op {
-            Operand::Value(v) => Some(self.pool.find(v)),
+            Operand::Value(v) => Some(v),
             Operand::Expr(e) => self.walk_expr(e),
         }
     }
@@ -1797,8 +1803,7 @@ impl<'a> Builder<'a> {
             let Some(&entry) = self.current_value.get(idx) else {
                 continue;
             };
-            let rep = self.pool.find(entry);
-            let phi = match self.pool.type_of(rep) {
+            let phi = match self.pool.type_of(entry) {
                 Some(ty) => {
                     let phi = self.pool.alloc_loop_phi(entry, ty);
                     phis.push((*idx, phi));
@@ -2197,5 +2202,96 @@ mod tests {
             unreachable!("int_lit yields a pool value")
         };
         assert_eq!(body.values.type_of(v), Some(TypeTable::I32));
+    }
+
+    // ----- Order-independent CSE (issue #1440) -----
+
+    /// `f(); a + b`, where locals `a` (0) and `b` (1) are both mutably escaped:
+    /// the call re-mints an opaque for each, and the `a + b` that follows reads
+    /// those post-call opaques. Opaque `ValueId`s are handed out in mint order,
+    /// so a build that minted them in `mut_escaped`'s iteration order would
+    /// produce a differently-shaped graph under a permuted set.
+    fn call_then_add_body() -> Body {
+        use crate::nir::{FuncId, NirLocal};
+        use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
+        use crate::token::Span;
+        let span = Span::new(0, 0, 0, 0);
+        let mut b = Body::empty();
+        let mut_local = |name: &str| NirLocal {
+            name: name.to_string(),
+            type_id: TypeTable::I32,
+            is_mut: true,
+        };
+        b.locals = vec![mut_local("a"), mut_local("b")];
+        let call = b.exprs.push(ExprNode {
+            kind: ExprKind::Call {
+                func_id: FuncId::from_u32(0),
+                type_args: vec![],
+                args: vec![],
+            },
+            type_id: TypeTable::I32,
+            span,
+        });
+        let read = |b: &mut Body, index: u32, name: &str| {
+            Operand::Expr(b.exprs.push(ExprNode {
+                kind: ExprKind::Local {
+                    index,
+                    name: name.to_string(),
+                },
+                type_id: TypeTable::I32,
+                span,
+            }))
+        };
+        let left = read(&mut b, 0, "a");
+        let right = read(&mut b, 1, "b");
+        let add = b.exprs.push(ExprNode {
+            kind: ExprKind::Binary {
+                left,
+                op: NirBinaryOp::Add,
+                right,
+            },
+            type_id: TypeTable::I32,
+            span,
+        });
+        let s_call = b.stmts.push(StmtNode {
+            kind: StmtKind::Expr(Operand::Expr(call)),
+            span,
+        });
+        let s_add = b.stmts.push(StmtNode {
+            kind: StmtKind::Expr(Operand::Expr(add)),
+            span,
+        });
+        b.root = b.blocks.push(BlockNode {
+            stmts: vec![s_call, s_add],
+            span,
+        });
+        b
+    }
+
+    #[test]
+    fn cse_independent_of_mut_escaped_iteration_order() {
+        use crate::hashmap::IndexSet;
+        let empty = IndexSet::default();
+        let no_calls = IndexSet::default();
+        let no_callees = IndexSet::default();
+        let escaped = |order: [u32; 2]| order.into_iter().collect::<IndexSet<u32>>();
+
+        let build_with = |mut_escaped: &IndexSet<u32>| {
+            let mut body = call_then_add_body();
+            build(
+                &mut body,
+                &[],
+                &empty,
+                &empty,
+                mut_escaped,
+                &no_calls,
+                &no_callees,
+                None,
+            );
+            body.values.values
+        };
+
+        // Same set, opposite insertion order: the graph must be byte-identical.
+        assert_eq!(build_with(&escaped([0, 1])), build_with(&escaped([1, 0])));
     }
 }

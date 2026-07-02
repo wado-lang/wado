@@ -1,7 +1,9 @@
-//! NIR Value Graph (Layer 2 — pure-value e-graph).
+//! NIR Value Graph (Layer 2 — hash-consed pure-value DAG).
 //!
 //! Hash-consed DAG of pure values. Each value has a [`ValueId`] (newtype
-//! over `u32`); two structurally-equivalent values share one `ValueId`. The
+//! over `u32`); two structurally-equivalent values share one `ValueId`. CSE is
+//! pure hash-consing — there are no e-class merges, so a `ValueId` is stable
+//! once allocated. The
 //! `SkelTree` (Layer 1 — see [`crate::nir_arena`]) references pure operands by
 //! `ValueId`; pure values live exclusively here.
 //!
@@ -198,21 +200,13 @@ pub enum ValueKind {
 #[derive(Debug, Default, Clone)]
 pub struct ValuePool {
     /// Allocated values, in `ValueId` order. `values[id.index() as usize]`
-    /// is the kind for `id`, with its children canonicalized to their class
-    /// representatives. A non-representative id's entry is read only via
-    /// [`ValuePool::find`].
+    /// is the kind for `id`. CSE is pure hash-consing (no e-class merges), so a
+    /// `ValueId` is stable once allocated and needs no representative lookup.
     values: Vec<ValueKind>,
-    /// Reverse index: canonical kind → `ValueId`. The hash-cons (e-graph memo).
-    /// Keyed by a kind whose children are class representatives.
+    /// Reverse index: kind → `ValueId`. The hash-cons memo.
     interned: IndexMap<ValueKind, ValueId>,
     /// Next `OpaqueId` to allocate.
     next_opaque: u32,
-    /// Union-find parent pointers, indexed by raw `ValueId`. `parent[i] == i`
-    /// for a class representative; [`ValuePool::find`] resolves the
-    /// representative with path halving. No merges happen today (CSE is pure
-    /// hash-consing), so every id is its own representative and `find` is the
-    /// identity — the field is the seam a future union-based rewrite would use.
-    parent: Vec<u32>,
     /// Per-`ValueId` source type, indexed by raw id. `ValueKind` is type-erased
     /// (an `Int(u64)` carries no width), so extraction — which materialises a
     /// promoted `Operand::Value` back to WIR once the typed `ExprNode` is gone —
@@ -262,19 +256,16 @@ impl ValuePool {
     }
 
     /// Hash-cons: return the `ValueId` for `kind`, allocating a fresh one if no
-    /// structurally-equal value exists. Children are canonicalized to their
-    /// class representatives first (a no-op today — see [`ValuePool::find`]).
+    /// structurally-equal value exists.
     ///
     /// `kind` is cloned only on a fresh allocation (the clone goes into the
     /// `values` vector); a repeat lookup hits the index and returns the
     /// existing id without copying.
     pub fn intern(&mut self, kind: ValueKind) -> ValueId {
-        let kind = self.canonicalize(kind);
         if let Some(&id) = self.interned.get(&kind) {
-            return self.find(id);
+            return id;
         }
         let id = ValueId(self.values.len() as u32);
-        self.parent.push(id.0);
         // A typed literal carries its width in the kind; record it so extraction
         // (which reads `type_of`) sees it without a separate `set_type` call.
         let carried_type = match kind {
@@ -292,16 +283,13 @@ impl ValuePool {
     }
 
     /// Record the source type of a value (its NIR `ExprNode` type before
-    /// promotion). Idempotent; a later call overwrites. Stored on `id`'s own raw
-    /// slot — resolve the representative with [`ValuePool::find`] before reading
-    /// if the class may have been unioned.
+    /// promotion). Idempotent; a later call overwrites.
     #[inline]
     pub fn set_type(&mut self, id: ValueId, type_id: TypeId) {
         self.types[id.0 as usize] = Some(type_id);
     }
 
-    /// The recorded source type of `id`, if any. Prefer passing a representative
-    /// (`find(id)`); a non-representative slot may be unset.
+    /// The recorded source type of `id`, if any.
     #[inline]
     pub fn type_of(&self, id: ValueId) -> Option<TypeId> {
         self.types[id.0 as usize]
@@ -323,71 +311,8 @@ impl ValuePool {
     pub fn alloc_unshared(&mut self, kind: ValueKind, type_id: TypeId) -> ValueId {
         let id = ValueId(self.values.len() as u32);
         self.values.push(kind);
-        self.parent.push(id.0);
         self.types.push(Some(type_id));
         id
-    }
-
-    /// The class representative of `id`, with path halving.
-    pub fn find(&mut self, id: ValueId) -> ValueId {
-        let mut x = id.0;
-        while self.parent[x as usize] != x {
-            let gp = self.parent[self.parent[x as usize] as usize];
-            self.parent[x as usize] = gp;
-            x = gp;
-        }
-        ValueId(x)
-    }
-
-    /// Class representative without path compression — the `&self` form of
-    /// [`ValuePool::find`], for read-only walks that cannot take `&mut`.
-    pub fn find_imm(&self, id: ValueId) -> ValueId {
-        let mut x = id.0;
-        while self.parent[x as usize] != x {
-            x = self.parent[x as usize];
-        }
-        ValueId(x)
-    }
-
-    /// Replace each child of `kind` with its class representative (the identity
-    /// today — [`ValuePool::find`] never merges).
-    fn canonicalize(&mut self, kind: ValueKind) -> ValueKind {
-        match kind {
-            ValueKind::Binary { op, lhs, rhs, ty } => ValueKind::Binary {
-                op,
-                lhs: self.find(lhs),
-                rhs: self.find(rhs),
-                ty,
-            },
-            ValueKind::Unary { op, operand, ty } => ValueKind::Unary {
-                op,
-                operand: self.find(operand),
-                ty,
-            },
-            ValueKind::Cast { operand, target } => ValueKind::Cast {
-                operand: self.find(operand),
-                target,
-            },
-            ValueKind::Select { cond, then, else_ } => ValueKind::Select {
-                cond: self.find(cond),
-                then: self.find(then),
-                else_: self.find(else_),
-            },
-            ValueKind::LoopPhi { entry, body_iter } => ValueKind::LoopPhi {
-                entry: self.find(entry),
-                body_iter: self.find(body_iter),
-            },
-            ValueKind::FieldAccess {
-                receiver,
-                field_index,
-                heap_ver,
-            } => ValueKind::FieldAccess {
-                receiver: self.find(receiver),
-                field_index,
-                heap_ver,
-            },
-            leaf => leaf,
-        }
     }
 
     /// Allocate a fresh `Opaque` value. Each call returns a `ValueId`
@@ -448,11 +373,10 @@ impl ValuePool {
         let mut stack = vec![v];
         let mut seen: IndexSet<ValueId> = IndexSet::default();
         while let Some(v) = stack.pop() {
-            let rep = self.find_imm(v);
-            if !seen.insert(rep) {
+            if !seen.insert(v) {
                 continue;
             }
-            match self.kind(rep).clone() {
+            match self.kind(v).clone() {
                 ValueKind::Opaque(oid) => {
                     if let Some(OpaqueSource::Local(idx)) = self.opaque_source(oid) {
                         out.insert(idx);
@@ -512,8 +436,7 @@ impl ValuePool {
         id: ValueId,
         mut_locals: &IndexSet<u32>,
     ) -> bool {
-        let rep = self.find(id);
-        match self.kind(rep).clone() {
+        match self.kind(id).clone() {
             ValueKind::Int(_, _)
             | ValueKind::Float(_, _)
             | ValueKind::Bool(_)
@@ -566,22 +489,21 @@ impl ValuePool {
     }
 
     fn dup_work_walk(&mut self, v: ValueId, seen: &mut IndexSet<ValueId>) -> bool {
-        let rep = self.find(v);
-        match self.kind(rep).clone() {
+        match self.kind(v).clone() {
             ValueKind::Binary { lhs, rhs, .. } => {
-                if !seen.insert(rep) {
+                if !seen.insert(v) {
                     return true;
                 }
                 self.dup_work_walk(lhs, seen) || self.dup_work_walk(rhs, seen)
             }
             ValueKind::Unary { operand, .. } => {
-                if !seen.insert(rep) {
+                if !seen.insert(v) {
                     return true;
                 }
                 self.dup_work_walk(operand, seen)
             }
             ValueKind::Select { cond, then, else_ } => {
-                if !seen.insert(rep) {
+                if !seen.insert(v) {
                     return true;
                 }
                 self.dup_work_walk(cond, seen)
@@ -660,9 +582,7 @@ impl ValuePool {
     }
 
     pub fn select(&mut self, cond: ValueId, then: ValueId, else_: ValueId) -> ValueId {
-        let t = self.find(then);
-        let e = self.find(else_);
-        let c = self.find(cond);
+        let (t, e, c) = (then, else_, cond);
         // A constant condition selects one arm: `Select(true, a, _) → a`,
         // `Select(false, _, b) → b`. Recovers `false || x` / `true && x` → `x`,
         // which lower to a const-condition merge under operand promotion.
@@ -1070,16 +990,5 @@ mod tests {
         assert_eq!(_t, t2);
         // 4 originals + 1 new opaque = 5 entries.
         assert_eq!(pool.len(), 5);
-    }
-
-    // ---- Union-find / congruence ----
-
-    #[test]
-    fn fresh_value_is_its_own_representative() {
-        let mut pool = ValuePool::new();
-        let a = pool.int_typed(1, crate::tir::TypeTable::I32);
-        let b = pool.fresh_opaque();
-        assert_eq!(pool.find(a), a);
-        assert_eq!(pool.find(b), b);
     }
 }

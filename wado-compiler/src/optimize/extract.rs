@@ -2,22 +2,19 @@
 //! `SkelTree`.
 //!
 //! In the live-ValueGraph design (see
-//! `docs/wep-2026-06-15-live-value-graph.md`) pure-value rewrites prove
-//! equivalences by unioning e-classes rather than editing the skeleton. A read
-//! of an expression's value therefore goes through the class representative
-//! ([`Engine::value_find`]); the extractor walks the skeleton and lowers each
-//! pure operand to the representative's chosen concrete form.
+//! `docs/wep-2026-06-15-live-value-graph.md`) an expression's value is a
+//! hash-consed [`ValueId`]; the extractor walks the skeleton and lowers each
+//! pure operand to that value's concrete form.
 //!
-//! This is the literal case — the keystone every union-based pure-value rule
-//! reuses: an expression whose representative is a constant (`Int` / `Float` /
-//! `Bool` / `Char`) is replaced by that literal. The share-vs-duplicate cost
-//! model for non-literal multi-use values is a later step; constants are always
-//! cheaper to rematerialize than to share, so they need no cost decision.
+//! This is the literal case: an expression whose value is a constant (`Int` /
+//! `Float` / `Bool` / `Char`) is replaced by that literal. The share-vs-duplicate
+//! cost model for non-literal multi-use values is a later step; constants are
+//! always cheaper to rematerialize than to share, so they need no cost decision.
 //!
 //! [`extract_const`] is the shared materialization primitive, used in
 //! production by `store_load_forward`. [`ExtractLiteralRule`] (the worklist
-//! rule form) is exercised by unit tests until the first union-producing
-//! pure-value pass wires it into a combined session.
+//! rule form) is exercised by unit tests until the first value-rewrite pass
+//! wires it into a combined session.
 #![allow(dead_code)]
 
 use crate::nir_arena::{ExprId, ExprKind, NodeRef, StmtKind};
@@ -38,8 +35,7 @@ impl Rule for ExtractLiteralRule {
         let Some(vid) = e.value(id) else {
             return false;
         };
-        let rep = e.value_find(vid);
-        let Some(value) = extract_const(e, rep, id) else {
+        let Some(value) = extract_const(e, vid, id) else {
             return false;
         };
         // Promote the node to the pooled constant in its parent slot (WEP: The
@@ -250,13 +246,12 @@ fn receiver_available_at(
 #[must_use]
 fn record_value_tree_types(e: &mut Engine, v: ValueId, type_id: crate::tir::TypeId) -> bool {
     use crate::nir_value_graph::ValueKind;
-    let rep = e.body.values.find(v);
-    match e.body.values.type_of(rep) {
+    match e.body.values.type_of(v) {
         Some(existing) if existing != type_id => return false,
         Some(_) => {}
-        None => e.body.values.set_type(rep, type_id),
+        None => e.body.values.set_type(v, type_id),
     }
-    match e.body.values.kind(rep).clone() {
+    match e.body.values.kind(v).clone() {
         ValueKind::Binary { lhs, rhs, .. } => {
             record_value_tree_types(e, lhs, type_id) && record_value_tree_types(e, rhs, type_id)
         }
@@ -385,18 +380,15 @@ pub(super) fn freeze_pure_arith(
                 && leaf_root_stable
                 && !is_place_read(&engine, id)
                 && let Some(vid) = engine.value(id)
+                && crate::nir_value_graph::builder::is_const_value(&engine.body.values, vid)
             {
-                let rep = engine.value_find(vid);
-                if crate::nir_value_graph::builder::is_const_value(&engine.body.values, rep) {
-                    to_freeze.push((id, rep));
-                    continue;
-                }
+                to_freeze.push((id, vid));
+                continue;
             }
             if !is_pure_arith(&engine, id, include_fields) {
                 continue;
             }
-            if let Some(vid) = engine.value(id) {
-                let rep = engine.value_find(vid);
+            if let Some(rep) = engine.value(id) {
                 // A standalone `FieldAccess` is reemittable when its receiver is
                 // (it materialises via the source-point path). For every other
                 // value, `FieldAccess` is non-reemittable (it cannot be inlined),
