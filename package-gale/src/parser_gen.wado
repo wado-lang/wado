@@ -2465,8 +2465,15 @@ fn gen_parse_fn_simple_named(
     if ctx.emit_actions() && rule_emits_vals(rule) {
         w.line(&`let mut vals = {vals_struct_name(rule)} \{\};`);
     }
+    // `@init` runs at rule entry, before the first decision (after `vals`
+    // so a prequel action can seed the value channel).
+    if ctx.emit_actions() {
+        if let Some(a) = &rule.init_action {
+            gen_action_body(w, a, ctx);
+        }
+    }
     let body = rule_alt_body(lowered_rule, 0).unwrap();
-    gen_alt_body(w, &type_name, null, null, &rule.alternatives[0], body, 0, rule_alts_labeled(&rule.alternatives), ctx);
+    gen_alt_body(w, &type_name, null, null, &rule.alternatives[0], body, 0, rule_alts_labeled(&rule.alternatives), &rule.after_action, ctx);
     w.end();
     w.blank();
 }
@@ -2651,6 +2658,7 @@ fn gen_parse_fn_named(
                         body,
                         alt_index,
                         rule_alts_labeled(&rule.alternatives),
+                        &null,
                         ctx,
                     );
                     w.end();
@@ -2766,6 +2774,7 @@ fn gen_alt_body(
     body: &AltBody,
     alt_index: i32,
     rule_labeled: bool,
+    after_action: &Option<ActionSource>,
     ctx: &mut GenContext,
 ) {
     let _ = type_name;
@@ -2780,6 +2789,13 @@ fn gen_alt_body(
         w.line(&`p.b.set_alt({alt_index});`);
     }
     gen_alt_elements(w, &alt.elements, &body.ops, &alt.actions, ctx);
+
+    // `@after` runs after the body, before the node is finished.
+    if ctx.emit_actions() {
+        if let Some(a) = after_action {
+            gen_action_body(w, a, ctx);
+        }
+    }
 
     // the alt's terminals / subtrees already appended to the
     // builder via the Parser methods, so there is no struct to assemble — the
@@ -2837,6 +2853,7 @@ fn gen_multi_alt_body(
             body,
             alt_index,
             rule_alts_labeled(&rule.alternatives),
+            &null,
             ctx,
         );
         w.end();
@@ -6570,6 +6587,7 @@ fn gen_multi_alt_body_alt(
                 body,
                 alt_index,
                 rule_alts_labeled(&rule.alternatives),
+                &null,
                 ctx,
             );
         } else {

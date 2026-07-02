@@ -243,7 +243,10 @@ Recovery invariants with actions present:
     - [ ] Cross-rule `$a.v` — needs `_parse_<rule>` to return its vals (return-type change + call-site threading).
     - [ ] Rule arguments as `_parse_<rule>` params; multi-alt / LR rule value channels.
     - [ ] Token/label member access (`$x.text`) via the context API.
-  - [ ] 1b-4 — runtime context API surface (`p.la`/`lt`/`rule_text`/…), `@init` / `@after` timing.
+  - [~] 1b-4 — runtime context API + prequel timing.
+    - [x] `@init` (rule entry) / `@after` (after body) for single-alt rules, sharing the rule's `vals` local; execution order pinned by a driver test.
+    - [ ] Runtime context API surface (`p.la`/`lt`/`rule_text`/`input_text`/…) and `$text`/`$ctx`-backed substitution.
+    - [ ] `@init` / `@after` for multi-alt / LR rules.
 - [ ] Phase 2 — predicates in prediction (`SemPredEvalParser` / `SemPredEvalLexer` descriptors are the acceptance suite).
 - [ ] Phase 3 — java2wado for the corpus subset + members translation.
 - [ ] Phase 4 — lexer actions / position-sensitive predicates + SuperClass trait (`tokenVocab` falls out).

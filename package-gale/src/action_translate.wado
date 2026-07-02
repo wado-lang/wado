@@ -92,11 +92,28 @@ pub fn rule_uses_value_channel(rule: &ParserRule) -> bool {
             if !a.kind matches { Action } {
                 continue;
             }
-            for let r of &find_attr_refs(&a.source.text) {
-                if is_channel_field(rule, &r.name) {
-                    return true;
-                }
+            if body_reads_channel(rule, &a.source.text) {
+                return true;
             }
+        }
+    }
+    if let Some(a) = &rule.init_action {
+        if body_reads_channel(rule, &a.text) {
+            return true;
+        }
+    }
+    if let Some(a) = &rule.after_action {
+        if body_reads_channel(rule, &a.text) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn body_reads_channel(rule: &ParserRule, body: &String) -> bool {
+    for let r of &find_attr_refs(body) {
+        if is_channel_field(rule, &r.name) {
+            return true;
         }
     }
     return false;
