@@ -1041,11 +1041,14 @@ fn compile_after_load<H: CompilerHost>(
 
 /// Deep-clone TIR modules so that each snapshot has its own independent `TypeTable`.
 ///
-/// TIR modules share a single `TypeTable` via `Rc<RefCell<…>>`.  Later
-/// optimization passes (notably DCE's `TypeTable::retain`) mutate that shared
-/// table.  Snapshots taken for dump output must be immune to those mutations,
-/// so we clone the `TypeTable` once and give every module in the snapshot its
-/// own `Rc` pointing to the clone.
+/// TIR modules share a single `TypeTable` via `Rc<RefCell<…>>`, and their
+/// `functions` are `Rc<RefCell<TirFunction>>` shared with later phases. Later
+/// passes mutate both in place — DCE's `TypeTable::retain` punches holes in the
+/// table, and monomorphization rewrites function bodies' type ids. A snapshot
+/// taken for `--tir-resolved` dump output must be immune to all of that, so it
+/// deep-clones the `TypeTable` (one clone, shared across the snapshot's modules
+/// via a fresh `Rc`) and every function / generic function into its own `Rc`,
+/// producing a fully independent frozen view of the resolved stage.
 fn snapshot_tir_modules(
     modules: &IndexMap<ModuleSource, tir::TirModule>,
 ) -> IndexMap<ModuleSource, tir::TirModule> {
@@ -1061,6 +1064,18 @@ fn snapshot_tir_modules(
             if let Some(ref tt) = cloned_tt {
                 m.type_table = Rc::clone(tt);
             }
+            // Deep-clone the shared `Rc<RefCell<TirFunction>>`s so later
+            // in-place mutation (monomorphization) can't reach this snapshot.
+            m.functions = m
+                .functions
+                .iter()
+                .map(|f| Rc::new(RefCell::new(f.borrow().clone())))
+                .collect();
+            m.generic_functions = m
+                .generic_functions
+                .iter()
+                .map(|(key, f)| (key.clone(), Rc::new(RefCell::new(f.borrow().clone()))))
+                .collect();
             (k.clone(), m)
         })
         .collect()
@@ -1214,7 +1229,17 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // Create Package early so CM binding synthesis runs before monomorphize,
     // matching the compile_with_options pipeline.
     let (monomorphized_tir_text, lowered_nir_text, optimized_package, wir_package) =
-        if let Some(resolved_modules) = tir_modules_by_source.clone() {
+        // Hand the downstream pipeline an *independent* deep copy of the type
+        // table. A plain `.clone()` shares the `Rc<RefCell<TypeTable>>` with the
+        // `--tir-resolved` snapshot, so DCE's `retain` (which drops generic
+        // decl field TypeParams unreachable from concrete types) would punch
+        // holes the snapshot still references — `wado dump --tir-resolved` then
+        // panics unparsing a generic struct decl. `snapshot_tir_modules` clones
+        // the table into a fresh `Rc`, isolating the two.
+        if let Some(resolved_modules) = tir_modules_by_source
+            .as_ref()
+            .map(snapshot_tir_modules)
+        {
             let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
 
             let (mut cm_interface_registry, world_registry) =
