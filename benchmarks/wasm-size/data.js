@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782941195984,
+  "lastUpdate": 1782971262720,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -36993,6 +36993,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 371011,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dea07b4545676c759e14a21a4fbc841354f5097a",
+          "message": "Merge pull request #1487 from wado-lang/claude/benchmark-sieve-perf-a5t0mt\n\nperf(optimizer): loop-versioned bounds-check elimination with array.fill idiom",
+          "timestamp": "2026-07-02T14:39:05+09:00",
+          "tree_id": "91d020e51cec5785961181af0fe66a6c8f222325",
+          "url": "https://github.com/wado-lang/wado/commit/dea07b4545676c759e14a21a4fbc841354f5097a"
+        },
+        "date": 1782971262063,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15323,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 371059,
             "unit": "bytes"
           }
         ]
