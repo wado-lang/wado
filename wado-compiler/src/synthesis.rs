@@ -14,7 +14,6 @@ pub mod cm_binding;
 pub mod common;
 pub mod effect_dispatch;
 pub mod from_synth;
-pub mod kiln_synth;
 pub mod resource_cleanup;
 pub mod serde_synth;
 pub mod template;
@@ -44,9 +43,11 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
 
     // Kiln generators need `Options::deserialize` to decode the canonical
     // JSON wire form, but the author does not write
-    // `impl Deserialize for Options;` explicitly. Inject the synthesis
-    // request here so the following `serde_synth` pass picks it up.
-    kiln_synth::prepare_kiln(&mut project);
+    // `impl Deserialize for Options;` explicitly by hand — the loader
+    // injects that marker post-load (`kiln::import_check::inject_deserialize_impl`),
+    // which now flows through the same bound-driven request path as any
+    // other `Serialize`/`Deserialize` marker (WEP 2026-06-25-trait-derivation),
+    // so no separate pre-`serde_synth` push is needed here.
 
     // Generate Serialize/Deserialize impls from `impl Trait for Type;` requests.
     serde_synth::synthesize_serde(&mut project);

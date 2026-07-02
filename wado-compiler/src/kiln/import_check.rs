@@ -24,8 +24,10 @@ use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Sever
 use crate::hashmap::IndexMap;
 use crate::logger::Logger;
 use crate::module_source::ModuleSource;
-use crate::synthesis::kiln_synth::KILN_GENERATOR_WORLD;
 use crate::token::Span;
+
+/// Target world that identifies a Kiln generator package.
+pub const KILN_GENERATOR_WORLD: &str = "core:kiln/generator";
 
 /// Run the Kiln generator import-refusal check against every loaded
 /// module. Returns the count of rejected `use` sites; zero means the

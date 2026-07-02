@@ -396,7 +396,14 @@ pub fn synthesize_serde(project: &mut Package) {
             let tt = module.type_table.borrow();
             SerdeStdlibNames::from_compiler_items(tt.compiler_items())
         };
-        let existing = collect_existing_trait_methods(module);
+        // Mutable and updated as each request is processed (not just
+        // snapshotted once): a `(type, trait)` pair can legitimately reach
+        // this drain twice — e.g. an explicit marker recorded into
+        // `bound_driven_synth_requests` alongside a separately-injected
+        // marker for the same pair (see the Kiln `Options` case this
+        // guards against) — and the second occurrence must see the first's
+        // output, not just what existed before the loop started.
+        let mut existing = collect_existing_trait_methods(module);
         let mut generated = Vec::new();
 
         for req in &requests {
@@ -407,7 +414,7 @@ pub fn synthesize_serde(project: &mut Package) {
                         Some(&names.serialize),
                         "serialize",
                     );
-                    if existing.contains(&key) {
+                    if !existing.insert(key) {
                         continue;
                     }
                     let func = generate_struct_serialize(module, req, &names)
@@ -424,7 +431,7 @@ pub fn synthesize_serde(project: &mut Package) {
                         Some(&names.deserialize),
                         "deserialize",
                     );
-                    if existing.contains(&key) {
+                    if !existing.insert(key) {
                         continue;
                     }
                     if let Some((lookup_func, positional_at_func, deser_func)) =

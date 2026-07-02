@@ -695,7 +695,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Enums have no fields, so — like Eq/Ord above — they are always
-        // structurally eligible for on_bound serde traits.
+        // structurally eligible for on_bound serde traits. Gated on
+        // `has_real_trait_impl_for_type`, not `find_trait_impl_for_type`: a
+        // body-less `impl Serialize for T;` marker is itself an `Item::Impl`
+        // and would otherwise read as "already implemented," permanently
+        // blocking the very request it's meant to enable (mirrors
+        // `has_real_impl` in `synthesis::traits`, which exists for the
+        // identical reason).
         if let ResolvedType::Enum {
             name,
             module_source,
@@ -724,8 +730,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Variants auto-implement Serialize/Deserialize (on_bound) when no
-        // explicit impl exists and every non-unit payload implements the
-        // trait.
+        // real (methodful) impl exists and every non-unit payload
+        // implements the trait. See the `Enum` arm above for why the gate
+        // is `has_real_trait_impl_for_type`, not `find_trait_impl_for_type`.
         if let ResolvedType::Variant {
             name,
             module_source,
@@ -773,11 +780,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Structs auto-implement Serialize/Deserialize (on_bound) when no
-        // explicit impl exists and every field implements the trait. This is
-        // also how an anonymous struct — which has no spellable name to
-        // write `impl Serialize for …;` against — ever satisfies the bound:
-        // it is a plain `ResolvedType::Struct` like any other, just with a
-        // compiler-synthesized name (see `resolve_anonymous_struct_literal`).
+        // real (methodful) impl exists and every field implements the
+        // trait. This is also how an anonymous struct — which has no
+        // spellable name to write `impl Serialize for …;` against — ever
+        // satisfies the bound: it is a plain `ResolvedType::Struct` like any
+        // other, just with a compiler-synthesized name (see
+        // `resolve_anonymous_struct_literal`). See the `Enum` arm above for
+        // why the gate is `has_real_trait_impl_for_type`, not
+        // `find_trait_impl_for_type`.
         if let ResolvedType::Struct {
             name,
             module_source,
@@ -961,6 +971,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Helper to check if there's an impl block for a type implementing a trait
     pub(super) fn find_trait_impl_for_type(&self, type_name: &str, trait_name: &str) -> bool {
         self.find_trait_impl_for_type_with_args(type_name, trait_name, None)
+    }
+
+    /// Like [`Self::find_trait_impl_for_type`], but an empty `impl Trait for
+    /// Type;` marker does not count — only a real (methodful) impl does.
+    /// Module-agnostic like `find_trait_impl_for_type` (an impl of a
+    /// stdlib-provided trait such as `Serialize` routinely lives in a
+    /// different module than the type it targets, e.g. `core:serde`
+    /// providing `impl Serialize for i128` for the `i128` struct declared
+    /// in `core:prelude/int128.wado`), unlike
+    /// [`super::trait_env::TraitEnv::has_methodful_impl`], which is
+    /// strictly module-scoped and exists for a narrower case (see its own
+    /// doc comment).
+    #[allow(dead_code)]
+    pub(super) fn has_real_trait_impl_for_type(&self, type_name: &str, trait_name: &str) -> bool {
+        let trait_env = self.tysys.trait_env.clone();
+        let Some(entries) = trait_env.impl_index.get(type_name) else {
+            return false;
+        };
+        entries.iter().any(|entry| {
+            trait_env.impl_headers.get(entry).is_some_and(|header| {
+                header.trait_name.as_deref() == Some(trait_name) && !header.methods.is_empty()
+            })
+        })
     }
 
     /// Check if there's a trait impl for a type, with optional type args for bounds checking.
