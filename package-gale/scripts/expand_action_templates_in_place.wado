@@ -21,14 +21,7 @@
 //!   wado run package-gale/scripts/expand_action_templates_in_place.wado
 
 use { println, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
-use {
-    Preopens,
-    Descriptor,
-    DescriptorFlags,
-    PathFlags,
-    OpenFlags,
-    Filesize,
-} from "wasi:filesystem";
+use { Preopens, Descriptor, DescriptorFlags, PathFlags, OpenFlags, Filesize } from "wasi:filesystem";
 use { ErrorCode } from "wasi:filesystem/types.wado";
 use { expand_action_templates } from "../src/g4/action_templates.wado";
 
@@ -93,17 +86,12 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
 }
 
 fn read_file_to_string(dir: &Descriptor, path: &String) -> Result<String, ErrorCode> {
-    let opened = match dir.open_at(
+    let opened = dir.open_at(
         PathFlags::none(),
         *path,
         OpenFlags::none(),
         DescriptorFlags::Read,
-    ).wait() {
-        Ok(file) => file,
-        Err(e) => {
-            return Result::Err(e);
-        },
-    };
+    ).wait()?;
     let [stream, done] = opened.read_via_stream(0 as Filesize);
     let mut bytes: List<u8> = [];
     loop {
@@ -128,17 +116,12 @@ fn read_file_to_string(dir: &Descriptor, path: &String) -> Result<String, ErrorC
 }
 
 fn write_file_string(dir: &Descriptor, path: &String, content: &String) -> Result<(), ErrorCode> {
-    let file = match dir.open_at(
+    let file = dir.open_at(
         PathFlags::none(),
         *path,
         OpenFlags::Create | OpenFlags::Truncate,
         DescriptorFlags::Read | DescriptorFlags::Write,
-    ).wait() {
-        Ok(f) => f,
-        Err(e) => {
-            return Result::Err(e);
-        },
-    };
+    ).wait()?;
     let bytes: List<u8> = content.bytes().collect();
     let [rx, tx] = Stream::<u8>::new();
     let sub = file.write_via_stream(rx, 0 as Filesize);
