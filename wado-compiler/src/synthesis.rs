@@ -43,6 +43,12 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
 
     serde_synth::synthesize_serde(&mut project);
 
+    // Drain `Default` after serde: a `Deserialize` body records a
+    // `Field::default()` request for a missing non-required field, later than
+    // `synthesize_traits`' snapshot, so `Default` generation must run once,
+    // here, over the now-complete request set (WEP 2026-06-25).
+    traits::synthesize_defaults(&mut project);
+
     // Snapshot the synthesis-layer impls (auto-derives + From/serde adapters)
     // onto `TraitEnv` so subsequent phases query a single source of truth
     // instead of rescanning TIR. The AST layer is preserved unchanged.

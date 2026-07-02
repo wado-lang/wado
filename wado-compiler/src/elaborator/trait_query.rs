@@ -474,57 +474,65 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     pub(super) fn classify_on_bound_trait(&self, trait_name: &str) -> Option<OnBoundTrait> {
-        let (on_bound, item) = {
+        // Match the bare name against each compiler trait, capturing the
+        // trait's own declaring module in the same borrow.
+        let (on_bound, compiler_module) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
+            let of = |item: CompilerItem, on_bound: OnBoundTrait| {
+                items.trait_module(item).map(|m| (on_bound, m.clone()))
+            };
             if trait_name == items.trait_name(CompilerItem::Eq) {
-                (OnBoundTrait::Eq, CompilerItem::Eq)
+                of(CompilerItem::Eq, OnBoundTrait::Eq)
             } else if trait_name == items.trait_name(CompilerItem::Ord) {
-                (OnBoundTrait::Ord, CompilerItem::Ord)
+                of(CompilerItem::Ord, OnBoundTrait::Ord)
             } else if items.trait_name_opt(CompilerItem::Serialize) == Some(trait_name) {
-                (OnBoundTrait::Serialize, CompilerItem::Serialize)
+                of(CompilerItem::Serialize, OnBoundTrait::Serialize)
             } else if items.trait_name_opt(CompilerItem::Deserialize) == Some(trait_name) {
-                (OnBoundTrait::Deserialize, CompilerItem::Deserialize)
+                of(CompilerItem::Deserialize, OnBoundTrait::Deserialize)
             } else if trait_name == items.trait_name(CompilerItem::Default) {
-                (OnBoundTrait::Default, CompilerItem::Default)
+                of(CompilerItem::Default, OnBoundTrait::Default)
             } else if trait_name == items.trait_name(CompilerItem::Inspect) {
-                (OnBoundTrait::Inspect, CompilerItem::Inspect)
+                of(CompilerItem::Inspect, OnBoundTrait::Inspect)
             } else if trait_name == items.trait_name(CompilerItem::InspectAlt) {
-                (OnBoundTrait::InspectAlt, CompilerItem::InspectAlt)
+                of(CompilerItem::InspectAlt, OnBoundTrait::InspectAlt)
             } else if trait_name == items.trait_name(CompilerItem::Display) {
-                (OnBoundTrait::Display, CompilerItem::Display)
+                of(CompilerItem::Display, OnBoundTrait::Display)
             } else if trait_name == items.trait_name(CompilerItem::DisplayAlt) {
-                (OnBoundTrait::DisplayAlt, CompilerItem::DisplayAlt)
+                of(CompilerItem::DisplayAlt, OnBoundTrait::DisplayAlt)
             } else {
-                return None;
+                None
             }
+        }?;
+        // The name matches a compiler trait by spelling, but a user may declare
+        // or import a trait of the same name (e.g. the `trait_bound_fn_violation`
+        // fixture's local `trait Display`). Resolve which trait declaration the
+        // name refers to in this module's scope: a local declaration wins, else
+        // an explicit import brings the declaration from elsewhere. Both are
+        // O(1) probes of the trait-decl index (which keys every trait
+        // declaration, compiler and user, by `(module, name)`). If the name
+        // resolves to no local/imported trait declaration, it is the ambient
+        // compiler trait; if it resolves to the compiler item's own module
+        // (including inside that very module), it is the compiler trait; only a
+        // resolution to a *different* module is a user shadow.
+        let trait_env = &self.tysys.trait_env;
+        let declares = |module: &ModuleSource| {
+            trait_env
+                .decl_index
+                .contains_key(&(module.clone(), trait_name.to_string()))
         };
-        // The name matches a compiler trait, but a user may declare a trait of
-        // the same name (e.g. the `trait_bound_fn_violation` fixture's local
-        // `trait Display`). Treat the name as the compiler trait unless a user
-        // trait genuinely shadows it here — declared in this module, or
-        // imported from a module other than the compiler item's. Resolving via
-        // `canonical_decl_key` instead is unsafe: for an ambient trait like
-        // `Ord` that is neither imported nor locally declared it falls through
-        // to the current module, which would wrongly reject the compiler trait.
-        let compiler_module = {
-            let tt = self.tysys.type_table.borrow();
-            tt.compiler_items().trait_module(item).cloned()
-        };
-        let shadowed_locally = self
-            .current_module_items
-            .iter()
-            .any(|it| matches!(it, Item::Trait(t) if t.name == trait_name));
-        let shadowed_by_import = self
-            .sem
-            .imports
-            .imported_type_sources
-            .get(trait_name)
-            .is_some_and(|m| Some(m) != compiler_module.as_ref());
-        if shadowed_locally || shadowed_by_import {
-            None
+        let scoped_module = if declares(&self.current_module_source) {
+            Some(&self.current_module_source)
         } else {
-            Some(on_bound)
+            self.sem
+                .imports
+                .imported_type_sources
+                .get(trait_name)
+                .filter(|src| declares(src))
+        };
+        match scoped_module {
+            Some(module) => (*module == compiler_module).then_some(on_bound),
+            None => Some(on_bound),
         }
     }
 
@@ -660,15 +668,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         resolved: &ResolvedType,
         trait_name: &str,
     ) -> bool {
+        // Classify once — reused by the format short-circuit, the primitive
+        // fast paths, the structural on_bound arm, and the Default arm below.
+        let on_bound = self.classify_on_bound_trait(trait_name);
+
         // The format traits are total (WEP 2026-06-25): every type is
         // structurally formattable — the automatic policy already generated an
         // `Inspect` body for every type kind, and `Display` falls back to it —
         // so a `T: Inspect` / `T: Display` (and the `Alt` siblings) obligation
-        // always holds, for a type parameter or any concrete type alike.
-        if self
-            .classify_on_bound_trait(trait_name)
-            .is_some_and(OnBoundTrait::is_format)
-        {
+        // always holds, for a type parameter or any concrete type alike. A
+        // referenced-but-unsynthesized format body would fail loud at
+        // monomorphize; totality is upheld by the synthesis passes covering
+        // every type kind.
+        if on_bound.is_some_and(OnBoundTrait::is_format) {
             return true;
         }
 
@@ -682,13 +694,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return false;
         }
 
-        let default_name = {
-            let tt = self.tysys.type_table.borrow();
-            tt.compiler_items()
-                .trait_name(CompilerItem::Default)
-                .to_string()
-        };
-        let on_bound = self.classify_on_bound_trait(trait_name);
         let is_eq = on_bound == Some(OnBoundTrait::Eq);
         let is_eq_or_ord = is_eq || on_bound == Some(OnBoundTrait::Ord);
 
@@ -760,7 +765,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             module_source,
             ..
         } = &resolved
-            && trait_name == default_name
+            && on_bound == Some(OnBoundTrait::Default)
             && self.auto_derive_default_struct_type(name).is_some()
         {
             self.tysys

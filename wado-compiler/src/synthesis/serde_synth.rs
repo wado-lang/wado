@@ -927,7 +927,12 @@ fn deserialize_error_literal(
 /// Generate a `T::default()` static call for the field's initial value.
 /// Only emits the call when the `Default` trait is registered via `#[compiler_item("default")]`.
 /// The module source for resolution comes from the type itself (where `impl Default for T` lives).
-fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -> TirExpr {
+fn default_value_for_type(
+    type_id: TypeId,
+    type_table: &TypeTable,
+    span: Span,
+    requested_defaults: &mut Vec<(String, ModuleSource)>,
+) -> TirExpr {
     // Gate: only generate Default calls if the trait is registered via compiler_item.
     if type_table.default_trait_module_source().is_none() {
         return null_expr(type_id);
@@ -970,6 +975,10 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
     let default_trait_name = type_table
         .compiler_trait_name(crate::compiler_item::CompilerItem::Default)
         .to_string();
+    // Record the `Default` reference so `synthesize_defaults` (which runs after
+    // serde) generates the body: `Default` is `on_bound`, and this emitted
+    // `Field::default()` may be the only site that needs it.
+    requested_defaults.push((base_name.clone(), module_source.clone()));
     let mut method_info =
         LocalMethodName::new(base_name, Some(default_trait_name), "default".to_string());
     if !type_args.is_empty() {
@@ -1514,6 +1523,7 @@ fn generate_struct_deserialize(
         ));
     }
 
+    let mut requested_defaults: Vec<(String, ModuleSource)> = Vec::new();
     {
         let tt = module.type_table.borrow();
         for (i, (field_name, _, type_id, _)) in fields.iter().enumerate() {
@@ -1530,7 +1540,12 @@ fn generate_struct_deserialize(
                     relocate_default_locals(&mut v, &mut next_local, &mut locals);
                     Some(v)
                 }
-                None if !is_required => Some(default_value_for_type(*type_id, &tt, span)),
+                None if !is_required => Some(default_value_for_type(
+                    *type_id,
+                    &tt,
+                    span,
+                    &mut requested_defaults,
+                )),
                 None => None,
             };
             if let Some(default_val) = default_val {
@@ -1541,6 +1556,17 @@ fn generate_struct_deserialize(
                     default_val,
                 ));
             }
+        }
+    }
+    if !requested_defaults.is_empty() {
+        let default_trait_name = module
+            .type_table
+            .borrow()
+            .compiler_trait_name(crate::compiler_item::CompilerItem::Default)
+            .to_string();
+        let mut tt = module.type_table.borrow_mut();
+        for (name, source) in &requested_defaults {
+            tt.record_bound_driven_synth_request(name, source, &default_trait_name);
         }
     }
 
