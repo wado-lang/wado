@@ -1,0 +1,19 @@
+// A default argument whose expression / type references a type private to the
+// callee's module must resolve at a cross-module call site even though the
+// caller cannot name that type — the caller never writes it, the default does.
+// This is the `core:log` shape: `info(msg)` with a private `NoFields` sentinel.
+
+use { plain, generic } from "./sub/default_arg_xmod_private_lib.wado";
+
+test "cross-module value default constructs a callee-private type" {
+    // The caller cannot name `Priv`, so only the default form is callable.
+    assert plain() == 5;
+}
+
+test "cross-module default type param uses a callee-private default type" {
+    assert generic() == 5;
+    assert generic(9) == 9;
+}
+
+__DATA__
+{"test": {}}

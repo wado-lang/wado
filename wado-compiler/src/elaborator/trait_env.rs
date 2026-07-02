@@ -959,21 +959,6 @@ impl TraitEnv {
         pick_module_union(ast, syn, type_module)
     }
 
-    /// Whether a **methodful** `impl trait_name for type_name` exists in
-    /// `module_source` at the AST layer — unlike [`Self::impl_module_for`],
-    /// an empty `impl Trait for Type;` marker does not count.
-    ///
-    /// `impl_index` indexes a marker exactly like a real impl. That's fine
-    /// for most callers, but `Eq` / `Ord` synthesis gating (WEP
-    /// 2026-06-25-trait-derivation) needs the opposite question: a marker
-    /// for these two traits is itself a request for the body, so treating
-    /// it as "already implemented" would permanently block that body.
-    ///
-    /// Strictly scoped to `module_source`, unlike [`Self::impl_module_for`]'s
-    /// hint-preferred-with-fallback: `impl_index` is keyed by bare type
-    /// name, so two unrelated same-named types in different modules share
-    /// one bucket, and a fallback here would silently reuse the wrong
-    /// type's impl and skip synthesizing this one's.
     pub(crate) fn has_methodful_impl(
         &self,
         type_name: &str,
@@ -982,12 +967,22 @@ impl TraitEnv {
     ) -> bool {
         self.impl_index.get(type_name).is_some_and(|entries| {
             entries.iter().any(|entry| {
-                entry.0 == *module_source
-                    && self.impl_headers.get(entry).is_some_and(|header| {
-                        header.trait_name.as_deref() == Some(trait_name)
-                            && !header.methods.is_empty()
-                    })
+                entry.0 == *module_source && self.methodful_header_matches(entry, trait_name)
             })
+        })
+    }
+
+    pub(crate) fn has_any_methodful_impl(&self, type_name: &str, trait_name: &str) -> bool {
+        self.impl_index.get(type_name).is_some_and(|entries| {
+            entries
+                .iter()
+                .any(|entry| self.methodful_header_matches(entry, trait_name))
+        })
+    }
+
+    fn methodful_header_matches(&self, entry: &(ModuleSource, usize), trait_name: &str) -> bool {
+        self.impl_headers.get(entry).is_some_and(|header| {
+            header.trait_name.as_deref() == Some(trait_name) && !header.methods.is_empty()
         })
     }
 

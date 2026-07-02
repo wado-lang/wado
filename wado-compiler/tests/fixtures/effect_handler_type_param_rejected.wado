@@ -1,0 +1,20 @@
+// A bare type-parameter handler cannot be installed: dispatch synthesis runs
+// before monomorphization and has no impl to route `Log::event` to while the
+// handler type is still the abstract `H`. The elaborator must reject this with
+// a clear diagnostic rather than letting it reach synthesis (which panics).
+
+interface Log {
+    fn event(msg: String);
+}
+
+fn run_with<H: Log>(h: &H) with Log {
+    with Log => h do {
+        Log::event("x");
+    };
+}
+
+export fn run() {
+}
+
+__DATA__
+{"compile_error": "does not implement interface 'Log'"}

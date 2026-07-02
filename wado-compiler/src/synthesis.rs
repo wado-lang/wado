@@ -14,7 +14,6 @@ pub mod cm_binding;
 pub mod common;
 pub mod effect_dispatch;
 pub mod from_synth;
-pub mod kiln_synth;
 pub mod resource_cleanup;
 pub mod serde_synth;
 pub mod template;
@@ -42,13 +41,6 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
         from_synth::synthesize_from(module);
     }
 
-    // Kiln generators need `Options::deserialize` to decode the canonical
-    // JSON wire form, but the author does not write
-    // `impl Deserialize for Options;` explicitly. Inject the synthesis
-    // request here so the following `serde_synth` pass picks it up.
-    kiln_synth::prepare_kiln(&mut project);
-
-    // Generate Serialize/Deserialize impls from `impl Trait for Type;` requests.
     serde_synth::synthesize_serde(&mut project);
 
     // Snapshot the synthesis-layer impls (auto-derives + From/serde adapters)

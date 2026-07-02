@@ -16,6 +16,35 @@ use super::trait_env::AnnotateCtx;
 use super::types::{MethodInfo, ResolvedTraitMethod, TraitMethodMatch, TypeError};
 use super::tysys::TypeSystem;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum OnBoundTrait {
+    Eq,
+    Ord,
+    Serialize,
+    Deserialize,
+}
+
+impl OnBoundTrait {
+    pub(super) fn is_serde(self) -> bool {
+        matches!(self, Self::Serialize | Self::Deserialize)
+    }
+}
+
+#[derive(Clone, Copy)]
+enum StructuralMember<'a> {
+    Field(&'a str),
+    Case(&'a str),
+}
+
+impl StructuralMember<'_> {
+    fn describe(self) -> String {
+        match self {
+            Self::Field(name) => format!("field `{name}`"),
+            Self::Case(name) => format!("variant `{name}`"),
+        }
+    }
+}
+
 /// Free-function form of [`Elaborator::canonical_decl_key`], callable from
 /// any module that has the inputs in hand. Reify uses this for trait
 /// default-method synthesis (it has no `Elaborator` instance but does carry
@@ -388,209 +417,151 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if chain.len() >= 8 {
             return;
         }
-
-        let (eq_name, ord_name, serialize_name, deserialize_name) = {
-            let tt = self.tysys.type_table.borrow();
-            let items = tt.compiler_items();
-            (
-                items.trait_name(CompilerItem::Eq).to_string(),
-                items.trait_name(CompilerItem::Ord).to_string(),
-                items
-                    .trait_name_opt(CompilerItem::Serialize)
-                    .map(str::to_string),
-                items
-                    .trait_name_opt(CompilerItem::Deserialize)
-                    .map(str::to_string),
-            )
+        let Some(tr) = self.classify_on_bound_trait(trait_name) else {
+            return;
         };
-        let is_eq = trait_name == eq_name;
-        let is_eq_or_ord = is_eq || trait_name == ord_name;
-        let is_serde = Some(trait_name) == serialize_name.as_deref()
-            || Some(trait_name) == deserialize_name.as_deref();
-        // Struct fields walk for both `automatic` (Eq/Ord) and `on_bound`
-        // (Serialize/Deserialize) structural rules; variants only ever
-        // unfold for `Eq`, `Serialize`, and `Deserialize` (`Ord` is not
-        // auto-derived for variants at all, see the bound-check above).
-        let walk_struct_fields = is_eq_or_ord || is_serde;
-        let walk_variant_cases = is_eq || is_serde;
-
         let resolved = self.tysys.type_table.borrow().get(type_id).clone();
 
-        // Collect the members to walk as owned (label, member type) pairs,
-        // releasing the field/case borrow before the conformance recursion.
-        let members: Vec<(String, TypeId)> = match &resolved {
+        let mut failing: Option<(String, TypeId)> = None;
+        self.walk_structural_derive_members(&resolved, tr, &mut |member, member_tid| {
+            if self.type_implements_trait(&self.annotate_ctx, member_tid, trait_name) {
+                true
+            } else {
+                failing = Some((member.describe(), member_tid));
+                false
+            }
+        });
+        if let Some((label, member_tid)) = failing {
+            let owner = self.tysys.type_id_to_string(type_id);
+            let member_ty = self.tysys.type_id_to_string(member_tid);
+            chain.push(format!(
+                "`{owner}` does not implement `{trait_name}` because {label} of type `{member_ty}` does not implement `{trait_name}`"
+            ));
+            self.collect_trait_unimpl_reason(member_tid, trait_name, chain);
+        }
+    }
+
+    pub(super) fn classify_on_bound_trait(&self, trait_name: &str) -> Option<OnBoundTrait> {
+        let tt = self.tysys.type_table.borrow();
+        let items = tt.compiler_items();
+        if trait_name == items.trait_name(CompilerItem::Eq) {
+            Some(OnBoundTrait::Eq)
+        } else if trait_name == items.trait_name(CompilerItem::Ord) {
+            Some(OnBoundTrait::Ord)
+        } else if items.trait_name_opt(CompilerItem::Serialize) == Some(trait_name) {
+            Some(OnBoundTrait::Serialize)
+        } else if items.trait_name_opt(CompilerItem::Deserialize) == Some(trait_name) {
+            Some(OnBoundTrait::Deserialize)
+        } else {
+            None
+        }
+    }
+
+    fn walk_structural_derive_members(
+        &self,
+        resolved: &ResolvedType,
+        tr: OnBoundTrait,
+        visit: &mut dyn FnMut(StructuralMember<'_>, TypeId) -> bool,
+    ) -> Option<bool> {
+        let subst = |param_ids: &[TypeId], type_args: &[TypeId], tid: TypeId| -> TypeId {
+            param_ids
+                .iter()
+                .position(|param| *param == tid)
+                .and_then(|i| type_args.get(i).copied())
+                .unwrap_or(tid)
+        };
+        let walk_struct = |info: &super::types::StructFieldInfo,
+                           type_args: &[TypeId],
+                           visit: &mut dyn FnMut(StructuralMember<'_>, TypeId) -> bool|
+         -> bool {
+            info.fields.iter().all(|(fname, tid, _)| {
+                let concrete = subst(&info.type_param_type_ids, type_args, *tid);
+                visit(StructuralMember::Field(fname), concrete)
+            })
+        };
+        let walk_variant = |info: &super::types::VariantInfo,
+                            type_args: &[TypeId],
+                            visit: &mut dyn FnMut(StructuralMember<'_>, TypeId) -> bool|
+         -> bool {
+            info.cases
+                .iter()
+                .filter(|c| c.payload != TypeTable::UNIT)
+                .all(|c| {
+                    let concrete = subst(&info.type_param_type_ids, type_args, c.payload);
+                    visit(StructuralMember::Case(&c.name), concrete)
+                })
+        };
+        match resolved {
+            ResolvedType::Enum { .. } => Some(true),
+            ResolvedType::Flags { .. } => {
+                if tr.is_serde() {
+                    Some(true)
+                } else {
+                    None
+                }
+            }
             ResolvedType::Struct {
                 name,
                 module_source,
                 ..
-            } if walk_struct_fields => {
-                let Some(info) = self.lookup_struct_fields_in(name, module_source) else {
-                    return;
-                };
-                info.fields
-                    .iter()
-                    .map(|(fname, tid, _)| (format!("field `{fname}`"), *tid))
-                    .collect()
+            } => {
+                let info = self.lookup_struct_fields_in(name, module_source)?;
+                Some(walk_struct(info, &[], visit))
             }
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-            } if walk_struct_fields => {
-                let Some(info) = self.lookup_struct_fields_in(name, module_source) else {
-                    return;
-                };
-                let param_map: IndexMap<TypeId, TypeId> = info
-                    .type_param_type_ids
-                    .iter()
-                    .zip(type_args.iter())
-                    .map(|(param, arg)| (*param, *arg))
-                    .collect();
-                info.fields
-                    .iter()
-                    .map(|(fname, tid, _)| {
-                        let concrete = param_map.get(tid).copied().unwrap_or(*tid);
-                        (format!("field `{fname}`"), concrete)
-                    })
-                    .collect()
-            }
-            ResolvedType::Variant {
-                name,
-                module_source,
-            } if walk_variant_cases => {
-                let Some(info) = self.lookup_variant_case_in(name, module_source) else {
-                    return;
-                };
-                info.cases
-                    .iter()
-                    .filter(|c| c.payload != TypeTable::UNIT)
-                    .map(|c| (format!("variant `{}`", c.name), c.payload))
-                    .collect()
-            }
-            _ => return,
-        };
-
-        // Report the first member that breaks the trait, then recurse to
-        // explain that member in turn.
-        for (label, member_tid) in members {
-            if !self.type_implements_trait(&self.annotate_ctx, member_tid, trait_name) {
-                let owner = self.tysys.type_id_to_string(type_id);
-                let member_ty = self.tysys.type_id_to_string(member_tid);
-                chain.push(format!(
-                    "`{owner}` does not implement `{trait_name}` because {label} of type `{member_ty}` does not implement `{trait_name}`"
-                ));
-                self.collect_trait_unimpl_reason(member_tid, trait_name, chain);
-                return;
-            }
-        }
-    }
-
-    /// Whether `type_id` is *structurally* derivable for `trait_name` (`Eq`
-    /// or `Ord`) — every field (struct) or every non-unit case payload
-    /// (variant) recursively satisfies `trait_name`; a plain enum is always
-    /// eligible. Mirrors the auto-derive branches in
-    /// [`Self::type_implements_trait_inner`], but ignores whether an impl
-    /// already exists for `type_id` itself — needed as a separate query
-    /// because [`Self::type_implements_trait`] would see an explicit
-    /// `impl Eq for T;` marker as "already satisfied" and never validate the
-    /// fields the marker is meant to guarantee.
-    pub(super) fn structurally_derivable_for_explicit_request(
-        &self,
-        ctx: &AnnotateCtx,
-        type_id: TypeId,
-        trait_name: &str,
-    ) -> bool {
-        // Variants derive `Eq` only, never `Ord` (mirrors
-        // `type_implements_trait_inner`'s `Variant` arms). Without this,
-        // `impl Ord for SomeVariant;` would be wrongly accepted here and
-        // only fail later, at a `<` use site.
-        let is_eq = {
-            let tt = self.tysys.type_table.borrow();
-            trait_name == tt.compiler_items().trait_name(CompilerItem::Eq)
-        };
-        // A field/case type resolving to the impl block's own (necessarily
-        // unconstrained) type parameter is trivially eligible: `impl<T> Eq
-        // for Wrapper<T>;` validates the *shape* of `Wrapper`, not a bound
-        // on `T` — matching how the compiler auto-derives `impl<T: Eq> Eq
-        // for Wrapper<T>` once some concrete instantiation demands it.
-        let trivially_eligible = |concrete: TypeId| {
-            matches!(
-                self.tysys.type_table.borrow().get(concrete),
-                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-            )
-        };
-        let resolved = self.tysys.type_table.borrow().get(type_id).clone();
-        match &resolved {
-            ResolvedType::Enum { .. } => true,
             ResolvedType::Variant {
                 name,
                 module_source,
             } => {
-                is_eq
-                    && self
-                        .lookup_variant_case_in(name, module_source)
-                        .is_some_and(|info| {
-                            info.cases.iter().all(|c| {
-                                c.payload == TypeTable::UNIT
-                                    || self.type_implements_trait(ctx, c.payload, trait_name)
-                            })
-                        })
+                if tr == OnBoundTrait::Ord {
+                    return None;
+                }
+                let info = self.lookup_variant_case_in(name, module_source)?;
+                Some(walk_variant(info, &[], visit))
             }
-            ResolvedType::Struct {
-                name,
-                module_source,
-                ..
-            } => self
-                .lookup_struct_fields_in(name, module_source)
-                .is_some_and(|info| {
-                    info.fields
-                        .iter()
-                        .all(|(_, tid, _)| self.type_implements_trait(ctx, *tid, trait_name))
-                }),
             ResolvedType::GenericInstance {
                 name,
                 module_source,
                 type_args,
             } => {
                 if let Some(info) = self.lookup_struct_fields_in(name, module_source) {
-                    let param_map: IndexMap<TypeId, TypeId> = info
-                        .type_param_type_ids
-                        .iter()
-                        .zip(type_args.iter())
-                        .map(|(param, arg)| (*param, *arg))
-                        .collect();
-                    info.fields.iter().all(|(_, field_tid, _)| {
-                        let concrete = param_map.get(field_tid).copied().unwrap_or(*field_tid);
-                        trivially_eligible(concrete)
-                            || self.type_implements_trait(ctx, concrete, trait_name)
-                    })
-                } else if is_eq && let Some(info) = self.lookup_variant_case_in(name, module_source)
+                    Some(walk_struct(info, type_args, visit))
+                } else if tr != OnBoundTrait::Ord
+                    && let Some(info) = self.lookup_variant_case_in(name, module_source)
                 {
-                    let param_map: IndexMap<TypeId, TypeId> = info
-                        .type_param_type_ids
-                        .iter()
-                        .zip(type_args.iter())
-                        .map(|(param, arg)| (*param, *arg))
-                        .collect();
-                    info.cases.iter().all(|c| {
-                        if c.payload == TypeTable::UNIT {
-                            return true;
-                        }
-                        let concrete = param_map.get(&c.payload).copied().unwrap_or(c.payload);
-                        trivially_eligible(concrete)
-                            || self.type_implements_trait(ctx, concrete, trait_name)
-                    })
+                    Some(walk_variant(info, type_args, visit))
                 } else {
-                    false
+                    None
                 }
             }
+            _ => None,
+        }
+    }
+
+    pub(super) fn structurally_derivable_for_explicit_request(
+        &self,
+        ctx: &AnnotateCtx,
+        type_id: TypeId,
+        trait_name: &str,
+    ) -> bool {
+        let Some(tr) = self.classify_on_bound_trait(trait_name) else {
+            return false;
+        };
+        let resolved = self.tysys.type_table.borrow().get(type_id).clone();
+        match &resolved {
             ResolvedType::Newtype { base_type, .. } => {
                 self.type_implements_trait(ctx, *base_type, trait_name)
             }
             ResolvedType::Flags { .. } => {
                 self.type_implements_trait(ctx, TypeTable::U32, trait_name)
             }
-            _ => false,
+            nominal => {
+                self.walk_structural_derive_members(nominal, tr, &mut |_, member| {
+                    matches!(
+                        self.tysys.type_table.borrow().get(member),
+                        ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+                    ) || self.type_implements_trait(ctx, member, trait_name)
+                }) == Some(true)
+            }
         }
     }
 
@@ -610,63 +581,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return false;
         }
 
-        // Resolve the canonical stdlib trait names through the
-        // compiler-item registry so the auto-derive predicates below
-        // stay aligned with the actual stdlib decls (and a rename of
-        // `Eq` / `Ord` / `Default` does not silently disable auto-impl).
-        let (eq_name, ord_name, default_name) = {
+        let default_name = {
             let tt = self.tysys.type_table.borrow();
-            let items = tt.compiler_items();
-            (
-                items.trait_name(CompilerItem::Eq).to_string(),
-                items.trait_name(CompilerItem::Ord).to_string(),
-                items.trait_name(CompilerItem::Default).to_string(),
-            )
+            tt.compiler_items()
+                .trait_name(CompilerItem::Default)
+                .to_string()
         };
-        let is_eq = |n: &str| n == eq_name;
-        let is_eq_or_ord = |n: &str| n == eq_name || n == ord_name;
-
-        // `Serialize` / `Deserialize`: looked up with `_opt`, not
-        // `trait_name` — unlike the always-on prelude traits above, they
-        // are only registered when a program actually imports `core:serde`.
-        let (serialize_name, deserialize_name) = {
-            let tt = self.tysys.type_table.borrow();
-            let items = tt.compiler_items();
-            (
-                items
-                    .trait_name_opt(CompilerItem::Serialize)
-                    .map(str::to_string),
-                items
-                    .trait_name_opt(CompilerItem::Deserialize)
-                    .map(str::to_string),
-            )
-        };
-        let is_serde = |n: &str| {
-            Some(n) == serialize_name.as_deref() || Some(n) == deserialize_name.as_deref()
-        };
-
-        // Bound-driven request tracking (WEP 2026-06-25-trait-derivation).
-        // Every structural match records a request, for both `Eq`/`Ord` and
-        // `Serialize`/`Deserialize`, so `synthesis::traits` /
-        // `serde_synth` emit an impl only where one was actually recorded.
-        // `Serialize`/`Deserialize` additionally require no explicit impl
-        // already existing before recording (checked at each call site);
-        // `Eq`/`Ord` don't need that guard — `synthesis::traits`'s own dedup
-        // already skips a hand-written impl, so recording redundantly is
-        // harmless. Keyed nominally (name + module, not `TypeId`) so a
-        // generic struct/variant's many instantiations collapse onto one
-        // request against the base declaration.
-        let record_request = |name: &str, module_source: &ModuleSource, trait_name: &str| -> bool {
-            self.tysys
-                .type_table
-                .borrow_mut()
-                .record_bound_driven_synth_request(name, module_source, trait_name);
-            true
-        };
+        let on_bound = self.classify_on_bound_trait(trait_name);
+        let is_eq = on_bound == Some(OnBoundTrait::Eq);
+        let is_eq_or_ord = is_eq || on_bound == Some(OnBoundTrait::Ord);
 
         // Primitives have built-in implementations for certain traits
         if let ResolvedType::Primitive(prim) = &resolved {
-            if is_eq_or_ord(trait_name) {
+            if is_eq_or_ord {
                 return true;
             }
             // Numeric primitives implement arithmetic traits
@@ -680,80 +607,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.find_trait_impl_for_type(&type_name, trait_name);
         }
 
-        // All enums automatically implement Eq and Ord
-        if let ResolvedType::Enum {
-            name,
-            module_source,
-        } = &resolved
-            && is_eq_or_ord(trait_name)
-        {
-            return record_request(name, module_source, trait_name);
-        }
-
-        // Enums have no fields, so — like Eq/Ord above — they are always
-        // structurally eligible for on_bound serde traits.
-        if let ResolvedType::Enum {
-            name,
-            module_source,
-        } = &resolved
-            && is_serde(trait_name)
-            && !self.find_trait_impl_for_type(name, trait_name)
-        {
-            return record_request(name, module_source, trait_name);
-        }
-
-        // Variants auto-implement Eq when all payload types implement Eq
-        if let ResolvedType::Variant {
-            name,
-            module_source,
-        } = &resolved
-            && is_eq(trait_name)
-            && let Some(info) = self.lookup_variant_case_in(name, module_source)
-        {
-            let all_impl = info.cases.iter().all(|c| {
-                c.payload == TypeTable::UNIT
-                    || self.type_implements_trait(ctx, c.payload, trait_name)
-            });
-            if all_impl {
-                return record_request(name, module_source, trait_name);
+        if let Some(tr) = on_bound
+            && let ResolvedType::Enum {
+                name,
+                module_source,
             }
-        }
-
-        // Variants auto-implement Serialize/Deserialize (on_bound) when no
-        // explicit impl exists and every non-unit payload implements the
-        // trait.
-        if let ResolvedType::Variant {
-            name,
-            module_source,
-        } = &resolved
-            && is_serde(trait_name)
-            && !self.find_trait_impl_for_type(name, trait_name)
-            && let Some(info) = self.lookup_variant_case_in(name, module_source)
-        {
-            let all_impl = info.cases.iter().all(|c| {
-                c.payload == TypeTable::UNIT
-                    || self.type_implements_trait(ctx, c.payload, trait_name)
-            });
-            if all_impl {
-                return record_request(name, module_source, trait_name);
+            | ResolvedType::Struct {
+                name,
+                module_source,
+                ..
             }
-        }
-
-        // Structs auto-implement Eq/Ord when all fields implement the trait
-        if let ResolvedType::Struct {
-            name,
-            module_source,
-            ..
-        } = &resolved
-            && is_eq_or_ord(trait_name)
-            && let Some(info) = self.lookup_struct_fields_in(name, module_source)
+            | ResolvedType::Variant {
+                name,
+                module_source,
+            }
+            | ResolvedType::Flags {
+                name,
+                module_source,
+            }
+            | ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            } = resolved
         {
-            let field_types: Vec<TypeId> = info.fields.iter().map(|(_, tid, _)| *tid).collect();
-            let all_impl = field_types
-                .iter()
-                .all(|tid| self.type_implements_trait(ctx, *tid, trait_name));
-            if all_impl {
-                return record_request(name, module_source, trait_name);
+            let serde_blocked =
+                tr.is_serde() && self.has_real_trait_impl_for_type(name, trait_name);
+            if !serde_blocked
+                && self.walk_structural_derive_members(resolved, tr, &mut |_, member| {
+                    self.type_implements_trait(ctx, member, trait_name)
+                }) == Some(true)
+            {
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .record_bound_driven_synth_request(name, module_source, trait_name);
+                return true;
             }
         }
 
@@ -767,97 +656,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return true;
         }
-
-        // Structs auto-implement Serialize/Deserialize (on_bound) when no
-        // explicit impl exists and every field implements the trait. This is
-        // also how an anonymous struct — which has no spellable name to
-        // write `impl Serialize for …;` against — ever satisfies the bound:
-        // it is a plain `ResolvedType::Struct` like any other, just with a
-        // compiler-synthesized name (see `resolve_anonymous_struct_literal`).
-        if let ResolvedType::Struct {
-            name,
-            module_source,
-            ..
-        } = &resolved
-            && is_serde(trait_name)
-            && !self.find_trait_impl_for_type(name, trait_name)
-            && let Some(info) = self.lookup_struct_fields_in(name, module_source)
-        {
-            let field_types: Vec<TypeId> = info.fields.iter().map(|(_, tid, _)| *tid).collect();
-            let all_impl = field_types
-                .iter()
-                .all(|tid| self.type_implements_trait(ctx, *tid, trait_name));
-            if all_impl {
-                return record_request(name, module_source, trait_name);
-            }
-        }
-
-        // Generic structs auto-implement Eq/Ord when all fields implement the
-        // trait (with type params substituted by concrete type args).
-        // Recorded against the base declaration (see the note on
-        // `record_request` above), not this specific instantiation.
-        if let ResolvedType::GenericInstance {
-            name,
-            module_source,
-            type_args,
-        } = &resolved
-            && is_eq_or_ord(trait_name)
-            && let Some(info) = self.lookup_struct_fields_in(name, module_source)
-        {
-            // Build type param -> concrete type arg mapping
-            let param_map: IndexMap<TypeId, TypeId> = info
-                .type_param_type_ids
-                .iter()
-                .zip(type_args.iter())
-                .map(|(param, arg)| (*param, *arg))
-                .collect();
-            let all_impl = info.fields.iter().all(|(_, field_tid, _)| {
-                let concrete_tid = param_map.get(field_tid).copied().unwrap_or(*field_tid);
-                self.type_implements_trait(ctx, concrete_tid, trait_name)
-            });
-            if all_impl {
-                return record_request(name, module_source, trait_name);
-            }
-        }
-
-        // Generic variants auto-implement Eq when all payload types implement
-        // Eq (with type params substituted by concrete type args). Recorded
-        // against the base declaration, same rationale as generic structs
-        // above.
-        if let ResolvedType::GenericInstance {
-            name,
-            module_source,
-            type_args,
-        } = &resolved
-            && is_eq(trait_name)
-            && let Some(info) = self.lookup_variant_case_in(name, module_source)
-        {
-            let param_map: IndexMap<TypeId, TypeId> = info
-                .type_param_type_ids
-                .iter()
-                .zip(type_args.iter())
-                .map(|(param, arg)| (*param, *arg))
-                .collect();
-            let all_impl = info.cases.iter().all(|c| {
-                if c.payload == TypeTable::UNIT {
-                    return true;
-                }
-                let concrete_tid = param_map.get(&c.payload).copied().unwrap_or(c.payload);
-                self.type_implements_trait(ctx, concrete_tid, trait_name)
-            });
-            if all_impl {
-                return record_request(name, module_source, trait_name);
-            }
-        }
-
-        // `on_bound` serde synthesis intentionally does not extend to
-        // `GenericInstance` (e.g. `Wrapper<Foo>`) — unlike `Eq`/`Ord` above.
-        // Serde's generic-struct `Deserialize` has a documented pre-existing
-        // gap where the per-field machinery doesn't substitute `type_params`
-        // (docs/wep-2026-02-28-serde.md, "Generic struct Deserialize
-        // synthesis"); recording a request here would hit it. Built-in
-        // generics (`List<T>`, `Option<T>`, …) carry their own hand-written
-        // impls regardless, found by the plain lookup below.
 
         // Get the type name and type args for looking up implementations
         let (type_name, type_args) = match &resolved {
@@ -891,7 +689,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             ResolvedType::Ref(inner) => {
                 // References always implement Eq via ref.eq (identity comparison)
-                if is_eq(trait_name) {
+                if is_eq {
                     return true;
                 }
                 // Check for a specific impl Trait for &T first (e.g., impl Inspect for &T)
@@ -903,7 +701,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             ResolvedType::MutRef(inner) => {
                 // Mutable references always implement Eq via ref.eq (identity comparison)
-                if is_eq(trait_name) {
+                if is_eq {
                     return true;
                 }
                 let inner_id = *inner;
@@ -929,23 +727,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let base_id = *base_type;
                 return self.type_implements_trait(ctx, base_id, trait_name);
             }
-            ResolvedType::Flags {
-                name,
-                module_source,
-            } => {
-                // Check for a direct impl on the flags type first (e.g., impl Serialize for Perms)
+            ResolvedType::Flags { name, .. } => {
                 if self.find_trait_impl_for_type(name, trait_name) {
                     return true;
                 }
-                // Flags have no fields (a bitmask over u32), so — like enums
-                // — they are always structurally eligible for on_bound serde
-                // traits. Record a request for the flags type itself (not
-                // just u32) so an actual `Perms::serialize` gets synthesized;
-                // the u32 fallback below still answers every other trait.
-                if is_serde(trait_name) {
-                    return record_request(name, module_source, trait_name);
-                }
-                // Fall back to u32's trait implementation
                 return self.type_implements_trait(ctx, TypeTable::U32, trait_name);
             }
             _ => return false,
@@ -957,6 +742,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Helper to check if there's an impl block for a type implementing a trait
     pub(super) fn find_trait_impl_for_type(&self, type_name: &str, trait_name: &str) -> bool {
         self.find_trait_impl_for_type_with_args(type_name, trait_name, None)
+    }
+
+    pub(super) fn has_real_trait_impl_for_type(&self, type_name: &str, trait_name: &str) -> bool {
+        self.tysys
+            .trait_env
+            .has_any_methodful_impl(type_name, trait_name)
+            || self.blanket_trait_impl_applies(type_name, trait_name)
     }
 
     /// Check if there's a trait impl for a type, with optional type args for bounds checking.
@@ -995,8 +787,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `impl_index` above (the index is built from every loaded module,
         // including this one), so no separate current-module scan is needed.
 
-        // Blanket impl fallback: check `impl<T: Bound> Trait for T` where the
-        // concrete type satisfies the bound.
+        self.blanket_trait_impl_applies(type_name, trait_name)
+    }
+
+    fn blanket_trait_impl_applies(&self, type_name: &str, trait_name: &str) -> bool {
+        let trait_env = self.tysys.trait_env.clone();
         for entry in &trait_env.blanket_impl_index {
             let Some(header) = trait_env.impl_headers.get(entry) else {
                 continue;

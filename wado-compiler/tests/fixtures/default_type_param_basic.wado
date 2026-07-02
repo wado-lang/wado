@@ -1,0 +1,30 @@
+// A generic function type parameter may declare a default (`<T = Fallback>`).
+// When a call site leaves `T` unbound (the argument that would pin it is
+// omitted and filled by its value default), the declared default type must be
+// substituted before monomorphization.
+//
+// Regression: the default was parsed and exempted the call from the
+// "cannot infer type parameter" diagnostic, but never substituted, so the
+// unbound `TypeParam` reached codegen and ICEd:
+// "unsubstituted TypeParam `T` (index 0) reached codegen".
+
+struct Fallback {
+    tag: i32 = 7,
+}
+
+fn pick<T = Fallback>(v: T = Fallback {}) -> T {
+    return v;
+}
+
+test "omitted argument falls back to the default type param" {
+    let v = pick();
+    assert v.tag == 7;
+}
+
+test "an explicit argument still binds the type param" {
+    let n = pick(42);
+    assert n == 42;
+}
+
+__DATA__
+{"test": {}}

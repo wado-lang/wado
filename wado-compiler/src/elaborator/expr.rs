@@ -3065,6 +3065,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
                 (name.clone(), self.current_module_source.clone())
             }
+<<<<<<< HEAD
         } else if let Some(resolved) = self.lookup_struct_in_default_scope(name) {
             // Default-expression fallback (`default_scope_module`, issue
             // #1486): a struct literal inside a foreign default resolves its
@@ -3072,6 +3073,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // struct the declaring module defines and one it imports
             // (`span: Span = Span { ... }` where `Span` comes from a `use`).
             resolved
+||||||| 42894971
+=======
+        } else if let Some(scope_mod) = self.default_scope_module.clone()
+            && scope_mod != self.current_module_source
+            && let Some(info) = self.lookup_struct_fields_in(name, &scope_mod)
+        {
+            // A default expression re-resolved at the call site may construct a
+            // struct private to (or only imported by) the callee's module —
+            // e.g. `fn f(m: Priv = Priv {})` called cross-module. The caller
+            // never names it, so fall back to the callee's module.
+            (info.name.clone(), info.module_source.clone())
+>>>>>>> origin/main
         } else {
             // The struct name is neither locally defined nor imported.
             // Emit a clear diagnostic instead of silently falling back to

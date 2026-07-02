@@ -1,0 +1,22 @@
+// A defaulted type param alongside an effect param and a genuinely
+// unresolvable type param must still produce the "cannot infer" diagnostic —
+// the default-fill must not seed `type_args` in a way that suppresses it.
+
+interface Noop {
+    fn ping();
+}
+
+struct D {
+    n: i32 = 0,
+}
+
+fn f<T = D, U, effect E>(a: T = D {}) -> i32 with E {
+    return 1;
+}
+
+export fn run() {
+    let r = f();
+}
+
+__DATA__
+{"compile_error": "cannot infer type parameter"}
