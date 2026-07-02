@@ -1,0 +1,44 @@
+use {
+    translate_wado_action,
+    rule_value_channel_ready,
+    rule_uses_value_channel,
+    vals_struct_name,
+    wado_type_default,
+} from "./action_translate.wado";
+use { parse } from "./g4/parser.wado";
+
+test "translate rewrites value-channel refs to vals fields" {
+    let g = parse("grammar T;
+r returns [i32 v] : ID { $v = 1; } ;
+").unwrap();
+    let rule = &g.parser_rules[0];
+    let out = translate_wado_action(rule, &g.parser_rules, &" $v = 1; ").unwrap();
+    assert out == " vals.v = 1; ", `out: '{out}'`;
+}
+
+test "translate rejects rule-argument refs (not yet threaded)" {
+    let g = parse("grammar T;
+r[i32 n] : ID { $n = 2; } ;
+").unwrap();
+    let res = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" $n = 2; ");
+    assert res.is_err(), "arg ref must be unsupported for now";
+}
+
+test "value channel readiness and usage detection" {
+    let g = parse("grammar T;
+r returns [i32 v] : ID { $v = 1; } ;
+plain : ID ;
+").unwrap();
+    assert rule_value_channel_ready(&g.parser_rules[0]), "r declares a defaultable channel";
+    assert rule_uses_value_channel(&g.parser_rules[0]), "r's action reads the channel";
+    assert !rule_value_channel_ready(&g.parser_rules[1]), "plain has no channel";
+    assert vals_struct_name(&g.parser_rules[0]) == "RVals", `name: {vals_struct_name(&g.parser_rules[0])}`;
+}
+
+test "wado_type_default covers the corpus surface" {
+    assert wado_type_default(&"i32") matches { Some(_) };
+    assert wado_type_default(&"bool") matches { Some(_) };
+    assert wado_type_default(&"String") matches { Some(_) };
+    assert wado_type_default(&"List<String>") matches { Some(_) };
+    assert wado_type_default(&"SomeUserType") matches { None }, "unknown type has no default";
+}

@@ -236,7 +236,13 @@ Recovery invariants with actions present:
   - [x] 1b-1 — attribute scanner (`attr_scan::find_attr_refs`).
   - [x] 1b-1b — attribute resolution (`attr_resolve::resolve_attrs`, target classification + member validation, loud errors). Not yet wired into emit.
   - [x] 1b-2 — print-style Wado actions execute via `p.emit`, surfaced on `ParseResult.output`, gated by the `execute_actions` generator option (default off; `language = Wado` only). Interleaved by `before_index` in `gen_alt_elements`, guarded on `!p.speculating`. Attribute-referencing bodies raise a loud `UnsupportedAction` diagnostic pending substitution.
-  - [ ] 1b-3 — value channel (`<Rule>Vals` structs threaded through `_parse_<rule>`) + attribute-substitution engine (`ResolvedAttr` → Wado expr over the value channel / context API), so `$x.text` / `$e.v` bodies emit.
+  - [~] 1b-3 — value channel + attribute-substitution engine.
+    - [x] Span-splicing engine (`attr_substitute::splice_attrs`).
+    - [x] Identity translator (`action_translate`): resolves refs and maps the supported subset to Wado exprs; loud error otherwise.
+    - [x] Own-rule value channel: a single-alt rule declaring `returns` / `locals` (defaultable types) gets a `<Rule>Vals` struct + `vals` local; `$v` / `$local` in its actions substitute to `vals.<name>`. Write-then-read across a rule's actions works end to end.
+    - [ ] Cross-rule `$a.v` — needs `_parse_<rule>` to return its vals (return-type change + call-site threading).
+    - [ ] Rule arguments as `_parse_<rule>` params; multi-alt / LR rule value channels.
+    - [ ] Token/label member access (`$x.text`) via the context API.
   - [ ] 1b-4 — runtime context API surface (`p.la`/`lt`/`rule_text`/…), `@init` / `@after` timing.
 - [ ] Phase 2 — predicates in prediction (`SemPredEvalParser` / `SemPredEvalLexer` descriptors are the acceptance suite).
 - [ ] Phase 3 — java2wado for the corpus subset + members translation.

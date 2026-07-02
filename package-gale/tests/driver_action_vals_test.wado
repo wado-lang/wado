@@ -1,0 +1,19 @@
+//! Stage C value channel: a `returns`-declaring rule gets a `<Rule>Vals`
+//! struct + `vals` local; `$v` in actions substitutes to `vals.v`. One action
+//! writes it, a later one reads it back and emits — proving the write is
+//! visible across actions within the rule and that substitution round-trips.
+
+use wv from "./grammars/wado_vals.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false, execute_actions: true },
+            output_dir: "./generated/action_vals",
+        },
+    };
+
+test "value channel: $v written then read across actions" {
+    let result = wv::parse(&"a b");
+    assert result.ok(), "clean parse";
+    assert result.output == "v=5", `output: '{result.output}'`;
+}

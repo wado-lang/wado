@@ -431,6 +431,12 @@ impl GenContext {
         return null;
     }
 
+    /// The parser-rule table (for action attribute resolution, which validates
+    /// cross-rule members against a referenced rule's `returns`).
+    pub fn parser_rules(&self) -> &List<ParserRule> {
+        return &self.parser_rules;
+    }
+
     pub fn first_of_rule(&mut self, name: &String, visiting: &mut List<String>) -> List<String> {
         let cached = self.first_cache.get(*name);
         if let Some(result) = cached {

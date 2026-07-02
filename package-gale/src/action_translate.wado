@@ -1,0 +1,150 @@
+//! Identity translator (`language = Wado`): rewrite an action body's
+//! `$`-references to Wado expressions over the value channel, leaving the
+//! surrounding host text (already Wado) verbatim.
+//!
+//! This slice covers a rule's own value channel — `$v` / `$local` map to
+//! the `vals` struct local emitted in the rule function. References that
+//! need infrastructure not yet emitted (rule arguments, cross-rule
+//! `$a.v`, token members via the context API, specials) return a loud
+//! error naming the reference, so codegen surfaces a diagnostic rather
+//! than emitting invalid code. The supported subset grows as the value
+//! channel and context API land.
+
+use { ParserRule, ActionKind } from "./ir.wado";
+use { resolve_attrs, ResolvedAttr } from "./attr_resolve.wado";
+use { splice_attrs } from "./attr_substitute.wado";
+use { find_attr_refs } from "./attr_scan.wado";
+use { to_pascal_case } from "./ident.wado";
+
+/// Name of a rule's value-channel struct (`e` -> `EVals`).
+pub fn vals_struct_name(rule: &ParserRule) -> String {
+    return `{to_pascal_case(&rule.name)}Vals`;
+}
+
+/// Translate `body` against `rule`'s environment. Returns ready-to-emit
+/// Wado, or an error naming the first unsupported reference.
+pub fn translate_wado_action(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    body: &String,
+) -> Result<String, String> {
+    let resolved = resolve_attrs(body, rule, rules)?;
+    let mut repls: List<String> = [];
+    for let r of &resolved {
+        let e = action_attr_expr(rule, r)?;
+        repls.push(e);
+    }
+    return Result::<String, String>::Ok(splice_attrs(body, &resolved, &repls));
+}
+
+/// The Wado expression a resolved reference becomes, or an error if this
+/// slice cannot emit it yet.
+fn action_attr_expr(rule: &ParserRule, r: &ResolvedAttr) -> Result<String, String> {
+    return match r.target {
+        // Rule returns / locals resolve to the `vals` struct local. Rule
+        // arguments share the `RuleAttr` target but are not threaded as
+        // parameters yet, so they are rejected here.
+        RuleAttr => {
+            if is_arg(rule, &r.name) {
+                Result::<String, String>::Err(`$${r.name}: rule arguments are not yet threaded into the value channel`);
+            } else {
+                Result::<String, String>::Ok(`vals.{r.name}`);
+            }
+        },
+        _ => Result::<String, String>::Err(`$${r.name}: this attribute form is not yet emitted`),
+    };
+}
+
+fn is_arg(rule: &ParserRule, name: &String) -> bool {
+    for let d of &rule.args {
+        if d.name == *name {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn is_channel_field(rule: &ParserRule, name: &String) -> bool {
+    for let d of &rule.returns_decls {
+        if d.name == *name {
+            return true;
+        }
+    }
+    for let d of &rule.locals_decls {
+        if d.name == *name {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Whether any action in the rule references one of its value-channel
+/// (returns / locals) fields, so codegen should emit the `vals` local and
+/// struct. Rules that declare a channel but never read it stay lean.
+pub fn rule_uses_value_channel(rule: &ParserRule) -> bool {
+    if !rule_value_channel_ready(rule) {
+        return false;
+    }
+    for let alt of &rule.alternatives {
+        for let a of &alt.actions {
+            // Only executed actions emit substitutions; predicates are gated
+            // in prediction (Phase 2) and would leave `vals` unused.
+            if !a.kind matches { Action } {
+                continue;
+            }
+            for let r of &find_attr_refs(&a.source.text) {
+                if is_channel_field(rule, &r.name) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+/// Whether every returns / locals type has a Wado default, so a `<Rule>Vals`
+/// struct can be emitted and default-constructed. Args are excluded (not yet
+/// threaded).
+pub fn rule_value_channel_ready(rule: &ParserRule) -> bool {
+    if rule.returns_decls.len() == 0 && rule.locals_decls.len() == 0 {
+        return false;
+    }
+    for let d of &rule.returns_decls {
+        if wado_type_default(&d.type_text) matches { None } {
+            return false;
+        }
+    }
+    for let d of &rule.locals_decls {
+        if wado_type_default(&d.type_text) matches { None } {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// A Wado default-value expression for a value-channel field type, or `None`
+/// if the type has no known default (the rule's value channel is then not
+/// emitted). Covers the corpus surface: numerics, `bool`, `String`, `List`.
+pub fn wado_type_default(type_text: &String) -> Option<String> {
+    let t = type_text.trim();
+    if t == "bool" {
+        return Option::<String>::Some("false");
+    }
+    if t == "String" || t == "str" {
+        return Option::<String>::Some("\"\"");
+    }
+    if t.starts_with("List") || t.starts_with("[") {
+        return Option::<String>::Some("[]");
+    }
+    if is_numeric_type(&t) {
+        return Option::<String>::Some("0");
+    }
+    return null;
+}
+
+fn is_numeric_type(t: &String) -> bool {
+    return *t == "i8" || *t == "i16" || *t == "i32" || *t == "i64"
+        || *t == "u8" || *t == "u16" || *t == "u32" || *t == "u64"
+        || *t == "f32" || *t == "f64" || *t == "usize" || *t == "isize"
+        || *t == "int";
+}

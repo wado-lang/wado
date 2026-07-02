@@ -8,6 +8,7 @@ use {
     AltAction,
     ActionKind,
     ActionSource,
+    AttrDecl,
 } from "./ir.wado";
 use {
     rule_type_name,
@@ -102,6 +103,13 @@ use {
     DiagnosticKind,
 } from "./gir.wado";
 use { find_attr_refs } from "./attr_scan.wado";
+use {
+    translate_wado_action,
+    rule_value_channel_ready,
+    rule_uses_value_channel,
+    vals_struct_name,
+    wado_type_default,
+} from "./action_translate.wado";
 use { unwrap_label } from "./lr_util.wado";
 use { compute_shapes_for_alt, shape_lookahead_signature_for_alt, rebind_op_field } from "./lower.wado";
 
@@ -149,6 +157,9 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // `Rule::Simple` / `MultiAlt` / `LeftRecursive` instead of
     // recomputing the classification at every emit site.
     gen_parser_struct(w, ctx.is_trace(), ctx.needs_atn(), ctx.emit_actions());
+    if ctx.emit_actions() {
+        gen_vals_structs(w, grammar, ctx);
+    }
     if ctx.is_trace() {
         gen_trace_helpers(w);
     }
@@ -282,6 +293,42 @@ fn emit_consume_kind_return(w: &mut CodeWriter) {
 fn emit_diag_prologue(w: &mut CodeWriter) {
     w.line(&"if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }");
     w.line(&"let lc = line_col(self.tokens.chars, span.start);");
+}
+
+/// Whether a rule gets a value-channel `vals` struct + local emitted: a
+/// single-alt (non-LR) rule whose actions read its returns / locals. The
+/// same predicate gates the struct definition, the `let mut vals` local,
+/// and action substitution, so the three stay in lockstep.
+fn rule_emits_vals(rule: &ParserRule) -> bool {
+    return rule.alternatives.len() == 1 && rule_uses_value_channel(rule);
+}
+
+/// Emit a `<Rule>Vals` struct per rule that uses its value channel. Fields
+/// are the rule's returns then locals, each with a defaulted Wado type, so
+/// the rule function can default-construct `<Rule>Vals {}`.
+fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar, ctx: &mut GenContext) {
+    let _ = ctx;
+    for let rule of &grammar.parser_rules {
+        if !rule_emits_vals(rule) {
+            continue;
+        }
+        w.begin(&`struct {vals_struct_name(rule)}`);
+        gen_vals_fields(w, &rule.returns_decls);
+        gen_vals_fields(w, &rule.locals_decls);
+        w.end();
+        w.blank();
+    }
+}
+
+fn gen_vals_fields(w: &mut CodeWriter, decls: &List<AttrDecl>) {
+    for let d of decls {
+        let def = match wado_type_default(&d.type_text) {
+            Some(v) => v,
+            // `rule_value_channel_ready` already excluded no-default types.
+            None => panic("gen_vals_fields: no default for value-channel type"),
+        };
+        w.line(&`{d.name}: {d.type_text} = {def},`);
+    }
 }
 
 fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_actions: bool) {
@@ -2414,6 +2461,10 @@ fn gen_parse_fn_simple_named(
     f.set_return_type(&rule_result_type());
     f.emit_begin(w);
     w.line(&"let start = p.peek_start();");
+    // Value channel: a `vals` local the rule's actions read/write via `$v`.
+    if ctx.emit_actions() && rule_emits_vals(rule) {
+        w.line(&`let mut vals = {vals_struct_name(rule)} \{\};`);
+    }
     let body = rule_alt_body(lowered_rule, 0).unwrap();
     gen_alt_body(w, &type_name, null, null, &rule.alternatives[0], body, 0, rule_alts_labeled(&rule.alternatives), ctx);
     w.end();
@@ -2908,16 +2959,31 @@ fn gen_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before: i32
 /// substitution, which is not yet emitted; a body that carries any is a
 /// loud `UnsupportedAction` diagnostic rather than emitting invalid `$x`.
 fn gen_action_body(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext) {
-    if find_attr_refs(&src.text).len() > 0 {
+    if find_attr_refs(&src.text).len() == 0 {
+        emit_action_stmt(w, &src.text);
+        return;
+    }
+    // The body references attributes: substitute against the current rule's
+    // value channel. Only a single-alt rule that emits a `vals` local can be
+    // served today; anything else is a loud diagnostic.
+    let ridx = ctx.current_rule_index();
+    if ridx < 0 || !rule_emits_vals(&ctx.parser_rules()[ridx]) {
         ctx.warn(
             &`action {src.action_id}`,
             DiagnosticKind::UnsupportedAction,
-            `action {src.action_id} references attributes; value-channel substitution is not yet emitted`,
+            `action {src.action_id} references attributes but no value channel is available here`,
         );
         return;
     }
+    match translate_wado_action(&ctx.parser_rules()[ridx], ctx.parser_rules(), &src.text) {
+        Ok(code) => emit_action_stmt(w, &code),
+        Err(msg) => ctx.warn(&`action {src.action_id}`, DiagnosticKind::UnsupportedAction, msg),
+    }
+}
+
+fn emit_action_stmt(w: &mut CodeWriter, code: &String) {
     w.begin(&"if !p.speculating");
-    w.line(&src.text);
+    w.line(code);
     w.end();
 }
 
