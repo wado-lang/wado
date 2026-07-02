@@ -1,7 +1,7 @@
 use {
     translate_wado_action,
     rule_value_channel_ready,
-    rule_uses_value_channel,
+    rule_returns_vals,
     vals_struct_name,
     wado_type_default,
 } from "./action_translate.wado";
@@ -12,26 +12,47 @@ test "translate rewrites value-channel refs to vals fields" {
 r returns [i32 v] : ID { $v = 1; } ;
 ").unwrap();
     let rule = &g.parser_rules[0];
-    let out = translate_wado_action(rule, &g.parser_rules, &" $v = 1; ").unwrap();
+    let out = translate_wado_action(rule, &g.parser_rules, &" $v = 1; ", true).unwrap();
     assert out == " vals.v = 1; ", `out: '{out}'`;
+}
+
+test "translate rewrites a cross-rule $a.v to a child binding" {
+    let g = parse("grammar T;
+r : a=e { print($a.v); } ;
+e returns [i32 v] : ID ;
+").unwrap();
+    // `r` has no own channel, but `$a.v` reads child `e`'s returned vals via
+    // the `a` binding — no `vals` local needed in `r`.
+    let out = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" print($a.v); ", false).unwrap();
+    assert out == " print(a.v); ", `out: '{out}'`;
+}
+
+test "translate rejects a value-channel ref with no vals in scope" {
+    let g = parse("grammar T;
+r returns [i32 v] : ID { $v = 1; } ;
+").unwrap();
+    let res = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" $v = 1; ", false);
+    assert res.is_err(), "$v needs vals in scope";
 }
 
 test "translate rejects rule-argument refs (not yet threaded)" {
     let g = parse("grammar T;
 r[i32 n] : ID { $n = 2; } ;
 ").unwrap();
-    let res = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" $n = 2; ");
+    let res = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" $n = 2; ", true);
     assert res.is_err(), "arg ref must be unsupported for now";
 }
 
-test "value channel readiness and usage detection" {
+test "value channel readiness and return-vals detection" {
     let g = parse("grammar T;
 r returns [i32 v] : ID { $v = 1; } ;
+multi returns [i32 v] : ID | INT ;
 plain : ID ;
 ").unwrap();
     assert rule_value_channel_ready(&g.parser_rules[0]), "r declares a defaultable channel";
-    assert rule_uses_value_channel(&g.parser_rules[0]), "r's action reads the channel";
-    assert !rule_value_channel_ready(&g.parser_rules[1]), "plain has no channel";
+    assert rule_returns_vals(&g.parser_rules[0]), "single-alt r returns vals";
+    assert !rule_returns_vals(&g.parser_rules[1]), "multi-alt rule does not return vals yet";
+    assert !rule_value_channel_ready(&g.parser_rules[2]), "plain has no channel";
     assert vals_struct_name(&g.parser_rules[0]) == "RVals", `name: {vals_struct_name(&g.parser_rules[0])}`;
 }
 

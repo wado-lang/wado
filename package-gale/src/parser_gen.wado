@@ -105,8 +105,7 @@ use {
 use { find_attr_refs } from "./attr_scan.wado";
 use {
     translate_wado_action,
-    rule_value_channel_ready,
-    rule_uses_value_channel,
+    rule_returns_vals,
     vals_struct_name,
     wado_type_default,
 } from "./action_translate.wado";
@@ -200,7 +199,7 @@ fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenContex
     w.end();
     w.blank();
     for let rule of &lowered.parser_rules {
-        gen_parse_rule_entry(w, rule);
+        gen_parse_rule_entry(w, rule, ctx);
     }
 }
 
@@ -247,12 +246,30 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
 /// Emit one `pub fn parse_<rule>(input) -> ParseResult` entry as a thin wrapper
 /// over `_run_parse_entry`. The closure defers to `_parse_<rule>(p)` so a follow-gated
 /// or LR entry's defaulted `follow` / `min_prec` arguments fill in.
-fn gen_parse_rule_entry(w: &mut CodeWriter, rule: &Rule) {
+fn gen_parse_rule_entry(w: &mut CodeWriter, rule: &Rule, ctx: &GenContext) {
     let header = rule_header(rule);
     w.begin(&`pub fn parse_{header.snake_name}(input: &String, max_errors: i32 = i32::MAX) -> ParseResult`);
-    w.line(&`return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_{header.snake_name}(p));`);
+    // A value-channel entry returns `<Rule>Vals`; the closure must yield `()`
+    // to match `_run_parse_entry`'s `fn(&mut Parser)`, so discard it.
+    let call = `_parse_{header.snake_name}(p)`;
+    let entry = if entry_returns_vals(ctx, &header.name) {
+        `|p: &mut Parser| \{ let _ = {call}; \}`;
+    } else {
+        `|p: &mut Parser| {call}`;
+    };
+    w.line(&`return _run_parse_entry(input, max_errors, {entry});`);
     w.end();
     w.blank();
+}
+
+fn entry_returns_vals(ctx: &GenContext, rule_name: &String) -> bool {
+    if !ctx.emit_actions() {
+        return false;
+    }
+    return match ctx.find_rule(rule_name) {
+        Some(r) => rule_returns_vals(r),
+        None => false,
+    };
 }
 
 fn join_kinds(kinds: &List<String>) -> String {
@@ -295,21 +312,13 @@ fn emit_diag_prologue(w: &mut CodeWriter) {
     w.line(&"let lc = line_col(self.tokens.chars, span.start);");
 }
 
-/// Whether a rule gets a value-channel `vals` struct + local emitted: a
-/// single-alt (non-LR) rule whose actions read its returns / locals. The
-/// same predicate gates the struct definition, the `let mut vals` local,
-/// and action substitution, so the three stay in lockstep.
-fn rule_emits_vals(rule: &ParserRule) -> bool {
-    return rule.alternatives.len() == 1 && rule_uses_value_channel(rule);
-}
-
-/// Emit a `<Rule>Vals` struct per rule that uses its value channel. Fields
+/// Emit a `<Rule>Vals` struct per rule that exposes a value channel. Fields
 /// are the rule's returns then locals, each with a defaulted Wado type, so
 /// the rule function can default-construct `<Rule>Vals {}`.
 fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar, ctx: &mut GenContext) {
     let _ = ctx;
     for let rule of &grammar.parser_rules {
-        if !rule_emits_vals(rule) {
+        if !rule_returns_vals(rule) {
             continue;
         }
         w.begin(&`struct {vals_struct_name(rule)}`);
@@ -2243,6 +2252,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
         ctx.emit_follow(),
         ctx.is_trace(),
         ctx.needs_atn(),
+        &rule_result_type_for(rule, ctx),
     );
 }
 
@@ -2364,7 +2374,11 @@ fn gen_rule_entry_wrapper(
     emit_follow: bool,
     trace: bool,
     needs_atn: bool,
+    result_type: &String,
 ) {
+    // A value-channel rule returns `<Rule>Vals`; the wrapper captures the
+    // inner body's result and returns it after closing the node.
+    let returns_vals = *result_type != "()";
     let mut f = FnSpec::new(outer_name);
     f.add_param(&"p", &"&mut Parser");
     // `follow` precedes `min_prec` so a non-precedence call site can pass
@@ -2381,13 +2395,17 @@ fn gen_rule_entry_wrapper(
             default_value: Option::Some("0"),
         });
     }
-    f.set_return_type(&"()");
+    f.set_return_type(result_type);
     f.emit_begin(w);
     let lit = str_lit(*rule_display);
     // Already unwinding from a deeper failure: no-op so the descent collapses
     // to the entry without opening spurious nodes (the infallible analogue of a
     // `?` that would have skipped this call entirely).
-    w.line(&"if p.recovering { return; }");
+    if returns_vals {
+        w.line(&`if p.recovering \{ return {*result_type} \{\}; \}`);
+    } else {
+        w.line(&"if p.recovering { return; }");
+    }
     // Forward `follow`/`min_prec` so the inner body's tail-greedy gate sees
     // the caller's continuation.
     let fsep = if emit_follow { ", follow" } else { "" };
@@ -2412,7 +2430,11 @@ fn gen_rule_entry_wrapper(
         w.line(&`let _start = p.peek_start();`);
         w.line(&`p.b.start_node({rk}, _start);`);
     }
-    w.line(&`{call};`);
+    if returns_vals {
+        w.line(&`let __vals = {call};`);
+    } else {
+        w.line(&`{call};`);
+    }
     if !takes_min_prec {
         w.line(&"p.b.finish_node(p.last_end());");
     }
@@ -2430,6 +2452,9 @@ fn gen_rule_entry_wrapper(
         w.line(&`trace_ok(p, &{lit});`);
     }
     w.end();
+    if returns_vals {
+        w.line(&"return __vals;");
+    }
     w.end();
     w.blank();
 }
@@ -2458,11 +2483,12 @@ fn gen_parse_fn_simple_named(
     if ctx.emit_follow() {
         add_follow_param(&mut f);
     }
-    f.set_return_type(&rule_result_type());
+    f.set_return_type(&rule_result_type_for(rule, ctx));
     f.emit_begin(w);
     w.line(&"let start = p.peek_start();");
-    // Value channel: a `vals` local the rule's actions read/write via `$v`.
-    if ctx.emit_actions() && rule_emits_vals(rule) {
+    // Value channel: a `vals` local the rule's actions read/write via `$v`,
+    // returned so callers can read `$a.v`.
+    if ctx.emit_actions() && rule_returns_vals(rule) {
         w.line(&`let mut vals = {vals_struct_name(rule)} \{\};`);
     }
     // `@init` runs at rule entry, before the first decision (after `vals`
@@ -2476,6 +2502,15 @@ fn gen_parse_fn_simple_named(
     gen_alt_body(w, &type_name, null, null, &rule.alternatives[0], body, 0, rule_alts_labeled(&rule.alternatives), &rule.after_action, ctx);
     w.end();
     w.blank();
+}
+
+/// A rule's inner / wrapper result type: `<Rule>Vals` when the rule exposes a
+/// value channel (action execution on), else `()`.
+fn rule_result_type_for(rule: &ParserRule, ctx: &GenContext) -> String {
+    if ctx.emit_actions() && rule_returns_vals(rule) {
+        return vals_struct_name(rule);
+    }
+    return rule_result_type();
 }
 
 
@@ -2799,8 +2834,24 @@ fn gen_alt_body(
 
     // the alt's terminals / subtrees already appended to the
     // builder via the Parser methods, so there is no struct to assemble — the
-    // rule wrapper's `finish_node` closes the node.
-    w.line(&"return;");
+    // rule wrapper's `finish_node` closes the node. A value-channel rule
+    // returns its `vals`; every other rule returns `()`.
+    if ctx.emit_actions() && current_rule_returns_vals(ctx) {
+        w.line(&"return vals;");
+    } else {
+        w.line(&"return;");
+    }
+}
+
+/// Whether the rule currently being emitted exposes a value channel (so its
+/// body returns `vals`). Reads `GenContext.current_rule_index`, set at each
+/// rule's emit entry.
+fn current_rule_returns_vals(ctx: &GenContext) -> bool {
+    let ridx = ctx.current_rule_index();
+    if ridx < 0 {
+        return false;
+    }
+    return rule_returns_vals(&ctx.parser_rules()[ridx]);
 }
 
 fn gen_multi_alt_body(
@@ -2972,27 +3023,26 @@ fn gen_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before: i32
 /// the host text is Wado, so it passes through verbatim inside a block,
 /// with `p` in scope as the current `Parser`. Actions must not observably
 /// run inside a speculative attempt, so the body is guarded on
-/// `!p.speculating`. Attribute references need the value-channel
-/// substitution, which is not yet emitted; a body that carries any is a
-/// loud `UnsupportedAction` diagnostic rather than emitting invalid `$x`.
+/// `!p.speculating`. `$`-references are substituted against the current
+/// rule's environment — its own `vals` local (`$v`) and child bindings
+/// (`$a.v`). A reference the translator cannot emit yet is a loud
+/// `UnsupportedAction` diagnostic rather than invalid `$x`.
 fn gen_action_body(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext) {
     if find_attr_refs(&src.text).len() == 0 {
         emit_action_stmt(w, &src.text);
         return;
     }
-    // The body references attributes: substitute against the current rule's
-    // value channel. Only a single-alt rule that emits a `vals` local can be
-    // served today; anything else is a loud diagnostic.
     let ridx = ctx.current_rule_index();
-    if ridx < 0 || !rule_emits_vals(&ctx.parser_rules()[ridx]) {
+    if ridx < 0 {
         ctx.warn(
             &`action {src.action_id}`,
             DiagnosticKind::UnsupportedAction,
-            `action {src.action_id} references attributes but no value channel is available here`,
+            `action {src.action_id} references attributes outside a rule context`,
         );
         return;
     }
-    match translate_wado_action(&ctx.parser_rules()[ridx], ctx.parser_rules(), &src.text) {
+    let vals_in_scope = rule_returns_vals(&ctx.parser_rules()[ridx]);
+    match translate_wado_action(&ctx.parser_rules()[ridx], ctx.parser_rules(), &src.text, vals_in_scope) {
         Ok(code) => emit_action_stmt(w, &code),
         Err(msg) => ctx.warn(&`action {src.action_id}`, DiagnosticKind::UnsupportedAction, msg),
     }

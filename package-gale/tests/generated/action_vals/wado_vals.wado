@@ -1440,7 +1440,7 @@ fn scan_r(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn _parse_r__inner(p: &mut Parser) -> () {
+fn _parse_r__inner(p: &mut Parser) -> RVals {
     let start = p.peek_start();
     let mut vals = RVals {};
     let a = p.expect(TK_A, &SYNC_0);
@@ -1451,18 +1451,19 @@ fn _parse_r__inner(p: &mut Parser) -> () {
     if !p.speculating {
          p.emit(`v={vals.v}`); 
     }
-    return;
+    return vals;
 }
 
-fn _parse_r(p: &mut Parser) -> () {
-    if p.recovering { return; }
+fn _parse_r(p: &mut Parser) -> RVals {
+    if p.recovering { return RVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_R, _start);
-    _parse_r__inner(p);
+    let __vals = _parse_r__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("r");
     }
+    return __vals;
 }
 
 fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
@@ -1487,7 +1488,7 @@ pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 }
 
 pub fn parse_r(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_r(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_r(p); });
 }
 
 pub fn to_string_tree(result: &ParseResult) -> String {

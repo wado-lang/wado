@@ -1,0 +1,20 @@
+//! Stage C cross-rule value channel: `$a.v` / `$b.v` read the returned vals
+//! of labeled child rules. This is the corpus's LR-binary `$a.v * $b.v`
+//! shape — the child rule `e` returns its `vals`, and the parent's call sites
+//! bind them as `let a = _parse_e(p)`, so `$a.v` substitutes to `a.v`.
+
+use wc from "./grammars/wado_cross_vals.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false, execute_actions: true },
+            output_dir: "./generated/action_cross_vals",
+        },
+    };
+
+test "cross-rule $a.v + $b.v reads child returns" {
+    let result = wc::parse(&"3 + 4");
+    assert result.ok(), "clean parse";
+    // Each `e` sets $v = 1, so $a.v + $b.v == 2.
+    assert result.output == "2", `output: '{result.output}'`;
+}

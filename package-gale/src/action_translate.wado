@@ -10,10 +10,9 @@
 //! than emitting invalid code. The supported subset grows as the value
 //! channel and context API land.
 
-use { ParserRule, ActionKind } from "./ir.wado";
+use { ParserRule } from "./ir.wado";
 use { resolve_attrs, ResolvedAttr } from "./attr_resolve.wado";
 use { splice_attrs } from "./attr_substitute.wado";
-use { find_attr_refs } from "./attr_scan.wado";
 use { to_pascal_case } from "./ident.wado";
 
 /// Name of a rule's value-channel struct (`e` -> `EVals`).
@@ -21,17 +20,20 @@ pub fn vals_struct_name(rule: &ParserRule) -> String {
     return `{to_pascal_case(&rule.name)}Vals`;
 }
 
-/// Translate `body` against `rule`'s environment. Returns ready-to-emit
-/// Wado, or an error naming the first unsupported reference.
+/// Translate `body` against `rule`'s environment. `vals_in_scope` is true
+/// when the enclosing rule emits a `vals` local (so `$v` / `$local` can be
+/// served). Returns ready-to-emit Wado, or an error naming the first
+/// unsupported reference.
 pub fn translate_wado_action(
     rule: &ParserRule,
     rules: &List<ParserRule>,
     body: &String,
+    vals_in_scope: bool,
 ) -> Result<String, String> {
     let resolved = resolve_attrs(body, rule, rules)?;
     let mut repls: List<String> = [];
     for let r of &resolved {
-        let e = action_attr_expr(rule, r)?;
+        let e = action_attr_expr(rule, r, vals_in_scope)?;
         repls.push(e);
     }
     return Result::<String, String>::Ok(splice_attrs(body, &resolved, &repls));
@@ -39,20 +41,49 @@ pub fn translate_wado_action(
 
 /// The Wado expression a resolved reference becomes, or an error if this
 /// slice cannot emit it yet.
-fn action_attr_expr(rule: &ParserRule, r: &ResolvedAttr) -> Result<String, String> {
+fn action_attr_expr(rule: &ParserRule, r: &ResolvedAttr, vals_in_scope: bool) -> Result<String, String> {
     return match r.target {
-        // Rule returns / locals resolve to the `vals` struct local. Rule
-        // arguments share the `RuleAttr` target but are not threaded as
-        // parameters yet, so they are rejected here.
+        // Rule returns / locals resolve to the enclosing rule's `vals` local.
+        // Rule arguments share the `RuleAttr` target but are not threaded as
+        // parameters yet.
         RuleAttr => {
             if is_arg(rule, &r.name) {
                 Result::<String, String>::Err(`$${r.name}: rule arguments are not yet threaded into the value channel`);
+            } else if !vals_in_scope {
+                Result::<String, String>::Err(`$${r.name}: no value channel in the enclosing rule`);
             } else {
                 Result::<String, String>::Ok(`vals.{r.name}`);
             }
         },
+        // A labeled / named child rule reference: the call site bound its
+        // returned vals as `let <name> = _parse_<rule>(p)`, so a returns
+        // field reads `<name>.<field>`. CST pseudo-members (.text/.ctx/
+        // .start/.stop) need tree access not yet emitted.
+        RuleLabel => rule_member_expr(r),
+        RuleRef => rule_member_expr(r),
         _ => Result::<String, String>::Err(`$${r.name}: this attribute form is not yet emitted`),
     };
+}
+
+fn rule_member_expr(r: &ResolvedAttr) -> Result<String, String> {
+    return match &r.member {
+        // `resolve_attrs` already validated the member is a returns field or a
+        // pseudo-member; reject the four pseudo-members (tree access), so the
+        // rest are the target rule's returns fields.
+        Some(m) => {
+            if is_pseudo_member(m) {
+                Result::<String, String>::Err(`$${r.name}.{*m}: CST pseudo-members are not yet emitted`);
+            } else {
+                Result::<String, String>::Ok(`{r.name}.{*m}`);
+            }
+        },
+        // A bare `$a` is the child's vals struct itself.
+        None => Result::<String, String>::Ok(`{r.name}`),
+    };
+}
+
+fn is_pseudo_member(m: &String) -> bool {
+    return *m == "text" || *m == "ctx" || *m == "start" || *m == "stop";
 }
 
 fn is_arg(rule: &ParserRule, name: &String) -> bool {
@@ -64,59 +95,14 @@ fn is_arg(rule: &ParserRule, name: &String) -> bool {
     return false;
 }
 
-fn is_channel_field(rule: &ParserRule, name: &String) -> bool {
-    for let d of &rule.returns_decls {
-        if d.name == *name {
-            return true;
-        }
-    }
-    for let d of &rule.locals_decls {
-        if d.name == *name {
-            return true;
-        }
-    }
-    return false;
-}
-
-/// Whether any action in the rule references one of its value-channel
-/// (returns / locals) fields, so codegen should emit the `vals` local and
-/// struct. Rules that declare a channel but never read it stay lean.
-pub fn rule_uses_value_channel(rule: &ParserRule) -> bool {
-    if !rule_value_channel_ready(rule) {
-        return false;
-    }
-    for let alt of &rule.alternatives {
-        for let a of &alt.actions {
-            // Only executed actions emit substitutions; predicates are gated
-            // in prediction (Phase 2) and would leave `vals` unused.
-            if !a.kind matches { Action } {
-                continue;
-            }
-            if body_reads_channel(rule, &a.source.text) {
-                return true;
-            }
-        }
-    }
-    if let Some(a) = &rule.init_action {
-        if body_reads_channel(rule, &a.text) {
-            return true;
-        }
-    }
-    if let Some(a) = &rule.after_action {
-        if body_reads_channel(rule, &a.text) {
-            return true;
-        }
-    }
-    return false;
-}
-
-fn body_reads_channel(rule: &ParserRule, body: &String) -> bool {
-    for let r of &find_attr_refs(body) {
-        if is_channel_field(rule, &r.name) {
-            return true;
-        }
-    }
-    return false;
+/// Whether a rule exposes a value channel to callers: a single-alt (non-LR)
+/// rule declaring a defaultable `returns` / `locals`. Such a rule's
+/// `_parse_<rule>` returns `<Rule>Vals`, its body gets a `vals` local, and a
+/// caller's `$a.v` reads the returned struct. This is the return-type
+/// decision — independent of whether the rule's own actions read the channel,
+/// since a caller might.
+pub fn rule_returns_vals(rule: &ParserRule) -> bool {
+    return rule.alternatives.len() == 1 && rule_value_channel_ready(rule);
 }
 
 /// Whether every returns / locals type has a Wado default, so a `<Rule>Vals`
