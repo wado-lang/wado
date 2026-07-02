@@ -147,6 +147,17 @@ test "expand: composite members and invocation helpers" {
     assert out.contains("{this.foo();}"), `got '{out}'`;
 }
 
+test "expand: apostrophe in char class does not swallow a later template" {
+    let g = "Q : [a-z'] ;\nr : ID {<writeln(\"$x\")>} ;";
+    assert expand(&g) == "Q : [a-z'] ;\nr : ID {System.out.println($x);} ;", `got '{expand(&g)}'`;
+}
+
+test "expand: subtemplate argument tracks nested braces" {
+    let g = "r : ID {<AssertIsList({ if (x) { y; } })>} ;";
+    let expected = "r : ID {java.util.List<?> __assertIsList =  if (x) { y; } ;} ;";
+    assert expand(&g) == expected, `got '{expand(&g)}'`;
+}
+
 test "expand: TokenStartColumnEquals lexer predicate" {
     let g = "INDENT : [ \\t]+ { <TokenStartColumnEquals(\"0\")> }? ;";
     let expected = "INDENT : [ \\t]+ { _tokenStartCharPositionInLine == 0 }? ;";

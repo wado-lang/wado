@@ -1676,14 +1676,34 @@ fn intern_mode(mode_names: &mut List<String>, name: &String) -> i32 {
 fn action_language_from_options(options: &List<GrammarOption>) -> ActionLanguage {
     for let opt of options {
         if opt.name == "language" {
-            if let Ident(v) = &opt.value {
-                if *v == "Java" { return ActionLanguage::Java; }
-                if *v == "Wado" || *v == "wado" { return ActionLanguage::Wado; }
-                return ActionLanguage::Other(*v);
+            // The value is a bare identifier conventionally (`language = Java`)
+            // but ANTLR4's optionValue also admits a string literal
+            // (`language = "Java"`); accept both. Match case-insensitively so
+            // `java` / `JAVA` classify as Java, not Other.
+            let name = match &opt.value {
+                Ident(v) => Option::<String>::Some(*v),
+                Str(v) => Option::<String>::Some(*v),
+                Qualified(_) => null,
+                Int(_) => null,
+                Action(_) => null,
+            };
+            if let Some(v) = name {
+                let lower = to_lower_ascii(&v);
+                if lower == "java" { return ActionLanguage::Java; }
+                if lower == "wado" { return ActionLanguage::Wado; }
+                return ActionLanguage::Other(v);
             }
         }
     }
     return ActionLanguage::Java;
+}
+
+fn to_lower_ascii(s: &String) -> String {
+    let mut out = String::with_capacity(s.len());
+    for let c of s.chars() {
+        out.push(c.to_ascii_lowercase());
+    }
+    return out;
 }
 
 /// Captured `catch` / `finally` clauses following a rule body.
@@ -1741,11 +1761,26 @@ fn parse_attr_decls(body: &String, list_span: Span) -> List<AttrDecl> {
     return out;
 }
 
-/// Split one declaration segment ("int v", "List<String> ignored") into
-/// (type_text, name). `null` when the segment is blank.
+/// Split one declaration segment ("int v", "List<String> ignored",
+/// "int i = 0") into (type_text, name). `null` when the segment is blank.
+/// An initializer (`= expr`, legal in ANTLR4 `returns`/`locals`/args) is
+/// dropped: the declaration is everything before the first assignment `=`.
 fn split_attr_decl(seg: &String, span: Span) -> Option<AttrDecl> {
     let chars: List<char> = seg.chars().collect();
-    let n = chars.len();
+    let full = chars.len();
+    // Cut at the first assignment `=` (not `==` / `<=` / `>=` / `!=`), so
+    // "int i = 0" declares `i`, not the initializer's trailing token.
+    let mut n = full;
+    for let mut k = 0; k < full; k += 1 {
+        if chars[k] == '=' {
+            let prev_cmp = k > 0 && (chars[k - 1] == '!' || chars[k - 1] == '<' || chars[k - 1] == '>' || chars[k - 1] == '=');
+            let next_eq = k + 1 < full && chars[k + 1] == '=';
+            if !prev_cmp && !next_eq {
+                n = k;
+                break;
+            }
+        }
+    }
     // Trim trailing whitespace, then take the trailing identifier run as name.
     let mut end = n;
     while end > 0 && is_ws_char(chars[end - 1]) {

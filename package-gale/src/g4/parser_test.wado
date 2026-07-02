@@ -565,6 +565,32 @@ expr[int _p, String name] returns [int v, List<String> ignored] locals [int i] :
     assert r.throws.len() == 0;
 }
 
+test "prequel attr decls with initializers" {
+    let input = "grammar Test;
+r returns [int i = 0, String s = \"x\"] locals [int n = f(1, 2)] : ID ;";
+    let g = parse(input).unwrap();
+    let r = &g.parser_rules[0];
+    assert r.returns_decls.len() == 2, `returns: {r.returns_decls.len()}`;
+    assert r.returns_decls[0].type_text == "int" && r.returns_decls[0].name == "i",
+        `ret0: {r.returns_decls[0].type_text}/{r.returns_decls[0].name}`;
+    assert r.returns_decls[1].type_text == "String" && r.returns_decls[1].name == "s",
+        `ret1: {r.returns_decls[1].type_text}/{r.returns_decls[1].name}`;
+    // The comma inside the initializer f(1, 2) must not split the decl.
+    assert r.locals_decls.len() == 1, `locals: {r.locals_decls.len()}`;
+    assert r.locals_decls[0].type_text == "int" && r.locals_decls[0].name == "n",
+        `loc0: {r.locals_decls[0].type_text}/{r.locals_decls[0].name}`;
+}
+
+test "action language from string-literal option value" {
+    let g = parse("grammar Test;\noptions { language = 'Wado'; }\nr : ID ;").unwrap();
+    assert g.action_language matches { Wado };
+}
+
+test "action language matches Java case-insensitively" {
+    let g = parse("grammar Test;\noptions { language = java; }\nr : ID ;").unwrap();
+    assert g.action_language matches { Java };
+}
+
 test "prequel throws list retained" {
     let input = "grammar Test;
 expr throws E1, pkg.E2 : ID ;";
