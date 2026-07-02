@@ -281,7 +281,13 @@ the compiled fast path:**
    either right or fails a parse with no viable reading — so such a
    grammar carries no ATN at all. A parser-side `.` / `~X` makes FOLLOW
    under-approximate (unenumerable FIRST), so those grammars route every
-   conflict conservatively. `grammar_has_at_end_conflict` (run before
+   conflict conservatively. **Soundness hinges on FOLLOW never
+   under-approximating otherwise**: the FOLLOW walk uses the *deep* suffix
+   FIRST (`deep_first_of_elements_from`), which flows through a nullable
+   `RuleRef` / `Group` in the caller's suffix — a shallow walk that stopped
+   at `nb` in `s : x nb 'c'` (`nb : 'w'?`) would drop `'c'` from FOLLOW(x),
+   wrongly keep the tournament, and reject the valid input `a b c`.
+   `grammar_has_at_end_conflict` (run before
    `build_atn`) detects a routed conflict and forces the ATN build; the
    rule emitter applies the same predicate per site and routes the
    decision through `atn_predict_with_stack` keyed on the rule body
@@ -293,7 +299,8 @@ the compiled fast path:**
    shows the tournament resolving it wrongly. Regression fixtures:
    `tests/grammars/ll_longest_vs_context.g4` (routes),
    `tests/grammars/ll_at_end_follow_disjoint.g4` (stays static),
-   `tests/grammars/ll_optional_non_greedy_multi.g4`.
+   `tests/grammars/ll_at_end_nullable_gap.g4` (routes via FOLLOW through a
+   nullable rule), `tests/grammars/ll_optional_non_greedy_multi.g4`.
 
 **ATN embedding.** The reachable whole-grammar ATN is serialized to a
 packed byte blob and decoded once, at parser construction, into the

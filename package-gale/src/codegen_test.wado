@@ -1286,6 +1286,27 @@ test "FOLLOW-disjoint at-end conflict keeps the static tournament" {
     assert !str_contains(&output, &"global ATN_SIM");
 }
 
+// The caller presents the divergence token 'c' AFTER x through a *nullable*
+// rule `nb` (`nb : 'w'?`), so 'c' is genuinely in FOLLOW(x) and the conflict
+// is context-dependent — it must route to the ATN. FOLLOW must flow through
+// the nullable RuleRef: a shallow suffix-FIRST walk that stops at `nb` drops
+// 'c', wrongly keeps the static tournament, and misparses `a b c`.
+global AT_END_NULLABLE_GAP_G4: String = "
+grammar T;
+s : x nb 'c' ;
+x : 'a' 'b' | 'a' 'b' 'c' ;
+nb : 'w'? ;
+WS : ' ' -> skip ;
+";
+
+test "at-end conflict routes through the ATN when a nullable rule hides the caller token" {
+    let mut g = parse(AT_END_NULLABLE_GAP_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_x__inner(");
+    assert str_contains(&body, &"let _atn_alt = atn_predict_with_stack(&ATN_SIM,");
+    assert !str_contains(&body, &"_sd_best_i");
+}
+
 // A wildcard caller suffix (`s : x . ;`) admits any token, but
 // `first_of_element(Wildcard)` cannot enumerate that, so the computed FOLLOW
 // under-approximates. The refinement must detect the open-FIRST element and
