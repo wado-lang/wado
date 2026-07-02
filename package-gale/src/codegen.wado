@@ -114,7 +114,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
     let mut ctx = GenContext::new(&grammar.parser_rules, &lit_tokens);
     ctx.set_trace(options.trace);
-    ctx.set_emit_actions(options.execute_actions && grammar.action_language matches { Wado });
+    ctx.set_emit_actions(options.execute_actions && action_language_is_emittable(grammar));
     let lowered = lower(grammar, &lit_tokens, &mut ctx);
     // Build the ATN up front when the grammar needs the simulator, so parser
     // emit can push each rule call's exact return state (`call_site_returns`)
@@ -205,6 +205,13 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         source: w.to_string(),
         diagnostics: lowered.diagnostics,
     };
+}
+
+/// Whether Gale can currently emit the grammar's action bodies: the identity
+/// translator handles `language = Wado`. Java / other host languages are a
+/// later phase and stay discarded until then.
+fn action_language_is_emittable(grammar: &Grammar) -> bool {
+    return grammar.action_language matches { Wado };
 }
 
 fn install_rule_follow(grammar: &Grammar, ctx: &mut GenContext) {

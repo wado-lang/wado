@@ -2325,6 +2325,12 @@ fn rule_result_type() -> String {
     return String::from("()");
 }
 
+/// Whether a rule's result type is a `<Rule>Vals` struct rather than the
+/// value-less `()` — i.e. the rule exposes a value channel.
+fn result_type_carries_vals(result_type: &String) -> bool {
+    return *result_type != rule_result_type();
+}
+
 /// `RK_<UPPER>` node-kind constant name for a rule (matches `gen_node_kinds`).
 fn rule_kind_const(name: &String) -> String {
     let mut out = String::with_capacity(name.len() + 3);
@@ -2439,7 +2445,7 @@ fn gen_rule_entry_wrapper(
     needs_atn: bool,
     result_type: &String,
 ) {
-    let returns_vals = *result_type != "()";
+    let returns_vals = result_type_carries_vals(result_type);
     let mut f = FnSpec::new(outer_name);
     f.add_param(&"p", &"&mut Parser");
     // `follow` precedes `min_prec` so a non-precedence call site can pass
@@ -3068,19 +3074,31 @@ fn gen_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before: i32
         match a.kind {
             Action => gen_action_body(w, &a.source, ctx),
             Predicate => {
-                if before == 0 && current_rule_is_multi_alt(ctx) {
-                    ctx.mark_action_seen(a.source.action_id);
-                    ctx.warn(
-                        &`action {a.source.action_id}`,
-                        DiagnosticKind::UnsupportedAction,
-                        `predicate {a.source.action_id}: alt-initial predicates in a multi-alt rule need prediction-time gating (not yet supported)`,
-                    );
+                if predicate_selects_alternative(before, ctx) {
+                    warn_unsupported_prediction_predicate(&a.source, ctx);
                 } else {
                     gen_predicate_guard(w, &a.source, ctx);
                 }
             },
         }
     }
+}
+
+/// An alt-initial predicate in a multi-alt rule chooses which alternative the
+/// prediction takes. Gale's prediction ignores predicates, so this shape is
+/// not an inline guard but a prediction gate — surfaced loudly until
+/// prediction-time gating lands (Phase 2).
+fn predicate_selects_alternative(before: i32, ctx: &GenContext) -> bool {
+    return before == 0 && current_rule_is_multi_alt(ctx);
+}
+
+fn warn_unsupported_prediction_predicate(src: &ActionSource, ctx: &mut GenContext) {
+    ctx.mark_action_seen(src.action_id);
+    ctx.warn(
+        &`action {src.action_id}`,
+        DiagnosticKind::UnsupportedAction,
+        `predicate {src.action_id}: alt-initial predicates in a multi-alt rule need prediction-time gating (not yet supported)`,
+    );
 }
 
 fn current_rule_is_multi_alt(ctx: &GenContext) -> bool {
