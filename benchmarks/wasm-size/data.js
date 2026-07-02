@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782996545324,
+  "lastUpdate": 1783002401064,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -37237,6 +37237,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/94725f5f40d283d6fd4c77386cecfd0a0e961621"
         },
         "date": 1782996544658,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15323,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288551,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e251f5a56b763660a044d34edb3238a93851bd8e",
+          "message": "Merge pull request #1495 from wado-lang/claude/value-graph-cse-order-independent-xr8zf1\n\nrefactor(nir): make value-graph CSE order-independent and drop the dormant e-graph machinery",
+          "timestamp": "2026-07-02T23:17:43+09:00",
+          "tree_id": "d847bf6ff96f068868a3349c6384277cae8cd25e",
+          "url": "https://github.com/wado-lang/wado/commit/e251f5a56b763660a044d34edb3238a93851bd8e"
+        },
+        "date": 1783002400311,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
