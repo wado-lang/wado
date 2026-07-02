@@ -500,20 +500,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
         // The name matches a compiler trait, but a user may declare a trait of
-        // the same name (e.g. `trait Display { … }`). Only classify as
-        // `on_bound` when the name actually resolves — local-first, in the
-        // current module — to the compiler item's own declaration; otherwise
-        // the bound refers to the user trait and must go through ordinary
-        // impl lookup. Without this guard a user `T: Display` bound would be
-        // wrongly satisfied by the total-format short-circuit.
-        let resolved_module = self.canonical_decl_key(trait_name).0;
+        // the same name (e.g. the `trait_bound_fn_violation` fixture's local
+        // `trait Display`). Treat the name as the compiler trait unless a user
+        // trait genuinely shadows it here — declared in this module, or
+        // imported from a module other than the compiler item's. Resolving via
+        // `canonical_decl_key` instead is unsafe: for an ambient trait like
+        // `Ord` that is neither imported nor locally declared it falls through
+        // to the current module, which would wrongly reject the compiler trait.
         let compiler_module = {
             let tt = self.tysys.type_table.borrow();
             tt.compiler_items().trait_module(item).cloned()
         };
-        match compiler_module {
-            Some(m) if m == resolved_module => Some(on_bound),
-            _ => None,
+        let shadowed_locally = self
+            .current_module_items
+            .iter()
+            .any(|it| matches!(it, Item::Trait(t) if t.name == trait_name));
+        let shadowed_by_import = self
+            .sem
+            .imports
+            .imported_type_sources
+            .get(trait_name)
+            .is_some_and(|m| Some(m) != compiler_module.as_ref());
+        if shadowed_locally || shadowed_by_import {
+            None
+        } else {
+            Some(on_bound)
         }
     }
 
