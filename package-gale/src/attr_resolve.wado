@@ -171,7 +171,7 @@ fn is_token_member(m: &String) -> bool {
 }
 
 fn is_rule_member(m: &String, rule_name: &String, rules: &List<ParserRule>) -> bool {
-    if *m == "text" || *m == "ctx" || *m == "start" || *m == "stop" {
+    if is_rule_pseudo_member(m) {
         return true;
     }
     for let rule of rules {
@@ -186,9 +186,14 @@ fn is_rule_member(m: &String, rule_name: &String, rules: &List<ParserRule>) -> b
     return false;
 }
 
+/// The CST pseudo-members every rule reference exposes (`.text` / `.ctx` /
+/// `.start` / `.stop`), independent of its declared `returns`.
+pub fn is_rule_pseudo_member(name: &String) -> bool {
+    return *name == "text" || *name == "ctx" || *name == "start" || *name == "stop";
+}
+
 fn is_parser_special(name: &String) -> bool {
-    return *name == "text" || *name == "ctx" || *name == "start"
-        || *name == "stop" || *name == "_p";
+    return is_rule_pseudo_member(name) || *name == "_p";
 }
 
 fn contains(names: &List<String>, name: &String) -> bool {
