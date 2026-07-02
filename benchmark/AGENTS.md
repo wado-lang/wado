@@ -12,24 +12,24 @@ C compiler (`cc`) and Rust (`cargo`) are expected from the system.
 
 ## Tasks
 
-Benchmarks are grouped into four sections: pure computation (純粋計算),
-serde & compression (serde・圧縮), parser (パーサー), and application server.
+Benchmarks are grouped into four sections: pure computation, serde &
+compression, parsing, and application server.
 
 ```sh
-# 純粋計算 (pure computation)
+# pure computation
 mise run count-prime   # integer arithmetic (count primes to 1M)
 mise run mandelbrot    # float arithmetic (1024x768 fractal)
 mise run sieve         # array operations (sieve of Eratosthenes to 10M)
 mise run fts           # float-to-string conversion
 
-# serde・圧縮 (serde & compression)
+# serde & compression
 mise run json-twitter  # JSON ser/de (twitter.json)
-mise run cbor          # CBOR ser/de (twitter.json, schema shared with json-twitter)
 mise run json-canada   # JSON ser/de (canada.json)
 mise run json-catalog  # JSON ser/de (citm_catalog.json)
+mise run cbor          # CBOR ser/de (twitter/canada/catalog, schemas shared with json-*)
 mise run zlib          # compression (zlib-rs native vs Wado)
 
-# パーサー (parser)
+# parsing
 mise run sqlite-parse       # SQLite parsing (Gale vs sqlparser-rs)
 mise run syntax-highlight   # syntax highlighting (Gale vs tree-sitter)
 
@@ -56,4 +56,4 @@ After running benchmarks, update `README.md` with the new results. Use the `/ben
 
 ## Structure
 
-Each benchmark has its own directory with implementations in all languages side by side. The `zlib/` directory also contains a Rust (`Cargo.toml` + `zlib_rs.rs`) native reference. The `json_*` directories contain JSON ser/de benchmarks with Rust `serde_json` as the native reference; the `cbor/` directory holds the CBOR ser/de benchmark with `serde_cbor` (Rust) and `@msgpack/msgpack` (JS) as references. `json_twitter/twitter_schema.wado` defines the full twitter.json schema shared by both the JSON and CBOR benchmarks, so the two codecs are compared over identical data types.
+Each benchmark has its own directory with implementations in all languages side by side. The `zlib/` directory also contains a Rust (`Cargo.toml` + `zlib_rs.rs`) native reference. The `json_*` directories contain JSON ser/de benchmarks with Rust `serde_json` as the native reference; the `cbor/` directory holds the CBOR ser/de benchmarks (twitter, canada, catalog) with `serde_cbor` (Rust) as the reference. Each `json_*` directory defines a shared schema module (`twitter_schema.wado`, `canada_schema.wado`, `catalog_schema.wado`) imported by both the JSON and CBOR benchmarks, so the two codecs are compared over identical data types.

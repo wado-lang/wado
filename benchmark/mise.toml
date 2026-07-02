@@ -184,23 +184,21 @@ cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 js
 """
 
 [tasks.cbor]
-description = "Run cbor ser/de benchmark (serde_cbor vs @msgpack/msgpack vs Wado core:cbor)"
+description = "Run cbor ser/de benchmark (serde_cbor vs Wado core:cbor) over twitter/canada/catalog"
 run = """
 #!/usr/bin/env bash
 set -e
 
-echo "=== Compiling Rust serde_cbor benchmark ==="
+echo "=== Compiling Rust serde_cbor benchmarks ==="
 cargo build --release --manifest-path cbor/Cargo.toml --quiet
 
-echo "=== Rust serde_cbor ==="
-./cbor/target/release/cbor_twitter_bench
+for ds in twitter canada catalog; do
+    echo "=== Rust serde_cbor ($ds) ==="
+    ./cbor/target/release/cbor_${ds}_bench
 
-echo "=== JavaScript @msgpack/msgpack (Node.js) ==="
-npm install --prefix cbor --silent --no-audit --no-fund
-node cbor/cbor.js
-
-echo "=== Wado core:cbor ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 cbor/cbor.wado
+    echo "=== Wado core:cbor ($ds) ==="
+    cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 cbor/cbor_${ds}.wado
+done
 """
 
 [tasks.json-canada]
@@ -291,18 +289,18 @@ description = "Run all benchmarks serially"
 run = """
 #!/usr/bin/env bash
 set -e
-# 純粋計算 (pure computation)
+# pure computation
 MISE_JOBS=1 mise run count-prime
 MISE_JOBS=1 mise run mandelbrot
 MISE_JOBS=1 mise run sieve
 MISE_JOBS=1 mise run fts
-# serde・圧縮 (serde & compression)
+# serde & compression
 MISE_JOBS=1 mise run json-twitter
 MISE_JOBS=1 mise run cbor
 MISE_JOBS=1 mise run json-canada
 MISE_JOBS=1 mise run json-catalog
 MISE_JOBS=1 mise run zlib
-# パーサー (parser)
+# parsing
 MISE_JOBS=1 mise run sqlite-parse
 MISE_JOBS=1 mise run syntax-highlight
 """

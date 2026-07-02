@@ -1,16 +1,21 @@
-// JSON ser/de benchmark: citm_catalog.json
+// CBOR ser/de benchmark over citm_catalog.json (core:cbor).
+//
+// The full citm_catalog.json schema (shared with the JSON benchmark, see
+// `../json_catalog/catalog_schema.wado`) is modeled, so every field
+// round-trips. The JSON is parsed once into `CitmCatalog` (core:json), then
+// encoded to a CBOR byte payload. Throughput is reported over the original JSON
+// source size (shared denominator with the JSON benchmark). Both phases operate
+// on byte buffers:
+//   ser: CitmCatalog -> CBOR bytes  (core:cbor to_bytes)
+//   de:  CBOR bytes -> CitmCatalog  (core:cbor from_bytes)
+//
 // Data source: https://github.com/miloyip/nativejson-benchmark
 // License: MIT
-//
-// The full schema (shared with the CBOR benchmark, see `catalog_schema.wado`)
-// is modeled, so every field round-trips. Both phases operate on byte buffers,
-// reported over the JSON source size:
-//   ser: CitmCatalog -> JSON bytes  (core:json to_bytes)
-//   de:  JSON bytes -> CitmCatalog  (core:json from_bytes)
 
 use { Stdout } from "core:cli";
-use { to_bytes, from_bytes } from "core:json";
-use { CitmCatalog, event_count } from "./catalog_schema.wado";
+use { from_bytes as json_from_bytes } from "core:json";
+use { to_bytes as cbor_to_bytes, from_bytes as cbor_from_bytes } from "core:cbor";
+use { CitmCatalog, event_count } from "../json_catalog/catalog_schema.wado";
 use { MonotonicClock } from "wasi:clocks";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 use { Benchmark } from "core:benchmark";
@@ -40,26 +45,32 @@ fn read_file_bytes(path: String) -> ByteList with Preopens {
 }
 
 fn parse_catalog<B: AsByteSlice>(json_data: B) -> CitmCatalog {
-    return match from_bytes::<CitmCatalog, B>(json_data) {
+    return match json_from_bytes::<CitmCatalog, B>(json_data) {
         Ok(c) => c,
         Err(e) => panic(`JSON parse error: {e.message}`),
     };
 }
 
-fn encode_json(catalog: &CitmCatalog) -> ByteList {
-    return match to_bytes::<CitmCatalog>(catalog) {
-        Ok(b) => b as ByteList,
-        Err(e) => panic(`JSON encode error: {e.message}`),
+fn encode_cbor(catalog: &CitmCatalog) -> ByteList {
+    return match cbor_to_bytes::<CitmCatalog>(catalog) {
+        Ok(b) => b,
+        Err(e) => panic(`CBOR encode error: {e.message}`),
+    };
+}
+
+fn decode_cbor(bytes: ByteSlice) -> CitmCatalog {
+    return match cbor_from_bytes::<CitmCatalog, ByteSlice>(bytes) {
+        Ok(c) => c,
+        Err(e) => panic(`CBOR decode error: {e.message}`),
     };
 }
 
 test "smoke" {
-    // Minimal valid CitmCatalog with empty maps and no events / performances.
     let catalog = parse_catalog(
         "{\"areaNames\":{},\"audienceSubCategoryNames\":{},\"blockNames\":{},\"events\":{},\"performances\":[],\"seatCategoryNames\":{},\"subTopicNames\":{},\"subjectNames\":{},\"topicNames\":{},\"topicSubTopics\":{},\"venueNames\":{}}",
     );
-    let bytes = encode_json(&catalog);
-    let back = parse_catalog(bytes.as_byte_slice());
+    let cbor = encode_cbor(&catalog);
+    let back = decode_cbor(cbor.as_byte_slice());
     assert event_count(&back) == 0;
 }
 
@@ -68,13 +79,17 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     let json_size = json_data.len();
     let catalog = parse_catalog(json_data);
 
+    let cbor = encode_cbor(&catalog);
+    let cbor_view = cbor.as_byte_slice();
+
     let mut b = Benchmark {
-        name: "json-catalog",
+        name: "cbor-catalog",
         input_size: Option::Some(json_size),
     };
+    b.println(`{json_size} bytes JSON -> {cbor.len()} bytes CBOR payload`);
 
-    b.run("ser", || encode_json(&catalog).len());
-    let events = b.run("de", || event_count(&parse_catalog(json_data)));
+    b.run("ser", || encode_cbor(&catalog).len());
+    let events = b.run("de", || event_count(&decode_cbor(cbor_view)));
     assert events == 184;
     b.println(`round-tripped {events} events`);
 }

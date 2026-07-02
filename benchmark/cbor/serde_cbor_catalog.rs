@@ -1,6 +1,15 @@
 #![allow(dead_code)]
-// Rust serde_json benchmark for citm_catalog.json
-// Comparison baseline for Wado's core:json deserialization.
+// Rust serde_cbor ser/de benchmark for citm_catalog.json.
+//
+// Comparison baseline for Wado's core:cbor serialization/deserialization. The
+// full citm_catalog.json schema is modeled (shared data types with the JSON
+// benchmark), so every field is round-tripped. Throughput is reported over the
+// original JSON source size (shared denominator across implementations). Both
+// phases operate on byte buffers:
+//   ser: CitmCatalog -> CBOR bytes  (serde_cbor::to_vec)
+//   de:  CBOR bytes -> CitmCatalog  (serde_cbor::from_slice)
+//
+// The wire keys are camelCase, so `rename_all = "camelCase"` maps every field.
 //
 // JSON data source: https://github.com/miloyip/nativejson-benchmark
 // License: MIT
@@ -156,21 +165,28 @@ fn bench<T, F: FnMut() -> T>(label: &str, work_per_iter: f64, unit: &str, mut f:
 }
 
 fn main() {
-    let json_data = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/citm_catalog.json"))
-        .expect("Failed to read citm_catalog.json");
-    let size = json_data.len();
+    let json_data = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../json_catalog/citm_catalog.json"
+    ))
+    .expect("Failed to read citm_catalog.json");
+    let json_size = json_data.len();
 
     let catalog: CitmCatalog =
         serde_json::from_str(&json_data).expect("Failed to parse citm_catalog.json");
+    let cbor = serde_cbor::to_vec(&catalog).expect("Failed to encode CBOR");
 
-    println!("json-catalog: {size} bytes");
+    println!(
+        "cbor-catalog: {json_size} bytes JSON -> {} bytes CBOR payload",
+        cbor.len()
+    );
 
-    bench("Ser", size as f64, "B", || {
-        serde_json::to_vec(&catalog).expect("encode").len()
+    bench("Ser", json_size as f64, "B", || {
+        serde_cbor::to_vec(&catalog).expect("encode").len()
     });
 
-    let events = bench("De", size as f64, "B", || {
-        let catalog: CitmCatalog = serde_json::from_str(&json_data).expect("decode");
+    let events = bench("De", json_size as f64, "B", || {
+        let catalog: CitmCatalog = serde_cbor::from_slice(&cbor).expect("decode");
         catalog.events.len()
     });
 
