@@ -2004,10 +2004,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Each default type is resolved with the callee's type params in scope, so
     /// a param-referencing default (`<T, U = T>`) resolves `T` to the callee's
     /// own `TypeParam` and then picks up `T`'s inferred type via
-    /// [`Self::substitute_type_params`]. (A default naming a type the caller
-    /// cannot see — e.g. one private to another module — resolves to an error
-    /// type and surfaces a normal "unknown type" diagnostic; resolving foreign
-    /// default types in the callee's full module scope is not yet supported.)
+    /// [`Self::substitute_type_params`]. `default_scope_module` is pointed at
+    /// the callee so a default naming a type private to the callee's module
+    /// (`<T = Priv>`, `Priv` private) resolves through the fallback in
+    /// [`Self::resolve_named_type`].
     fn fill_defaulted_fn_type_args(&mut self, callee: &CalleeRef, type_args: &mut Vec<TypeId>) {
         let params = self.lookup_function_type_params(callee);
         let space: Vec<ast::GenericParam> = params
@@ -2021,15 +2021,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let n = space.len();
 
         // Resolve defaults with the callee's type params registered, mirroring
-        // `lookup_generic_func_for_inference`.
+        // `lookup_generic_func_for_inference`. Point `default_scope_module` at
+        // the callee so a default naming a type private to the callee's module
+        // (`<T = Priv>`, `Priv` private) resolves through the fallback in
+        // `resolve_named_type`.
         let defaults: Vec<Option<TypeId>> = {
+            let saved_scope_module = self.default_scope_module.replace(callee.module.clone());
             let mut scope = self.enter_inherited_type_param_scope();
             scope.annotate_ctx.trait_ctx.type_params.clear();
             scope.register_generic_params(&params, 0);
-            space
+            let resolved = space
                 .iter()
                 .map(|p| p.default.as_ref().map(|ty| scope.resolve_type(ty)))
-                .collect()
+                .collect();
+            drop(scope);
+            self.default_scope_module = saved_scope_module;
+            resolved
         };
 
         if type_args.is_empty() {
