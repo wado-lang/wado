@@ -73,9 +73,15 @@ for (const opt of OPT_LEVELS) {
   push(`zlib/compress (${label})`, zlib, 'compress');
   push(`zlib/decompress (${label})`, zlib, 'decompress');
 
-  push(`json/twitter (${label})`, runBench('json_twitter/json_twitter.wado', opt));
-  push(`json/canada (${label})`, runBench('json_canada/json_canada.wado', opt));
-  push(`json/catalog (${label})`, runBench('json_catalog/json_catalog.wado', opt));
+  const twitter = runBench('json_twitter/json_twitter.wado', opt);
+  push(`json/twitter/ser (${label})`, twitter, 'ser');
+  push(`json/twitter/de (${label})`, twitter, 'de');
+  const canada = runBench('json_canada/json_canada.wado', opt);
+  push(`json/canada/ser (${label})`, canada, 'ser');
+  push(`json/canada/de (${label})`, canada, 'de');
+  const catalog = runBench('json_catalog/json_catalog.wado', opt);
+  push(`json/catalog/ser (${label})`, catalog, 'ser');
+  push(`json/catalog/de (${label})`, catalog, 'de');
   push(`sqlite_parse (${label})`, runBench('sqlite_parse/sqlite_parse.wado', opt));
   push(`syntax_highlight (${label})`, runBench('syntax_highlight/syntax_highlight.wado', opt));
 }
