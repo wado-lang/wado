@@ -260,59 +260,34 @@ resolves and routes only the residual cold sites through the simulator.
 **The simulator decides exactly three parser sites; everything else keeps
 the compiled fast path:**
 
-1. A **left-recursive rule's loop entry** — via the dedicated O(1)
-   `atn_lr_loop_decision` (below), with the complete simulator as the
-   documented fallback.
-2. A **non-greedy `??`** — `atn_predict_with_stack`, keyed to the `??`'s
-   own ATN decision number (`assign_atn_decisions` → `Atn.decision_sites`
-   → `GenContext::atn_decision_site`), so several `??` in one rule each
-   predict independently.
-3. A **context-dependent multi-alt `AtEndConflict`** — one alt returns to
-   the caller while another continues past the same lookahead, the one
-   ambiguity the longest-match scan tournament resolves unsoundly (its
-   longest pick can steal a token the caller needs, e.g. `s : x 'c' ; x :
-   'a' 'b' | 'a' 'b' 'c'` on `a b c`). "Context-dependent" is decided by
-   intersecting the conflict's divergence tokens with the rule's
-   whole-grammar FOLLOW (`follow_env::build` →
-   `GenContext::at_end_conflict_routes`): only a token both continuing an
-   alt **and** continuing a caller needs the runtime context. A
-   FOLLOW-disjoint conflict (SQLite's `UNION` vs `UNION ALL`: `ALL`
-   continues no caller) keeps the tournament — the longest pick is then
-   either right or fails a parse with no viable reading — so such a
-   grammar carries no ATN at all. A parser-side `.` / `~X` makes FOLLOW
-   under-approximate (unenumerable FIRST), so those grammars route every
-   conflict conservatively. **Soundness hinges on FOLLOW never
-   under-approximating otherwise**: the FOLLOW walk uses the *deep* suffix
-   FIRST (`deep_first_of_elements_from`), which flows through a nullable
-   `RuleRef` / `Group` in the caller's suffix — a shallow walk that stopped
-   at `nb` in `s : x nb 'c'` (`nb : 'w'?`) would drop `'c'` from FOLLOW(x),
-   wrongly keep the tournament, and reject the valid input `a b c`.
-   `grammar_has_at_end_conflict` (run before
-   `build_atn`) detects a routed conflict and forces the ATN build; the
-   rule emitter applies the same predicate per site and routes the
-   decision through `atn_predict_with_stack` keyed on the rule body
-   decision (`rule_body_decision` → `GenContext::atn_rule_body_decision`).
-   Every **other** ambiguity reason (`OpaqueRuleRef`, `MaxDepth`,
-   `ConfigExplosion`, `MultiAtEnd`, `NoViableAlt`) keeps the sound
-   tournament — its longest-match agrees with ANTLR4 for those across the
-   whole corpus. Route one through the simulator only if a descriptor ever
-   shows the tournament resolving it wrongly. Regression fixtures:
-   `tests/grammars/ll_longest_vs_context.g4` (routes),
-   `tests/grammars/ll_at_end_follow_disjoint.g4` (stays static),
-   `tests/grammars/ll_at_end_nullable_gap.g4` (routes via FOLLOW through a
-   nullable rule), `tests/grammars/ll_optional_non_greedy_multi.g4`.
+1. A **left-recursive rule's loop entry**, where precedence — not a
+   distinct lookahead token — decides whether to keep climbing or return
+   to the caller.
+2. A **non-greedy `??`**, whose enter-or-skip choice is taken at runtime;
+   several `??` in one rule decide independently.
+3. A **context-dependent multi-alt at-end conflict** — one alternative
+   ends (returning to the caller) while another continues past the same
+   lookahead. A longest-match tournament resolves this unsoundly when its
+   longer pick consumes a token the caller needed: on `a b c` for `s : x
+   'c' ; x : 'a' 'b' | 'a' 'b' 'c'`, `x` must leave the `'c'` for `s`. The
+   conflict needs the simulator only when a token that lets the longer
+   alternative continue can also legally follow the rule at some call
+   site. When no caller can ever continue on that token — SQLite's `UNION`
+   vs `UNION ALL`, since nothing follows a bare `UNION` with `ALL` — the
+   longer pick is either correct or fails a parse that had no valid
+   reading, so the conflict stays on the tournament and the grammar needs
+   no simulator. A rule reachable only past a `.` / `~X` (whose follow set
+   can't be enumerated) routes conservatively. Every other multi-alt
+   ambiguity keeps the tournament, whose longest-match matches ANTLR4
+   across the corpus. Regression fixtures:
+   `tests/grammars/ll_longest_vs_context.g4` and
+   `ll_at_end_nullable_gap.g4` (routed to the simulator),
+   `ll_at_end_follow_disjoint.g4` (stays on the tournament),
+   `ll_optional_non_greedy_multi.g4`.
 
-**ATN embedding.** The reachable whole-grammar ATN is serialized to a
-packed byte blob and decoded once, at parser construction, into the
-`ATN_SIM` the simulator reads (`atn_blob_bytes` / `atn_decode` in
-`atn.wado` / `runtime/atn.wado`); `gale dump --atn` plus a round-trip test
-(`atn_test.wado`) cover readability. Emitted only when a grammar needs it;
-non-ATN grammars stay byte-identical to before. `atn_decode`'s `lr_tables`
-argument (emitted as `needs_scan_atn`) gates the decoder's FIRST/nullable
-fixpoint and flat `state_cont_*` cache — they serve only
-`atn_lr_loop_decision`, so a `??` / at-end-only grammar skips them: the
-decoded tables live as GC roots for the module's lifetime, and permanently
-live data taxes every collection (see `perf.md`).
+The simulator's state machine is embedded in the generated parser only
+when a grammar needs it (inspect it with `gale dump --atn`); a grammar
+that needs none carries none and is byte-for-byte unaffected.
 
 ### Two mechanisms
 
