@@ -231,7 +231,13 @@ Recovery invariants with actions present:
 ## Staging
 
 - [x] Phase 1a — IR retention, byte-identical (1a-i: rule signatures, named-action / option bodies; 1a-ii: per-alternative `actions` sidecar).
-- [ ] Phase 1b — attribute resolution + value channel + Wado actions (identity translator) + `@after` / print-style actions via `p.emit`.
+- [~] Phase 1b — attribute resolution + value channel + Wado actions (identity translator) + `@after` / print-style actions via `p.emit`.
+  - [x] Phase 0 — `assign_action_ids` normalize pass (stable ids, byte-identical).
+  - [x] 1b-1 — attribute scanner (`attr_scan::find_attr_refs`).
+  - [x] 1b-1b — attribute resolution (`attr_resolve::resolve_attrs`, target classification + member validation, loud errors). Not yet wired into emit.
+  - [x] 1b-2 — print-style Wado actions execute via `p.emit`, surfaced on `ParseResult.output`, gated by the `execute_actions` generator option (default off; `language = Wado` only). Interleaved by `before_index` in `gen_alt_elements`, guarded on `!p.speculating`. Attribute-referencing bodies raise a loud `UnsupportedAction` diagnostic pending substitution.
+  - [ ] 1b-3 — value channel (`<Rule>Vals` structs threaded through `_parse_<rule>`) + attribute-substitution engine (`ResolvedAttr` → Wado expr over the value channel / context API), so `$x.text` / `$e.v` bodies emit.
+  - [ ] 1b-4 — runtime context API surface (`p.la`/`lt`/`rule_text`/…), `@init` / `@after` timing.
 - [ ] Phase 2 — predicates in prediction (`SemPredEvalParser` / `SemPredEvalLexer` descriptors are the acceptance suite).
 - [ ] Phase 3 — java2wado for the corpus subset + members translation.
 - [ ] Phase 4 — lexer actions / position-sensitive predicates + SuperClass trait (`tokenVocab` falls out).

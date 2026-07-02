@@ -153,6 +153,11 @@ pub struct ParseResult {
     pub root: CstNode,
     pub tokens: TokenStream,
     pub diagnostics: List<Diagnostic>,
+    /// Text emitted by executed actions via `p.emit(...)`, in execution
+    /// order (Stage C). Empty unless the parser was generated with action
+    /// execution on. Defaulted so existing construction sites and tests keep
+    /// compiling.
+    pub output: String = "",
 }
 
 impl ParseResult {

@@ -144,6 +144,11 @@ pub struct GenContext {
     /// multi-alt scan/pick/try decisions) — the `trace: true` generator
     /// option. Off by default.
     trace: bool,
+    /// When set, parser emit executes retained actions (Stage C) instead of
+    /// discarding them: the `execute_actions` generator option, narrowed by
+    /// codegen to grammars whose action language Gale can currently emit.
+    /// Off by default, so actionless / option-off grammars stay byte-identical.
+    emit_actions: bool,
     rule_follow_kinds: TreeMap<String, List<String>>,
     rule_follow_exact: bool,
 }
@@ -179,6 +184,7 @@ impl GenContext {
             lr_loop_entry_decisions: [],
             atn_rule_body_decisions: [],
             trace: false,
+            emit_actions: false,
             rule_follow_kinds: TreeMap::new(),
             rule_follow_exact: false,
         };
@@ -365,6 +371,20 @@ impl GenContext {
     /// Whether trace instrumentation should be emitted.
     pub fn is_trace(&self) -> bool {
         return self.trace;
+    }
+
+    /// Enable action execution in the generated parser (the
+    /// `execute_actions` generator option, narrowed to an emittable action
+    /// language). Read by `gen_parser_struct` (the `output` buffer + `emit`
+    /// method), the parse entry (`output` on `ParseResult`), and
+    /// `gen_alt_elements` (the interleaved action bodies).
+    pub fn set_emit_actions(&mut self, on: bool) {
+        self.emit_actions = on;
+    }
+
+    /// Whether retained actions should be executed rather than discarded.
+    pub fn emit_actions(&self) -> bool {
+        return self.emit_actions;
     }
 
     /// Record a prediction-strategy diagnostic for `rule`, deduped on

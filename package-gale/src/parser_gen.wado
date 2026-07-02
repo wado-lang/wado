@@ -1,4 +1,14 @@
-use { Grammar, ParserRule, Alternative, Element, RepeatElement, GroupElement } from "./ir.wado";
+use {
+    Grammar,
+    ParserRule,
+    Alternative,
+    Element,
+    RepeatElement,
+    GroupElement,
+    AltAction,
+    ActionKind,
+    ActionSource,
+} from "./ir.wado";
 use {
     rule_type_name,
     literal_field_name,
@@ -89,7 +99,9 @@ use {
     rule_header,
     rule_alt_body,
     rule_alt_scan_body,
+    DiagnosticKind,
 } from "./gir.wado";
+use { find_attr_refs } from "./attr_scan.wado";
 use { unwrap_label } from "./lr_util.wado";
 use { compute_shapes_for_alt, shape_lookahead_signature_for_alt, rebind_op_field } from "./lower.wado";
 
@@ -136,7 +148,7 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // `LoweredGrammar` is threaded through so we can dispatch on
     // `Rule::Simple` / `MultiAlt` / `LeftRecursive` instead of
     // recomputing the classification at every emit site.
-    gen_parser_struct(w, ctx.is_trace(), ctx.needs_atn());
+    gen_parser_struct(w, ctx.is_trace(), ctx.needs_atn(), ctx.emit_actions());
     if ctx.is_trace() {
         gen_trace_helpers(w);
     }
@@ -151,7 +163,7 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // caller's continuation at runtime via the `follow` argument (see
     // `follow_yields` / `FollowArg`). The follow-mask globals are
     // emitted by `gen_follow_mask_globals` at the end of codegen.
-    gen_parse_entry(w, lowered);
+    gen_parse_entry(w, lowered, ctx);
 }
 
 /// Public `parse` entry under the emitter: tokenize, run the start
@@ -159,14 +171,14 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
 /// infallible; a failure leaves `p.recovering` set and the deepest error in
 /// `p.pending`, surfaced as one diagnostic. The partial tree (open nodes folded
 /// by each wrapper's `finish_node`) is still returned.
-fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar) {
+fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenContext) {
     if lowered.parser_rules.len() == 0 {
         return;
     }
     // The tokenize → run-entry → fold-error body is identical for every rule, so
     // it lives in a single `_run_parse_entry` helper; each `parse_<rule>` is a thin
     // wrapper that hands it the rule's `_parse_<rule>` entry as a fn value.
-    gen_run_parse_entry(w);
+    gen_run_parse_entry(w, ctx);
     w.blank();
     // `parse` is the start (first) rule. Per-rule `parse_<rule>` entries let a
     // caller parse from any rule (ANTLR4 lets you pick a start rule; the
@@ -186,7 +198,7 @@ fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar) {
 /// or LR entry's defaulted `follow` / `min_prec` arguments fill in), fold the
 /// partial tree, and on error push a single diagnostic (deepest of the
 /// propagated error and `p.pending`).
-fn gen_run_parse_entry(w: &mut CodeWriter) {
+fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
     w.begin(
         &"fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult",
     );
@@ -213,7 +225,11 @@ fn gen_run_parse_entry(w: &mut CodeWriter) {
     w.line(&"p.diagnostics.push(d);");
     w.end();
     w.end();
-    w.line(&"return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };");
+    if ctx.emit_actions() {
+        w.line(&"return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics, output: p.output };");
+    } else {
+        w.line(&"return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };");
+    }
     w.end();
 }
 
@@ -268,7 +284,7 @@ fn emit_diag_prologue(w: &mut CodeWriter) {
     w.line(&"let lc = line_col(self.tokens.chars, span.start);");
 }
 
-fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
+fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_actions: bool) {
     let mut s = StructSpec::new("Parser");
     s.add_field(&"tokens", &"TokenStream");
     // Token kinds as a bare `Array<i32>` — the hot scan/peek read. A flat
@@ -329,6 +345,10 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     // against it unchanged.
     s.add_field(&"b", &"TreeBuilder");
     s.add_field(&"diagnostics", &"List<Diagnostic>");
+    // Action-emitted text buffer (Stage C), surfaced on `ParseResult.output`.
+    if emit_actions {
+        s.add_field(&"output", &"String");
+    }
     s.emit(w);
     w.blank();
 
@@ -349,9 +369,22 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
         init.push_str(&", atn_stack: [], atn_ret_pending: -1");
     }
     init.push_str(&", b: TreeBuilder::new(), diagnostics: []");
+    if emit_actions {
+        init.push_str(&", output: \"\"");
+    }
     w.line(&`return Parser \{ {init} \};`);
     w.end();
     w.blank();
+
+    if emit_actions {
+        let mut fem = FnSpec::new("emit");
+        fem.set_receiver(&"&mut self");
+        fem.add_param(&"s", &"String");
+        fem.emit_begin(w);
+        w.line(&"self.output.push_str(&s);");
+        w.end();
+        w.blank();
+    }
 
     // Build a ParseError at the current position, resolving `line:col` from the
     // source. `rule_stack` is filled by the rule-entry wrappers as it propagates.
@@ -2695,7 +2728,7 @@ fn gen_alt_body(
     if rule_labeled {
         w.line(&`p.b.set_alt({alt_index});`);
     }
-    gen_alt_elements(w, &alt.elements, &body.ops, ctx);
+    gen_alt_elements(w, &alt.elements, &body.ops, &alt.actions, ctx);
 
     // the alt's terminals / subtrees already appended to the
     // builder via the Parser methods, so there is no struct to assemble — the
@@ -2791,7 +2824,13 @@ fn peel_scalar_label(elem: &Element) -> &Element {
     return cur;
 }
 
-fn gen_alt_elements(w: &mut CodeWriter, elements: &List<Element>, ops: &List<Op>, ctx: &mut GenContext) {
+fn gen_alt_elements(
+    w: &mut CodeWriter,
+    elements: &List<Element>,
+    ops: &List<Op>,
+    actions: &List<AltAction>,
+    ctx: &mut GenContext,
+) {
     // gen_alt_elements requires 1:1 correspondence between
     // `elements` and `ops` — full-alt bodies (Simple / MultiAlt /
     // LR atom). LR-suffix bodies strip the leading self-ref op and are
@@ -2813,6 +2852,7 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &List<Element>, ops: &List<Op>
     // are required so group dispatch can reuse the shared prediction
     // (`build_prediction` / scan tournament).
     for let mut i = 0; i < elements.len(); i += 1 {
+        gen_alt_actions_at(w, actions, i, ctx);
         let elem = &elements[i];
         let op = &ops[i];
         if let Repeat(rep) = peel_scalar_label(elem) {
@@ -2836,6 +2876,49 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &List<Element>, ops: &List<Op>
             panic("gen_alt_elements: unreachable op shape — every Op variant is handled");
         }
     }
+    // Alt-final actions (`before_index == elements.len()`), e.g. a trailing
+    // `{ println($e.v); }`.
+    gen_alt_actions_at(w, actions, elements.len(), ctx);
+}
+
+/// Emit every retained action whose position is `before` (it runs after
+/// `elements[before - 1]` and before `elements[before]`). No-op unless
+/// action execution is on. Predicates are gated in prediction (Phase 2),
+/// not executed inline here.
+fn gen_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before: i32, ctx: &mut GenContext) {
+    if !ctx.emit_actions() {
+        return;
+    }
+    for let a of actions {
+        if a.before_index != before {
+            continue;
+        }
+        match a.kind {
+            Action => gen_action_body(w, &a.source, ctx),
+            Predicate => {},
+        }
+    }
+}
+
+/// Emit one action body under the identity translator (`language = Wado`):
+/// the host text is Wado, so it passes through verbatim inside a block,
+/// with `p` in scope as the current `Parser`. Actions must not observably
+/// run inside a speculative attempt, so the body is guarded on
+/// `!p.speculating`. Attribute references need the value-channel
+/// substitution, which is not yet emitted; a body that carries any is a
+/// loud `UnsupportedAction` diagnostic rather than emitting invalid `$x`.
+fn gen_action_body(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext) {
+    if find_attr_refs(&src.text).len() > 0 {
+        ctx.warn(
+            &`action {src.action_id}`,
+            DiagnosticKind::UnsupportedAction,
+            `action {src.action_id} references attributes; value-channel substitution is not yet emitted`,
+        );
+        return;
+    }
+    w.begin(&"if !p.speculating");
+    w.line(&src.text);
+    w.end();
 }
 
 /// Group / single-alt-body internal walker. Mirrors `gen_alt_elements`
