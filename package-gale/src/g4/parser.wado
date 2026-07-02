@@ -5,6 +5,8 @@ use {
     GrammarOption,
     OptionValue,
     ActionSource,
+    ActionKind,
+    AltAction,
     AttrDecl,
     CatchClause,
     ActionLanguage,
@@ -684,15 +686,8 @@ impl G4Parser {
         return Result::<(), ParseError>::Ok(());
     }
 
-    /// Skip a `{ ... }` block of host-language code — `extract_action`
-    /// without retaining the captured body. Used where the action element
-    /// still has no IR slot (inline alt / lexer actions, pending Phase 1a-ii).
-    fn skip_braced_block(&mut self) {
-        let _ = self.extract_action('{', '}');
-    }
-
-    /// Same traversal as `skip_braced_block`, but capture the block as an
-    /// `ActionSource`: `text` is the source strictly between the delimiters,
+    /// Capture a `{ ... }` / `[ ... ]` block as an `ActionSource`: `text` is
+    /// the source strictly between the delimiters,
     /// `span` covers the whole block including them. Used to retain action /
     /// predicate / arg-action bodies. `open`/`close` are `{`/`}` or `[`/`]`.
     fn extract_action(&mut self, open: char, close: char) -> ActionSource {
@@ -979,6 +974,7 @@ impl G4Parser {
     fn parse_alternative(&mut self) -> Result<Alternative, ParseError> {
         let mut elements: List<Element> = [];
         let mut options: List<GrammarOption> = [];
+        let mut actions: List<AltAction> = [];
         let mut label: Option<String> = null;
 
         loop {
@@ -989,21 +985,24 @@ impl G4Parser {
                 || self.is_kind(G4Token::Hash) {
                 break;
             }
-            // Skip action blocks {..} and semantic predicates {..}?
+            // Action block `{ ... }` or semantic predicate `{ ... }?` —
+            // retained in the `actions` sidecar, positioned before the next
+            // element. The body stays out of `elements`, so the element
+            // sequence and every index-based analysis over it are unchanged.
             if self.is_kind(G4Token::LBrace) {
-                self.skip_braced_block();
-                // If followed by ?, this was a semantic predicate — skip the ?
+                let source = self.extract_action('{', '}');
+                let mut kind = ActionKind::Action;
                 if self.is_kind(G4Token::Question) {
+                    kind = ActionKind::Predicate;
                     self.advance();
                 }
+                actions.push(AltAction { kind, source, before_index: elements.len() });
                 // ANTLR4 attaches element options to action blocks and
                 // semantic predicates: `{ ... }<p=3>` and `{ ... }?<fail='…'>`.
-                // The action/predicate body itself is host-language code that
-                // Gale skips (Stage C territory), so the action element has no
-                // IR slot of its own. Promote the options up to the enclosing
-                // alternative — that is where ANTLR4's left-recursion rewriter
-                // also reads them from (e.g. `<p=N>` overriding alt precedence,
-                // `<fail='…'>` providing a custom predicate failure message).
+                // Promote them to the enclosing alternative — that is where
+                // ANTLR4's left-recursion rewriter reads them from (`<p=N>`
+                // overriding alt precedence, `<fail='…'>` a custom failure
+                // message).
                 if self.is_kind(G4Token::LAngle) {
                     let opts = self.parse_angle_options()?;
                     for let o of opts {
@@ -1035,7 +1034,7 @@ impl G4Parser {
             label = Option::<String>::Some(label_tok.text.to_string());
         }
 
-        return Result::<Alternative, ParseError>::Ok(Alternative { label, options, elements });
+        return Result::<Alternative, ParseError>::Ok(Alternative { label, options, elements, actions });
     }
 
     fn parse_element(&mut self) -> Result<Element, ParseError> {
@@ -1373,6 +1372,7 @@ impl G4Parser {
 
     fn parse_lexer_alt(&mut self) -> Result<LexerAlternative, ParseError> {
         let mut elements: List<LexerElement> = [];
+        let mut actions: List<AltAction> = [];
         loop {
             if self.at_eof()
                 || self.is_kind(G4Token::Pipe)
@@ -1381,12 +1381,16 @@ impl G4Parser {
                 || self.is_kind(G4Token::Arrow) {
                 break;
             }
-            // Skip action blocks {..} and semantic predicates {..}?
+            // Action block `{ ... }` / predicate `{ ... }?` — retained in the
+            // sidecar, positioned before the next element (see `AltAction`).
             if self.is_kind(G4Token::LBrace) {
-                self.skip_braced_block();
+                let source = self.extract_action('{', '}');
+                let mut kind = ActionKind::Action;
                 if self.is_kind(G4Token::Question) {
+                    kind = ActionKind::Predicate;
                     self.advance();
                 }
+                actions.push(AltAction { kind, source, before_index: elements.len() });
                 continue;
             }
             // Skip element options <...>
@@ -1397,7 +1401,7 @@ impl G4Parser {
             let elem = self.parse_lexer_element()?;
             elements.push(elem);
         }
-        return Result::<LexerAlternative, ParseError>::Ok(LexerAlternative { elements });
+        return Result::<LexerAlternative, ParseError>::Ok(LexerAlternative { elements, actions });
     }
 
     fn parse_lexer_element(&mut self) -> Result<LexerElement, ParseError> {

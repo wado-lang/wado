@@ -358,11 +358,11 @@ pub struct ParserRule {
     pub args: List<AttrDecl> = [],
     pub returns_decls: List<AttrDecl> = [],
     pub locals_decls: List<AttrDecl> = [],
-    pub init_action: Option<ActionSource> = null,   // @init
+    pub init_action: Option<ActionSource> = null,  // @init
     pub after_action: Option<ActionSource> = null,  // @after
     pub throws: List<String> = [],
-    pub catches: List<CatchClause> = [],            // retained, execution parked
-    pub finally_action: Option<ActionSource> = null, // retained, execution parked
+    pub catches: List<CatchClause> = [],  // retained, execution parked
+    pub finally_action: Option<ActionSource> = null,  // retained, execution parked
 }
 
 impl ParserRule {
@@ -379,6 +379,27 @@ impl ParserRule {
     }
 }
 
+/// Whether a retained action fragment is a plain `{ ... }` action or a
+/// `{ ... }?` semantic predicate.
+pub enum ActionKind {
+    Action,
+    Predicate,
+}
+
+/// A `{ ... }` action or `{ ... }?` predicate retained from an alternative,
+/// with its position recorded so codegen (Stage C) can place it. Held in a
+/// per-alternative sidecar rather than inline in `elements`, so the element
+/// sequence — and every index-based analysis over it — is unchanged. See
+/// `action.md`.
+pub struct AltAction {
+    pub kind: ActionKind,
+    pub source: ActionSource,
+    /// Count of significant elements before this action: it runs after
+    /// `elements[before_index - 1]` and before `elements[before_index]`.
+    /// `0` = alt-initial (a `Predicate` here is a prediction gate).
+    pub before_index: i32,
+}
+
 /// Alternative is one branch of a parser rule, optionally labeled.
 ///
 /// `options` carries the alt-level element options parsed from a leading
@@ -389,6 +410,11 @@ pub struct Alternative {
     pub label: Option<String>,
     pub options: List<GrammarOption>,
     pub elements: List<Element>,
+    /// Retained `{ ... }` actions / `{ ... }?` predicates, positioned by
+    /// `before_index` into `elements`. Defaulted empty so codegen that
+    /// ignores it and literal-constructing tests keep compiling. See
+    /// `action.md`.
+    pub actions: List<AltAction> = [],
 }
 
 impl Alternative {
@@ -633,6 +659,9 @@ impl LexerRule {
 /// LexerAlternative is one alternative in a lexer rule.
 pub struct LexerAlternative {
     pub elements: List<LexerElement>,
+    /// Retained `{ ... }` actions / `{ ... }?` predicates, positioned by
+    /// `before_index` into `elements` (see `AltAction`, `action.md`).
+    pub actions: List<AltAction> = [],
 }
 
 /// LexerElement is a single unit within a lexer alternative.
@@ -696,7 +725,7 @@ pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
     // (the parser grammar usually holds the actions); last non-Java wins.
     let mut action_language = ActionLanguage::Java;
     for let g of grammars {
-        if !(g.action_language matches { Java }) {
+        if !g.action_language matches { Java } {
             action_language = g.action_language;
         }
         // Concatenate source paths so every input contributes a provenance entry.
@@ -891,7 +920,7 @@ fn stamp_call_sites_alternatives(alts: &List<Alternative>, next: &mut i32) -> Li
         for let e of &alt.elements {
             elems.push(stamp_call_sites_element(e, next));
         }
-        out.push(Alternative { label: alt.label, options: alt.options, elements: elems });
+        out.push(Alternative { label: alt.label, options: alt.options, elements: elems, actions: alt.actions });
     }
     return out;
 }
@@ -965,7 +994,7 @@ fn stamp_decisions_alternatives(alts: &List<Alternative>, next: &mut i32) -> Lis
         for let e of &alt.elements {
             elems.push(stamp_decisions_element(e, next));
         }
-        out.push(Alternative { label: alt.label, options: alt.options, elements: elems });
+        out.push(Alternative { label: alt.label, options: alt.options, elements: elems, actions: alt.actions });
     }
     return out;
 }
@@ -1018,7 +1047,7 @@ fn canon_empty_alt_alternatives(alts: &List<Alternative>) -> List<Alternative> {
         for let e of &alt.elements {
             elems.push(canon_empty_alt_element(e));
         }
-        out.push(Alternative { label: alt.label, options: alt.options, elements: elems });
+        out.push(Alternative { label: alt.label, options: alt.options, elements: elems, actions: alt.actions });
     }
     return out;
 }

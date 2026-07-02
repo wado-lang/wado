@@ -18,7 +18,7 @@ Survey results (2026-07):
 
 ## Architecture: four layers
 
-1. IR retention. Carry action / predicate source (text + span + language tag) in the IR: `Element::Action` / `Element::Predicate`, `@init` / `@after` slots, rule args / `returns` / `locals` declarations, lexer-rule actions. Today the g4 parser discards all of these (`skip_braced_block`).
+1. IR retention. Carry action / predicate source (text + span + language tag) in the IR: a per-alternative `actions` sidecar, `@init` / `@after` slots, rule args / `returns` / `locals` declarations, lexer-rule actions. Today the g4 parser discards all of these (`skip_braced_block`).
 2. Attribute resolution (language-independent). `$x`, `$x.text`, `$ctx`, `$_p`, `$text` are ANTLR semantics, not host-language semantics. Gale scans the opaque body for `$`-references and resolves them itself; `$_p` maps to the existing `min_prec` threading.
 3. Translator plugin. `translate(body, resolved_attrs) -> Wado snippet`. Ships two: identity (body is already Wado — requirement 2) and java2wado (requirement 1). Both target the same runtime API, so java2wado is mostly an API mapping table plus a small Java expression/statement parser.
 4. Runtime layer. An action-context API in the generated parser (current token, matched text, input access) that all translated bodies call into. `superClass = Foo` generates a `Foo` trait; the user implements it in Wado — this is how the real-world grammars run (requirement 2 applied to requirement 1's gap).
@@ -47,24 +47,31 @@ pub struct ActionSource {
 
 Embedded directly at each site (value semantics), not interned into a grammar-level table — `merge_grammars` then needs no index remapping; the id pass provides global identity afterwards.
 
-### Element position (parser alternatives)
+### Element position — a parallel per-alternative list
+
+Actions and predicates are **not** added as `Element` variants. Adding a variant to `Element` / `LexerElement` breaks every exhaustive match over them (~16 sites) and, worse, silently shifts the index-based LR / prediction / scan logic that reads `alt.elements[0]` (LR self-ref), `alt.elements[k+1]` (suffix walk), etc. — making byte-identical output depend on correctly skipping an invisible ε element at every one of those sites.
+
+Instead each alternative carries a sidecar list, so `elements` stays exactly the sequence of things that match (byte-identical, no match-site touched) and position is recorded explicitly:
 
 ```wado
-pub variant Element {
-    // ... existing 8 variants ...
-    /// `{ ... }` element action; executes when the parse reaches this point.
-    Action(ActionElement),
-    /// `{ ... }?` semantic predicate; gates prediction (Phase 2).
-    Predicate(PredicateElement),
+pub enum ActionKind { Action, Predicate }   // `{ ... }` vs `{ ... }?`
+
+pub struct AltAction {
+    pub kind: ActionKind,
+    pub source: ActionSource,
+    /// Number of significant elements before this action, i.e. it runs
+    /// after `elements[before_index - 1]` and before `elements[before_index]`.
+    /// `0` = alt-initial (a `Predicate` here is a prediction gate).
+    pub before_index: i32,
 }
 
-pub struct ActionElement    { pub source: ActionSource, pub options: List<GrammarOption> }
-pub struct PredicateElement { pub source: ActionSource, pub options: List<GrammarOption> }
+// Alternative / LexerAlternative gain:
+pub actions: List<AltAction> = [],
 ```
 
-Element options (`{...}?<fail='msg'>`) move onto the element instead of today's promote-to-alternative hack (`parse_alternative`); during migration the LR rewriter reads both places.
+Position is fully preserved: an alt-initial predicate is `before_index == 0`; a mid-alt action after the k-th element is `before_index == k` (`LexerExec/ActionPlacement` pins the lexer analog). Phase 2 reads `actions` to place predicates in prediction and actions in the parse.
 
-Position among elements is meaningful and preserved: an alt-initial `Predicate` is a prediction gate; a mid-alt `Action` runs after the preceding element is matched (`LexerExec/ActionPlacement` pins the lexer analog).
+Element options (`{...}?<fail='msg'>` / `{...}<p=3>`) keep their current promote-to-alternative handling in `parse_alternative` (the LR rewriter already reads `<p=N>` / `<assoc>` from `alt.options`), so that path stays byte-identical; the action body is recorded alongside.
 
 ### Rule signature and prequels
 
@@ -93,7 +100,7 @@ Call sites: `RuleRefElement` gains `pub arg_action: Option<ActionSource>` (`a[$i
 
 ### Lexer, named actions, options
 
-- `LexerElement` gains the same `Action(ActionElement)` / `Predicate(PredicateElement)` variants (position-sensitive; see Lexer semantics).
+- `LexerAlternative` gets the same `actions: List<AltAction>` sidecar (position-sensitive; see Lexer semantics).
 - `NamedAction` gains `pub body: ActionSource` (`@members` carries member declarations the corpus needs, e.g. `int i = 0;`).
 - `OptionValue::Action(String)` migrates to `OptionValue::Action(ActionSource)` for consistency.
 
@@ -109,7 +116,7 @@ Default Java matches ANTLR (its default target) and the corpus. Gale-first gramm
 
 ### Migration invariant
 
-Phase 1a lands retention only: the g4 parser stores instead of skips, and codegen still discards — moving the "action skipped" warning from parse time to codegen time. Generated parsers stay byte-identical; the cost is mechanical (every `match` over `Element` / `LexerElement` in lower / parser_gen / prediction / dump gains arms — `Action` is ε for FIRST/nullability, `Predicate` is ε for FIRST until Phase 2). Attribute resolution then reads `ActionSource` without touching the parser again.
+Phase 1a lands retention only: the g4 parser stores actions instead of skipping them, and codegen still discards. Because actions live in the `actions` sidecar rather than in `elements`, generated parsers stay byte-identical by construction — no `Element` / `LexerElement` variant is added, so no `match` in lower / parser_gen / prediction / dump changes, and the index-based LR / prediction / scan logic never sees an action. Phase 1a-i landed the out-of-element retention (rule signatures, named-action / option bodies); Phase 1a-ii adds the `actions` sidecar. Attribute resolution then reads `ActionSource` without touching the parser again.
 
 ## Attribute resolution
 
@@ -223,7 +230,8 @@ Recovery invariants with actions present:
 
 ## Staging
 
-- [ ] Phase 1 — IR retention (1a, byte-identical) + attribute resolution + value channel + Wado actions (identity translator) + `@after` / print-style actions via `p.emit`.
+- [x] Phase 1a — IR retention, byte-identical (1a-i: rule signatures, named-action / option bodies; 1a-ii: per-alternative `actions` sidecar).
+- [ ] Phase 1b — attribute resolution + value channel + Wado actions (identity translator) + `@after` / print-style actions via `p.emit`.
 - [ ] Phase 2 — predicates in prediction (`SemPredEvalParser` / `SemPredEvalLexer` descriptors are the acceptance suite).
 - [ ] Phase 3 — java2wado for the corpus subset + members translation.
 - [ ] Phase 4 — lexer actions / position-sensitive predicates + SuperClass trait (`tokenVocab` falls out).
