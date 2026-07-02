@@ -1,6 +1,6 @@
 grammar T;
-s : e {<writeln("$e.v")>};
-e returns [int v, <StringList()> ignored]
+s : e {System.out.println($e.v);};
+e returns [int v, List<String> ignored]
   : a=e '*' b=e {$v = $a.v * $b.v;}
   | a=e '+' b=e {$v = $a.v + $b.v;}
   | INT {$v = $INT.int;}

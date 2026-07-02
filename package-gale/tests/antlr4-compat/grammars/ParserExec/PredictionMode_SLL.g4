@@ -1,7 +1,7 @@
 grammar T;
 
 r
-   : (a b | a) EOF {<writeln("$text")>}
+   : (a b | a) EOF {System.out.println($text);}
    ;
 a
    : X Y?

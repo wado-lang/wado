@@ -1,2 +1,2 @@
 parser grammar S;
-a : '=' 'a' {<write("\"S.a\"")>};
+a : '=' 'a' {System.out.print("S.a");};

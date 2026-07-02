@@ -1,7 +1,7 @@
 grammar T;
 s : a a;
-a : {<LTEquals("1", "\"x\"")>}? ID INT {<writeln("\"alt 1\"")>}
-  | {<LTEquals("1", "\"y\"")>}? ID INT {<writeln("\"alt 2\"")>}
+a : {_input.LT(1).getText().equals("x")}? ID INT {System.out.println("alt 1");}
+  | {_input.LT(1).getText().equals("y")}? ID INT {System.out.println("alt 2");}
   ;
 ID : 'a'..'z'+ ;
 INT : '0'..'9'+;

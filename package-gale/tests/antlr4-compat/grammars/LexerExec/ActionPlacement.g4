@@ -1,8 +1,8 @@
 lexer grammar L;
-I : ({<PlusText("stuff fail: "):writeln()>} 'a'
-| {<PlusText("stuff0:"):writeln()>}
-       'a' {<PlusText("stuff1: "):writeln()>}
-       'b' {<PlusText("stuff2: "):writeln()>})
-       {<Text():writeln()>} ;
+I : ({System.out.println("stuff fail: " + getText());} 'a'
+| {System.out.println("stuff0:" + getText());}
+       'a' {System.out.println("stuff1: " + getText());}
+       'b' {System.out.println("stuff2: " + getText());})
+       {System.out.println(getText());} ;
 WS : (' '|'\n') -> skip ;
 J : .;

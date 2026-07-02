@@ -1,8 +1,8 @@
 grammar T;
-s : a {<writeln("\"alt 1\"")>}
-  | b {<writeln("\"alt 2\"")>}
+s : a {System.out.println("alt 1");}
+  | b {System.out.println("alt 2");}
   ;
-a : {<False()>}? ID INT
+a : {false}? ID INT
   | ID INT
   ;
 b : ID ID

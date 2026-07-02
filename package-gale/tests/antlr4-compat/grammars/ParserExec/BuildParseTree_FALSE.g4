@@ -1,7 +1,7 @@
 grammar T;
 
 r
-   : a b {<ToStringTree("$ctx"):writeln()>}
+   : a b {System.out.println($ctx.toStringTree(this));}
    ;
 a
    : A

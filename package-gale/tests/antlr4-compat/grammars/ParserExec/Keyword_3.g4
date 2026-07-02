@@ -1,4 +1,4 @@
 grammar T;
 
-program : action*{<writeln("$text")>} EOF ;
+program : action*{System.out.println($text);} EOF ;
 action: 'break;' | 'continue;' | 'return;' ;

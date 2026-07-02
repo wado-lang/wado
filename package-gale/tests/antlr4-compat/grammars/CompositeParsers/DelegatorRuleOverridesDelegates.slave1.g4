@@ -1,3 +1,3 @@
 parser grammar T;
 tokens { A }
-b : 'b' {<writeln("\"T.b\"")>};
+b : 'b' {System.out.println("T.b");};

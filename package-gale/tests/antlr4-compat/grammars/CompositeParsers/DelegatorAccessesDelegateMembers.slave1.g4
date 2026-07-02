@@ -1,5 +1,7 @@
 parser grammar S;
 @parser::members {
-<Declare_foo()>
+public void foo() {
+	System.out.println("foo");
+}
 }
 a : B;

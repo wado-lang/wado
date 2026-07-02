@@ -1,5 +1,5 @@
 grammar T;
-s @after {<ToStringTree("$ctx"):writeln()>} : e EOF; // must indicate EOF can follow or 'a<EOF>' won't match
+s @after {System.out.println($ctx.toStringTree(this));} : e EOF; // must indicate EOF can follow or 'a<EOF>' won't match
 e :<assoc=right> e '*' e
   |<assoc=right> e '+' e
   |<assoc=right> e '?' e ':' e

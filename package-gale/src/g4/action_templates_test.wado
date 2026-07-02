@@ -1,0 +1,154 @@
+use { expand_action_templates } from "./action_templates.wado";
+
+fn expand(src: &String) -> String {
+    let outcome = expand_action_templates(src);
+    assert outcome.warnings.is_empty(), `unexpected warnings: {outcome.warnings:?}`;
+    return outcome.text;
+}
+
+test "expand: writeln with quoted Java string literal" {
+    let g = "a : ID {<writeln(\"\\\"alt 1\\\"\")>} ;";
+    assert expand(&g) == "a : ID {System.out.println(\"alt 1\");} ;", `got '{expand(&g)}'`;
+}
+
+test "expand: writeln with attribute-ref code arg" {
+    let g = "{<writeln(\"$e.v\")>}";
+    assert expand(&g) == "{System.out.println($e.v);}", `got '{expand(&g)}'`;
+}
+
+test "expand: chained ToStringTree into writeln" {
+    let g = "s @after {<ToStringTree(\"$ctx\"):writeln()>} : e EOF ;";
+    let expected = "s @after {System.out.println($ctx.toStringTree(this));} : e EOF ;";
+    assert expand(&g) == expected, `got '{expand(&g)}'`;
+}
+
+test "expand: True / False predicates" {
+    let g = "a : {<False()>}? ID | {<True()>}? INT ;";
+    assert expand(&g) == "a : {false}? ID | {true}? INT ;", `got '{expand(&g)}'`;
+}
+
+test "expand: InputText chained into writeln" {
+    let g = "a : A {<InputText():writeln()>} ;";
+    assert expand(&g) == "a : A {System.out.println(_input.getText());} ;", `got '{expand(&g)}'`;
+}
+
+test "expand: lexer Text and PlusText actions" {
+    let g = "I : 'a' {<Text():writeln()>} J : 'b' {<PlusText(\"stuff0:\"):writeln()>} ;";
+    let expected = "I : 'a' {System.out.println(getText());} J : 'b' {System.out.println(\"stuff0:\" + getText());} ;";
+    assert expand(&g) == expected, `got '{expand(&g)}'`;
+}
+
+test "expand: member helpers (init / add / get / mod-equals)" {
+    let g = "@parser::members {<InitIntMember(\"i\",\"0\")>}\ns : ({<AddMember(\"i\",\"1\")>\n<write(\"\\\"i=\\\"\")>\n<writeln(GetMember(\"i\"))>} a)+ ;\na : {<ModMemberEquals(\"i\",\"2\",\"0\")>}? ID ;";
+    let expected = "@parser::members {int i = 0;}\ns : ({this.i += 1;\nSystem.out.print(\"i=\");\nSystem.out.println(this.i);} a)+ ;\na : {this.i % 2 == 0}? ID ;";
+    assert expand(&g) == expected, `got '{expand(&g)}'`;
+}
+
+test "expand: nested subtemplate arg (LANotEquals + ParserToken)" {
+    let g = "p : ('s'|{<LANotEquals(\"2\",{T<ParserToken(\"Parser\", \"NL\")>})>}? NL)+ ;";
+    let expected = "p : ('s'|{_input.LA(2) != TParser.NL}? NL)+ ;";
+    assert expand(&g) == expected, `got '{expand(&g)}'`;
+}
+
+test "expand: SubContextLocal chain with Production / Result blocks" {
+    let g = "{$v = <Cast(\"BinaryContext\",\"$ctx\"):SubContextLocal({<Production(\"e\")>(0)}, {<Result(\"v\")>})> * <Cast(\"BinaryContext\",\"$ctx\"):SubContextLocal({<Production(\"e\")>(1)}, {<Result(\"v\")>})>;}";
+    let expected = "{$v = ((BinaryContext)$ctx).e(0).v * ((BinaryContext)$ctx).e(1).v;}";
+    assert expand(&g) == expected, `got '{expand(&g)}'`;
+}
+
+test "expand: returns / locals / rule-arg type helpers" {
+    let g = "e returns [int v, <StringList()> ignored] : ID ;\nf returns [<StringType()> result] : ID ;\nb[<IntArg(\"i\")>] : a[<VarRef(\"i\")>] ;";
+    let expected = "e returns [int v, List<String> ignored] : ID ;\nf returns [String result] : ID ;\nb[int i] : a[i] ;";
+    assert expand(&g) == expected, `got '{expand(&g)}'`;
+}
+
+test "expand: ContextRuleFunction chain with Concat and Assert" {
+    let g = "{<ContextRuleFunction(Cast(\"UnaryContext\",\"$ctx\"), \"INC()\"):Concat(\" != null\"):Assert()>}";
+    let expected = "{assert ((UnaryContext)$ctx).INC() != null;}";
+    assert expand(&g) == expected, `got '{expand(&g)}'`;
+}
+
+test "expand: AssertIsList over a ContextListFunction subtemplate" {
+    let g = "@after {\n<AssertIsList({<ContextListFunction(\"$ctx\",\"elseIfStatement\")>})>\n}";
+    let expected = "@after {\njava.util.List<?> __assertIsList = $ctx.elseIfStatement();\n}";
+    assert expand(&g) == expected, `got '{expand(&g)}'`;
+}
+
+test "expand: predicate helper family" {
+    let g = "s : e {<True():Invoke_pred()>}? '!' ;\nt : e {<ValEquals(\"$i\",\"99\"):Invoke_pred()>}? ID ;\nu : {<GetMember(\"enumKeyword\"):Not()>}? ID ;\nENUM : [a-z]+ { <TextEquals(\"enum\")> }? ;";
+    let expected = "s : e {this.pred(true)}? '!' ;\nt : e {this.pred($i == 99)}? ID ;\nu : {!(this.enumKeyword)}? ID ;\nENUM : [a-z]+ { getText().equals(\"enum\") }? ;";
+    assert expand(&g) == expected, `got '{expand(&g)}'`;
+}
+
+test "expand: Column splices into a raw comparison" {
+    let g = "fragment ID1 : { <Column()> < 2 }? [a-zA-Z];";
+    let expected = "fragment ID1 : { getCharPositionInLine() < 2 }? [a-zA-Z];";
+    assert expand(&g) == expected, `got '{expand(&g)}'`;
+}
+
+test "expand: Declare_pred members body" {
+    let g = "@parser::members {\n<Declare_pred()>\n}";
+    let out = expand(&g);
+    assert out.contains("boolean pred(boolean v)"), `got '{out}'`;
+    assert out.contains("System.out.println(\"eval=\" + v);"), `got '{out}'`;
+}
+
+test "expand: parser-config helpers" {
+    let g = "s @init {<LL_EXACT_AMBIG_DETECTION()>} : a {<DumpDFA()>} ;\nf @init{\n<BailErrorStrategy()>\n} : b {<BuildParseTrees()>} ;";
+    let out = expand(&g);
+    assert out.contains("getInterpreter().setPredictionMode(PredictionMode.LL_EXACT_AMBIG_DETECTION);"), `got '{out}'`;
+    assert out.contains("dumpDFA();"), `got '{out}'`;
+    assert out.contains("setErrorHandler(new BailErrorStrategy());"), `got '{out}'`;
+    assert out.contains("setBuildParseTree(true);"), `got '{out}'`;
+}
+
+test "expand: Pass is a no-op action and Append concatenates" {
+    let g = "a : ('b'|'z'{<Pass()>})* ;\nm : A {<Append(\"\\\"conjured=\\\"\",\"$x\"):writeln()>} ;\nn : B {<AppendStr(\"\\\"ID \\\"\", \"$ID.text\"):writeln()>} ;";
+    let expected = "a : ('b'|'z'{})* ;\nm : A {System.out.println(\"conjured=\" + $x);} ;\nn : B {System.out.println(\"ID \" + $ID.text);} ;";
+    assert expand(&g) == expected, `got '{expand(&g)}'`;
+}
+
+test "expand: assignment and declaration helpers" {
+    let g = "{<AssignLocal(\"$v\",\"3\")>} {<InitIntVar(\"x\",\"0\")>} {<SetMember(\"i\",\"2\")>} {<InitBooleanMember(\"enumKeyword\",True())>}";
+    let expected = "{$v = 3;} {int x = 0;} {this.i = 2;} {boolean enumKeyword = true;}";
+    assert expand(&g) == expected, `got '{expand(&g)}'`;
+}
+
+test "expand: LTEquals and GetExpectedTokenNames" {
+    let g = "a : {<LTEquals(\"1\", \"\\\"x\\\"\")>}? ID ;\nc @init\n{<GetExpectedTokenNames():writeln()>}\n  : ;";
+    let expected = "a : {_input.LT(1).getText().equals(\"x\")}? ID ;\nc @init\n{System.out.println(getExpectedTokens().toString(getVocabulary()));}\n  : ;";
+    assert expand(&g) == expected, `got '{expand(&g)}'`;
+}
+
+test "expand: leaves element options, literals, comments, raw Java untouched" {
+    let g = "e : e '^'<assoc=right> e | e ('<<' | '>') e {$v = $a.v * $b.v;} ;\n// must indicate EOF can follow or 'a<EOF>' won't match\nr : {0==0}? ID<p=3> ;";
+    assert expand(&g) == g, `got '{expand(&g)}'`;
+}
+
+test "expand: idempotent on already-expanded output" {
+    let g = "a : ID {<writeln(\"\\\"alt 1\\\"\")>} ;\ne returns [int v, <StringList()> ignored] : ID {<writeln(GetMember(\"i\"))>} ;";
+    let once = expand(&g);
+    assert expand(&once) == once, `not idempotent: '{expand(&once)}'`;
+}
+
+test "expand: unknown helper is left verbatim with a warning" {
+    let g = "a : ID {<Bogus(\"x\")>} ;";
+    let outcome = expand_action_templates(&g);
+    assert outcome.text == g, `got '{outcome.text}'`;
+    assert outcome.warnings.len() == 1, `got {outcome.warnings:?}`;
+    assert outcome.warnings[0].contains("Bogus"), `got {outcome.warnings:?}`;
+}
+
+test "expand: composite members and invocation helpers" {
+    let g = "@parser::members {\n<Declare_foo()>\n}\ns : 'b' {<Invoke_foo()>} ;";
+    let out = expand(&g);
+    assert out.contains("public void foo()"), `got '{out}'`;
+    assert out.contains("System.out.println(\"foo\");"), `got '{out}'`;
+    assert out.contains("{this.foo();}"), `got '{out}'`;
+}
+
+test "expand: TokenStartColumnEquals lexer predicate" {
+    let g = "INDENT : [ \\t]+ { <TokenStartColumnEquals(\"0\")> }? ;";
+    let expected = "INDENT : [ \\t]+ { _tokenStartCharPositionInLine == 0 }? ;";
+    assert expand(&g) == expected, `got '{expand(&g)}'`;
+}

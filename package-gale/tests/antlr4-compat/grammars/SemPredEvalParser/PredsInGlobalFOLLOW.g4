@@ -1,9 +1,12 @@
 grammar T;
 @parser::members {
-<Declare_pred()>
+boolean pred(boolean v) {
+	System.out.println("eval=" + v);
+	return v;
 }
-s : e {<True():Invoke_pred()>}? {<writeln("\"parse\"")>} '!' ;
-t : e {<False():Invoke_pred()>}? ID ;
+}
+s : e {this.pred(true)}? {System.out.println("parse");} '!' ;
+t : e {this.pred(false)}? ID ;
 e : ID | ; // non-LL(1) so we use ATN
 ID : 'a'..'z'+ ;
 INT : '0'..'9'+;

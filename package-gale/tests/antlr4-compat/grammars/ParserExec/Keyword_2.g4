@@ -1,4 +1,4 @@
 grammar T;
 
-program : sempred*{<writeln("$text")>} EOF ;
+program : sempred*{System.out.println($text);} EOF ;
 sempred: 'break;' | 'continue;' | 'return;' ;

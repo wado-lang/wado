@@ -1,3 +1,3 @@
 parser grammar S;
 tokens { A, B, C }
-x : A {<writeln("\"S.x\"")>};
+x : A {System.out.println("S.x");};

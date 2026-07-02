@@ -10,5 +10,5 @@ SOFTWARE: 'software';
 WS : ' ' -> skip ;
 acClass
 @init
-{<GetExpectedTokenNames():writeln()>}
+{System.out.println(getExpectedTokens().toString(getVocabulary()));}
   : ;

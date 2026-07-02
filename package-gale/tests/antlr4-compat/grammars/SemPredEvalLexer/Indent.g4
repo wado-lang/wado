@@ -1,6 +1,6 @@
 lexer grammar L;
 ID : [a-z]+  ;
-INDENT : [ \t]+ { <TokenStartColumnEquals("0")> }?
-{ <writeln("\"INDENT\"")> }  ;
+INDENT : [ \t]+ { _tokenStartCharPositionInLine == 0 }?
+{ System.out.println("INDENT"); }  ;
 NL : '\n';
 WS : [ \t]+ ;

@@ -1,2 +1,2 @@
 grammar T;
-a : ~'x' 'z' {<InputText():writeln()>} ;
+a : ~'x' 'z' {System.out.println(_input.getText());} ;

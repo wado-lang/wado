@@ -1,0 +1,203 @@
+#!/usr/bin/env wado
+//! Re-run the StringTemplate-helper expansion over the committed descriptor
+//! grammars in `tests/antlr4-compat/grammars/`, in place.
+//!
+//! The canonical pipeline expands templates at extract time
+//! (`extract_antlr4_descriptors.wado`), which needs the `vendor/antlr4`
+//! submodule. This script applies the identical transform to the committed
+//! `.g4` files instead, for two situations:
+//!
+//! - bootstrapping: converting an already-extracted corpus without
+//!   re-running the full vendor extract;
+//! - verifying idempotency: on an expanded corpus the script must report
+//!   zero rewrites.
+//!
+//! It cannot *re-derive* an expansion: once a template is expanded the
+//! original helper text is gone, so after a change to the expansion table
+//! the corpus must be regenerated via the vendor extract (or edited
+//! manually for a targeted fix).
+//!
+//! Usage (from the repository root):
+//!   wado run package-gale/scripts/expand_action_templates_in_place.wado
+
+use { println, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
+use {
+    Preopens,
+    Descriptor,
+    DescriptorFlags,
+    PathFlags,
+    OpenFlags,
+    Filesize,
+} from "wasi:filesystem";
+use { ErrorCode } from "wasi:filesystem/types.wado";
+use { expand_action_templates } from "../src/g4/action_templates.wado";
+
+global FILE_READ_CHUNK: i32 = 8192;
+global DIR_READ_CHUNK: i32 = 64;
+
+fn grammars_root() -> String {
+    return "package-gale/tests/antlr4-compat/grammars";
+}
+
+export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("expand: no preopened directories available (run via `wado run`)");
+        exit(1);
+    }
+    let root = dirs[0].0;
+    let grammars = match open_dir(&root, &grammars_root(), false) {
+        Ok(d) => d,
+        Err(_) => {
+            eprintln(`expand: cannot open '{grammars_root()}' — run from the repository root`);
+            exit(1);
+        },
+    };
+
+    let mut total = 0;
+    let mut rewritten = 0;
+    let mut warned = 0;
+    for let category of list_subdirs(&grammars) {
+        let cat_dir = match open_dir(&grammars, &category, true) {
+            Ok(d) => d,
+            Err(_) => {
+                eprintln(`expand: cannot open category '{category}'`);
+                exit(1);
+            },
+        };
+        for let name of list_files_with_suffix(&cat_dir, &".g4") {
+            total += 1;
+            let text = match read_file_to_string(&cat_dir, &name) {
+                Ok(s) => s,
+                Err(_) => {
+                    eprintln(`expand: cannot read {category}/{name}`);
+                    exit(1);
+                },
+            };
+            let outcome = expand_action_templates(&text);
+            for let w of outcome.warnings {
+                eprintln(`expand: {category}/{name}: {w}`);
+                warned += 1;
+            }
+            if outcome.text == text {
+                continue;
+            }
+            if let Err(_) = write_file_string(&cat_dir, &name, &outcome.text) {
+                eprintln(`expand: cannot write {category}/{name}`);
+                exit(1);
+            }
+            rewritten += 1;
+        }
+    }
+    println(`expand: {total} grammars scanned, {rewritten} rewritten, {warned} warnings`);
+}
+
+fn read_file_to_string(dir: &Descriptor, path: &String) -> Result<String, ErrorCode> {
+    let opened = match dir.open_at(
+        PathFlags::none(),
+        *path,
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    ).wait() {
+        Ok(file) => file,
+        Err(e) => {
+            return Result::Err(e);
+        },
+    };
+    let [stream, done] = opened.read_via_stream(0 as Filesize);
+    let mut bytes: List<u8> = [];
+    loop {
+        let chunk = stream.read(FILE_READ_CHUNK);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let b of chunk {
+            bytes.push(b);
+        }
+    }
+    stream.drop();
+    let read_result = done.read();
+    done.drop();
+    if let Some(Err(e)) = read_result {
+        return Result::Err(e);
+    }
+    return match String::from_utf8(bytes) {
+        Ok(s) => Result::Ok(s),
+        Err(_) => Result::Err(ErrorCode::IllegalByteSequence),
+    };
+}
+
+fn write_file_string(dir: &Descriptor, path: &String, content: &String) -> Result<(), ErrorCode> {
+    let file = match dir.open_at(
+        PathFlags::none(),
+        *path,
+        OpenFlags::Create | OpenFlags::Truncate,
+        DescriptorFlags::Read | DescriptorFlags::Write,
+    ).wait() {
+        Ok(f) => f,
+        Err(e) => {
+            return Result::Err(e);
+        },
+    };
+    let bytes: List<u8> = content.bytes().collect();
+    let [rx, tx] = Stream::<u8>::new();
+    let sub = file.write_via_stream(rx, 0 as Filesize);
+    tx.write(bytes);
+    tx.drop();
+    let write_result = sub.read();
+    sub.drop();
+    if let Some(Err(e)) = write_result {
+        return Result::Err(e);
+    }
+    return Result::Ok(());
+}
+
+fn open_dir(parent: &Descriptor, name: &String, mutate: bool) -> Result<Descriptor, ErrorCode> {
+    let flags = if mutate { DescriptorFlags::Read | DescriptorFlags::MutateDirectory } else { DescriptorFlags::Read };
+    return parent.open_at(
+        PathFlags::none(),
+        *name,
+        OpenFlags::Directory,
+        flags,
+    ).wait();
+}
+
+fn list_subdirs(dir: &Descriptor) -> List<String> {
+    let mut out: List<String> = [];
+    let [stream, done] = dir.read_directory();
+    loop {
+        let chunk = stream.read(DIR_READ_CHUNK);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let e of chunk {
+            if e.type matches { Directory } {
+                out.push(e.name);
+            }
+        }
+    }
+    stream.drop();
+    done.drop();
+    out.sort();
+    return out;
+}
+
+fn list_files_with_suffix(dir: &Descriptor, suffix: &String) -> List<String> {
+    let mut out: List<String> = [];
+    let [stream, done] = dir.read_directory();
+    loop {
+        let chunk = stream.read(DIR_READ_CHUNK);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let e of chunk {
+            if e.type matches { RegularFile } && e.name.ends_with(*suffix) {
+                out.push(e.name);
+            }
+        }
+    }
+    stream.drop();
+    done.drop();
+    out.sort();
+    return out;
+}

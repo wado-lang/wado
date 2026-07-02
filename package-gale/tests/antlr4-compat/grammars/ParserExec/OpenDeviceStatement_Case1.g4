@@ -1,7 +1,7 @@
 grammar OpenDeviceStatement;
 program : statement+ '.' ;
 
-statement : 'OPEN' ( 'DEVICE' (  OPT1  |  OPT2  |  OPT3  )? )+ {<writeln("$text")>} ;
+statement : 'OPEN' ( 'DEVICE' (  OPT1  |  OPT2  |  OPT3  )? )+ {System.out.println($text);} ;
 
 OPT1 : 'OPT-1';
 OPT2 : 'OPT-2';

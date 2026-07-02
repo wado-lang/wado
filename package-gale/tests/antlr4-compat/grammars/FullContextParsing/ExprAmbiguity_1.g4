@@ -1,7 +1,7 @@
 grammar T;
 s
-@init {<LL_EXACT_AMBIG_DETECTION()>}
-:   expr[0] {<ToStringTree("$expr.ctx"):writeln()>};
+@init {getInterpreter().setPredictionMode(PredictionMode.LL_EXACT_AMBIG_DETECTION);}
+:   expr[0] {System.out.println($expr.ctx.toStringTree(this));};
    expr[int _p]
        : ID
        (

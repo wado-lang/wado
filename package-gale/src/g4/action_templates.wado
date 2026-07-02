@@ -1,0 +1,465 @@
+//! StringTemplate-helper expansion for ANTLR4 testsuite grammars.
+//!
+//! The upstream `runtime-testsuite/` descriptors write action bodies and
+//! semantic predicates in a target-agnostic helper vocabulary
+//! (`<writeln("$e.v")>`, `<True()>`, ...) that the upstream test harness
+//! expands per target language. Gale's descriptor extractor calls
+//! `expand_action_templates` to bake the **Java-target** expansion into the
+//! extracted `.g4`, so the committed corpus carries real host-language
+//! action bodies instead of testsuite-only notation. Downstream consumers
+//! (the future Stage C action pipeline, the Stage B' oracle stripper) then
+//! never see StringTemplate syntax.
+//!
+//! Expansion semantics were derived clean-room: from the helper names, the
+//! descriptors' observed `[input]`/`[output]` pairs, and the *public* ANTLR4
+//! Java runtime API — never from the upstream `.stg` template definitions or
+//! runtime implementation source (License hygiene, package CLAUDE.md). If a
+//! future jar-oracle run shows an expansion diverging from upstream
+//! behaviour, fix the table in `expand_helper` and regenerate the corpus
+//! via `scripts/extract-antlr4-descriptors.sh` (a table change cannot be
+//! re-applied in place — see `scripts/expand_action_templates_in_place.wado`).
+//!
+//! Template reference syntax handled here (the subset the corpus uses):
+//!
+//! ```text
+//! template  = '<' chain '>'
+//! chain     = call (':' call)*            // X:F() applies F to X
+//! call      = IDENT '(' (arg (',' arg)*)? ')'
+//! arg       = '"' ... '"'                 // code text; \" and \\ unescaped
+//!           | '{' subtemplate '}'         // literal text + nested templates
+//!           | chain                       // nested helper call
+//! ```
+//!
+//! Only `<IDENT(` sequences whose IDENT is a known helper are rewritten;
+//! element options (`<assoc=right>`), token literals (`'<'`), comments, and
+//! raw Java action bodies pass through verbatim, so the transform is
+//! idempotent. An unknown `<IDENT(...)>` is left verbatim and reported in
+//! `warnings` — loud, never a silent guess.
+
+use { scan_string, scan_line_comment, scan_block_comment } from "./scan.wado";
+
+pub struct ExpandOutcome {
+    pub text: String,
+    pub warnings: List<String>,
+}
+
+pub fn expand_action_templates(src: &String) -> ExpandOutcome {
+    let chars: List<char> = src.chars().collect();
+    let n = chars.len();
+    let mut out = String::with_capacity(src.len());
+    let mut warnings: List<String> = [];
+    let mut i = 0;
+    while i < n {
+        let c = chars[i];
+        if c == '\'' {
+            let end = scan_string(&chars, i);
+            push_span(&mut out, &chars, i, end);
+            i = end;
+            continue;
+        }
+        if c == '/' && i + 1 < n && chars[i + 1] == '/' {
+            let end = scan_line_comment(&chars, i);
+            push_span(&mut out, &chars, i, end);
+            i = end;
+            continue;
+        }
+        if c == '/' && i + 1 < n && chars[i + 1] == '*' {
+            let end = scan_block_comment(&chars, i);
+            push_span(&mut out, &chars, i, end);
+            i = end;
+            continue;
+        }
+        if c == '<' && is_template_start(&chars, i) {
+            match eval_template(&chars, i) {
+                Ok(expanded) => {
+                    out.push_str(&expanded.text);
+                    i = expanded.end;
+                    continue;
+                },
+                Err(reason) => {
+                    warnings.push(reason);
+                    // Fall through: emit '<' and rescan the rest verbatim.
+                },
+            }
+        }
+        out.push(c);
+        i += 1;
+    }
+    return ExpandOutcome { text: out, warnings };
+}
+
+struct Expanded {
+    text: String,
+    /// Index just past the closing '>'.
+    end: i32,
+}
+
+/// A '<' opens a template only when an identifier followed by '(' comes
+/// next. This keeps `<assoc=right>`, `<EOF>`, `<p=3>`, and comparison
+/// operators out of the template path without tracking regions.
+fn is_template_start(chars: &List<char>, lt: i32) -> bool {
+    let n = chars.len();
+    let mut j = lt + 1;
+    if j >= n || !is_id_start_char(chars[j]) {
+        return false;
+    }
+    while j < n && is_id_continue_char(chars[j]) {
+        j += 1;
+    }
+    return j < n && chars[j] == '(';
+}
+
+/// Parse and expand one `<chain>` starting at the '<'.
+fn eval_template(chars: &List<char>, lt: i32) -> Result<Expanded, String> {
+    let chain = eval_chain(chars, lt + 1)?;
+    let mut j = skip_ws(chars, chain.end);
+    if j >= chars.len() || chars[j] != '>' {
+        return Result::Err(`template at index {lt}: expected '>' to close the reference`);
+    }
+    return Result::Ok(Expanded { text: chain.text, end: j + 1 });
+}
+
+/// Parse and expand `call (':' call)*` starting at an identifier.
+fn eval_chain(chars: &List<char>, start: i32) -> Result<Expanded, String> {
+    let n = chars.len();
+    let mut current = eval_call(chars, start, null)?;
+    loop {
+        let j = skip_ws(chars, current.end);
+        if j < n && chars[j] == ':' {
+            let k = skip_ws(chars, j + 1);
+            current = eval_call(chars, k, Option::Some(current.text))?;
+            continue;
+        }
+        return Result::Ok(Expanded { text: current.text, end: current.end });
+    }
+}
+
+/// Parse `IDENT '(' args ')'` at `start` and expand it against the table.
+fn eval_call(chars: &List<char>, start: i32, receiver: Option<String>) -> Result<Expanded, String> {
+    let n = chars.len();
+    let mut j = start;
+    if j >= n || !is_id_start_char(chars[j]) {
+        return Result::Err(`template call at index {start}: expected a helper name`);
+    }
+    let mut name = String::with_capacity(16);
+    while j < n && is_id_continue_char(chars[j]) {
+        name.push(chars[j]);
+        j += 1;
+    }
+    if j >= n || chars[j] != '(' {
+        return Result::Err(`template helper '{name}': expected '('`);
+    }
+    j += 1;
+    let mut args: List<String> = [];
+    j = skip_ws(chars, j);
+    if j < n && chars[j] != ')' {
+        loop {
+            let arg = eval_arg(chars, j)?;
+            args.push(arg.text);
+            j = skip_ws(chars, arg.end);
+            if j < n && chars[j] == ',' {
+                j = skip_ws(chars, j + 1);
+                continue;
+            }
+            break;
+        }
+    }
+    if j >= n || chars[j] != ')' {
+        return Result::Err(`template helper '{name}': expected ')'`);
+    }
+    let text = expand_helper(&name, &receiver, &args)?;
+    return Result::Ok(Expanded { text, end: j + 1 });
+}
+
+/// Parse one argument: a `"..."` code-text string, a `{...}` subtemplate
+/// block, or a nested helper chain.
+fn eval_arg(chars: &List<char>, start: i32) -> Result<Expanded, String> {
+    let n = chars.len();
+    let c = chars[start];
+    if c == '"' {
+        let mut text = String::with_capacity(16);
+        let mut j = start + 1;
+        while j < n {
+            if chars[j] == '\\' && j + 1 < n && (chars[j + 1] == '"' || chars[j + 1] == '\\') {
+                text.push(chars[j + 1]);
+                j += 2;
+                continue;
+            }
+            if chars[j] == '"' {
+                return Result::Ok(Expanded { text, end: j + 1 });
+            }
+            text.push(chars[j]);
+            j += 1;
+        }
+        return Result::Err(`template string argument at index {start} is unterminated`);
+    }
+    if c == '{' {
+        // Subtemplate: literal text with nested `<template>` references.
+        let mut text = String::with_capacity(16);
+        let mut j = start + 1;
+        while j < n && chars[j] != '}' {
+            if chars[j] == '<' && is_template_start(chars, j) {
+                let nested = eval_template(chars, j)?;
+                text.push_str(&nested.text);
+                j = nested.end;
+                continue;
+            }
+            text.push(chars[j]);
+            j += 1;
+        }
+        if j >= n {
+            return Result::Err(`template block argument at index {start} is unterminated`);
+        }
+        return Result::Ok(Expanded { text, end: j + 1 });
+    }
+    if is_id_start_char(c) {
+        return eval_chain(chars, start);
+    }
+    return Result::Err(`template argument at index {start}: expected a string, block, or helper call`);
+}
+
+/// The Java-target expansion table. `recv` is the chained receiver
+/// (`X:F()` passes X's expansion), `args` are the evaluated arguments.
+fn expand_helper(name: &String, recv: &Option<String>, args: &List<String>) -> Result<String, String> {
+    // Print helpers accept the value either chained or as the argument.
+    if *name == "writeln" {
+        let v = chain_or_arg(recv, args, name)?;
+        return Result::Ok(`System.out.println({v});`);
+    }
+    if *name == "write" {
+        let v = chain_or_arg(recv, args, name)?;
+        return Result::Ok(`System.out.print({v});`);
+    }
+
+    // Chained combinators (require a receiver).
+    if *name == "Invoke_pred" {
+        let r = require_receiver(recv, name)?;
+        return Result::Ok(`this.pred({r})`);
+    }
+    if *name == "Assert" {
+        let r = require_receiver(recv, name)?;
+        return Result::Ok(`assert {r};`);
+    }
+    if *name == "Concat" {
+        let r = require_receiver(recv, name)?;
+        let a = require_args(args, 1, name)?;
+        return Result::Ok(`{r}{a[0]}`);
+    }
+    if *name == "Not" {
+        let r = require_receiver(recv, name)?;
+        return Result::Ok(`!({r})`);
+    }
+    if *name == "SubContextLocal" {
+        let r = require_receiver(recv, name)?;
+        let a = require_args(args, 2, name)?;
+        return Result::Ok(`{r}.{a[0]}.{a[1]}`);
+    }
+
+    // Everything below is receiver-free.
+    if recv matches { Some(_) } {
+        return Result::Err(`template helper '{*name}' does not take a chained receiver`);
+    }
+
+    if *name == "True" {
+        return Result::Ok("true");
+    }
+    if *name == "False" {
+        return Result::Ok("false");
+    }
+    if *name == "Pass" {
+        return Result::Ok("");
+    }
+    if *name == "ToStringTree" {
+        let a = require_args(args, 1, name)?;
+        return Result::Ok(`{a[0]}.toStringTree(this)`);
+    }
+    if *name == "InputText" {
+        return Result::Ok("_input.getText()");
+    }
+    if *name == "Text" {
+        return Result::Ok("getText()");
+    }
+    if *name == "PlusText" {
+        let a = require_args(args, 1, name)?;
+        return Result::Ok(`"{a[0]}" + getText()`);
+    }
+    if *name == "Column" {
+        return Result::Ok("getCharPositionInLine()");
+    }
+    if *name == "TokenStartColumnEquals" {
+        let a = require_args(args, 1, name)?;
+        return Result::Ok(`_tokenStartCharPositionInLine == {a[0]}`);
+    }
+    if *name == "LL_EXACT_AMBIG_DETECTION" {
+        return Result::Ok("getInterpreter().setPredictionMode(PredictionMode.LL_EXACT_AMBIG_DETECTION);");
+    }
+    if *name == "DumpDFA" {
+        return Result::Ok("dumpDFA();");
+    }
+    if *name == "BuildParseTrees" {
+        return Result::Ok("setBuildParseTree(true);");
+    }
+    if *name == "BailErrorStrategy" {
+        return Result::Ok("setErrorHandler(new BailErrorStrategy());");
+    }
+    if *name == "GetExpectedTokenNames" {
+        return Result::Ok("getExpectedTokens().toString(getVocabulary())");
+    }
+    if *name == "Declare_pred" {
+        return Result::Ok("boolean pred(boolean v) {\n\tSystem.out.println(\"eval=\" + v);\n\treturn v;\n}");
+    }
+    if *name == "Declare_foo" {
+        return Result::Ok("public void foo() {\n\tSystem.out.println(\"foo\");\n}");
+    }
+    if *name == "Invoke_foo" {
+        return Result::Ok("this.foo();");
+    }
+    if *name == "DeclareContextListGettersFunction" {
+        // Compile-time check that the rule context exposes list getters.
+        return Result::Ok("void foo() {\n\tSContext s = null;\n\ts.a();\n\ts.b();\n}");
+    }
+    if *name == "AssertIsList" {
+        // Compile-time check that the expression has a List type.
+        let a = require_args(args, 1, name)?;
+        return Result::Ok(`java.util.List<?> __assertIsList = {a[0]};`);
+    }
+    if *name == "Cast" {
+        let a = require_args(args, 2, name)?;
+        return Result::Ok(`(({a[0]}){a[1]})`);
+    }
+    if *name == "ContextRuleFunction" {
+        let a = require_args(args, 2, name)?;
+        return Result::Ok(`{a[0]}.{a[1]}`);
+    }
+    if *name == "ContextListFunction" {
+        let a = require_args(args, 2, name)?;
+        return Result::Ok(`{a[0]}.{a[1]}()`);
+    }
+    if *name == "Production" || *name == "Result" || *name == "VarRef" {
+        let a = require_args(args, 1, name)?;
+        return Result::Ok(a[0]);
+    }
+    if *name == "ParserToken" {
+        let a = require_args(args, 2, name)?;
+        return Result::Ok(`{a[0]}.{a[1]}`);
+    }
+    if *name == "LANotEquals" {
+        let a = require_args(args, 2, name)?;
+        return Result::Ok(`_input.LA({a[0]}) != {a[1]}`);
+    }
+    if *name == "TextEquals" {
+        let a = require_args(args, 1, name)?;
+        return Result::Ok(`getText().equals("{a[0]}")`);
+    }
+    if *name == "LTEquals" {
+        let a = require_args(args, 2, name)?;
+        return Result::Ok(`_input.LT({a[0]}).getText().equals({a[1]})`);
+    }
+    if *name == "ValEquals" {
+        let a = require_args(args, 2, name)?;
+        return Result::Ok(`{a[0]} == {a[1]}`);
+    }
+    if *name == "AssignLocal" {
+        let a = require_args(args, 2, name)?;
+        return Result::Ok(`{a[0]} = {a[1]};`);
+    }
+    if *name == "InitIntVar" || *name == "InitIntMember" {
+        let a = require_args(args, 2, name)?;
+        return Result::Ok(`int {a[0]} = {a[1]};`);
+    }
+    if *name == "InitBooleanMember" {
+        let a = require_args(args, 2, name)?;
+        return Result::Ok(`boolean {a[0]} = {a[1]};`);
+    }
+    if *name == "GetMember" {
+        let a = require_args(args, 1, name)?;
+        return Result::Ok(`this.{a[0]}`);
+    }
+    if *name == "SetMember" {
+        let a = require_args(args, 2, name)?;
+        return Result::Ok(`this.{a[0]} = {a[1]};`);
+    }
+    if *name == "AddMember" {
+        let a = require_args(args, 2, name)?;
+        return Result::Ok(`this.{a[0]} += {a[1]};`);
+    }
+    if *name == "MemberEquals" {
+        let a = require_args(args, 2, name)?;
+        return Result::Ok(`this.{a[0]} == {a[1]}`);
+    }
+    if *name == "ModMemberEquals" {
+        let a = require_args(args, 3, name)?;
+        return Result::Ok(`this.{a[0]} % {a[1]} == {a[2]}`);
+    }
+    if *name == "ModMemberNotEquals" {
+        let a = require_args(args, 3, name)?;
+        return Result::Ok(`this.{a[0]} % {a[1]} != {a[2]}`);
+    }
+    if *name == "IntArg" {
+        let a = require_args(args, 1, name)?;
+        return Result::Ok(`int {a[0]}`);
+    }
+    if *name == "StringType" {
+        return Result::Ok("String");
+    }
+    if *name == "StringList" {
+        return Result::Ok("List<String>");
+    }
+    if *name == "Append" || *name == "AppendStr" {
+        let a = require_args(args, 2, name)?;
+        return Result::Ok(`{a[0]} + {a[1]}`);
+    }
+    return Result::Err(`unknown template helper '{*name}'`);
+}
+
+fn chain_or_arg(recv: &Option<String>, args: &List<String>, name: &String) -> Result<String, String> {
+    if let Some(r) = recv {
+        if !args.is_empty() {
+            return Result::Err(`template helper '{*name}' takes a receiver or one argument, not both`);
+        }
+        return Result::Ok(*r);
+    }
+    if args.len() != 1 {
+        return Result::Err(`template helper '{*name}' expects exactly one argument`);
+    }
+    return Result::Ok(args[0]);
+}
+
+fn require_receiver(recv: &Option<String>, name: &String) -> Result<String, String> {
+    return match recv {
+        Some(r) => Result::Ok(*r),
+        None => Result::Err(`template helper '{*name}' requires a chained receiver`),
+    };
+}
+
+fn require_args(args: &List<String>, count: i32, name: &String) -> Result<List<String>, String> {
+    if args.len() != count {
+        return Result::Err(`template helper '{*name}' expects {count} argument(s), got {args.len()}`);
+    }
+    return Result::Ok(*args);
+}
+
+fn skip_ws(chars: &List<char>, pos: i32) -> i32 {
+    let n = chars.len();
+    let mut i = pos;
+    while i < n && (chars[i] == ' ' || chars[i] == '\t' || chars[i] == '\n' || chars[i] == '\r') {
+        i += 1;
+    }
+    return i;
+}
+
+fn push_span(out: &mut String, chars: &List<char>, start: i32, end: i32) {
+    let mut i = start;
+    while i < end {
+        out.push(chars[i]);
+        i += 1;
+    }
+}
+
+fn is_id_start_char(c: char) -> bool {
+    return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_';
+}
+
+fn is_id_continue_char(c: char) -> bool {
+    return is_id_start_char(c) || c >= '0' && c <= '9';
+}
