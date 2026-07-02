@@ -176,15 +176,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ..
         }) = &effect
         {
-            let type_name = self.tysys.type_table.borrow().type_name(handler_type);
-            // Skip the impl-presence check when the handler type is unresolved
-            // (e.g. `Unknown` / `Error`), because earlier diagnostics already
-            // reported the handler-side problem.
-            let is_real_type = !matches!(
-                self.tysys.type_table.borrow().get(handler_type),
-                ResolvedType::Unknown | ResolvedType::Error
+            // Skip the check for an unresolved handler (`Unknown` / `Error`):
+            // an earlier diagnostic already covered it. Query by `TypeId` (via
+            // `type_implements_trait`) so a generic-instance handler like
+            // `Ctx<i32>` is recognised through its `impl<T> Log for Ctx<T>`.
+            let underlying = self.tysys.type_table.borrow().get(handler_type).clone();
+            let is_real_type = !matches!(underlying, ResolvedType::Unknown | ResolvedType::Error);
+            // A bare type parameter (`with E => h do` where `h: &H`, `H: E`)
+            // cannot be installed: dispatch synthesis runs before
+            // monomorphization and has no concrete impl to route the effect
+            // operations to. `type_implements_trait` would accept it (its bound
+            // names the effect), so reject it explicitly rather than let it
+            // reach synthesis, which would panic.
+            let is_type_param = matches!(
+                underlying,
+                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
             );
-            if is_real_type && !self.find_trait_impl_for_type(&type_name, interface_name) {
+            if is_real_type
+                && (is_type_param
+                    || !self.type_implements_trait(
+                        &self.annotate_ctx,
+                        handler_type,
+                        interface_name,
+                    ))
+            {
+                let type_name = self.tysys.type_table.borrow().type_name(handler_type);
                 let _ = self.logger.error(TypeError::HandlerEffectNotImplemented {
                     type_name,
                     interface_name: interface_name.clone(),
@@ -278,7 +294,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let type_name = self.tysys.type_table.borrow().type_name(handler_type);
+        // Enumerate by the bare head: a generic impl `impl<T> Log for Ctx<T>`
+        // is keyed under "Ctx", not the instantiated "Ctx<i32>".
+        let type_name = match &resolved {
+            ResolvedType::GenericInstance { name, .. }
+            | ResolvedType::GenericResource { name, .. } => name.clone(),
+            _ => self.tysys.type_table.borrow().type_name(handler_type),
+        };
         let effects = self.collect_effect_impls_for_type(&type_name);
 
         if effects.is_empty() {

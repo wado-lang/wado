@@ -6,10 +6,23 @@
 //! gate on `Log::enabled` and forward to `event`. A handler must still be
 //! installed (`with Log => &sink do`), else `Log::*` traps; the ambient-effect
 //! extension adds the default-handler fallback that removes that requirement.
+//!
+//! Fields are passed as an anonymous struct bounded by `Serialize`
+//! (`info(msg, { user_id, ip })`) and boxed into a single `core:value::Value`
+//! at the ambient facade, before the effect boundary — so the `Log` effect
+//! itself stays non-generic. This retires the `Field` / `List<Field>` design.
+//! The field parameter defaults to an empty struct, so `info(msg)` logs with
+//! no fields; the default type param (`T: Serialize = NoFields`) supplies the
+//! type for the omitted argument.
 
 use { Serialize } from "core:serde";
 use { Value, to_value } from "core:value";
+use { TreeMap } from "core:collections";
 use { to_string } from "core:json";
+
+// Default field payload: serializes to an empty object `{}`.
+pub struct NoFields {
+}
 
 pub enum Level {
     Trace,
@@ -26,30 +39,18 @@ pub struct Metadata {
     pub line: i32,
 }
 
-pub struct Field {
-    pub key: String,
-    pub value: Value,
-}
-
 pub struct Event {
     pub meta: Metadata,
     pub message: String,
-    pub fields: List<Field> = [],
+    pub fields: Value = Value::Null,
     pub parent: u64 = 0,  // 0 = no current span
 }
 
-// Serde derive in Wado is an empty compiler-synthesized impl.
-impl Serialize for Level;
-impl Serialize for Metadata;
-impl Serialize for Field;
-impl Serialize for Event;
-
-pub fn field<T: Serialize>(key: String, value: T) -> Field {
-    let v = match to_value(&value) {
+fn box_fields<T: Serialize>(fields: T) -> Value {
+    return match to_value(&fields) {
         Ok(v) => v,
         Err(_) => Value::Null,
     };
-    return Field { key, value: v };
 }
 
 // The subscriber, as an effect (an `#[ambient]` effect in the real design).
@@ -60,7 +61,7 @@ interface Log {
     fn exit(id: u64);
     fn close(id: u64);
     fn current_span() -> u64;
-    fn record_fields(id: u64, fields: List<Field>);
+    fn record_fields(id: u64, fields: Value);
     fn follows_from(id: u64, cause: u64);
     fn event(event: Event);
 }
@@ -68,10 +69,10 @@ interface Log {
 // Facade; location defaults resolve at the call site. `#[ambient]` (like
 // `log_stdout`) lets it perform `Log` without `with Log` infecting callers.
 #[ambient]
-pub fn event(
+pub fn event<T: Serialize = NoFields>(
     level: Level,
     message: String,
-    fields: List<Field> = [],
+    fields: T = NoFields {},
     target: String = #function,
     file: String = #file,
     line: i32 = #line,
@@ -80,15 +81,15 @@ pub fn event(
     Log::event(Event {
         meta: Metadata { level, target, file, line },
         message,
-        fields,
+        fields: box_fields(fields),
         parent,
     });
 }
 
 #[ambient]
-pub fn info(
+pub fn info<T: Serialize = NoFields>(
     message: String,
-    fields: List<Field> = [],
+    fields: T = NoFields {},
     target: String = #function,
     file: String = #file,
     line: i32 = #line,
@@ -100,9 +101,9 @@ pub fn info(
 }
 
 #[ambient]
-pub fn warn(
+pub fn warn<T: Serialize = NoFields>(
     message: String,
-    fields: List<Field> = [],
+    fields: T = NoFields {},
     target: String = #function,
     file: String = #file,
     line: i32 = #line,
@@ -119,8 +120,8 @@ pub fn span(name: String) -> u64 {
 }
 
 #[ambient]
-pub fn record(id: u64, fields: List<Field>) {
-    Log::record_fields(id, fields);
+pub fn record<T: Serialize = NoFields>(id: u64, fields: T = NoFields {}) {
+    Log::record_fields(id, box_fields(fields));
 }
 
 #[ambient]
@@ -188,9 +189,11 @@ impl Log for CaptureSink {
         resume top;
     }
 
-    fn record_fields(&mut self, id: u64, fields: List<Field>) {
-        for let f of fields {
-            self.recorded.push(`record:{id}:{f.key}`);
+    fn record_fields(&mut self, id: u64, fields: Value) {
+        if let Object(map) = fields {
+            for let [key, _] of map.entries() {
+                self.recorded.push(`record:{id}:{key}`);
+            }
         }
     }
 
@@ -203,12 +206,14 @@ impl Log for CaptureSink {
     }
 }
 
-// Contextual layer: prepend fixed fields, forward the rest.
-struct Context {
-    fields: List<Field>,
+// Contextual layer: prepend fixed fields, forward the rest. Generic over the
+// field payload — a `Serialize`-bounded anonymous struct — installed directly
+// as a handler via the generic `impl<T> Log for Context<T>`.
+struct Context<T: Serialize> {
+    fields: T,
 }
 
-impl Log for Context {
+impl<T: Serialize> Log for Context<T> {
     fn enabled(&self, level: Level) -> bool {
         resume Log::enabled(level);
     }
@@ -233,7 +238,7 @@ impl Log for Context {
         resume Log::current_span();
     }
 
-    fn record_fields(&self, id: u64, fields: List<Field>) {
+    fn record_fields(&self, id: u64, fields: Value) {
         Log::record_fields(id, fields);
     }
 
@@ -242,12 +247,21 @@ impl Log for Context {
     }
 
     fn event(&self, event: Event) {
-        let mut merged = self.fields;
-        merged.extend(&event.fields);
+        let mut merged = TreeMap::<String, Value>::new();
+        if let Object(base) = box_fields(self.fields) {
+            for let [key, value] of base.entries() {
+                merged[key] = value;
+            }
+        }
+        if let Object(extra) = event.fields {
+            for let [key, value] of extra.entries() {
+                merged[key] = value;
+            }
+        }
         Log::event(Event {
             meta: event.meta,
             message: event.message,
-            fields: merged,
+            fields: Value::Object(merged),
             parent: event.parent,
         });
     }
@@ -280,7 +294,7 @@ impl Log for JsonSink {
         resume 0;
     }
 
-    fn record_fields(&self, id: u64, fields: List<Field>) {
+    fn record_fields(&self, id: u64, fields: Value) {
     }
 
     fn follows_from(&self, id: u64, cause: u64) {
@@ -325,7 +339,7 @@ impl Log for Filter {
         resume Log::current_span();
     }
 
-    fn record_fields(&self, id: u64, fields: List<Field>) {
+    fn record_fields(&self, id: u64, fields: Value) {
         Log::record_fields(id, fields);
     }
 
@@ -352,7 +366,7 @@ test "captures message, level, and caller location" {
         assert e.meta.line == expected_line;
         assert e.meta.file.contains("logger_poc.wado");
 
-        warn(`heads up`, [field("code", 1)]);
+        warn(`heads up`, { code: 1 });
         assert sink.events.len() == 2;
         assert sink.events[1].meta.level matches { Warn };
     };
@@ -361,15 +375,16 @@ test "captures message, level, and caller location" {
 test "generic field accepts any Serialize value, preserving the data model" {
     let mut sink = CaptureSink {};
     with Log => &mut sink do {
-        info(`with fields`, [
-            field("user", "alice"),
-            field("n", 42),
-        ]);
+        info(`with fields`, { user: "alice", n: 42 });
         let e = sink.events[0];
-        assert e.fields.len() == 2;
-        assert e.fields[0].value matches { String(_) };
-        // Real to_value preserves Int (a JSON round-trip would give Float).
-        assert e.fields[1].value matches { Int(42) };
+        if let Object(map) = e.fields {
+            assert map.len() == 2;
+            assert map.get("user") matches { Some(String(_)) };
+            // Real to_value preserves Int (a JSON round-trip would give Float).
+            assert map.get("n") matches { Some(Int(42)) };
+        } else {
+            panic("expected Object fields");
+        }
     };
 }
 
@@ -404,24 +419,29 @@ test "enabled gate drops events below the sink's minimum level" {
 test "context layer prepends fields and forwards to outer sink" {
     let mut sink = CaptureSink {};
     let ctx = Context {
-        fields: [field("request_id", "abc")],
+        fields: { request_id: "abc" },
     };
     with Log => &mut sink do {
         with Log => &ctx do {
-            info(`x`, [field("k", "v")]);
+            info(`x`, { k: "v" });
         };
     };
     assert sink.events.len() == 1;
     let e = sink.events[0];
-    assert e.fields.len() == 2;
-    assert e.fields[0].key == "request_id";
-    assert e.fields[1].key == "k";
+    if let Object(map) = e.fields {
+        assert map.len() == 2;
+        let entries = map.entries();
+        assert entries[0][0] == "request_id";
+        assert entries[1][0] == "k";
+    } else {
+        panic("expected Object fields");
+    }
 }
 
 test "json sink serializes whole events to one line each" {
     let mut sink = JsonSink { lines: [] };
     with Log => &mut sink do {
-        info(`hi`, [field("k", "v")]);
+        info(`hi`, { k: "v" });
     };
     assert sink.lines.len() == 1;
     assert sink.lines[0].contains("message");
@@ -492,10 +512,7 @@ test "record_fields and follows_from reach the subscriber" {
     with Log => &mut sink do {
         let a = span(`a`);
         let b = span(`b`);
-        record(a, [
-            field("user", "alice"),
-            field("ip", "127.0.0.1"),
-        ]);
+        record(a, { user: "alice", ip: "127.0.0.1" });
         follows(b, a);
     };
     let recorded: List<String> = ["record:1:user", "record:1:ip"];

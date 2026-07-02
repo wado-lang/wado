@@ -317,6 +317,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         resource_info.module_source.clone(),
                     );
                     self.tysys.type_table.borrow_mut().make_resource(n, src)
+                } else if let Some(scope_mod) = self.default_scope_module.clone()
+                    && scope_mod != self.current_module_source
+                {
+                    // A default re-resolved at the caller may name a type
+                    // private to the callee's module (`fn f<T = Priv>()` called
+                    // cross-module); the caller can't name it, so retry in the
+                    // callee's perspective. Mirrors the ident / call fallback.
+                    self.with_module_perspective_for(&scope_mod, |s| {
+                        s.resolve_named_type(name, span, enforce_arity)
+                    })
                 } else {
                     // Unknown type
                     TypeTable::UNKNOWN

@@ -1,0 +1,31 @@
+// `Priv` is private to this module; callers of `plain` / `generic` cannot name
+// it, but the defaults supply it.
+struct Priv {
+    n: i32 = 5,
+}
+
+trait Tagged {
+    fn tag(&self) -> i32;
+}
+
+impl Tagged for Priv {
+    fn tag(&self) -> i32 {
+        return self.n;
+    }
+}
+
+impl Tagged for i32 {
+    fn tag(&self) -> i32 {
+        return *self;
+    }
+}
+
+// Value default referencing a callee-private type.
+pub fn plain(m: Priv = Priv {}) -> i32 {
+    return m.tag();
+}
+
+// Default type param whose default type is callee-private.
+pub fn generic<T: Tagged = Priv>(v: T = Priv {}) -> i32 {
+    return v.tag();
+}

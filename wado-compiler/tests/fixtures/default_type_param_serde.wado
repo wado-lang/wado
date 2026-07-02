@@ -1,0 +1,44 @@
+// A bounded default type param (`<T: Serialize = NoFields>`) with a value
+// default lets a logging-style facade accept an optional Serialize payload:
+// `log()` and `log({ a: 1 })` both work.
+//
+// Regression: with the bound present the pipeline crashed later than the
+// unbounded case (see default_type_param_basic.wado) — the WIR pipeline
+// emitted invalid core Wasm: "type mismatch: expected (ref $type), found
+// (ref (exact $type))".
+
+use { Serialize } from "core:serde";
+use { Value, to_value } from "core:value";
+use { to_string } from "core:json";
+
+struct NoFields {}
+
+fn box_fields<T: Serialize = NoFields>(fields: T = NoFields {}) -> Value {
+    return match to_value(&fields) {
+        Ok(v) => v,
+        Err(_) => Value::Null,
+    };
+}
+
+test "omitted payload serializes the default empty struct" {
+    let v = box_fields();
+    let s = to_string(&v);
+    if let Ok(json) = s {
+        assert json == `\{\}`;
+    } else {
+        panic("serialize failed");
+    }
+}
+
+test "an explicit anonymous struct payload overrides the default" {
+    let v = box_fields({ a: 1 });
+    let s = to_string(&v);
+    if let Ok(json) = s {
+        assert json == `\{"a":1\}`;
+    } else {
+        panic("serialize failed");
+    }
+}
+
+__DATA__
+{"test": {}}

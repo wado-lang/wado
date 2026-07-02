@@ -1039,13 +1039,13 @@ fn compile_after_load<H: CompilerHost>(
     ))
 }
 
-/// Deep-clone TIR modules so that each snapshot has its own independent `TypeTable`.
+/// Deep-clone TIR modules into a fully independent, frozen view.
 ///
-/// TIR modules share a single `TypeTable` via `Rc<RefCell<…>>`.  Later
-/// optimization passes (notably DCE's `TypeTable::retain`) mutate that shared
-/// table.  Snapshots taken for dump output must be immune to those mutations,
-/// so we clone the `TypeTable` once and give every module in the snapshot its
-/// own `Rc` pointing to the clone.
+/// A module's `TypeTable` and its `Rc<RefCell<TirFunction>>`s are shared with
+/// later phases that mutate them in place (DCE's `TypeTable::retain` punches
+/// holes; monomorphization rewrites body type ids). The `--tir-resolved` dump
+/// must be immune to that, so both the table (one clone shared across the
+/// snapshot's modules) and every function are cloned into fresh `Rc`s.
 fn snapshot_tir_modules(
     modules: &IndexMap<ModuleSource, tir::TirModule>,
 ) -> IndexMap<ModuleSource, tir::TirModule> {
@@ -1061,6 +1061,18 @@ fn snapshot_tir_modules(
             if let Some(ref tt) = cloned_tt {
                 m.type_table = Rc::clone(tt);
             }
+            // Deep-clone the shared `Rc<RefCell<TirFunction>>`s so later
+            // in-place mutation (monomorphization) can't reach this snapshot.
+            m.functions = m
+                .functions
+                .iter()
+                .map(|f| Rc::new(RefCell::new(f.borrow().clone())))
+                .collect();
+            m.generic_functions = m
+                .generic_functions
+                .iter()
+                .map(|(key, f)| (key.clone(), Rc::new(RefCell::new(f.borrow().clone()))))
+                .collect();
             (k.clone(), m)
         })
         .collect()
@@ -1200,13 +1212,14 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     };
     // Destructure rather than clone the `Arc<TraitEnv>`: keeping a stray
     // reference alive forces `synthesize`'s `Arc::try_unwrap` into the
-    // deep-clone fallback. Snapshotting the TIR consumes the modules, so
-    // no need to keep `resolve_output` past this point.
+    // deep-clone fallback. The resolved modules are kept as-is for the
+    // `--tir-resolved` dump view; the pipeline runs on its own snapshot
+    // (below), so these stay frozen at the resolved stage.
     let (tir_modules_by_source, trait_env): (
         Option<IndexMap<ModuleSource, tir::TirModule>>,
         Option<std::sync::Arc<crate::elaborator::trait_env::TraitEnv>>,
     ) = match resolve_output {
-        Some((modules, env)) => (Some(snapshot_tir_modules(&modules)), Some(env)),
+        Some((modules, env)) => (Some(modules), Some(env)),
         None => (None, None),
     };
 
@@ -1214,7 +1227,12 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // Create Package early so CM binding synthesis runs before monomorphize,
     // matching the compile_with_options pipeline.
     let (monomorphized_tir_text, lowered_nir_text, optimized_package, wir_package) =
-        if let Some(resolved_modules) = tir_modules_by_source.clone() {
+        // The pipeline mutates its input in place, so give it an independent
+        // snapshot rather than the frozen dump view.
+        if let Some(resolved_modules) = tir_modules_by_source
+            .as_ref()
+            .map(snapshot_tir_modules)
+        {
             let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
 
             let (mut cm_interface_registry, world_registry) =

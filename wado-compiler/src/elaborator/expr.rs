@@ -2996,6 +2996,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
                 (name.clone(), self.current_module_source.clone())
             }
+        } else if let Some(scope_mod) = self.default_scope_module.clone()
+            && scope_mod != self.current_module_source
+            && let Some(info) = self.lookup_struct_fields_in(name, &scope_mod)
+        {
+            // A default expression re-resolved at the call site may construct a
+            // struct private to (or only imported by) the callee's module —
+            // e.g. `fn f(m: Priv = Priv {})` called cross-module. The caller
+            // never names it, so fall back to the callee's module.
+            (info.name.clone(), info.module_source.clone())
         } else {
             // The struct name is neither locally defined nor imported.
             // Emit a clear diagnostic instead of silently falling back to
