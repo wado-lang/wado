@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782971262720,
+  "lastUpdate": 1782986036406,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -37017,6 +37017,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/dea07b4545676c759e14a21a4fbc841354f5097a"
         },
         "date": 1782971262063,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15323,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 371059,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c7f800533461c856b609f1503464d968996cc6bb",
+          "message": "Merge pull request #1489 from wado-lang/claude/logger-poc-anon-struct-uf371k\n\nfix: generic effect-handler impls, default type params, and anonymous-struct log fields",
+          "timestamp": "2026-07-02T18:45:30+09:00",
+          "tree_id": "849421d997e555c5c2ab28ef16b610e217682cee",
+          "url": "https://github.com/wado-lang/wado/commit/c7f800533461c856b609f1503464d968996cc6bb"
+        },
+        "date": 1782986035935,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
