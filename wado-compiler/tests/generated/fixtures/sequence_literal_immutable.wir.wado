@@ -160,7 +160,6 @@ fn "wado-compiler/tests/fixtures/sequence_literal_immutable.wado/run"() with Std
     let __cond_58: bool;
     let __v1_66: i32;
     let __cond_67: bool;
-    let v_70: ref "wado-compiler/tests/fixtures/sequence_literal_immutable.wado//FrozenVec<i32>";
     let v_78: ref "core:prelude//List<i32>";
     let self_79: ref "core:prelude//List<i32>";
     let self_81: ref "core:prelude//List<i32>";
@@ -199,8 +198,7 @@ condition: v.get(4) == 5
 "), used: 26 }); "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("v.get(4): "), used: 10 }); __local_23 = "core:prelude/format.wado/Formatter::new"(__local_22); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_8 }, __local_23); "core:prelude/string.wado/String::push"(__local_22, 10); __local_22);
         unreachable;
     }
-    v_70 = struct.new "wado-compiler/tests/fixtures/sequence_literal_immutable.wado//FrozenVec<i32>" { items: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20), used: 2 } };
-    v2 = struct.new "wado-compiler/tests/fixtures/sequence_literal_immutable.wado//FrozenVec<i32>" { items: ref.as_non_null(v_78 = v_70.items; struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(builtin::array_clone<i32>(v_78.repr)), used: v_78.used }) };
+    v2 = struct.new "wado-compiler/tests/fixtures/sequence_literal_immutable.wado//FrozenVec<i32>" { items: ref.as_non_null(v_78 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20), used: 2 }; struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(builtin::array_clone<i32>(v_78.repr)), used: v_78.used }) };
     __cond_13 = local.tee __v0_12(self_79 = v2.items; self_79.used) == 2;
     if @unlikely(__cond_13 == 0) {
         cold_path;
