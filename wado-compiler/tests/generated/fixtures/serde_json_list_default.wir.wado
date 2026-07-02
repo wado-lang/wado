@@ -3028,28 +3028,6 @@ fn "core:prelude/slice.wado/ArraySlice<u8>::len"(self) {
     return self.end - self.start;
 }
 
-fn "core:prelude/list.wado/List<i32>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if @unlikely(used >= builtin::array_len(self.repr)) {
-        cold_path;
-        "core:prelude/list.wado/List<i32>::grow"(self);
-    }
-    builtin::array_set<i32>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/list.wado/List<i32>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref Array<i32>;
-    let a: i32;
-    capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<i32>(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
-    builtin::array_copy<i32>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
-}
-
 fn "wado-compiler/tests/fixtures/serde_json_list_default.wado/S^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
     let __result: ref "core:prelude/types.wado//Result<core:json/JsonStructAccess,core:serde/DeserializeError>";
     let __local_2: ref "core:json//JsonStructAccess";
@@ -3083,8 +3061,8 @@ fn "wado-compiler/tests/fixtures/serde_json_list_default.wado/S^Deserialize::des
         __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 };
         __local_3 = __b;
         __local_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
-        b406: block {
-            l407: loop {
+        b405: block {
+            l406: loop {
                 let __sroa___local_6_discriminant: i32;
                 let __sroa___local_6_case0_payload_0: ref null "core:prelude/types.wado//Option<i32>";
                 let __sroa___local_6_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -3122,12 +3100,12 @@ fn "wado-compiler/tests/fixtures/serde_json_list_default.wado/S^Deserialize::des
                             }
                         }
                     } else {
-                        break b406;
+                        break b405;
                     }
                 } else {
                     return 1, ref.null none, ref.as_non_null(__sroa___local_6_case1_payload_0);
                 }
-                continue l407;
+                continue l406;
             };
         };
         __local_15 = "core:json/JsonDeserializer::expect_char"(__local_2.de, 125);
@@ -3206,25 +3184,25 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field<wado-compiler/tests
     _licm_repr_32 = _licm_input_29.repr;
     _licm_arith_33 = _licm_end_30 - _licm_start_31;
     __hfs_pos_34 = _licm_de_28.pos;
-    b422: block {
-        l423: loop {
+    b421: block {
+        l422: loop {
             if __hfs_pos_34 >= _licm_arith_33 {
                 _licm_de_28.pos = __hfs_pos_34;
-                break b422;
+                break b421;
             }
             index_27 = __hfs_pos_34;
             b_4 = builtin::array_get<u8>(_licm_repr_32, _licm_start_31 + index_27);
             if b_4 == 34 {
                 _licm_de_28.pos = __hfs_pos_34;
-                break b422;
+                break b421;
             }
             if b_4 == 92 {
                 has_escape = 1;
                 _licm_de_28.pos = __hfs_pos_34;
-                break b422;
+                break b421;
             }
             __hfs_pos_34 = __hfs_pos_34 + 1;
-            continue l423;
+            continue l422;
         };
     };
     if @likely(has_escape == 0) {
@@ -3273,6 +3251,17 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field<wado-compiler/tests
         -1;
     });
     return 0, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: idx_16 }, ref.null none;
+}
+
+fn "core:prelude/list.wado/List<i32>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if @unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
+        "core:prelude/list.wado/List<i32>::grow"(self);
+    }
+    builtin::array_set<i32>(self.repr, used, value);
+    self.used = used + 1;
 }
 
 fn "core:serde/List<i32>^Deserialize::deserialize<&mut core:json/JsonDeserializer>"(d) {
@@ -3400,6 +3389,17 @@ fn "core:json/JsonSeqAccess^DeserializeSeq::next_element<i32>"(self) {
         cold_path;
         return 1, 1, 0, e;
     }
+}
+
+fn "core:prelude/list.wado/List<i32>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref Array<i32>;
+    let a: i32;
+    capacity = builtin::array_len(self.repr);
+    new_repr = builtin::array_new<i32>(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    builtin::array_copy<i32>(new_repr, 0, self.repr, 0, self.used);
+    self.repr = new_repr;
 }
 
 export fn "wado-compiler/tests/fixtures/serde_json_list_default.wado/__cm_export____test_0_missing_list_string_defaults_materialize" as "__test_0_missing_list_string_defaults_materialize"
