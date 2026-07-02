@@ -185,6 +185,8 @@ fn main() {
         serde_cbor::to_vec(&catalog).expect("encode").len()
     });
 
+    assert_eq!(catalog.performances.len(), 243);
+
     let events = bench("De", json_size as f64, "B", || {
         let catalog: CitmCatalog = serde_cbor::from_slice(&cbor).expect("decode");
         catalog.events.len()

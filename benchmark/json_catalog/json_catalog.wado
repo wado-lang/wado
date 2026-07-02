@@ -10,7 +10,7 @@
 
 use { Stdout } from "core:cli";
 use { to_bytes, from_bytes } from "core:json";
-use { CitmCatalog, event_count } from "./catalog_schema.wado";
+use { CitmCatalog, event_count, performance_count } from "./catalog_schema.wado";
 use { MonotonicClock } from "wasi:clocks";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 use { Benchmark } from "core:benchmark";
@@ -73,8 +73,10 @@ export fn run() with Stdout, MonotonicClock, Preopens {
         input_size: Option::Some(json_size),
     };
 
+    assert performance_count(&catalog) == 243;
+
     b.run("ser", || encode_json(&catalog).len());
-    let events = b.run("de", || event_count(&parse_catalog(json_data)));
+    let events = b.run("de", || event_count(&parse_catalog(json_data.as_byte_slice())));
     assert events == 184;
     b.println(`round-tripped {events} events`);
 }

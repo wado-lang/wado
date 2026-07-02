@@ -162,6 +162,7 @@ fn main() {
 
     let catalog: CitmCatalog =
         serde_json::from_str(&json_data).expect("Failed to parse citm_catalog.json");
+    assert_eq!(catalog.performances.len(), 243);
 
     println!("json-catalog: {size} bytes");
 

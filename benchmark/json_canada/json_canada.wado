@@ -74,7 +74,7 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     };
 
     b.run("ser", || encode_json(&fc).len());
-    let total_points = b.run("de", || count_points(&parse_canada(json_data)));
+    let total_points = b.run("de", || count_points(&parse_canada(json_data.as_byte_slice())));
     assert total_points == 55563;
     b.println(`round-tripped {total_points} coordinate points`);
 }

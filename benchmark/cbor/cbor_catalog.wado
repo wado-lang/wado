@@ -15,7 +15,7 @@
 use { Stdout } from "core:cli";
 use { from_bytes as json_from_bytes } from "core:json";
 use { to_bytes as cbor_to_bytes, from_bytes as cbor_from_bytes } from "core:cbor";
-use { CitmCatalog, event_count } from "../json_catalog/catalog_schema.wado";
+use { CitmCatalog, event_count, performance_count } from "../json_catalog/catalog_schema.wado";
 use { MonotonicClock } from "wasi:clocks";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 use { Benchmark } from "core:benchmark";
@@ -78,6 +78,8 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     let json_data = read_file_bytes("json_catalog/citm_catalog.json");
     let json_size = json_data.len();
     let catalog = parse_catalog(json_data);
+
+    assert performance_count(&catalog) == 243;
 
     let cbor = encode_cbor(&catalog);
     let cbor_view = cbor.as_byte_slice();

@@ -77,7 +77,7 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     };
 
     b.run("ser", || encode_json(&resp).len());
-    let count = b.run("de", || parse_twitter(json_data).statuses.len());
+    let count = b.run("de", || parse_twitter(json_data.as_byte_slice()).statuses.len());
     assert count == 100;
     b.println(`round-tripped {count} total statuses`);
 }
