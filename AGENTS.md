@@ -43,7 +43,7 @@ mise run report-wasm-size  # hello_world, pi_approx, zlib, and so on
 ## General Rules
 
 - Write all documentation and comments in English, and keep them concise — cut filler and low-information words.
-  - Comments: add one only when the intent can't be read from the code. Never use comments as section dividers or to restate what the code already says.
+  - Comments: don't write them. Make them unnecessary through clear structure, naming, and function decomposition that make intent obvious.
   - Docs: lead with the information; drop throat-clearing, restating the obvious, and redundant phrasing.
 - Avoid ad-hoc workarounds. Write proper code based on a sound design.
 - Perform red/green TDD.
