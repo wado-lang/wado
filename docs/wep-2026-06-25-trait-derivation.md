@@ -77,40 +77,36 @@ carry no implicit bound and a `T: Trait` there is a real obligation the caller
 must satisfy.
 
 - A hand-written `impl Trait for T { … }` always wins.
-- An `impl` declaration — hand-written or the empty marker `impl Trait for
-  T;` — is a conformance check, never a synthesis trigger. It asserts (and,
-  for the marker, validates immediately) that `T` can implement `Trait`; it
-  does not by itself cause any code to be generated. The marker `impl Trait
-  for T;` stays valid under every policy: under `explicit` it's the only way
-  to make `T` eligible at all (the policy runs no structural scan on its
-  own); under `on_bound` it's redundant but harmless, since the same
-  eligibility already holds structurally. For the structurally-checkable
-  traits (`Eq` / `Ord` / `Default` / serde) the marker is also a hard
-  guarantee: a compile error at the marker's own span if any field/case is
-  ineligible (`Default` additionally requires every field to carry a default
-  expression), unlike a bound (simply unsatisfied elsewhere) or the
-  structural rule (nothing to reject). A format-trait marker always validates
-  — every nominal type is structurally formattable — so it serves as an
-  intent/documentation annotation rather than a filter.
+- An `impl Trait for T;` marker is a conformance check that validates `T`
+  structurally at its own span and records a bound-driven request — the same
+  effect a `T: Trait` bound has, except a marker is a hard compile error if
+  `T` is ineligible (a bound is merely unsatisfied elsewhere). For the
+  structurally-checkable traits (`Eq` / `Ord` / `Default` / serde) that hard
+  error fires when any field/case is ineligible (`Default` additionally
+  requires every field to carry a default expression). A format-trait marker
+  always validates — every nominal type is structurally formattable — so it
+  serves as an intent/documentation annotation. Under `explicit` a marker is
+  the only way to make `T` eligible at all; under `on_bound` it is redundant
+  with the structural rule but still a useful declaration of intent.
 - The actual trigger for synthesis — the point where a body gets generated —
   is usage: some call site resolves a reference to the trait method. See
   [Discovery Mechanism](#discovery-mechanism).
 - `on_bound` and `explicit` differ on one axis: whether eligibility is
   discovered by an unprompted structural scan (`on_bound`) or only via an
-  explicit marker (`explicit`). Both generate a body only on a reference.
+  explicit marker (`explicit`).
 
 ### Bound-driven synthesis semantics
 
 An `on_bound` obligation `T: Trait` is satisfied structurally: no manual impl
-exists, and every field/case of `T` satisfies `Trait` recursively. On
-failure, the error reason-chains from the bound site to the offending
-field/case ([Diagnostic Reason Chains](./wep-2026-06-02-diagnostic-reason-chains.md)).
+exists, and every field/case of `T` satisfies `Trait` recursively (`Default`
+instead requires every field to carry a default expression). On failure, the
+error reason-chains from the bound site to the offending field/case
+([Diagnostic Reason Chains](./wep-2026-06-02-diagnostic-reason-chains.md)).
 
-Both `Eq` / `Ord`'s marker and (closing the historical gap) `Serialize` /
-`Deserialize`'s marker validate `T` structurally at their own span and are a
-hard compile error if ineligible — see [Discovery Mechanism](#discovery-mechanism)
-for how that validation feeds the same eligibility state a bare bound
-consults.
+A marker for any of the structurally-checkable traits (`Eq` / `Ord` /
+`Default` / `Serialize` / `Deserialize`) validates `T` at its own span and is
+a hard compile error if ineligible, then records the request exactly as a bare
+bound does.
 
 Whole-program and monomorphized, so there's no orphan rule to violate.
 Generic types record nominally against the base declaration — the many
@@ -156,11 +152,11 @@ link then fails loud (`no generic template for …`) rather than miscompiling �
 a compiler bug to fix, per the P0-on-suspected-bug rule, not a silent feature
 gap.
 
-An explicit marker validates structurally at its own span (hard error if
-ineligible) but records no reference and so generates nothing on its own — see
-[Consequences](#consequences). This is scoped to compiler-synthesized bodies;
-a hand-written `impl Trait for T { … }` is ordinary source, type-checked
-because it exists and left to ordinary dead-code elimination.
+An explicit marker feeds the same request set: it validates structurally at
+its own span (hard error if ineligible) and records the request like a bound.
+This is scoped to compiler-synthesized bodies; a hand-written
+`impl Trait for T { … }` is ordinary source, type-checked because it exists and
+left to ordinary dead-code elimination.
 
 ### Policy assignment
 
@@ -215,11 +211,12 @@ motivation is pure compile-time / code size, with no opt-out to weigh.
   blanket `impl<T: Reflect> Trait for T` conflict with concrete impls — an
   open coherence question the current mechanism doesn't hit yet, since it
   instantiates the existing per-type synthesizer directly.
-- No on_bound impl exists "for free" without a reference; an explicit marker
-  guarantees a hard validation error at declaration if `T` is ineligible
-  (`Eq` / `Ord` / `Default` / serde), but no longer guarantees a body is
-  generated in advance. A type intended for future use with zero current call
-  sites gets no code until something references it.
+- No on_bound impl exists "for free" from a mere declaration without a bound,
+  marker, or reference; an unmarked type intended for future use with zero
+  current call sites gets no code until something references it. An explicit
+  marker both guarantees a hard validation error if `T` is ineligible
+  (`Eq` / `Ord` / `Default` / serde) and records a request, so a marked type
+  does get its body.
 - The format traits become implicit bounds on every type parameter, so the
   language now commits to "every type is formattable." This matches the
   pre-existing automatic policy (which generated `Inspect` for every type), but

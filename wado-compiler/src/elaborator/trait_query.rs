@@ -22,11 +22,21 @@ pub(super) enum OnBoundTrait {
     Ord,
     Serialize,
     Deserialize,
+    Default,
 }
 
 impl OnBoundTrait {
     pub(super) fn is_serde(self) -> bool {
         matches!(self, Self::Serialize | Self::Deserialize)
+    }
+
+    /// Whether structural eligibility is decided by recursing through the
+    /// type's fields/cases (each must itself implement the trait). True for
+    /// `Eq` / `Ord` / serde; false for `Default`, whose eligibility is
+    /// "every field carries a default expression" — a different rule handled
+    /// by [`TypeSystem::auto_derive_default_struct_type`].
+    pub(super) fn is_field_recursive(self) -> bool {
+        !matches!(self, Self::Default)
     }
 }
 
@@ -420,6 +430,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(tr) = self.classify_on_bound_trait(trait_name) else {
             return;
         };
+        // `Default` fails structurally when a field lacks a default expression,
+        // not because a field type is non-`Default`; the headline error already
+        // states which field, so no recursive field-type chain applies.
+        if !tr.is_field_recursive() {
+            return;
+        }
         let resolved = self.tysys.type_table.borrow().get(type_id).clone();
 
         let mut failing: Option<(String, TypeId)> = None;
@@ -452,6 +468,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(OnBoundTrait::Serialize)
         } else if items.trait_name_opt(CompilerItem::Deserialize) == Some(trait_name) {
             Some(OnBoundTrait::Deserialize)
+        } else if trait_name == items.trait_name(CompilerItem::Default) {
+            Some(OnBoundTrait::Default)
         } else {
             None
         }
@@ -546,6 +564,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(tr) = self.classify_on_bound_trait(trait_name) else {
             return false;
         };
+        // `Default` is eligible when the struct's every field carries a default
+        // expression — a different rule from the field-recursion the other
+        // `on_bound` traits use. The marker validates against the same
+        // predicate `S::default()` resolution consults.
+        if !tr.is_field_recursive() {
+            return matches!(
+                self.tysys.type_table.borrow().get(type_id),
+                ResolvedType::Struct { .. }
+            ) && {
+                let name = self.tysys.type_table.borrow().type_name(type_id);
+                self.auto_derive_default_struct_type(&name).is_some()
+            };
+        }
         let resolved = self.tysys.type_table.borrow().get(type_id).clone();
         match &resolved {
             ResolvedType::Newtype { base_type, .. } => {
@@ -608,6 +639,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         if let Some(tr) = on_bound
+            && tr.is_field_recursive()
             && let ResolvedType::Enum {
                 name,
                 module_source,
@@ -649,11 +681,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Structs auto-implement Default when every field has a declared
         // default expression (`= expr`) — the synthesis pass emits the body.
         // Share the eligibility predicate with the method-lookup helper so
-        // the bound check and `S::default()` resolution agree.
-        if let ResolvedType::Struct { name, .. } = &resolved
+        // the bound check and `S::default()` resolution agree. Record the
+        // bound-driven request so `on_bound` synthesis (WEP 2026-06-25)
+        // generates the body only where a `T: Default` bound or a marker
+        // actually needs it.
+        if let ResolvedType::Struct {
+            name,
+            module_source,
+            ..
+        } = &resolved
             && trait_name == default_name
             && self.auto_derive_default_struct_type(name).is_some()
         {
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .record_bound_driven_synth_request(name, module_source, trait_name);
             return true;
         }
 

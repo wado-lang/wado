@@ -315,19 +315,22 @@ pub fn synthesize_traits(project: Package) -> Package {
         .values()
         .next()
         .expect("tir_modules must contain at least the entry module during synthesis");
-    let (eq_trait_name, ord_trait_name) = {
+    let (eq_trait_name, ord_trait_name, default_trait_name) = {
         let tt = first_module.type_table.borrow();
         let items = tt.compiler_items();
         (
             items.trait_name(CompilerItem::Eq).to_string(),
             items.trait_name(CompilerItem::Ord).to_string(),
+            items.trait_name(CompilerItem::Default).to_string(),
         )
     };
     let requested: IndexSet<(String, ModuleSource, String)> = first_module
         .type_table
         .borrow()
         .bound_driven_synth_requests(|trait_name| {
-            trait_name == eq_trait_name || trait_name == ord_trait_name
+            trait_name == eq_trait_name
+                || trait_name == ord_trait_name
+                || trait_name == default_trait_name
         })
         .into_iter()
         .collect();
@@ -854,7 +857,11 @@ fn generate_struct_default_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<
         .collect();
 
     for (name, fields, span) in &infos {
-        if ctx.has_impl(name, &default_trait_name) {
+        // On_bound (WEP 2026-06-25): emit only where a `T: Default` bound,
+        // a `S::default()` call, or an `impl Default for S;` marker recorded
+        // the request — not for every defaults-eligible struct. A body-less
+        // marker does not count as a real impl (`should_synthesize`).
+        if !ctx.should_synthesize(name, &default_trait_name) {
             continue;
         }
         let struct_type = tt.make_struct(name.clone(), module_source.clone());
