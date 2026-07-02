@@ -176,12 +176,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ..
         }) = &effect
         {
-            // Skip the impl-presence check when the handler type is unresolved
-            // (e.g. `Unknown` / `Error`), because earlier diagnostics already
-            // reported the handler-side problem. Query by `TypeId`, not the
-            // stringified name: a generic impl (`impl<T> Log for Ctx<T>`) is
-            // indexed by its bare head, which a full instantiated name
-            // (`Ctx<i32>`) would never match.
+            // Skip the check for an unresolved handler (`Unknown` / `Error`):
+            // an earlier diagnostic already covered it. Query by `TypeId` (via
+            // `type_implements_trait`) so a generic-instance handler like
+            // `Ctx<i32>` is recognised through its `impl<T> Log for Ctx<T>`.
             let underlying = self.tysys.type_table.borrow().get(handler_type).clone();
             let is_real_type = !matches!(underlying, ResolvedType::Unknown | ResolvedType::Error);
             // A bare type parameter (`with E => h do` where `h: &H`, `H: E`)
@@ -290,9 +288,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Enumerate impls by the bare head name: `impl_index` keys a generic
-        // impl (`impl<T> Log for Ctx<T>`) by "Ctx", which the full
-        // instantiated name ("Ctx<i32>") would never match.
+        // Enumerate by the bare head: a generic impl `impl<T> Log for Ctx<T>`
+        // is keyed under "Ctx", not the instantiated "Ctx<i32>".
         let type_name = match &resolved {
             ResolvedType::GenericInstance { name, .. }
             | ResolvedType::GenericResource { name, .. } => name.clone(),

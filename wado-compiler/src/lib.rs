@@ -1039,16 +1039,13 @@ fn compile_after_load<H: CompilerHost>(
     ))
 }
 
-/// Deep-clone TIR modules so that each snapshot has its own independent `TypeTable`.
+/// Deep-clone TIR modules into a fully independent, frozen view.
 ///
-/// TIR modules share a single `TypeTable` via `Rc<RefCell<…>>`, and their
-/// `functions` are `Rc<RefCell<TirFunction>>` shared with later phases. Later
-/// passes mutate both in place — DCE's `TypeTable::retain` punches holes in the
-/// table, and monomorphization rewrites function bodies' type ids. A snapshot
-/// taken for `--tir-resolved` dump output must be immune to all of that, so it
-/// deep-clones the `TypeTable` (one clone, shared across the snapshot's modules
-/// via a fresh `Rc`) and every function / generic function into its own `Rc`,
-/// producing a fully independent frozen view of the resolved stage.
+/// A module's `TypeTable` and its `Rc<RefCell<TirFunction>>`s are shared with
+/// later phases that mutate them in place (DCE's `TypeTable::retain` punches
+/// holes; monomorphization rewrites body type ids). The `--tir-resolved` dump
+/// must be immune to that, so both the table (one clone shared across the
+/// snapshot's modules) and every function are cloned into fresh `Rc`s.
 fn snapshot_tir_modules(
     modules: &IndexMap<ModuleSource, tir::TirModule>,
 ) -> IndexMap<ModuleSource, tir::TirModule> {
@@ -1215,11 +1212,9 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     };
     // Destructure rather than clone the `Arc<TraitEnv>`: keeping a stray
     // reference alive forces `synthesize`'s `Arc::try_unwrap` into the
-    // deep-clone fallback. Snapshotting the TIR consumes the modules, so
-    // no need to keep `resolve_output` past this point.
-    // Keep the resolved modules as-is for the `--tir-resolved` dump view; the
-    // downstream pipeline runs on an independent snapshot (below), so these
-    // stay frozen at the resolved stage.
+    // deep-clone fallback. The resolved modules are kept as-is for the
+    // `--tir-resolved` dump view; the pipeline runs on its own snapshot
+    // (below), so these stay frozen at the resolved stage.
     let (tir_modules_by_source, trait_env): (
         Option<IndexMap<ModuleSource, tir::TirModule>>,
         Option<std::sync::Arc<crate::elaborator::trait_env::TraitEnv>>,
@@ -1232,11 +1227,8 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // Create Package early so CM binding synthesis runs before monomorphize,
     // matching the compile_with_options pipeline.
     let (monomorphized_tir_text, lowered_nir_text, optimized_package, wir_package) =
-        // Hand the downstream pipeline an *independent* deep copy (fresh type
-        // table + deep-cloned functions). Sharing would let DCE's `retain`
-        // (which drops generic decl field TypeParams unreachable from concrete
-        // types) and monomorphization punch holes / rewrite ids the frozen
-        // `--tir-resolved` view still references, panicking the unparser.
+        // The pipeline mutates its input in place, so give it an independent
+        // snapshot rather than the frozen dump view.
         if let Some(resolved_modules) = tir_modules_by_source
             .as_ref()
             .map(snapshot_tir_modules)

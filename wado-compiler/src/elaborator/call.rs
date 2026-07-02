@@ -1157,14 +1157,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Fill any still-unbound type param that declares a default
-        // (`fn f<T = Fallback>(...)`) with its default type, before the
-        // bound check and the defer/report step below. A value default on
-        // the same parameter (`v: T = Fallback {}`) leaves nothing to infer
-        // `T` from at an omitted-argument call site, so without this the
-        // unbound `TypeParam` reaches codegen and traps. Filling first also
-        // lets `check_function_type_arg_bounds` see the concrete default and
-        // record any bound-driven synthesis request (e.g. `Serialize`).
+        // Before the bound check and defer/report below, so the bound check
+        // sees the concrete default (and records any bound-driven synthesis).
         self.fill_defaulted_fn_type_args(&callee, &mut type_args);
 
         // Check trait bounds on function type arguments
@@ -2020,11 +2014,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let n = space.len();
 
-        // Resolve defaults with the callee's type params registered, mirroring
-        // `lookup_generic_func_for_inference`. Point `default_scope_module` at
-        // the callee so a default naming a type private to the callee's module
-        // (`<T = Priv>`, `Priv` private) resolves through the fallback in
-        // `resolve_named_type`.
         let defaults: Vec<Option<TypeId>> = {
             let saved_scope_module = self.default_scope_module.replace(callee.module.clone());
             let mut scope = self.enter_inherited_type_param_scope();
@@ -2104,12 +2093,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if n == 0 {
             return;
         }
-        // Type-param defaults were already substituted by
-        // `fill_defaulted_fn_type_args`, so the dense-aware logic below can
-        // handle whatever remains — no short-circuit to the full-params
-        // `report_uninferred_fn_type_args` (which miskeys on the dense length
-        // when an effect / `fn`-bound param is present, silently dropping the
-        // "cannot infer" diagnostic for a genuinely unresolvable param).
+        // Defaults are already substituted (`fill_defaulted_fn_type_args`), so
+        // the dense-aware logic below handles the rest. Not `report_uninferred`
+        // (which keys on the full param count, dropping the diagnostic when an
+        // effect / `fn`-bound param shifts the dense length).
         // Full-length (some slots unbound) or empty (nothing inferred); any other
         // length is a pack/effect interleaving we do not touch.
         let from_empty = type_args.is_empty();

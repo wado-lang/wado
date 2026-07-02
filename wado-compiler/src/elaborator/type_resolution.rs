@@ -320,12 +320,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 } else if let Some(scope_mod) = self.default_scope_module.clone()
                     && scope_mod != self.current_module_source
                 {
-                    // A callee's default whose type is private to (or only
-                    // imported by) the callee's module — e.g. `fn f<T = Priv>()`
-                    // or `fn f(m: Priv = Priv {})` called cross-module — is
-                    // re-resolved here at the caller. The caller never names it,
-                    // so retry in the callee's perspective. Mirrors the
-                    // `default_scope_module` fallback on the ident / call paths.
+                    // A default re-resolved at the caller may name a type
+                    // private to the callee's module (`fn f<T = Priv>()` called
+                    // cross-module); the caller can't name it, so retry in the
+                    // callee's perspective. Mirrors the ident / call fallback.
                     self.with_module_perspective_for(&scope_mod, |s| {
                         s.resolve_named_type(name, span, enforce_arity)
                     })

@@ -1563,14 +1563,11 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             interface_name.clone(),
             trait_type_args.clone(),
         );
-        // Exact match first (concrete impls, incl. concrete instantiations
-        // like `impl E for Holder<u8>`), then the generic-template fallback.
-        // A generic impl `impl<T> E for Holder<T>` registers its method under
-        // the bare head `Holder` (see `build_handler_impl_index`), which the
-        // instantiated handler name `Holder<i32>` never equals — so look up
-        // the bare-head entry. Matching the head exactly (not just "same
-        // head") targets only the template, never a concrete sibling like
-        // `Holder<u8>`.
+        // Exact match first, then the generic-template fallback: a generic
+        // impl `impl<T> E for Holder<T>` registers under the bare head `Holder`
+        // (see `build_handler_impl_index`), which `Holder<i32>` never equals.
+        // Keying the fallback on the head exactly hits only the template, never
+        // a concrete sibling like `Holder<u8>`.
         let impl_info = env.impl_index.get(&impl_key).or_else(|| {
             let head = crate::name::split_base_name(&handler_type_name);
             env.impl_index
@@ -2172,9 +2169,7 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
 /// `__h_<E>` holds — typically `&T` or `&mut T`); the closure body's
 /// receiver is a `TirExprKind::Capture { index: 0 }` that the
 /// lower-phase closure pass converts into a field access on the
-/// generated functor struct. The call target (mangled name +
-/// `method_info`) comes off `impl_info.methods` verbatim, as reify
-/// registered it.
+/// generated functor struct.
 fn build_handler_op_closure(
     op: &TirEffectOp,
     impl_info: &HandlerImplInfo,
@@ -2220,11 +2215,9 @@ fn build_handler_op_closure(
         handler_type,
         span,
     );
-    // Target the impl method under the exact mangled name + `method_info`
-    // reify registered for it (`build_handler_impl_index` recorded both).
-    // For a generic impl (`impl<T> Log for Ctx<T>`) this is the template's
-    // name; the monomorphizer instantiates it from the receiver's concrete
-    // type args, exactly as it would for a user-written method call.
+    // Reuse the exact mangled name + `method_info` reify registered. For a
+    // generic impl this is the template; the monomorphizer instantiates it
+    // from the receiver's type args like any user-written method call.
     let target = impl_info
         .methods
         .get(&op.name)
