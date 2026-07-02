@@ -1,18 +1,19 @@
 # Trait Derivation Policy — Bound-Driven Synthesis
 
 Status: Implemented. Every derivable compiler trait — `Eq` / `Ord` /
-`Default` / `Inspect` / `InspectAlt` / `Display` / `DisplayAlt` — is
-`on_bound`: a body is synthesized only where a call site actually references
-the trait method. `Serialize` / `Deserialize` are `on_bound` too but keep
-their own bound-recorded channel (see below). Discovery is a single
-post-monomorphize lazy sweep (`synthesis::lazy_traits`): after every generic
-type argument is concrete, it scans function bodies for referenced-but-unsynthesized
-trait-method targets and materializes each concrete body to fixpoint. This
-replaces the earlier per-call-site request recording, and closes the gap it
-left — a reference no annotate-time eligibility check happened to see
-(unbounded generic template formatting, `{v:?}` over a type param) is now
-discovered structurally at the point every reference is concrete. A policy
-declaration for user-defined traits is open. See Open Questions.
+`Default` / `Inspect` / `InspectAlt` / `Display` / `DisplayAlt` /
+`Serialize` / `Deserialize` — is `on_bound`: a body is synthesized only
+where a reference actually needs it, discovered through the shared
+`bound_driven_synth_requests` channel a bound check or explicit marker
+records into. The format traits (`Inspect` / `InspectAlt` / `Display` /
+`DisplayAlt`) are _total_ — every type is structurally formattable — so every
+type parameter carries them as implicit bounds; this routes formatting of a
+generic value through the same bound-check recording as `Eq` / `Ord`,
+covering `{v:?}` over a type param without a written bound. References with no
+type parameter in play (a `{p:?}` template or `p.inspect(f)` on a concrete
+`p`, a `P::default()` call, an `assert` capture) record at their own
+resolution site. A policy declaration for user-defined traits is open. See
+Open Questions.
 
 ## Context
 
@@ -59,11 +60,21 @@ instantiated for a given `T`.
 
 There is no longer an `automatic` policy: `Inspect` / `InspectAlt` /
 `Display` / `DisplayAlt` / `Default` moved onto `on_bound` alongside `Eq` /
-`Ord`. The format traits force the point the WEP always intended — a
-reference, not a bound, triggers synthesis — because `{v:?}` over an unbounded
-type param has no bound to record, so nothing short of usage-based discovery
-is correct. `Display` / `DisplayAlt` synthesize a fallback that delegates to
+`Ord`. `Display` / `DisplayAlt` synthesize a fallback that delegates to
 `Inspect` / `InspectAlt`.
+
+The format traits differ from the rest in being _total_: every type is
+structurally formattable (the pre-existing `automatic` policy already
+generated an `Inspect` body for every type kind — struct, enum, variant,
+flags, newtype, tuple, closure, opaque resource). This WEP makes that totality
+a type-system fact: every type parameter carries `Inspect` / `InspectAlt` /
+`Display` / `DisplayAlt` as implicit bounds, always satisfiable, never
+rejecting. The payoff is discovery: formatting a generic value now flows
+through an ordinary bound check that records the request, so `{v:?}` over a
+type param needs no special path. `Eq` / `Ord` / `Default` / serde are _not_
+total (a `fn`-typed field, a field without a default, blocks them), so they
+carry no implicit bound and a `T: Trait` there is a real obligation the caller
+must satisfy.
 
 - A hand-written `impl Trait for T { … }` always wins.
 - An `impl` declaration — hand-written or the empty marker `impl Trait for
@@ -101,55 +112,49 @@ hard compile error if ineligible — see [Discovery Mechanism](#discovery-mechan
 for how that validation feeds the same eligibility state a bare bound
 consults.
 
-Whole-program and monomorphized, so there's no orphan rule to violate. For
-the sweep-driven traits, a generic type's per-instantiation references are all
-concrete by the time the sweep runs, so each concrete `(type, trait)` pair is
-synthesized directly — no shared template. `Serialize` / `Deserialize` still
-emit a generic template that monomorphize instantiates per concrete serializer
-(the `Deserialize` `FieldSchema` keying keeps the `next_field` selector on the
-base type — see [Serde](./wep-2026-02-28-serde.md)).
+Whole-program and monomorphized, so there's no orphan rule to violate.
+Generic types record nominally against the base declaration — the many
+instantiations collapse onto one request, and synthesis emits a generic
+template that monomorphize instantiates per concrete type. `Serialize` /
+`Deserialize` templates are additionally generic over the _serializer_ type
+`S` / `D` (the `Deserialize` `FieldSchema` keying keeps the `next_field`
+selector on the base type — see [Serde](./wep-2026-02-28-serde.md)).
 
 ### Discovery mechanism
 
 A structural obligation is only satisfiable if the reference that needs it can
-be _found_. Recording eligibility as a side effect of each resolution path
-that happens to check it (operator dispatch, `.method()` resolution, bound
-checks) is fragile: every path must remember to record, and a path that
-doesn't silently skips generation. The format traits make this unworkable
-outright — `{v:?}` over an unbounded type param has no bound to record, and
-the concrete `T^Inspect` reference only materializes when monomorphize
-substitutes `T`, after any annotate-time recording has run.
+be _found_. Discovery funnels into one shared set,
+`TypeTable::bound_driven_synth_requests`: the pre-monomorphize synthesis pass
+reads it and emits a body (concrete or generic template) for each recorded
+`(type, trait)` pair, gated so nothing is generated for a pair no reference
+recorded. What differs per trait is _how the reference is found_.
 
-The mechanism is a single post-monomorphize lazy sweep (`synthesis::lazy_traits`).
-Once every generic type argument is concrete, it walks all function bodies for
-`Call` / `MethodCall` targets whose `method_info` names an `on_bound` trait
-method (`Eq::eq`, `Ord::cmp`, `Default::default`, `Inspect::inspect`,
-`Display::fmt`, and the `Alt` siblings) that no function defines yet, and
-synthesizes each concrete body — reusing the same per-type generators, now
-driven by the reference instead of an eager scan. Synthesizing an `Inspect`
-body emits `field.inspect(f)` calls, so the sweep runs to fixpoint: each new
-body's references feed the next round. Because it runs where _every_ reference
-is concrete and enumerable, no resolution path needs derivation-specific
-awareness, and the historical "a path forgot to record" gap cannot recur — a
-referenced-but-unsynthesized target is discovered by construction.
+For the total format traits, the implicit `Inspect` / `InspectAlt` / `Display`
+/ `DisplayAlt` bound on every type parameter does the work. Formatting a
+generic value type-checks that value against the bound, and the bound check
+(`type_implements_trait`) records the request while it recurses through fields
+— so at the outermost concrete call, where a type argument first becomes
+concrete, the type and every field it structurally reaches are recorded
+together. This is the same recursion `Eq` / `Ord` bound checks already use.
+Because the bound sits on _every_ type parameter, a concrete type entering
+anywhere in a generic call chain is recorded at that boundary, and a generic
+container built inside a body (`Box<P>` formatted downstream) rides its own
+`impl<T: Inspect> Inspect for Box<T>` bound the same way.
 
-The pre-monomorphize synthesis pass keeps only the generic-template
-generators the monomorphizer needs to instantiate (generic user structs /
-variants and the blanket container impls); it no longer eagerly emits concrete
-bodies.
+References with no type parameter to carry the bound record at their own
+resolution site: a `{p:?}` / `{p}` template interpolation and an `assert`
+capture record from the concrete interpolation type (keyed by the format spec
+— `Inspect` vs `Display` vs the `Alt` variants); a direct `p.inspect(f)` or
+`P::default()` records at method / static-call resolution. `Eq` / `Ord`
+records at operator dispatch, `Default` at a `T: Default` bound or a
+`P::default()` call, serde at a `T: Serialize` bound — none of these have an
+unbounded path, so no implicit bound is needed for them.
 
-`Serialize` / `Deserialize` are equally usage-based — no `T: Serialize` use,
-no impl — but keep their bound-recorded pre-monomorphize channel
-(`serde_synth`), for a structural reason: `serialize` / `deserialize` are
-generic over the _serializer_ type `S` / `D`, not just the value type. Their
-body must therefore exist as a template _before_ monomorphize, so the one mono
-pass instantiates `S` / `D` per concrete serializer; the post-mono sweep runs
-too late to drive that. Serde also has no unbounded-reference gap for the
-sweep to close — a value is only ever serialized through a `T: Serialize`
-bound (anonymous structs included), so bound recording captures every use.
-The value-only-generic traits (`Eq` / `Ord` / `Default` / format) have no
-serializer parameter, fully concretize at monomorphize, and _do_ have the
-unbounded-reference path — so they, and only they, ride the sweep.
+A missed direct site is not silent: with generation gated on requests, an
+unrecorded reference leaves its target body unsynthesized, and monomorphize /
+link then fails loud (`no generic template for …`) rather than miscompiling —
+a compiler bug to fix, per the P0-on-suspected-bug rule, not a silent feature
+gap.
 
 An explicit marker validates structurally at its own span (hard error if
 ineligible) but records no reference and so generates nothing on its own — see
@@ -161,10 +166,10 @@ because it exists and left to ordinary dead-code elimination.
 
 - `Inspect` / `InspectAlt` / `Display` / `DisplayAlt` / `Default` move from
   `automatic` to `on_bound`: a body is generated only for a `(type, trait)`
-  pair some reference actually needs.
-- `Eq` / `Ord` were already `on_bound`; they now share the post-mono sweep
-  instead of per-call-site recording.
-- `Serialize` / `Deserialize` are `on_bound` via their bound-recorded channel.
+  pair some reference actually needs. The format traits additionally become
+  implicit bounds on every type parameter (they are total).
+- `Eq` / `Ord` / `Serialize` / `Deserialize` were already `on_bound`; no
+  change.
 - User-defined traits default to `explicit`; opting into `on_bound` is an open
   question (see below).
 
@@ -185,15 +190,18 @@ motivation is pure compile-time / code size, with no opt-out to weigh.
 
 ### Benefits
 
-- One uniform model replaces the ad-hoc split; a single sweep is the discovery
-  point, so no resolution path can silently skip generation.
+- One uniform model replaces the ad-hoc split: every derivable trait is
+  `on_bound`, discovered through one shared request set.
 - Removes serde's per-type marker boilerplate and unblocks anonymous-struct
   serialization.
 - Removes compile-time and code-size waste on unused impls — `Eq` / `Ord` for
-  types never compared, and now `Inspect` / `Display` / `Default` for types
-  never formatted or defaulted (previously synthesized for every type).
-- `T: Inspect` / `T: Display` bounds now hold structurally for plain aggregate
-  types, which the old automatic policy rejected at bound-check.
+  types never compared, and now `Default` for types never defaulted (`Default`
+  is not total, so its waste is real). Format traits stay near-total in
+  practice (any type used generically is recorded), so their code-size change
+  is minor; DCE reclaims the rest.
+- `T: Inspect` / `T: Display` bounds now hold for every type — they are
+  implicit on every type parameter — which the old automatic policy rejected
+  at bound-check for plain aggregates.
 - No macros, no dynamic reflection; synthesis stays static and monomorphized.
 
 ### Trade-offs
@@ -205,18 +213,22 @@ motivation is pure compile-time / code size, with no opt-out to weigh.
   keep them legible.
 - A future `Reflect`-based rewrite of the synthesized body must not let a
   blanket `impl<T: Reflect> Trait for T` conflict with concrete impls — an
-  open coherence question the sweep doesn't hit yet, since it instantiates the
-  existing per-type synthesizer directly.
+  open coherence question the current mechanism doesn't hit yet, since it
+  instantiates the existing per-type synthesizer directly.
 - No on_bound impl exists "for free" without a reference; an explicit marker
   guarantees a hard validation error at declaration if `T` is ineligible
   (`Eq` / `Ord` / `Default` / serde), but no longer guarantees a body is
   generated in advance. A type intended for future use with zero current call
   sites gets no code until something references it.
-- The sweep is an extra post-monomorphize walk over all function bodies, run
-  to fixpoint. Its cost is bounded by the set of distinct concrete
-  `(type, trait)` references actually present — the same impls the old
-  automatic policy generated eagerly and more — so it trades eager work for
-  on-demand work rather than adding net synthesis.
+- The format traits become implicit bounds on every type parameter, so the
+  language now commits to "every type is formattable." This matches the
+  pre-existing automatic policy (which generated `Inspect` for every type), but
+  it removes the freedom to introduce a genuinely non-formattable type later
+  without revisiting the bound.
+- Discovery for the concrete format / `Default` references stays a
+  finite set of recording sites (template desugar, `assert`, direct call,
+  static `default()`); a missed site fails loud at monomorphize / link rather
+  than miscompiling, but it is still per-site rather than a single funnel.
 
 ### Relationship and prerequisites
 
@@ -241,33 +253,30 @@ changes _when_ a request is created, not _how_ the body is written. A future
 - **Keep `Eq` / `Ord` automatic (status quo).** Simplest, but pays synthesis
   cost for every declared type regardless of use, with no offsetting
   benefit. Rejected.
-- **Record eligibility as a side effect of each call-resolution path
-  checking it (the interim mechanism).** The first `Eq` / `Ord` / serde
-  implementation: works, but every resolution path must remember to opt in,
-  and nothing enforces that a future path does. Fatal for the format traits —
-  `{v:?}` over an unbounded type param has no path to record at, since the
-  concrete reference only appears at monomorphize. Superseded by the sweep.
-- **Extend per-call-site recording to the format traits** (record an `Inspect`
-  request at template desugaring, `assert` capture, direct `.inspect()`, …).
-  Handles the concrete cases but still misses the monomorphize-substituted
-  ones and re-introduces the "every path must remember" fragility across even
-  more sites. Rejected in favor of the single post-mono sweep.
-- **Placeholder entries in `impl_index` at `TraitEnv::build()`** (an earlier
-  draft of this WEP). Precompute eligibility from AST-level field types and
-  insert body-less placeholders that resolution paths find through their
-  existing lookup. Sound, but requires a correct pre-Annotate structural scan
-  (generic fields, cross-module recursion, newtypes of newtypes) and a proven
-  single lowering funnel. The post-mono sweep achieves the same "no path can
-  skip generation" guarantee without either, by running where all references
-  are already concrete. Rejected as more machinery for the same guarantee.
+- **Keep the format traits `automatic` (status quo).** Simplest, but pays
+  synthesis for every declared type, blocks `T: Inspect` / `T: Display` bounds
+  from holding, and gives no conformance-marker story. Rejected.
+- **A post-monomorphize lazy sweep** (an earlier draft of this WEP). Discover
+  every referenced `(type, trait)` after all type arguments are concrete and
+  synthesize each concrete body to fixpoint — the single funnel that no
+  resolution path can bypass. Robust and precise, but reimplements the
+  per-type synthesizers against concrete post-mono `FlatPackage` data and adds
+  a whole pass. Rejected because the format traits are total: making them
+  implicit bounds routes the generic case through the _existing_ `Eq` / `Ord`
+  bound-check recording (with its field recursion) for a fraction of the code,
+  and the residual concrete-reference sites are few and fail loud when missed.
+- **Implicit bounds for `Eq` / `Ord` / `Default` too.** Would unify discovery
+  fully, but those traits are not total (a `fn`-typed field blocks `Eq`; a
+  field without a default blocks `Default`), so an implicit bound would reject
+  ordinary generic code over ineligible types. Rejected — implicit bounds are
+  sound only for the total traits.
 
 ## Open Questions
 
 - Declaration syntax for a user-defined trait's policy (opting a user trait
   into `on_bound`).
-- Whether `Serialize` / `Deserialize` should eventually fold onto the sweep
-  too. Blocked on their genericity over the serializer type `S` / `D`, which
-  forces pre-monomorphize template emission; unifying would cost a second
-  serializer-monomorphize pass for no correctness gain, so it stays deferred.
+- Whether the concrete format / `Default` recording sites can eventually
+  collapse into one funnel (e.g. a single trait-method-reference lowering hook)
+  instead of the current per-site set, removing even the fail-loud residual.
 - Coherence interaction with concrete impls, relevant once a `Reflect`-based
   rewrite of the synthesized body lands.
