@@ -289,123 +289,39 @@ The simulator's state machine is embedded in the generated parser only
 when a grammar needs it (inspect it with `gale dump --atn`); a grammar
 that needs none carries none and is byte-for-byte unaffected.
 
-### Two mechanisms
+### Known approximation gaps
 
-1. **Complete simulator** — `atn_predict_with_stack` + `atn_closure` /
-   `atn_move` over graph-structured prediction contexts (`CtxArena`).
-   This is correct in **all** cases: it simulates the ATN against the
-   input, so it handles multi-token lookahead, `~X` (`NOT_ATOM`)
-   exclusions, deep suffix disambiguation, and the exact caller
-   continuation. It is what the non-greedy `??` decision uses, and what
-   P4.3 originally used for the loop entry.
-2. **Dedicated O(1) loop-entry decision** — `atn_lr_loop_decision`.
-   It does **not** simulate forward. It does one shallow check:
-   - if the caller continuation **mandates** the lookahead token
-     (`atn_caller_mandates` walks the caller return-state stack, skips
-     nullable levels, tests the first non-nullable FIRST) → EXIT;
-   - else the first precedence-allowed enter edge whose suffix FIRST
-     admits the token → ENTER;
-   - else EXIT.
-
-### Why the dedicated decision exists (the performance invariant)
-
-The complete simulator, used at **every** loop iteration of a deep
-chain, is **O(n²)**: each iteration's `predict` re-walks the O(depth)
-enclosing-loop caller chain (measured `lr_between.g4` depth 8/16/32 =
-1.3 s / 7 s / 48 s). `DropLoopEntryBranchInLRRule_4` is a **Performance**
-descriptor with a deep input, so the complete simulator times out on
-the very test it is meant to pass. The dedicated decision's
-caller-mandate check terminates at the **first non-nullable** caller
-level (one step for the `between … 'and'` shape), so each iteration is
-O(1) and the deep chain is O(n) (~117 ms).
-
-**Invariant for any future change: the deep descriptor's loop
-iterations must stay decidable without forward simulation.** A fix that
-re-introduces per-iteration simulation on the common case is a
-regression even if it is "more correct".
-
-### Status of the known edges
-
-The dedicated decision is an approximation; its edges have been worked
-through under one rule: **never silently mispredict**. Each edge is
-resolved one of three ways — a correct fix, a loud guard, or (for the
-remaining runtime-precision cases) a documented fall-back-to-complete-
-simulator plan. The performance invariant is preserved throughout.
-
-**Closed (correct fix + regression test):**
-
-| Edge                                                                                                                             | Resolution                                                                                                                                                                                                     |
-| -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `~X` (`NOT_ATOM`) treated as "matches anything" (`~COMMA` mandates `COMMA`)                                                      | FIRST carries the **excluded** label (`rule_first_neg` / `atn_first_admits`); tests `token != excluded`                                                                                                        |
-| Scan stack pushed only for a rule's own self-ref operand                                                                         | every scan rule call pushes its exact return state (`needs_scan_atn`), mirroring the parse-side wrapper                                                                                                        |
-| Nullable-atom LR rule trapped at decode (the guard blocked _correct_ behaviour)                                                  | removed: a nullable atom legitimately puts the loop operator in FIRST, so walk precedence edges in FIRST                                                                                                       |
-| `lr_loop_entry_decision` returned the first `STAR_LOOP_ENTRY` (wrong for an atom `*`)                                            | select the entry by its **precedence enter edges**                                                                                                                                                             |
-| Packed-key depth limit (998 caller frames; 254 precedence levels)                                                                | collision-free power-of-two bit-pack (pr/alt 11b, rs/state 20b ≈ 1M); assert is encoding-capacity only                                                                                                         |
-| Speculative repeat-recovery `_parse_R` missing `atn_ret_pending`                                                                 | stamp the call's exact return state before the recovery parse (diagnostic-only path)                                                                                                                           |
-| Open-ended (`.` / `~X`-led, empty static `suffix_first`) LR suffix in an ATN-class rule                                          | `valid_lr_alts` built over the same real-suffix set as the enter edges, so the edge index lines up; rule forced ATN-class. Superset case; fixtures `lr_complement_op.g4`, `lr_wildcard_postfix.g4`             |
-| Self-reference nested inside a Group/Repeat LR-suffix element (wrong precedence floor)                                           | `build_lr_suffix_element` recurses through the container, deciding each self-ref's precedence floor (`conflict_min` vs `0`) from its own follow                                                                |
-| Non-greedy `??` inside a left-recursive rule (prediction at `min_prec 0` ignored the raised precedence)                          | the `??`'s `atn_predict_with_stack` call forwards `min_prec`, so the decision honors the loop's precedence floor                                                                                               |
-| Several non-greedy `??` in one rule (the unique-exit-first search collapsed to greedy ENTER)                                     | each `??` carries its own ATN decision number (`assign_atn_decisions` → `Atn.decision_sites`), emitted into `atn_predict_with_stack(sim, decision, …)`; fixture `ll_optional_non_greedy_multi.g4`              |
-| Multi-alt `AtEndConflict` mis-resolved by longest-match (an alt returns to the caller, the longer alt steals the caller's token) | `grammar_has_at_end_conflict` forces the ATN build; the rule emitter routes the decision through `atn_predict_with_stack` on the rule body decision (`rule_body_decision`); fixture `ll_longest_vs_context.g4` |
-
-**Open — runtime precision (fall back, don't panic):** these mispredict
-on _valid_ input the heuristic can't resolve, where a panic would reject
-a legal parse, so the right answer is to fall back to the complete
-simulator (which already exists and is correct), not to fail:
-
-- the mandate yields on a 1-token FIRST match without verifying the
-  caller continuation past the shared delimiter (`a and b and )`);
-- two enter edges sharing a first token are decided by FIRST alone;
-- the parse-side scan tournament seeds from an empty `SCAN_STACK`
-  instead of `p.atn_stack`, so an enclosing parser rule's mandatory
-  delimiter is invisible to the scan decision when the immediate
-  continuation is nullable.
-
-The fallback fires **only** on these specific shapes, never on chain
-depth, so the deep `between` descriptor stays O(n).
-
-### Why a hybrid and not "just use the complete simulator"
-
-The complete simulator already exists and is correct, so completeness is
-not the obstacle — **cost placement** is. The hybrid keeps the O(1)
-decision on the hot path (correct and fast there), and reserves the
-expensive complete simulation for the residual ambiguous tail. This is
-the standard ALL(\*)-with-shortcut shape; it is the deliberate trade-off
-for Gale's clean-room re-derivation.
-
-The precedence-edge check in `lr_loop_entry_decision` once tripped a
-wado compiler ICE (a nested `for … break` miscompiling to an invalid
-core Wasm module in the full `atn` module context). That compiler bug
-has since been fixed, so the scan is now inlined directly into
-`lr_loop_entry_decision` (no helper indirection).
+The loop-entry decision is an approximation, held to one rule: **never
+silently mispredict**. Each known edge is resolved one of three ways — a
+correct fix with a regression fixture, a loud guard, or a documented
+fall-back to the complete simulator (which is exact). So a grammar
+either parses as ANTLR4 does or fails loudly; none accept invalid input
+or reject valid input silently. The set-complement `~X`, the `.`-led and
+`~X`-led left-recursive suffixes, and non-greedy `??` inside a
+left-recursive rule are covered by fixtures (`lr_complement_op.g4`,
+`lr_wildcard_postfix.g4`, `ll_optional_non_greedy_multi.g4`); a few
+runtime-precision shapes (a shared delimiter past a nullable
+continuation, two enter edges sharing a first lookahead token) fall back
+to the complete simulator rather than guess. The mechanism and the full
+edge list live in `runtime/atn.wado` and [`AGENTS.md`](./AGENTS.md).
 
 ## Lexer ATN — recursive non-greedy wildcard rules
 
-The lexer has its own ATN-class case: a rule whose non-greedy repeat body
-recurses into itself, the nested-comment pattern
-`CMT : '/*' (CMT | .)+? '*' '/'`. Whether an inner `/*` opens a nested
-rule or is just wildcard text needs unbounded lookahead, so the static
-single-pass emitter cannot decide it (it over-consumes). These are the
-`LexerExec/RecursiveLexerRuleRefWithWildcard{Plus,Star}_1` descriptors.
+The lexer has its own case that needs runtime matching to agree with
+ANTLR4: a rule whose non-greedy repeat body recurses into itself — the
+nested-comment pattern `CMT : '/*' (CMT | .)+? '*' '/'`. Whether an inner
+`/*` opens a nested comment or is just wildcard text needs unbounded
+lookahead, which a single-pass lexer cannot decide (it over-consumes).
+These are the `LexerExec/RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`
+descriptors.
 
-`lexer_rule_is_atn_class` (`src/latn.wado`) detects the trigger — a
-non-greedy repeat transitively referencing its owning rule. Such a rule's
-generated `try_*` body becomes a single call to `latn_match`
-(`src/runtime/latn.wado`) over a dedicated lexer ATN (`build_latn`, char-range
-atoms), reusing the parser blob format and `atn_decode`. Non-ATN-class
-rules and grammars are byte-identical to before.
-
-`latn_match` is an ordered-thread Pike VM: a Thompson NFA simulation over
-the input characters with leftmost-first (PCRE) thread priority and a
-per-thread rule-call return stack for the recursion. The winning match is
-the one reached by the highest-priority surviving thread, where priority
-is the order edges are laid down at build time — non-greedy loops emit the
-exit edge first, alternations keep source order — so greedy loops yield
-the longest match and non-greedy the shortest that still lets the rule
-finish. No backtracking, linear in the live thread-set per position. The
-semantics were characterized clean-room against the published jar as a
-black box (License hygiene: run it, never read it); `src/latn_test.wado`
-pins them.
+Gale reproduces ANTLR4's result: leftmost-first alternation and the usual
+greedy / non-greedy loop semantics (greedy takes the longest match,
+non-greedy the shortest that still completes the rule). The behaviour was
+characterized clean-room against the published jar as a black box
+(License hygiene: run it, never read it). Rules without this
+recursive-wildcard shape are unaffected. The implementation lives in
+`runtime/latn.wado`.
 
 ## The Descriptor Pipeline
 
