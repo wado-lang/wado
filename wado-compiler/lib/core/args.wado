@@ -85,11 +85,15 @@ pub enum ArgsErrorKind {
     TooManyPositionals,
 }
 
+impl Eq for ArgsErrorKind;
+
 /// A command-line parse failure.
 pub struct ArgsError {
     pub kind: ArgsErrorKind,
     pub message: String,
 }
+
+impl Eq for ArgsError;
 
 /// The argv `Deserializer`. Holds the token stream and the plumbing that serves
 /// the current field's value to the `deserialize_*` methods.
