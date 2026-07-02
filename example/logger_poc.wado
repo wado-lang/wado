@@ -11,11 +11,17 @@
 //! (`info(msg, { user_id, ip })`) and boxed into a single `core:value::Value`
 //! at the ambient facade, before the effect boundary — so the `Log` effect
 //! itself stays non-generic. This retires the `Field` / `List<Field>` design.
+//! The field parameter defaults to an empty struct, so `info(msg)` logs with
+//! no fields; the default type param (`T: Serialize = NoFields`) supplies the
+//! type for the omitted argument.
 
 use { Serialize } from "core:serde";
 use { Value, to_value } from "core:value";
 use { TreeMap } from "core:collections";
 use { to_string } from "core:json";
+
+// Default field payload: serializes to an empty object `{}`.
+pub struct NoFields {}
 
 pub enum Level {
     Trace,
@@ -62,10 +68,10 @@ interface Log {
 // Facade; location defaults resolve at the call site. `#[ambient]` (like
 // `log_stdout`) lets it perform `Log` without `with Log` infecting callers.
 #[ambient]
-pub fn event<T: Serialize>(
+pub fn event<T: Serialize = NoFields>(
     level: Level,
     message: String,
-    fields: T,
+    fields: T = NoFields {},
     target: String = #function,
     file: String = #file,
     line: i32 = #line,
@@ -80,9 +86,9 @@ pub fn event<T: Serialize>(
 }
 
 #[ambient]
-pub fn info<T: Serialize>(
+pub fn info<T: Serialize = NoFields>(
     message: String,
-    fields: T,
+    fields: T = NoFields {},
     target: String = #function,
     file: String = #file,
     line: i32 = #line,
@@ -94,9 +100,9 @@ pub fn info<T: Serialize>(
 }
 
 #[ambient]
-pub fn warn<T: Serialize>(
+pub fn warn<T: Serialize = NoFields>(
     message: String,
-    fields: T,
+    fields: T = NoFields {},
     target: String = #function,
     file: String = #file,
     line: i32 = #line,
@@ -113,7 +119,7 @@ pub fn span(name: String) -> u64 {
 }
 
 #[ambient]
-pub fn record<T: Serialize>(id: u64, fields: T) {
+pub fn record<T: Serialize = NoFields>(id: u64, fields: T = NoFields {}) {
     Log::record_fields(id, box_fields(fields));
 }
 
@@ -199,12 +205,14 @@ impl Log for CaptureSink {
     }
 }
 
-// Contextual layer: prepend fixed fields, forward the rest.
-struct Context {
-    fields: Value,
+// Contextual layer: prepend fixed fields, forward the rest. Generic over the
+// field payload — a `Serialize`-bounded anonymous struct — installed directly
+// as a handler via the generic `impl<T> Log for Context<T>`.
+struct Context<T: Serialize> {
+    fields: T,
 }
 
-impl Log for Context {
+impl<T: Serialize> Log for Context<T> {
     fn enabled(&self, level: Level) -> bool {
         resume Log::enabled(level);
     }
@@ -239,7 +247,7 @@ impl Log for Context {
 
     fn event(&self, event: Event) {
         let mut merged = TreeMap::<String, Value>::new();
-        if let Object(base) = self.fields {
+        if let Object(base) = box_fields(self.fields) {
             for let [key, value] of base.entries() {
                 merged[key] = value;
             }
@@ -349,7 +357,7 @@ test "captures message, level, and caller location" {
     let mut sink = CaptureSink {};
     with Log => &mut sink do {
         let expected_line = #line + 1;
-        info(`hello`, {});
+        info(`hello`);
         assert sink.events.len() == 1;
         let e = sink.events[0];
         assert e.message == "hello";
@@ -384,9 +392,9 @@ test "span lifecycle fires and events parent to the current span" {
     with Log => &mut sink do {
         let sid = span(`request`);
         in_span(sid, || {
-            info(`inside`, {});
+            info(`inside`);
         });
-        info(`outside`, {});
+        info(`outside`);
     };
     let trace: List<String> = ["new:request#1", "enter:1", "exit:1", "close:1"];
     assert sink.trace == trace;
@@ -400,8 +408,8 @@ test "span lifecycle fires and events parent to the current span" {
 test "enabled gate drops events below the sink's minimum level" {
     let mut sink = CaptureSink { min: Level::Warn };
     with Log => &mut sink do {
-        info(`dropped`, {});
-        warn(`kept`, {});
+        info(`dropped`);
+        warn(`kept`);
     };
     assert sink.events.len() == 1;
     assert sink.events[0].message == "kept";
@@ -409,7 +417,7 @@ test "enabled gate drops events below the sink's minimum level" {
 
 test "context layer prepends fields and forwards to outer sink" {
     let mut sink = CaptureSink {};
-    let ctx = Context { fields: box_fields({ request_id: "abc" }) };
+    let ctx = Context { fields: { request_id: "abc" } };
     with Log => &mut sink do {
         with Log => &ctx do {
             info(`x`, { k: "v" });
@@ -441,7 +449,7 @@ test "effect-polymorphic in_span returns the body value" {
     let mut sink = CaptureSink {};
     let n = with Log => &mut sink do {
         in_span(span(`compute`), || {
-            info(`working`, {});
+            info(`working`);
             return 42;
         });
     };
@@ -456,7 +464,7 @@ test "in_span runs exit and close even when the body returns early" {
             if true {
                 return 7;
             }
-            info(`unreachable`, {});
+            info(`unreachable`);
             return 0;
         });
     };
@@ -472,12 +480,12 @@ test "nested spans parent to the innermost span" {
     with Log => &mut sink do {
         let outer = span(`outer`);
         in_span(outer, || {
-            info(`in outer`, {});
+            info(`in outer`);
             let inner = span(`inner`);
             in_span(inner, || {
-                info(`in inner`, {});
+                info(`in inner`);
             });
-            info(`back in outer`, {});
+            info(`back in outer`);
         });
     };
     assert sink.events[0].parent == 1;  // in outer
@@ -515,8 +523,8 @@ test "a filter layer composes over a sink" {
     let filt = Filter { min: Level::Warn };
     with Log => &mut sink do {
         with Log => &filt do {
-            info(`drop`, {});
-            warn(`keep`, {});
+            info(`drop`);
+            warn(`keep`);
         };
     };
     assert sink.events.len() == 1;
