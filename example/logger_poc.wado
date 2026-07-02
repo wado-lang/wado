@@ -21,7 +21,8 @@ use { TreeMap } from "core:collections";
 use { to_string } from "core:json";
 
 // Default field payload: serializes to an empty object `{}`.
-pub struct NoFields {}
+pub struct NoFields {
+}
 
 pub enum Level {
     Trace,
@@ -417,7 +418,9 @@ test "enabled gate drops events below the sink's minimum level" {
 
 test "context layer prepends fields and forwards to outer sink" {
     let mut sink = CaptureSink {};
-    let ctx = Context { fields: { request_id: "abc" } };
+    let ctx = Context {
+        fields: { request_id: "abc" },
+    };
     with Log => &mut sink do {
         with Log => &ctx do {
             info(`x`, { k: "v" });

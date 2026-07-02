@@ -1570,13 +1570,12 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
         // a concrete sibling like `Holder<u8>`.
         let impl_info = env.impl_index.get(&impl_key).or_else(|| {
             let head = crate::name::split_base_name(&handler_type_name);
-            env.impl_index
-                .get(&(
-                    head.to_string(),
-                    effect_module.clone(),
-                    interface_name.clone(),
-                    trait_type_args.clone(),
-                ))
+            env.impl_index.get(&(
+                head.to_string(),
+                effect_module.clone(),
+                interface_name.clone(),
+                trait_type_args.clone(),
+            ))
         });
         let impl_info = impl_info.unwrap_or_else(|| {
             panic!(

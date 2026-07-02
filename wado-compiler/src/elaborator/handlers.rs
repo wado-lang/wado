@@ -188,11 +188,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // operations to. `type_implements_trait` would accept it (its bound
             // names the effect), so reject it explicitly rather than let it
             // reach synthesis, which would panic.
-            let is_type_param =
-                matches!(underlying, ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. });
+            let is_type_param = matches!(
+                underlying,
+                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+            );
             if is_real_type
                 && (is_type_param
-                    || !self.type_implements_trait(&self.annotate_ctx, handler_type, interface_name))
+                    || !self.type_implements_trait(
+                        &self.annotate_ctx,
+                        handler_type,
+                        interface_name,
+                    ))
             {
                 let type_name = self.tysys.type_table.borrow().type_name(handler_type);
                 let _ = self.logger.error(TypeError::HandlerEffectNotImplemented {

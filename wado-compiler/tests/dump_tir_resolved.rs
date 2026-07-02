@@ -5,7 +5,7 @@
 //! with the downstream pipeline, so DCE's type-table `retain` (which drops a
 //! generic decl's field `TypeParam`, unreachable from any concrete type)
 //! punched holes the snapshot still referenced. Unparsing `struct Holder<T>`'s
-//! `payload: T` field then panicked with "TypeId(..) not found in TypeTable".
+//! `payload: T` field then panicked with "`TypeId`(..) not found in `TypeTable`".
 
 #![allow(unused_crate_dependencies)]
 
