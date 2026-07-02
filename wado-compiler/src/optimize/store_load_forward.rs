@@ -171,11 +171,8 @@ pub(super) fn forward_at_root(
         let Some(vid) = consts.get(&expr).copied() else {
             continue;
         };
-        // Resolve through the e-class representative so a value proven equal to
-        // a constant by a union (not only by build-time hash-consing) forwards
-        // too. With no unions this is the identity. The constant promotes into
-        // `expr`'s parent operand slot (WEP: The Live ValueGraph).
-        let vid = engine.value_find(vid);
+        // The constant promotes into `expr`'s parent operand slot (WEP: The Live
+        // ValueGraph).
         let Some(value) = super::extract::extract_const(engine, vid, expr) else {
             continue;
         };

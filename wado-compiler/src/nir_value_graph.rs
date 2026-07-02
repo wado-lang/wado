@@ -1,7 +1,9 @@
-//! NIR Value Graph (Layer 2 — pure-value e-graph).
+//! NIR Value Graph (Layer 2 — hash-consed pure-value DAG).
 //!
 //! Hash-consed DAG of pure values. Each value has a [`ValueId`] (newtype
-//! over `u32`); two structurally-equivalent values share one `ValueId`. The
+//! over `u32`); two structurally-equivalent values share one `ValueId`. CSE is
+//! pure hash-consing — there are no e-class merges, so a `ValueId` is stable
+//! once allocated. The
 //! `SkelTree` (Layer 1 — see [`crate::nir_arena`]) references pure operands by
 //! `ValueId`; pure values live exclusively here.
 //!
@@ -198,26 +200,13 @@ pub enum ValueKind {
 #[derive(Debug, Default, Clone)]
 pub struct ValuePool {
     /// Allocated values, in `ValueId` order. `values[id.index() as usize]`
-    /// is the kind for `id`, with its children canonicalized to their class
-    /// representatives. A non-representative id's entry is read only via
-    /// [`ValuePool::find`].
+    /// is the kind for `id`. CSE is pure hash-consing (no e-class merges), so a
+    /// `ValueId` is stable once allocated and needs no representative lookup.
     values: Vec<ValueKind>,
-    /// Reverse index: canonical kind → `ValueId`. The hash-cons (e-graph memo).
-    /// Keyed by a kind whose children are class representatives.
+    /// Reverse index: kind → `ValueId`. The hash-cons memo.
     interned: IndexMap<ValueKind, ValueId>,
     /// Next `OpaqueId` to allocate.
     next_opaque: u32,
-    /// Union-find parent pointers, indexed by raw `ValueId`. `parent[i] == i`
-    /// for a class representative. [`ValuePool::union`] merges classes;
-    /// [`ValuePool::find`] resolves the representative with path halving.
-    parent: Vec<u32>,
-    /// For each class representative (by raw id), the ids of the nodes that
-    /// reference it as a child. [`ValuePool::rebuild`] re-canonicalizes these
-    /// after a union so structurally-equal parents re-merge (congruence).
-    class_parents: IndexMap<u32, Vec<ValueId>>,
-    /// Classes merged since the last [`ValuePool::rebuild`], pending congruence
-    /// repair.
-    pending: Vec<ValueId>,
     /// Per-`ValueId` source type, indexed by raw id. `ValueKind` is type-erased
     /// (an `Int(u64)` carries no width), so extraction — which materialises a
     /// promoted `Operand::Value` back to WIR once the typed `ExprNode` is gone —
@@ -235,9 +224,6 @@ pub struct ValuePool {
     /// dropped them) share a single identity — the precondition for matching the
     /// guard's and check's copies of an induction variable or a hoisted bound.
     canonical_locals: IndexMap<u32, ValueId>,
-    /// Same, for a global receiver (keyed by module + name); see
-    /// [`ValuePool::canonical_global`].
-    canonical_globals: IndexMap<String, ValueId>,
 }
 
 /// How the extractor re-emits an [`OpaqueId`]'s value (see
@@ -270,20 +256,16 @@ impl ValuePool {
     }
 
     /// Hash-cons: return the `ValueId` for `kind`, allocating a fresh one if no
-    /// structurally-equal value exists. Children are canonicalized to their
-    /// class representatives first, so a node whose children were unioned dedups
-    /// against the congruent existing node.
+    /// structurally-equal value exists.
     ///
     /// `kind` is cloned only on a fresh allocation (the clone goes into the
     /// `values` vector); a repeat lookup hits the index and returns the
     /// existing id without copying.
     pub fn intern(&mut self, kind: ValueKind) -> ValueId {
-        let kind = self.canonicalize(kind);
         if let Some(&id) = self.interned.get(&kind) {
-            return self.find(id);
+            return id;
         }
         let id = ValueId(self.values.len() as u32);
-        self.parent.push(id.0);
         // A typed literal carries its width in the kind; record it so extraction
         // (which reads `type_of`) sees it without a separate `set_type` call.
         let carried_type = match kind {
@@ -296,22 +278,18 @@ impl ValuePool {
         };
         self.values.push(kind.clone());
         self.types.push(carried_type);
-        self.register_parent_links(id, &kind);
         self.interned.insert(kind, id);
         id
     }
 
     /// Record the source type of a value (its NIR `ExprNode` type before
-    /// promotion). Idempotent; a later call overwrites. Stored on `id`'s own raw
-    /// slot — resolve the representative with [`ValuePool::find`] before reading
-    /// if the class may have been unioned.
+    /// promotion). Idempotent; a later call overwrites.
     #[inline]
     pub fn set_type(&mut self, id: ValueId, type_id: TypeId) {
         self.types[id.0 as usize] = Some(type_id);
     }
 
-    /// The recorded source type of `id`, if any. Prefer passing a representative
-    /// (`find(id)`); a non-representative slot may be unset.
+    /// The recorded source type of `id`, if any.
     #[inline]
     pub fn type_of(&self, id: ValueId) -> Option<TypeId> {
         self.types[id.0 as usize]
@@ -333,171 +311,8 @@ impl ValuePool {
     pub fn alloc_unshared(&mut self, kind: ValueKind, type_id: TypeId) -> ValueId {
         let id = ValueId(self.values.len() as u32);
         self.values.push(kind);
-        self.parent.push(id.0);
         self.types.push(Some(type_id));
         id
-    }
-
-    /// The class representative of `id`, with path halving.
-    pub fn find(&mut self, id: ValueId) -> ValueId {
-        let mut x = id.0;
-        while self.parent[x as usize] != x {
-            let gp = self.parent[self.parent[x as usize] as usize];
-            self.parent[x as usize] = gp;
-            x = gp;
-        }
-        ValueId(x)
-    }
-
-    /// Class representative without path compression — the `&self` form of
-    /// [`ValuePool::find`], for read-only walks that cannot take `&mut`.
-    pub fn find_imm(&self, id: ValueId) -> ValueId {
-        let mut x = id.0;
-        while self.parent[x as usize] != x {
-            x = self.parent[x as usize];
-        }
-        ValueId(x)
-    }
-
-    /// Merge the classes of `a` and `b`, returning the surviving representative
-    /// (the smaller raw id, for determinism). The merge is recorded for the
-    /// next [`ValuePool::rebuild`], which restores congruence. A no-op (and
-    /// nothing pending) when they already share a class.
-    pub fn union(&mut self, a: ValueId, b: ValueId) -> ValueId {
-        let ra = self.find(a);
-        let rb = self.find(b);
-        if ra == rb {
-            return ra;
-        }
-        // Prefer a constant representative: a class containing a literal should
-        // resolve to it, so extraction materializes the constant. Among equal
-        // ranks, the smaller raw id wins, for determinism.
-        let (ra_rank, rb_rank) = (self.rep_rank(ra), self.rep_rank(rb));
-        let ra_wins = ra_rank < rb_rank || (ra_rank == rb_rank && ra.0 <= rb.0);
-        let (win, lose) = if ra_wins { (ra, rb) } else { (rb, ra) };
-        self.parent[lose.0 as usize] = win.0;
-        // Keep a known type on the surviving representative.
-        if self.types[win.0 as usize].is_none() {
-            self.types[win.0 as usize] = self.types[lose.0 as usize];
-        }
-        if let Some(losers) = self.class_parents.swap_remove(&lose.0) {
-            self.class_parents.entry(win.0).or_default().extend(losers);
-        }
-        self.pending.push(win);
-        win
-    }
-
-    /// Restore congruence after a batch of unions: re-canonicalize the parents
-    /// of every merged class and re-merge any that became structurally equal,
-    /// to a fixed point. Cheap when nothing was unioned (empty `pending`).
-    pub fn rebuild(&mut self) {
-        while let Some(c) = self.pending.pop() {
-            let c = self.find(c);
-            self.repair(c);
-        }
-    }
-
-    /// Re-canonicalize and re-hash-cons the parents of class `c`, unioning any
-    /// pair that now denotes the same node. See [`ValuePool::rebuild`].
-    fn repair(&mut self, c: ValueId) {
-        let parents = self.class_parents.get(&c.0).cloned().unwrap_or_default();
-        // Drop every parent's stale memo entry before re-inserting, so a
-        // canonical kind that now collides with another parent is detected.
-        for &p in &parents {
-            let old = self.values[p.0 as usize].clone();
-            self.interned.swap_remove(&old);
-        }
-        for &p in &parents {
-            let canon = self.canonicalize(self.values[p.0 as usize].clone());
-            self.values[p.0 as usize] = canon.clone();
-            match self.interned.get(&canon).copied() {
-                Some(q) if self.find(q) != self.find(p) => {
-                    self.union(p, q);
-                    let r = self.find(p);
-                    self.interned.insert(canon, r);
-                }
-                _ => {
-                    let r = self.find(p);
-                    self.interned.insert(canon, r);
-                }
-            }
-        }
-    }
-
-    /// Representative-preference rank for `id`: a constant kind ranks 0 (most
-    /// preferred), everything else 1. [`ValuePool::union`] keeps the
-    /// lower-ranked side, so a class containing a literal resolves to it.
-    fn rep_rank(&self, id: ValueId) -> u8 {
-        match self.values[id.0 as usize] {
-            ValueKind::Int(_, _)
-            | ValueKind::Float(_, _)
-            | ValueKind::Bool(_)
-            | ValueKind::Char(_)
-            | ValueKind::Null
-            | ValueKind::Unit => 0,
-            _ => 1,
-        }
-    }
-
-    /// Replace each child of `kind` with its class representative.
-    fn canonicalize(&mut self, kind: ValueKind) -> ValueKind {
-        match kind {
-            ValueKind::Binary { op, lhs, rhs, ty } => ValueKind::Binary {
-                op,
-                lhs: self.find(lhs),
-                rhs: self.find(rhs),
-                ty,
-            },
-            ValueKind::Unary { op, operand, ty } => ValueKind::Unary {
-                op,
-                operand: self.find(operand),
-                ty,
-            },
-            ValueKind::Cast { operand, target } => ValueKind::Cast {
-                operand: self.find(operand),
-                target,
-            },
-            ValueKind::Select { cond, then, else_ } => ValueKind::Select {
-                cond: self.find(cond),
-                then: self.find(then),
-                else_: self.find(else_),
-            },
-            ValueKind::LoopPhi { entry, body_iter } => ValueKind::LoopPhi {
-                entry: self.find(entry),
-                body_iter: self.find(body_iter),
-            },
-            ValueKind::FieldAccess {
-                receiver,
-                field_index,
-                heap_ver,
-            } => ValueKind::FieldAccess {
-                receiver: self.find(receiver),
-                field_index,
-                heap_ver,
-            },
-            leaf => leaf,
-        }
-    }
-
-    /// Register `id` as a parent of each of its (already-canonical) children's
-    /// classes, so a later union of a child re-canonicalizes `id`.
-    fn register_parent_links(&mut self, id: ValueId, kind: &ValueKind) {
-        for child in Self::child_values(kind) {
-            self.class_parents.entry(child.0).or_default().push(id);
-        }
-    }
-
-    /// The child `ValueId`s referenced by `kind` (empty for literals / opaque).
-    fn child_values(kind: &ValueKind) -> Vec<ValueId> {
-        match *kind {
-            ValueKind::Binary { lhs, rhs, .. } => vec![lhs, rhs],
-            ValueKind::Unary { operand, .. } => vec![operand],
-            ValueKind::Cast { operand, .. } => vec![operand],
-            ValueKind::Select { cond, then, else_ } => vec![cond, then, else_],
-            ValueKind::LoopPhi { entry, body_iter } => vec![entry, body_iter],
-            ValueKind::FieldAccess { receiver, .. } => vec![receiver],
-            _ => Vec::new(),
-        }
     }
 
     /// Allocate a fresh `Opaque` value. Each call returns a `ValueId`
@@ -536,33 +351,6 @@ impl ValuePool {
         v
     }
 
-    /// The build's existing `Opaque(Local idx)` value if one was minted (a
-    /// parameter's `seed_params` opaque). Reusing it — rather than a fresh
-    /// `canonical_local` — lets a re-seeded leaf read match a *promoted* operand
-    /// that survived carrying the same build value (`pos + k` over the param's
-    /// `pos`). `None` when no such opaque exists (a non-param leaf).
-    pub fn existing_local_opaque(&mut self, idx: u32) -> Option<ValueId> {
-        let oid = self.opaque_sources.iter().find_map(|(&oid, src)| {
-            matches!(src, OpaqueSource::Local(i) if *i == idx).then_some(oid)
-        })?;
-        Some(self.intern(ValueKind::Opaque(oid)))
-    }
-
-    /// A stable opaque for a global, keyed by `key` (module + name). Like
-    /// [`ValuePool::canonical_local`] but for a `GlobalVarGet` receiver, so two
-    /// field copies of the same `global.field` share a receiver identity. The
-    /// opaque has no extraction source — it appears only as a re-seed receiver,
-    /// never promoted into an operand slot.
-    pub fn canonical_global(&mut self, key: &str, ty: TypeId) -> ValueId {
-        if let Some(&v) = self.canonical_globals.get(key) {
-            return v;
-        }
-        let v = self.fresh_opaque();
-        self.set_type(v, ty);
-        self.canonical_globals.insert(key.to_string(), v);
-        v
-    }
-
     /// Every local index named by an `OpaqueSource::Local` (a promoted value
     /// extracted as `local.get idx`). A pass that decides a local is unused must
     /// treat these as reads — the read lives in the value pool, not the skeleton.
@@ -585,11 +373,10 @@ impl ValuePool {
         let mut stack = vec![v];
         let mut seen: IndexSet<ValueId> = IndexSet::default();
         while let Some(v) = stack.pop() {
-            let rep = self.find_imm(v);
-            if !seen.insert(rep) {
+            if !seen.insert(v) {
                 continue;
             }
-            match self.kind(rep).clone() {
+            match self.kind(v).clone() {
                 ValueKind::Opaque(oid) => {
                     if let Some(OpaqueSource::Local(idx)) = self.opaque_source(oid) {
                         out.insert(idx);
@@ -649,8 +436,7 @@ impl ValuePool {
         id: ValueId,
         mut_locals: &IndexSet<u32>,
     ) -> bool {
-        let rep = self.find(id);
-        match self.kind(rep).clone() {
+        match self.kind(id).clone() {
             ValueKind::Int(_, _)
             | ValueKind::Float(_, _)
             | ValueKind::Bool(_)
@@ -703,22 +489,21 @@ impl ValuePool {
     }
 
     fn dup_work_walk(&mut self, v: ValueId, seen: &mut IndexSet<ValueId>) -> bool {
-        let rep = self.find(v);
-        match self.kind(rep).clone() {
+        match self.kind(v).clone() {
             ValueKind::Binary { lhs, rhs, .. } => {
-                if !seen.insert(rep) {
+                if !seen.insert(v) {
                     return true;
                 }
                 self.dup_work_walk(lhs, seen) || self.dup_work_walk(rhs, seen)
             }
             ValueKind::Unary { operand, .. } => {
-                if !seen.insert(rep) {
+                if !seen.insert(v) {
                     return true;
                 }
                 self.dup_work_walk(operand, seen)
             }
             ValueKind::Select { cond, then, else_ } => {
-                if !seen.insert(rep) {
+                if !seen.insert(v) {
                     return true;
                 }
                 self.dup_work_walk(cond, seen)
@@ -797,9 +582,7 @@ impl ValuePool {
     }
 
     pub fn select(&mut self, cond: ValueId, then: ValueId, else_: ValueId) -> ValueId {
-        let t = self.find(then);
-        let e = self.find(else_);
-        let c = self.find(cond);
+        let (t, e, c) = (then, else_, cond);
         // A constant condition selects one arm: `Select(true, a, _) → a`,
         // `Select(false, _, b) → b`. Recovers `false || x` / `true && x` → `x`,
         // which lower to a const-condition merge under operand promotion.
@@ -847,17 +630,13 @@ impl ValuePool {
 
     /// Patch the `body_iter` of a phi made by [`ValuePool::alloc_loop_phi`] to the
     /// loop body's exit value (which may reference `phi` itself — a sound
-    /// self-reference, traversals are visited-set/stop-at-phi guarded). Registers
-    /// the (now final) child links so a later union of `entry` / `body_iter`
-    /// re-canonicalizes the phi.
+    /// self-reference, traversals are visited-set/stop-at-phi guarded).
     pub fn set_loop_phi_body_iter(&mut self, phi: ValueId, body_iter: ValueId) {
         let entry = match self.values[phi.0 as usize] {
             ValueKind::LoopPhi { entry, .. } => entry,
             ref k => panic!("set_loop_phi_body_iter on non-phi {k:?}"),
         };
-        let kind = ValueKind::LoopPhi { entry, body_iter };
-        self.register_parent_links(phi, &kind);
-        self.values[phi.0 as usize] = kind;
+        self.values[phi.0 as usize] = ValueKind::LoopPhi { entry, body_iter };
     }
 
     #[inline]
@@ -1211,111 +990,5 @@ mod tests {
         assert_eq!(_t, t2);
         // 4 originals + 1 new opaque = 5 entries.
         assert_eq!(pool.len(), 5);
-    }
-
-    // ---- Union-find / congruence ----
-
-    #[test]
-    fn fresh_value_is_its_own_representative() {
-        let mut pool = ValuePool::new();
-        let a = pool.int_typed(1, crate::tir::TypeTable::I32);
-        let b = pool.fresh_opaque();
-        assert_eq!(pool.find(a), a);
-        assert_eq!(pool.find(b), b);
-    }
-
-    #[test]
-    fn union_makes_find_agree() {
-        let mut pool = ValuePool::new();
-        let a = pool.fresh_opaque();
-        let b = pool.fresh_opaque();
-        assert_ne!(pool.find(a), pool.find(b));
-        let rep = pool.union(a, b);
-        assert_eq!(pool.find(a), rep);
-        assert_eq!(pool.find(b), rep);
-    }
-
-    #[test]
-    fn union_is_idempotent_and_keeps_smaller_id() {
-        let mut pool = ValuePool::new();
-        let a = pool.fresh_opaque();
-        let b = pool.fresh_opaque();
-        let rep1 = pool.union(a, b);
-        let rep2 = pool.union(b, a);
-        assert_eq!(rep1, rep2);
-        // The smaller raw id is the representative.
-        assert_eq!(rep1, if a.index() <= b.index() { a } else { b });
-    }
-
-    #[test]
-    fn rebuild_propagates_congruence_to_parents() {
-        // f = Add(a, c), g = Add(b, c). After union(a, b) + rebuild, the two
-        // sums denote the same value and must share a representative.
-        let mut pool = ValuePool::new();
-        let a = pool.fresh_opaque();
-        let b = pool.fresh_opaque();
-        let c = pool.fresh_opaque();
-        let f = pool.binary(NirBinaryOp::Add, a, c, crate::tir::TypeTable::I32);
-        let g = pool.binary(NirBinaryOp::Add, b, c, crate::tir::TypeTable::I32);
-        assert_ne!(pool.find(f), pool.find(g));
-        pool.union(a, b);
-        pool.rebuild();
-        assert_eq!(pool.find(f), pool.find(g));
-    }
-
-    #[test]
-    fn congruence_propagates_through_two_levels() {
-        // Neg(Add(a,c)) ≡ Neg(Add(b,c)) once a ≡ b.
-        let mut pool = ValuePool::new();
-        let a = pool.fresh_opaque();
-        let b = pool.fresh_opaque();
-        let c = pool.fresh_opaque();
-        let f = pool.binary(NirBinaryOp::Add, a, c, crate::tir::TypeTable::I32);
-        let g = pool.binary(NirBinaryOp::Add, b, c, crate::tir::TypeTable::I32);
-        let nf = pool.unary(NirUnaryOp::Neg, f, crate::tir::TypeTable::I32);
-        let ng = pool.unary(NirUnaryOp::Neg, g, crate::tir::TypeTable::I32);
-        pool.union(a, b);
-        pool.rebuild();
-        assert_eq!(pool.find(nf), pool.find(ng));
-    }
-
-    #[test]
-    fn interning_after_union_dedups_against_congruent_node() {
-        // Build Add(a,c); union a≡b; a fresh Add(b,c) interns to the same id.
-        let mut pool = ValuePool::new();
-        let a = pool.fresh_opaque();
-        let b = pool.fresh_opaque();
-        let c = pool.fresh_opaque();
-        let f = pool.binary(NirBinaryOp::Add, a, c, crate::tir::TypeTable::I32);
-        pool.union(a, b);
-        pool.rebuild();
-        let g = pool.binary(NirBinaryOp::Add, b, c, crate::tir::TypeTable::I32);
-        assert_eq!(pool.find(f), pool.find(g));
-    }
-
-    #[test]
-    fn unrelated_values_stay_distinct_after_union() {
-        let mut pool = ValuePool::new();
-        let a = pool.fresh_opaque();
-        let b = pool.fresh_opaque();
-        let c = pool.fresh_opaque();
-        let d = pool.fresh_opaque();
-        let f = pool.binary(NirBinaryOp::Add, a, c, crate::tir::TypeTable::I32);
-        let h = pool.binary(NirBinaryOp::Add, c, d, crate::tir::TypeTable::I32);
-        pool.union(a, b);
-        pool.rebuild();
-        // `h` shares no unioned operand with `f`, so it stays its own class.
-        assert_ne!(pool.find(f), pool.find(h));
-    }
-
-    #[test]
-    fn rebuild_without_union_is_noop() {
-        let mut pool = ValuePool::new();
-        let a = pool.fresh_opaque();
-        let c = pool.fresh_opaque();
-        let f = pool.binary(NirBinaryOp::Add, a, c, crate::tir::TypeTable::I32);
-        pool.rebuild();
-        assert_eq!(pool.find(f), f);
-        assert_eq!(pool.find(a), a);
     }
 }

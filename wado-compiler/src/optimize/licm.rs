@@ -1789,9 +1789,8 @@ fn cse_operand_in_scope(
     match op {
         Operand::Expr(e) => cse_clone_in_scope(engine, e, min_i, toplevel_lets, loop_body),
         Operand::Value(v) => {
-            let rep = engine.body.values.find_imm(v);
             let mut leaves: IndexSet<u32> = IndexSet::default();
-            engine.body.values.collect_opaque_locals(rep, &mut leaves);
+            engine.body.values.collect_opaque_locals(v, &mut leaves);
             leaves
                 .iter()
                 .all(|&idx| cse_local_available(engine, idx, min_i, toplevel_lets, loop_body))
@@ -2140,11 +2139,10 @@ fn hoist_invariant_value_operands(
     let mut leaf_locals: IndexSet<u32> = IndexSet::default();
     for op in &ops {
         if let Operand::Value(v) = *op {
-            let rep = engine.body.values.find_imm(v);
             engine
                 .body
                 .values
-                .collect_opaque_locals(rep, &mut leaf_locals);
+                .collect_opaque_locals(v, &mut leaf_locals);
         }
     }
     let mut entry_locals: IndexSet<u32> = IndexSet::default();
@@ -2158,8 +2156,7 @@ fn hoist_invariant_value_operands(
     // order, and materialise a pre-header temp + read value for each.
     let mut rep_read: IndexMap<ValueId, ValueId> = IndexMap::default();
     for op in &ops {
-        let Operand::Value(v) = *op else { continue };
-        let rep = engine.body.values.find_imm(v);
+        let Operand::Value(rep) = *op else { continue };
         if rep_read.contains_key(&rep)
             || !is_hoistable_value(&engine.body.values, rep, &entry_locals)
         {
@@ -2200,7 +2197,7 @@ fn hoist_invariant_value_operands(
     let new_ops: Vec<Operand> = ops
         .iter()
         .map(|op| match *op {
-            Operand::Value(v) => match rep_read.get(&engine.body.values.find_imm(v)) {
+            Operand::Value(v) => match rep_read.get(&v) {
                 Some(&read) => Operand::Value(read),
                 None => *op,
             },

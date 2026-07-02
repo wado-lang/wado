@@ -455,17 +455,6 @@ impl<'a> Engine<'a> {
         out
     }
 
-    /// The class representative of `id` in the session's value graph. Two ids
-    /// with the same representative denote the same value. See
-    /// [`crate::nir_value_graph::ValuePool::find`].
-    pub fn value_find(
-        &mut self,
-        id: crate::nir_value_graph::ValueId,
-    ) -> crate::nir_value_graph::ValueId {
-        self.ensure_value_graph();
-        self.body.values.find(id)
-    }
-
     /// Drop the session's `&local` address-taken scan so the next
     /// [`Engine::body_address_taken`] recomputes it. The value graph is
     /// **never** dropped — it is built once and maintained in place (build-once
