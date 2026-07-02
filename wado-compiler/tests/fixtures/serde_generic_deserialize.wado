@@ -1,0 +1,103 @@
+// Test: generic structs and variants derive `Deserialize` (WEP: Trait
+// Derivation Policy). Like `Serialize`, the synthesizer emits a generic
+// template — return type `Result<Wrapper<T>, _>`, the type's params as
+// `impl_type_params` — that monomorphize instantiates per concrete type.
+// The `FieldSchema` selector (`next_field`) stays keyed on the base type,
+// so one shared `Wrapper^FieldSchema::lookup` serves every instantiation.
+// A required field of a type parameter is left to Wasm's zero-init rather
+// than a `null` placeholder (which would be a `nullref` where `T = i32`
+// expects a value).
+use { Deserialize } from "core:serde";
+use { from_string } from "core:json";
+
+struct Wrapper<T> {
+    value: T,
+}
+
+struct Pair<A, B> {
+    first: A,
+    second: B,
+}
+
+variant Maybe<T> {
+    Just(T),
+    Nothing,
+}
+
+impl<T: Deserialize> Deserialize for Maybe<T>;
+
+test "generic struct deserialize (bound-only, no marker)" {
+    let r = from_string::<Wrapper<i32>>(`\{"value":7\}`);
+    if let Ok(w) = r {
+        assert w.value == 7;
+    } else {
+        panic("deserialize Wrapper<i32> failed");
+    }
+}
+
+test "two instantiations of the same generic" {
+    let ra = from_string::<Wrapper<String>>(`\{"value":"hi"\}`);
+    let rb = from_string::<Wrapper<bool>>(`\{"value":true\}`);
+    if let Ok(a) = ra {
+        assert a.value == "hi";
+    } else {
+        panic("deserialize Wrapper<String> failed");
+    }
+    if let Ok(b) = rb {
+        assert b.value == true;
+    } else {
+        panic("deserialize Wrapper<bool> failed");
+    }
+}
+
+test "nested generic instantiation" {
+    let r = from_string::<Wrapper<Wrapper<i32>>>(`\{"value":\{"value":5\}\}`);
+    if let Ok(w) = r {
+        assert w.value.value == 5;
+    } else {
+        panic("deserialize Wrapper<Wrapper<i32>> failed");
+    }
+}
+
+test "multi-param generic struct" {
+    let r = from_string::<Pair<i32, String>>(`\{"first":1,"second":"x"\}`);
+    if let Ok(p) = r {
+        assert p.first == 1;
+        assert p.second == "x";
+    } else {
+        panic("deserialize Pair<i32, String> failed");
+    }
+}
+
+test "generic variant deserialize via explicit marker" {
+    let rj = from_string::<Maybe<i32>>(`\{"Just":42\}`);
+    let rn = from_string::<Maybe<i32>>(`"Nothing"`);
+    if let Ok(m) = rj {
+        if let Just(v) = m {
+            assert v == 42;
+        } else {
+            panic("expected Just");
+        }
+    } else {
+        panic("deserialize Maybe::Just failed");
+    }
+    if let Ok(m) = rn {
+        if let Nothing = m {
+            // OK
+        } else {
+            panic("expected Nothing");
+        }
+    } else {
+        panic("deserialize Maybe::Nothing failed");
+    }
+}
+
+test "missing required field on a generic struct errors" {
+    let r = from_string::<Wrapper<i32>>(`\{\}`);
+    if let Ok(_) = r {
+        panic("expected missing-field error");
+    }
+}
+
+__DATA__
+{"test": {}}

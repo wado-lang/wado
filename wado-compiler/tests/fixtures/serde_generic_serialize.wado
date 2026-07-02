@@ -1,0 +1,92 @@
+// Test: generic structs and variants derive `Serialize` (WEP: Trait
+// Derivation Policy). The synthesizer emits a generic template — receiver
+// `&Wrapper<T>`, the struct's params as `impl_type_params` — that
+// monomorphize instantiates per concrete type, exactly like the generic
+// `Eq` / `Ord` templates. Covers both triggers: the explicit generic
+// marker (`impl<T> Serialize for Maybe<T>;` — previously an ICE at WIR
+// build) and a bare bound with no marker.
+use { Serialize } from "core:serde";
+use { to_string } from "core:json";
+
+struct Wrapper<T> {
+    value: T,
+}
+
+struct Pair<A, B> {
+    first: A,
+    second: B,
+}
+
+variant Maybe<T> {
+    Just(T),
+    Nothing,
+}
+
+impl<T> Serialize for Maybe<T>;
+
+test "bound-only generic struct serialize (no marker)" {
+    let w = Wrapper { value: 7 };
+    let r = to_string(&w);
+    if let Ok(s) = r {
+        assert s == `\{"value":7\}`;
+    } else {
+        panic("serialize Wrapper<i32> failed");
+    }
+}
+
+test "two instantiations of the same generic" {
+    let a = Wrapper { value: "hi" };
+    let b = Wrapper { value: true };
+    let ra = to_string(&a);
+    let rb = to_string(&b);
+    if let Ok(sa) = ra {
+        assert sa == `\{"value":"hi"\}`;
+    } else {
+        panic("serialize Wrapper<String> failed");
+    }
+    if let Ok(sb) = rb {
+        assert sb == `\{"value":true\}`;
+    } else {
+        panic("serialize Wrapper<bool> failed");
+    }
+}
+
+test "nested generic instantiation" {
+    let n = Wrapper { value: Wrapper { value: 1 } };
+    let r = to_string(&n);
+    if let Ok(s) = r {
+        assert s == `\{"value":\{"value":1\}\}`;
+    } else {
+        panic("serialize Wrapper<Wrapper<i32>> failed");
+    }
+}
+
+test "multi-param generic struct" {
+    let p = Pair { first: 1, second: "x" };
+    let r = to_string(&p);
+    if let Ok(s) = r {
+        assert s == `\{"first":1,"second":"x"\}`;
+    } else {
+        panic("serialize Pair<i32, String> failed");
+    }
+}
+
+test "generic variant serialize via explicit marker" {
+    let m = Maybe::Just(42);
+    let n: Maybe<i32> = Maybe::Nothing;
+    let rm = to_string(&m);
+    let rn = to_string(&n);
+    if let Ok(s) = rm {
+        assert s == `\{"Just":42\}`;
+    } else {
+        panic("serialize Maybe::Just failed");
+    }
+    if let Ok(s) = rn {
+        assert s == `"Nothing"`;
+    } else {
+        panic("serialize Maybe::Nothing failed");
+    }
+}
+
+__DATA__
+{"test": {}}

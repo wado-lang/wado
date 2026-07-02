@@ -1,0 +1,18 @@
+// Test: an explicit `impl Serialize for T;` marker is a hard compile error
+// when a field is not structurally eligible — the marker is a guarantee,
+// not a best-effort request (WEP: Trait Derivation Policy).
+use { Serialize } from "core:serde";
+
+struct NoSerialize {
+    cb: fn(i32) -> i32,
+}
+
+impl Serialize for NoSerialize;
+
+export fn run() {
+    let x = NoSerialize { cb: |v: i32| v };
+    let _ = x;
+}
+
+__DATA__
+{"compile_error": "cannot derive `Serialize` for `NoSerialize`: not every field/case implements `Serialize`"}

@@ -1,0 +1,17 @@
+// Test: an explicit `impl Deserialize for T;` marker is a hard compile error
+// when a field is not structurally eligible — mirrors
+// serde_explicit_marker_ineligible.wado for the `Deserialize` half (WEP:
+// Trait Derivation Policy).
+use { Deserialize } from "core:serde";
+
+struct NoDeserialize {
+    cb: fn(i32) -> i32,
+}
+
+impl Deserialize for NoDeserialize;
+
+export fn run() {
+}
+
+__DATA__
+{"compile_error": "cannot derive `Deserialize` for `NoDeserialize`: not every field/case implements `Deserialize`"}
