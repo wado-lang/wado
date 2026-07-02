@@ -27,6 +27,22 @@ e returns [i32 v] : ID ;
     assert out == " print(a.v); ", `out: '{out}'`;
 }
 
+test "translate rewrites a token label member to the context API" {
+    let g = parse("grammar T;
+r : x=ID { print($x.text); } ;
+").unwrap();
+    let out = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" print($x.text); ", false).unwrap();
+    assert out == " print(p.token_text(x)); ", `out: '{out}'`;
+}
+
+test "translate rejects unsupported token members" {
+    let g = parse("grammar T;
+r : x=ID { print($x.line); } ;
+").unwrap();
+    let res = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" print($x.line); ", false);
+    assert res.is_err(), "$x.line not yet emitted";
+}
+
 test "translate rejects a value-channel ref with no vals in scope" {
     let g = parse("grammar T;
 r returns [i32 v] : ID { $v = 1; } ;

@@ -241,8 +241,9 @@ Recovery invariants with actions present:
     - [x] Identity translator (`action_translate`): resolves refs and maps the supported subset to Wado exprs; loud error otherwise.
     - [x] Own-rule value channel: a single-alt rule declaring `returns` / `locals` (defaultable types) gets a `<Rule>Vals` struct + `vals` local; `$v` / `$local` in its actions substitute to `vals.<name>`. Write-then-read across a rule's actions works end to end.
     - [x] Cross-rule `$a.v`: a value-channel rule's `_parse_<rule>` (inner + wrapper) returns `<Rule>Vals`; call sites already bind `let <name> = _parse_<rule>(p)`, so `$a.v` → `a.v`. Entry closures discard the vals (`|p| { let _ = _parse_<rule>(p); }`). The corpus LR-binary `$a.v + $b.v` shape works (non-LR).
+    - [x] Token label member `$x.text` → `p.token_text(<index>)` (the `let x = p.expect(...)` binding). Only `.text` so far.
     - [ ] Rule arguments as `_parse_<rule>` params; multi-alt / LR rule value channels.
-    - [ ] Token/label member access (`$x.text`) via the context API.
+    - [ ] Other token members (`$x.int`/`.type`/`.line`/…), unlabeled `$ID.text`.
     - [ ] Unlabeled `$e.v` when the call-site binding is deduped (`e_2`); currently assumes the first-occurrence binding name.
   - [~] 1b-4 — runtime context API + prequel timing.
     - [x] `@init` (rule entry) / `@after` (after body) for single-alt rules, sharing the rule's `vals` local; execution order pinned by a driver test.

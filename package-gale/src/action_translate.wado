@@ -61,7 +61,25 @@ fn action_attr_expr(rule: &ParserRule, r: &ResolvedAttr, vals_in_scope: bool) ->
         // .start/.stop) need tree access not yet emitted.
         RuleLabel => rule_member_expr(r),
         RuleRef => rule_member_expr(r),
+        // A labeled token: the call site bound its stream index as
+        // `let <label> = p.expect(...)`, so `$x.text` reads the matched text
+        // via the context API. Only `.text` is emitted so far.
+        TokenLabel => token_member_expr(r),
         _ => Result::<String, String>::Err(`$${r.name}: this attribute form is not yet emitted`),
+    };
+}
+
+fn token_member_expr(r: &ResolvedAttr) -> Result<String, String> {
+    return match &r.member {
+        Some(m) => {
+            if *m == "text" {
+                Result::<String, String>::Ok(`p.token_text({r.name})`);
+            } else {
+                Result::<String, String>::Err(`$${r.name}.{*m}: only .text is emitted for tokens so far`);
+            }
+        },
+        // A bare `$x` is the token's stream index.
+        None => Result::<String, String>::Ok(`{r.name}`),
     };
 }
 

@@ -440,6 +440,17 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_acti
         w.line(&"self.output.push_str(&s);");
         w.end();
         w.blank();
+
+        // `$x.text` — the matched text of a token, addressed by its stream
+        // index (what `expect` / `match_*` return and the caller bound).
+        let mut ftt = FnSpec::new("token_text");
+        ftt.set_receiver(&"&self");
+        ftt.add_param(&"i", &"i32");
+        ftt.set_return_type(&"String");
+        ftt.emit_begin(w);
+        w.line(&"return self.tokens.token_text(i);");
+        w.end();
+        w.blank();
     }
 
     // Build a ParseError at the current position, resolving `line:col` from the

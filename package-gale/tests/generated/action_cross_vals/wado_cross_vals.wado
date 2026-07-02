@@ -1221,6 +1221,10 @@ impl Parser {
         self.output.push_str(&s);
     }
 
+    fn token_text(&self, i: i32) -> String {
+        return self.tokens.token_text(i);
+    }
+
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
         let lc = line_col(self.tokens.chars, span.start);
         return ParseError::at(message, span, expected, lc.0, lc.1);
