@@ -176,15 +176,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ..
         }) = &effect
         {
-            let type_name = self.tysys.type_table.borrow().type_name(handler_type);
             // Skip the impl-presence check when the handler type is unresolved
             // (e.g. `Unknown` / `Error`), because earlier diagnostics already
-            // reported the handler-side problem.
+            // reported the handler-side problem. Query by `TypeId`, not the
+            // stringified name: a generic impl (`impl<T> Log for Ctx<T>`) is
+            // indexed by its bare head, which a full instantiated name
+            // (`Ctx<i32>`) would never match.
             let is_real_type = !matches!(
                 self.tysys.type_table.borrow().get(handler_type),
                 ResolvedType::Unknown | ResolvedType::Error
             );
-            if is_real_type && !self.find_trait_impl_for_type(&type_name, interface_name) {
+            if is_real_type
+                && !self.type_implements_trait(&self.annotate_ctx, handler_type, interface_name)
+            {
+                let type_name = self.tysys.type_table.borrow().type_name(handler_type);
                 let _ = self.logger.error(TypeError::HandlerEffectNotImplemented {
                     type_name,
                     interface_name: interface_name.clone(),
@@ -278,7 +283,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let type_name = self.tysys.type_table.borrow().type_name(handler_type);
+        // Enumerate impls by the bare head name: `impl_index` keys a generic
+        // impl (`impl<T> Log for Ctx<T>`) by "Ctx", which the full
+        // instantiated name ("Ctx<i32>") would never match.
+        let type_name = match &resolved {
+            ResolvedType::GenericInstance { name, .. }
+            | ResolvedType::GenericResource { name, .. } => name.clone(),
+            _ => self.tysys.type_table.borrow().type_name(handler_type),
+        };
         let effects = self.collect_effect_impls_for_type(&type_name);
 
         if effects.is_empty() {

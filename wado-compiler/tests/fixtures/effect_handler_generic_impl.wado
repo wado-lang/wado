@@ -36,5 +36,13 @@ test "generic impl handles an effect for Holder<String>" {
     assert s == "hi ann";
 }
 
+test "bundled form enumerates effects from a generic impl" {
+    let h = Holder { payload: true };
+    let s = with &h do {
+        Greeter::greet("cy");
+    };
+    assert s == "hi cy";
+}
+
 __DATA__
 {"test": {}}

@@ -1563,7 +1563,25 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             interface_name.clone(),
             trait_type_args.clone(),
         );
-        let impl_info = env.impl_index.get(&impl_key).unwrap_or_else(|| {
+        // Exact match first (concrete impls, incl. concrete instantiations
+        // like `impl E for Holder<u8>`), then the generic-template fallback:
+        // `impl<T> E for Holder<T>` is indexed under its template spelling
+        // (`"Holder<T>"`), which the concrete handler name (`"Holder<i32>"`)
+        // never equals — match those by the bare head instead.
+        let impl_info = env.impl_index.get(&impl_key).or_else(|| {
+            let head = type_name_head(&handler_type_name);
+            env.impl_index
+                .iter()
+                .find(|((tn, em, in_, ta), _)| {
+                    em == &effect_module
+                        && in_ == &interface_name
+                        && ta == &trait_type_args
+                        && tn != &handler_type_name
+                        && type_name_head(tn) == head
+                })
+                .map(|(_, info)| info)
+        });
+        let impl_info = impl_info.unwrap_or_else(|| {
             panic!(
                 "effect-dispatch synthesis: no `impl {interface_name} for \
                  {handler_type_name}` (type args = {trait_type_args:?}) \
@@ -1674,7 +1692,6 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             let closure_expr = if impl_info.methods.contains_key(&op.name) {
                 build_handler_op_closure(
                     op,
-                    &label,
                     impl_info,
                     handler_type,
                     h_local,
@@ -2155,17 +2172,11 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
 /// `__h_<E>` holds — typically `&T` or `&mut T`); the closure body's
 /// receiver is a `TirExprKind::Capture { index: 0 }` that the
 /// lower-phase closure pass converts into a field access on the
-/// generated functor struct.
-/// `effect_label` is the full mangled trait name at this instantiation
-/// site (e.g. `"Stream<u8>"`, or `"Counter"` for non-generic effects).
-/// Used to build the user-impl method's mangled name
-/// `<Handler>^<E><args>::<op>` — must match what
-/// `Elaborator::resolve_method` registered, since the elaborator mangles
-/// `trait_type` via `get_type_name_full` (preserving the type args for
-/// distinct-instantiation symbol names).
+/// generated functor struct. The call target (mangled name +
+/// `method_info`) comes off `impl_info.methods` verbatim, as reify
+/// registered it.
 fn build_handler_op_closure(
     op: &TirEffectOp,
-    effect_label: &str,
     impl_info: &HandlerImplInfo,
     handler_type: TypeId,
     h_local_index: u32,
@@ -2209,24 +2220,23 @@ fn build_handler_op_closure(
         handler_type,
         span,
     );
-    // The user impl method was registered by `Elaborator::resolve_method`
-    // under the full mangled trait name (`Stream<u8>` rather than the
-    // bare base `Stream`); use the same form here so the synthesised
-    // method-call resolves against the right symbol.
-    let mangled = LocalMethodName::new(
-        impl_info.handler_type_name.clone(),
-        Some(effect_label.to_string()),
-        op.name.clone(),
-    );
-    let mangled_name = mangled.to_mangled_name();
+    // Target the impl method under the exact mangled name + `method_info`
+    // reify registered for it (`build_handler_impl_index` recorded both).
+    // For a generic impl (`impl<T> Log for Ctx<T>`) this is the template's
+    // name; the monomorphizer instantiates it from the receiver's concrete
+    // type args, exactly as it would for a user-written method call.
+    let target = impl_info
+        .methods
+        .get(&op.name)
+        .expect("caller checked impl_info.methods.contains_key(&op.name)");
     let method_call = TirExpr::new(
         TirExprKind::method_call(
             Box::new(receiver),
             FunctionRef {
                 module_source: impl_info.impl_module.clone(),
-                name: mangled_name,
+                name: target.mangled_name.clone(),
                 monomorph_info: None,
-                method_info: Some(mangled),
+                method_info: Some(target.method_info.clone()),
             },
             vec![],
             arg_call_args,
@@ -2962,15 +2972,20 @@ struct HandlerImplInfo {
     /// Module that owns the impl block — used to build the
     /// `FunctionRef::module_source` of the generated `MethodCall`.
     impl_module: ModuleSource,
-    /// Per-method return type from the impl. Lets the lowering patch up
-    /// the result type of a synthesised `MethodCall` even when the
-    /// original `Counter::next()` `Call` came in with `Unit` (the
-    /// elaborator doesn't know the operation's return type for
-    /// user-defined effects without a CM binding).
-    methods: IndexMap<String, TypeId>,
-    /// Handler struct's type name (the `T` in `impl Effect for T`).
-    /// Used to build the mangled method name in generated `MethodCall`s.
-    handler_type_name: String,
+    /// Per-operation call target, keyed by operation name.
+    methods: IndexMap<String, HandlerMethodTarget>,
+}
+
+/// The TIR function a synthesised dispatch `MethodCall` must target for
+/// one effect operation: the impl method's mangled name and its
+/// `method_info`, exactly as reify registered them. Reusing them verbatim
+/// (rather than reconstructing the name from strings) keeps the
+/// synthesised call byte-identical to a user-written method call, so the
+/// monomorphizer's template lookup handles generic impls the same way.
+#[derive(Debug, Clone)]
+struct HandlerMethodTarget {
+    mangled_name: String,
+    method_info: LocalMethodName,
 }
 
 /// Walk every TIR function tagged with `method_info.base_trait_name` and
@@ -3026,14 +3041,22 @@ fn build_handler_impl_index(
             let entry = out.entry(key).or_insert_with(|| HandlerImplInfo {
                 impl_module: module_source.clone(),
                 methods: IndexMap::default(),
-                handler_type_name: method_info.struct_name.clone(),
             });
-            entry
-                .methods
-                .insert(method_info.method_name.clone(), func.return_type);
+            entry.methods.insert(
+                method_info.method_name.clone(),
+                HandlerMethodTarget {
+                    mangled_name: func.name.clone(),
+                    method_info: method_info.clone(),
+                },
+            );
         }
     }
     out
+}
+
+/// Bare head of a type name: `"Holder<i32>"` → `"Holder"`, `"Sink"` → `"Sink"`.
+fn type_name_head(name: &str) -> &str {
+    name.split('<').next().unwrap_or(name)
 }
 
 /// Strip a single leading `&` / `&mut` layer to find the underlying
