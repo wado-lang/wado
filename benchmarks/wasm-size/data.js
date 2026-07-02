@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782993328116,
+  "lastUpdate": 1782996545324,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -37213,6 +37213,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 371059,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "94725f5f40d283d6fd4c77386cecfd0a0e961621",
+          "message": "Merge pull request #1492 from wado-lang/claude/gale-performance-benchmark-nqt744\n\nperf(gale): route only context-dependent at-end conflicts through the ATN",
+          "timestamp": "2026-07-02T21:40:18+09:00",
+          "tree_id": "fba3fb40e6c21ecda41e0628d563c8018f425139",
+          "url": "https://github.com/wado-lang/wado/commit/94725f5f40d283d6fd4c77386cecfd0a0e961621"
+        },
+        "date": 1782996544658,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15323,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288551,
             "unit": "bytes"
           }
         ]
