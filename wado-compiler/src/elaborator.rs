@@ -805,75 +805,48 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.decls.pending_synthesis_requests.push(req);
     }
 
-    /// Classify the trait named by an `impl Trait for Type;` request into a
-    /// [`tir::SynthTrait`]. Returns `None` for any trait the compiler cannot
-    /// synthesize, letting the caller emit a diagnostic. `From<Source>`
-    /// resolves its argument to a [`TypeId`] here so no downstream pass has to
-    /// re-parse the mangled trait name.
-    fn classify_synth_trait(&mut self, trait_type: &ast::Type) -> Option<tir::SynthTrait> {
+    /// Whether an `impl Trait for Type;` marker requests a `From` adapter
+    /// (`impl From<Source> for Type;`), resolving `Source` to a [`TypeId`]
+    /// so no downstream pass re-parses the mangled trait name. `From` is
+    /// the one marker kind still carried by a [`tir::SynthesisRequest`];
+    /// the `on_bound` traits go through
+    /// [`Self::classify_on_bound_marker`] instead. Returns `None` for a
+    /// malformed `From` reference (zero or multiple type arguments) as well
+    /// as for unrelated traits, letting the caller emit the
+    /// unsupported-trait diagnostic.
+    fn classify_from_marker(&mut self, trait_type: &ast::Type) -> Option<tir::SynthTrait> {
         use crate::compiler_item::CompilerItem;
         let base = trait_type.head_base_name()?;
-        // `trait_name_opt` keeps the serde anchors optional: a program that
-        // never imports serde has them unregistered, and a `From<…>` request
-        // must still classify there without tripping a registry panic.
-        enum Kind {
-            From,
-            Serialize,
-            Deserialize,
-        }
-        let kind = {
+        {
+            // `trait_name_opt` keeps the anchor optional so a program that
+            // never imports the prelude's `From` cannot trip a registry
+            // panic here.
             let tt = self.tysys.type_table.borrow();
-            let items = tt.compiler_items();
-            let is = |item| items.trait_name_opt(item) == Some(base);
-            if is(CompilerItem::Serialize) {
-                Kind::Serialize
-            } else if is(CompilerItem::Deserialize) {
-                Kind::Deserialize
-            } else if is(CompilerItem::From) {
-                Kind::From
-            } else {
+            if tt.compiler_items().trait_name_opt(CompilerItem::From) != Some(base) {
                 return None;
             }
-        };
-        match kind {
-            Kind::Serialize => Some(tir::SynthTrait::Serialize),
-            Kind::Deserialize => Some(tir::SynthTrait::Deserialize),
-            // `From<Source>` resolves its single argument to a `TypeId` so no
-            // downstream pass re-parses the mangled trait name.
-            Kind::From => {
-                if let ast::Type::Generic(generic) = trait_type
-                    && generic.args.len() == 1
-                {
-                    let source = self.resolve_type(&generic.args[0]);
-                    Some(tir::SynthTrait::From { source })
-                } else {
-                    None
-                }
-            }
+        }
+        if let ast::Type::Generic(generic) = trait_type
+            && generic.args.len() == 1
+        {
+            let source = self.resolve_type(&generic.args[0]);
+            Some(tir::SynthTrait::From { source })
+        } else {
+            None
         }
     }
 
     /// Whether an `impl Trait for Type;` marker's trait name resolves to
-    /// `Eq` or `Ord`. Handled separately from [`Self::classify_synth_trait`]:
-    /// its request lands in the shared `bound_driven_synth_requests` set
-    /// (see [`Self::record_eq_ord_explicit_request`]) rather than a drained
-    /// [`tir::SynthesisRequest`]. `Serialize` / `Deserialize` markers also
-    /// validate through [`Self::validate_explicit_derive_eligibility`], but
-    /// at their own call site (`resolve_module`'s `impl`-item handling)
-    /// rather than here, since they still need `classify_synth_trait`'s
-    /// request shape (`type_params`, generic template support). `From` has
-    /// no structural-eligibility notion at all and validates neither way.
-    fn classify_eq_ord_marker(&self, trait_type: &ast::Type) -> Option<String> {
-        use crate::compiler_item::CompilerItem;
+    /// one of the `on_bound` traits (`Eq` / `Ord` / `Serialize` /
+    /// `Deserialize`). Their markers all validate structural eligibility
+    /// immediately at the marker's span and record into the shared
+    /// bound-driven request set (see
+    /// [`Self::record_explicit_derive_request`]); `From` is the one
+    /// remaining marker kind with its own [`tir::SynthesisRequest`] channel
+    /// ([`Self::classify_from_marker`]).
+    fn classify_on_bound_marker(&self, trait_type: &ast::Type) -> Option<String> {
         let base = trait_type.head_base_name()?;
-        let tt = self.tysys.type_table.borrow();
-        let items = tt.compiler_items();
-        if base == items.trait_name(CompilerItem::Eq) || base == items.trait_name(CompilerItem::Ord)
-        {
-            Some(base.to_string())
-        } else {
-            None
-        }
+        self.classify_on_bound_trait(base).map(|_| base.to_string())
     }
 
     /// Validate that `target_type_id` is structurally eligible to derive
@@ -912,18 +885,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Validate and record an explicit `impl Eq for T;` / `impl Ord for T;`
-    /// / `impl Serialize for T;` / `impl Deserialize for T;` marker, into
-    /// the same `bound_driven_synth_requests` set a real `T: Trait` bound
-    /// records into. Unifies `Serialize` / `Deserialize` markers (which
-    /// previously always built their own `SynthesisRequest` directly,
-    /// bypassing this set) with `Eq` / `Ord`'s existing marker behavior.
-    /// Note this still records unconditionally at the marker's own
-    /// declaration, same as `Eq` / `Ord` today — a marker still forces a
+    /// Validate and record an explicit `on_bound`-trait marker (`impl Eq
+    /// for T;` / `impl Ord for T;` / `impl Serialize for T;` / `impl
+    /// Deserialize for T;`) into the same `bound_driven_synth_requests`
+    /// set a real `T: Trait` bound records into. Note this records
+    /// unconditionally at the marker's own declaration — a marker forces a
     /// body into existence with no other reference present; genuinely
     /// deferring that to first use is the placeholder-based redesign in
-    /// [Discovery Mechanism](../../docs/wep-2026-06-25-trait-derivation.md#discovery-mechanism),
-    /// not this change.
+    /// WEP 2026-06-25-trait-derivation's "Discovery Mechanism", not
+    /// implemented yet.
+    ///
+    /// The request is keyed by the *target type's* defining module (the
+    /// synthesis drains distribute per defining module), not the module
+    /// the marker happens to be written in.
     fn record_explicit_derive_request(
         &mut self,
         trait_type: &ast::Type,
@@ -945,6 +919,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             tir::ResolvedType::Struct { module_source, .. }
             | tir::ResolvedType::Enum { module_source, .. }
             | tir::ResolvedType::Variant { module_source, .. }
+            | tir::ResolvedType::Flags { module_source, .. }
             | tir::ResolvedType::GenericInstance { module_source, .. } => module_source.clone(),
             _ => self.current_module_source.clone(),
         };
@@ -952,6 +927,64 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .type_table
             .borrow_mut()
             .record_bound_driven_synth_request(target_type_name, &module_source, trait_name);
+    }
+
+    /// Handle an `impl Trait for Type;` marker (`is_synthesize_request`):
+    /// validate and record it, or reject the trait as unsupported. The
+    /// `on_bound` traits (`Eq` / `Ord` / `Serialize` / `Deserialize`)
+    /// validate structural eligibility at the marker's own span and record
+    /// into the shared bound-driven request set — the same channel a
+    /// `T: Trait` bound uses (WEP 2026-06-25-trait-derivation) — while
+    /// `From` records a [`tir::SynthesisRequest`] on
+    /// `sem.decls.pending_synthesis_requests`, which `reify_module` emits
+    /// as `tir_module.synthesis_requests`.
+    ///
+    /// The caller (`resolve_module`'s impl-item walk) has already
+    /// registered the block's type parameters into
+    /// `annotate_ctx.trait_ctx`, so `resolve_type(&impl_block.ty)` sees
+    /// them (`impl<T> Eq for Pair<T>;`).
+    fn resolve_synthesize_request_marker(
+        &mut self,
+        impl_block: &ast::ImplBlock,
+        struct_name: &str,
+    ) {
+        let Some(trait_type) = &impl_block.trait_type else {
+            return;
+        };
+        if let Some(trait_name) = self.classify_on_bound_marker(trait_type) {
+            let target_type_id = self.resolve_type(&impl_block.ty);
+            self.record_explicit_derive_request(
+                trait_type,
+                &trait_name,
+                target_type_id,
+                struct_name,
+                impl_block.span,
+            );
+        } else if let Some(trait_ref) = self.classify_from_marker(trait_type) {
+            let target_type_id = self.resolve_type(&impl_block.ty);
+            let type_params: Vec<_> = self
+                .annotate_ctx
+                .trait_ctx
+                .type_params
+                .iter()
+                .map(|(name, &(index, type_id))| (name.clone(), index, type_id))
+                .collect();
+            self.record_pending_synthesis_request(tir::SynthesisRequest {
+                trait_ref,
+                target_type_name: struct_name.to_string(),
+                target_type_id,
+                type_params,
+                span: impl_block.span,
+            });
+        } else {
+            let _ = self
+                .logger
+                .error(types::TypeError::UnsupportedSynthesisTrait {
+                    trait_name: self.get_type_name_full(trait_type),
+                    type_name: struct_name.to_string(),
+                    span: impl_block.span,
+                });
+        }
     }
 
     /// Record a coercion decision for the expression at `ast_id`. Called
@@ -1671,78 +1704,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         }
                     }
 
-                    // `impl Trait for Type;` — record synthesis request and skip.
-                    // `Eq` / `Ord` / `Serialize` / `Deserialize` all validate
-                    // structurally at their own span and record into the
-                    // shared `bound_driven_synth_requests` set (WEP
-                    // 2026-06-25-trait-derivation), same as a real bound
-                    // check would. `From` has no structural-eligibility
-                    // notion, so its request still lands on
-                    // `sem.decls.pending_synthesis_requests`; `reify_module`
-                    // reads it and emits `tir_module.synthesis_requests`.
+                    // `impl Trait for Type;` — record the synthesis request
+                    // and skip the (empty) body walk.
                     if impl_block.is_synthesize_request {
-                        if let Some(ref trait_type) = impl_block.trait_type {
-                            if let Some(trait_name) = self.classify_eq_ord_marker(trait_type) {
-                                let target_type_id = self.resolve_type(&impl_block.ty);
-                                self.record_explicit_derive_request(
-                                    trait_type,
-                                    &trait_name,
-                                    target_type_id,
-                                    &struct_name,
-                                    impl_block.span,
-                                );
-                            } else {
-                                match self.classify_synth_trait(trait_type) {
-                                    Some(trait_ref) => {
-                                        let target_type_id = self.resolve_type(&impl_block.ty);
-                                        match &trait_ref {
-                                            tir::SynthTrait::Serialize
-                                            | tir::SynthTrait::Deserialize => {
-                                                if let Some(trait_name) =
-                                                    trait_type.head_base_name()
-                                                {
-                                                    self.record_explicit_derive_request(
-                                                        trait_type,
-                                                        trait_name,
-                                                        target_type_id,
-                                                        &struct_name,
-                                                        impl_block.span,
-                                                    );
-                                                }
-                                            }
-                                            tir::SynthTrait::From { .. } => {
-                                                let type_params: Vec<_> = self
-                                                    .annotate_ctx
-                                                    .trait_ctx
-                                                    .type_params
-                                                    .iter()
-                                                    .map(|(name, &(index, type_id))| {
-                                                        (name.clone(), index, type_id)
-                                                    })
-                                                    .collect();
-                                                let req = crate::tir::SynthesisRequest {
-                                                    trait_ref,
-                                                    target_type_name: struct_name.clone(),
-                                                    target_type_id,
-                                                    type_params,
-                                                    span: impl_block.span,
-                                                };
-                                                self.record_pending_synthesis_request(req);
-                                            }
-                                        }
-                                    }
-                                    None => {
-                                        let _ = self.logger.error(
-                                            types::TypeError::UnsupportedSynthesisTrait {
-                                                trait_name: self.get_type_name_full(trait_type),
-                                                type_name: struct_name.clone(),
-                                                span: impl_block.span,
-                                            },
-                                        );
-                                    }
-                                }
-                            }
-                        }
+                        self.resolve_synthesize_request_marker(impl_block, &struct_name);
                         self.annotate_ctx.trait_ctx = saved_trait_ctx;
                         continue;
                     }

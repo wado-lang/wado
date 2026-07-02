@@ -964,16 +964,19 @@ impl TraitEnv {
     /// an empty `impl Trait for Type;` marker does not count.
     ///
     /// `impl_index` indexes a marker exactly like a real impl. That's fine
-    /// for most callers, but `Eq` / `Ord` synthesis gating (WEP
+    /// for most callers, but auto-derive gating (WEP
     /// 2026-06-25-trait-derivation) needs the opposite question: a marker
-    /// for these two traits is itself a request for the body, so treating
-    /// it as "already implemented" would permanently block that body.
+    /// for an `on_bound` trait is itself a request for the body, so
+    /// treating it as "already implemented" would permanently block that
+    /// body.
     ///
     /// Strictly scoped to `module_source`, unlike [`Self::impl_module_for`]'s
     /// hint-preferred-with-fallback: `impl_index` is keyed by bare type
     /// name, so two unrelated same-named types in different modules share
     /// one bucket, and a fallback here would silently reuse the wrong
-    /// type's impl and skip synthesizing this one's.
+    /// type's impl and skip synthesizing this one's. When the impl may
+    /// legitimately live outside the type's module, use
+    /// [`Self::has_any_methodful_impl`] instead.
     pub(crate) fn has_methodful_impl(
         &self,
         type_name: &str,
@@ -982,12 +985,29 @@ impl TraitEnv {
     ) -> bool {
         self.impl_index.get(type_name).is_some_and(|entries| {
             entries.iter().any(|entry| {
-                entry.0 == *module_source
-                    && self.impl_headers.get(entry).is_some_and(|header| {
-                        header.trait_name.as_deref() == Some(trait_name)
-                            && !header.methods.is_empty()
-                    })
+                entry.0 == *module_source && self.methodful_header_matches(entry, trait_name)
             })
+        })
+    }
+
+    /// Module-agnostic variant of [`Self::has_methodful_impl`]: whether
+    /// **any** module's `impl trait_name for type_name` block has methods.
+    /// Needed where the impl legitimately lives outside the type's own
+    /// module — e.g. `core:serde` implementing `Serialize` for the
+    /// prelude's `i128`. Shares `impl_index`'s bare-name keying, so two
+    /// same-named types in different modules share a bucket (the caveat
+    /// documented on [`TraitImplModuleIndex`]).
+    pub(crate) fn has_any_methodful_impl(&self, type_name: &str, trait_name: &str) -> bool {
+        self.impl_index.get(type_name).is_some_and(|entries| {
+            entries
+                .iter()
+                .any(|entry| self.methodful_header_matches(entry, trait_name))
+        })
+    }
+
+    fn methodful_header_matches(&self, entry: &(ModuleSource, usize), trait_name: &str) -> bool {
+        self.impl_headers.get(entry).is_some_and(|header| {
+            header.trait_name.as_deref() == Some(trait_name) && !header.methods.is_empty()
         })
     }
 

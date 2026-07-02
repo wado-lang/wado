@@ -128,7 +128,7 @@ one event. They become two:
    `impl_index` / `all_impl_index` tables a hand-written `impl Trait for T {
    … }` occupies. An `explicit`-policy trait runs no such scan; its only
    placeholders come from an explicit marker, validated immediately at its
-   own span exactly as `record_eq_ord_explicit_request` does today, with the
+   own span exactly as `record_explicit_derive_request` does today, with the
    same result (a placeholder registration) instead of a synthesis request.
    This is a genuine cost paid for every declared type under `automatic` /
    `on_bound`, but it is the check only — the WEP's compile-time / code-size
