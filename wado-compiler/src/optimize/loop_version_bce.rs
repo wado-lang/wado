@@ -35,9 +35,7 @@
 //! cloning never compounds.
 
 use crate::nir::{FunctionRef, NirBinaryOp, NirFunction, NirUnaryOp};
-use crate::nir_arena::{
-    ArenaCallArg, BlockId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
-};
+use crate::nir_arena::{ArenaCallArg, BlockId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
@@ -122,14 +120,7 @@ pub(super) fn version_loops(project: &mut NirPackage) -> bool {
         let plans: Vec<Plan> = loops
             .into_iter()
             .filter_map(|(parent, loop_stmt, loop_body)| {
-                analyze_loop(
-                    &engine,
-                    &binds,
-                    &type_table,
-                    parent,
-                    loop_stmt,
-                    loop_body,
-                )
+                analyze_loop(&engine, &binds, &type_table, parent, loop_stmt, loop_body)
             })
             .collect();
         if plans.is_empty() {
@@ -310,7 +301,9 @@ fn parse_cmp_any(
         return Some(r);
     }
     if let Operand::Value(v) = resolve(engine, binds, op)
-        && let ValueKind::Binary { op: bop, lhs, rhs, .. } = engine.body.values.kind(v)
+        && let ValueKind::Binary {
+            op: bop, lhs, rhs, ..
+        } = engine.body.values.kind(v)
         && matches!(
             bop,
             NirBinaryOp::Lt | NirBinaryOp::LtEq | NirBinaryOp::Gt | NirBinaryOp::GtEq
@@ -658,8 +651,7 @@ fn try_fill_idiom(
     let stmts = engine.body.blocks[arm.fast_body].stmts.clone();
     // Shape: guard first (no leading lets for the fill form), then pure
     // lets, one array_set, and the `i += 1` increment last.
-    let Some((guard_idx, var, h, guard_le)) = parse_loop_guard(engine, binds, arm.fast_body)
-    else {
+    let Some((guard_idx, var, h, guard_le)) = parse_loop_guard(engine, binds, arm.fast_body) else {
         return false;
     };
     if guard_idx != 0 || var != arm.var || h != arm.bound || guard_le != arm.guard_le {

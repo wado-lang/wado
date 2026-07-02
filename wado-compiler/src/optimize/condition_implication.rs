@@ -435,7 +435,11 @@ fn parse_check(engine: &Engine, binds: &Binds, cond: Operand) -> Option<(u32, i6
 /// **promoted** comparison (`Operand::Value`, decomposed through the value
 /// **pool** — never `value_of`). Operands are returned raw (caller decides how
 /// to parse each side).
-pub(super) fn ge_check_operands(engine: &Engine, binds: &Binds, cond: Operand) -> Option<(Operand, Operand)> {
+pub(super) fn ge_check_operands(
+    engine: &Engine,
+    binds: &Binds,
+    cond: Operand,
+) -> Option<(Operand, Operand)> {
     match resolve(engine, binds, cond) {
         Operand::Expr(ce) => match &engine.body.exprs[ce].kind {
             ExprKind::Binary {
