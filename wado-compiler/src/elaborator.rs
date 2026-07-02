@@ -1058,6 +1058,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.type_lookup().enum_case_in(name, module_source)
     }
 
+    pub(super) fn lookup_flags_case_in(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<&FlagsInfo> {
+        self.type_lookup().flags_case_in(name, module_source)
+    }
+
     /// Build effect name → module source map from a module's import declarations.
     ///
     /// For `use { Stdout::{write_via_stream} } from "wasi:cli"`, maps "Stdout" → resolved("wasi:cli").

@@ -1,0 +1,23 @@
+//! Regression: a struct-field default whose expression is a qualified
+//! type path (`Mode::Fast`, `Color::Red`) must resolve in the struct's
+//! declaring module when the struct is constructed from another module
+//! that does NOT import the type. Default expressions resolve in the
+//! declaration scope (`default_scope_module`); before the fix the
+//! annotate-phase fallback only covered bare identifiers (globals /
+//! function refs), so the qualified variant / enum case errored with
+//! "unknown identifier 'Mode::Fast'" — with the span misattributed to
+//! this file. The private-global default (`retries`) already worked and
+//! pins the existing behavior.
+
+use { Job, mode_score, color_score } from "./sub/default_scope_xmod_lib.wado";
+
+export fn run() {
+    let j = Job { name: "build" };
+    assert mode_score(&j.mode) == 10;
+    assert color_score(&j.color) == 100;
+    assert j.retries == 3;
+    assert j.window.hi - j.window.lo == 8;
+}
+
+__DATA__
+{"stdout": ""}

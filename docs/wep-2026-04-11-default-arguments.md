@@ -144,6 +144,18 @@ fn bar(path: String = read_env("PATH")) { ... }  // compile error: requires effe
 
 The restriction is enforced by the effect system: default expressions must have an empty effect set.
 
+#### Name Resolution: Declaration Scope
+
+A default expression resolves its names in the scope of the declaration (the function's or struct's defining module), not the use site. Call-site expansion inserts the expression, but the names inside it bind exactly as they would at the declaration:
+
+- A default may reference the defining module's private items (`port: i32 = DEFAULT_PORT` where `DEFAULT_PORT` is a file-private `global`); callers need no access to them.
+- A default may reference qualified type paths (`mode: Mode = Mode::Fast`); the use site does not need to import `Mode`.
+- Conversely, names visible only at the use site never leak into a default's meaning — changing a caller's imports cannot change what an omitted argument evaluates to.
+
+The exceptions are deliberate and syntactic, not scoped lookups: location literals (`#file`/`#line`/`#function`) evaluate at the call site (see the interaction table below), and earlier-parameter references substitute the caller's argument expression (next section).
+
+This mirrors Kotlin/Swift/C#: encapsulation of the declaring module is preserved, and a default behaves identically at every use site. Regression fixtures: `default_field_xmod_variant_case.wado`, `default_arg_xmod_variant_case.wado` (issue #1486), `bug_default_arg_xmod.wado`.
+
 Default expressions may reference earlier parameters in the same function:
 
 ```wado
