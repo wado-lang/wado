@@ -165,7 +165,7 @@ cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 ft
 """
 
 [tasks.json-twitter]
-description = "Run json-twitter benchmark (JSON deserialization)"
+description = "Run json-twitter benchmark (JSON ser/de)"
 run = """
 #!/usr/bin/env bash
 set -e
@@ -184,27 +184,25 @@ cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 js
 """
 
 [tasks.cbor]
-description = "Run cbor ser/de benchmark (serde_cbor vs @msgpack/msgpack vs Wado core:cbor)"
+description = "Run cbor ser/de benchmark (serde_cbor vs Wado core:cbor) over twitter/canada/catalog"
 run = """
 #!/usr/bin/env bash
 set -e
 
-echo "=== Compiling Rust serde_cbor benchmark ==="
+echo "=== Compiling Rust serde_cbor benchmarks ==="
 cargo build --release --manifest-path cbor/Cargo.toml --quiet
 
-echo "=== Rust serde_cbor ==="
-./cbor/target/release/cbor_twitter_bench
+for ds in twitter canada catalog; do
+    echo "=== Rust serde_cbor ($ds) ==="
+    ./cbor/target/release/cbor_${ds}_bench
 
-echo "=== JavaScript @msgpack/msgpack (Node.js) ==="
-npm install --prefix cbor --silent --no-audit --no-fund
-node cbor/cbor.js
-
-echo "=== Wado core:cbor ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 cbor/cbor.wado
+    echo "=== Wado core:cbor ($ds) ==="
+    cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 cbor/cbor_${ds}.wado
+done
 """
 
 [tasks.json-canada]
-description = "Run json-canada benchmark (JSON deserialization)"
+description = "Run json-canada benchmark (JSON ser/de)"
 run = """
 #!/usr/bin/env bash
 set -e
@@ -223,7 +221,7 @@ cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 js
 """
 
 [tasks.json-catalog]
-description = "Run json-catalog benchmark (JSON deserialization)"
+description = "Run json-catalog benchmark (JSON ser/de)"
 run = """
 #!/usr/bin/env bash
 set -e
@@ -291,14 +289,18 @@ description = "Run all benchmarks serially"
 run = """
 #!/usr/bin/env bash
 set -e
+# pure computation
 MISE_JOBS=1 mise run count-prime
 MISE_JOBS=1 mise run mandelbrot
 MISE_JOBS=1 mise run sieve
-MISE_JOBS=1 mise run zlib
 MISE_JOBS=1 mise run fts
+# serde & compression
 MISE_JOBS=1 mise run json-twitter
+MISE_JOBS=1 mise run cbor
 MISE_JOBS=1 mise run json-canada
 MISE_JOBS=1 mise run json-catalog
+MISE_JOBS=1 mise run zlib
+# parsing
 MISE_JOBS=1 mise run sqlite-parse
 MISE_JOBS=1 mise run syntax-highlight
 """
@@ -309,7 +311,8 @@ run = """
 rm -f count_prime/*.wasm mandelbrot/*.wasm sieve/*.wasm zlib/zlib_c.wasm
 rm -f count_prime/count_prime_c mandelbrot/mandelbrot_c sieve/sieve_c
 rm -f fts/fts_c fts/fts_rs
-rm -rf zlib/target json_twitter/target json_canada/target json_catalog/target syntax_highlight/target
+rm -rf zlib/target json_twitter/target json_canada/target json_catalog/target cbor/target syntax_highlight/target
+rm -rf cbor/node_modules cbor/package-lock.json
 rm -rf syntax_highlight/node_modules syntax_highlight/package-lock.json
 rm -rf http_routing/node_modules http_routing/package-lock.json http_routing/target
 """

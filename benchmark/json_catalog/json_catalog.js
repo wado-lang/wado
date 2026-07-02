@@ -66,15 +66,18 @@ function bench(label, workPerIter, unit, f) {
 }
 
 const jsonData = fs.readFileSync(path.join(__dirname, "citm_catalog.json"), "utf-8");
-const size = jsonData.length;
+const size = Buffer.byteLength(jsonData, "utf-8");
+const catalogObj = JSON.parse(jsonData);
 
 console.log(`json-catalog: ${size} bytes`);
 
-const counts = bench("Throughput", size, "B", () => {
+bench("Ser", size, "B", () => JSON.stringify(catalogObj).length);
+
+const counts = bench("De", size, "B", () => {
   const catalog = JSON.parse(jsonData);
   return [Object.keys(catalog.events).length, catalog.performances.length];
 });
 
 if (counts[0] !== 184) throw new Error("assertion failed");
 if (counts[1] !== 243) throw new Error("assertion failed");
-console.log(`Parsed ${counts[0]} events, ${counts[1]} performances per iteration`);
+console.log(`Round-tripped ${counts[0]} events, ${counts[1]} performances per iteration`);

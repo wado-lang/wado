@@ -1,31 +1,49 @@
 #![allow(dead_code)]
-// Rust serde_json benchmark for twitter.json
-// Comparison baseline for Wado's core:json deserialization.
+// Rust serde_json ser/de benchmark for twitter.json.
+//
+// Comparison baseline for Wado's core:json serialization/deserialization. The
+// complete twitter.json schema is modeled with typed structs (shared data types
+// with the CBOR benchmark), so every field is round-tripped. Throughput is
+// reported over the original JSON source size (shared denominator across
+// implementations). Both phases operate on byte buffers:
+//   ser: TwitterResponse -> JSON bytes  (serde_json::to_vec)
+//   de:  JSON bytes -> TwitterResponse  (serde_json::from_slice)
+//
+// serde matches struct field names to the wire keys by default, so no `rename`
+// attributes are needed; `r#type` covers the one reserved-word key.
 //
 // JSON data source: https://github.com/miloyip/nativejson-benchmark
 // License: MIT
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct SearchMetadata {
     completed_in: f64,
     count: i32,
     max_id: i64,
     max_id_str: String,
+    next_results: String,
     query: String,
+    refresh_url: String,
     since_id: i64,
     since_id_str: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct Metadata {
     iso_language_code: String,
     result_type: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
+struct Hashtag {
+    text: String,
+    indices: Vec<i32>,
+}
+
+#[derive(Serialize, Deserialize)]
 struct Url {
     url: String,
     expanded_url: String,
@@ -33,13 +51,7 @@ struct Url {
     indices: Vec<i32>,
 }
 
-#[derive(Deserialize)]
-struct Hashtag {
-    text: String,
-    indices: Vec<i32>,
-}
-
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct UserMention {
     screen_name: String,
     name: String,
@@ -48,46 +60,107 @@ struct UserMention {
     indices: Vec<i32>,
 }
 
-#[derive(Deserialize)]
-struct StatusEntities {
-    hashtags: Vec<Hashtag>,
-    urls: Vec<Url>,
-    user_mentions: Vec<UserMention>,
+#[derive(Serialize, Deserialize)]
+struct Size {
+    w: i32,
+    h: i32,
+    resize: String,
 }
 
-#[derive(Deserialize)]
-struct UserEntities {
+#[derive(Serialize, Deserialize)]
+struct MediaSizes {
+    large: Size,
+    medium: Size,
+    small: Size,
+    thumb: Size,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Media {
+    id: i64,
+    id_str: String,
+    indices: Vec<i32>,
+    media_url: String,
+    media_url_https: String,
+    url: String,
+    display_url: String,
+    expanded_url: String,
+    r#type: String,
+    sizes: MediaSizes,
     #[serde(default)]
-    description: Option<UserEntityUrls>,
+    source_status_id: Option<i64>,
+    #[serde(default)]
+    source_status_id_str: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct StatusEntities {
+    hashtags: Vec<Hashtag>,
+    symbols: Vec<String>,
+    urls: Vec<Url>,
+    user_mentions: Vec<UserMention>,
+    #[serde(default)]
+    media: Vec<Media>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct UserEntityUrls {
+    urls: Vec<Url>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct UserEntities {
+    description: UserEntityUrls,
     #[serde(default)]
     url: Option<UserEntityUrls>,
 }
 
-#[derive(Deserialize)]
-struct UserEntityUrls {
-    #[serde(default)]
-    urls: Vec<Url>,
-}
-
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct User {
     id: i64,
     id_str: String,
     name: String,
     screen_name: String,
-    #[serde(default)]
-    description: Option<String>,
+    location: String,
+    description: String,
+    url: Option<String>,
+    entities: UserEntities,
+    protected: bool,
     followers_count: i32,
     friends_count: i32,
-    statuses_count: i32,
+    listed_count: i32,
     created_at: String,
+    favourites_count: i32,
+    utc_offset: Option<i32>,
+    time_zone: Option<String>,
+    geo_enabled: bool,
+    verified: bool,
+    statuses_count: i32,
+    lang: String,
+    contributors_enabled: bool,
+    is_translator: bool,
+    is_translation_enabled: bool,
+    profile_background_color: String,
+    profile_background_image_url: String,
+    profile_background_image_url_https: String,
+    profile_background_tile: bool,
+    profile_image_url: String,
     profile_image_url_https: String,
     #[serde(default)]
-    verified: bool,
-    lang: String,
+    profile_banner_url: Option<String>,
+    profile_link_color: String,
+    profile_sidebar_border_color: String,
+    profile_sidebar_fill_color: String,
+    profile_text_color: String,
+    profile_use_background_image: bool,
+    default_profile: bool,
+    default_profile_image: bool,
+    following: bool,
+    follow_request_sent: bool,
+    notifications: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct Status {
     metadata: Metadata,
     created_at: String,
@@ -96,16 +169,29 @@ struct Status {
     text: String,
     source: String,
     truncated: bool,
+    in_reply_to_status_id: Option<i64>,
+    in_reply_to_status_id_str: Option<String>,
+    in_reply_to_user_id: Option<i64>,
+    in_reply_to_user_id_str: Option<String>,
+    in_reply_to_screen_name: Option<String>,
     user: User,
+    geo: Option<String>,
+    coordinates: Option<String>,
+    place: Option<String>,
+    contributors: Option<String>,
+    #[serde(default)]
+    retweeted_status: Option<Box<Status>>,
     retweet_count: i32,
     favorite_count: i32,
     entities: StatusEntities,
     favorited: bool,
     retweeted: bool,
+    #[serde(default)]
+    possibly_sensitive: bool,
     lang: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct TwitterResponse {
     statuses: Vec<Status>,
     search_metadata: SearchMetadata,
@@ -188,16 +274,22 @@ fn bench<T, F: FnMut() -> T>(label: &str, work_per_iter: f64, unit: &str, mut f:
 fn main() {
     let json_data = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/twitter.json"))
         .expect("Failed to read twitter.json");
-    let size = json_data.len();
+    let json_size = json_data.len();
 
-    println!("json-twitter: {size} bytes");
+    let resp: TwitterResponse =
+        serde_json::from_str(&json_data).expect("Failed to parse twitter.json");
 
-    let count = bench("Throughput", size as f64, "B", || {
-        let resp: TwitterResponse =
-            serde_json::from_str(&json_data).expect("Failed to parse twitter.json");
-        resp.statuses.len()
+    println!("json-twitter: {json_size} bytes");
+
+    bench("Ser", json_size as f64, "B", || {
+        serde_json::to_vec(&resp).expect("encode").len()
+    });
+
+    let count = bench("De", json_size as f64, "B", || {
+        let r: TwitterResponse = serde_json::from_str(&json_data).expect("decode");
+        r.statuses.len()
     });
 
     assert_eq!(count, 100);
-    println!("Parsed {count} statuses per iteration");
+    println!("Round-tripped {count} statuses per iteration");
 }

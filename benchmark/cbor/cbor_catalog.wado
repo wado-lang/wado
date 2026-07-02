@@ -1,16 +1,21 @@
-// JSON ser/de benchmark: citm_catalog.json
+// CBOR ser/de benchmark over citm_catalog.json (core:cbor).
+//
+// The full citm_catalog.json schema (shared with the JSON benchmark, see
+// `../json_catalog/catalog_schema.wado`) is modeled, so every field
+// round-trips. The JSON is parsed once into `CitmCatalog` (core:json), then
+// encoded to a CBOR byte payload. Throughput is reported over the original JSON
+// source size (shared denominator with the JSON benchmark). Both phases operate
+// on byte buffers:
+//   ser: CitmCatalog -> CBOR bytes  (core:cbor to_bytes)
+//   de:  CBOR bytes -> CitmCatalog  (core:cbor from_bytes)
+//
 // Data source: https://github.com/miloyip/nativejson-benchmark
 // License: MIT
-//
-// The full schema (shared with the CBOR benchmark, see `catalog_schema.wado`)
-// is modeled, so every field round-trips. Both phases operate on byte buffers,
-// reported over the JSON source size:
-//   ser: CitmCatalog -> JSON bytes  (core:json to_bytes)
-//   de:  JSON bytes -> CitmCatalog  (core:json from_bytes)
 
 use { Stdout } from "core:cli";
-use { to_bytes, from_bytes } from "core:json";
-use { CitmCatalog, event_count, performance_count } from "./catalog_schema.wado";
+use { from_bytes as json_from_bytes } from "core:json";
+use { to_bytes as cbor_to_bytes, from_bytes as cbor_from_bytes } from "core:cbor";
+use { CitmCatalog, event_count, performance_count } from "../json_catalog/catalog_schema.wado";
 use { MonotonicClock } from "wasi:clocks";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 use { Benchmark } from "core:benchmark";
@@ -40,29 +45,31 @@ fn read_file_bytes(path: String) -> ByteList with Preopens {
 }
 
 test "smoke" {
-    // Minimal valid CitmCatalog with empty maps and no events / performances.
-    let catalog = from_bytes::<CitmCatalog, _>(
+    let catalog = json_from_bytes::<CitmCatalog, _>(
         "{\"areaNames\":{},\"audienceSubCategoryNames\":{},\"blockNames\":{},\"events\":{},\"performances\":[],\"seatCategoryNames\":{},\"subTopicNames\":{},\"subjectNames\":{},\"topicNames\":{},\"topicSubTopics\":{},\"venueNames\":{}}",
     ).unwrap();
-    let bytes = to_bytes::<CitmCatalog>(&catalog).unwrap();
-    let back = from_bytes::<CitmCatalog, _>(bytes).unwrap();
+    let cbor = cbor_to_bytes::<CitmCatalog>(&catalog).unwrap();
+    let back = cbor_from_bytes::<CitmCatalog, _>(cbor).unwrap();
     assert event_count(&back) == 0;
 }
 
 export fn run() with Stdout, MonotonicClock, Preopens {
     let json_data = read_file_bytes("json_catalog/citm_catalog.json");
     let json_size = json_data.len();
-    let catalog = from_bytes::<CitmCatalog, _>(json_data).unwrap();
-
-    let mut b = Benchmark {
-        name: "json-catalog",
-        input_size: Option::Some(json_size),
-    };
+    let catalog = json_from_bytes::<CitmCatalog, _>(json_data).unwrap();
 
     assert performance_count(&catalog) == 243;
 
-    b.run("ser", || to_bytes::<CitmCatalog>(&catalog).unwrap().len());
-    let events = b.run("de", || event_count(&from_bytes::<CitmCatalog, _>(json_data).unwrap()));
+    let cbor = cbor_to_bytes::<CitmCatalog>(&catalog).unwrap();
+
+    let mut b = Benchmark {
+        name: "cbor-catalog",
+        input_size: Option::Some(json_size),
+    };
+    b.println(`{json_size} bytes JSON -> {cbor.len()} bytes CBOR payload`);
+
+    b.run("ser", || cbor_to_bytes::<CitmCatalog>(&catalog).unwrap().len());
+    let events = b.run("de", || event_count(&cbor_from_bytes::<CitmCatalog, _>(cbor).unwrap()));
     assert events == 184;
     b.println(`round-tripped {events} events`);
 }

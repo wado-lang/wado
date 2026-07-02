@@ -1,0 +1,50 @@
+// Shared canada.json schema for the serde benchmarks.
+//
+// A GeoJSON FeatureCollection with 480 polygon rings and 55,563 coordinate
+// points. The full schema is modeled, so every field round-trips. Both the JSON
+// (`json_canada.wado`) and CBOR (`../cbor/cbor_canada.wado`) benchmarks import
+// these types, so the two codecs are compared over identical data types.
+//
+// Data source: https://github.com/miloyip/nativejson-benchmark
+// License: MIT
+
+use { Serialize, Deserialize } from "core:serde";
+
+pub struct Properties {
+    name: String,
+}
+impl Serialize for Properties;
+impl Deserialize for Properties;
+
+pub struct Geometry {
+    type: String,
+    coordinates: List<List<List<f64>>>,
+}
+impl Serialize for Geometry;
+impl Deserialize for Geometry;
+
+pub struct Feature {
+    type: String,
+    properties: Properties,
+    geometry: Geometry,
+}
+impl Serialize for Feature;
+impl Deserialize for Feature;
+
+pub struct FeatureCollection {
+    #[serde(rename = "type")]
+    collection_type: String,
+    features: List<Feature>,
+}
+impl Serialize for FeatureCollection;
+impl Deserialize for FeatureCollection;
+
+pub fn count_points(fc: &FeatureCollection) -> i32 {
+    let mut total = 0;
+    for let feat of fc.features {
+        for let ring of feat.geometry.coordinates {
+            total = total + ring.len();
+        }
+    }
+    return total;
+}

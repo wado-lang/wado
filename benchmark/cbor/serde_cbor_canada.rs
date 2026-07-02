@@ -1,6 +1,13 @@
 #![allow(dead_code)]
-// Rust serde_json benchmark for canada.json
-// Comparison baseline for Wado's core:json deserialization.
+// Rust serde_cbor ser/de benchmark for canada.json.
+//
+// Comparison baseline for Wado's core:cbor serialization/deserialization. The
+// full canada.json schema is modeled (shared data types with the JSON
+// benchmark), so every field is round-tripped. Throughput is reported over the
+// original JSON source size (shared denominator across implementations). Both
+// phases operate on byte buffers:
+//   ser: FeatureCollection -> CBOR bytes  (serde_cbor::to_vec)
+//   de:  CBOR bytes -> FeatureCollection  (serde_cbor::from_slice)
 //
 // JSON data source: https://github.com/miloyip/nativejson-benchmark
 // License: MIT
@@ -120,21 +127,28 @@ fn count_points(fc: &FeatureCollection) -> usize {
 }
 
 fn main() {
-    let json_data = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/canada.json"))
-        .expect("Failed to read canada.json");
-    let size = json_data.len();
+    let json_data = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../json_canada/canada.json"
+    ))
+    .expect("Failed to read canada.json");
+    let json_size = json_data.len();
 
     let fc: FeatureCollection =
         serde_json::from_str(&json_data).expect("Failed to parse canada.json");
+    let cbor = serde_cbor::to_vec(&fc).expect("Failed to encode CBOR");
 
-    println!("json-canada: {size} bytes");
+    println!(
+        "cbor-canada: {json_size} bytes JSON -> {} bytes CBOR payload",
+        cbor.len()
+    );
 
-    bench("Ser", size as f64, "B", || {
-        serde_json::to_vec(&fc).expect("encode").len()
+    bench("Ser", json_size as f64, "B", || {
+        serde_cbor::to_vec(&fc).expect("encode").len()
     });
 
-    let total_points = bench("De", size as f64, "B", || {
-        let fc: FeatureCollection = serde_json::from_str(&json_data).expect("decode");
+    let total_points = bench("De", json_size as f64, "B", || {
+        let fc: FeatureCollection = serde_cbor::from_slice(&cbor).expect("decode");
         count_points(&fc)
     });
 
