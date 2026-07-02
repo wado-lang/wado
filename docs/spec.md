@@ -2899,7 +2899,7 @@ let arr = make_default::<List<String>>();  // []
 
 **Auto-Derivation:**
 
-`Default` is auto-derived for a non-generic struct when every field has a declared default expression (`f: T = expr`). See [Struct Field Defaults](#struct-field-defaults). A user-written `impl Default for S` overrides the auto-derived one. Generic structs require an explicit impl.
+`Default` is auto-derived for a non-generic struct when every field has a declared default expression (`f: T = expr`), synthesized on demand where a `S::default()` call, a `T: Default` bound, or an `impl Default for S;` marker needs it — not for every eligible struct. See [Struct Field Defaults](#struct-field-defaults). A user-written `impl Default for S` overrides the auto-derived one. Generic structs require an explicit impl.
 
 ```wado
 struct Config {
@@ -3182,7 +3182,7 @@ Wado provides a format-agnostic serialization framework via `core:serde` and a J
 
 ### Compiler-Synthesized `impl`
 
-The syntax `impl Trait for Type;` (semicolon instead of block) signals that the compiler generates the method body. Supported traits: `From`, `Serialize`, `Deserialize`, `Eq`, `Ord`.
+The syntax `impl Trait for Type;` (semicolon instead of block) signals that the compiler generates the method body. Supported traits: `From`, `Serialize`, `Deserialize`, `Eq`, `Ord`, `Default`, and the format family (`Inspect`, `InspectAlt`, `Display`, `DisplayAlt`). For the structurally-checkable traits (`Eq` / `Ord` / `Default` / serde) the marker is also a conformance check — a compile error at its own span if `Type` is ineligible. A format-trait marker always validates, since every type is formattable.
 
 ```wado
 use { Serialize, Deserialize } from "core:serde";
@@ -3225,6 +3225,16 @@ struct Handler { cb: fn(i32) -> i32 }
 
 impl Eq for Handler;
 // compile error: cannot derive `Eq` for `Handler`: not every field/case implements `Eq`
+```
+
+### Format Traits Are Total
+
+The format traits — `Inspect` / `InspectAlt` / `Display` / `DisplayAlt` — hold for **every** type: any value can be debug-formatted (`{x:?}`) or displayed (`{x}`). A `T: Inspect` or `T: Display` bound therefore always holds, so a generic function can format its type parameter with no written bound, and `impl Inspect for T;` markers always validate. Their bodies are generated eagerly for every type, unlike the on-demand `Eq` / `Ord` / `Default` / serde.
+
+```wado
+fn describe<T>(v: &T) -> String {
+    return `{v:?}`;   // no `T: Inspect` bound needed
+}
 ```
 
 See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
