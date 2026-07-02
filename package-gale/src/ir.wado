@@ -1037,6 +1037,163 @@ fn stamp_decisions_element(elem: &Element, next: &mut i32) -> Element {
     };
 }
 
+/// Assign every retained `ActionSource` a unique, increasing `action_id`
+/// (a depth-first walk over parser rules, their alternatives / nested
+/// groups / arg-actions and prequel slots, lexer rules, grammar-level
+/// named actions, and option actions). The id is the stable name of the
+/// emitted action fn and the anchor for action diagnostics — the same
+/// role `atn_call_site` plays for rule-call return states.
+///
+/// Runs on the `generate()` path after `assign_atn_decisions`; the rebuilds
+/// here preserve `atn_call_site` / `atn_decision` explicitly so stamping
+/// action ids last does not clobber them. Idempotent re-runs renumber from 0.
+pub fn assign_action_ids(grammar: &mut Grammar) {
+    let mut next: i32 = 0;
+    for let mut ri = 0; ri < grammar.parser_rules.len(); ri += 1 {
+        grammar.parser_rules[ri].init_action = stamp_action_source_opt(grammar.parser_rules[ri].init_action, &mut next);
+        let stamped = stamp_actions_alternatives(&grammar.parser_rules[ri].alternatives, &mut next);
+        grammar.parser_rules[ri].alternatives = stamped;
+        grammar.parser_rules[ri].after_action = stamp_action_source_opt(grammar.parser_rules[ri].after_action, &mut next);
+        let mut new_catches: List<CatchClause> = [];
+        for let c of &grammar.parser_rules[ri].catches {
+            let mut body = c.body;
+            body.action_id = next;
+            next += 1;
+            new_catches.push(CatchClause { decl_text: c.decl_text, body });
+        }
+        grammar.parser_rules[ri].catches = new_catches;
+        grammar.parser_rules[ri].finally_action = stamp_action_source_opt(grammar.parser_rules[ri].finally_action, &mut next);
+    }
+    for let mut li = 0; li < grammar.lexer_rules.len(); li += 1 {
+        let stamped = stamp_actions_lexer_alternatives(&grammar.lexer_rules[li].body, &mut next);
+        grammar.lexer_rules[li].body = stamped;
+    }
+    for let mut ni = 0; ni < grammar.named_actions.len(); ni += 1 {
+        grammar.named_actions[ni].body.action_id = next;
+        next += 1;
+    }
+    for let mut oi = 0; oi < grammar.options.len(); oi += 1 {
+        if let Action(src) = &grammar.options[oi].value {
+            let mut ns = *src;
+            ns.action_id = next;
+            next += 1;
+            grammar.options[oi].value = OptionValue::Action(ns);
+        }
+    }
+}
+
+fn stamp_action_source_opt(opt: Option<ActionSource>, next: &mut i32) -> Option<ActionSource> {
+    match opt {
+        Some(s) => {
+            let mut ns = s;
+            ns.action_id = *next;
+            *next += 1;
+            return Option::<ActionSource>::Some(ns);
+        },
+        None => return opt,
+    }
+}
+
+fn stamp_actions_alternatives(alts: &List<Alternative>, next: &mut i32) -> List<Alternative> {
+    let mut out: List<Alternative> = [];
+    for let alt of alts {
+        let mut acts: List<AltAction> = [];
+        for let a of &alt.actions {
+            let mut src = a.source;
+            src.action_id = *next;
+            *next += 1;
+            acts.push(AltAction { kind: a.kind, source: src, before_index: a.before_index });
+        }
+        let mut elems: List<Element> = [];
+        for let e of &alt.elements {
+            elems.push(stamp_actions_element(e, next));
+        }
+        out.push(Alternative { label: alt.label, options: alt.options, elements: elems, actions: acts });
+    }
+    return out;
+}
+
+fn stamp_actions_element(elem: &Element, next: &mut i32) -> Element {
+    return match *elem {
+        RuleRef(rr) => {
+            let mut arg = rr.arg_action;
+            match arg {
+                Some(s) => {
+                    let mut ns = s;
+                    ns.action_id = *next;
+                    *next += 1;
+                    arg = Option::<ActionSource>::Some(ns);
+                },
+                None => {},
+            }
+            Element::RuleRef(RuleRefElement {
+                name: rr.name,
+                options: rr.options,
+                snake_name: rr.snake_name,
+                field_name: rr.field_name,
+                atn_call_site: rr.atn_call_site,
+                arg_action: arg,
+            });
+        },
+        Label(lab) => Element::Label(LabelElement {
+            name: lab.name,
+            list: lab.list,
+            element: stamp_actions_element(&lab.element, next),
+            snake_name: lab.snake_name,
+            field_name: lab.field_name,
+        }),
+        Repeat(rep) => Element::Repeat(RepeatElement {
+            kind: rep.kind,
+            element: stamp_actions_element(&rep.element, next),
+            non_greedy: rep.non_greedy,
+            atn_decision: rep.atn_decision,
+        }),
+        Not(n) => Element::Not(NotElement {
+            element: stamp_actions_element(&n.element, next),
+        }),
+        Group(g) => Element::Group(GroupElement {
+            alternatives: stamp_actions_alternatives(&g.alternatives, next),
+            options: g.options,
+            atn_decision: g.atn_decision,
+        }),
+        _ => *elem,
+    };
+}
+
+fn stamp_actions_lexer_alternatives(alts: &List<LexerAlternative>, next: &mut i32) -> List<LexerAlternative> {
+    let mut out: List<LexerAlternative> = [];
+    for let alt of alts {
+        let mut acts: List<AltAction> = [];
+        for let a of &alt.actions {
+            let mut src = a.source;
+            src.action_id = *next;
+            *next += 1;
+            acts.push(AltAction { kind: a.kind, source: src, before_index: a.before_index });
+        }
+        let mut elems: List<LexerElement> = [];
+        for let e of &alt.elements {
+            elems.push(stamp_actions_lexer_element(e, next));
+        }
+        out.push(LexerAlternative { elements: elems, actions: acts });
+    }
+    return out;
+}
+
+fn stamp_actions_lexer_element(elem: &LexerElement, next: &mut i32) -> LexerElement {
+    return match *elem {
+        Group(alts) => LexerElement::Group(stamp_actions_lexer_alternatives(&alts, next)),
+        Repeat(rep) => LexerElement::Repeat(LexerRepeatElement {
+            kind: rep.kind,
+            element: stamp_actions_lexer_element(&rep.element, next),
+            non_greedy: rep.non_greedy,
+        }),
+        Not(n) => LexerElement::Not(LexerNotElement {
+            element: stamp_actions_lexer_element(&n.element, next),
+        }),
+        _ => *elem,
+    };
+}
+
 /// Rebuild an alternative list with each element canonicalized. Returns a
 /// fresh list (value semantics: in-place `&mut list[i]` mutation does not
 /// persist, so the pass rebuilds and reassigns).

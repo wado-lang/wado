@@ -9,6 +9,7 @@ use {
     canonicalize_empty_alt_groups,
     assign_atn_call_sites,
     assign_atn_decisions,
+    assign_action_ids,
 } from "./ir.wado";
 use { build as build_follow_env } from "./follow_env.wado";
 use { rule_type_name, all_alts_are_single_token } from "./gen_util.wado";
@@ -91,6 +92,10 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // Must run after `assign_atn_call_sites` (its `Repeat` / `Group` rebuild
     // would otherwise reset the freshly stamped decision-site ids).
     assign_atn_decisions(grammar);
+    // Number every retained action / predicate fragment so Stage C codegen
+    // can name its emitted fn and anchor diagnostics. Runs after the ATN
+    // stamps (the rebuild preserves their ids) and before lowering.
+    assign_action_ids(grammar);
     normalize_caches(grammar);
     // Pre-size the output buffer from the grammar's rule count so the
     // bulk of `String::push_str` calls in `CodeWriter::line` don't
