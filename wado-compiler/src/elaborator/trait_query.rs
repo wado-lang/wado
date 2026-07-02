@@ -456,25 +456,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The one remaining serde generic gap: `Deserialize` synthesis is not
-    /// generic-aware yet — `generate_struct_deserialize`'s per-field
-    /// machinery and the `FieldSchema` impl keying don't substitute
-    /// `type_params` (docs/wep-2026-02-28-serde.md, "Generic struct
-    /// Deserialize synthesis") — so a generic instance cannot derive
-    /// `Deserialize`. `Serialize` generics *are* supported (the
-    /// synthesizers emit a generic template monomorphize instantiates).
-    /// Both the bound funnel ([`Self::type_implements_trait_inner`]) and
-    /// the marker funnel
-    /// ([`Self::structurally_derivable_for_explicit_request`]) consult
-    /// this one predicate so the two cannot drift.
-    pub(super) fn serde_generic_derive_unsupported(
-        &self,
-        tr: OnBoundTrait,
-        resolved: &ResolvedType,
-    ) -> bool {
-        tr == OnBoundTrait::Deserialize && matches!(resolved, ResolvedType::GenericInstance { .. })
-    }
-
     /// Classify `trait_name` under the `on_bound` derivation policy,
     /// resolving through the compiler-item registry so a stdlib rename
     /// flows here. `Serialize` / `Deserialize` resolve with `_opt` —
@@ -636,12 +617,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.type_implements_trait(ctx, TypeTable::U32, trait_name)
             }
             nominal => {
-                // The `Deserialize` generic gap rejects the marker here so
-                // the request never reaches the non-generic-aware
-                // synthesizer — same rule the bound funnel applies.
-                if self.serde_generic_derive_unsupported(tr, nominal) {
-                    return false;
-                }
                 // `None` also rejects `impl Ord for SomeVariant;` here — a
                 // hard error at the marker instead of a deferred failure at
                 // a `<` use site.
@@ -747,13 +722,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ..
             } = resolved
         {
-            // Two serde-only guards: the real-impl gate described above
-            // (which also keeps auto-derive away from built-in generics
-            // like `List<T>` / `Option<T>` — their hand-written impls are
-            // found by the plain lookup below), and the `Deserialize`
-            // generic gap ([`Self::serde_generic_derive_unsupported`]).
-            let serde_blocked = self.serde_generic_derive_unsupported(tr, resolved)
-                || (tr.is_serde() && self.has_real_trait_impl_for_type(name, trait_name));
+            // The serde-only real-impl gate described above (which also
+            // keeps auto-derive away from built-in generics like `List<T>`
+            // / `Option<T>` — their hand-written impls are found by the
+            // plain lookup below). Generic types derive `Serialize` /
+            // `Deserialize` via base-declaration templates like `Eq` / `Ord`.
+            let serde_blocked =
+                tr.is_serde() && self.has_real_trait_impl_for_type(name, trait_name);
             if !serde_blocked
                 && self.walk_structural_derive_members(resolved, tr, &mut |_, member| {
                     self.type_implements_trait(ctx, member, trait_name)

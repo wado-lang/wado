@@ -9,10 +9,10 @@ call-resolution site that happens to check eligibility (`operators.rs`,
 specifies a placeholder-based redesign that closes the gap this leaves (a
 resolution path that doesn't call the check silently skips generation — see
 `operators.rs`'s `Variant` comment) but is not yet implemented. Generic
-structs and variants derive `Serialize` (recorded against the base
-declaration, synthesized as a generic template monomorphize instantiates);
-`Deserialize` is not yet `GenericInstance`-eligible, and a policy
-declaration for user-defined traits is open. See Open Questions.
+structs and variants derive all four traits (`Serialize` / `Deserialize` /
+`Eq` / `Ord`), recorded against the base declaration and synthesized as a
+generic template monomorphize instantiates. A policy declaration for
+user-defined traits is open. See Open Questions.
 
 ## Context
 
@@ -101,13 +101,11 @@ Whole-program and monomorphized, so there's no orphan rule to violate.
 Generic types record nominally against the base declaration — the many
 instantiations collapse onto one request, and synthesis emits a generic
 template that monomorphize instantiates per concrete type. This is how
-`Eq` / `Ord` have always worked and, as of this WEP's implementation,
-`Serialize` too. `Deserialize` alone excludes `GenericInstance`
-(`Elaborator::serde_generic_derive_unsupported`, one predicate consulted by
-both the bound and marker funnels): its synthesizer's per-field machinery
-and `FieldSchema` keying are not generic-aware yet (the gap
-[Serde](./wep-2026-02-28-serde.md) tracks for generic-struct
-`Deserialize`).
+`Eq` / `Ord` have always worked and, as of this WEP's implementation, all
+four `on_bound` traits: `Serialize` and `Deserialize` synthesize generic
+templates too (the `Deserialize` `FieldSchema` keying is handled by keeping
+the `next_field` selector on the base type — see
+[Serde](./wep-2026-02-28-serde.md)).
 
 ### Discovery mechanism
 
@@ -264,12 +262,6 @@ changes _when_ a request is created, not _how_ the body is written. A future
 ## Open Questions
 
 - Declaration syntax for a user-defined trait's policy.
-- `GenericInstance` is not yet `on_bound`-eligible for `Deserialize`
-  (`Serialize` / `Eq` / `Ord` support generics via base-declaration
-  templates). Closing it means making `generate_struct_deserialize`'s
-  per-field machinery and the `FieldSchema` keying generic-aware — see the
-  [Serde WEP](./wep-2026-02-28-serde.md)'s "Generic struct Deserialize
-  synthesis" item.
 - Whether `TraitEnv::build()`'s AST-level field-type scan (before Annotate,
   no full type resolution) can decide structural eligibility correctly for
   every case `type_implements_trait_inner` handles today — generic struct

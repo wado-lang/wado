@@ -1362,7 +1362,28 @@ fn generate_struct_deserialize(
 
     let mut tt = module.type_table.borrow_mut();
 
-    let struct_type = req.target_type_id;
+    // For a generic struct the return type and the built struct literal are
+    // the generic instance over the struct's own type parameters
+    // (`Wrapper<T>`), carried below as `impl_type_params` and instantiated
+    // per concrete type by monomorphize — the same shape
+    // `generate_struct_serialize` uses. The `FieldSchema` selector
+    // (`next_field::<…>`) keeps the *base* type instead (see
+    // `base_struct_type` below).
+    let base_struct_type = req.target_type_id;
+    let struct_type = if struct_def.type_params.is_empty() {
+        base_struct_type
+    } else {
+        let param_ids: Vec<TypeId> = struct_def
+            .type_params
+            .iter()
+            .map(|tp| tt.make_type_param(tp.name.clone(), tp.index))
+            .collect();
+        tt.make_generic_instance(
+            req.target_type_name.clone(),
+            module.module_source.clone(),
+            param_ids,
+        )
+    };
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
     let option_i32 = tt.make_option(TypeTable::I32);
@@ -1383,7 +1404,10 @@ fn generate_struct_deserialize(
         .find_enum_type(&names.deserialize_error_kind, &serde_module)
         .unwrap_or(TypeTable::I32);
     let result_struct_err = tt.make_result(struct_type, deser_error_type);
-    let d_type_param = tt.make_type_param("D".to_string(), 0);
+    // `D` is numbered after the struct's own type params, matching reify's
+    // `next_idx = impl_type_params.len()` — see `generate_struct_serialize`.
+    let d_index = struct_def.type_params.len() as u32;
+    let d_type_param = tt.make_type_param("D".to_string(), d_index);
     let mut_ref_d = tt.make_mut_ref(d_type_param);
     let struct_access_type = tt.make_assoc_type_projection(
         d_type_param,
@@ -1415,8 +1439,12 @@ fn generate_struct_deserialize(
         .collect();
     // The struct type spelling drives the `next_field::<StructType>()` type
     // argument that selects this struct's `FieldSchema::lookup` at
-    // monomorphization.
-    let struct_type_name = tt.type_name(struct_type);
+    // monomorphization. The `FieldSchema` impl is keyed on the *base* type
+    // name (the `lookup` / `positional_at` bodies never reference the type
+    // parameters — field names don't vary with `T`), so a generic struct's
+    // selector stays the base type too, keeping one shared non-generic
+    // `Wrapper^FieldSchema::lookup` rather than one per instantiation.
+    let struct_type_name = tt.type_name(base_struct_type);
 
     let compiler_items = tt.compiler_items().clone();
     drop(tt);
@@ -1521,9 +1549,18 @@ fn generate_struct_deserialize(
     {
         let tt = module.type_table.borrow();
         for (i, (field_name, _, type_id, _)) in fields.iter().enumerate() {
-            // Prefer the field's declared default expression (WEP 2026-04-11)
-            // when available; fall back to `T::default()` for types with an
-            // auto-derived Default impl; otherwise null.
+            // A field with a declared default expression (WEP 2026-04-11) or
+            // `#[serde(default)]` gets pre-initialized to that fallback,
+            // which the loop overwrites when the field is present.
+            //
+            // A required field (tracked by a `seen` flag) needs no such
+            // pre-init: it is either assigned in the loop or its absence
+            // returns a missing-field error before the struct literal is
+            // built, so the slot is provably dead until assigned. Skipping
+            // it also avoids emitting a `null` placeholder for a generic
+            // field `T` — which would be a `nullref` where a monomorphized
+            // primitive (`T = i32`) expects a value. Wasm zero-inits the
+            // local, so the dead read is well-typed for every concrete `T`.
             let default_val = match struct_def
                 .fields
                 .get(i)
@@ -1534,16 +1571,21 @@ fn generate_struct_deserialize(
                     // The default was reified in the struct's own context;
                     // relocate its locals so they don't alias this function's.
                     relocate_default_locals(&mut v, &mut next_local, &mut locals);
-                    v
+                    Some(v)
                 }
-                None => default_value_for_type(*type_id, &tt, span),
+                None if seen_locals[i].is_none() => {
+                    Some(default_value_for_type(*type_id, &tt, span))
+                }
+                None => None,
             };
-            then_stmts.push(let_mut_stmt(
-                field_name,
-                field_locals[i],
-                *type_id,
-                default_val,
-            ));
+            if let Some(default_val) = default_val {
+                then_stmts.push(let_mut_stmt(
+                    field_name,
+                    field_locals[i],
+                    *type_id,
+                    default_val,
+                ));
+            }
         }
     }
 
@@ -1561,7 +1603,7 @@ fn generate_struct_deserialize(
         &names.m_deserialize_struct_next_field,
         serde_module.clone(),
         vec![struct_type_name],
-        vec![struct_type],
+        vec![base_struct_type],
         vec![],
         result_opt_i32_err,
         span,
@@ -1844,7 +1886,7 @@ fn generate_struct_deserialize(
             default: None,
             index: 0,
         }],
-        impl_type_params: Vec::new(),
+        impl_type_params: struct_def.type_params.clone(),
         monomorph_info: None,
         method_info: Some(method_info),
         params: vec![TirParam {
@@ -2422,6 +2464,7 @@ fn generate_enum_deserialize(
         names,
         cases,
         wire_names,
+        &[],
         DeserConstruct::Enum,
     ))
 }
@@ -2440,6 +2483,10 @@ fn generate_variant_family_deserialize(
     // `wire_names` is the rename-applied name matched against the input tag.
     cases: Vec<(String, u32, TypeId)>,
     wire_names: Vec<String>,
+    // The type's own type parameters — non-empty only for generic variants
+    // (enums are always plain discriminants). Drive the same generic-template
+    // shape as `generate_struct_deserialize`; empty for the non-generic case.
+    type_params: &[TirTypeParam],
     kind: DeserConstruct,
 ) -> TirFunction {
     let span = synth_span();
@@ -2459,7 +2506,24 @@ fn generate_variant_family_deserialize(
     };
     let mut tt = module.type_table.borrow_mut();
 
-    let target_type = req.target_type_id;
+    // A generic variant's return type and constructed value use the generic
+    // instance over its own type parameters (`Maybe<T>`), carried as
+    // `impl_type_params` and instantiated per concrete type by monomorphize
+    // — same shape as `generate_struct_deserialize`. Enums are never generic
+    // (`type_params` empty), so `target_type` stays the base id.
+    let target_type = if type_params.is_empty() {
+        req.target_type_id
+    } else {
+        let param_ids: Vec<TypeId> = type_params
+            .iter()
+            .map(|tp| tt.make_type_param(tp.name.clone(), tp.index))
+            .collect();
+        tt.make_generic_instance(
+            req.target_type_name.clone(),
+            module.module_source.clone(),
+            param_ids,
+        )
+    };
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
     let deser_error_type = tt.make_struct(names.deserialize_error.clone(), serde_module.clone());
@@ -2467,7 +2531,10 @@ fn generate_variant_family_deserialize(
         .find_enum_type(&names.deserialize_error_kind, &serde_module)
         .unwrap_or(TypeTable::I32);
     let result_target_err = tt.make_result(target_type, deser_error_type);
-    let d_type_param = tt.make_type_param("D".to_string(), 0);
+    // `D` is numbered after the type's own params — see
+    // `generate_struct_deserialize`.
+    let d_index = type_params.len() as u32;
+    let d_type_param = tt.make_type_param("D".to_string(), d_index);
     let mut_ref_d = tt.make_mut_ref(d_type_param);
     let variant_access_type = tt.make_assoc_type_projection(
         d_type_param,
@@ -2853,7 +2920,7 @@ fn generate_variant_family_deserialize(
             default: None,
             index: 0,
         }],
-        impl_type_params: Vec::new(),
+        impl_type_params: type_params.to_vec(),
         monomorph_info: None,
         method_info: Some(method_info),
         params: vec![TirParam {
@@ -3216,12 +3283,14 @@ fn generate_variant_deserialize(
         .iter()
         .map(|c| serialized_case_name(&c.name, &c.serde_rename, &variant_def.serde_rename_all))
         .collect();
+    let type_params = variant_def.type_params.clone();
     Some(generate_variant_family_deserialize(
         module,
         req,
         names,
         cases,
         wire_names,
+        &type_params,
         DeserConstruct::Variant,
     ))
 }
