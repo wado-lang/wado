@@ -66,11 +66,14 @@ function bench(label, workPerIter, unit, f) {
 }
 
 const jsonData = fs.readFileSync(path.join(__dirname, "canada.json"), "utf-8");
-const size = jsonData.length;
+const size = Buffer.byteLength(jsonData, "utf-8");
+const fcObj = JSON.parse(jsonData);
 
 console.log(`json-canada: ${size} bytes`);
 
-const totalPoints = bench("Throughput", size, "B", () => {
+bench("Ser", size, "B", () => JSON.stringify(fcObj).length);
+
+const totalPoints = bench("De", size, "B", () => {
   const fc = JSON.parse(jsonData);
   let points = 0;
   for (const feat of fc.features) {
@@ -82,4 +85,4 @@ const totalPoints = bench("Throughput", size, "B", () => {
 });
 
 if (totalPoints !== 55563) throw new Error("assertion failed");
-console.log(`Parsed ${totalPoints} coordinate points per iteration`);
+console.log(`Round-tripped ${totalPoints} coordinate points per iteration`);

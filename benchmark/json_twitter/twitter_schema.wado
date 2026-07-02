@@ -1,0 +1,200 @@
+// Shared twitter.json schema for the serde benchmarks.
+//
+// The complete twitter.json schema is modeled with typed structs (no dynamic
+// value), so every field is round-tripped. Both the JSON (`json_twitter.wado`)
+// and CBOR (`cbor/cbor.wado`) benchmarks import these types, so the two codecs
+// are compared over identical data types.
+//
+// Field names match the wire keys, so no `rename` is needed (`type` is a
+// contextual keyword and works directly as a field name).
+//
+// Data source: https://github.com/miloyip/nativejson-benchmark
+// License: MIT
+
+use { Serialize, Deserialize } from "core:serde";
+
+pub struct SearchMetadata {
+    completed_in: f64,
+    pub count: i32,
+    max_id: i64,
+    max_id_str: String,
+    next_results: String,
+    query: String,
+    refresh_url: String,
+    since_id: i64,
+    since_id_str: String,
+}
+impl Serialize for SearchMetadata;
+impl Deserialize for SearchMetadata;
+
+pub struct Metadata {
+    iso_language_code: String,
+    result_type: String,
+}
+impl Serialize for Metadata;
+impl Deserialize for Metadata;
+
+pub struct Hashtag {
+    text: String,
+    indices: List<i32>,
+}
+impl Serialize for Hashtag;
+impl Deserialize for Hashtag;
+
+pub struct Url {
+    url: String,
+    expanded_url: String,
+    display_url: String,
+    indices: List<i32>,
+}
+impl Serialize for Url;
+impl Deserialize for Url;
+
+pub struct UserMention {
+    screen_name: String,
+    name: String,
+    id: i64,
+    id_str: String,
+    indices: List<i32>,
+}
+impl Serialize for UserMention;
+impl Deserialize for UserMention;
+
+pub struct Size {
+    w: i32,
+    h: i32,
+    resize: String,
+}
+impl Serialize for Size;
+impl Deserialize for Size;
+
+pub struct MediaSizes {
+    large: Size,
+    medium: Size,
+    small: Size,
+    thumb: Size,
+}
+impl Serialize for MediaSizes;
+impl Deserialize for MediaSizes;
+
+pub struct Media {
+    id: i64,
+    id_str: String,
+    indices: List<i32>,
+    media_url: String,
+    media_url_https: String,
+    url: String,
+    display_url: String,
+    expanded_url: String,
+    type: String,
+    sizes: MediaSizes,
+    source_status_id: Option<i64> = null,
+    source_status_id_str: Option<String> = null,
+}
+impl Serialize for Media;
+impl Deserialize for Media;
+
+pub struct StatusEntities {
+    hashtags: List<Hashtag>,
+    symbols: List<String>,
+    urls: List<Url>,
+    user_mentions: List<UserMention>,
+    media: List<Media> = [],
+}
+impl Serialize for StatusEntities;
+impl Deserialize for StatusEntities;
+
+pub struct UserEntityUrls {
+    urls: List<Url>,
+}
+impl Serialize for UserEntityUrls;
+impl Deserialize for UserEntityUrls;
+
+pub struct UserEntities {
+    description: UserEntityUrls,
+    url: Option<UserEntityUrls> = null,
+}
+impl Serialize for UserEntities;
+impl Deserialize for UserEntities;
+
+pub struct User {
+    id: i64,
+    id_str: String,
+    name: String,
+    screen_name: String,
+    location: String,
+    description: String,
+    url: Option<String>,
+    entities: UserEntities,
+    protected: bool,
+    followers_count: i32,
+    friends_count: i32,
+    listed_count: i32,
+    created_at: String,
+    favourites_count: i32,
+    utc_offset: Option<i32>,
+    time_zone: Option<String>,
+    geo_enabled: bool,
+    verified: bool,
+    statuses_count: i32,
+    lang: String,
+    contributors_enabled: bool,
+    is_translator: bool,
+    is_translation_enabled: bool,
+    profile_background_color: String,
+    profile_background_image_url: String,
+    profile_background_image_url_https: String,
+    profile_background_tile: bool,
+    profile_image_url: String,
+    profile_image_url_https: String,
+    profile_banner_url: Option<String> = null,
+    profile_link_color: String,
+    profile_sidebar_border_color: String,
+    profile_sidebar_fill_color: String,
+    profile_text_color: String,
+    profile_use_background_image: bool,
+    default_profile: bool,
+    default_profile_image: bool,
+    following: bool,
+    follow_request_sent: bool,
+    notifications: bool,
+}
+impl Serialize for User;
+impl Deserialize for User;
+
+pub struct Status {
+    metadata: Metadata,
+    created_at: String,
+    id: i64,
+    id_str: String,
+    text: String,
+    source: String,
+    truncated: bool,
+    in_reply_to_status_id: Option<i64>,
+    in_reply_to_status_id_str: Option<String>,
+    in_reply_to_user_id: Option<i64>,
+    in_reply_to_user_id_str: Option<String>,
+    in_reply_to_screen_name: Option<String>,
+    user: User,
+    geo: Option<String>,
+    coordinates: Option<String>,
+    place: Option<String>,
+    contributors: Option<String>,
+    retweeted_status: Option<Status> = null,
+    retweet_count: i32,
+    favorite_count: i32,
+    entities: StatusEntities,
+    favorited: bool,
+    retweeted: bool,
+    possibly_sensitive: bool = false,
+    lang: String,
+}
+impl Serialize for Status;
+impl Deserialize for Status;
+
+pub struct TwitterResponse {
+    pub statuses: List<Status>,
+    pub search_metadata: SearchMetadata,
+}
+impl Serialize for TwitterResponse;
+impl Deserialize for TwitterResponse;

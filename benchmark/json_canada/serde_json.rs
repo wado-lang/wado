@@ -5,22 +5,22 @@
 // JSON data source: https://github.com/miloyip/nativejson-benchmark
 // License: MIT
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct Properties {
     name: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct Geometry {
     #[serde(rename = "type")]
     geom_type: String,
     coordinates: Vec<Vec<Vec<f64>>>,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct Feature {
     #[serde(rename = "type")]
     feat_type: String,
@@ -28,7 +28,7 @@ struct Feature {
     geometry: Geometry,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct FeatureCollection {
     #[serde(rename = "type")]
     collection_type: String,
@@ -109,25 +109,35 @@ fn bench<T, F: FnMut() -> T>(label: &str, work_per_iter: f64, unit: &str, mut f:
     result
 }
 
+fn count_points(fc: &FeatureCollection) -> usize {
+    let mut points = 0usize;
+    for feat in &fc.features {
+        for ring in &feat.geometry.coordinates {
+            points += ring.len();
+        }
+    }
+    points
+}
+
 fn main() {
     let json_data = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/canada.json"))
         .expect("Failed to read canada.json");
     let size = json_data.len();
 
+    let fc: FeatureCollection =
+        serde_json::from_str(&json_data).expect("Failed to parse canada.json");
+
     println!("json-canada: {size} bytes");
 
-    let total_points = bench("Throughput", size as f64, "B", || {
-        let fc: FeatureCollection =
-            serde_json::from_str(&json_data).expect("Failed to parse canada.json");
-        let mut points = 0usize;
-        for feat in &fc.features {
-            for ring in &feat.geometry.coordinates {
-                points += ring.len();
-            }
-        }
-        points
+    bench("Ser", size as f64, "B", || {
+        serde_json::to_vec(&fc).expect("encode").len()
+    });
+
+    let total_points = bench("De", size as f64, "B", || {
+        let fc: FeatureCollection = serde_json::from_str(&json_data).expect("decode");
+        count_points(&fc)
     });
 
     assert_eq!(total_points, 55563);
-    println!("Parsed {total_points} coordinate points per iteration");
+    println!("Round-tripped {total_points} coordinate points per iteration");
 }

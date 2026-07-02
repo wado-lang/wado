@@ -66,14 +66,17 @@ function bench(label, workPerIter, unit, f) {
 }
 
 const jsonData = fs.readFileSync(path.join(__dirname, "twitter.json"), "utf-8");
-const size = jsonData.length;
+const size = Buffer.byteLength(jsonData, "utf-8");
+const obj = JSON.parse(jsonData);
 
 console.log(`json-twitter: ${size} bytes`);
 
-const count = bench("Throughput", size, "B", () => {
+bench("Ser", size, "B", () => JSON.stringify(obj).length);
+
+const count = bench("De", size, "B", () => {
   const resp = JSON.parse(jsonData);
   return resp.statuses.length;
 });
 
 if (count !== 100) throw new Error("assertion failed");
-console.log(`Parsed ${count} statuses per iteration`);
+console.log(`Round-tripped ${count} statuses per iteration`);

@@ -6,7 +6,7 @@
 
 use { Stdout } from "core:cli";
 use { Serialize, Deserialize } from "core:serde";
-use { from_bytes } from "core:json";
+use { to_bytes, from_bytes } from "core:json";
 use { TreeMap } from "core:collections";
 use { MonotonicClock } from "wasi:clocks";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
@@ -25,6 +25,7 @@ struct Event {
     #[serde(rename = "topicIds")]
     topic_ids: List<i64>,
 }
+impl Serialize for Event;
 impl Deserialize for Event;
 
 struct Price {
@@ -34,6 +35,7 @@ struct Price {
     #[serde(rename = "seatCategoryId")]
     seat_category_id: i64,
 }
+impl Serialize for Price;
 impl Deserialize for Price;
 
 struct Area {
@@ -42,6 +44,7 @@ struct Area {
     #[serde(rename = "blockIds")]
     block_ids: List<i64>,
 }
+impl Serialize for Area;
 impl Deserialize for Area;
 
 struct SeatCategory {
@@ -49,6 +52,7 @@ struct SeatCategory {
     #[serde(rename = "seatCategoryId")]
     seat_category_id: i64,
 }
+impl Serialize for SeatCategory;
 impl Deserialize for SeatCategory;
 
 struct Performance {
@@ -66,6 +70,7 @@ struct Performance {
     #[serde(rename = "venueCode")]
     venue_code: String,
 }
+impl Serialize for Performance;
 impl Deserialize for Performance;
 
 struct CitmCatalog {
@@ -90,6 +95,7 @@ struct CitmCatalog {
     #[serde(rename = "venueNames")]
     venue_names: TreeMap<String, String>,
 }
+impl Serialize for CitmCatalog;
 impl Deserialize for CitmCatalog;
 
 fn read_file_bytes(path: String) -> ByteList with Preopens {
@@ -116,40 +122,43 @@ fn read_file_bytes(path: String) -> ByteList with Preopens {
     return buf as ByteList;
 }
 
+fn parse_catalog<B: AsByteSlice>(json_data: B) -> CitmCatalog {
+    return match from_bytes::<CitmCatalog, B>(json_data) {
+        Ok(c) => c,
+        Err(e) => panic(`JSON parse error: {e.message}`),
+    };
+}
+
+fn encode_json(catalog: &CitmCatalog) -> ByteList {
+    return match to_bytes::<CitmCatalog>(catalog) {
+        Ok(b) => b as ByteList,
+        Err(e) => panic(`JSON encode error: {e.message}`),
+    };
+}
+
 test "smoke" {
     // Minimal valid CitmCatalog with empty maps and no events / performances.
-    let counts = parse_counts(
+    let catalog = parse_catalog(
         "{\"areaNames\":{},\"audienceSubCategoryNames\":{},\"blockNames\":{},\"events\":{},\"performances\":[],\"seatCategoryNames\":{},\"subTopicNames\":{},\"subjectNames\":{},\"topicNames\":{},\"topicSubTopics\":{},\"venueNames\":{}}",
     );
-    assert counts.events == 0;
-    assert counts.performances == 0;
-}
-
-struct CatalogCounts {
-    events: i32,
-    performances: i32,
-}
-
-fn parse_counts<B: AsByteSlice>(json_data: B) -> CatalogCounts {
-    let catalog = match from_bytes::<CitmCatalog, B>(json_data) {
-        Ok(c) => c,
-        Err(e) => panic(`Parse error: {e.message}`),
-    };
-    return CatalogCounts {
-        events: catalog.events.len(),
-        performances: catalog.performances.len(),
-    };
+    let bytes = encode_json(&catalog);
+    let back = parse_catalog(bytes.as_byte_slice());
+    assert back.events.len() == 0;
+    assert back.performances.len() == 0;
 }
 
 export fn run() with Stdout, MonotonicClock, Preopens {
     let json_data = read_file_bytes("json_catalog/citm_catalog.json");
+    let json_size = json_data.len();
+    let catalog = parse_catalog(json_data);
+
     let mut b = Benchmark {
         name: "json-catalog",
-        input_size: Option::Some(json_data.len()),
+        input_size: Option::Some(json_size),
     };
 
-    let counts = b.run("", || parse_counts(json_data));
-    assert counts.events == 184;
-    assert counts.performances == 243;
-    b.println(`parsed {counts.events} events, {counts.performances} performances`);
+    b.run("ser", || encode_json(&catalog).len());
+    let events = b.run("de", || parse_catalog(json_data).events.len());
+    assert events == 184;
+    b.println(`round-tripped {events} events`);
 }

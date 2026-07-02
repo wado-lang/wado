@@ -1,137 +1,22 @@
-// JSON benchmark: twitter.json
+// JSON ser/de benchmark over twitter.json (core:json).
+//
+// The complete twitter.json schema (shared with the CBOR benchmark, see
+// `twitter_schema.wado`) is modeled with typed structs, so every field is
+// round-tripped. Both phases operate on byte buffers:
+//   ser: TwitterResponse -> JSON bytes  (core:json to_bytes)
+//   de:  JSON bytes -> TwitterResponse  (core:json from_bytes)
+// Throughput is reported over the original JSON source size (shared denominator
+// across implementations and with the CBOR benchmark).
+//
 // Data source: https://github.com/miloyip/nativejson-benchmark
 // License: MIT
-//
-// Parses a Twitter API search response with 100 statuses.
 
 use { Stdout } from "core:cli";
-use { Serialize, Deserialize } from "core:serde";
-use { from_bytes } from "core:json";
+use { to_bytes, from_bytes } from "core:json";
+use { TwitterResponse } from "./twitter_schema.wado";
 use { MonotonicClock } from "wasi:clocks";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 use { Benchmark } from "core:benchmark";
-
-struct SearchMetadata {
-    #[serde(rename = "completed_in")]
-    completed_in: f64,
-    count: i32,
-    #[serde(rename = "max_id")]
-    max_id: i64,
-    #[serde(rename = "max_id_str")]
-    max_id_str: String,
-    query: String,
-    #[serde(rename = "since_id")]
-    since_id: i64,
-    #[serde(rename = "since_id_str")]
-    since_id_str: String,
-}
-impl Deserialize for SearchMetadata;
-
-struct Metadata {
-    #[serde(rename = "iso_language_code")]
-    iso_language_code: String,
-    #[serde(rename = "result_type")]
-    result_type: String,
-}
-impl Deserialize for Metadata;
-
-struct Url {
-    url: String,
-    #[serde(rename = "expanded_url")]
-    expanded_url: String,
-    #[serde(rename = "display_url")]
-    display_url: String,
-    indices: List<i32>,
-}
-impl Deserialize for Url;
-
-struct Hashtag {
-    text: String,
-    indices: List<i32>,
-}
-impl Deserialize for Hashtag;
-
-struct UserMention {
-    #[serde(rename = "screen_name")]
-    screen_name: String,
-    name: String,
-    id: i64,
-    #[serde(rename = "id_str")]
-    id_str: String,
-    indices: List<i32>,
-}
-impl Deserialize for UserMention;
-
-struct StatusEntities {
-    hashtags: List<Hashtag>,
-    urls: List<Url>,
-    #[serde(rename = "user_mentions")]
-    user_mentions: List<UserMention>,
-}
-impl Deserialize for StatusEntities;
-
-struct UserEntities {
-    description: UserEntityUrls = UserEntityUrls {},
-    url: UserEntityUrls = UserEntityUrls {},
-}
-impl Deserialize for UserEntities;
-
-struct UserEntityUrls {
-    urls: List<Url> = [],
-}
-impl Deserialize for UserEntityUrls;
-
-struct User {
-    id: i64,
-    #[serde(rename = "id_str")]
-    id_str: String,
-    name: String,
-    #[serde(rename = "screen_name")]
-    screen_name: String,
-    description: Option<String> = null,
-    #[serde(rename = "followers_count")]
-    followers_count: i32,
-    #[serde(rename = "friends_count")]
-    friends_count: i32,
-    #[serde(rename = "statuses_count")]
-    statuses_count: i32,
-    #[serde(rename = "created_at")]
-    created_at: String,
-    #[serde(rename = "profile_image_url_https")]
-    profile_image_url_https: String,
-    verified: bool = false,
-    lang: String,
-}
-impl Deserialize for User;
-
-struct Status {
-    metadata: Metadata,
-    #[serde(rename = "created_at")]
-    created_at: String,
-    id: i64,
-    #[serde(rename = "id_str")]
-    id_str: String,
-    text: String,
-    source: String,
-    truncated: bool,
-    user: User,
-    #[serde(rename = "retweet_count")]
-    retweet_count: i32,
-    #[serde(rename = "favorite_count")]
-    favorite_count: i32,
-    entities: StatusEntities,
-    favorited: bool,
-    retweeted: bool,
-    lang: String,
-}
-impl Deserialize for Status;
-
-struct TwitterResponse {
-    statuses: List<Status>,
-    #[serde(rename = "search_metadata")]
-    search_metadata: SearchMetadata,
-}
-impl Deserialize for TwitterResponse;
 
 fn read_file_bytes(path: String) -> ByteList with Preopens {
     let dirs = Preopens::get_directories();
@@ -157,30 +42,42 @@ fn read_file_bytes(path: String) -> ByteList with Preopens {
     return buf as ByteList;
 }
 
-test "smoke" {
-    // Tiny in-memory input; no Preopens needed.
-    let count = parse_statuses(
-        "{\"statuses\":[],\"search_metadata\":{\"completed_in\":0.0,\"count\":0,\"max_id\":0,\"max_id_str\":\"0\",\"query\":\"\",\"since_id\":0,\"since_id_str\":\"0\"}}",
-    );
-    assert count == 0;
+fn parse_twitter<B: AsByteSlice>(json_data: B) -> TwitterResponse {
+    return match from_bytes::<TwitterResponse, B>(json_data) {
+        Ok(r) => r,
+        Err(e) => panic(`JSON parse error: {e.message}`),
+    };
 }
 
-fn parse_statuses<B: AsByteSlice>(json_data: B) -> i32 {
-    let resp = match from_bytes::<TwitterResponse, B>(json_data) {
-        Ok(r) => r,
-        Err(e) => panic(`Parse error: {e.message}`),
+fn encode_json(resp: &TwitterResponse) -> ByteList {
+    return match to_bytes::<TwitterResponse>(resp) {
+        Ok(b) => b as ByteList,
+        Err(e) => panic(`JSON encode error: {e.message}`),
     };
-    return resp.statuses.len();
+}
+
+test "smoke" {
+    // Empty statuses keeps the input small while still exercising the round-trip.
+    let json = "{\"statuses\":[],\"search_metadata\":{\"completed_in\":0.0,\"count\":0,\"max_id\":0,\"max_id_str\":\"0\",\"next_results\":\"\",\"query\":\"\",\"refresh_url\":\"\",\"since_id\":0,\"since_id_str\":\"0\"}}";
+    let resp = parse_twitter(json);
+    let bytes = encode_json(&resp);
+    let back = parse_twitter(bytes.as_byte_slice());
+    assert back.statuses.len() == 0;
+    assert back.search_metadata.count == 0;
 }
 
 export fn run() with Stdout, MonotonicClock, Preopens {
     let json_data = read_file_bytes("json_twitter/twitter.json");
+    let json_size = json_data.len();
+    let resp = parse_twitter(json_data);
+
     let mut b = Benchmark {
         name: "json-twitter",
-        input_size: Option::Some(json_data.len()),
+        input_size: Option::Some(json_size),
     };
 
-    let count = b.run("", || parse_statuses(json_data));
+    b.run("ser", || encode_json(&resp).len());
+    let count = b.run("de", || parse_twitter(json_data).statuses.len());
     assert count == 100;
-    b.println(`parsed {count} total statuses`);
+    b.println(`round-tripped {count} total statuses`);
 }

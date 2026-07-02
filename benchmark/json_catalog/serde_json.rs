@@ -5,11 +5,11 @@
 // JSON data source: https://github.com/miloyip/nativejson-benchmark
 // License: MIT
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::time::Instant;
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct Event {
     #[serde(default)]
     description: Option<String>,
@@ -27,7 +27,7 @@ struct Event {
     topic_ids: Vec<i64>,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct Price {
     amount: i64,
     #[serde(rename = "audienceSubCategoryId")]
@@ -36,7 +36,7 @@ struct Price {
     seat_category_id: i64,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct Area {
     #[serde(rename = "areaId")]
     area_id: i64,
@@ -44,14 +44,14 @@ struct Area {
     block_ids: Vec<i64>,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct SeatCategory {
     areas: Vec<Area>,
     #[serde(rename = "seatCategoryId")]
     seat_category_id: i64,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct Performance {
     #[serde(rename = "eventId")]
     event_id: i64,
@@ -70,7 +70,7 @@ struct Performance {
     venue_code: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct CitmCatalog {
     #[serde(rename = "areaNames")]
     area_names: BTreeMap<String, String>,
@@ -173,18 +173,20 @@ fn main() {
         .expect("Failed to read citm_catalog.json");
     let size = json_data.len();
 
+    let catalog: CitmCatalog =
+        serde_json::from_str(&json_data).expect("Failed to parse citm_catalog.json");
+
     println!("json-catalog: {size} bytes");
 
-    let counts = bench("Throughput", size as f64, "B", || {
-        let catalog: CitmCatalog =
-            serde_json::from_str(&json_data).expect("Failed to parse citm_catalog.json");
-        (catalog.events.len(), catalog.performances.len())
+    bench("Ser", size as f64, "B", || {
+        serde_json::to_vec(&catalog).expect("encode").len()
     });
 
-    assert_eq!(counts.0, 184);
-    assert_eq!(counts.1, 243);
-    println!(
-        "Parsed {} events, {} performances per iteration",
-        counts.0, counts.1
-    );
+    let events = bench("De", size as f64, "B", || {
+        let catalog: CitmCatalog = serde_json::from_str(&json_data).expect("decode");
+        catalog.events.len()
+    });
+
+    assert_eq!(events, 184);
+    println!("Round-tripped {events} events per iteration");
 }
