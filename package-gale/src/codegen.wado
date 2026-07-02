@@ -97,9 +97,6 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // Must run after `assign_atn_call_sites` (its `Repeat` / `Group` rebuild
     // would otherwise reset the freshly stamped decision-site ids).
     assign_atn_decisions(grammar);
-    // Number every retained action / predicate fragment so Stage C codegen
-    // can name its emitted fn and anchor diagnostics. Runs after the ATN
-    // stamps (the rebuild preserves their ids) and before lowering.
     assign_action_ids(grammar);
     normalize_caches(grammar);
     // Pre-size the output buffer from the grammar's rule count so the
@@ -117,10 +114,6 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
     let mut ctx = GenContext::new(&grammar.parser_rules, &lit_tokens);
     ctx.set_trace(options.trace);
-    // Action execution is narrowed to grammars whose action language Gale can
-    // currently emit: the identity translator for `language = Wado`. Java /
-    // Other bodies are a later phase; leaving them off keeps them discarded
-    // (unchanged behavior) rather than mis-emitting host code.
     ctx.set_emit_actions(options.execute_actions && grammar.action_language matches { Wado });
     let lowered = lower(grammar, &lit_tokens, &mut ctx);
     // Build the ATN up front when the grammar needs the simulator, so parser

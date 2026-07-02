@@ -13,7 +13,6 @@ test "find_attr_refs locates bare and member references in order" {
 }
 
 test "find_attr_refs records spans at the dollar sign" {
-    // "x = $ctx;" — `$ctx` starts at index 4, ends at 8.
     let refs = find_attr_refs(&"x = $ctx;");
     assert refs.len() == 1;
     assert refs[0].name == "ctx", `name: {refs[0].name}`;
@@ -39,7 +38,6 @@ test "find_attr_refs skips single-quoted char and block comments" {
 }
 
 test "find_attr_refs skips a literal dollar in backtick text but scans interpolations" {
-    // `$amount` is literal template text (not a ref); `$v` inside {} is a ref.
     let refs = find_attr_refs(&"p.emit(`cost $amount, v={$v} done`)");
     assert refs.len() == 1, `count: {refs.len()}`;
     assert refs[0].name == "v", `name: {refs[0].name}`;
@@ -68,7 +66,6 @@ test "find_attr_refs special names resolve as bare identifiers" {
 }
 
 test "find_attr_refs stops member at a non-identifier after the dot" {
-    // `$a.5` is not a valid member access — capture only `$a`.
     let refs = find_attr_refs(&"$a.5");
     assert refs.len() == 1;
     assert refs[0].name == "a";

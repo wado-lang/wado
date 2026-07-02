@@ -9,7 +9,6 @@ e returns [int v] : ID ;
     let rule = &g.parser_rules[0];
     let body = &" $v = $a.v; ";
     let refs = resolve_attrs(body, rule, &g.parser_rules).unwrap();
-    // $v (returns attr), $a (rule label), .v (a's returns field)
     assert refs.len() == 2, `count: {refs.len()}`;
     assert refs[0].name == "v" && refs[0].target matches { RuleAttr }, "v is a returns attr";
     assert refs[1].name == "a" && refs[1].target matches { RuleLabel }, "a is a rule label";
@@ -68,10 +67,8 @@ test "resolve_attrs errors on an unknown rule member" {
 r : e ;
 e returns [int v] : ID ;
 ").unwrap();
-    // `.w` is not a field of e's returns nor a rule pseudo-member.
     let res = resolve_attrs(&" $e.w ", &g.parser_rules[0], &g.parser_rules);
     assert res.is_err(), "unknown rule member must be an error";
-    // `.v` (declared) and `.start` (pseudo) both resolve.
     assert resolve_attrs(&" $e.v ", &g.parser_rules[0], &g.parser_rules).is_ok();
     assert resolve_attrs(&" $e.start ", &g.parser_rules[0], &g.parser_rules).is_ok();
 }

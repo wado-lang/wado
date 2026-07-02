@@ -9,7 +9,6 @@ e returns [int v] : ID ;
 ").unwrap();
     let body = &" $v = $a.v; ";
     let refs = resolve_attrs(body, &g.parser_rules[0], &g.parser_rules).unwrap();
-    // Codegen would map $v -> vals.v and $a.v -> a.v (rule-label vals field).
     let repls: List<String> = ["vals.v", "a.v"];
     let out = splice_attrs(body, &refs, &repls);
     assert out == " vals.v = a.v; ", `out: '{out}'`;
@@ -25,7 +24,6 @@ test "splice_attrs handles adjacent and end-anchored references" {
     let g = parse("grammar T;
 r : x=ID ;
 ").unwrap();
-    // Two refs to $x.text back to back.
     let body = &"$x.text$x.text";
     let refs = resolve_attrs(body, &g.parser_rules[0], &g.parser_rules).unwrap();
     assert refs.len() == 2;

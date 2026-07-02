@@ -92,8 +92,6 @@ fn resolve_one(
     env: &AttrEnv,
     rules: &List<ParserRule>,
 ) -> Result<ResolvedAttr, String> {
-    // Labels shadow same-named element refs (ANTLR resolves an explicit
-    // label first).
     for let lab of &env.labels {
         if lab.name == r.name {
             let target = if lab.list {
@@ -156,7 +154,6 @@ fn check_member(
         TokenRef => is_token_member(&member),
         RuleLabel => is_rule_member(&member, rule_name, rules),
         RuleRef => is_rule_member(&member, rule_name, rules),
-        // `$text.foo` etc. — specials and scalar attrs are leaves.
         ParserSpecial => false,
         LexerSpecial => false,
         RuleAttr => false,

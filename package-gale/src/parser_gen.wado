@@ -175,9 +175,6 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // `follow_yields` / `FollowArg`). The follow-mask globals are
     // emitted by `gen_follow_mask_globals` at the end of codegen.
     gen_parse_entry(w, lowered, ctx);
-    // Any stamped parser action codegen did not handle (nested group, LR
-    // suffix, single-token multi-alt, multi-alt prequel) is surfaced loudly
-    // rather than silently discarded.
     warn_unhandled_actions(grammar, ctx);
 }
 
@@ -308,8 +305,6 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
 fn gen_parse_rule_entry(w: &mut CodeWriter, rule: &Rule, ctx: &GenContext) {
     let header = rule_header(rule);
     w.begin(&`pub fn parse_{header.snake_name}(input: &String, max_errors: i32 = i32::MAX) -> ParseResult`);
-    // A value-channel entry returns `<Rule>Vals`; the closure must yield `()`
-    // to match `_run_parse_entry`'s `fn(&mut Parser)`, so discard it.
     let call = `_parse_{header.snake_name}(p)`;
     let entry = if entry_returns_vals(ctx, &header.name) {
         `|p: &mut Parser| \{ let _ = {call}; \}`;
@@ -389,8 +384,6 @@ fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar) {
 
 fn gen_vals_fields(w: &mut CodeWriter, decls: &List<AttrDecl>) {
     for let d of decls {
-        // Fields with no Wado default are skipped (a reference to one is a
-        // loud error in the translator), so the struct default-constructs.
         if !field_in_vals(d) {
             continue;
         }
@@ -463,7 +456,6 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_acti
     // against it unchanged.
     s.add_field(&"b", &"TreeBuilder");
     s.add_field(&"diagnostics", &"List<Diagnostic>");
-    // Action-emitted text buffer (Stage C), surfaced on `ParseResult.output`.
     if emit_actions {
         s.add_field(&"output", &"String");
     }
@@ -503,8 +495,6 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_acti
         w.end();
         w.blank();
 
-        // `$x.text` — the matched text of a token, addressed by its stream
-        // index (what `expect` / `match_*` return and the caller bound).
         let mut ftt = FnSpec::new("token_text");
         ftt.set_receiver(&"&self");
         ftt.add_param(&"i", &"i32");
@@ -2449,8 +2439,6 @@ fn gen_rule_entry_wrapper(
     needs_atn: bool,
     result_type: &String,
 ) {
-    // A value-channel rule returns `<Rule>Vals`; the wrapper captures the
-    // inner body's result and returns it after closing the node.
     let returns_vals = *result_type != "()";
     let mut f = FnSpec::new(outer_name);
     f.add_param(&"p", &"&mut Parser");
@@ -2559,13 +2547,9 @@ fn gen_parse_fn_simple_named(
     f.set_return_type(&rule_result_type_for(rule, ctx));
     f.emit_begin(w);
     w.line(&"let start = p.peek_start();");
-    // Value channel: a `vals` local the rule's actions read/write via `$v`,
-    // returned so callers can read `$a.v`.
     if ctx.emit_actions() && rule_returns_vals(rule) {
         w.line(&`let mut vals = {vals_struct_name(rule)} \{\};`);
     }
-    // `@init` runs at rule entry, before the first decision (after `vals`
-    // so a prequel action can seed the value channel).
     if ctx.emit_actions() {
         if let Some(a) = &rule.init_action {
             gen_action_body(w, a, ctx);
@@ -2898,7 +2882,6 @@ fn gen_alt_body(
     }
     gen_alt_elements(w, &alt.elements, &body.ops, &alt.actions, ctx);
 
-    // `@after` runs after the body, before the node is finished.
     if ctx.emit_actions() {
         if let Some(a) = after_action {
             gen_action_body(w, a, ctx);
@@ -2907,8 +2890,7 @@ fn gen_alt_body(
 
     // the alt's terminals / subtrees already appended to the
     // builder via the Parser methods, so there is no struct to assemble — the
-    // rule wrapper's `finish_node` closes the node. A value-channel rule
-    // returns its `vals`; every other rule returns `()`.
+    // rule wrapper's `finish_node` closes the node.
     if ctx.emit_actions() && current_rule_returns_vals(ctx) {
         w.line(&"return vals;");
     } else {
@@ -3068,8 +3050,6 @@ fn gen_alt_elements(
             panic("gen_alt_elements: unreachable op shape — every Op variant is handled");
         }
     }
-    // Alt-final actions (`before_index == elements.len()`), e.g. a trailing
-    // `{ println($e.v); }`.
     gen_alt_actions_at(w, actions, elements.len(), ctx);
 }
 
@@ -3088,11 +3068,6 @@ fn gen_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before: i32
         match a.kind {
             Action => gen_action_body(w, &a.source, ctx),
             Predicate => {
-                // An alt-initial predicate in a multi-alt rule is a
-                // prediction gate (it chooses which alt to take). Gale's
-                // prediction ignores predicates, so emitting it as an inline
-                // guard here could reject a valid parse; surface it loudly
-                // until prediction-time gating lands (Phase 2 proper).
                 if before == 0 && current_rule_is_multi_alt(ctx) {
                     ctx.mark_action_seen(a.source.action_id);
                     ctx.warn(

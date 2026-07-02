@@ -16,14 +16,10 @@ use wa from "./grammars/wado_action.g4"
 test "wado actions emit into ParseResult.output in execution order" {
     let result = wa::parse(&"a b");
     assert result.ok(), "clean parse";
-    // Mid-alt `{p.emit("hi")}` then alt-final `{p.emit("!")}`.
     assert result.output == "hi!", `output: '{result.output}'`;
 }
 
 test "recovery that still traverses an action executes it" {
-    // Missing `A`: error recovery inserts it, so the op path still reaches
-    // both actions — they run, matching the design's "executes iff the op
-    // path reaches it normally".
     let result = wa::parse(&"b");
     assert !result.ok(), "recovered parse reports the missing token";
     assert result.output == "hi!", `output on recovered parse: '{result.output}'`;

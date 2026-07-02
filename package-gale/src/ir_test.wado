@@ -30,7 +30,6 @@ TOK : 'a' {more();} 'b' ;
     assign_action_ids(&mut g);
     let rule = &g.parser_rules[0];
     let alt = &rule.alternatives[0];
-    // @init is stamped first (id 0), then the alt actions in source order.
     if let Some(a) = &rule.init_action {
         assert a.action_id == 0, `init id: {a.action_id}`;
     } else {
@@ -43,10 +42,8 @@ TOK : 'a' {more();} 'b' ;
     } else {
         panic("expected @after");
     }
-    // Lexer alt action and named action are also stamped.
     assert g.lexer_rules[0].body[0].actions[0].source.action_id >= 0, "lexer action stamped";
     assert g.named_actions[0].body.action_id >= 0, "named action stamped";
-    // Collect every stamped id and assert global uniqueness.
     let mut ids: List<i32> = [];
     if let Some(a) = &rule.init_action { ids.push(a.action_id); }
     for let act of &alt.actions { ids.push(act.source.action_id); }
