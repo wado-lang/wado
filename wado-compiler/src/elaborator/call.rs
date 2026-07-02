@@ -2029,8 +2029,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // risk a misaligned substitution.
             return;
         }
+        // A slot bound to an enclosing scope's own type param is a caller
+        // forwarding its generics (`fn outer<T>() { defaulted(x) }` where
+        // `x: T`); monomorphization resolves it, so leave it — replacing it
+        // with the default would wrongly pin it to the default type. Mirrors
+        // the `scope_params` guard in `defer_or_report_uninferred_fn_type_args`.
+        let scope_params: Vec<TypeId> = self
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .values()
+            .map(|&(_, tid)| tid)
+            .collect();
         for (i, slot) in type_args.iter_mut().enumerate() {
             if self.is_unbound_type_param(*slot)
+                && !scope_params.contains(slot)
                 && let Some(default_ty) = defaults[i]
             {
                 *slot = default_ty;
