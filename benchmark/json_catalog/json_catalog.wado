@@ -39,34 +39,20 @@ fn read_file_bytes(path: String) -> ByteList with Preopens {
     return buf as ByteList;
 }
 
-fn parse_catalog<B: AsByteSlice>(json_data: B) -> CitmCatalog {
-    return match from_bytes::<CitmCatalog, B>(json_data) {
-        Ok(c) => c,
-        Err(e) => panic(`JSON parse error: {e.message}`),
-    };
-}
-
-fn encode_json(catalog: &CitmCatalog) -> ByteList {
-    return match to_bytes::<CitmCatalog>(catalog) {
-        Ok(b) => b as ByteList,
-        Err(e) => panic(`JSON encode error: {e.message}`),
-    };
-}
-
 test "smoke" {
     // Minimal valid CitmCatalog with empty maps and no events / performances.
-    let catalog = parse_catalog(
+    let catalog = from_bytes::<CitmCatalog, _>(
         "{\"areaNames\":{},\"audienceSubCategoryNames\":{},\"blockNames\":{},\"events\":{},\"performances\":[],\"seatCategoryNames\":{},\"subTopicNames\":{},\"subjectNames\":{},\"topicNames\":{},\"topicSubTopics\":{},\"venueNames\":{}}",
-    );
-    let bytes = encode_json(&catalog);
-    let back = parse_catalog(bytes.as_byte_slice());
+    ).unwrap();
+    let bytes = to_bytes::<CitmCatalog>(&catalog).unwrap();
+    let back = from_bytes::<CitmCatalog, _>(bytes).unwrap();
     assert event_count(&back) == 0;
 }
 
 export fn run() with Stdout, MonotonicClock, Preopens {
     let json_data = read_file_bytes("json_catalog/citm_catalog.json");
     let json_size = json_data.len();
-    let catalog = parse_catalog(json_data);
+    let catalog = from_bytes::<CitmCatalog, _>(json_data).unwrap();
 
     let mut b = Benchmark {
         name: "json-catalog",
@@ -75,8 +61,8 @@ export fn run() with Stdout, MonotonicClock, Preopens {
 
     assert performance_count(&catalog) == 243;
 
-    b.run("ser", || encode_json(&catalog).len());
-    let events = b.run("de", || event_count(&parse_catalog(json_data)));
+    b.run("ser", || to_bytes::<CitmCatalog>(&catalog).unwrap().len());
+    let events = b.run("de", || event_count(&from_bytes::<CitmCatalog, _>(json_data).unwrap()));
     assert events == 184;
     b.println(`round-tripped {events} events`);
 }

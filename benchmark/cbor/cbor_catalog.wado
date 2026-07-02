@@ -44,44 +44,23 @@ fn read_file_bytes(path: String) -> ByteList with Preopens {
     return buf as ByteList;
 }
 
-fn parse_catalog<B: AsByteSlice>(json_data: B) -> CitmCatalog {
-    return match json_from_bytes::<CitmCatalog, B>(json_data) {
-        Ok(c) => c,
-        Err(e) => panic(`JSON parse error: {e.message}`),
-    };
-}
-
-fn encode_cbor(catalog: &CitmCatalog) -> ByteList {
-    return match cbor_to_bytes::<CitmCatalog>(catalog) {
-        Ok(b) => b,
-        Err(e) => panic(`CBOR encode error: {e.message}`),
-    };
-}
-
-fn decode_cbor<S: AsByteSlice>(bytes: S) -> CitmCatalog {
-    return match cbor_from_bytes::<CitmCatalog, S>(bytes) {
-        Ok(c) => c,
-        Err(e) => panic(`CBOR decode error: {e.message}`),
-    };
-}
-
 test "smoke" {
-    let catalog = parse_catalog(
+    let catalog = json_from_bytes::<CitmCatalog, _>(
         "{\"areaNames\":{},\"audienceSubCategoryNames\":{},\"blockNames\":{},\"events\":{},\"performances\":[],\"seatCategoryNames\":{},\"subTopicNames\":{},\"subjectNames\":{},\"topicNames\":{},\"topicSubTopics\":{},\"venueNames\":{}}",
-    );
-    let cbor = encode_cbor(&catalog);
-    let back = decode_cbor(cbor);
+    ).unwrap();
+    let cbor = cbor_to_bytes::<CitmCatalog>(&catalog).unwrap();
+    let back = cbor_from_bytes::<CitmCatalog, _>(cbor).unwrap();
     assert event_count(&back) == 0;
 }
 
 export fn run() with Stdout, MonotonicClock, Preopens {
     let json_data = read_file_bytes("json_catalog/citm_catalog.json");
     let json_size = json_data.len();
-    let catalog = parse_catalog(json_data);
+    let catalog = json_from_bytes::<CitmCatalog, _>(json_data).unwrap();
 
     assert performance_count(&catalog) == 243;
 
-    let cbor = encode_cbor(&catalog);
+    let cbor = cbor_to_bytes::<CitmCatalog>(&catalog).unwrap();
 
     let mut b = Benchmark {
         name: "cbor-catalog",
@@ -89,8 +68,8 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     };
     b.println(`{json_size} bytes JSON -> {cbor.len()} bytes CBOR payload`);
 
-    b.run("ser", || encode_cbor(&catalog).len());
-    let events = b.run("de", || event_count(&decode_cbor(cbor)));
+    b.run("ser", || cbor_to_bytes::<CitmCatalog>(&catalog).unwrap().len());
+    let events = b.run("de", || event_count(&cbor_from_bytes::<CitmCatalog, _>(cbor).unwrap()));
     assert events == 184;
     b.println(`round-tripped {events} events`);
 }

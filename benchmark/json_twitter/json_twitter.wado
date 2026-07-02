@@ -42,26 +42,12 @@ fn read_file_bytes(path: String) -> ByteList with Preopens {
     return buf as ByteList;
 }
 
-fn parse_twitter<B: AsByteSlice>(json_data: B) -> TwitterResponse {
-    return match from_bytes::<TwitterResponse, B>(json_data) {
-        Ok(r) => r,
-        Err(e) => panic(`JSON parse error: {e.message}`),
-    };
-}
-
-fn encode_json(resp: &TwitterResponse) -> ByteList {
-    return match to_bytes::<TwitterResponse>(resp) {
-        Ok(b) => b as ByteList,
-        Err(e) => panic(`JSON encode error: {e.message}`),
-    };
-}
-
 test "smoke" {
     // Empty statuses keeps the input small while still exercising the round-trip.
     let json = "{\"statuses\":[],\"search_metadata\":{\"completed_in\":0.0,\"count\":0,\"max_id\":0,\"max_id_str\":\"0\",\"next_results\":\"\",\"query\":\"\",\"refresh_url\":\"\",\"since_id\":0,\"since_id_str\":\"0\"}}";
-    let resp = parse_twitter(json);
-    let bytes = encode_json(&resp);
-    let back = parse_twitter(bytes.as_byte_slice());
+    let resp = from_bytes::<TwitterResponse, _>(json).unwrap();
+    let bytes = to_bytes::<TwitterResponse>(&resp).unwrap();
+    let back = from_bytes::<TwitterResponse, _>(bytes).unwrap();
     assert back.statuses.len() == 0;
     assert back.search_metadata.count == 0;
 }
@@ -69,15 +55,15 @@ test "smoke" {
 export fn run() with Stdout, MonotonicClock, Preopens {
     let json_data = read_file_bytes("json_twitter/twitter.json");
     let json_size = json_data.len();
-    let resp = parse_twitter(json_data);
+    let resp = from_bytes::<TwitterResponse, _>(json_data).unwrap();
 
     let mut b = Benchmark {
         name: "json-twitter",
         input_size: Option::Some(json_size),
     };
 
-    b.run("ser", || encode_json(&resp).len());
-    let count = b.run("de", || parse_twitter(json_data).statuses.len());
+    b.run("ser", || to_bytes::<TwitterResponse>(&resp).unwrap().len());
+    let count = b.run("de", || from_bytes::<TwitterResponse, _>(json_data).unwrap().statuses.len());
     assert count == 100;
     b.println(`round-tripped {count} total statuses`);
 }

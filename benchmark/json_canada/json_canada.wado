@@ -39,42 +39,28 @@ fn read_file_bytes(path: String) -> ByteList with Preopens {
     return buf as ByteList;
 }
 
-fn parse_canada<B: AsByteSlice>(json_data: B) -> FeatureCollection {
-    return match from_bytes::<FeatureCollection, B>(json_data) {
-        Ok(fc) => fc,
-        Err(e) => panic(`JSON parse error: {e.message}`),
-    };
-}
-
-fn encode_json(fc: &FeatureCollection) -> ByteList {
-    return match to_bytes::<FeatureCollection>(fc) {
-        Ok(b) => b as ByteList,
-        Err(e) => panic(`JSON encode error: {e.message}`),
-    };
-}
-
 test "smoke" {
     // Tiny GeoJSON FeatureCollection with one feature, two coordinates.
-    let fc = parse_canada(
+    let fc = from_bytes::<FeatureCollection, _>(
         "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"name\":\"x\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[0.0,0.0],[1.0,1.0]]]}}]}",
-    );
-    let bytes = encode_json(&fc);
-    let back = parse_canada(bytes.as_byte_slice());
+    ).unwrap();
+    let bytes = to_bytes::<FeatureCollection>(&fc).unwrap();
+    let back = from_bytes::<FeatureCollection, _>(bytes).unwrap();
     assert count_points(&back) == 2;
 }
 
 export fn run() with Stdout, MonotonicClock, Preopens {
     let json_data = read_file_bytes("json_canada/canada.json");
     let json_size = json_data.len();
-    let fc = parse_canada(json_data);
+    let fc = from_bytes::<FeatureCollection, _>(json_data).unwrap();
 
     let mut b = Benchmark {
         name: "json-canada",
         input_size: Option::Some(json_size),
     };
 
-    b.run("ser", || encode_json(&fc).len());
-    let total_points = b.run("de", || count_points(&parse_canada(json_data)));
+    b.run("ser", || to_bytes::<FeatureCollection>(&fc).unwrap().len());
+    let total_points = b.run("de", || count_points(&from_bytes::<FeatureCollection, _>(json_data).unwrap()));
     assert total_points == 55563;
     b.println(`round-tripped {total_points} coordinate points`);
 }
