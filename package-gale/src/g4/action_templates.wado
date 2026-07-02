@@ -51,76 +51,81 @@ pub fn expand_action_templates(src: &String) -> ExpandOutcome {
     let mut i = 0;
     while i < n {
         let c = chars[i];
-        if c == '\'' {
-            let end = scan_string(&chars, i);
-            push_span(&mut out, &chars, i, end);
-            i = end;
-            continue;
-        }
-        if c == '[' {
+        match c {
+            // A `'...'` grammar string is copied verbatim (never a template).
+            '\'' => {
+                let end = scan_string(&chars, i);
+                push_span(&mut out, &chars, i, end);
+                i = end;
+                continue;
+            },
             // A `[...]` region is either a lexer char class (`[a-z']`, which
             // may contain a bare `'`) or a rule arg-action / `returns` /
             // `locals` bracket (`[<StringList()> x]`, which may contain a
-            // template). Walk the region expanding templates but treating
-            // `'` as a literal char, so an apostrophe in a class never opens
-            // a string that would swallow a later `<template>`.
-            out.push(c);
-            i += 1;
-            let mut depth = 1;
-            while i < n && depth > 0 {
-                let d = chars[i];
-                if d == '\\' && i + 1 < n {
-                    out.push(d);
-                    out.push(chars[i + 1]);
-                    i += 2;
-                    continue;
-                }
-                if d == '<' && is_template_start(&chars, i) {
-                    match eval_template(&chars, i) {
-                        Ok(expanded) => {
-                            out.push_str(&expanded.text);
-                            i = expanded.end;
-                            continue;
-                        },
-                        Err(reason) => {
-                            warnings.push(reason);
-                        },
-                    }
-                }
-                if d == '[' {
-                    depth += 1;
-                } else if d == ']' {
-                    depth -= 1;
-                }
-                out.push(d);
+            // template). Walk it expanding templates but treating `'` as a
+            // literal char, so an apostrophe never opens a string that would
+            // swallow a later `<template>`.
+            '[' => {
+                out.push(c);
                 i += 1;
-            }
-            continue;
-        }
-        if c == '/' && i + 1 < n && chars[i + 1] == '/' {
-            let end = scan_line_comment(&chars, i);
-            push_span(&mut out, &chars, i, end);
-            i = end;
-            continue;
-        }
-        if c == '/' && i + 1 < n && chars[i + 1] == '*' {
-            let end = scan_block_comment(&chars, i);
-            push_span(&mut out, &chars, i, end);
-            i = end;
-            continue;
-        }
-        if c == '<' && is_template_start(&chars, i) {
-            match eval_template(&chars, i) {
-                Ok(expanded) => {
-                    out.push_str(&expanded.text);
-                    i = expanded.end;
-                    continue;
-                },
-                Err(reason) => {
-                    warnings.push(reason);
-                    // Fall through: emit '<' and rescan the rest verbatim.
-                },
-            }
+                let mut depth = 1;
+                while i < n && depth > 0 {
+                    let d = chars[i];
+                    if d == '\\' && i + 1 < n {
+                        out.push(d);
+                        out.push(chars[i + 1]);
+                        i += 2;
+                        continue;
+                    }
+                    if d == '<' && is_template_start(&chars, i) {
+                        match eval_template(&chars, i) {
+                            Ok(expanded) => {
+                                out.push_str(&expanded.text);
+                                i = expanded.end;
+                                continue;
+                            },
+                            Err(reason) => {
+                                warnings.push(reason);
+                            },
+                        }
+                    }
+                    if d == '[' {
+                        depth += 1;
+                    } else if d == ']' {
+                        depth -= 1;
+                    }
+                    out.push(d);
+                    i += 1;
+                }
+                continue;
+            },
+            '/' && i + 1 < n && chars[i + 1] == '/' => {
+                let end = scan_line_comment(&chars, i);
+                push_span(&mut out, &chars, i, end);
+                i = end;
+                continue;
+            },
+            '/' && i + 1 < n && chars[i + 1] == '*' => {
+                let end = scan_block_comment(&chars, i);
+                push_span(&mut out, &chars, i, end);
+                i = end;
+                continue;
+            },
+            '<' && is_template_start(&chars, i) => {
+                match eval_template(&chars, i) {
+                    Ok(expanded) => {
+                        out.push_str(&expanded.text);
+                        i = expanded.end;
+                        continue;
+                    },
+                    Err(reason) => {
+                        // Fall through: emit '<' and rescan the rest verbatim.
+                        warnings.push(reason);
+                    },
+                }
+            },
+            _ => {
+            },
         }
         out.push(c);
         i += 1;
@@ -272,38 +277,37 @@ fn eval_arg(chars: &List<char>, start: i32) -> Result<Expanded, String> {
 /// The Java-target expansion table. `recv` is the chained receiver
 /// (`X:F()` passes X's expansion), `args` are the evaluated arguments.
 fn expand_helper(name: &String, recv: &Option<String>, args: &List<String>) -> Result<String, String> {
-    // Print helpers accept the value either chained or as the argument.
-    if *name == "writeln" {
-        let v = chain_or_arg(recv, args, name)?;
-        return Result::Ok(`System.out.println({v});`);
-    }
-    if *name == "write" {
-        let v = chain_or_arg(recv, args, name)?;
-        return Result::Ok(`System.out.print({v});`);
-    }
-
-    // Chained combinators (require a receiver).
-    if *name == "Invoke_pred" {
-        let r = require_receiver(recv, name)?;
-        return Result::Ok(`this.pred({r})`);
-    }
-    if *name == "Assert" {
-        let r = require_receiver(recv, name)?;
-        return Result::Ok(`assert {r};`);
-    }
-    if *name == "Concat" {
-        let r = require_receiver(recv, name)?;
-        require_args(args, 1, name)?;
-        return Result::Ok(`{r}{args[0]}`);
-    }
-    if *name == "Not" {
-        let r = require_receiver(recv, name)?;
-        return Result::Ok(`!({r})`);
-    }
-    if *name == "SubContextLocal" {
-        let r = require_receiver(recv, name)?;
-        require_args(args, 2, name)?;
-        return Result::Ok(`{r}.{args[0]}.{args[1]}`);
+    // Receiver-capable helpers: the print helpers take the value chained or
+    // as a single argument; the combinators require a chained receiver. A
+    // non-match falls through to the receiver-free table below.
+    match *name {
+        "writeln" => {
+            return Result::Ok(`System.out.println({chain_or_arg(recv, args, name)?});`);
+        },
+        "write" => {
+            return Result::Ok(`System.out.print({chain_or_arg(recv, args, name)?});`);
+        },
+        "Invoke_pred" => {
+            return Result::Ok(`this.pred({require_receiver(recv, name)?})`);
+        },
+        "Assert" => {
+            return Result::Ok(`assert {require_receiver(recv, name)?};`);
+        },
+        "Not" => {
+            return Result::Ok(`!({require_receiver(recv, name)?})`);
+        },
+        "Concat" => {
+            let r = require_receiver(recv, name)?;
+            require_args(args, 1, name)?;
+            return Result::Ok(`{r}{args[0]}`);
+        },
+        "SubContextLocal" => {
+            let r = require_receiver(recv, name)?;
+            require_args(args, 2, name)?;
+            return Result::Ok(`{r}.{args[0]}.{args[1]}`);
+        },
+        _ => {
+        },
     }
 
     // Everything below is receiver-free.
@@ -311,156 +315,126 @@ fn expand_helper(name: &String, recv: &Option<String>, args: &List<String>) -> R
         return Result::Err(`template helper '{*name}' does not take a chained receiver`);
     }
 
-    if *name == "True" {
-        return Result::Ok("true");
-    }
-    if *name == "False" {
-        return Result::Ok("false");
-    }
-    if *name == "Pass" {
-        return Result::Ok("");
-    }
-    if *name == "ToStringTree" {
-        require_args(args, 1, name)?;
-        return Result::Ok(`{args[0]}.toStringTree(this)`);
-    }
-    if *name == "InputText" {
-        return Result::Ok("_input.getText()");
-    }
-    if *name == "Text" {
-        return Result::Ok("getText()");
-    }
-    if *name == "PlusText" {
-        require_args(args, 1, name)?;
-        return Result::Ok(`"{args[0]}" + getText()`);
-    }
-    if *name == "Column" {
-        return Result::Ok("getCharPositionInLine()");
-    }
-    if *name == "TokenStartColumnEquals" {
-        require_args(args, 1, name)?;
-        return Result::Ok(`_tokenStartCharPositionInLine == {args[0]}`);
-    }
-    if *name == "LL_EXACT_AMBIG_DETECTION" {
-        return Result::Ok("getInterpreter().setPredictionMode(PredictionMode.LL_EXACT_AMBIG_DETECTION);");
-    }
-    if *name == "DumpDFA" {
-        return Result::Ok("dumpDFA();");
-    }
-    if *name == "BuildParseTrees" {
-        return Result::Ok("setBuildParseTree(true);");
-    }
-    if *name == "BailErrorStrategy" {
-        return Result::Ok("setErrorHandler(new BailErrorStrategy());");
-    }
-    if *name == "GetExpectedTokenNames" {
-        return Result::Ok("getExpectedTokens().toString(getVocabulary())");
-    }
-    if *name == "Declare_pred" {
-        return Result::Ok("boolean pred(boolean v) {\n\tSystem.out.println(\"eval=\" + v);\n\treturn v;\n}");
-    }
-    if *name == "Declare_foo" {
-        return Result::Ok("public void foo() {\n\tSystem.out.println(\"foo\");\n}");
-    }
-    if *name == "Invoke_foo" {
-        return Result::Ok("this.foo();");
-    }
-    if *name == "DeclareContextListGettersFunction" {
+    return match *name {
+        // Constants.
+        "True" => Result::Ok("true"),
+        "False" => Result::Ok("false"),
+        "Pass" => Result::Ok(""),
+        "InputText" => Result::Ok("_input.getText()"),
+        "Text" => Result::Ok("getText()"),
+        "Column" => Result::Ok("getCharPositionInLine()"),
+        "StringType" => Result::Ok("String"),
+        "StringList" => Result::Ok("List<String>"),
+        "LL_EXACT_AMBIG_DETECTION" => Result::Ok(
+            "getInterpreter().setPredictionMode(PredictionMode.LL_EXACT_AMBIG_DETECTION);",
+        ),
+        "DumpDFA" => Result::Ok("dumpDFA();"),
+        "BuildParseTrees" => Result::Ok("setBuildParseTree(true);"),
+        "BailErrorStrategy" => Result::Ok("setErrorHandler(new BailErrorStrategy());"),
+        "GetExpectedTokenNames" => Result::Ok("getExpectedTokens().toString(getVocabulary())"),
+        "Invoke_foo" => Result::Ok("this.foo();"),
+        "Declare_pred" => Result::Ok("boolean pred(boolean v) {\n\tSystem.out.println(\"eval=\" + v);\n\treturn v;\n}"),
+        "Declare_foo" => Result::Ok("public void foo() {\n\tSystem.out.println(\"foo\");\n}"),
         // Compile-time check that the rule context exposes list getters.
-        return Result::Ok("void foo() {\n\tSContext s = null;\n\ts.a();\n\ts.b();\n}");
-    }
-    if *name == "AssertIsList" {
+        "DeclareContextListGettersFunction" => Result::Ok("void foo() {\n\tSContext s = null;\n\ts.a();\n\ts.b();\n}"),
+        // One argument.
+        "ToStringTree" => {
+            require_args(args, 1, name)?;
+            Result::Ok(`{args[0]}.toStringTree(this)`);
+        },
+        "PlusText" => {
+            require_args(args, 1, name)?;
+            Result::Ok(`"{args[0]}" + getText()`);
+        },
+        "TokenStartColumnEquals" => {
+            require_args(args, 1, name)?;
+            Result::Ok(`_tokenStartCharPositionInLine == {args[0]}`);
+        },
         // Compile-time check that the expression has a List type.
-        require_args(args, 1, name)?;
-        return Result::Ok(`java.util.List<?> __assertIsList = {args[0]};`);
-    }
-    if *name == "Cast" {
-        require_args(args, 2, name)?;
-        return Result::Ok(`(({args[0]}){args[1]})`);
-    }
-    if *name == "ContextRuleFunction" {
-        require_args(args, 2, name)?;
-        return Result::Ok(`{args[0]}.{args[1]}`);
-    }
-    if *name == "ContextListFunction" {
-        require_args(args, 2, name)?;
-        return Result::Ok(`{args[0]}.{args[1]}()`);
-    }
-    if *name == "Production" || *name == "Result" || *name == "VarRef" {
-        require_args(args, 1, name)?;
-        return Result::Ok(args[0]);
-    }
-    if *name == "ParserToken" {
-        require_args(args, 2, name)?;
-        return Result::Ok(`{args[0]}.{args[1]}`);
-    }
-    if *name == "LANotEquals" {
-        require_args(args, 2, name)?;
-        return Result::Ok(`_input.LA({args[0]}) != {args[1]}`);
-    }
-    if *name == "TextEquals" {
-        require_args(args, 1, name)?;
-        return Result::Ok(`getText().equals("{args[0]}")`);
-    }
-    if *name == "LTEquals" {
-        require_args(args, 2, name)?;
-        return Result::Ok(`_input.LT({args[0]}).getText().equals({args[1]})`);
-    }
-    if *name == "ValEquals" {
-        require_args(args, 2, name)?;
-        return Result::Ok(`{args[0]} == {args[1]}`);
-    }
-    if *name == "AssignLocal" {
-        require_args(args, 2, name)?;
-        return Result::Ok(`{args[0]} = {args[1]};`);
-    }
-    if *name == "InitIntVar" || *name == "InitIntMember" {
-        require_args(args, 2, name)?;
-        return Result::Ok(`int {args[0]} = {args[1]};`);
-    }
-    if *name == "InitBooleanMember" {
-        require_args(args, 2, name)?;
-        return Result::Ok(`boolean {args[0]} = {args[1]};`);
-    }
-    if *name == "GetMember" {
-        require_args(args, 1, name)?;
-        return Result::Ok(`this.{args[0]}`);
-    }
-    if *name == "SetMember" {
-        require_args(args, 2, name)?;
-        return Result::Ok(`this.{args[0]} = {args[1]};`);
-    }
-    if *name == "AddMember" {
-        require_args(args, 2, name)?;
-        return Result::Ok(`this.{args[0]} += {args[1]};`);
-    }
-    if *name == "MemberEquals" {
-        require_args(args, 2, name)?;
-        return Result::Ok(`this.{args[0]} == {args[1]}`);
-    }
-    if *name == "ModMemberEquals" {
-        require_args(args, 3, name)?;
-        return Result::Ok(`this.{args[0]} % {args[1]} == {args[2]}`);
-    }
-    if *name == "ModMemberNotEquals" {
-        require_args(args, 3, name)?;
-        return Result::Ok(`this.{args[0]} % {args[1]} != {args[2]}`);
-    }
-    if *name == "IntArg" {
-        require_args(args, 1, name)?;
-        return Result::Ok(`int {args[0]}`);
-    }
-    if *name == "StringType" {
-        return Result::Ok("String");
-    }
-    if *name == "StringList" {
-        return Result::Ok("List<String>");
-    }
-    if *name == "Append" || *name == "AppendStr" {
-        require_args(args, 2, name)?;
-        return Result::Ok(`{args[0]} + {args[1]}`);
-    }
-    return Result::Err(`unknown template helper '{*name}'`);
+        "AssertIsList" => {
+            require_args(args, 1, name)?;
+            Result::Ok(`java.util.List<?> __assertIsList = {args[0]};`);
+        },
+        "TextEquals" => {
+            require_args(args, 1, name)?;
+            Result::Ok(`getText().equals("{args[0]}")`);
+        },
+        "GetMember" => {
+            require_args(args, 1, name)?;
+            Result::Ok(`this.{args[0]}`);
+        },
+        "IntArg" => {
+            require_args(args, 1, name)?;
+            Result::Ok(`int {args[0]}`);
+        },
+        "Production" | "Result" | "VarRef" => {
+            require_args(args, 1, name)?;
+            Result::Ok(args[0]);
+        },
+        // Two arguments.
+        "Cast" => {
+            require_args(args, 2, name)?;
+            Result::Ok(`(({args[0]}){args[1]})`);
+        },
+        "ContextRuleFunction" | "ParserToken" => {
+            require_args(args, 2, name)?;
+            Result::Ok(`{args[0]}.{args[1]}`);
+        },
+        "ContextListFunction" => {
+            require_args(args, 2, name)?;
+            Result::Ok(`{args[0]}.{args[1]}()`);
+        },
+        "LANotEquals" => {
+            require_args(args, 2, name)?;
+            Result::Ok(`_input.LA({args[0]}) != {args[1]}`);
+        },
+        "LTEquals" => {
+            require_args(args, 2, name)?;
+            Result::Ok(`_input.LT({args[0]}).getText().equals({args[1]})`);
+        },
+        "ValEquals" => {
+            require_args(args, 2, name)?;
+            Result::Ok(`{args[0]} == {args[1]}`);
+        },
+        "AssignLocal" => {
+            require_args(args, 2, name)?;
+            Result::Ok(`{args[0]} = {args[1]};`);
+        },
+        "InitIntVar" | "InitIntMember" => {
+            require_args(args, 2, name)?;
+            Result::Ok(`int {args[0]} = {args[1]};`);
+        },
+        "InitBooleanMember" => {
+            require_args(args, 2, name)?;
+            Result::Ok(`boolean {args[0]} = {args[1]};`);
+        },
+        "SetMember" => {
+            require_args(args, 2, name)?;
+            Result::Ok(`this.{args[0]} = {args[1]};`);
+        },
+        "AddMember" => {
+            require_args(args, 2, name)?;
+            Result::Ok(`this.{args[0]} += {args[1]};`);
+        },
+        "MemberEquals" => {
+            require_args(args, 2, name)?;
+            Result::Ok(`this.{args[0]} == {args[1]}`);
+        },
+        "Append" | "AppendStr" => {
+            require_args(args, 2, name)?;
+            Result::Ok(`{args[0]} + {args[1]}`);
+        },
+        // Three arguments.
+        "ModMemberEquals" => {
+            require_args(args, 3, name)?;
+            Result::Ok(`this.{args[0]} % {args[1]} == {args[2]}`);
+        },
+        "ModMemberNotEquals" => {
+            require_args(args, 3, name)?;
+            Result::Ok(`this.{args[0]} % {args[1]} != {args[2]}`);
+        },
+        _ => Result::Err(`unknown template helper '{*name}'`),
+    };
 }
 
 fn chain_or_arg(recv: &Option<String>, args: &List<String>, name: &String) -> Result<String, String> {

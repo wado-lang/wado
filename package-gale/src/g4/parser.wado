@@ -713,7 +713,11 @@ impl G4Parser {
             body.push(self.chars[i]);
             i += 1;
         }
-        return ActionSource { text: body, span: Span { start, end }, action_id: -1 };
+        return ActionSource {
+            text: body,
+            span: Span { start, end },
+            action_id: -1,
+        };
     }
 
     /// Skip a `<...>` angle-bracket block without interpreting its contents.
@@ -855,7 +859,11 @@ impl G4Parser {
                     if self.is_kind(G4Token::CharClass) {
                         let act = self.extract_action('[', ']');
                         for let d of parse_attr_decls(&act.text, act.span) {
-                            if is_returns { p.returns_decls.push(d); } else { p.locals_decls.push(d); }
+                            if is_returns {
+                                p.returns_decls.push(d);
+                            } else {
+                                p.locals_decls.push(d);
+                            }
                         }
                     }
                     continue;
@@ -1677,8 +1685,12 @@ fn action_language_from_options(options: &List<GrammarOption>) -> ActionLanguage
                 Action(_) => null,
             };
             if let Some(v) = name {
-                if v.eq_ignore_ascii_case("java") { return ActionLanguage::Java; }
-                if v.eq_ignore_ascii_case("wado") { return ActionLanguage::Wado; }
+                if v.eq_ignore_ascii_case("java") {
+                    return ActionLanguage::Java;
+                }
+                if v.eq_ignore_ascii_case("wado") {
+                    return ActionLanguage::Wado;
+                }
                 return ActionLanguage::Other(v);
             }
         }
@@ -1720,21 +1732,27 @@ fn parse_attr_decls(body: &String, list_span: Span) -> List<AttrDecl> {
     let mut seg = String::with_capacity(16);
     let mut i = 0;
     while i <= n {
-        let at_end = i == n;
-        let c = if at_end { ',' } else { chars[i] };
-        if !at_end && (c == '<' || c == '[' || c == '(') {
-            depth += 1;
-            seg.push(c);
-        } else if !at_end && (c == '>' || c == ']' || c == ')') {
-            if depth > 0 { depth -= 1; }
-            seg.push(c);
-        } else if c == ',' && depth == 0 {
-            if let Some(d) = split_attr_decl(&seg, list_span) {
-                out.push(d);
-            }
-            seg = String::with_capacity(16);
-        } else {
-            seg.push(c);
+        // A trailing `,` at `i == n` flushes the final declaration. Nesting
+        // (`<>` / `[]` / `()`) shields an inner comma (e.g. `Map<K, V>`).
+        let c = if i == n { ',' } else { chars[i] };
+        match c {
+            '<' | '[' | '(' => {
+                depth += 1;
+                seg.push(c);
+            },
+            '>' | ']' | ')' => {
+                if depth > 0 {
+                    depth -= 1;
+                }
+                seg.push(c);
+            },
+            ',' && depth == 0 => {
+                if let Some(d) = split_attr_decl(&seg, list_span) {
+                    out.push(d);
+                }
+                seg = String::with_capacity(16);
+            },
+            _ => seg.push(c),
         }
         i += 1;
     }
@@ -1753,7 +1771,8 @@ fn split_attr_decl(seg: &String, span: Span) -> Option<AttrDecl> {
     let mut n = full;
     for let mut k = 0; k < full; k += 1 {
         if chars[k] == '=' {
-            let prev_cmp = k > 0 && (chars[k - 1] == '!' || chars[k - 1] == '<' || chars[k - 1] == '>' || chars[k - 1] == '=');
+            let prev_cmp = k > 0
+                && (chars[k - 1] == '!' || chars[k - 1] == '<' || chars[k - 1] == '>' || chars[k - 1] == '=');
             let next_eq = k + 1 < full && chars[k + 1] == '=';
             if !prev_cmp && !next_eq {
                 n = k;
