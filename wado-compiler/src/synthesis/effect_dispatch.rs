@@ -1564,22 +1564,22 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             trait_type_args.clone(),
         );
         // Exact match first (concrete impls, incl. concrete instantiations
-        // like `impl E for Holder<u8>`), then the generic-template fallback:
-        // `impl<T> E for Holder<T>` is indexed under its template spelling
-        // (`"Holder<T>"`), which the concrete handler name (`"Holder<i32>"`)
-        // never equals — match those by the bare head instead.
+        // like `impl E for Holder<u8>`), then the generic-template fallback.
+        // A generic impl `impl<T> E for Holder<T>` registers its method under
+        // the bare head `Holder` (see `build_handler_impl_index`), which the
+        // instantiated handler name `Holder<i32>` never equals — so look up
+        // the bare-head entry. Matching the head exactly (not just "same
+        // head") targets only the template, never a concrete sibling like
+        // `Holder<u8>`.
         let impl_info = env.impl_index.get(&impl_key).or_else(|| {
-            let head = type_name_head(&handler_type_name);
+            let head = crate::name::split_base_name(&handler_type_name);
             env.impl_index
-                .iter()
-                .find(|((tn, em, in_, ta), _)| {
-                    em == &effect_module
-                        && in_ == &interface_name
-                        && ta == &trait_type_args
-                        && tn != &handler_type_name
-                        && type_name_head(tn) == head
-                })
-                .map(|(_, info)| info)
+                .get(&(
+                    head.to_string(),
+                    effect_module.clone(),
+                    interface_name.clone(),
+                    trait_type_args.clone(),
+                ))
         });
         let impl_info = impl_info.unwrap_or_else(|| {
             panic!(
@@ -3052,11 +3052,6 @@ fn build_handler_impl_index(
         }
     }
     out
-}
-
-/// Bare head of a type name: `"Holder<i32>"` → `"Holder"`, `"Sink"` → `"Sink"`.
-fn type_name_head(name: &str) -> &str {
-    name.split('<').next().unwrap_or(name)
 }
 
 /// Strip a single leading `&` / `&mut` layer to find the underlying

@@ -182,12 +182,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // stringified name: a generic impl (`impl<T> Log for Ctx<T>`) is
             // indexed by its bare head, which a full instantiated name
             // (`Ctx<i32>`) would never match.
-            let is_real_type = !matches!(
-                self.tysys.type_table.borrow().get(handler_type),
-                ResolvedType::Unknown | ResolvedType::Error
-            );
+            let underlying = self.tysys.type_table.borrow().get(handler_type).clone();
+            let is_real_type = !matches!(underlying, ResolvedType::Unknown | ResolvedType::Error);
+            // A bare type parameter (`with E => h do` where `h: &H`, `H: E`)
+            // cannot be installed: dispatch synthesis runs before
+            // monomorphization and has no concrete impl to route the effect
+            // operations to. `type_implements_trait` would accept it (its bound
+            // names the effect), so reject it explicitly rather than let it
+            // reach synthesis, which would panic.
+            let is_type_param =
+                matches!(underlying, ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. });
             if is_real_type
-                && !self.type_implements_trait(&self.annotate_ctx, handler_type, interface_name)
+                && (is_type_param
+                    || !self.type_implements_trait(&self.annotate_ctx, handler_type, interface_name))
             {
                 let type_name = self.tysys.type_table.borrow().type_name(handler_type);
                 let _ = self.logger.error(TypeError::HandlerEffectNotImplemented {

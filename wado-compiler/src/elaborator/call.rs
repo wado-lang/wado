@@ -1999,19 +1999,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// (non-effect, non-`fn`-bound params in declaration order). Seeds an
     /// empty `type_args` first so a fully-omitted turbofish is handled too;
     /// non-defaulted slots keep their unbound `TypeParam`, leaving the
-    /// defer/report step to handle them exactly as before.
+    /// defer/report step to handle them.
+    ///
+    /// Each default type is resolved with the callee's type params in scope, so
+    /// a param-referencing default (`<T, U = T>`) resolves `T` to the callee's
+    /// own `TypeParam` and then picks up `T`'s inferred type via
+    /// [`Self::substitute_type_params`]. (A default naming a type the caller
+    /// cannot see — e.g. one private to another module — resolves to an error
+    /// type and surfaces a normal "unknown type" diagnostic; resolving foreign
+    /// default types in the callee's full module scope is not yet supported.)
     fn fill_defaulted_fn_type_args(&mut self, callee: &CalleeRef, type_args: &mut Vec<TypeId>) {
         let params = self.lookup_function_type_params(callee);
-        let space: Vec<&ast::GenericParam> =
-            params.iter().filter(|p| p.is_real_type_param()).collect();
+        let space: Vec<ast::GenericParam> = params
+            .iter()
+            .filter(|p| p.is_real_type_param())
+            .cloned()
+            .collect();
         if !space.iter().any(|p| p.default.is_some()) {
             return;
         }
         let n = space.len();
-        let defaults: Vec<Option<TypeId>> = space
-            .iter()
-            .map(|p| p.default.as_ref().map(|ty| self.resolve_type(ty)))
-            .collect();
+
+        // Resolve defaults with the callee's type params registered, mirroring
+        // `lookup_generic_func_for_inference`.
+        let defaults: Vec<Option<TypeId>> = {
+            let mut scope = self.enter_inherited_type_param_scope();
+            scope.annotate_ctx.trait_ctx.type_params.clear();
+            scope.register_generic_params(&params, 0);
+            space
+                .iter()
+                .map(|p| p.default.as_ref().map(|ty| scope.resolve_type(ty)))
+                .collect()
+        };
+
         if type_args.is_empty() {
             *type_args = space
                 .iter()
@@ -2041,20 +2061,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .values()
             .map(|&(_, tid)| tid)
             .collect();
-        for (i, slot) in type_args.iter_mut().enumerate() {
-            if self.is_unbound_type_param(*slot)
-                && !scope_params.contains(slot)
+        // Fill in declaration order so a default that references an earlier
+        // param (`U = T`) sees `T`'s slot already resolved.
+        for i in 0..n {
+            let slot = type_args[i];
+            if self.is_unbound_type_param(slot)
+                && !scope_params.contains(&slot)
                 && let Some(default_ty) = defaults[i]
             {
-                *slot = default_ty;
+                let snapshot = type_args.clone();
+                type_args[i] = self.substitute_type_params(default_ty, &snapshot);
             }
         }
     }
 
     /// Defer (mint inference holes) or report unresolved free-function type
     /// parameters, mirroring the instance-method deferral. Gated on a hole-free
-    /// argument list and no expected type; functions with default type params
-    /// fall back to the plain report.
+    /// argument list and no expected type. Runs after
+    /// [`Self::fill_defaulted_fn_type_args`], so any declared default is already
+    /// substituted and only genuinely unresolvable params remain here.
     pub(super) fn defer_or_report_uninferred_fn_type_args(
         &mut self,
         callee: &CalleeRef,
@@ -2069,10 +2094,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let space: Vec<&ast::GenericParam> =
             params.iter().filter(|p| p.is_real_type_param()).collect();
         let n = space.len();
-        if n == 0 || space.iter().any(|p| p.default.is_some()) {
-            self.report_uninferred_fn_type_args(callee, type_args, span);
+        if n == 0 {
             return;
         }
+        // Type-param defaults were already substituted by
+        // `fill_defaulted_fn_type_args`, so the dense-aware logic below can
+        // handle whatever remains — no short-circuit to the full-params
+        // `report_uninferred_fn_type_args` (which miskeys on the dense length
+        // when an effect / `fn`-bound param is present, silently dropping the
+        // "cannot infer" diagnostic for a genuinely unresolvable param).
         // Full-length (some slots unbound) or empty (nothing inferred); any other
         // length is a pack/effect interleaving we do not touch.
         let from_empty = type_args.is_empty();

@@ -1217,11 +1217,14 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // reference alive forces `synthesize`'s `Arc::try_unwrap` into the
     // deep-clone fallback. Snapshotting the TIR consumes the modules, so
     // no need to keep `resolve_output` past this point.
+    // Keep the resolved modules as-is for the `--tir-resolved` dump view; the
+    // downstream pipeline runs on an independent snapshot (below), so these
+    // stay frozen at the resolved stage.
     let (tir_modules_by_source, trait_env): (
         Option<IndexMap<ModuleSource, tir::TirModule>>,
         Option<std::sync::Arc<crate::elaborator::trait_env::TraitEnv>>,
     ) = match resolve_output {
-        Some((modules, env)) => (Some(snapshot_tir_modules(&modules)), Some(env)),
+        Some((modules, env)) => (Some(modules), Some(env)),
         None => (None, None),
     };
 
@@ -1229,13 +1232,11 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // Create Package early so CM binding synthesis runs before monomorphize,
     // matching the compile_with_options pipeline.
     let (monomorphized_tir_text, lowered_nir_text, optimized_package, wir_package) =
-        // Hand the downstream pipeline an *independent* deep copy of the type
-        // table. A plain `.clone()` shares the `Rc<RefCell<TypeTable>>` with the
-        // `--tir-resolved` snapshot, so DCE's `retain` (which drops generic
-        // decl field TypeParams unreachable from concrete types) would punch
-        // holes the snapshot still references — `wado dump --tir-resolved` then
-        // panics unparsing a generic struct decl. `snapshot_tir_modules` clones
-        // the table into a fresh `Rc`, isolating the two.
+        // Hand the downstream pipeline an *independent* deep copy (fresh type
+        // table + deep-cloned functions). Sharing would let DCE's `retain`
+        // (which drops generic decl field TypeParams unreachable from concrete
+        // types) and monomorphization punch holes / rewrite ids the frozen
+        // `--tir-resolved` view still references, panicking the unparser.
         if let Some(resolved_modules) = tir_modules_by_source
             .as_ref()
             .map(snapshot_tir_modules)
