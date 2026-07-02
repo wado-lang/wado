@@ -1123,9 +1123,33 @@ fn generate_struct_serialize(
 
     let mut tt = module.type_table.borrow_mut();
 
-    let struct_type = req.target_type_id;
+    // For a generic struct the receiver is the generic instance over the
+    // struct's own type parameters (`&Wrapper<T>`), and the function below
+    // carries them as `impl_type_params` — the same generic-template shape
+    // `synthesis::traits` emits for `Eq` / `Ord`, instantiated per concrete
+    // type by monomorphize. Field types stay as the declared `TypeParam`
+    // ids so substitution reaches them.
+    let struct_type = if struct_def.type_params.is_empty() {
+        req.target_type_id
+    } else {
+        let param_ids: Vec<TypeId> = struct_def
+            .type_params
+            .iter()
+            .map(|tp| tt.make_type_param(tp.name.clone(), tp.index))
+            .collect();
+        tt.make_generic_instance(
+            req.target_type_name.clone(),
+            module.module_source.clone(),
+            param_ids,
+        )
+    };
     let ref_self_type = tt.make_ref(struct_type);
-    let s_type_param = tt.make_type_param("S".to_string(), 0);
+    // Method type params are numbered after the impl's, matching reify's
+    // `next_idx = impl_type_params.len()` for user-written generic impls —
+    // otherwise `S` would collide with the struct's first type parameter
+    // (both index 0) during monomorphize substitution.
+    let s_index = struct_def.type_params.len() as u32;
+    let s_type_param = tt.make_type_param("S".to_string(), s_index);
     let mut_ref_s = tt.make_mut_ref(s_type_param);
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
@@ -1286,7 +1310,7 @@ fn generate_struct_serialize(
             default: None,
             index: 0,
         }],
-        impl_type_params: Vec::new(),
+        impl_type_params: struct_def.type_params.clone(),
         monomorph_info: None,
         method_info: Some(method_info),
         params: vec![
@@ -2872,9 +2896,27 @@ fn generate_variant_serialize(
 
     let mut tt = module.type_table.borrow_mut();
 
-    let variant_type = req.target_type_id;
+    // Generic variants mirror generic structs (see `generate_struct_serialize`):
+    // the receiver is the generic instance over the variant's own type
+    // parameters, carried as `impl_type_params` below, and `S` is numbered
+    // after them.
+    let variant_type = if variant_def.type_params.is_empty() {
+        req.target_type_id
+    } else {
+        let param_ids: Vec<TypeId> = variant_def
+            .type_params
+            .iter()
+            .map(|tp| tt.make_type_param(tp.name.clone(), tp.index))
+            .collect();
+        tt.make_generic_instance(
+            req.target_type_name.clone(),
+            module.module_source.clone(),
+            param_ids,
+        )
+    };
     let ref_self_type = tt.make_ref(variant_type);
-    let s_type_param = tt.make_type_param("S".to_string(), 0);
+    let s_index = variant_def.type_params.len() as u32;
+    let s_type_param = tt.make_type_param("S".to_string(), s_index);
     let mut_ref_s = tt.make_mut_ref(s_type_param);
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
@@ -3117,7 +3159,7 @@ fn generate_variant_serialize(
             default: None,
             index: 0,
         }],
-        impl_type_params: Vec::new(),
+        impl_type_params: variant_def.type_params.clone(),
         monomorph_info: None,
         method_info: Some(method_info),
         params: vec![

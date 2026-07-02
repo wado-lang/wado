@@ -1,0 +1,21 @@
+// Test: generic `Deserialize` derivation is not implemented yet
+// (docs/wep-2026-02-28-serde.md, "Generic struct Deserialize synthesis"),
+// so a generic marker is rejected with a clean error at the marker's span
+// — not an ICE at WIR build — and the note names the gap when the members
+// themselves are fine.
+use { Deserialize } from "core:serde";
+use { from_string } from "core:json";
+
+struct Wrapper<T> {
+    value: T,
+}
+
+impl<T: Deserialize> Deserialize for Wrapper<T>;
+
+export fn run() {
+    let r = from_string::<Wrapper<i32>>(`\{"value":7\}`);
+    let _ = r;
+}
+
+__DATA__
+{"compile_error": "generic `Deserialize` derivation is not implemented yet"}

@@ -921,7 +921,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // Neither derivable nor already implemented: the marker's
         // guarantee is broken. Unlike a bound (simply unsatisfied
         // elsewhere), this is an error at the marker's own span.
-        let reason = self.trait_unimpl_reason_chain(target_type_id, trait_name);
+        let mut reason = self.trait_unimpl_reason_chain(target_type_id, trait_name);
+        if reason.is_empty()
+            && let Some(tr) = self.classify_on_bound_trait(trait_name)
+        {
+            let resolved = self.tysys.type_table.borrow().get(target_type_id).clone();
+            if self.serde_generic_derive_unsupported(tr, &resolved) {
+                reason.push(
+                    "generic `Deserialize` derivation is not implemented yet; \
+                     write a manual impl (docs/wep-2026-02-28-serde.md)"
+                        .to_string(),
+                );
+            }
+        }
         let _ = self
             .logger
             .error(types::TypeError::ExplicitDeriveNotEligible {
