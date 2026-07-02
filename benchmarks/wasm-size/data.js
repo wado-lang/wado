@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782988733220,
+  "lastUpdate": 1782991968312,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -37105,6 +37105,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ef9baadc95014db9e72bbaedfa6aceba3c207b1a"
         },
         "date": 1782988732630,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15323,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 371059,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e6f80bfd24c78d9d7019646c9326d1ff34892955",
+          "message": "Merge pull request #1491 from wado-lang/claude/gale-action-design-1kvnf3\n\nfeat(gale): retain grammar actions and predicates in the IR (Phase 1a)",
+          "timestamp": "2026-07-02T20:19:47+09:00",
+          "tree_id": "80418c0d2e1301367b554e203ffe1f6f22571575",
+          "url": "https://github.com/wado-lang/wado/commit/e6f80bfd24c78d9d7019646c9326d1ff34892955"
+        },
+        "date": 1782991967934,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
