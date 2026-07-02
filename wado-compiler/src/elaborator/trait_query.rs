@@ -23,6 +23,10 @@ pub(super) enum OnBoundTrait {
     Serialize,
     Deserialize,
     Default,
+    Inspect,
+    InspectAlt,
+    Display,
+    DisplayAlt,
 }
 
 impl OnBoundTrait {
@@ -30,13 +34,25 @@ impl OnBoundTrait {
         matches!(self, Self::Serialize | Self::Deserialize)
     }
 
+    /// The format family (`Inspect` / `InspectAlt` / `Display` / `DisplayAlt`).
+    /// Total: every type is structurally formattable, so a `T: <format>` bound
+    /// always holds and needs no field recursion to decide. `Display` /
+    /// `DisplayAlt` synthesize a fallback delegating to `Inspect` /
+    /// `InspectAlt`.
+    pub(super) fn is_format(self) -> bool {
+        matches!(
+            self,
+            Self::Inspect | Self::InspectAlt | Self::Display | Self::DisplayAlt
+        )
+    }
+
     /// Whether structural eligibility is decided by recursing through the
     /// type's fields/cases (each must itself implement the trait). True for
-    /// `Eq` / `Ord` / serde; false for `Default`, whose eligibility is
-    /// "every field carries a default expression" — a different rule handled
-    /// by [`TypeSystem::auto_derive_default_struct_type`].
+    /// `Eq` / `Ord` / serde; false for `Default` (eligibility is "every field
+    /// carries a default expression") and the format traits (total, decided
+    /// without recursion).
     pub(super) fn is_field_recursive(self) -> bool {
-        !matches!(self, Self::Default)
+        !matches!(self, Self::Default) && !self.is_format()
     }
 }
 
@@ -470,6 +486,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(OnBoundTrait::Deserialize)
         } else if trait_name == items.trait_name(CompilerItem::Default) {
             Some(OnBoundTrait::Default)
+        } else if trait_name == items.trait_name(CompilerItem::Inspect) {
+            Some(OnBoundTrait::Inspect)
+        } else if trait_name == items.trait_name(CompilerItem::InspectAlt) {
+            Some(OnBoundTrait::InspectAlt)
+        } else if trait_name == items.trait_name(CompilerItem::Display) {
+            Some(OnBoundTrait::Display)
+        } else if trait_name == items.trait_name(CompilerItem::DisplayAlt) {
+            Some(OnBoundTrait::DisplayAlt)
         } else {
             None
         }
@@ -564,6 +588,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(tr) = self.classify_on_bound_trait(trait_name) else {
             return false;
         };
+        // The format traits are total: an `impl Inspect for T;` (etc.) marker
+        // always validates.
+        if tr.is_format() {
+            return true;
+        }
         // `Default` is eligible when the struct's every field carries a default
         // expression — a different rule from the field-recursion the other
         // `on_bound` traits use. The marker validates against the same
@@ -602,6 +631,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         resolved: &ResolvedType,
         trait_name: &str,
     ) -> bool {
+        // The format traits are total (WEP 2026-06-25): every type is
+        // structurally formattable — the automatic policy already generated an
+        // `Inspect` body for every type kind, and `Display` falls back to it —
+        // so a `T: Inspect` / `T: Display` (and the `Alt` siblings) obligation
+        // always holds, for a type parameter or any concrete type alike.
+        if self
+            .classify_on_bound_trait(trait_name)
+            .is_some_and(OnBoundTrait::is_format)
+        {
+            return true;
+        }
+
         // Type parameters satisfy bounds declared on them (e.g., T: Describable
         // means T implements Describable within the scope of that declaration)
         if let ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } = resolved

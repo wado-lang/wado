@@ -2918,7 +2918,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.tysys
                 .type_table
                 .borrow_mut()
-                .record_bound_driven_synth_request(struct_name, &module_source, &default_trait_name);
+                .record_bound_driven_synth_request(
+                    struct_name,
+                    &module_source,
+                    &default_trait_name,
+                );
             return Some(StaticMethodRef::new(
                 module_source,
                 struct_name,

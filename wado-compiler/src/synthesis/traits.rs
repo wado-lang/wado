@@ -499,6 +499,23 @@ impl SynthesisCtx<'_, '_, '_> {
     pub(crate) fn should_synthesize(&self, type_name: &str, trait_name: &str) -> bool {
         self.is_requested(type_name, trait_name) && !self.has_real_impl(type_name, trait_name)
     }
+
+    /// Like [`Self::has_impl`], but a body-less `impl Trait for Type;` marker
+    /// does not count — only a methodful impl (in any module) or one this pass
+    /// already generated. Used by the format sub-passes (Inspect / InspectAlt /
+    /// Display / DisplayAlt), where a format marker is a conformance check that
+    /// must NOT suppress the auto-derived body (unlike a real `impl Display for
+    /// String { … }`, which must). Module-agnostic on the methodful side so a
+    /// cross-module manual impl (e.g. `impl Display for String` in
+    /// `core:prelude/format`) still suppresses the fallback.
+    pub(crate) fn has_methodful_impl_anywhere(&self, type_name: &str, trait_name: &str) -> bool {
+        self.trait_env.has_any_methodful_impl(type_name, trait_name)
+            || self.pending.contains(&(
+                type_name.to_string(),
+                self.module.clone(),
+                trait_name.to_string(),
+            ))
+    }
 }
 
 /// Resolve type parameter definitions into `TypeIds`.
@@ -1028,7 +1045,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         .collect();
 
     for (name, cases, espan) in &enum_infos {
-        if ctx.has_impl(name, &inspect_name) {
+        if ctx.has_methodful_impl_anywhere(name, &inspect_name) {
             continue;
         }
         let enum_type = tt.make_enum(name.clone(), module_source.clone());
@@ -1058,7 +1075,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         {
             continue;
         }
-        if ctx.has_impl(name, &inspect_name) {
+        if ctx.has_methodful_impl_anywhere(name, &inspect_name) {
             continue;
         }
         let struct_type = tt.make_struct(name.clone(), module_source.clone());
@@ -1085,7 +1102,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
 
     let generic_struct_infos = collect_generic_struct_visible_fields(module);
     for (name, type_params, fields, has_hidden, sspan) in &generic_struct_infos {
-        if ctx.has_impl(name, &inspect_name) {
+        if ctx.has_methodful_impl_anywhere(name, &inspect_name) {
             continue;
         }
         let type_param_ids = make_type_param_ids(type_params, &mut tt);
@@ -1114,7 +1131,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
 
     let variant_infos = collect_variant_cases(module);
     for (name, cases, vspan) in &variant_infos {
-        if ctx.has_impl(name, &inspect_name) {
+        if ctx.has_methodful_impl_anywhere(name, &inspect_name) {
             continue;
         }
         let variant_type = tt.make_variant(name.clone(), module_source.clone());
@@ -1141,7 +1158,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
 
     let generic_variant_infos = collect_generic_variant_cases(module);
     for (name, type_params, cases, vspan) in &generic_variant_infos {
-        if ctx.has_impl(name, &inspect_name) {
+        if ctx.has_methodful_impl_anywhere(name, &inspect_name) {
             continue;
         }
         let type_param_ids = make_type_param_ids(type_params, &mut tt);
@@ -1183,7 +1200,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         .collect();
 
     for (name, flags_type_id, members, fspan) in &flags_infos {
-        if ctx.has_impl(name, &inspect_name) {
+        if ctx.has_methodful_impl_anywhere(name, &inspect_name) {
             continue;
         }
         let ref_type = tt.make_ref(*flags_type_id);
@@ -1209,7 +1226,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         if module.flags.iter().any(|f| f.type_id == nt.type_id) {
             continue;
         }
-        if ctx.has_impl(&nt.name, &inspect_name) {
+        if ctx.has_methodful_impl_anywhere(&nt.name, &inspect_name) {
             continue;
         }
         let base_type = match tt.get(nt.type_id) {
@@ -1242,7 +1259,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
     let span = synth_span();
     for (type_id, base_name, type_arg_names) in collect_parameterized_types(&tt) {
         let mangled = crate::name::mangle_generic_name(&base_name, &type_arg_names);
-        if ctx.has_impl(&mangled, &inspect_name) {
+        if ctx.has_methodful_impl_anywhere(&mangled, &inspect_name) {
             continue;
         }
         let ref_type = tt.make_ref(type_id);
@@ -1282,7 +1299,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
     for sig in collect_canonical_fn_signatures(&tt) {
         let mangled =
             crate::name::mangle_generic_name(crate::name::CLOSURE_FN_TRAIT, &sig.type_arg_names);
-        if ctx.has_impl(&mangled, &inspect_name) {
+        if ctx.has_methodful_impl_anywhere(&mangled, &inspect_name) {
             continue;
         }
         let ref_type = tt.make_ref(sig.repr_type_id);
@@ -2141,7 +2158,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         .map(|e| e.name.clone())
         .collect::<Vec<_>>()
     {
-        if ctx.has_impl(&name, &inspect_alt_name) || !has_inspect(&name, ctx) {
+        if ctx.has_methodful_impl_anywhere(&name, &inspect_alt_name) || !has_inspect(&name, ctx) {
             continue;
         }
         let enum_type = tt.make_enum(name.clone(), module_source.clone());
@@ -2170,7 +2187,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         {
             continue;
         }
-        if ctx.has_impl(name, &inspect_alt_name) {
+        if ctx.has_methodful_impl_anywhere(name, &inspect_alt_name) {
             continue;
         }
         let struct_type = tt.make_struct(name.clone(), module_source.clone());
@@ -2197,7 +2214,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
 
     let generic_struct_infos = collect_generic_struct_visible_fields(module);
     for (name, type_params, fields, has_hidden, sspan) in &generic_struct_infos {
-        if ctx.has_impl(name, &inspect_alt_name) {
+        if ctx.has_methodful_impl_anywhere(name, &inspect_alt_name) {
             continue;
         }
         let type_param_ids = make_type_param_ids(type_params, &mut tt);
@@ -2226,7 +2243,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
 
     let variant_infos = collect_variant_cases(module);
     for (name, cases, vspan) in &variant_infos {
-        if ctx.has_impl(name, &inspect_alt_name) {
+        if ctx.has_methodful_impl_anywhere(name, &inspect_alt_name) {
             continue;
         }
         let variant_type = tt.make_variant(name.clone(), module_source.clone());
@@ -2253,7 +2270,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
 
     let generic_variant_infos = collect_generic_variant_cases(module);
     for (name, type_params, cases, vspan) in &generic_variant_infos {
-        if ctx.has_impl(name, &inspect_alt_name) {
+        if ctx.has_methodful_impl_anywhere(name, &inspect_alt_name) {
             continue;
         }
         let type_param_ids = make_type_param_ids(type_params, &mut tt);
@@ -2288,7 +2305,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         .collect();
 
     for (name, flags_type_id) in &flags_infos {
-        if ctx.has_impl(name, &inspect_alt_name) || !has_inspect(name, ctx) {
+        if ctx.has_methodful_impl_anywhere(name, &inspect_alt_name) || !has_inspect(name, ctx) {
             continue;
         }
         let ref_type = tt.make_ref(*flags_type_id);
@@ -2311,7 +2328,9 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         if module.flags.iter().any(|f| f.type_id == nt.type_id) {
             continue;
         }
-        if ctx.has_impl(&nt.name, &inspect_alt_name) || !has_inspect(&nt.name, ctx) {
+        if ctx.has_methodful_impl_anywhere(&nt.name, &inspect_alt_name)
+            || !has_inspect(&nt.name, ctx)
+        {
             continue;
         }
         let ref_type = tt.make_ref(nt.type_id);
@@ -2335,7 +2354,9 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     // `Inspect` counterpart. `Fn` signatures are handled separately below.
     for (type_id, base_name, type_arg_names) in collect_parameterized_types(&tt) {
         let mangled = crate::name::mangle_generic_name(&base_name, &type_arg_names);
-        if ctx.has_impl(&mangled, &inspect_alt_name) || !has_inspect(&mangled, ctx) {
+        if ctx.has_methodful_impl_anywhere(&mangled, &inspect_alt_name)
+            || !has_inspect(&mangled, ctx)
+        {
             continue;
         }
         let resolved = tt.get(type_id).clone();
@@ -2373,7 +2394,9 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     for sig in collect_canonical_fn_signatures(&tt) {
         let mangled =
             crate::name::mangle_generic_name(crate::name::CLOSURE_FN_TRAIT, &sig.type_arg_names);
-        if ctx.has_impl(&mangled, &inspect_alt_name) || !has_inspect(&mangled, ctx) {
+        if ctx.has_methodful_impl_anywhere(&mangled, &inspect_alt_name)
+            || !has_inspect(&mangled, ctx)
+        {
             continue;
         }
         let ref_type = tt.make_ref(sig.repr_type_id);
@@ -2995,7 +3018,7 @@ fn generate_fallback_impls(
     let fmt_type = tt.make_mut_ref(formatter_type);
 
     let needs_fallback = |name: &str, ctx: &SynthesisCtx<'_, '_, '_>| -> bool {
-        if ctx.has_impl(name, &pair.target_trait) {
+        if ctx.has_methodful_impl_anywhere(name, &pair.target_trait) {
             return false;
         }
         if ctx.has_impl(name, &pair.delegate_trait) {
@@ -3166,7 +3189,7 @@ fn generate_fallback_impls(
             continue;
         }
         let mangled = crate::name::mangle_generic_name(&base_name, &type_arg_names);
-        if ctx.has_impl(&mangled, &pair.target_trait) {
+        if ctx.has_methodful_impl_anywhere(&mangled, &pair.target_trait) {
             continue;
         }
         let delegate_present = ctx.has_impl(&mangled, &pair.delegate_trait) || {
@@ -3204,7 +3227,7 @@ fn generate_fallback_impls(
     for sig in collect_canonical_fn_signatures(&tt) {
         let mangled =
             crate::name::mangle_generic_name(crate::name::CLOSURE_FN_TRAIT, &sig.type_arg_names);
-        if ctx.has_impl(&mangled, &pair.target_trait) {
+        if ctx.has_methodful_impl_anywhere(&mangled, &pair.target_trait) {
             continue;
         }
         let delegate_present = ctx.has_impl(&mangled, &pair.delegate_trait) || {

@@ -1,7 +1,7 @@
-// Regression for lazy (post-monomorphize) synthesis: a template string
-// formatting an *unbounded* type param gives annotate no bound to record —
-// the concrete `P^Inspect` reference only appears when monomorphize
-// substitutes `T` → `P`. The lazy sweep must synthesize it then.
+// Regression: a template string formatting an *unbounded* type param must
+// still work. The format traits are total, so `{v:?}` over `T` type-checks
+// with no written bound, and the concrete `P^Inspect` body (generated eagerly)
+// resolves once monomorphize substitutes `T` → `P`.
 struct P {
     x: i32,
 }
