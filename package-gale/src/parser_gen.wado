@@ -228,7 +228,8 @@ fn collect_element_action_ids(elem: &Element, out: &mut List<i32>) {
         Repeat(rep) => collect_element_action_ids(&rep.element, out),
         Label(lab) => collect_element_action_ids(&lab.element, out),
         Not(n) => collect_element_action_ids(&n.element, out),
-        _ => {},
+        _ => {
+        },
     }
 }
 
@@ -292,7 +293,9 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
     w.end();
     w.end();
     if ctx.emit_actions() {
-        w.line(&"return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics, output: p.output };");
+        w.line(
+            &"return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics, output: p.output };",
+        );
     } else {
         w.line(&"return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };");
     }
@@ -2559,7 +2562,18 @@ fn gen_parse_fn_simple_named(
         }
     }
     let body = rule_alt_body(lowered_rule, 0).unwrap();
-    gen_alt_body(w, &type_name, null, null, &rule.alternatives[0], body, 0, rule_alts_labeled(&rule.alternatives), &rule.after_action, ctx);
+    gen_alt_body(
+        w,
+        &type_name,
+        null,
+        null,
+        &rule.alternatives[0],
+        body,
+        0,
+        rule_alts_labeled(&rule.alternatives),
+        &rule.after_action,
+        ctx,
+    );
     w.end();
     w.blank();
 }
@@ -3160,7 +3174,9 @@ fn gen_predicate_guard(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenCont
     ctx.mark_action_seen(src.action_id);
     let cond = match translate_action_or_warn(src, ctx) {
         Some(c) => c,
-        None => return,
+        None => {
+            return;
+        },
     };
     w.begin(&"if !p.speculating");
     w.begin(&`if !({cond})`);

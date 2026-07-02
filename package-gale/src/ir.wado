@@ -916,18 +916,18 @@ enum StampMode {
 fn stamp_parser_elements(grammar: &mut Grammar, mode: StampMode) {
     let mut next: i32 = 0;
     for let mut ri = 0; ri < grammar.parser_rules.len(); ri += 1 {
-        grammar.parser_rules[ri].alternatives = stamp_alternatives(&grammar.parser_rules[ri].alternatives, mode, &mut next);
+        grammar.parser_rules[ri].alternatives = stamp_alternatives(
+            &grammar.parser_rules[ri].alternatives,
+            mode,
+            &mut next,
+        );
     }
 }
 
 fn stamp_alternatives(alts: &List<Alternative>, mode: StampMode, next: &mut i32) -> List<Alternative> {
     let mut out: List<Alternative> = [];
     for let alt of alts {
-        let acts = if mode matches { ActionIds } {
-            stamp_alt_actions(&alt.actions, next);
-        } else {
-            alt.actions;
-        };
+        let acts = if mode matches { ActionIds } { stamp_alt_actions(&alt.actions, next) } else { alt.actions };
         let mut elems: List<Element> = [];
         for let e of &alt.elements {
             elems.push(stamp_element(e, mode, next));
@@ -948,7 +948,8 @@ fn stamp_element(elem: &Element, mode: StampMode, next: &mut i32) -> Element {
                     *next += 1;
                 },
                 ActionIds => arg = stamp_action_source_opt(rr.arg_action, next),
-                Decisions => {},
+                Decisions => {
+                },
             }
             Element::RuleRef(RuleRefElement {
                 name: rr.name,
@@ -1031,8 +1032,15 @@ pub fn assign_action_ids(grammar: &mut Grammar) {
     let mut next: i32 = 0;
     for let mut ri = 0; ri < grammar.parser_rules.len(); ri += 1 {
         grammar.parser_rules[ri].init_action = stamp_action_source_opt(grammar.parser_rules[ri].init_action, &mut next);
-        grammar.parser_rules[ri].alternatives = stamp_alternatives(&grammar.parser_rules[ri].alternatives, StampMode::ActionIds, &mut next);
-        grammar.parser_rules[ri].after_action = stamp_action_source_opt(grammar.parser_rules[ri].after_action, &mut next);
+        grammar.parser_rules[ri].alternatives = stamp_alternatives(
+            &grammar.parser_rules[ri].alternatives,
+            StampMode::ActionIds,
+            &mut next,
+        );
+        grammar.parser_rules[ri].after_action = stamp_action_source_opt(
+            grammar.parser_rules[ri].after_action,
+            &mut next,
+        );
         let mut new_catches: List<CatchClause> = [];
         for let c of &grammar.parser_rules[ri].catches {
             let mut body = c.body;
@@ -1041,7 +1049,10 @@ pub fn assign_action_ids(grammar: &mut Grammar) {
             new_catches.push(CatchClause { decl_text: c.decl_text, body });
         }
         grammar.parser_rules[ri].catches = new_catches;
-        grammar.parser_rules[ri].finally_action = stamp_action_source_opt(grammar.parser_rules[ri].finally_action, &mut next);
+        grammar.parser_rules[ri].finally_action = stamp_action_source_opt(
+            grammar.parser_rules[ri].finally_action,
+            &mut next,
+        );
     }
     for let mut li = 0; li < grammar.lexer_rules.len(); li += 1 {
         let stamped = stamp_actions_lexer_alternatives(&grammar.lexer_rules[li].body, &mut next);
@@ -1069,7 +1080,9 @@ fn stamp_action_source_opt(opt: Option<ActionSource>, next: &mut i32) -> Option<
             *next += 1;
             return Option::<ActionSource>::Some(ns);
         },
-        None => return opt,
+        None => {
+            return opt;
+        },
     }
 }
 

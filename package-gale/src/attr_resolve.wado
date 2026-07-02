@@ -8,12 +8,7 @@
 //! and the fragment span the substitution engine later rewrites. An
 //! unresolvable reference is a loud error, never a silent passthrough.
 
-use {
-    ParserRule,
-    Element,
-    Alternative,
-    AttrDecl,
-} from "./ir.wado";
+use { ParserRule, Element, Alternative, AttrDecl } from "./ir.wado";
 use { AttrRef, find_attr_refs } from "./attr_scan.wado";
 
 /// What a `$name` reference resolves to. Determines how the substitution
@@ -72,11 +67,7 @@ pub struct AttrEnv {
 /// `rules` is the parser-rule table, used to validate a rule member against
 /// the referenced rule's `returns` fields. Returns the resolved list, or an
 /// error message naming the first unresolvable reference / member.
-pub fn resolve_attrs(
-    body: &String,
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
-) -> Result<List<ResolvedAttr>, String> {
+pub fn resolve_attrs(body: &String, rule: &ParserRule, rules: &List<ParserRule>) -> Result<List<ResolvedAttr>, String> {
     let env = build_attr_env(rule);
     let refs = find_attr_refs(body);
     let mut out: List<ResolvedAttr> = [];
@@ -87,19 +78,15 @@ pub fn resolve_attrs(
     return Result::<List<ResolvedAttr>, String>::Ok(out);
 }
 
-fn resolve_one(
-    r: &AttrRef,
-    env: &AttrEnv,
-    rules: &List<ParserRule>,
-) -> Result<ResolvedAttr, String> {
+fn resolve_one(r: &AttrRef, env: &AttrEnv, rules: &List<ParserRule>) -> Result<ResolvedAttr, String> {
     for let lab of &env.labels {
         if lab.name == r.name {
             let target = if lab.list {
-                AttrTarget::ListLabel
+                AttrTarget::ListLabel;
             } else if lab.is_token {
-                AttrTarget::TokenLabel
+                AttrTarget::TokenLabel;
             } else {
-                AttrTarget::RuleLabel
+                AttrTarget::RuleLabel;
             };
             check_member(r, &target, &lab.rule_name, rules)?;
             return ok_attr(r, target, &lab.rule_name);
@@ -139,15 +126,12 @@ fn ok_attr(r: &AttrRef, target: AttrTarget, rule_name: &String) -> Result<Resolv
 /// target admits the token member set; a rule-like target admits the rule
 /// pseudo-members plus the referenced rule's `returns` fields; specials and
 /// scalar attrs admit no member.
-fn check_member(
-    r: &AttrRef,
-    target: &AttrTarget,
-    rule_name: &String,
-    rules: &List<ParserRule>,
-) -> Result<(), String> {
+fn check_member(r: &AttrRef, target: &AttrTarget, rule_name: &String, rules: &List<ParserRule>) -> Result<(), String> {
     let member = match &r.member {
         Some(m) => *m,
-        None => return Result::<(), String>::Ok(()),
+        None => {
+            return Result::<(), String>::Ok(());
+        },
     };
     let ok = match *target {
         TokenLabel => is_token_member(&member),
@@ -166,8 +150,13 @@ fn check_member(
 }
 
 fn is_token_member(m: &String) -> bool {
-    return *m == "text" || *m == "type" || *m == "line" || *m == "pos"
-        || *m == "index" || *m == "channel" || *m == "int";
+    return *m == "text"
+        || *m == "type"
+        || *m == "line"
+        || *m == "pos"
+        || *m == "index"
+        || *m == "channel"
+        || *m == "int";
 }
 
 fn is_rule_member(m: &String, rule_name: &String, rules: &List<ParserRule>) -> bool {
@@ -251,7 +240,8 @@ fn collect_env_element(
         },
         Repeat(rep) => collect_env_element(&rep.element, labels, token_refs, rule_refs),
         Not(n) => collect_env_element(&n.element, labels, token_refs, rule_refs),
-        _ => {},
+        _ => {
+        },
     }
 }
 
