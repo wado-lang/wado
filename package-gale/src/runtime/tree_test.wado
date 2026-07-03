@@ -119,9 +119,9 @@ test "set_alt stamps the innermost open node" {
     let mut b = TreeBuilder::new();
     b.start_node(0 as NodeKind, 0);
     b.start_node(1 as NodeKind, 0);
-    b.set_alt(3);  // inner
+    b.set_alt(3);
     b.finish_node(1);
-    b.set_alt(2);  // outer
+    b.set_alt(2);
     b.finish_node(1);
     let s = b.finish();
 
@@ -197,7 +197,7 @@ test "error region is a K_ERROR node and bubbles error up to the parent" {
     b.finish_node(5);
     let s = b.finish();
 
-    assert s.is_error(0);  // bubbled from the error region
+    assert s.is_error(0);
     let ch = children_of(&s, 0);
     assert s.is_node(ch[1]);
     assert s.kind(ch[1]) == K_ERROR;
@@ -250,7 +250,6 @@ test "truncate rolls the builder back to a checkpoint" {
     b.start_node(0 as NodeKind, 0);
     b.token(0);
     let cp = b.checkpoint();
-    // Speculative subtree that must not leak.
     b.start_node(1 as NodeKind, 2);
     b.token(1);
     b.finish_node(3);
@@ -258,7 +257,7 @@ test "truncate rolls the builder back to a checkpoint" {
     b.finish_node(1);
     let s = b.finish();
 
-    assert children_of(&s, 0).len() == 1;  // only the first token survives
+    assert children_of(&s, 0).len() == 1;
     assert s.to_string_tree(0, &ts, &names(["expr", "term"]), &names(["ID"])) == "(expr a)";
 }
 
@@ -269,24 +268,19 @@ test "next_sibling on the root returns -1 without indexing past the columns" {
     b.finish_node(1);
     let s = b.finish();
 
-    // The root has no parent, so it has no sibling — and must not read
-    // tag[row_count]. first_child on a childless leaf is likewise bounded.
     assert s.next_sibling(0) == -1;
     let ch = children_of(&s, 0);
     assert ch.len() == 1;
-    assert s.first_child(ch[0]) == -1;  // the token child has no children
+    assert s.first_child(ch[0]) == -1;
 }
 
 test "an unterminated open finalizes gracefully instead of corrupting traversal" {
-    // A truncated event stream (an open with no matching finish_node) must not
-    // leave `next == 0` — traversal would otherwise loop back to the root.
     let mut b = TreeBuilder::new();
     b.start_node(0 as NodeKind, 0);
     b.token(0);
-    // no finish_node
     let s = b.finish();
 
-    assert children_of(&s, 0).len() == 1;  // the token, then bounded stop
+    assert children_of(&s, 0).len() == 1;
     assert s.next_sibling(0) == -1;
 }
 

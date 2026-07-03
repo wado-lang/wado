@@ -17,8 +17,6 @@ use ao from "./grammars/alt_opt.g4"
         },
     };
 
-// Count stamped `expr` nodes (alt >= 0), asserting each maps to `Some`. A flat
-// scan over the store's open rows; no node value is ever constructed.
 fn count_stamped(s: &ao::CstStore) -> i32 {
     let mut n = 0;
     for let mut r = 0; r < s.row_count(); r += 1 {
@@ -30,7 +28,6 @@ fn count_stamped(s: &ao::CstStore) -> i32 {
     return n;
 }
 
-// Count unstamped `expr` nodes (alt < 0), asserting each maps to `None`.
 fn count_unstamped(s: &ao::CstStore) -> i32 {
     let mut n = 0;
     for let mut r = 0; r < s.row_count(); r += 1 {
