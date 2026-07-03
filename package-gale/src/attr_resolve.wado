@@ -139,8 +139,10 @@ fn check_member(r: &AttrRef, target: &AttrTarget, rule_name: &String, rules: &Li
         RuleLabel => is_rule_member(&member, rule_name, rules),
         RuleRef => is_rule_member(&member, rule_name, rules),
         // `$start` / `$stop` are the rule's first / last token, so they take the
-        // token member set; `$text` / `$ctx` / `$_p` take no member.
-        ParserSpecial => (r.name == "start" || r.name == "stop") && is_token_member(&member),
+        // token member set; `$ctx` exposes `toStringTree`; `$text` / `$_p` take
+        // no member.
+        ParserSpecial => ((r.name == "start" || r.name == "stop") && is_token_member(&member))
+            || (r.name == "ctx" && member == "toStringTree"),
         LexerSpecial => false,
         RuleAttr => false,
         ListLabel => false,

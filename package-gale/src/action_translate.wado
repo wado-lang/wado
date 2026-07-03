@@ -162,6 +162,11 @@ fn parser_special_expr(r: &ResolvedAttr, span_in_scope: bool) -> Result<String, 
     if r.name == "stop" {
         return token_member_of(&String::from("(p.pos - 1)"), &r.member);
     }
+    // `$ctx.toStringTree` — a method reference; the source's trailing `()`
+    // completes the call. Renders the rule node currently under construction.
+    if r.name == "ctx" && r.member matches { Some("toStringTree") } {
+        return Result::<String, String>::Ok(String::from("p.rule_string_tree"));
+    }
     return Result::<String, String>::Err(`${r.name}: this parser special is not yet emitted`);
 }
 

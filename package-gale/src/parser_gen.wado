@@ -777,6 +777,20 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_acti
         w.line(&"return self.text_span(0, self.tokens.chars.len());");
         w.end();
         w.blank();
+
+        // `$ctx.toStringTree()` — the S-expression of the rule currently under
+        // construction, rendered from the builder's still-open innermost node.
+        let mut frst = FnSpec::new("rule_string_tree");
+        frst.set_receiver(&"&self");
+        frst.set_return_type(&"String");
+        frst.emit_begin(w);
+        w.line(&"let mut token_names: List<String> = List::with_capacity(NUM_TOKEN_KINDS);");
+        w.begin(&"for let mut k = 0; k < NUM_TOKEN_KINDS; k += 1");
+        w.line(&"token_names.push(token_kind_name(k));");
+        w.end();
+        w.line(&"return self.b.render_open(&self.tokens, &RULE_NAMES, &token_names);");
+        w.end();
+        w.blank();
     }
 
     // Build a ParseError at the current position, resolving `line:col` from the

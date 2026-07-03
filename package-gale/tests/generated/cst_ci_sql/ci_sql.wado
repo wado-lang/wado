@@ -1026,6 +1026,71 @@ impl TreeBuilder {
         }
         return CstStore { tag: self.tag, a: self.a, b, alt: self.alt, end, flags, next };
     }
+
+    /// Render the S-expression of the innermost currently-open node — the rule
+    /// under construction — from the raw (not-yet-finalised) events. Backs
+    /// `$ctx.toStringTree()` in `@after`, which runs after the body but before
+    /// `finish_node`, so the node is still open and its children are complete.
+    pub fn render_open(&self, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
+        let mut out = String::with_capacity(128);
+        if self.open.len() == 0 {
+            return out;
+        }
+        let root = self.open[self.open.len() - 1];
+        let _ = render_builder_node(&mut out, &self.tag, &self.a, root, toks, rule_names, token_names);
+        return out;
+    }
+}
+
+/// Render the subtree rooted at the `E_OPEN` row `i`, returning the row after
+/// its `E_CLOSE`. Events are balanced (`start_node` / `finish_node` pair), so a
+/// linear walk with recursion at each child `E_OPEN` stands in for the finalised
+/// `next` column. The current rule's node is still open (no `E_CLOSE`), so the
+/// walk closes it when it reaches the end — mirrors `cst_to_string_tree_impl`.
+fn render_builder_node(
+    out: &mut String,
+    tag: &List<i32>,
+    a: &List<i32>,
+    i: i32,
+    toks: &TokenStream,
+    rule_names: &List<String>,
+    token_names: &List<String>,
+) -> i32 {
+    out.push_str(&"(");
+    if a[i] == K_ERROR as i32 {
+        out.push_str(&"<error>");
+    } else {
+        out.push_str(&rule_names[a[i]]);
+    }
+    let mut c = i + 1;
+    while c < tag.len() {
+        let t = tag[c];
+        if t == E_OPEN {
+            out.push_str(&" ");
+            c = render_builder_node(out, tag, a, c, toks, rule_names, token_names);
+        } else if t == E_CLOSE {
+            out.push_str(&")");
+            return c + 1;
+        } else if t == E_TOK {
+            if !toks.is_empty_text(a[c]) {
+                out.push_str(&" ");
+                toks.push_token_text(out, a[c]);
+            }
+            c += 1;
+        } else if t == E_MISS {
+            out.push_str(&` <missing {token_names[toks.kind_at(a[c])]}>`);
+            c += 1;
+        } else if t == E_SKIP {
+            out.push_str(&" <skip ");
+            toks.push_token_text(out, a[c]);
+            out.push_str(&">");
+            c += 1;
+        } else {
+            c += 1;
+        }
+    }
+    out.push_str(&")");
+    return c;
 }
 //! Consumer-facing tree / token utilities exposed by every generated
 //! parser: S-expression normalisation (`normalize_tree`) and the

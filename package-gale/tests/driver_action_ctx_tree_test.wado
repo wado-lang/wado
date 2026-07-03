@@ -1,0 +1,19 @@
+//! Stage A `$ctx.toStringTree()`: renders the rule node under construction. In
+//! `s`'s `@after` the still-open `s` node has all its children, so the render
+//! matches the finalized tree's root rendering (`to_string_tree`).
+
+use ct from "./grammars/wado_ctx_tree.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_ctx_tree",
+        },
+    };
+
+test "$ctx.toStringTree renders the open rule node" {
+    let result = ct::parse(&"a b");
+    assert result.ok(), "clean parse of a b";
+    assert result.output == "(s (e a b))", `output: '{result.output}'`;
+    assert result.output == ct::to_string_tree(&result), `render mismatch: '{result.output}' vs '{ct::to_string_tree(&result)}'`;
+}
