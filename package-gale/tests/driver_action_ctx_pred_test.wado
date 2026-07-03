@@ -1,0 +1,22 @@
+//! Stage C context-dependent predicate: an alt-initial `{$n == 1}?` reads the
+//! value channel (seeded by @init). Prediction gates the branch on the
+//! translated condition `vals.n == 1`, folded into the token-led dispatch.
+
+use cp from "./grammars/wado_ctx_pred.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_ctx_pred",
+        },
+    };
+
+test "a context-dependent predicate gates on the value channel" {
+    let a = cp::parse(&"a");
+    assert a.ok(), "clean parse of a (predicate holds)";
+    assert a.output == "n=1 one", `output: '{a.output}'`;
+
+    let b = cp::parse(&"b");
+    assert b.ok(), "clean parse of b (unpredicated alt)";
+    assert b.output == "b", `output: '{b.output}'`;
+}
