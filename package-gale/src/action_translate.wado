@@ -41,27 +41,29 @@ pub fn translate_wado_action(
     return Result::<String, String>::Ok(splice_attrs(body, &resolved, &repls));
 }
 
-/// The `let _rule_text_start = p.peek_start();` local a `$text`-substituted
-/// action reads. Named once so codegen (which emits it at inner-body entry) and
-/// the translator (which references it) cannot diverge.
-pub global RULE_TEXT_START_LOCAL: String = "_rule_text_start";
+/// The `let _rule_start_tok = p.pos;` local a `$text` / `$start` / `$stop`
+/// substitution reads — the rule's first token index, captured at rule entry.
+/// Named once so codegen (which emits it) and the translator (which references
+/// it) cannot diverge.
+pub global RULE_START_TOK_LOCAL: String = "_rule_start_tok";
 
-/// Whether any of `rule`'s actions references the `$text` special, so codegen
-/// must capture the rule's start byte before the body.
-pub fn rule_uses_parser_text(rule: &ParserRule, rules: &List<ParserRule>) -> bool {
+/// Whether any of `rule`'s actions references a rule-span special (`$text`,
+/// `$start`, `$stop`), so codegen must capture the rule's start token before the
+/// body.
+pub fn rule_uses_rule_span(rule: &ParserRule, rules: &List<ParserRule>) -> bool {
     if let Some(a) = &rule.init_action {
-        if body_uses_parser_text(&a.text, rule, rules) {
+        if body_uses_rule_span(&a.text, rule, rules) {
             return true;
         }
     }
     if let Some(a) = &rule.after_action {
-        if body_uses_parser_text(&a.text, rule, rules) {
+        if body_uses_rule_span(&a.text, rule, rules) {
             return true;
         }
     }
     for let alt of &rule.alternatives {
         for let a of &alt.actions {
-            if body_uses_parser_text(&a.source.text, rule, rules) {
+            if body_uses_rule_span(&a.source.text, rule, rules) {
                 return true;
             }
         }
@@ -69,10 +71,10 @@ pub fn rule_uses_parser_text(rule: &ParserRule, rules: &List<ParserRule>) -> boo
     return false;
 }
 
-fn body_uses_parser_text(body: &String, rule: &ParserRule, rules: &List<ParserRule>) -> bool {
+fn body_uses_rule_span(body: &String, rule: &ParserRule, rules: &List<ParserRule>) -> bool {
     if let Ok(resolved) = resolve_attrs(body, rule, rules) {
         for let r of &resolved {
-            if r.target matches { ParserSpecial } && r.name == "text" {
+            if r.target matches { ParserSpecial } && (r.name == "text" || r.name == "start" || r.name == "stop") {
                 return true;
             }
         }
@@ -122,16 +124,28 @@ fn action_attr_expr(
     };
 }
 
-/// A parser special (`$text`, `$ctx`, `$start`, `$stop`, `$_p`). Only `$text`
-/// is emitted so far — the input the current rule has consumed, spanning the
-/// captured rule-start byte to the last consumed token. The rest await the CST
-/// context handle and remain a loud error.
-fn parser_special_expr(r: &ResolvedAttr, rule_text_in_scope: bool) -> Result<String, String> {
-    if r.name == "text" && r.member matches { None } {
-        if !rule_text_in_scope {
-            return Result::<String, String>::Err("$text: only emitted for single-alt rules so far");
+/// A parser special (`$text`, `$start`, `$stop`, `$ctx`, `$_p`). `$text` is the
+/// input the rule has consumed (rule-start byte → last consumed token); `$start`
+/// / `$stop` are the rule's first / last token (member-addressable like any
+/// token). All three read the captured `_rule_start_tok` (first token index),
+/// so they need `span_in_scope`. `$ctx` / `$_p` await the CST context handle and
+/// remain a loud error.
+fn parser_special_expr(r: &ResolvedAttr, span_in_scope: bool) -> Result<String, String> {
+    if r.name == "text" || r.name == "start" || r.name == "stop" {
+        if !span_in_scope {
+            return Result::<String, String>::Err(`${r.name}: no rule-span capture in the enclosing rule`);
         }
-        return Result::<String, String>::Ok(`p.text_span({RULE_TEXT_START_LOCAL}, p.last_end())`);
+    }
+    if r.name == "text" && r.member matches { None } {
+        return Result::<String, String>::Ok(
+            `p.text_span(p.token_start({RULE_START_TOK_LOCAL}), p.last_end())`,
+        );
+    }
+    if r.name == "start" {
+        return token_member_of(&RULE_START_TOK_LOCAL, &r.member);
+    }
+    if r.name == "stop" {
+        return token_member_of(&String::from("(p.pos - 1)"), &r.member);
     }
     return Result::<String, String>::Err(`${r.name}: this parser special is not yet emitted`);
 }
@@ -149,35 +163,42 @@ fn binding_name(name: &String) -> String {
 /// index itself and `.channel` is 0 (parser-visible tokens are default channel),
 /// so neither needs a runtime call.
 fn token_member_expr(r: &ResolvedAttr) -> Result<String, String> {
-    let binding = binding_name(&r.name);
-    let m = match &r.member {
+    return token_member_of(&binding_name(&r.name), &r.member);
+}
+
+/// A token member read on an arbitrary token-index expression `idx` (a bound
+/// label, `_rule_start_tok`, `(p.pos - 1)`, …). `.index` is the index itself and
+/// `.channel` is 0 (parser-visible tokens are default channel), so neither
+/// needs a runtime call; the rest go through the `p.token_*` context API.
+fn token_member_of(idx: &String, member: &Option<String>) -> Result<String, String> {
+    let m = match member {
         Some(m) => *m,
         None => {
-            return Result::<String, String>::Ok(binding);
+            return Result::<String, String>::Ok(*idx);
         },
     };
     if m == "text" {
-        return Result::<String, String>::Ok(`p.token_text({binding})`);
+        return Result::<String, String>::Ok(`p.token_text({*idx})`);
     }
     if m == "int" {
-        return Result::<String, String>::Ok(`p.token_int({binding})`);
+        return Result::<String, String>::Ok(`p.token_int({*idx})`);
     }
     if m == "type" {
-        return Result::<String, String>::Ok(`p.token_kind({binding})`);
+        return Result::<String, String>::Ok(`p.token_kind({*idx})`);
     }
     if m == "line" {
-        return Result::<String, String>::Ok(`p.token_line({binding})`);
+        return Result::<String, String>::Ok(`p.token_line({*idx})`);
     }
     if m == "pos" {
-        return Result::<String, String>::Ok(`p.token_col({binding})`);
+        return Result::<String, String>::Ok(`p.token_col({*idx})`);
     }
     if m == "index" {
-        return Result::<String, String>::Ok(binding);
+        return Result::<String, String>::Ok(*idx);
     }
     if m == "channel" {
         return Result::<String, String>::Ok(String::from("0"));
     }
-    return Result::<String, String>::Err(`${r.name}.{m}: unknown token member`);
+    return Result::<String, String>::Err(`.{m}: unknown token member`);
 }
 
 fn rule_member_expr(rules: &List<ParserRule>, r: &ResolvedAttr) -> Result<String, String> {

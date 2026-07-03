@@ -1,0 +1,22 @@
+//! Stage C `$start` / `$stop` / multi-alt `$text`: `$start` / `$stop` are the
+//! rule's first / last token, `$text` its consumed input. The span capture is
+//! emitted at every dispatch shape, so it works on this multi-alt rule.
+
+use ss from "./grammars/wado_start_stop.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_start_stop",
+        },
+    };
+
+test "$start / $stop / $text read the rule span on a multi-alt rule" {
+    let abc = ss::parse(&"a b c");
+    assert abc.ok(), "clean parse of a b c";
+    assert abc.output == "text=a b c start=a stop=c", `output: '{abc.output}'`;
+
+    let d = ss::parse(&"d");
+    assert d.ok(), "clean parse of d";
+    assert d.output == "d text=d start=d", `output: '{d.output}'`;
+}

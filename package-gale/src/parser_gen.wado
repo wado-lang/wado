@@ -109,9 +109,9 @@ use {
     vals_struct_name,
     wado_type_default,
     field_in_vals,
-    rule_uses_parser_text,
+    rule_uses_rule_span,
     rule_threads_args,
-    RULE_TEXT_START_LOCAL,
+    RULE_START_TOK_LOCAL,
 } from "./action_translate.wado";
 use { unwrap_label } from "./lr_util.wado";
 use { escape_ident } from "./ident.wado";
@@ -236,8 +236,8 @@ fn translate_caller_arg(expr: &String, ctx: &GenContext) -> Option<String> {
     }
     let rule = &ctx.parser_rules()[ridx];
     let vals_in_scope = rule_emits_vals(ctx, rule);
-    let rule_text = rule_captures_rule_text(rule, ctx.parser_rules());
-    return match translate_wado_action(rule, ctx.parser_rules(), expr, vals_in_scope, rule_text) {
+    let span_in_scope = rule_captures_span(rule, ctx.parser_rules());
+    return match translate_wado_action(rule, ctx.parser_rules(), expr, vals_in_scope, span_in_scope) {
         Ok(c) => Option::Some(c),
         Err(_) => null,
     };
@@ -714,6 +714,17 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_acti
         fcol.set_return_type(&"i32");
         fcol.emit_begin(w);
         w.line(&"return line_col(self.tokens.chars, self.tokens.span_at(i).start).1;");
+        w.end();
+        w.blank();
+
+        // Byte offset where token `i` begins — backs `$text` (span from the
+        // rule's first token) and `$start`-derived spans.
+        let mut fts0 = FnSpec::new("token_start");
+        fts0.set_receiver(&"&self");
+        fts0.add_param(&"i", &"i32");
+        fts0.set_return_type(&"i32");
+        fts0.emit_begin(w);
+        w.line(&"return self.tokens.starts[i];");
         w.end();
         w.blank();
 
@@ -2833,9 +2844,7 @@ fn gen_parse_fn_simple_named(
         w.line(&`let mut vals = {vals_struct_name(rule)} \{\};`);
     }
     emit_arg_stores(w, rule, ctx);
-    if ctx.emit_actions() && rule_captures_rule_text(rule, ctx.parser_rules()) {
-        w.line(&`let {RULE_TEXT_START_LOCAL} = p.peek_start();`);
-    }
+    emit_span_capture(w, rule, ctx);
     if ctx.emit_actions() {
         if let Some(a) = &rule.init_action {
             gen_action_body(w, a, ctx);
@@ -3063,6 +3072,7 @@ fn gen_parse_fn_named(
                     if rule_emits_vals(ctx, rule) {
                         w.line(&"let mut vals = vals;");
                     }
+                    emit_span_capture(w, rule, ctx);
                     let body = rule_alt_body(lowered_rule, alt_index).unwrap();
                     let after = rule_after_for(rule, lowered_rule, ctx);
                     gen_alt_body(
@@ -3128,6 +3138,7 @@ fn gen_parse_fn_named(
         if rule_emits_vals(ctx, rule) {
             w.line(&"let mut vals = vals;");
         }
+        emit_span_capture(w, rule, ctx);
         if has_overlaps {
             gen_multi_alt_body_alt(
                 w,
@@ -3177,6 +3188,7 @@ fn gen_parse_fn_named(
             w.line(&`let mut vals = {vals_struct_name(rule)} \{\};`);
         }
         emit_arg_stores(w, rule, ctx);
+        emit_span_capture(w, rule, ctx);
         // `@init` shares the inner fn's `vals`; the seed is threaded into the
         // `_alt_<n>` helpers (see `alt_vals_arg`), so overlap-group dispatch
         // preserves it.
@@ -3486,8 +3498,8 @@ fn gate_condition_for(a: &AltAction, ctx: &GenContext) -> Option<String> {
     }
     let rule = &ctx.parser_rules()[ridx];
     let vals_in_scope = rule_emits_vals(ctx, rule);
-    let rule_text = rule_captures_rule_text(rule, ctx.parser_rules());
-    return match translate_wado_action(rule, ctx.parser_rules(), &a.source.text, vals_in_scope, rule_text) {
+    let span_in_scope = rule_captures_span(rule, ctx.parser_rules());
+    return match translate_wado_action(rule, ctx.parser_rules(), &a.source.text, vals_in_scope, span_in_scope) {
         Ok(code) => Option::Some(code),
         Err(_) => null,
     };
@@ -3746,8 +3758,8 @@ fn translate_action_or_warn(src: &ActionSource, ctx: &mut GenContext) -> Option<
         return null;
     }
     let vals_in_scope = rule_emits_vals(ctx, &ctx.parser_rules()[ridx]);
-    let rule_text_in_scope = rule_captures_rule_text(&ctx.parser_rules()[ridx], ctx.parser_rules());
-    return match translate_wado_action(&ctx.parser_rules()[ridx], ctx.parser_rules(), &src.text, vals_in_scope, rule_text_in_scope) {
+    let span_in_scope = rule_captures_span(&ctx.parser_rules()[ridx], ctx.parser_rules());
+    return match translate_wado_action(&ctx.parser_rules()[ridx], ctx.parser_rules(), &src.text, vals_in_scope, span_in_scope) {
         Ok(code) => Option::Some(code),
         Err(msg) => {
             ctx.warn(&`action {src.action_id}`, DiagnosticKind::UnsupportedAction, msg);
@@ -3756,11 +3768,23 @@ fn translate_action_or_warn(src: &ActionSource, ctx: &mut GenContext) -> Option<
     };
 }
 
-/// Whether codegen emits the `_rule_text_start` capture for this rule — a
-/// single-alt rule whose actions reference `$text`. The translator keys `$text`
-/// substitution on the same predicate so the local it reads is always in scope.
-fn rule_captures_rule_text(rule: &ParserRule, rules: &List<ParserRule>) -> bool {
-    return rule.alternatives.len() == 1 && rule_uses_parser_text(rule, rules);
+/// Whether codegen emits the `_rule_start_tok` capture for this rule — its
+/// actions reference a rule-span special (`$text` / `$start` / `$stop`). The
+/// translator keys their substitution on the same predicate, so the local they
+/// read is always in scope, for every rule shape.
+fn rule_captures_span(rule: &ParserRule, rules: &List<ParserRule>) -> bool {
+    return rule_uses_rule_span(rule, rules);
+}
+
+/// Emit `let _rule_start_tok = p.pos;` at a rule-body entry (where `p.pos` is
+/// the rule's first token), when the rule references `$text` / `$start` /
+/// `$stop`. Placed at every shape's body entry (single-alt inner, multi-alt
+/// inner, `_alt_<n>` helpers, LR inner/atom), so span specials resolve
+/// uniformly regardless of dispatch.
+fn emit_span_capture(w: &mut CodeWriter, rule: &ParserRule, ctx: &GenContext) {
+    if ctx.emit_actions() && rule_captures_span(rule, ctx.parser_rules()) {
+        w.line(&`let {RULE_START_TOK_LOCAL} = p.pos;`);
+    }
 }
 
 /// Emit a semantic predicate `{cond}?` as an inline runtime guard: when the
@@ -4160,6 +4184,7 @@ fn gen_lr_fn(
         let mut_kw = if entry_needs_mut { "mut " } else { "" };
         w.line(&`let {mut_kw}vals = {vals_struct_name(rule)} \{\};`);
     }
+    emit_span_capture(w, rule, ctx);
     if ctx.emit_actions() {
         emit_arg_stores(w, rule, ctx);
         if let Some(a) = &rule.init_action {

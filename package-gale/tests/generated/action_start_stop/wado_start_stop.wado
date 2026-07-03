@@ -1,4 +1,4 @@
-#![generated(by = "gale", sources = ["tests/grammars/wado_pred_mixed.g4"])]
+#![generated(by = "gale", sources = ["tests/grammars/wado_start_stop.g4"])]
 
 // Grammar metadata from source .g4 prequels:
 //   option language = Wado
@@ -1220,6 +1220,7 @@ pub enum TokenKind {
     A,
     B,
     C,
+    D,
     WS,
     Eof,
     Error,
@@ -1228,9 +1229,10 @@ pub enum TokenKind {
 pub global TK_A: i32 = 0;
 pub global TK_B: i32 = 1;
 pub global TK_C: i32 = 2;
-pub global TK_WS: i32 = 3;
-pub global TK_EOF: i32 = 4;
-pub global TK_ERROR: i32 = 5;
+pub global TK_D: i32 = 3;
+pub global TK_WS: i32 = 4;
+pub global TK_EOF: i32 = 5;
+pub global TK_ERROR: i32 = 6;
 
 struct Lexer {
     chars: List<char>,
@@ -1272,6 +1274,13 @@ fn try_C(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
+fn try_D(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != 'd' { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != ' ' { return -1; }
@@ -1301,6 +1310,9 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char == 'c' {
             end = try_C(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_C; }
+        } else if first_char == 'd' {
+            end = try_D(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_D; }
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
@@ -1327,6 +1339,7 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_A => "A",
         TK_B => "B",
         TK_C => "C",
+        TK_D => "D",
         TK_WS => "WS",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
@@ -1334,9 +1347,9 @@ pub fn token_kind_name(kind: i32) -> String {
     };
 }
 
-pub global RK_S: NodeKind = 0;
+pub global RK_R: NodeKind = 0;
 
-global RULE_NAMES: List<String> = ["s"];
+global RULE_NAMES: List<String> = ["r"];
 
 impl Display for NodeKind {
     fn fmt(&self, f: &mut Formatter) {
@@ -1662,32 +1675,30 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_r(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_A {
-            let mut best: i32 = -1;
-            pos = start;
-            try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_A { break try_1; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_B { break try_1; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_C { break try_1; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
             pos = start;
             try_0: {
                 if pos >= tokens.len() || tokens[pos] != TK_A { break try_0; }
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_B { break try_0; }
                 pos += 1;
-                if pos > best { best = pos; }
+                if pos >= tokens.len() || tokens[pos] != TK_C { break try_0; }
+                pos += 1;
+                break scan_alts;
             }
-            if best >= 0 { pos = best; break scan_alts; }
+            return -1;
+        } else if alt_kind == TK_D {
+            pos = start;
+            try_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_D { break try_1; }
+                pos += 1;
+                break scan_alts;
+            }
             return -1;
         } else {
             return -1;
@@ -1696,88 +1707,42 @@ fn scan_s(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn _parse_s__inner_alt_1(p: &mut Parser) -> () {
+fn _parse_r__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
-    let a = p.expect(TK_A, &SYNC_0);
-    let b = p.expect(TK_B, &SYNC_1);
-    let c = p.expect(TK_C, &EMPTY_SYNC);
-    if !p.speculating {
-         p.emit("abc"); 
-    }
-    return;
-}
-
-fn _parse_s__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_B { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_C { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn _parse_s__inner_alt_0(p: &mut Parser) -> () {
-    let start = p.peek_start();
-    let a = p.expect(TK_A, &SYNC_0);
-    let b = p.expect(TK_B, &EMPTY_SYNC);
-    if !p.speculating {
-         p.emit("ab"); 
-    }
-    return;
-}
-
-fn _parse_s__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_B { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn _parse_s__inner(p: &mut Parser) -> () {
+    let _rule_start_tok = p.pos;
     let kind = p.peek_kind();
     if kind == TK_A {
-        let _sd_tokens = &p.kinds;
-        let _sd_pos = p.pos;
-        let _sd_p_1 = _parse_s__inner_scan_1(_sd_tokens, _sd_pos);
-        let _sd_p_0 = _parse_s__inner_scan_0(_sd_tokens, _sd_pos);
-        let mut _sd_best_i: i32 = -1;
-        let mut _sd_best_p: i32 = -1;
-        if _sd_p_1 > _sd_best_p {
-            _sd_best_p = _sd_p_1;
-            _sd_best_i = 1;
+        let a = p.expect(TK_A, &SYNC_0);
+        let b = p.expect(TK_B, &SYNC_1);
+        let c = p.expect(TK_C, &EMPTY_SYNC);
+        if !p.speculating {
+             p.emit(`text={p.text_span(p.token_start(_rule_start_tok), p.last_end())} start={p.token_text(_rule_start_tok)} stop={p.token_text((p.pos - 1))}`); 
         }
-        if _sd_p_0 > _sd_best_p {
-            _sd_best_p = _sd_p_0;
-            _sd_best_i = 0;
+        return;
+    }
+    if kind == TK_D {
+        let d = p.expect(TK_D, &EMPTY_SYNC);
+        if !p.speculating {
+             p.emit(`d text={p.text_span(p.token_start(_rule_start_tok), p.last_end())} start={p.token_text(_rule_start_tok)}`); 
         }
-        if _sd_best_i == 1 {
-            return _parse_s__inner_alt_1(p);
-        }
-        if _sd_best_i == 0 {
-            return _parse_s__inner_alt_0(p);
-        }
-        return _parse_s__inner_alt_0(p);
+        return;
     }
     p.no_viable(
-        "expected s",
+        "expected r",
         p.peek_span(),
-        ["TK_A"],
+        ["TK_A", "TK_D"],
     );
     return;
 }
 
-fn _parse_s(p: &mut Parser) -> () {
+fn _parse_r(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_S, _start);
-    _parse_s__inner(p);
+    p.b.start_node(RK_R, _start);
+    _parse_r__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
-        p.push_rule_stack("s");
+        p.push_rule_stack("r");
     }
 }
 
@@ -1799,24 +1764,24 @@ fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> 
 }
 
 pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return parse_s(input, max_errors);
+    return parse_r(input, max_errors);
 }
 
-pub fn parse_s(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_s(p));
+pub fn parse_r(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_r(p));
 }
 
 pub fn to_string_tree(result: &ParseResult) -> String {
-    let mut token_names: List<String> = List::with_capacity(6);
-    for let mut k = 0; k < 6; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(7);
+    for let mut k = 0; k < 7; k += 1 {
         token_names.push(token_kind_name(k));
     }
     return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &token_names);
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
-    let mut token_names: List<String> = List::with_capacity(6);
-    for let mut k = 0; k < 6; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(7);
+    for let mut k = 0; k < 7; k += 1 {
         token_names.push(token_kind_name(k));
     }
     let mut _kind: i32 = -1;

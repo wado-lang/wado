@@ -50,15 +50,22 @@ NUM : [0-9]+ ;
     assert out == " print(p.token_int(x) + p.token_line(x) + p.token_col(x) + p.token_kind(x) + x); ", `out: '{out}'`;
 }
 
-test "translate rewrites $text to the captured rule span" {
+test "translate rewrites $text / $start / $stop to the captured rule span" {
     let g = parse("grammar T;
-r : ID { print($text); } ;
+r : NUM { print($text); print($start.int); print($stop.line); } ;
+NUM : [0-9]+ ;
 ").unwrap();
-    let out = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" print($text); ", false, true).unwrap();
-    assert out == " print(p.text_span(_rule_text_start, p.last_end())); ", `out: '{out}'`;
+    let out = translate_wado_action(
+        &g.parser_rules[0],
+        &g.parser_rules,
+        &" print($text); print($start.int); print($stop.line); ",
+        false,
+        true,
+    ).unwrap();
+    assert out == " print(p.text_span(p.token_start(_rule_start_tok), p.last_end())); print(p.token_int(_rule_start_tok)); print(p.token_line((p.pos - 1))); ", `out: '{out}'`;
 }
 
-test "translate rejects $text when the rule does not capture it" {
+test "translate rejects a span special when the rule does not capture it" {
     let g = parse("grammar T;
 r : ID { print($text); } ;
 ").unwrap();

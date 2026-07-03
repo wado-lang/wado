@@ -1403,6 +1403,10 @@ impl Parser {
         return line_col(self.tokens.chars, self.tokens.span_at(i).start).1;
     }
 
+    fn token_start(&self, i: i32) -> i32 {
+        return self.tokens.starts[i];
+    }
+
     fn la(&self, k: i32) -> i32 {
         return self.peek_at(k - 1);
     }
@@ -1658,11 +1662,11 @@ fn scan_r(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn _parse_r__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
-    let _rule_text_start = p.peek_start();
+    let _rule_start_tok = p.pos;
     let id = p.expect(TK_ID, &SYNC_0);
     let id_2 = p.expect(TK_ID, &EMPTY_SYNC);
     if !p.speculating {
-         p.emit(p.text_span(_rule_text_start, p.last_end())); 
+         p.emit(p.text_span(p.token_start(_rule_start_tok), p.last_end())); 
     }
     return;
 }
