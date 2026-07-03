@@ -1,0 +1,49 @@
+// Threading must bail when the inlined body contains a loop and an arm
+// carries a free unlabeled `break`/`continue`: cloning the arm into the
+// inlined body would capture the exit into the wrong loop. Behavior must
+// stay correct whether or not the rule fires.
+use { println, Stdout } from "core:cli";
+
+#[inline]
+fn find(data: &List<i32>, needle: i32) -> Result<i32, i32> {
+    let mut i = 0;
+    while i < data.len() {
+        if data[i] == needle {
+            return Result::Ok(i);
+        }
+        i += 1;
+    }
+    return Result::Err(-1);
+}
+
+fn first_hit(data: &List<i32>, needles: &List<i32>) -> i32 {
+    let mut hit = -100;
+    let mut i = 0;
+    while i < needles.len() {
+        let idx = match find(data, needles[i]) {
+            Ok(v) => v,
+            Err(_) => {
+                break;
+            },
+        };
+        hit = idx;
+        i += 1;
+    }
+    return hit;
+}
+
+export fn run() with Stdout {
+    let data: List<i32> = [10, 20, 30];
+    let needles: List<i32> = [30, 10, 99, 20];
+    // 30 -> 2, 10 -> 0, 99 -> break; 20 never reached.
+    assert first_hit(&data, &needles) == 0;
+
+    let none: List<i32> = [99];
+    assert first_hit(&data, &none) == -100;
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n"
+}

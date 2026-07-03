@@ -1566,7 +1566,7 @@ fn subst_variant_payload_in_expr(
 }
 
 /// Returns `true` if `block` contains a `Loop` statement at any nesting depth.
-fn block_contains_loop(body: &Body, block: BlockId) -> bool {
+pub(super) fn block_contains_loop(body: &Body, block: BlockId) -> bool {
     body.blocks[block]
         .stmts
         .iter()
@@ -1645,7 +1645,7 @@ fn stmt_has_free_unlabeled_loop_exit(body: &Body, s: StmtId, loop_depth: u32) ->
     }
 }
 
-fn expr_has_free_unlabeled_loop_exit(body: &Body, e: ExprId, loop_depth: u32) -> bool {
+pub(super) fn expr_has_free_unlabeled_loop_exit(body: &Body, e: ExprId, loop_depth: u32) -> bool {
     match &body.exprs[e].kind {
         ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
             stmts_have_free_unlabeled_loop_exit(body, *block, loop_depth)

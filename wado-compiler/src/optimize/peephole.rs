@@ -52,6 +52,7 @@ use super::elide_box_local::build_elide_box_local;
 use super::elide_local::ElideRule;
 use super::gate::{FunctionGate, GatedPass};
 use super::labeled_block_fusion::build_labeled_block_fusion;
+use super::match_thread::build_match_thread;
 use super::match_to_switch::MatchToSwitchRule;
 use super::ref_elim::build_ref_elim;
 use super::string_push::{ShortPushStrRule, resolve_ctx};
@@ -136,6 +137,10 @@ pub(super) fn run_peephole(
         // locals via the engine, so it sits next to the other block-level
         // rules.
         let labeled_block_fusion_rule = (!pre_inline).then(build_labeled_block_fusion);
+        // Match-over-LabeledBlock jump threading is likewise a post-inline
+        // shape: the `match LB { … }` scrutinee only exists after `inline`
+        // copies a variant-returning callee into a `?` / match caller.
+        let match_thread_rule = (!pre_inline).then(build_match_thread);
         // Disjoint borrow of the body arena and the local list so rules can
         // both rewrite the body and allocate fresh locals via the engine.
         let NirFunction { body, locals, .. } = &mut *func;
@@ -157,6 +162,9 @@ pub(super) fn run_peephole(
         }
         if let Some(labeled_block_fusion_rule) = labeled_block_fusion_rule.as_ref() {
             rules.push(labeled_block_fusion_rule);
+        }
+        if let Some(match_thread_rule) = match_thread_rule.as_ref() {
+            rules.push(match_thread_rule);
         }
         rules.extend([
             &array_rule as &dyn Rule,

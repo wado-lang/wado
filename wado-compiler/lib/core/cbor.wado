@@ -842,19 +842,6 @@ impl CborDeserializer {
         return Result::Ok(self.input.get_unchecked(self.pos));
     }
 
-    /// Peek the next byte as an `i32` in `0..256`, or `-1` at EOF. The hot
-    /// scalar decoders use this instead of `peek_byte`: a `Result<u8, _>` built
-    /// across the EOF branch is not scalarized by the optimizer (the variant is
-    /// materialized before the match), so it would allocate on every item. A
-    /// plain `i32` with a `-1` sentinel never allocates.
-    fn peek_or_eof(&self) -> i32 {
-        if self.pos >= self.input.len() {
-            builtin::cold_path();
-            return -1;
-        }
-        return self.input.get_unchecked(self.pos) as i32;
-    }
-
     fn enter(&mut self) -> Result<(), DeserializeError> {
         self.depth += 1;
         if self.depth > MAX_DEPTH {
@@ -1417,11 +1404,9 @@ impl DeserializeStruct for CborStructAccess {
             self.remaining -= 1;
         }
         // Fast path: a definite-length text key matches the schema straight from
-        // the input bytes, no allocation (RFC 8949 §6.1: text-string keys). A
-        // negative `peek_or_eof` (EOF) fails the test and takes the slow path,
-        // where `deserialize_string` reports the error.
-        let head = self.de.peek_or_eof();
-        if head >= 0 && (head >> 5) as u8 == MAJOR_TEXT && (head & 0x1f) as u8 != AI_INDEFINITE {
+        // the input bytes, no allocation (RFC 8949 §6.1: text-string keys).
+        let head = self.de.peek_byte()?;
+        if head >> 5 == MAJOR_TEXT && head & 0x1f != AI_INDEFINITE {
             let key_range = self.de.read_text_key_range()?;
             let idx = match S::lookup(self.de.input.slice(key_range.0, key_range.0 + key_range.1)) {
                 Some(i) => i,
@@ -1505,13 +1490,9 @@ impl Deserializer for CborDeserializer {
 
     fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {
         let start = self.pos as i64;
-        let ib = self.peek_or_eof();
-        if ib < 0 {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::eof(start));
-        }
-        let major = (ib >> 5) as u8;
-        let ai = (ib & 0x1f) as u8;
+        let b = self.peek_byte()?;
+        let major = b >> 5;
+        let ai = b & 0x1f;
         // Fast path: a definite major-0 / major-1 integer, decoded without the
         // i128 round-trip. `-1 - arg` for NINT; the u64 magnitude bound is the
         // same for both signs (`|value|` fits when `arg <= i32::MAX`).
@@ -1537,13 +1518,9 @@ impl Deserializer for CborDeserializer {
 
     fn deserialize_i64(&mut self) -> Result<i64, DeserializeError> {
         let start = self.pos as i64;
-        let ib = self.peek_or_eof();
-        if ib < 0 {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::eof(start));
-        }
-        let major = (ib >> 5) as u8;
-        let ai = (ib & 0x1f) as u8;
+        let b = self.peek_byte()?;
+        let major = b >> 5;
+        let ai = b & 0x1f;
         if ai <= AI_8BYTE && (major == MAJOR_UINT || major == MAJOR_NINT) {
             self.pos += 1;
             let arg = self.read_arg(ai)?;
@@ -1566,13 +1543,9 @@ impl Deserializer for CborDeserializer {
 
     fn deserialize_u32(&mut self) -> Result<u32, DeserializeError> {
         let start = self.pos as i64;
-        let ib = self.peek_or_eof();
-        if ib < 0 {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::eof(start));
-        }
-        let major = (ib >> 5) as u8;
-        let ai = (ib & 0x1f) as u8;
+        let b = self.peek_byte()?;
+        let major = b >> 5;
+        let ai = b & 0x1f;
         if ai <= AI_8BYTE && major == MAJOR_UINT {
             self.pos += 1;
             let arg = self.read_arg(ai)?;
@@ -1592,13 +1565,9 @@ impl Deserializer for CborDeserializer {
 
     fn deserialize_u64(&mut self) -> Result<u64, DeserializeError> {
         let start = self.pos as i64;
-        let ib = self.peek_or_eof();
-        if ib < 0 {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::eof(start));
-        }
-        let major = (ib >> 5) as u8;
-        let ai = (ib & 0x1f) as u8;
+        let b = self.peek_byte()?;
+        let major = b >> 5;
+        let ai = b & 0x1f;
         if ai <= AI_8BYTE && major == MAJOR_UINT {
             self.pos += 1;
             return self.read_arg(ai);
@@ -1625,13 +1594,9 @@ impl Deserializer for CborDeserializer {
         // Fast path: a definite float or major-0/1 integer head, decoded without
         // building a head tuple. Any other case (tags, malformed) leaves `pos`
         // untouched and falls into the tolerant slow loop below.
-        let ib = self.peek_or_eof();
-        if ib < 0 {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::eof(self.pos as i64));
-        }
-        let fmajor = (ib >> 5) as u8;
-        let fai = (ib & 0x1f) as u8;
+        let b = self.peek_byte()?;
+        let fmajor = b >> 5;
+        let fai = b & 0x1f;
         if fmajor == MAJOR_SIMPLE {
             // A compile-time `read_be` size keeps the hot path free of a runtime
             // width dispatch; `simple_float_to_f64` folds against the constant.
@@ -1690,13 +1655,9 @@ impl Deserializer for CborDeserializer {
         // Fast path (see `deserialize_f32`): a definite float or major-0/1
         // integer head decoded without a head tuple; other cases fall through
         // to the tolerant slow loop with `pos` unchanged.
-        let ib = self.peek_or_eof();
-        if ib < 0 {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::eof(self.pos as i64));
-        }
-        let fmajor = (ib >> 5) as u8;
-        let fai = (ib & 0x1f) as u8;
+        let b = self.peek_byte()?;
+        let fmajor = b >> 5;
+        let fai = b & 0x1f;
         if fmajor == MAJOR_SIMPLE {
             match fai {
                 AI_8BYTE => {
@@ -1751,14 +1712,14 @@ impl Deserializer for CborDeserializer {
 
     fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
         // Fast path: the preferred single-byte `false` / `true` heads. Any
-        // other byte (tag-wrapped, malformed, EOF) leaves `pos` untouched for
-        // the tolerant slow loop.
-        let ib = self.peek_or_eof();
-        if ib == INIT_FALSE as i32 {
+        // other byte (tag-wrapped, malformed) leaves `pos` untouched for the
+        // tolerant slow loop.
+        let b = self.peek_byte()?;
+        if b == INIT_FALSE {
             self.pos += 1;
             return Result::Ok(false);
         }
-        if ib == INIT_TRUE as i32 {
+        if b == INIT_TRUE {
             self.pos += 1;
             return Result::Ok(true);
         }
@@ -1812,10 +1773,10 @@ impl Deserializer for CborDeserializer {
         // case. Reads the length argument directly, skipping the head tuple.
         // Indefinite / tag-wrapped strings fall to the slow loop with `pos`
         // unchanged.
-        let ib = self.peek_or_eof();
-        if ib >= 0 && (ib >> 5) as u8 == MAJOR_TEXT && (ib & 0x1f) as u8 <= AI_8BYTE {
+        let b = self.peek_byte()?;
+        if b >> 5 == MAJOR_TEXT && b & 0x1f <= AI_8BYTE {
             self.pos += 1;
-            let len = self.read_arg((ib & 0x1f) as u8)?;
+            let len = self.read_arg(b & 0x1f)?;
             return self.read_definite_text(len);
         }
         loop {
@@ -1861,12 +1822,8 @@ impl Deserializer for CborDeserializer {
         // — a peek must leave the input untouched unless it consumes the null.
         let saved = self.pos;
         loop {
-            let b = self.peek_or_eof();
-            if b < 0 {
-                builtin::cold_path();
-                return Result::Err(DeserializeError::eof(self.pos as i64));
-            }
-            if (b >> 5) as u8 == MAJOR_TAG {
+            let b = self.peek_byte()?;
+            if b >> 5 == MAJOR_TAG {
                 let [tmajor, tai, tag, tindef] = self.read_head()?;
                 if is_passthrough_tag(tag) {
                     continue;
@@ -1875,7 +1832,7 @@ impl Deserializer for CborDeserializer {
                 return Result::Ok(false);
             }
             // null (0xf6) and undefined (0xf7) both map to the absent value.
-            if b == INIT_NULL as i32 || b == INIT_UNDEFINED as i32 {
+            if b == INIT_NULL || b == INIT_UNDEFINED {
                 self.pos += 1;
                 return Result::Ok(true);
             }

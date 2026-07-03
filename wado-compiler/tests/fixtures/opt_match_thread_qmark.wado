@@ -1,0 +1,51 @@
+// `?` on an inlined Result-returning callee is jump-threaded: each
+// `break L: Ok(v)` / `break L: Err(e)` in the inlined body flows straight
+// into the corresponding `?` arm, so the intermediate `Result<u8, bool>`
+// is never allocated and never dispatched on.
+use { println, Stdout } from "core:cli";
+
+struct Reader {
+    data: List<u8>,
+    pos: i32,
+}
+
+impl Reader {
+    #[inline]
+    fn next_byte(&mut self) -> Result<u8, bool> {
+        if self.pos >= self.data.len() {
+            return Result::Err(true);
+        }
+        let b = self.data[self.pos];
+        self.pos += 1;
+        return Result::Ok(b);
+    }
+}
+
+fn sum(r: &mut Reader, count: i32) -> Result<i32, bool> {
+    let mut total = 0;
+    let mut i = 0;
+    while i < count {
+        let b = r.next_byte()?;
+        total += b as i32;
+        i += 1;
+    }
+    return Result::Ok(total);
+}
+
+export fn run() with Stdout {
+    let mut r = Reader { data: [1, 2, 3, 250], pos: 0 };
+    assert sum(&mut r, 4) matches { Ok(256) };
+
+    let mut short = Reader { data: [7], pos: 0 };
+    assert sum(&mut short, 2) matches { Err(true) };
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_not_expect:O2": [
+        "Result<u8,bool>::Ok\" { discriminant",
+        "Result<u8,bool>::Err\" { discriminant"
+    ]
+}
