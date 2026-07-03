@@ -3489,16 +3489,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_lit: &ast::StructLiteralExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        // Functional-update spread is implemented only for named struct literals
-        // so far (see WEP: Literal Spread — anonymous composition and key-value
-        // merge are later phases).
+        // A spread on an anonymous literal is only meaningful once the literal's
+        // shape is known: a key-value merge (this literal coerces to a
+        // `KeyValueLiteralBuilder` type) is handled by `reify_key_value_coercion`;
+        // an anonymous-struct composition (`{ ..a, ..b }`) is a later phase and
+        // is rejected in `reify_anonymous_struct_literal`. Either way, resolve the
+        // base here for its facts.
         if let Some(base) = &struct_lit.spread {
-            let _ = self.logger.error(TypeError::InvalidLiteral {
-                message: "`..base` spread is only supported in a named struct literal; \
-                          write the struct name, e.g. `S { ..base }`"
-                    .to_string(),
-                span: base.span(),
-            });
+            let _ = self.resolve_expr(base, ctx, None);
         }
 
         // Resolve all field expressions first

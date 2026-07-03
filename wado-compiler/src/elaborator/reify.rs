@@ -5999,6 +5999,46 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         )];
 
+        // --- Functional-update seed: __b.insert_all(base) before the explicit
+        //     inserts, so explicit keys override the base's entries. ---
+        if let Some(base) = &struct_lit.spread {
+            let base_expr = self.reify_expr(base, ctx, Some(facts.target_type));
+            let builder_local = TirExpr::new(
+                TirExprKind::Local {
+                    index: builder_index,
+                    name: "__b".to_string(),
+                },
+                facts.builder_type,
+                span,
+            );
+            let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+                builder_local,
+                facts.insert_self_kind,
+                false,
+                span,
+                &self.tysys.type_table,
+            );
+            let insert_all_method_info = LocalMethodName::new(
+                facts.builder_base_name.clone(),
+                Some(facts.trait_name.clone()),
+                "insert_all".to_string(),
+            );
+            let insert_all_call = super::Elaborator::<H>::build_tir_method_call(
+                receiver,
+                FunctionRef {
+                    module_source: facts.impl_module_source.clone(),
+                    name: facts.insert_all_mangled_name.clone(),
+                    monomorph_info: None,
+                    method_info: Some(insert_all_method_info),
+                },
+                vec![],
+                vec![CallArg::new(base_expr, false)],
+                TypeTable::UNIT,
+                span,
+            );
+            stmts.push(TirStmt::new(TirStmtKind::Expr(insert_all_call), span));
+        }
+
         // --- For each field: __b.insert_literal("name", value) ---
         let insert_method_info = LocalMethodName::new(
             facts.builder_base_name.clone(),
@@ -6291,6 +6331,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         recorded_type: TypeId,
     ) -> TirExpr {
         use crate::tir::{TirExprKind, TirStructField};
+
+        // Anonymous-struct composition (`{ ..a, ..b }` synthesising a union) is a
+        // later phase; a spread that reaches here did not coerce to a key-value
+        // builder, so reject it rather than silently dropping it.
+        if let Some(base) = &struct_lit.spread {
+            let _ = self
+                .logger
+                .error(crate::elaborator::types::TypeError::InvalidLiteral {
+                    message: "`..base` spread in an anonymous struct literal is not yet \
+                          supported; use a named struct literal `S { ..base }` or a \
+                          key-value literal coerced to a map"
+                        .to_string(),
+                    span: base.span(),
+                });
+        }
 
         let resolved_fields: Vec<TirStructField> = struct_lit
             .fields

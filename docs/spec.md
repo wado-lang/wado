@@ -3177,7 +3177,15 @@ let opt = map.get("x");          // returns Option<V>
 
 // Keys preserve insertion order
 let keys = map.keys();  // returns List<K> in insertion order
+
+// Functional-update spread: seed from a base map, then override/add keys
+let m2: TreeMap<String, i32> = { ..map, "x": 99, "w": 40 };
 ```
+
+A `{ ..base, "k": v }` key-value literal seeds the builder with every entry of
+`base` (same map type) and then applies the explicit keys, so explicit keys
+override the base. Like the struct form, the spread is leading and single. See
+[WEP: Literal Spread](./wep-2026-07-03-literal-spread.md).
 
 ### Access Methods
 

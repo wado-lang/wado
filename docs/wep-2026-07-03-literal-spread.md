@@ -86,7 +86,10 @@ changing the semantics of the first two.
 - [x] Named-struct FRU (`S { ..base, overrides… }`): leading-single spread,
       field projection, once-evaluated base, generic inference from base, and the
       cross-module read-reachability guard.
-- [ ] Key-value merge (`insert_all`).
+- [x] Key-value merge (`{ ..base, "k": v }`): `KeyValueLiteralBuilder::insert_all`
+      seeds the builder with `base` before the explicit inserts, so explicit keys
+      override. Currently leading-single like the struct case; relaxing key-value
+      spread to any position / multiple sources (its full JS form) is a follow-up.
 - [ ] Anonymous composition (union synthesis).
 
 ## Consequences

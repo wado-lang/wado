@@ -3934,6 +3934,11 @@ impl Parser {
             return self.parse_struct_literal(None, start_span);
         }
 
+        // Functional-update spread leads the literal: `{ ..base, "k": v }`.
+        if self.check(&TokenKind::DotDot) {
+            return self.parse_struct_literal(None, start_span);
+        }
+
         Err(ParseError {
             message: "implicit struct literal requires field syntax: { field: value }".into(),
             span: start_span,

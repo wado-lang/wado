@@ -550,6 +550,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             MethodName::format_local(&mangled_builder_name, Some(&trait_name), "new_literal");
         let insert_mangled_name =
             MethodName::format_local(&mangled_builder_name, Some(&trait_name), "insert_literal");
+        let insert_all_mangled_name =
+            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "insert_all");
         let build_mangled_name = if use_new_api {
             Some(MethodName::format_local(
                 &mangled_builder_name,
@@ -579,6 +581,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 use_new_api,
                 new_mangled_name,
                 insert_mangled_name,
+                insert_all_mangled_name,
                 build_mangled_name,
             },
         );

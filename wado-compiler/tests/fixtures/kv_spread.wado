@@ -1,0 +1,30 @@
+// Key-value (TreeMap) functional-update spread: `{ ..base, "k": v }` seeds the
+// builder with `base`'s entries, then explicit keys override.
+use { println, Stdout } from "core:cli";
+use { TreeMap } from "core:collections";
+
+export fn run() with Stdout {
+    let base: TreeMap<String, i32> = { "a": 1, "b": 2 };
+
+    // Add a key, keep the rest from base.
+    let extended: TreeMap<String, i32> = { ..base, "c": 3 };
+    assert extended.len() == 3;
+    assert extended["a"] == 1;
+    assert extended["b"] == 2;
+    assert extended["c"] == 3;
+
+    // Explicit key overrides the base's entry.
+    let overridden: TreeMap<String, i32> = { ..base, "a": 100 };
+    assert overridden.len() == 2;
+    assert overridden["a"] == 100;
+    assert overridden["b"] == 2;
+
+    // Base is unchanged (value semantics).
+    assert base["a"] == 1;
+    assert base.len() == 2;
+
+    println("kv spread: ok");
+}
+
+__DATA__
+{"stdout": "kv spread: ok\n"}

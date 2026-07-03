@@ -649,6 +649,8 @@ pub(crate) struct KeyValueCoercionFacts {
     pub(crate) new_mangled_name: String,
     /// `Builder::insert_literal` call's mangled name.
     pub(crate) insert_mangled_name: String,
+    /// `Builder::insert_all` call's mangled name, for a `{ ..base, … }` spread.
+    pub(crate) insert_all_mangled_name: String,
     /// `Builder::build` call's mangled name. `None` under the legacy API
     /// where the block breaks with `__b` directly.
     pub(crate) build_mangled_name: Option<String>,
