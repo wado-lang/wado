@@ -201,10 +201,15 @@
             a.click();
           };
 
-          // Collect all bench results per benchmark name
+          // Collect all bench results per benchmark name, and track the most
+          // recent entry to derive the graph order from.
           const benchesByName = new Map();
+          let latestEntry = null;
           for (const entries of Object.values(data.entries)) {
             for (const entry of entries) {
+              if (!latestEntry || entry.date > latestEntry.date) {
+                latestEntry = entry;
+              }
               const {commit, date, tool, benches} = entry;
               for (const bench of benches) {
                 const result = { commit, date, tool, bench };
@@ -231,7 +236,25 @@
             // Skip entries without optimization level suffix (legacy data)
           }
 
-          return groups;
+          if (!latestEntry) {
+            return groups;
+          }
+
+          // Order graphs by the most recent run and drop retired series. The
+          // latest entry lists benches in the benchmark script's emission
+          // order, so following it places each series in its natural position
+          // (e.g. the `json/*/ser` and `json/*/de` series sit where the old
+          // suffix-less `json/*` ones used to). Series absent from the latest
+          // run — such as those retired `json/*` names — are omitted even
+          // though their historical data remains in data.js.
+          const ordered = new Map();
+          for (const bench of latestEntry.benches) {
+            const baseName = bench.name.replace(OPT_PATTERN, '');
+            if (groups.has(baseName) && !ordered.has(baseName)) {
+              ordered.set(baseName, groups.get(baseName));
+            }
+          }
+          return ordered;
         }
 
         // Every commit gets a fixed horizontal slot, so the chart grows as wide
