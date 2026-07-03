@@ -3,7 +3,7 @@ use { LitToken, TokenSlot, token_slot_order } from "./lexer_gen.wado";
 use { CodeWriter, FnSpec, GlobalSpec, Vis, str_lit } from "./wadopoet.wado";
 
 /// `highlight`: build the token/rule mapping, then drive `highlight_walk`
-/// over the parsed `CstNode` tree. `parse` always returns a tree (partial on
+/// over the parsed CST store. `parse` always returns a tree (partial on
 /// broken input), so there is no parse-failure / tokenize-only branch — a
 /// broken input still highlights from its partial tree.
 pub fn gen_highlight(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>) {
@@ -20,7 +20,7 @@ pub fn gen_highlight(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<Li
         // parse leaves a partial tree that need not cover every token, so fall
         // back to a flat token pass (default classes only).
         w.begin(&"if result.diagnostics.is_empty()");
-        w.line(&"highlight_walk(&mut visitor, &result.tokens, &result.root);");
+        w.line(&"highlight_walk(&mut visitor, &result.tokens, &result.cst);");
         w.else_begin(&"else");
         w.begin(&"for let mut _i = 0; _i < result.tokens.len(); _i += 1");
         w.line(&"visitor.hl_visit_token(&result.tokens, _i);");

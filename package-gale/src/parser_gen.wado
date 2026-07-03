@@ -294,10 +294,10 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
     w.end();
     if ctx.emit_actions() {
         w.line(
-            &"return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics, output: p.output };",
+            &"return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics, output: p.output };",
         );
     } else {
-        w.line(&"return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };");
+        w.line(&"return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };");
     }
     w.end();
 }

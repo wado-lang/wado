@@ -1,12 +1,12 @@
 //! `<rule>_alt` returns `Option`, and this pins *why* it must — rather than
 //! panicking — on a node whose alternative was never stamped.
 //!
-//! The error-resilient parser opens a rule's `CstNode` before it dispatches
-//! and closes it even when no alternative matches (fail-soft), so an error
-//! parse leaves `expr` nodes with `alt` unset (-1) in the tree. A consumer
-//! walking that tree must see them as `None` — not a crash, and not a silent
-//! first alternative. A clean parse stamps every `expr` node, so the accessor
-//! returns `Some(<label>)` there.
+//! The error-resilient parser opens a rule node before it dispatches and closes
+//! it even when no alternative matches (fail-soft), so an error parse leaves
+//! `expr` nodes with `alt` unset (-1) in the tree. A consumer reading that tree
+//! must see them as `None` — not a crash, and not a silent first alternative.
+//! A clean parse stamps every `expr` node, so the accessor returns
+//! `Some(<label>)` there.
 
 use ao from "./grammars/alt_opt.g4"
     with {
@@ -17,32 +17,26 @@ use ao from "./grammars/alt_opt.g4"
         },
     };
 
-// Count stamped `expr` nodes (alt >= 0), asserting each maps to `Some`.
-// Recurses on the loop-bound child, never returning a `CstNode` by value.
-fn count_stamped(node: &ao::CstNode) -> i32 {
+// Count stamped `expr` nodes (alt >= 0), asserting each maps to `Some`. A flat
+// scan over the store's open rows; no node value is ever constructed.
+fn count_stamped(s: &ao::CstStore) -> i32 {
     let mut n = 0;
-    if node.kind == ao::RK_EXPR && node.alt >= 0 {
-        assert ao::expr_alt(node) matches { Some(_) }, `stamped expr (alt={node.alt}) must map to Some`;
-        n += 1;
-    }
-    for let child of &node.children {
-        if let Node(c) = *child {
-            n += count_stamped(&c);
+    for let mut r = 0; r < s.tag.len(); r += 1 {
+        if s.tag[r] == ao::E_OPEN && ao::cst_kind(s, r) == ao::RK_EXPR && ao::cst_alt(s, r) >= 0 {
+            assert ao::expr_alt(s, r) matches { Some(_) }, `stamped expr (alt={ao::cst_alt(s, r)}) must map to Some`;
+            n += 1;
         }
     }
     return n;
 }
 
 // Count unstamped `expr` nodes (alt < 0), asserting each maps to `None`.
-fn count_unstamped(node: &ao::CstNode) -> i32 {
+fn count_unstamped(s: &ao::CstStore) -> i32 {
     let mut n = 0;
-    if node.kind == ao::RK_EXPR && node.alt < 0 {
-        assert ao::expr_alt(node) matches { None }, "unstamped expr must map to None, not a silent first alt";
-        n += 1;
-    }
-    for let child of &node.children {
-        if let Node(c) = *child {
-            n += count_unstamped(&c);
+    for let mut r = 0; r < s.tag.len(); r += 1 {
+        if s.tag[r] == ao::E_OPEN && ao::cst_kind(s, r) == ao::RK_EXPR && ao::cst_alt(s, r) < 0 {
+            assert ao::expr_alt(s, r) matches { None }, "unstamped expr must map to None, not a silent first alt";
+            n += 1;
         }
     }
     return n;
@@ -52,8 +46,8 @@ test "a stamped expr node maps to Some(label)" {
     let result = ao::parse(&"(42)");
     assert result.ok(), "clean input should parse without diagnostics";
     // Outer Paren expr + inner Num expr, both stamped; none unstamped.
-    assert count_stamped(&result.root) == 2;
-    assert count_unstamped(&result.root) == 0;
+    assert count_stamped(&result.cst) == 2;
+    assert count_unstamped(&result.cst) == 0;
 }
 
 test "an unstamped error-recovery expr node maps to None, not a silent first alt" {
@@ -63,5 +57,5 @@ test "an unstamped error-recovery expr node maps to None, not a silent first alt
     // to fall back to the first label, count_unstamped's assert would fail.
     let result = ao::parse(&"()");
     assert !result.ok(), "`( )` is a syntax error";
-    assert count_unstamped(&result.root) >= 1, "expected an unstamped expr node in the error tree";
+    assert count_unstamped(&result.cst) >= 1, "expected an unstamped expr node in the error tree";
 }
