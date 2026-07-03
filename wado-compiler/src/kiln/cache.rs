@@ -482,7 +482,9 @@ mod tests {
         map
     }
 
-    fn decode_map_inner(dec: &mut minicbor::Decoder<'_>) -> std::collections::BTreeMap<String, Cbor> {
+    fn decode_map_inner(
+        dec: &mut minicbor::Decoder<'_>,
+    ) -> std::collections::BTreeMap<String, Cbor> {
         let len = dec
             .map()
             .expect("expected a CBOR map")
@@ -535,7 +537,10 @@ mod tests {
     #[test]
     fn empty_options_is_the_empty_cbor_map() {
         assert_eq!(empty_options_canonical(), vec![0xa0]);
-        assert_eq!(empty_options_canonical(), encode_options_canonical(&opts(vec![])));
+        assert_eq!(
+            empty_options_canonical(),
+            encode_options_canonical(&opts(vec![]))
+        );
         assert!(decode_map(&empty_options_canonical()).is_empty());
     }
 
