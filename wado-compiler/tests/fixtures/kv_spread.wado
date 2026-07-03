@@ -23,6 +23,15 @@ export fn run() with Stdout {
     assert base["a"] == 1;
     assert base.len() == 2;
 
+    // Multiple spreads at any position, source-order last-wins.
+    let m2: TreeMap<String, i32> = { "a": 9, "d": 4 };
+    let merged: TreeMap<String, i32> = { ..base, ..m2, "c": 3 };
+    assert merged.len() == 4;
+    assert merged["a"] == 9;
+    assert merged["b"] == 2;
+    assert merged["c"] == 3;
+    assert merged["d"] == 4;
+
     println("kv spread: ok");
 }
 

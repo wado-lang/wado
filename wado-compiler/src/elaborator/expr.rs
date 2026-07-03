@@ -3737,13 +3737,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let has_spread = !struct_lit.spreads.is_empty();
         let compose_union = has_spread && base_info.iter().all(|(m, f)| !m && f.is_some());
-        let all_map = has_spread && base_info.iter().all(|(m, _)| *m);
+        let all_map = base_info.iter().all(|(m, _)| *m);
         let expected_is_map = expected_type
             .is_some_and(|t| self.type_implements_trait(&self.annotate_ctx, t, "KeyValueLiteral"));
+        // A pure key-value merge with a map-typed target is the one valid spread
+        // that is not a composition. A base that already errored is skipped to
+        // avoid a cascading diagnostic.
+        let is_kv_merge = has_spread && all_map && expected_is_map;
+        let base_errored = spread_base_types
+            .iter()
+            .any(|&t| t == TypeTable::ERROR || t == TypeTable::UNKNOWN);
 
-        // The only valid spread that is not a composition is a pure key-value
-        // merge with a map-typed target; anything else is a dropped spread.
-        if has_spread && !compose_union && !(all_map && expected_is_map) {
+        if has_spread && !compose_union && !is_kv_merge && !base_errored {
             let _ = self.logger.error(TypeError::InvalidLiteral {
                 message: "a `..base` spread must be a struct value (composition) or a \
                           key-value map with a map-typed target; a non-struct base or a \
