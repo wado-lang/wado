@@ -1166,7 +1166,7 @@ fn "core:cbor/CborDeserializer::read_be"(self, n) {
     let _licm_input_8: ref "core:prelude/slice.wado//ArraySlice<u8>";
     let _licm_repr_9: ref Array<u8>;
     let _licm_start_10: i32;
-    if @unlikely((self.pos + n) > (self.input.end - self.input.start)) {
+    if @unlikely(n > ((self.input.end - self.input.start) - self.pos)) {
         cold_path;
         return struct.new "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null("core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s(self.pos))) };
     }

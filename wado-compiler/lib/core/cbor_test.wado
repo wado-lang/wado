@@ -199,6 +199,54 @@ test "round-trip: integers across widths" {
     assert roundtrips(&u64v);
 }
 
+test "round-trip: integer fast-path boundaries" {
+    // The scalar decode fast paths gate on `arg <= i32::MAX`/`i64::MAX`/`u32::MAX`
+    // and reach the most-negative value only through the NINT `-1 - arg` arm.
+    let i32max: i32 = 2147483647;
+    let i32min: i32 = -2147483648;
+    let i64max: i64 = 9223372036854775807;
+    let i64min: i64 = -9223372036854775808;
+    let u32max: u32 = 4294967295;
+    let u64max: u64 = 18446744073709551615;
+    assert roundtrips(&i32max);
+    assert roundtrips(&i32min);
+    assert roundtrips(&i64max);
+    assert roundtrips(&i64min);
+    assert roundtrips(&u32max);
+    assert roundtrips(&u64max);
+}
+
+test "decode: out-of-range integers overflow, not truncate" {
+    // i32::MAX + 1 (uint) and i32::MIN - 1 (nint) must reject, not wrap.
+    assert decodes_err::<i32>(hex("1a80000000"));
+    assert decodes_err::<i32>(hex("3a80000000"));
+    // u32::MAX + 1 into u32; a negative into an unsigned target.
+    assert decodes_err::<u32>(hex("1b0000000100000000"));
+    assert decodes_err::<u32>(hex("20"));
+    // u64 does not overflow, but a bare u64::MAX must round-trip via the fast path.
+    assert from_bytes::<u64, ByteList>(hex("1bffffffffffffffff")).unwrap() == 18446744073709551615;
+}
+
+test "decode: truncated multi-byte head is EOF" {
+    // Head announces a wider argument than the remaining input.
+    assert decodes_err::<i32>(hex("1a0000"));
+    assert decodes_err::<u64>(hex("1b"));
+    assert decodes_err::<f64>(hex("fb00000000"));
+    assert decodes_err::<i32>(hex(""));
+}
+
+test "decode: non-preferred integer encodings widen correctly" {
+    // 0 in 1/2/4/8-byte forms, and -1 in the 1-byte nint form.
+    assert from_bytes::<i32, ByteList>(hex("1800")).unwrap() == 0;
+    assert from_bytes::<i32, ByteList>(hex("190000")).unwrap() == 0;
+    assert from_bytes::<i32, ByteList>(hex("1a00000000")).unwrap() == 0;
+    assert from_bytes::<i64, ByteList>(hex("1b0000000000000000")).unwrap() == 0;
+    assert from_bytes::<i32, ByteList>(hex("3800")).unwrap() == -1;
+    // An integer item decodes into a float target through the fast path.
+    assert from_bytes::<f64, ByteList>(hex("1a000f4240")).unwrap() == 1000000.0;
+    assert from_bytes::<f64, ByteList>(hex("20")).unwrap() == -1.0;
+}
+
 test "round-trip: 128-bit integers and bignums" {
     let a: u128 = 18446744073709551616;
     let b: i128 = -18446744073709551617;

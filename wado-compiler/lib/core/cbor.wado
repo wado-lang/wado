@@ -795,6 +795,20 @@ fn decode_half(bits: u64) -> f64 {
     return val;
 }
 
+/// Decode a major-7 float head into `f64` from its raw argument bits, given the
+/// additional-info code (`AI_8BYTE` binary64, `AI_4BYTE` binary32, `AI_2BYTE`
+/// binary16). All three widen to `f64` exactly, so `deserialize_f32` routes its
+/// *float* arms through this too (only the integer arms differ, to avoid the
+/// double-round `deserialize_f64` would introduce). The caller guarantees `ai`
+/// is one of the three float codes.
+fn simple_float_to_f64(ai: u8, bits: u64) -> f64 {
+    return match ai {
+        AI_8BYTE => f64::from_bits(bits as i64),
+        AI_4BYTE => f32::from_bits(bits as i32) as f64,
+        _ => decode_half(bits),
+    };
+}
+
 fn is_passthrough_tag(tag: u64) -> bool {
     // Tags whose content is decoded directly, ignoring the tag number
     // (RFC 8949 §6.1): date/time text (0) / epoch (1), base64url/base64/base16
@@ -858,7 +872,10 @@ impl CborDeserializer {
     /// cheaper than one `Result`-returning `next_byte` per byte on the hot
     /// float/integer paths.
     fn read_be(&mut self, n: i32) -> Result<u64, DeserializeError> {
-        if self.pos + n > self.input.len() {
+        // `n > len - pos` rather than `pos + n > len`: the latter overflows i32
+        // near the end of a multi-gigabyte input. `len - pos` cannot overflow
+        // (`0 <= pos <= len`), and `n` is small (2/4/8).
+        if n > self.input.len() - self.pos {
             builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
@@ -1616,17 +1633,23 @@ impl Deserializer for CborDeserializer {
         let fmajor = (ib >> 5) as u8;
         let fai = (ib & 0x1f) as u8;
         if fmajor == MAJOR_SIMPLE {
-            if fai == AI_8BYTE {
-                self.pos += 1;
-                return Result::Ok(f64::from_bits(self.read_be(8)? as i64) as f32);
-            }
-            if fai == AI_4BYTE {
-                self.pos += 1;
-                return Result::Ok(f32::from_bits(self.read_be(4)? as i32));
-            }
-            if fai == AI_2BYTE {
-                self.pos += 1;
-                return Result::Ok(decode_half(self.read_be(2)?) as f32);
+            // A compile-time `read_be` size keeps the hot path free of a runtime
+            // width dispatch; `simple_float_to_f64` folds against the constant.
+            match fai {
+                AI_8BYTE => {
+                    self.pos += 1;
+                    return Result::Ok(simple_float_to_f64(AI_8BYTE, self.read_be(8)?) as f32);
+                },
+                AI_4BYTE => {
+                    self.pos += 1;
+                    return Result::Ok(simple_float_to_f64(AI_4BYTE, self.read_be(4)?) as f32);
+                },
+                AI_2BYTE => {
+                    self.pos += 1;
+                    return Result::Ok(simple_float_to_f64(AI_2BYTE, self.read_be(2)?) as f32);
+                },
+                _ => {
+                },
             }
         } else if fai <= AI_8BYTE && (fmajor == MAJOR_UINT || fmajor == MAJOR_NINT) {
             self.pos += 1;
@@ -1640,14 +1663,8 @@ impl Deserializer for CborDeserializer {
             let [major, ai, arg, indef] = self.read_head()?;
             match major {
                 MAJOR_SIMPLE => match ai {
-                    AI_8BYTE => {
-                        return Result::Ok(f64::from_bits(arg as i64) as f32);
-                    },
-                    AI_4BYTE => {
-                        return Result::Ok(f32::from_bits(arg as i32));
-                    },
-                    AI_2BYTE => {
-                        return Result::Ok(decode_half(arg) as f32);
+                    AI_8BYTE | AI_4BYTE | AI_2BYTE => {
+                        return Result::Ok(simple_float_to_f64(ai, arg) as f32);
                     },
                     _ => {
                     },
@@ -1681,17 +1698,21 @@ impl Deserializer for CborDeserializer {
         let fmajor = (ib >> 5) as u8;
         let fai = (ib & 0x1f) as u8;
         if fmajor == MAJOR_SIMPLE {
-            if fai == AI_8BYTE {
-                self.pos += 1;
-                return Result::Ok(f64::from_bits(self.read_be(8)? as i64));
-            }
-            if fai == AI_4BYTE {
-                self.pos += 1;
-                return Result::Ok(f32::from_bits(self.read_be(4)? as i32) as f64);
-            }
-            if fai == AI_2BYTE {
-                self.pos += 1;
-                return Result::Ok(decode_half(self.read_be(2)?));
+            match fai {
+                AI_8BYTE => {
+                    self.pos += 1;
+                    return Result::Ok(simple_float_to_f64(AI_8BYTE, self.read_be(8)?));
+                },
+                AI_4BYTE => {
+                    self.pos += 1;
+                    return Result::Ok(simple_float_to_f64(AI_4BYTE, self.read_be(4)?));
+                },
+                AI_2BYTE => {
+                    self.pos += 1;
+                    return Result::Ok(simple_float_to_f64(AI_2BYTE, self.read_be(2)?));
+                },
+                _ => {
+                },
             }
         } else if fai <= AI_8BYTE && (fmajor == MAJOR_UINT || fmajor == MAJOR_NINT) {
             self.pos += 1;
@@ -1705,14 +1726,8 @@ impl Deserializer for CborDeserializer {
             let [major, ai, arg, indef] = self.read_head()?;
             match major {
                 MAJOR_SIMPLE => match ai {
-                    AI_8BYTE => {
-                        return Result::Ok(f64::from_bits(arg as i64));
-                    },
-                    AI_4BYTE => {
-                        return Result::Ok(f32::from_bits(arg as i32) as f64);
-                    },
-                    AI_2BYTE => {
-                        return Result::Ok(decode_half(arg));
+                    AI_8BYTE | AI_4BYTE | AI_2BYTE => {
+                        return Result::Ok(simple_float_to_f64(ai, arg));
                     },
                     _ => {
                     },
