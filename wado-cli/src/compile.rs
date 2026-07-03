@@ -1040,7 +1040,16 @@ async fn embed_wit_section(
         project,
         &base_path,
     );
-    let sem = wado_compiler::semantics(&source, &host, Some(input)).await;
+    // Thread the target world so the Kiln `Request<T>` adapter runs during
+    // this re-analysis; otherwise WIT emission sees the un-representable
+    // generic `Request<Options>` and skips the section (issue #1478).
+    let sem = wado_compiler::semantics_for_world(
+        &source,
+        &host,
+        Some(input),
+        opts.target_world.as_deref(),
+    )
+    .await;
     if !sem.is_complete() {
         let msg = "WIT analysis did not complete";
         if explicit {
