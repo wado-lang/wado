@@ -4176,7 +4176,7 @@ fn gen_lr_fn(
             w.else_begin(&`else if {cond}`);
         }
         if group.len() == 1 {
-            emit_lr_branch(w, &lr_alts[lr_dispatch.valid_lr_alts[group[0]]], &rk, &scan_fn, labeled, ctx, &mut nc);
+            emit_lr_branch(w, &lr_alts[lr_dispatch.valid_lr_alts[group[0]]], rule, &rk, &scan_fn, labeled, ctx, &mut nc);
         } else {
             emit_lr_overlap(w, rule, lr_alts, lr_dispatch, group, &rk, &scan_fn, ctx, &mut nc);
         }
@@ -4226,7 +4226,7 @@ fn gen_lr_fn_atn(
         } else {
             w.else_begin(&`else if _atn_alt == {i}`);
         }
-        emit_lr_branch_body(w, &lr_alts[valid[i]], rk, labeled, ctx, &mut nc);
+        emit_lr_branch_body(w, &lr_alts[valid[i]], rule, rk, labeled, ctx, &mut nc);
     }
     if !is_first {
         w.else_begin(&"else");
@@ -4252,6 +4252,7 @@ fn gen_lr_fn_atn(
 fn emit_lr_branch(
     w: &mut CodeWriter,
     lr: &LrAlt,
+    rule: &ParserRule,
     rk: &String,
     scan_fn: &String,
     labeled: bool,
@@ -4262,7 +4263,7 @@ fn emit_lr_branch(
     w.begin(&`if {*scan_fn}_lr_{lr.alt_index}(&p.kinds, p.pos) < 0`);
     w.line(&"break;");
     w.end();
-    emit_lr_branch_body(w, lr, rk, labeled, ctx, nc);
+    emit_lr_branch_body(w, lr, rule, rk, labeled, ctx, nc);
     w.else_begin(&"else");
     w.line(&"break;");
     w.end();
@@ -4274,6 +4275,7 @@ fn emit_lr_branch(
 fn emit_lr_branch_body(
     w: &mut CodeWriter,
     lr: &LrAlt,
+    rule: &ParserRule,
     rk: &String,
     labeled: bool,
     ctx: &mut GenContext,
@@ -4285,7 +4287,19 @@ fn emit_lr_branch_body(
     if labeled {
         w.line(&`p.b.set_alt({lr.alt_index});`);
     }
-    gen_ops(w, &lr.suffix.ops, ctx, nc);
+    // Interleave the alt's actions with the suffix ops. The LR rewrite strips
+    // the leading self-ref (element 0), so an action at surface `before_index b`
+    // runs before suffix op `b - 1`: pass the original `before` to
+    // `gen_alt_actions_at` (before op `i` → `before == i + 1`, trailing →
+    // `before == ops.len() + 1`). The alt-initial gate (`before == 0`) is never
+    // reached here — it is an LR loop-entry decision, not a suffix action.
+    let actions = &rule.alternatives[lr.alt_index].actions;
+    let ops = &lr.suffix.ops;
+    for let mut i = 0; i < ops.len(); i += 1 {
+        gen_alt_actions_at(w, actions, i + 1, ctx);
+        gen_op(w, &ops[i], ctx, nc);
+    }
+    gen_alt_actions_at(w, actions, ops.len() + 1, ctx);
     w.line(&"p.b.finish_node(p.last_end());");
 }
 
@@ -4328,7 +4342,7 @@ fn emit_lr_overlap(
                 } else {
                     w.else_begin(&`else if _sk == {*tk}`);
                 }
-                emit_lr_branch(w, &lr_alts[lr_dispatch.valid_lr_alts[group[k]]], rk, scan_fn, labeled, ctx, nc);
+                emit_lr_branch(w, &lr_alts[lr_dispatch.valid_lr_alts[group[k]]], rule, rk, scan_fn, labeled, ctx, nc);
                 emitted.push(*tk);
             }
         }
@@ -4363,10 +4377,10 @@ fn emit_lr_overlap(
             let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[k]]];
             if k == last_k {
                 if sub_first {
-                    emit_lr_branch(w, lr, rk, scan_fn, labeled, ctx, nc);
+                    emit_lr_branch(w, lr, rule, rk, scan_fn, labeled, ctx, nc);
                 } else {
                     w.else_begin(&"else");
-                    emit_lr_branch(w, lr, rk, scan_fn, labeled, ctx, nc);
+                    emit_lr_branch(w, lr, rule, rk, scan_fn, labeled, ctx, nc);
                     w.end();
                 }
             } else {
@@ -4379,7 +4393,7 @@ fn emit_lr_overlap(
                 } else {
                     w.else_begin(&`else if {sub_cond}`);
                 }
-                emit_lr_branch(w, lr, rk, scan_fn, labeled, ctx, nc);
+                emit_lr_branch(w, lr, rule, rk, scan_fn, labeled, ctx, nc);
             }
         }
         emitted.push(*shared_tk);

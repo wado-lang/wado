@@ -233,6 +233,7 @@ Recovery invariants with actions present:
 - [x] Phase 1a — IR retention, byte-identical (1a-i: rule signatures, named-action / option bodies; 1a-ii: per-alternative `actions` sidecar).
 - [~] Phase 1b — attribute resolution + value channel + Wado actions (identity translator) + `@after` / print-style actions via `p.emit`.
   - [x] Phase 0 — `assign_action_ids` normalize pass (stable ids, byte-identical).
+  - [x] LR-alt actions: `emit_lr_branch_body` interleaves the LR alt's actions with the suffix ops (surface `before_index b` → before suffix op `b - 1`), so print / side-effect actions on `e '+' e`-style continuations run in left-associative parse order. `$`-referencing LR actions still raise a loud `UnsupportedAction` (the LR value channel — lhs/rhs `vals` binding through the precedence loop — is deferred). Fixture `wado_lr_action.g4`.
   - [x] 1b-1 — attribute scanner (`attr_scan::find_attr_refs`).
   - [x] 1b-1b — attribute resolution (`attr_resolve::resolve_attrs`, target classification + member validation, loud errors). Not yet wired into emit.
   - [x] 1b-2 — print-style Wado actions execute via `p.emit`, surfaced on `ParseResult.output` (`language = Wado`). Interleaved by `before_index` in `gen_alt_elements`, guarded on `!p.speculating`. Attribute-referencing bodies raise a loud `UnsupportedAction` diagnostic pending substitution.
