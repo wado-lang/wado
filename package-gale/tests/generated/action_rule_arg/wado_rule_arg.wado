@@ -861,11 +861,16 @@ pub struct TreeBuilder {
     b: List<i32>,
     alt: List<i32>,
     open: List<i32>,
+    /// Row of the most recently closed node (`-1` before any). Backs
+    /// `$ctx.toStringTree()` in a left-recursive rule's `@after`: precedence
+    /// climbing folds each level shut before `@after` runs, so the current
+    /// context is the just-finished node, not anything still on `open`.
+    last_finished: i32,
 }
 
 impl TreeBuilder {
     pub fn new() -> TreeBuilder {
-        return TreeBuilder { tag: [], a: [], b: [], alt: [], open: [] };
+        return TreeBuilder { tag: [], a: [], b: [], alt: [], open: [], last_finished: -1 };
     }
 
     /// Pre-size the event columns to `rows`, avoiding the grow-from-empty
@@ -880,6 +885,7 @@ impl TreeBuilder {
             b: List::with_capacity(rows),
             alt: List::with_capacity(rows),
             open: [],
+            last_finished: -1,
         };
     }
 
@@ -954,6 +960,7 @@ impl TreeBuilder {
     /// Close the innermost open node at byte offset `end`.
     pub fn finish_node(&mut self, end: i32) {
         self.push_row(E_CLOSE, end, 0);
+        self.last_finished = self.open[self.open.len() - 1];
         let _ = self.open.pop();
     }
 
@@ -1029,14 +1036,28 @@ impl TreeBuilder {
 
     /// Render the S-expression of the innermost currently-open node — the rule
     /// under construction — from the raw (not-yet-finalised) events. Backs
-    /// `$ctx.toStringTree()` in `@after`, which runs after the body but before
-    /// `finish_node`, so the node is still open and its children are complete.
+    /// `$ctx.toStringTree()` in a non-LR rule's `@after`, which runs after the
+    /// body but before `finish_node`, so the node is still open and its children
+    /// are complete.
     pub fn render_open(&self, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
-        let mut out = String::with_capacity(128);
         if self.open.len() == 0 {
-            return out;
+            return String::new();
         }
-        let root = self.open[self.open.len() - 1];
+        return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
+    }
+
+    /// Render the most recently closed node. Backs `$ctx.toStringTree()` in a
+    /// left-recursive rule's `@after`, where the level's node is already folded
+    /// shut (see `last_finished`).
+    pub fn render_last_finished(&self, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
+        if self.last_finished < 0 {
+            return String::new();
+        }
+        return self.render_from(self.last_finished, toks, rule_names, token_names);
+    }
+
+    fn render_from(&self, root: i32, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
+        let mut out = String::with_capacity(128);
         let _ = render_builder_node(&mut out, &self.tag, &self.a, root, toks, rule_names, token_names);
         return out;
     }
@@ -1045,8 +1066,9 @@ impl TreeBuilder {
 /// Render the subtree rooted at the `E_OPEN` row `i`, returning the row after
 /// its `E_CLOSE`. Events are balanced (`start_node` / `finish_node` pair), so a
 /// linear walk with recursion at each child `E_OPEN` stands in for the finalised
-/// `next` column. The current rule's node is still open (no `E_CLOSE`), so the
-/// walk closes it when it reaches the end — mirrors `cst_to_string_tree_impl`.
+/// `next` column. Works for a closed root (stops at its `E_CLOSE`) and for a
+/// still-open root (no `E_CLOSE`, so the walk closes it at the event end) —
+/// mirrors `cst_to_string_tree_impl`.
 fn render_builder_node(
     out: &mut String,
     tag: &List<i32>,
@@ -1483,11 +1505,11 @@ impl Parser {
     }
 
     fn rule_string_tree(&self) -> String {
-        let mut token_names: List<String> = List::with_capacity(NUM_TOKEN_KINDS);
-        for let mut k = 0; k < NUM_TOKEN_KINDS; k += 1 {
-            token_names.push(token_kind_name(k));
-        }
-        return self.b.render_open(&self.tokens, &RULE_NAMES, &token_names);
+        return self.b.render_open(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+    }
+
+    fn rule_string_tree_final(&self) -> String {
+        return self.b.render_last_finished(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -1800,7 +1822,15 @@ pub fn parse_e(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_e(p); });
 }
 
-global NUM_TOKEN_KINDS: i32 = 4;
+fn _ctx_token_names() -> List<String> {
+    let mut v: List<String> = List::with_capacity(4);
+    for let mut k = 0; k < 4; k += 1 {
+        v.push(token_kind_name(k));
+    }
+    return v;
+}
+
+global CTX_TOKEN_NAMES: List<String> = _ctx_token_names();
 
 pub fn to_string_tree(result: &ParseResult) -> String {
     let mut token_names: List<String> = List::with_capacity(4);

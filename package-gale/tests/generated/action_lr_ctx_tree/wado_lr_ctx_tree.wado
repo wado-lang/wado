@@ -1,4 +1,4 @@
-#![generated(by = "gale", sources = ["tests/grammars/wado_lr_prequel.g4"])]
+#![generated(by = "gale", sources = ["tests/grammars/wado_lr_ctx_tree.g4"])]
 
 // Grammar metadata from source .g4 prequels:
 //   option language = Wado
@@ -1421,10 +1421,9 @@ pub fn token_kind_name(kind: i32) -> String {
     };
 }
 
-pub global RK_S: NodeKind = 0;
-pub global RK_E: NodeKind = 1;
+pub global RK_E: NodeKind = 0;
 
-global RULE_NAMES: List<String> = ["s", "e"];
+global RULE_NAMES: List<String> = ["e"];
 
 impl Display for NodeKind {
     fn fmt(&self, f: &mut Formatter) {
@@ -1758,17 +1757,6 @@ impl Parser {
     }
 }
 
-struct EVals {
-    v: i64 = 0,
-}
-
-fn scan_s(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_e(tokens, pos, 0);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn scan_e_atom(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_INT { return -1; }
@@ -1809,54 +1797,26 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn _parse_s__inner(p: &mut Parser) -> () {
+fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     let start = p.peek_start();
-    let x = _parse_e(p);
-    if !p.speculating {
-         p.emit(`v={x.v} `); 
-    }
-    return;
-}
-
-fn _parse_s(p: &mut Parser) -> () {
-    if p.recovering { return; }
-    let _start = p.peek_start();
-    p.b.start_node(RK_S, _start);
-    _parse_s__inner(p);
-    p.b.finish_node(p.last_end());
-    if p.recovering {
-        p.push_rule_stack("s");
-    }
-}
-
-fn _parse_e__inner_atom(p: &mut Parser, vals: EVals, min_prec: i32 = 0) -> EVals {
-    let start = p.peek_start();
-    let mut vals = vals;
     let kind = p.peek_kind();
     if kind == TK_INT {
-        let n = p.expect(TK_INT, &EMPTY_SYNC);
-        if !p.speculating {
-             vals.v = p.token_int(n) + vals.v; 
-        }
-        return vals;
+        let int = p.expect(TK_INT, &EMPTY_SYNC);
+        return;
     }
     p.no_viable(
         "expected e",
         p.peek_span(),
         ["TK_INT"],
     );
-    return vals;
+    return;
 }
 
-fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> EVals {
+fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_E, _start);
-    let mut vals = EVals {};
-    if !p.speculating {
-         vals.v = 1000; 
-    }
-    let mut _lr_acc = _parse_e__inner_atom(p, vals, min_prec);
+    _parse_e__inner_atom(p, min_prec);
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }
@@ -1867,15 +1827,9 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> EVals {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
-                let l = _lr_acc;
-                let mut vals = EVals {};
                 let plus = p.expect(TK_LIT_PLUS, &EMPTY_SYNC);
-                let r = _parse_e(p, 2);
-                if !p.speculating {
-                     vals.v = l.v + r.v; 
-                }
+                let e_2 = _parse_e(p, 2);
                 p.b.finish_node(p.last_end());
-                _lr_acc = vals;
             } else {
                 break;
             }
@@ -1883,20 +1837,18 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> EVals {
             break;
         }
     }
-    vals = _lr_acc;
     if !p.speculating {
-         p.emit(`[after={vals.v}]`); 
+         p.emit(`[{p.rule_string_tree_final()}]`); 
     }
-    return vals;
+    return;
 }
 
-fn _parse_e(p: &mut Parser, min_prec: i32 = 0) -> EVals {
-    if p.recovering { return EVals {}; }
-    let __vals = _parse_e__inner(p, min_prec);
+fn _parse_e(p: &mut Parser, min_prec: i32 = 0) -> () {
+    if p.recovering { return; }
+    _parse_e__inner(p, min_prec);
     if p.recovering {
         p.push_rule_stack("e");
     }
-    return __vals;
 }
 
 fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
@@ -1917,15 +1869,11 @@ fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> 
 }
 
 pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return parse_s(input, max_errors);
-}
-
-pub fn parse_s(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_s(p));
+    return parse_e(input, max_errors);
 }
 
 pub fn parse_e(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_e(p); });
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_e(p));
 }
 
 fn _ctx_token_names() -> List<String> {

@@ -12,8 +12,18 @@ use ct from "./grammars/wado_ctx_tree.g4"
     };
 
 test "$ctx.toStringTree renders the open rule node" {
-    let result = ct::parse(&"a b");
-    assert result.ok(), "clean parse of a b";
-    assert result.output == "(s (e a b))", `output: '{result.output}'`;
+    let result = ct::parse(&"a b c");
+    assert result.ok(), "clean parse of a b c";
+    assert result.output == "(s (e a b c))", `output: '{result.output}'`;
+    assert result.output == ct::to_string_tree(&result), `render mismatch: '{result.output}' vs '{ct::to_string_tree(&result)}'`;
+}
+
+test "$ctx.toStringTree matches the finalized render on a recovered tree" {
+    // `a c` is missing its middle `b`; single-token recovery inserts a synthetic
+    // token, so the still-open `s` node carries an `E_MISS` child. The @after
+    // render must match the finalized `to_string_tree` walk over the same tree.
+    let result = ct::parse(&"a c");
+    assert !result.ok(), "missing 'b' is a recovered parse";
+    assert result.output.contains("missing"), `expected a missing marker: '{result.output}'`;
     assert result.output == ct::to_string_tree(&result), `render mismatch: '{result.output}' vs '{ct::to_string_tree(&result)}'`;
 }

@@ -34,12 +34,57 @@ pub fn translate_wado_action(
     bindings: &List<[bool, String, String]>,
 ) -> Result<String, String> {
     let resolved = resolve_attrs(body, rule, rules)?;
+    let body_chars: List<char> = body.chars().collect();
+    let mut adjusted: List<ResolvedAttr> = [];
     let mut repls: List<String> = [];
     for let r of &resolved {
         let e = action_attr_expr(rule, rules, r, vals_in_scope, rule_text_in_scope, bindings)?;
         repls.push(e);
+        // `$ctx.toStringTree` maps to a complete nullary call, so absorb the
+        // source's own call syntax (`()`, `(this)`) — otherwise a leftover
+        // argument list would splice after the emitted `()`.
+        let mut r2 = *r;
+        if is_ctx_to_string_tree(r) {
+            r2.end = swallow_trailing_call(&body_chars, r.end);
+        }
+        adjusted.push(r2);
     }
-    return Result::<String, String>::Ok(splice_attrs(body, &resolved, &repls));
+    return Result::<String, String>::Ok(splice_attrs(body, &adjusted, &repls));
+}
+
+fn is_ctx_to_string_tree(r: &ResolvedAttr) -> bool {
+    return r.target matches { ParserSpecial } && r.name == "ctx" && r.member matches { Some("toStringTree") };
+}
+
+/// Extend past an immediately-following call `(...)` (skipping leading spaces),
+/// so `$ctx.toStringTree()` and `$ctx.toStringTree(this)` both reduce to a bare
+/// call. Bails (returns `end` unchanged) if a nested `$`-ref lives inside the
+/// parens — that ref is spliced on its own.
+fn swallow_trailing_call(chars: &List<char>, end: i32) -> i32 {
+    let n = chars.len();
+    let mut j = end;
+    while j < n && (chars[j] == ' ' || chars[j] == '\t') {
+        j += 1;
+    }
+    if j >= n || chars[j] != '(' {
+        return end;
+    }
+    let mut depth = 0;
+    for let mut k = j; k < n; k += 1 {
+        let c = chars[k];
+        if c == '$' {
+            return end;
+        }
+        if c == '(' {
+            depth += 1;
+        } else if c == ')' {
+            depth -= 1;
+            if depth == 0 {
+                return k + 1;
+            }
+        }
+    }
+    return end;
 }
 
 /// The actual local a `$ref` binds to. Prefers the emit's post-dedup binding
@@ -107,7 +152,7 @@ fn action_attr_expr(
     bindings: &List<[bool, String, String]>,
 ) -> Result<String, String> {
     if r.target matches { ParserSpecial } {
-        return parser_special_expr(r, rule_text_in_scope);
+        return parser_special_expr(r, rule_text_in_scope, rule_is_left_recursive(rule));
     }
     return match r.target {
         RuleAttr => {
@@ -145,7 +190,7 @@ fn action_attr_expr(
 /// token). All three read the captured `_rule_start_tok` (first token index),
 /// so they need `span_in_scope`. `$ctx` / `$_p` await the CST context handle and
 /// remain a loud error.
-fn parser_special_expr(r: &ResolvedAttr, span_in_scope: bool) -> Result<String, String> {
+fn parser_special_expr(r: &ResolvedAttr, span_in_scope: bool, is_lr: bool) -> Result<String, String> {
     if r.name == "text" || r.name == "start" || r.name == "stop" {
         if !span_in_scope {
             return Result::<String, String>::Err(`${r.name}: no rule-span capture in the enclosing rule`);
@@ -162,10 +207,12 @@ fn parser_special_expr(r: &ResolvedAttr, span_in_scope: bool) -> Result<String, 
     if r.name == "stop" {
         return token_member_of(&String::from("(p.pos - 1)"), &r.member);
     }
-    // `$ctx.toStringTree` — a method reference; the source's trailing `()`
-    // completes the call. Renders the rule node currently under construction.
+    // `$ctx.toStringTree` — renders the rule node under construction. A non-LR
+    // rule's node is still open in `@after`; a left-recursive rule's level is
+    // already folded shut, so it reads the just-finished node instead.
     if r.name == "ctx" && r.member matches { Some("toStringTree") } {
-        return Result::<String, String>::Ok(String::from("p.rule_string_tree"));
+        let method = if is_lr { "rule_string_tree_final" } else { "rule_string_tree" };
+        return Result::<String, String>::Ok(`p.{method}()`);
     }
     return Result::<String, String>::Err(`${r.name}: this parser special is not yet emitted`);
 }

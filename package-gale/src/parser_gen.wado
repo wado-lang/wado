@@ -779,16 +779,23 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_acti
         w.blank();
 
         // `$ctx.toStringTree()` — the S-expression of the rule currently under
-        // construction, rendered from the builder's still-open innermost node.
+        // construction. A non-LR rule's node is still open in `@after`
+        // (`render_open`); a left-recursive rule's level is already folded shut
+        // by then, so its `@after` reads the just-finished node
+        // (`rule_string_tree_final` / `render_last_finished`).
         let mut frst = FnSpec::new("rule_string_tree");
         frst.set_receiver(&"&self");
         frst.set_return_type(&"String");
         frst.emit_begin(w);
-        w.line(&"let mut token_names: List<String> = List::with_capacity(NUM_TOKEN_KINDS);");
-        w.begin(&"for let mut k = 0; k < NUM_TOKEN_KINDS; k += 1");
-        w.line(&"token_names.push(token_kind_name(k));");
+        w.line(&"return self.b.render_open(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);");
         w.end();
-        w.line(&"return self.b.render_open(&self.tokens, &RULE_NAMES, &token_names);");
+        w.blank();
+
+        let mut frstf = FnSpec::new("rule_string_tree_final");
+        frstf.set_receiver(&"&self");
+        frstf.set_return_type(&"String");
+        frstf.emit_begin(w);
+        w.line(&"return self.b.render_last_finished(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);");
         w.end();
         w.blank();
     }

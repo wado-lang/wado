@@ -10,8 +10,9 @@ grammar WadoCtxTree;
 options { language = Wado; }
 
 s @after { p.emit($ctx.toStringTree()); } : e EOF ;
-e : A B ;
+e : A B C ;
 
 A : 'a' ;
 B : 'b' ;
+C : 'c' ;
 WS : ' ' -> skip ;

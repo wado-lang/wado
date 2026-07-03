@@ -158,6 +158,31 @@ e returns [i32 v] : e '+' e | INT ;
     assert !rule_threads_args(&g.parser_rules[0]), "LR rule args stay deferred";
 }
 
+test "translate maps $ctx.toStringTree to the render call and absorbs the call syntax" {
+    let g = parse("grammar T;
+s @after { p.emit($ctx.toStringTree()); } : e EOF ;
+e : ID ;
+").unwrap();
+    let rule = &g.parser_rules[0];
+    // Empty parens.
+    let a = translate_wado_action(rule, &g.parser_rules, &" p.emit($ctx.toStringTree()); ", false, false, &NO_BINDINGS).unwrap();
+    assert a == " p.emit(p.rule_string_tree()); ", `a: '{a}'`;
+    // ANTLR / java2wado idiom `toStringTree(this)` — the `(this)` argument is absorbed.
+    let b = translate_wado_action(rule, &g.parser_rules, &" p.emit($ctx.toStringTree(this)); ", false, false, &NO_BINDINGS).unwrap();
+    assert b == " p.emit(p.rule_string_tree()); ", `b: '{b}'`;
+    // Bare reference (no parens) still emits a complete call.
+    let c = translate_wado_action(rule, &g.parser_rules, &" let t = $ctx.toStringTree; print(t); ", false, false, &NO_BINDINGS).unwrap();
+    assert c == " let t = p.rule_string_tree(); print(t); ", `c: '{c}'`;
+}
+
+test "translate maps $ctx.toStringTree in a left-recursive rule to the final-node render" {
+    let g = parse("grammar T;
+e @after { p.emit($ctx.toStringTree()); } : e '+' e | INT ;
+").unwrap();
+    let out = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" p.emit($ctx.toStringTree()); ", false, false, &NO_BINDINGS).unwrap();
+    assert out == " p.emit(p.rule_string_tree_final()); ", `out: '{out}'`;
+}
+
 test "wado_type_default covers the corpus surface" {
     assert wado_type_default(&"i32") matches { Some(_) };
     assert wado_type_default(&"bool") matches { Some(_) };

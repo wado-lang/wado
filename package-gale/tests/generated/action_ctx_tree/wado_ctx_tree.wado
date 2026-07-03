@@ -861,11 +861,16 @@ pub struct TreeBuilder {
     b: List<i32>,
     alt: List<i32>,
     open: List<i32>,
+    /// Row of the most recently closed node (`-1` before any). Backs
+    /// `$ctx.toStringTree()` in a left-recursive rule's `@after`: precedence
+    /// climbing folds each level shut before `@after` runs, so the current
+    /// context is the just-finished node, not anything still on `open`.
+    last_finished: i32,
 }
 
 impl TreeBuilder {
     pub fn new() -> TreeBuilder {
-        return TreeBuilder { tag: [], a: [], b: [], alt: [], open: [] };
+        return TreeBuilder { tag: [], a: [], b: [], alt: [], open: [], last_finished: -1 };
     }
 
     /// Pre-size the event columns to `rows`, avoiding the grow-from-empty
@@ -880,6 +885,7 @@ impl TreeBuilder {
             b: List::with_capacity(rows),
             alt: List::with_capacity(rows),
             open: [],
+            last_finished: -1,
         };
     }
 
@@ -954,6 +960,7 @@ impl TreeBuilder {
     /// Close the innermost open node at byte offset `end`.
     pub fn finish_node(&mut self, end: i32) {
         self.push_row(E_CLOSE, end, 0);
+        self.last_finished = self.open[self.open.len() - 1];
         let _ = self.open.pop();
     }
 
@@ -1029,14 +1036,28 @@ impl TreeBuilder {
 
     /// Render the S-expression of the innermost currently-open node — the rule
     /// under construction — from the raw (not-yet-finalised) events. Backs
-    /// `$ctx.toStringTree()` in `@after`, which runs after the body but before
-    /// `finish_node`, so the node is still open and its children are complete.
+    /// `$ctx.toStringTree()` in a non-LR rule's `@after`, which runs after the
+    /// body but before `finish_node`, so the node is still open and its children
+    /// are complete.
     pub fn render_open(&self, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
-        let mut out = String::with_capacity(128);
         if self.open.len() == 0 {
-            return out;
+            return String::new();
         }
-        let root = self.open[self.open.len() - 1];
+        return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
+    }
+
+    /// Render the most recently closed node. Backs `$ctx.toStringTree()` in a
+    /// left-recursive rule's `@after`, where the level's node is already folded
+    /// shut (see `last_finished`).
+    pub fn render_last_finished(&self, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
+        if self.last_finished < 0 {
+            return String::new();
+        }
+        return self.render_from(self.last_finished, toks, rule_names, token_names);
+    }
+
+    fn render_from(&self, root: i32, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
+        let mut out = String::with_capacity(128);
         let _ = render_builder_node(&mut out, &self.tag, &self.a, root, toks, rule_names, token_names);
         return out;
     }
@@ -1045,8 +1066,9 @@ impl TreeBuilder {
 /// Render the subtree rooted at the `E_OPEN` row `i`, returning the row after
 /// its `E_CLOSE`. Events are balanced (`start_node` / `finish_node` pair), so a
 /// linear walk with recursion at each child `E_OPEN` stands in for the finalised
-/// `next` column. The current rule's node is still open (no `E_CLOSE`), so the
-/// walk closes it when it reaches the end — mirrors `cst_to_string_tree_impl`.
+/// `next` column. Works for a closed root (stops at its `E_CLOSE`) and for a
+/// still-open root (no `E_CLOSE`, so the walk closes it at the event end) —
+/// mirrors `cst_to_string_tree_impl`.
 fn render_builder_node(
     out: &mut String,
     tag: &List<i32>,
@@ -1284,6 +1306,7 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
 pub enum TokenKind {
     A,
     B,
+    C,
     WS,
     Eof,
     Error,
@@ -1291,9 +1314,10 @@ pub enum TokenKind {
 
 pub global TK_A: i32 = 0;
 pub global TK_B: i32 = 1;
-pub global TK_WS: i32 = 2;
-pub global TK_EOF: i32 = 3;
-pub global TK_ERROR: i32 = 4;
+pub global TK_C: i32 = 2;
+pub global TK_WS: i32 = 3;
+pub global TK_EOF: i32 = 4;
+pub global TK_ERROR: i32 = 5;
 
 struct Lexer {
     chars: List<char>,
@@ -1328,6 +1352,13 @@ fn try_B(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
+fn try_C(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != 'c' { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != ' ' { return -1; }
@@ -1354,6 +1385,9 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char == 'b' {
             end = try_B(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_B; }
+        } else if first_char == 'c' {
+            end = try_C(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_C; }
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
@@ -1379,6 +1413,7 @@ pub fn token_kind_name(kind: i32) -> String {
     return match kind {
         TK_A => "A",
         TK_B => "B",
+        TK_C => "C",
         TK_WS => "WS",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
@@ -1496,11 +1531,11 @@ impl Parser {
     }
 
     fn rule_string_tree(&self) -> String {
-        let mut token_names: List<String> = List::with_capacity(NUM_TOKEN_KINDS);
-        for let mut k = 0; k < NUM_TOKEN_KINDS; k += 1 {
-            token_names.push(token_kind_name(k));
-        }
-        return self.b.render_open(&self.tokens, &RULE_NAMES, &token_names);
+        return self.b.render_open(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+    }
+
+    fn rule_string_tree_final(&self) -> String {
+        return self.b.render_last_finished(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -1738,6 +1773,8 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_B { return -1; }
     pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_C { return -1; }
+    pos += 1;
     return pos;
 }
 
@@ -1765,7 +1802,8 @@ fn _parse_s(p: &mut Parser) -> () {
 fn _parse_e__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     let a = p.expect(TK_A, &SYNC_0);
-    let b = p.expect(TK_B, &EMPTY_SYNC);
+    let b = p.expect(TK_B, &SYNC_1);
+    let c = p.expect(TK_C, &EMPTY_SYNC);
     return;
 }
 
@@ -1809,19 +1847,27 @@ pub fn parse_e(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_e(p));
 }
 
-global NUM_TOKEN_KINDS: i32 = 5;
+fn _ctx_token_names() -> List<String> {
+    let mut v: List<String> = List::with_capacity(6);
+    for let mut k = 0; k < 6; k += 1 {
+        v.push(token_kind_name(k));
+    }
+    return v;
+}
+
+global CTX_TOKEN_NAMES: List<String> = _ctx_token_names();
 
 pub fn to_string_tree(result: &ParseResult) -> String {
-    let mut token_names: List<String> = List::with_capacity(5);
-    for let mut k = 0; k < 5; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(6);
+    for let mut k = 0; k < 6; k += 1 {
         token_names.push(token_kind_name(k));
     }
     return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &token_names);
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
-    let mut token_names: List<String> = List::with_capacity(5);
-    for let mut k = 0; k < 5; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(6);
+    for let mut k = 0; k < 6; k += 1 {
         token_names.push(token_kind_name(k));
     }
     let mut _kind: i32 = -1;
@@ -1840,4 +1886,5 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_B];
+global SYNC_1: List<i32> = [TK_C];
 
