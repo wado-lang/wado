@@ -140,16 +140,23 @@ pub fn extract_options_descriptor(
     };
 
     let Some(options_struct) = tir_module.find_struct("Options") else {
-        diagnostics.push(Diagnostic {
-            severity: Severity::Error,
-            code: Code::GeneratorOptionsUnsupported,
-            message: format!(
-                "kiln: generator {:?} does not declare `pub struct Options`",
-                module.diagnostic_filename()
-            ),
-            span: None,
-        });
-        return Err(diagnostics);
+        // A generator that takes no configuration may omit `pub struct
+        // Options` entirely. It still must export `generate`; the empty
+        // descriptor makes every use-site `options` field an unknown-field
+        // error and encodes to an empty CBOR map on the wire.
+        if tir_module.find_function("generate").is_none() {
+            diagnostics.push(Diagnostic {
+                severity: Severity::Error,
+                code: Code::GeneratorOptionsUnsupported,
+                message: format!(
+                    "kiln: generator {:?} does not declare `generate` function",
+                    module.diagnostic_filename()
+                ),
+                span: None,
+            });
+            return Err(diagnostics);
+        }
+        return Ok(OptionsDescriptor { fields: vec![] });
     };
 
     if !options_struct.visibility.is_public() {

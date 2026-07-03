@@ -233,15 +233,13 @@ pub async fn execute_with_mode<H: CompilerHost>(
         inputs.push(file);
     }
 
-    // Canonical options are UTF-8 JSON bytes produced by
-    // `encode_options_canonical`. Converting to `String` at the wire
-    // boundary upholds the invariant; non-UTF-8 here is a compiler bug.
-    let options = String::from_utf8(invocation.options_canonical.clone())
-        .expect("kiln: canonical options must be UTF-8");
+    // Canonical options are the deterministic CBOR bytes produced by
+    // `encode_options_canonical`; they cross the wire as `list<u8>` and the
+    // generator decodes them with `core:cbor::from_bytes`.
     let request = GeneratorRequest {
         primary,
         inputs,
-        options,
+        options: invocation.options_canonical.clone(),
     };
 
     let response = host
@@ -1675,17 +1673,18 @@ mod tests {
             };
             let host = MockHost::new(&[("schema.proto", b"x"), ("dep.proto", b"y")], Ok(response));
             let mut inv = sample_invocation();
-            // Canonical options travel to the generator as a UTF-8 JSON
-            // string (see WEP §"The `kiln` world"). Use a well-formed
-            // canonical JSON fixture so the UTF-8 invariant holds.
-            inv.options_canonical = br#"{"k":"v"}"#.to_vec();
+            // Canonical options travel to the generator verbatim as the
+            // CBOR bytes `encode_options_canonical` produced (see WEP
+            // §"Protocol revision v0.2"). The wire field is `list<u8>`, so
+            // the exact bytes — here an opaque fixture — are forwarded as-is.
+            inv.options_canonical = vec![0xa1, 0x61, b'k', 0x61, b'v'];
 
             runtime()
                 .block_on(async { execute(&inv, b"wasm", tmp.path(), &host).await })
                 .unwrap();
             let reqs = host.requests.lock().unwrap();
             assert_eq!(reqs.len(), 1);
-            assert_eq!(reqs[0].options, r#"{"k":"v"}"#);
+            assert_eq!(reqs[0].options, vec![0xa1, 0x61, b'k', 0x61, b'v']);
             assert_eq!(reqs[0].primary.path, "schema.proto");
             assert_eq!(reqs[0].inputs.len(), 1);
             assert_eq!(reqs[0].inputs[0].path, "dep.proto");

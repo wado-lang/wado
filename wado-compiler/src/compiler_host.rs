@@ -463,10 +463,11 @@ pub struct GeneratorRequest {
     pub primary: GeneratorInputFile,
     /// Supplementary schema files.
     pub inputs: Vec<GeneratorInputFile>,
-    /// Canonical JSON encoding of the user's `options = { ... }`.
-    /// The generator-side compiler-synthesized adapter decodes this
-    /// into the typed `Options` struct before user code runs.
-    pub options: String,
+    /// Deterministic CBOR encoding of the user's `options = { ... }`
+    /// (see `crate::kiln::cache::encode_options_canonical`). The
+    /// generator-side `bind_request` decodes this into the typed
+    /// `Options` struct via `core:cbor::from_bytes` before user code runs.
+    pub options: Vec<u8>,
 }
 
 /// One schema file passed to a Kiln generator.
@@ -688,7 +689,7 @@ mod tests {
                         content: "syntax = \"proto3\";".to_string(),
                     },
                     inputs: vec![],
-                    options: String::new(),
+                    options: Vec::new(),
                 };
                 let result = host.run_generator(b"\0asm", req).await;
                 assert!(matches!(result, Err(GeneratorRunnerError::Unsupported)));

@@ -1124,11 +1124,16 @@ fn emit_kiln_world_types(builder: &mut ComponentBuilder, ctx: &mut ComponentMode
     );
     emit_export(&mut instance_type, &mut next_idx, "error", error_local);
 
-    // list<input-file> + raw-request record
+    // list<input-file> + list<u8> (options blob) + raw-request record
     let list_input_local = emit_list(
         &mut instance_type,
         &mut next_idx,
         ComponentValType::Type(input_file_export),
+    );
+    let list_u8_local = emit_list(
+        &mut instance_type,
+        &mut next_idx,
+        ComponentValType::Primitive(PrimitiveValType::U8),
     );
     let raw_request_local = emit_record(
         &mut instance_type,
@@ -1136,7 +1141,7 @@ fn emit_kiln_world_types(builder: &mut ComponentBuilder, ctx: &mut ComponentMode
         &[
             ("primary", ComponentValType::Type(input_file_export)),
             ("inputs", ComponentValType::Type(list_input_local)),
-            ("options", string_vt),
+            ("options", ComponentValType::Type(list_u8_local)),
         ],
     );
     // The raw-request export advances the encoder counter once more,

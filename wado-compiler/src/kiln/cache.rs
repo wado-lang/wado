@@ -7,14 +7,18 @@
 //! regardless of who computed it.
 //!
 //! The options encoding is intentionally opaque here (`&[u8]`). The caller
-//! supplies already-canonical bytes:
+//! supplies already-canonical bytes produced by [`encode_options_canonical`]:
+//! a deterministic CBOR encoding (RFC 8949) of the validated options tree.
+//! The same bytes feed the cache key and the wire-form `options: list<u8>`
+//! on `core:kiln/types::raw-request`; the generator decodes them with
+//! `core:cbor::from_bytes`.
 //!
-//! - M3 driver: provisional TOML-tree encoding produced outside the
-//!   compiler; since M6.4 it also emits canonical JSON so the two paths
-//!   stay byte-equivalent on the common subset.
-//! - M6.4 driver: canonical JSON encoding produced by
-//!   [`encode_options_canonical`]. The same bytes feed the cache key and
-//!   the wire-form `options: string` on `core:kiln/types::raw-request`.
+//! CBOR replaced the earlier canonical-JSON layer (WEP 2026-04-12, protocol
+//! revision v0.2): a binary blob decodes faster and represents `i64` / `u64`
+//! / `f64` / byte payloads without JSON's numeric ambiguity. Because nothing
+//! re-encodes the blob on the generator side, the encoder only has to be
+//! deterministic and decodable by `core:cbor` — it need not be byte-identical
+//! to `core:cbor`'s own canonical serializer.
 //!
 //! Swapping the encoder in one place keeps cache keys stable unless the
 //! user-facing options actually change.
@@ -44,9 +48,10 @@ fn hex(bytes: &[u8; 32]) -> String {
 /// Magic + version prefix. Bump when the canonical layout changes in a
 /// way that must invalidate every existing lockfile entry. `v2` marked
 /// the M6.4 switch from the binary options encoder to canonical JSON;
-/// `v3` drops NFC normalization on string values so cache keys reflect
-/// the literal UTF-8 bytes the user supplied.
-const MAGIC: &[u8] = b"kiln-cache-key-v3\0";
+/// `v3` dropped NFC normalization on string values so cache keys reflect
+/// the literal UTF-8 bytes the user supplied; `v4` switches the options
+/// encoding from canonical JSON to CBOR (protocol revision v0.2).
+const MAGIC: &[u8] = b"kiln-cache-key-v4\0";
 
 /// The core:kiln world version the generator was built against. Part of the
 /// cache key so a future world-version bump invalidates every cached entry.
@@ -111,24 +116,42 @@ pub fn hex_digest(digest: &[u8; 32]) -> String {
     hex(digest)
 }
 
+/// CBOR encoding constants used by the options encoder (RFC 8949 §3).
+mod cbor {
+    // Major types (top 3 bits of the head byte).
+    pub const UINT: u8 = 0;
+    pub const NINT: u8 = 1;
+    pub const TEXT: u8 = 3;
+    pub const MAP: u8 = 5;
+    // Additional-info values selecting the argument width.
+    pub const AI_U8: u8 = 0x18;
+    pub const AI_U16: u8 = 0x19;
+    pub const AI_U32: u8 = 0x1a;
+    pub const AI_U64: u8 = 0x1b;
+    // Simple / float head bytes.
+    pub const FALSE: u8 = 0xf4;
+    pub const TRUE: u8 = 0xf5;
+    pub const F64: u8 = 0xfb;
+}
+
 /// Encode a [`CanonicalOptions`] to the canonical cache-key / wire byte
-/// string (canonical JSON, RFC 8785–style).
+/// string: a deterministic CBOR (RFC 8949) encoding of the options tree.
 ///
-/// - Object keys are lexicographically sorted (UTF-8 byte order).
-/// - String values are written as their literal UTF-8 bytes and escaped
-///   minimally: `"`, `\`, and the ASCII control set use `\"`, `\\`,
-///   `\b`, `\f`, `\n`, `\r`, `\t`, or `\uXXXX`. Non-ASCII characters
-///   survive as raw UTF-8 bytes; no Unicode normalization is applied,
-///   so two strings that differ only in NFC vs NFD form hash to
-///   different cache keys (intended: keys reflect literal input).
-/// - Integers render as shortest base-10 with no leading sign on zero.
-/// - Floats render shortest-roundtrip. Integer-valued floats drop their
-///   trailing `.0`. `-0.0` canonicalizes to `0`. `NaN` / `±Inf` panic
-///   because JSON cannot represent them — no Wado options schema yields
-///   them.
-/// - `Option::None` fields are omitted from the enclosing object.
-///   `Some(x)` is transparent: the JSON value is exactly `x`'s encoding.
-/// - Enum variants render as JSON strings using their Wado name.
+/// - A struct/table is a definite-length CBOR map whose entries are sorted
+///   by the bytewise order of their encoded keys (RFC 8949 §4.2.1). Field
+///   names are text-string keys, matching how `core:cbor` decodes a struct.
+/// - Integers use the preferred (shortest) head; `I64` renders as an
+///   unsigned or negative integer by sign, `U64` always unsigned.
+/// - `F64` is always the 8-byte double form. `core:cbor::deserialize_f32`
+///   narrows a double, so a single width decodes into both `f32` and `f64`
+///   fields. `NaN` / `±Inf` panic — no Wado options schema yields them.
+/// - String and enum values are text strings (enums by their Wado name).
+/// - `Option::None` fields are omitted from the enclosing map. `Some(x)`
+///   is transparent: the encoding is exactly `x`'s.
+///
+/// The result is deterministic, which is all the cache key needs; it does
+/// not have to match `core:cbor`'s own canonical serializer byte-for-byte,
+/// since nothing re-encodes the blob on the generator side.
 #[must_use]
 pub fn encode_options_canonical(options: &CanonicalOptions) -> Vec<u8> {
     let mut out = Vec::new();
@@ -137,97 +160,85 @@ pub fn encode_options_canonical(options: &CanonicalOptions) -> Vec<u8> {
 }
 
 fn encode_options_table(out: &mut Vec<u8>, entries: &[(String, CanonicalValue)]) {
-    out.push(b'{');
-    let mut indices: Vec<usize> = (0..entries.len())
-        .filter(|i| !matches!(entries[*i].1, CanonicalValue::None))
-        .collect();
-    indices.sort_by(|a, b| entries[*a].0.cmp(&entries[*b].0));
-    let mut first = true;
-    for i in indices {
-        if !first {
-            out.push(b',');
+    // Encode each surviving (key, value) into its own buffer so the map can
+    // be emitted in canonical (encoded-key-bytewise) order.
+    let mut pairs: Vec<(Vec<u8>, Vec<u8>)> = Vec::with_capacity(entries.len());
+    for (k, v) in entries {
+        if matches!(v, CanonicalValue::None) {
+            continue;
         }
-        first = false;
-        let (k, v) = &entries[i];
-        write_json_string(out, k);
-        out.push(b':');
-        encode_canonical_value(out, v);
+        let mut key = Vec::new();
+        write_cbor_text(&mut key, k);
+        let mut value = Vec::new();
+        encode_canonical_value(&mut value, v);
+        pairs.push((key, value));
     }
-    out.push(b'}');
+    pairs.sort_by(|a, b| a.0.cmp(&b.0));
+
+    write_cbor_head(out, cbor::MAP, pairs.len() as u64);
+    for (key, value) in pairs {
+        out.extend_from_slice(&key);
+        out.extend_from_slice(&value);
+    }
 }
 
 fn encode_canonical_value(out: &mut Vec<u8>, v: &CanonicalValue) {
     match v {
-        CanonicalValue::Bool(true) => out.extend_from_slice(b"true"),
-        CanonicalValue::Bool(false) => out.extend_from_slice(b"false"),
+        CanonicalValue::Bool(true) => out.push(cbor::TRUE),
+        CanonicalValue::Bool(false) => out.push(cbor::FALSE),
         CanonicalValue::I64(n) => {
-            use std::io::Write;
-            let _ = write!(out, "{n}");
+            if *n >= 0 {
+                write_cbor_head(out, cbor::UINT, *n as u64);
+            } else {
+                write_cbor_head(out, cbor::NINT, (-1 - *n) as u64);
+            }
         }
-        CanonicalValue::U64(n) => {
-            use std::io::Write;
-            let _ = write!(out, "{n}");
-        }
+        CanonicalValue::U64(n) => write_cbor_head(out, cbor::UINT, *n),
         CanonicalValue::F64(f) => {
             assert!(
                 f.is_finite(),
-                "kiln: canonical JSON cannot encode non-finite float {f}"
+                "kiln: CBOR options cannot encode non-finite float {f}"
             );
-            write_json_float(out, *f);
+            out.push(cbor::F64);
+            out.extend_from_slice(&f.to_bits().to_be_bytes());
         }
-        CanonicalValue::String(s) | CanonicalValue::Enum(s) => {
-            write_json_string(out, s);
-        }
+        CanonicalValue::String(s) | CanonicalValue::Enum(s) => write_cbor_text(out, s),
         CanonicalValue::None => {
             panic!("kiln: encode_options_canonical reached bare None value");
         }
-        CanonicalValue::Some(inner) => {
-            encode_canonical_value(out, inner);
-        }
-        CanonicalValue::Struct(fields) => {
-            encode_options_table(out, fields);
-        }
+        CanonicalValue::Some(inner) => encode_canonical_value(out, inner),
+        CanonicalValue::Struct(fields) => encode_options_table(out, fields),
     }
 }
 
-/// Write a JSON string literal: surrounding quotes, literal UTF-8
-/// payload, minimal escapes. No Unicode normalization is applied —
-/// see the encoder docstring above for rationale.
-fn write_json_string(out: &mut Vec<u8>, s: &str) {
-    out.push(b'"');
-    for ch in s.chars() {
-        match ch {
-            '"' => out.extend_from_slice(b"\\\""),
-            '\\' => out.extend_from_slice(b"\\\\"),
-            '\u{0008}' => out.extend_from_slice(b"\\b"),
-            '\u{000C}' => out.extend_from_slice(b"\\f"),
-            '\n' => out.extend_from_slice(b"\\n"),
-            '\r' => out.extend_from_slice(b"\\r"),
-            '\t' => out.extend_from_slice(b"\\t"),
-            c if (c as u32) < 0x20 => {
-                use std::io::Write;
-                let _ = write!(out, "\\u{:04x}", c as u32);
-            }
-            c => {
-                let mut buf = [0u8; 4];
-                out.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
-            }
-        }
-    }
-    out.push(b'"');
+/// Write a CBOR text string: a text-major head carrying the UTF-8 byte
+/// length, followed by the literal UTF-8 payload. No Unicode normalization
+/// is applied, so two strings differing only in NFC vs NFD form encode
+/// differently (intended: keys reflect literal input).
+fn write_cbor_text(out: &mut Vec<u8>, s: &str) {
+    write_cbor_head(out, cbor::TEXT, s.len() as u64);
+    out.extend_from_slice(s.as_bytes());
 }
 
-fn write_json_float(out: &mut Vec<u8>, f: f64) {
-    use std::io::Write;
-    if f == 0.0 {
-        out.push(b'0');
-        return;
+/// Write a CBOR type head (major type + argument) using the preferred
+/// (shortest) encoding (RFC 8949 §3, §4.2.1).
+fn write_cbor_head(out: &mut Vec<u8>, major: u8, arg: u64) {
+    let high = major << 5;
+    if arg < 24 {
+        out.push(high | arg as u8);
+    } else if arg < 0x100 {
+        out.push(high | cbor::AI_U8);
+        out.push(arg as u8);
+    } else if arg < 0x1_0000 {
+        out.push(high | cbor::AI_U16);
+        out.extend_from_slice(&(arg as u16).to_be_bytes());
+    } else if arg < 0x1_0000_0000 {
+        out.push(high | cbor::AI_U32);
+        out.extend_from_slice(&(arg as u32).to_be_bytes());
+    } else {
+        out.push(high | cbor::AI_U64);
+        out.extend_from_slice(&arg.to_be_bytes());
     }
-    if f.fract() == 0.0 && f.abs() < 9_007_199_254_740_992.0 {
-        let _ = write!(out, "{}", f as i64);
-        return;
-    }
-    let _ = write!(out, "{f}");
 }
 
 /// Hex SHA-256 of the canonical options encoding.
@@ -479,84 +490,96 @@ mod tests {
         }
     }
 
-    #[test]
-    fn canonical_json_empty_table_is_braces() {
-        let bytes = encode_options_canonical(&opts(vec![]));
-        assert_eq!(bytes, b"{}");
+    use serde_cbor::Value as Cbor;
+
+    /// Decode the encoder's output with an independent CBOR reader
+    /// (`serde_cbor`) and return the top-level map. Verifying against a real
+    /// decoder — rather than hand-written byte literals — checks that the
+    /// output is well-formed CBOR that `core:cbor::from_bytes` can read.
+    fn decode_map(bytes: &[u8]) -> std::collections::BTreeMap<Cbor, Cbor> {
+        match serde_cbor::from_slice::<Cbor>(bytes).expect("encoder emits valid CBOR") {
+            Cbor::Map(m) => m,
+            other => panic!("expected a CBOR map, got {other:?}"),
+        }
+    }
+
+    fn key(s: &str) -> Cbor {
+        Cbor::Text(s.to_string())
     }
 
     #[test]
-    fn canonical_json_bool_int_u64_render_plainly() {
+    fn cbor_empty_table_is_empty_map() {
+        assert!(decode_map(&encode_options_canonical(&opts(vec![]))).is_empty());
+    }
+
+    #[test]
+    fn cbor_bool_int_u64_decode_to_their_values() {
         let bytes = encode_options_canonical(&opts(vec![
             ("flag", CanonicalValue::Bool(true)),
             ("n", CanonicalValue::I64(-7)),
             ("u", CanonicalValue::U64(42)),
         ]));
-        assert_eq!(
-            std::str::from_utf8(&bytes).unwrap(),
-            r#"{"flag":true,"n":-7,"u":42}"#
-        );
+        let m = decode_map(&bytes);
+        assert_eq!(m[&key("flag")], Cbor::Bool(true));
+        assert_eq!(m[&key("n")], Cbor::Integer(-7));
+        assert_eq!(m[&key("u")], Cbor::Integer(42));
     }
 
     #[test]
-    fn canonical_json_integer_float_drops_point_zero() {
-        let bytes = encode_options_canonical(&opts(vec![("ratio", CanonicalValue::F64(5.0))]));
-        assert_eq!(std::str::from_utf8(&bytes).unwrap(), r#"{"ratio":5}"#);
+    fn cbor_f64_decodes_as_float() {
+        let bytes = encode_options_canonical(&opts(vec![("ratio", CanonicalValue::F64(5.5))]));
+        assert_eq!(decode_map(&bytes)[&key("ratio")], Cbor::Float(5.5));
     }
 
     #[test]
-    fn canonical_json_string_escapes_quote_and_controls() {
-        let bytes = encode_options_canonical(&opts(vec![(
-            "msg",
-            CanonicalValue::String("a\"b\nc\td".to_string()),
-        )]));
-        assert_eq!(
-            std::str::from_utf8(&bytes).unwrap(),
-            r#"{"msg":"a\"b\nc\td"}"#
-        );
+    fn cbor_string_and_enum_decode_as_text() {
+        let bytes = encode_options_canonical(&opts(vec![
+            ("msg", CanonicalValue::String("a\"b".to_string())),
+            ("style", CanonicalValue::Enum("Rpc".to_string())),
+        ]));
+        let m = decode_map(&bytes);
+        assert_eq!(m[&key("msg")], Cbor::Text("a\"b".to_string()));
+        assert_eq!(m[&key("style")], Cbor::Text("Rpc".to_string()));
     }
 
     #[test]
-    fn canonical_json_string_preserves_literal_utf8_without_normalization() {
+    fn cbor_string_preserves_literal_utf8_without_normalization() {
         let decomposed = "e\u{0301}";
         let composed = "\u{00e9}";
         let bytes_d = encode_options_canonical(&opts(vec![(
-            "accent",
-            CanonicalValue::String(decomposed.to_string()),
+            "a",
+            CanonicalValue::String(decomposed.into()),
         )]));
-        let bytes_c = encode_options_canonical(&opts(vec![(
-            "accent",
-            CanonicalValue::String(composed.to_string()),
-        )]));
-        assert_ne!(
-            bytes_d, bytes_c,
-            "literal UTF-8 bytes must survive the encoder; NFC vs NFD differ"
-        );
-        assert!(std::str::from_utf8(&bytes_d).unwrap().contains(decomposed));
-        assert!(std::str::from_utf8(&bytes_c).unwrap().contains(composed));
-    }
-
-    #[test]
-    fn canonical_json_sorts_keys_regardless_of_input_order() {
-        let unsorted = encode_options_canonical(&opts(vec![
-            ("zeta", CanonicalValue::I64(1)),
-            ("alpha", CanonicalValue::I64(2)),
-            ("mu", CanonicalValue::I64(3)),
-        ]));
-        let sorted = encode_options_canonical(&opts(vec![
-            ("alpha", CanonicalValue::I64(2)),
-            ("mu", CanonicalValue::I64(3)),
-            ("zeta", CanonicalValue::I64(1)),
-        ]));
-        assert_eq!(unsorted, sorted);
+        let bytes_c =
+            encode_options_canonical(&opts(vec![("a", CanonicalValue::String(composed.into()))]));
+        assert_ne!(bytes_d, bytes_c, "NFC vs NFD must survive the encoder");
         assert_eq!(
-            std::str::from_utf8(&unsorted).unwrap(),
-            r#"{"alpha":2,"mu":3,"zeta":1}"#
+            decode_map(&bytes_d)[&key("a")],
+            Cbor::Text(decomposed.into())
         );
+        assert_eq!(decode_map(&bytes_c)[&key("a")], Cbor::Text(composed.into()));
     }
 
     #[test]
-    fn canonical_json_option_none_is_omitted_and_some_is_transparent() {
+    fn cbor_output_is_deterministic_regardless_of_input_order() {
+        let a = encode_options_canonical(&opts(vec![
+            ("zeta", CanonicalValue::I64(1)),
+            ("alpha", CanonicalValue::I64(2)),
+            ("mu", CanonicalValue::I64(3)),
+        ]));
+        let b = encode_options_canonical(&opts(vec![
+            ("alpha", CanonicalValue::I64(2)),
+            ("mu", CanonicalValue::I64(3)),
+            ("zeta", CanonicalValue::I64(1)),
+        ]));
+        assert_eq!(a, b, "reordered fields must hash-encode identically");
+        let m = decode_map(&a);
+        assert_eq!(m.len(), 3);
+        assert_eq!(m[&key("alpha")], Cbor::Integer(2));
+    }
+
+    #[test]
+    fn cbor_option_none_is_omitted_and_some_is_transparent() {
         let bytes = encode_options_canonical(&opts(vec![
             ("kept", CanonicalValue::Bool(true)),
             ("dropped", CanonicalValue::None),
@@ -565,20 +588,14 @@ mod tests {
                 CanonicalValue::Some(Box::new(CanonicalValue::String("x".to_string()))),
             ),
         ]));
-        assert_eq!(
-            std::str::from_utf8(&bytes).unwrap(),
-            r#"{"kept":true,"wrapped":"x"}"#
-        );
+        let m = decode_map(&bytes);
+        assert!(!m.contains_key(&key("dropped")), "None field is omitted");
+        assert_eq!(m[&key("wrapped")], Cbor::Text("x".to_string()));
+        assert_eq!(m.len(), 2);
     }
 
     #[test]
-    fn canonical_json_float_negative_zero_renders_as_zero() {
-        let bytes = encode_options_canonical(&opts(vec![("z", CanonicalValue::F64(-0.0))]));
-        assert_eq!(std::str::from_utf8(&bytes).unwrap(), r#"{"z":0}"#);
-    }
-
-    #[test]
-    fn canonical_json_struct_nests_cleanly() {
+    fn cbor_struct_nests_as_a_sub_map() {
         let bytes = encode_options_canonical(&opts(vec![(
             "nested",
             CanonicalValue::Struct(vec![
@@ -586,9 +603,10 @@ mod tests {
                 ("x".to_string(), CanonicalValue::I64(1)),
             ]),
         )]));
-        assert_eq!(
-            std::str::from_utf8(&bytes).unwrap(),
-            r#"{"nested":{"x":1,"y":2}}"#
-        );
+        let Cbor::Map(inner) = &decode_map(&bytes)[&key("nested")] else {
+            panic!("nested value must be a map");
+        };
+        assert_eq!(inner[&key("x")], Cbor::Integer(1));
+        assert_eq!(inner[&key("y")], Cbor::Integer(2));
     }
 }

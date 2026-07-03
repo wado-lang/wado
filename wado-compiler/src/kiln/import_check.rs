@@ -58,9 +58,10 @@ pub fn check_loaded<H: CompilerHost>(
 /// 2026-03-25), so the UX is "author writes `fn generate(req:
 /// Request<Options>)`".
 ///
-/// Gated on `target_world == core:kiln/generator` and only fires when
-/// the first param's type is syntactically `Request<…>` with exactly
-/// one type argument. Generator authors who prefer the explicit v1
+/// Gated on `target_world == core:kiln/generator`. Fires when the first
+/// param's type is syntactically `Request<T>` (one type argument) or the
+/// bare `Request` (a no-options generator), in which case `T` is the
+/// default `NoOptions`. Generator authors who prefer the explicit v1
 /// `fn generate(raw: RawRequest)` shape keep working unchanged — this
 /// pass is a no-op for them.
 pub fn inject_kiln_request_adapter(
@@ -79,10 +80,10 @@ pub fn inject_kiln_request_adapter(
     let span = synthesized_span();
 
     // First pass (read-only): locate the matching `fn generate` and
-    // extract the `Request<T>` inner type. Iterates by index so the
-    // mutation pass can bypass Rust's borrow checker when it needs to
-    // call `module.alloc_ast_id()`.
-    let mut target: Option<(usize, String, Type)> = None;
+    // extract the `Request<T>` inner type (or `NoOptions` for the bare
+    // `Request` form). Iterates by index so the mutation pass can bypass
+    // Rust's borrow checker when it needs to call `module.alloc_ast_id()`.
+    let mut target: Option<(usize, String, RequestOptions)> = None;
     for (idx, item) in module.items.iter().enumerate() {
         let Item::Function(func) = item else { continue };
         if !func.is_export || func.name != "generate" {
@@ -91,17 +92,14 @@ pub fn inject_kiln_request_adapter(
         let Some(first) = func.params.first() else {
             continue;
         };
-        let Type::Generic(generic_ty) = &first.ty else {
+        let Some(request_options) = request_options_type(&first.ty) else {
             continue;
         };
-        if generic_ty.name != "Request" || generic_ty.args.len() != 1 {
-            continue;
-        }
-        target = Some((idx, first.name.clone(), generic_ty.args[0].clone()));
+        target = Some((idx, first.name.clone(), request_options));
         break;
     }
 
-    let Some((item_idx, param_name, inner_type)) = target else {
+    let Some((item_idx, param_name, request_options)) = target else {
         return;
     };
 
@@ -114,6 +112,17 @@ pub fn inject_kiln_request_adapter(
     let try_id = module.alloc_ast_id();
     let let_id = module.alloc_ast_id();
     let pattern_id = module.alloc_ast_id();
+
+    // `Request<T>` binds `T`; the bare `Request` form binds the default
+    // `NoOptions`, which the synthesis must materialize and import.
+    let inner_type = match request_options {
+        RequestOptions::Explicit(ty) => ty,
+        RequestOptions::Default => {
+            let noopts_id = module.alloc_ast_id();
+            ensure_kiln_imports(module, span, &["NoOptions"]);
+            Type::Named(NamedType::new(noopts_id, "NoOptions".to_string(), span))
+        }
+    };
 
     let raw_request_type = Type::Named(NamedType::new(raw_ty_id, "RawRequest".to_string(), span));
 
@@ -171,6 +180,30 @@ pub fn inject_kiln_request_adapter(
         if let Some(body) = func.body.as_mut() {
             body.stmts.insert(0, let_stmt);
         }
+    }
+}
+
+/// The options binding implied by a `generate` first-parameter type.
+enum RequestOptions {
+    /// `Request<t>` — bind the explicit options type `t`.
+    Explicit(Type),
+    /// The bare `Request` — bind the default `NoOptions`.
+    Default,
+}
+
+/// Classify a `generate` first-parameter type for the adapter rewrite.
+/// Returns `None` for anything that is not a `Request` (e.g. the explicit
+/// `RawRequest` form), which the pass leaves untouched.
+fn request_options_type(ty: &Type) -> Option<RequestOptions> {
+    match ty {
+        Type::Generic(g) if g.name == "Request" && g.args.len() == 1 => {
+            Some(RequestOptions::Explicit(g.args[0].clone()))
+        }
+        Type::Generic(g) if g.name == "Request" && g.args.is_empty() => {
+            Some(RequestOptions::Default)
+        }
+        Type::Named(n) if n.name == "Request" => Some(RequestOptions::Default),
+        _ => None,
     }
 }
 
@@ -320,6 +353,7 @@ mod tests {
         assert!(forbid_reason("core:kiln/kiln_host.wado").is_none());
         assert!(forbid_reason("core:prelude").is_none());
         assert!(forbid_reason("core:json").is_none());
+        assert!(forbid_reason("core:cbor").is_none());
         assert!(forbid_reason("./options.wado").is_none());
         assert!(forbid_reason("../shared.wado").is_none());
     }
