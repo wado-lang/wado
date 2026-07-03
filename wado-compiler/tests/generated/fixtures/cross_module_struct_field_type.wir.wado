@@ -859,12 +859,10 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
 fn "core:prelude/list.wado/List<./sub/cross_module_struct_field_type_lib.wado/Inner>^Eq::eq"(self, other) {
     let i: i32;
     let self_3: ref "./sub/cross_module_struct_field_type_lib.wado//Inner";
-    let other_4: ref "./sub/cross_module_struct_field_type_lib.wado//Inner";
+    let other_4: i32;
     let _licm_used_5: i32;
     let _licm_repr_6: ref "Array<./sub/cross_module_struct_field_type_lib.wado/Inner>";
     let _licm_repr_7: ref "Array<./sub/cross_module_struct_field_type_lib.wado/Inner>";
-    let __sroa_other_value: i32;
-    let __sroa_self_value: i32;
     if self.used != other.used {
         return 0;
     }
@@ -875,7 +873,7 @@ fn "core:prelude/list.wado/List<./sub/cross_module_struct_field_type_lib.wado/In
     b88: block {
         l89: loop {
             break_if b88 i >= _licm_used_5;
-            if self_3 = builtin::array_get<ref "./sub/cross_module_struct_field_type_lib.wado//Inner">(_licm_repr_6, i); other_4 = builtin::array_get<ref "./sub/cross_module_struct_field_type_lib.wado//Inner">(_licm_repr_7, i); __sroa_self_value = self_3.value; __sroa_other_value = other_4.value; __sroa_self_value == __sroa_other_value == 0 {
+            if self_3 = builtin::array_get<ref "./sub/cross_module_struct_field_type_lib.wado//Inner">(_licm_repr_6, i); other_4 = builtin::array_get<ref "./sub/cross_module_struct_field_type_lib.wado//Inner">(_licm_repr_7, i).value; self_3.value == other_4 == 0 {
                 return 0;
             }
             i = i + 1;

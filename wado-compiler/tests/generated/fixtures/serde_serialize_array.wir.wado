@@ -144,7 +144,7 @@ type "functype//wado-compiler/tests/fixtures/serde_serialize_array.wado/List<cor
 
 type "functype//wado-compiler/tests/fixtures/serde_serialize_array.wado/List<i32>^Serialize::serialize<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSerializer>" = fn(ref "core:prelude//List<i32>", ref "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSerializer") -> ref null "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError";  // TypeId(48)
 
-type "functype//wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer^SerializeSeq::element<i32>" = fn(ref "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSeqSerializer", ref "core:prelude/types.wado//Box<i32>") -> ref null "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError";  // TypeId(49)
+type "functype//wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer^SerializeSeq::element<i32>" = fn(ref "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSeqSerializer", i32) -> ref null "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError";  // TypeId(49)
 
 type "functype//core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayRefIter<i32>") -> ref null "core:prelude/types.wado//Box<i32>";  // TypeId(50)
 
@@ -601,7 +601,7 @@ fn "wado-compiler/tests/fixtures/serde_serialize_array.wado/List<i32>^Serialize:
                 __local_7 = "core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(__iter_4);
                 if ref.is_null(__local_7) == 0 {
                     item = ref.as_non_null(__local_7);
-                    drop("wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer^SerializeSeq::element<i32>"(seq_3, item));
+                    drop("wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer^SerializeSeq::element<i32>"(seq_3, item.value));
                 } else {
                     break b45;
                 }
@@ -620,7 +620,7 @@ fn "wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer^Se
         "core:prelude/string.wado/String::push"(self.ser.buf, 44);
     }
     s = self.ser;
-    drop("wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSerializer^Serializer::serialize_i32"(s, value.value));
+    drop("wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSerializer^Serializer::serialize_i32"(s, value));
     self.count = self.count + 1;
     return ref.null none;
 }

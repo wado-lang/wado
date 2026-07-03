@@ -125,11 +125,16 @@ global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/orphan_rule_allowed_local_generic_self.wado/run"() {
     let a: ref "wado-compiler/tests/fixtures/orphan_rule_allowed_local_generic_self.wado//MyBox<i32>";
+    let b: ref "wado-compiler/tests/fixtures/orphan_rule_allowed_local_generic_self.wado//MyBox<i32>";
     let c: ref "wado-compiler/tests/fixtures/orphan_rule_allowed_local_generic_self.wado//MyBox<i32>";
+    let __cond_5: bool;
     let __v2: bool;
     let __cond_9: bool;
+    let __local_10: ref "core:prelude/string.wado//String";
+    let __local_11: ref "core:prelude/format.wado//Formatter";
     let __local_12: ref "core:prelude/string.wado//String";
     let __local_13: ref "core:prelude/format.wado//Formatter";
+    let other_17: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -137,8 +142,17 @@ fn "wado-compiler/tests/fixtures/orphan_rule_allowed_local_generic_self.wado/run
         global:__modules_initialized = 1;
     };
     a = struct.new "wado-compiler/tests/fixtures/orphan_rule_allowed_local_generic_self.wado//MyBox<i32>" { value: 42 };
+    b = struct.new "wado-compiler/tests/fixtures/orphan_rule_allowed_local_generic_self.wado//MyBox<i32>" { value: 42 };
     c = struct.new "wado-compiler/tests/fixtures/orphan_rule_allowed_local_generic_self.wado//MyBox<i32>" { value: 99 };
-    __cond_9 = local.tee __v2(a.value == c.value) == 0;
+    __cond_5 = 1;
+    if @unlikely(__cond_5 == 0) {
+        cold_path;
+        "core:rt/panic"(__local_10 = "core:prelude/string.wado/String::with_capacity"(132); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_10, 114); "core:prelude/string.wado/String::push"(__local_10, 117); "core:prelude/string.wado/String::push"(__local_10, 110); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push"(__local_10, 97); "core:prelude/string.wado/String::push"(__local_10, 116); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/orphan_rule_allowed_local_generic_self.wado"), used: 72 }); "core:prelude/string.wado/String::push"(__local_10, 58); __local_11 = "core:prelude/format.wado/Formatter::new"(__local_10); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 18 }, __local_11); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+condition: a == b
+"), used: 19 }); "core:prelude/string.wado/String::push"(__local_10, 97); "core:prelude/string.wado/String::push"(__local_10, 58); "core:prelude/string.wado/String::push"(__local_10, 32); __local_11 = "core:prelude/format.wado/Formatter::new"(__local_10); "wado-compiler/tests/fixtures/orphan_rule_allowed_local_generic_self.wado/MyBox<i32>^Inspect::inspect"(a, __local_11); "core:prelude/string.wado/String::push"(__local_10, 10); "core:prelude/string.wado/String::push"(__local_10, 98); "core:prelude/string.wado/String::push"(__local_10, 58); "core:prelude/string.wado/String::push"(__local_10, 32); __local_11 = "core:prelude/format.wado/Formatter::new"(__local_10); "wado-compiler/tests/fixtures/orphan_rule_allowed_local_generic_self.wado/MyBox<i32>^Inspect::inspect"(b, __local_11); "core:prelude/string.wado/String::push"(__local_10, 10); __local_10);
+        unreachable;
+    }
+    __cond_9 = local.tee __v2(other_17 = c.value; a.value == other_17) == 0;
     if @unlikely(__cond_9 == 0) {
         cold_path;
         "core:rt/panic"(__local_12 = "core:prelude/string.wado/String::with_capacity"(158); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_12, 114); "core:prelude/string.wado/String::push"(__local_12, 117); "core:prelude/string.wado/String::push"(__local_12, 110); "core:prelude/string.wado/String::push"(__local_12, 32); "core:prelude/string.wado/String::push"(__local_12, 97); "core:prelude/string.wado/String::push"(__local_12, 116); "core:prelude/string.wado/String::push"(__local_12, 32); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/orphan_rule_allowed_local_generic_self.wado"), used: 72 }); "core:prelude/string.wado/String::push"(__local_12, 58); __local_13 = "core:prelude/format.wado/Formatter::new"(__local_12); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 19 }, __local_13); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
@@ -167,12 +181,12 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b2: block {
-        l3: loop {
-            break_if b2 t <= 0_i64;
+    b3: block {
+        l4: loop {
+            break_if b3 t <= 0_i64;
             n = n + 1;
             t = t / 10_i64;
-            continue l3;
+            continue l4;
         };
     };
     return n;
@@ -186,13 +200,13 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b5: block {
-            l6: loop {
-                break_if b5 temp <= 0_i64;
+        b6: block {
+            l7: loop {
+                break_if b6 temp <= 0_i64;
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l6;
+                continue l7;
             };
         };
     }
@@ -201,12 +215,12 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
 fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b7: block {
-        l8: loop {
-            break_if b7 i >= len;
+    b8: block {
+        l9: loop {
+            break_if b8 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l8;
+            continue l9;
         };
     };
 }
@@ -270,20 +284,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b10: block {
-        l11: loop {
-            break_if b10 offset >= count;
+    b11: block {
+        l12: loop {
+            break_if b11 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/wait_for_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b10 (if (result >> 4) == 0 -> i32 {
+            break_if b11 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l11;
+            continue l12;
         };
     };
 }
@@ -411,12 +425,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b23: block {
-        l24: loop {
-            break_if b23 i >= n;
+    b24: block {
+        l25: loop {
+            break_if b24 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l24;
+            continue l25;
         };
     };
 }
