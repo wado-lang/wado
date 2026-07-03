@@ -37,7 +37,7 @@ pub fn eval(input: &String) -> Result<i64, String> {
 /// label. `expr_alt` is `None` only for a node that isn't a parsed `expr` (an
 /// error-recovery node, say) — impossible here after `ok()`, so a codegen bug.
 fn eval_expr(s: &arith::CstStore, node: i32, toks: &arith::TokenStream) -> Result<i64, String> {
-    return match arith::expr_alt(s, node) {
+    return match s.expr_alt(node) {
         Some(Num) => int_value(s, node, toks),
         Some(Paren) => eval_first_child(s, node, toks),
         Some(MulDiv) => fold_binary(s, node, toks),
@@ -49,12 +49,10 @@ fn eval_expr(s: &arith::CstStore, node: i32, toks: &arith::TokenStream) -> Resul
 /// Evaluate the first child rule node. `prog` and `Paren` each wrap exactly
 /// one `expr`, so a missing child is a codegen bug, not a runtime error.
 fn eval_first_child(s: &arith::CstStore, node: i32, toks: &arith::TokenStream) -> Result<i64, String> {
-    let mut c = arith::cst_first_child(s, node);
-    while c >= 0 {
-        if arith::cst_is_node(s, c) {
+    for let mut c = s.first_child(node); c >= 0; c = s.next_sibling(c) {
+        if s.is_node(c) {
             return eval_expr(s, c, toks);
         }
-        c = arith::cst_next_sibling(s, c);
     }
     panic("expr: expected a child rule node");
 }
@@ -66,20 +64,20 @@ fn fold_binary(s: &arith::CstStore, node: i32, toks: &arith::TokenStream) -> Res
     let mut right: i64 = 0;
     let mut have_left = false;
     let mut op = "";
-    let mut c = arith::cst_first_child(s, node);
-    while c >= 0 {
-        if arith::cst_is_node(s, c) {
-            let v = eval_expr(s, c, toks)?;
-            if have_left {
-                right = v;
-            } else {
-                left = v;
-                have_left = true;
-            }
-        } else {
-            op = toks.token_text(arith::cst_token_index(s, c));
+    for let mut c = s.first_child(node); c >= 0; c = s.next_sibling(c) {
+        match s.child_kind(c) {
+            Node => {
+                let v = eval_expr(s, c, toks)?;
+                if have_left {
+                    right = v;
+                } else {
+                    left = v;
+                    have_left = true;
+                }
+            },
+            Token => op = toks.token_text(s.token_index(c)),
+            Missing | Skipped => {},
         }
-        c = arith::cst_next_sibling(s, c);
     }
     return apply(left, &op, right);
 }
@@ -103,16 +101,14 @@ fn apply(a: i64, op: &String, b: i64) -> Result<i64, String> {
 /// The integer value of a `Num` node (its single `INT` token). The token text
 /// is all digits, but it can still overflow `i64`, so that surfaces as `Err`.
 fn int_value(s: &arith::CstStore, node: i32, toks: &arith::TokenStream) -> Result<i64, String> {
-    let mut c = arith::cst_first_child(s, node);
-    while c >= 0 {
-        if arith::cst_is_token(s, c) {
-            let text = toks.token_text(arith::cst_token_index(s, c));
+    for let mut c = s.first_child(node); c >= 0; c = s.next_sibling(c) {
+        if s.is_token(c) {
+            let text = toks.token_text(s.token_index(c));
             return match i64::from_str(&text) {
                 Ok(v) => Result::Ok(v),
                 Err(_) => Result::Err(`integer literal out of range: {text}`),
             };
         }
-        c = arith::cst_next_sibling(s, c);
     }
     panic("Num: expected an INT token");
 }

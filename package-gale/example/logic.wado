@@ -34,18 +34,16 @@ pub fn eval(input: &String) -> Result<i64, String> {
 
 /// Evaluate the first child rule node (`prog` wraps exactly one `expr`).
 fn eval_first_child(s: &bw::CstStore, node: i32, toks: &bw::TokenStream) -> Result<i64, String> {
-    let mut c = bw::cst_first_child(s, node);
-    while c >= 0 {
-        if bw::cst_is_node(s, c) {
+    for let mut c = s.first_child(node); c >= 0; c = s.next_sibling(c) {
+        if s.is_node(c) {
             return eval_expr(s, c, toks);
         }
-        c = bw::cst_next_sibling(s, c);
     }
     panic("expr: expected a child rule node");
 }
 
 fn eval_expr(s: &bw::CstStore, node: i32, toks: &bw::TokenStream) -> Result<i64, String> {
-    return match bw::expr_alt(s, node) {
+    return match s.expr_alt(node) {
         Some(Num) => int_value(s, node, toks),
         Some(And) => {
             let ops = operands(s, node, toks)?;
@@ -70,9 +68,8 @@ fn operands(s: &bw::CstStore, node: i32, toks: &bw::TokenStream) -> Result<[i64,
     let mut a: i64 = 0;
     let mut b: i64 = 0;
     let mut have_a = false;
-    let mut c = bw::cst_first_child(s, node);
-    while c >= 0 {
-        if bw::cst_is_node(s, c) {
+    for let mut c = s.first_child(node); c >= 0; c = s.next_sibling(c) {
+        if s.is_node(c) {
             let v = eval_expr(s, c, toks)?;
             if have_a {
                 b = v;
@@ -81,7 +78,6 @@ fn operands(s: &bw::CstStore, node: i32, toks: &bw::TokenStream) -> Result<[i64,
                 have_a = true;
             }
         }
-        c = bw::cst_next_sibling(s, c);
     }
     return Result::Ok([a, b]);
 }
@@ -89,16 +85,14 @@ fn operands(s: &bw::CstStore, node: i32, toks: &bw::TokenStream) -> Result<[i64,
 /// The integer value of a `Num` node (its single `INT` token). All-digit text
 /// can still overflow `i64`, so that surfaces as `Err`.
 fn int_value(s: &bw::CstStore, node: i32, toks: &bw::TokenStream) -> Result<i64, String> {
-    let mut c = bw::cst_first_child(s, node);
-    while c >= 0 {
-        if bw::cst_is_token(s, c) {
-            let text = toks.token_text(bw::cst_token_index(s, c));
+    for let mut c = s.first_child(node); c >= 0; c = s.next_sibling(c) {
+        if s.is_token(c) {
+            let text = toks.token_text(s.token_index(c));
             return match i64::from_str(&text) {
                 Ok(v) => Result::Ok(v),
                 Err(_) => Result::Err(`integer literal out of range: {text}`),
             };
         }
-        c = bw::cst_next_sibling(s, c);
     }
     panic("Num: expected an INT token");
 }

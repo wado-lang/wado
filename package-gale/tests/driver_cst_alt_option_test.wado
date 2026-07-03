@@ -21,9 +21,9 @@ use ao from "./grammars/alt_opt.g4"
 // scan over the store's open rows; no node value is ever constructed.
 fn count_stamped(s: &ao::CstStore) -> i32 {
     let mut n = 0;
-    for let mut r = 0; r < s.tag.len(); r += 1 {
-        if s.tag[r] == ao::E_OPEN && ao::cst_kind(s, r) == ao::RK_EXPR && ao::cst_alt(s, r) >= 0 {
-            assert ao::expr_alt(s, r) matches { Some(_) }, `stamped expr (alt={ao::cst_alt(s, r)}) must map to Some`;
+    for let mut r = 0; r < s.row_count(); r += 1 {
+        if s.is_node(r) && s.kind(r) == ao::RK_EXPR && s.alt(r) >= 0 {
+            assert s.expr_alt(r) matches { Some(_) }, `stamped expr (alt={s.alt(r)}) must map to Some`;
             n += 1;
         }
     }
@@ -33,9 +33,9 @@ fn count_stamped(s: &ao::CstStore) -> i32 {
 // Count unstamped `expr` nodes (alt < 0), asserting each maps to `None`.
 fn count_unstamped(s: &ao::CstStore) -> i32 {
     let mut n = 0;
-    for let mut r = 0; r < s.tag.len(); r += 1 {
-        if s.tag[r] == ao::E_OPEN && ao::cst_kind(s, r) == ao::RK_EXPR && ao::cst_alt(s, r) < 0 {
-            assert ao::expr_alt(s, r) matches { None }, "unstamped expr must map to None, not a silent first alt";
+    for let mut r = 0; r < s.row_count(); r += 1 {
+        if s.is_node(r) && s.kind(r) == ao::RK_EXPR && s.alt(r) < 0 {
+            assert s.expr_alt(r) matches { None }, "unstamped expr must map to None, not a silent first alt";
             n += 1;
         }
     }

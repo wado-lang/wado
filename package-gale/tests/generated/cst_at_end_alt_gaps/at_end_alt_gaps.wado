@@ -611,121 +611,152 @@ pub global E_SKIP: i32 = 4;
 /// `a`, `b` and `alt` are written during the parse; `end`, `flags` and `next`
 /// are derived by `finalize` (in `TreeBuilder::finish`). A node is addressed by
 /// the row index of its `E_OPEN` row. Columns are `pub` so a linear walk
-/// (`highlight_walk`) can read them in a tight loop; prefer the `cst_*` cursor
-/// functions for O(1) queries.
+/// (`highlight_walk`) can read them in a tight loop; external consumers use the
+/// `impl CstStore` cursor methods below for O(1) queries and child navigation.
 pub struct CstStore {
     pub tag: List<i32>,
     pub a: List<i32>,
     pub b: List<i32>,
     /// The matched labeled-alternative index for an `E_OPEN` row (grammar
     /// declaration order), or -1 when unlabeled / unset / non-open.
-    pub alt: List<i32>,
+    alt: List<i32>,
     /// `span.end` for an `E_OPEN` row (max of its close offset and every child
     /// end); derived.
-    pub end: List<i32>,
+    end: List<i32>,
     /// `NODE_ERROR` / `NODE_INCOMPLETE` for an `E_OPEN` row; derived.
-    pub flags: List<i32>,
+    flags: List<i32>,
     /// Row index just past this `E_OPEN` node's whole subtree, so a random-
     /// access consumer skips a subtree in O(1); derived.
-    pub next: List<i32>,
+    next: List<i32>,
 }
 
-/// Kind of the node at row `i`.
-pub fn cst_kind(s: &CstStore, i: i32) -> NodeKind {
-    return s.a[i] as NodeKind;
+/// What a direct child slot is. A plain discriminant enum (no payload), so it
+/// is an `i32` — matching over it allocates nothing. `child_kind` yields it
+/// so a consumer can `match` a child instead of chaining `is_node` / `is_token`.
+pub enum ChildKind {
+    Node,  // a rule / error sub-node
+    Token,  // a real terminal
+    Missing,  // an inserted synthetic terminal
+    Skipped,  // a real terminal deleted during recovery
 }
 
-/// Byte span of the node at row `i`.
-pub fn cst_span(s: &CstStore, i: i32) -> Span {
-    return Span::new(s.b[i], s.end[i]);
-}
+/// The read cursor over the flat store. Every method is `&self` over an `i32`
+/// row index — no node / cursor value is constructed, so traversal allocates
+/// nothing. The raw `tag` / `a` / `b` columns stay `pub` for the internal
+/// `highlight_walk` flat scan; external consumers use these methods.
+impl CstStore {
+    /// Number of event rows (upper bound for a flat scan; row 0 is the root).
+    pub fn row_count(&self) -> i32 {
+        return self.tag.len();
+    }
 
-/// Matched labeled-alternative index of the node at row `i` (-1 when unset).
-pub fn cst_alt(s: &CstStore, i: i32) -> i32 {
-    return s.alt[i];
-}
+    /// Kind of the node at row `i`.
+    pub fn kind(&self, i: i32) -> NodeKind {
+        return self.a[i] as NodeKind;
+    }
 
-/// True when the node at row `i`, or some descendant, carries a recovery edit.
-pub fn cst_is_error(s: &CstStore, i: i32) -> bool {
-    return s.flags[i] & NODE_ERROR != 0;
-}
+    /// Byte span of the node at row `i`.
+    pub fn span(&self, i: i32) -> Span {
+        return Span::new(self.b[i], self.end[i]);
+    }
 
-/// True when the node at row `i` is missing a required terminal.
-pub fn cst_is_incomplete(s: &CstStore, i: i32) -> bool {
-    return s.flags[i] & NODE_INCOMPLETE != 0;
-}
+    /// Matched labeled-alternative index of the node at row `i` (-1 when unset).
+    pub fn alt(&self, i: i32) -> i32 {
+        return self.alt[i];
+    }
 
-/// Row index of the first direct child node of rule `kind` under row `i`, or
-/// -1. Used by sub-tree rendering (an ANTLR4 descriptor whose `[output]` is a
-/// labelled child subtree, not the start rule's full tree).
-pub fn cst_find_child(s: &CstStore, i: i32, kind: NodeKind) -> i32 {
-    let k = kind as i32;
-    let mut c = i + 1;
-    while c < s.next[i] {
-        if s.tag[c] == E_OPEN {
-            if s.a[c] == k {
+    /// True when the node at row `i`, or some descendant, carries a recovery edit.
+    pub fn is_error(&self, i: i32) -> bool {
+        return self.flags[i] & NODE_ERROR != 0;
+    }
+
+    /// True when the node at row `i` is missing a required terminal.
+    pub fn is_incomplete(&self, i: i32) -> bool {
+        return self.flags[i] & NODE_INCOMPLETE != 0;
+    }
+
+    /// True when row `i` is a rule / error node (has a kind, span, children).
+    pub fn is_node(&self, i: i32) -> bool {
+        return self.tag[i] == E_OPEN;
+    }
+
+    /// True when row `i` is a terminal (real, missing, or skipped).
+    pub fn is_token(&self, i: i32) -> bool {
+        let t = self.tag[i];
+        return t == E_TOK || t == E_MISS || t == E_SKIP;
+    }
+
+    /// The `ChildKind` of the (child) row `i`.
+    pub fn child_kind(&self, i: i32) -> ChildKind {
+        let t = self.tag[i];
+        if t == E_OPEN {
+            return ChildKind::Node;
+        }
+        if t == E_MISS {
+            return ChildKind::Missing;
+        }
+        if t == E_SKIP {
+            return ChildKind::Skipped;
+        }
+        return ChildKind::Token;
+    }
+
+    /// Token-stream index of the terminal at row `i` (valid when `is_token`).
+    pub fn token_index(&self, i: i32) -> i32 {
+        return self.a[i];
+    }
+
+    /// Row of the first direct child of node `i` (a node or a terminal), or -1
+    /// when `i` has no children. Pair with `next_sibling` to walk children:
+    /// `for let mut c = s.first_child(i); c >= 0; c = s.next_sibling(c) { … }`.
+    pub fn first_child(&self, i: i32) -> i32 {
+        let c = i + 1;
+        if self.tag[c] == E_CLOSE {  // c is `i`'s own close row: no children
+            return -1;
+        }
+        return c;
+    }
+
+    /// Row of the next direct child after `child`, or -1 when `child` is the
+    /// last (the next row is the parent's close). A child node is skipped in
+    /// O(1) via its subtree extent.
+    pub fn next_sibling(&self, child: i32) -> i32 {
+        let c = if self.tag[child] == E_OPEN { self.next[child] } else { child + 1 };
+        if self.tag[c] == E_CLOSE {  // reached the parent's close row
+            return -1;
+        }
+        return c;
+    }
+
+    /// Row of the first direct child node of rule `kind` under row `i`, or -1.
+    /// Used by sub-tree rendering (an ANTLR4 descriptor whose `[output]` is a
+    /// labelled child subtree, not the start rule's full tree).
+    pub fn find_child(&self, i: i32, kind: NodeKind) -> i32 {
+        let k = kind as i32;
+        for let mut c = self.first_child(i); c >= 0; c = self.next_sibling(c) {
+            if self.tag[c] == E_OPEN && self.a[c] == k {
                 return c;
             }
-            c = s.next[c];
-        } else {
-            c += 1;
         }
-    }
-    return -1;
-}
-
-/// True when row `i` is a rule / error node (has a kind, span, children).
-pub fn cst_is_node(s: &CstStore, i: i32) -> bool {
-    return s.tag[i] == E_OPEN;
-}
-
-/// True when row `i` is a terminal (real, missing, or skipped).
-pub fn cst_is_token(s: &CstStore, i: i32) -> bool {
-    let t = s.tag[i];
-    return t == E_TOK || t == E_MISS || t == E_SKIP;
-}
-
-/// Token-stream index of the terminal at row `i` (valid when `cst_is_token`).
-pub fn cst_token_index(s: &CstStore, i: i32) -> i32 {
-    return s.a[i];
-}
-
-/// Row of the first direct child of node `i` (a node or a terminal), or -1 when
-/// `i` has no children. Pair with `cst_next_sibling` to walk children:
-/// `let mut c = cst_first_child(s, i); while c >= 0 { …; c = cst_next_sibling(s, c); }`.
-pub fn cst_first_child(s: &CstStore, i: i32) -> i32 {
-    let c = i + 1;
-    if s.tag[c] == E_CLOSE {  // c is `i`'s own close row: no children
         return -1;
     }
-    return c;
-}
 
-/// Row of the next direct child after `child`, or -1 when `child` is the last
-/// (the next row is the parent's close). A child node is skipped in O(1) via
-/// its subtree extent.
-pub fn cst_next_sibling(s: &CstStore, child: i32) -> i32 {
-    let c = if s.tag[child] == E_OPEN { s.next[child] } else { child + 1 };
-    if s.tag[c] == E_CLOSE {  // reached the parent's close row
-        return -1;
+    /// ANTLR4-style S-expression for the subtree at row `i`: `(name child ...)`,
+    /// tokens as their text. `rule_names[kind]` names rule nodes (`K_ERROR`
+    /// renders `<error>`); `token_names[kind]` names missing terminals. Real
+    /// terminals with empty text (e.g. EOF) are omitted; missing/skipped
+    /// terminals render markers.
+    pub fn to_string_tree(
+        &self,
+        i: i32,
+        toks: &TokenStream,
+        rule_names: &List<String>,
+        token_names: &List<String>,
+    ) -> String {
+        let mut out = String::with_capacity(256);
+        cst_to_string_tree_impl(&mut out, self, i, toks, rule_names, token_names);
+        return out;
     }
-    return c;
-}
-
-/// ANTLR4-style S-expression for the subtree at row `i`: `(name child ...)`,
-/// tokens as their text. `rule_names[kind]` names rule nodes (`K_ERROR` renders
-/// `<error>`); `token_names[kind]` names missing terminals. Real terminals with
-/// empty text (e.g. EOF) are omitted; missing/skipped terminals render markers.
-pub fn cst_to_string_tree(
-    s: &CstStore,
-    i: i32,
-    toks: &TokenStream,
-    rule_names: &List<String>,
-    token_names: &List<String>,
-) -> String {
-    let mut out = String::with_capacity(256);
-    cst_to_string_tree_impl(&mut out, s, i, toks, rule_names, token_names);
-    return out;
 }
 
 fn cst_to_string_tree_impl(
@@ -950,7 +981,7 @@ impl TreeBuilder {
                 if self.a[r] > end[oi] {
                     end[oi] = self.a[r];
                 }
-                b[r] = self.a[oi];
+                b[r] = self.a[oi];  // stamp the open's kind onto the close row
                 next[oi] = r + 1;
                 if stack.len() > 0 {
                     let pi = stack[stack.len() - 1];
@@ -3026,7 +3057,7 @@ pub fn to_string_tree(result: &ParseResult) -> String {
     for let mut k = 0; k < 10; k += 1 {
         token_names.push(token_kind_name(k));
     }
-    return cst_to_string_tree(&result.cst, 0, &result.tokens, &RULE_NAMES, &token_names);
+    return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &token_names);
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
@@ -3041,9 +3072,9 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
             break;
         }
     }
-    let _sub = cst_find_child(&result.cst, 0, _kind as NodeKind);
+    let _sub = result.cst.find_child(0, _kind as NodeKind);
     if _sub >= 0 {
-        return cst_to_string_tree(&result.cst, _sub, &result.tokens, &RULE_NAMES, &token_names);
+        return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &token_names);
     }
     return String::new();
 }

@@ -11,7 +11,7 @@ use { CstStore, E_OPEN, E_CLOSE, K_ERROR } from "./tree.wado";
 use { HighlightVisitor } from "./highlight.wado";
 
 pub fn highlight_walk(visitor: &mut HighlightVisitor, toks: &TokenStream, s: &CstStore) {
-    for let mut r = 0; r < s.tag.len(); r += 1 {
+    for let mut r = 0; r < s.row_count(); r += 1 {
         let t = s.tag[r];
         if t == E_OPEN {
             if s.a[r] != K_ERROR as i32 {

@@ -2,11 +2,7 @@
 //! token-stream recovery flags (`lex.wado`), and `Diagnostic` (`diag.wado`).
 
 use { Span, TokenStream, TOK_SYNTHETIC, TOK_SKIPPED } from "./lex.wado";
-use {
-    NodeKind, K_ERROR, NODE_ERROR, NODE_INCOMPLETE, CstStore, TreeBuilder, ParseResult,
-    E_OPEN, E_CLOSE, E_TOK, E_MISS, E_SKIP,
-    cst_kind, cst_span, cst_alt, cst_is_error, cst_is_incomplete, cst_to_string_tree,
-} from "./tree.wado";
+use { NodeKind, K_ERROR, CstStore, ChildKind, TreeBuilder, ParseResult } from "./tree.wado";
 use { Severity, DiagnosticCode, RecoveryAction, RelatedInfo, Diagnostic } from "./diag.wado";
 
 /// Build a TokenStream over `src` from `[kind, start, end]` specs (no trivia).
@@ -24,23 +20,11 @@ fn names(items: List<String>) -> List<String> {
     return items;
 }
 
-/// Row indices of the direct children of node `i` (child open rows and
-/// terminal rows, in order — the flat analogue of the old `children` list). The
-/// node's own closing row bounds the scan and is not a child.
+/// Row indices of the direct children of node `i`, via the cursor API.
 fn children_of(s: &CstStore, i: i32) -> List<i32> {
     let mut out: List<i32> = [];
-    let mut c = i + 1;
-    while c < s.next[i] {
-        let t = s.tag[c];
-        if t == E_OPEN {
-            out.push(c);
-            c = s.next[c];
-        } else if t == E_CLOSE {
-            c += 1;  // node i's own close row
-        } else {
-            out.push(c);
-            c += 1;
-        }
+    for let mut c = s.first_child(i); c >= 0; c = s.next_sibling(c) {
+        out.push(c);
     }
     return out;
 }
@@ -98,11 +82,11 @@ test "builder builds a flat node and renders an S-expression" {
     b.finish_node(5);
     let s = b.finish();
 
-    assert cst_kind(&s, 0) == 0 as NodeKind;
-    assert cst_span(&s, 0) == Span::new(0, 5);
+    assert s.kind(0) == 0 as NodeKind;
+    assert s.span(0) == Span::new(0, 5);
     assert children_of(&s, 0).len() == 3;
-    assert !cst_is_error(&s, 0);
-    assert cst_to_string_tree(&s, 0, &ts, &names(["expr"]), &names(["ID", "PLUS"])) == "(expr a + b)";
+    assert !s.is_error(0);
+    assert s.to_string_tree(0, &ts, &names(["expr"]), &names(["ID", "PLUS"])) == "(expr a + b)";
 }
 
 test "builder nests child nodes and computes spans" {
@@ -125,10 +109,10 @@ test "builder nests child nodes and computes spans" {
 
     let ch = children_of(&s, 0);
     assert ch.len() == 3;
-    assert s.tag[ch[0]] == E_OPEN;
-    assert cst_kind(&s, ch[0]) == 1 as NodeKind;
-    assert cst_span(&s, ch[0]) == Span::new(0, 1);
-    assert cst_to_string_tree(&s, 0, &ts, &names(["expr", "term"]), &names(["ID", "PLUS"])) == "(expr (term x) + (term y))";
+    assert s.is_node(ch[0]);
+    assert s.kind(ch[0]) == 1 as NodeKind;
+    assert s.span(ch[0]) == Span::new(0, 1);
+    assert s.to_string_tree(0, &ts, &names(["expr", "term"]), &names(["ID", "PLUS"])) == "(expr (term x) + (term y))";
 }
 
 test "set_alt stamps the innermost open node" {
@@ -141,14 +125,14 @@ test "set_alt stamps the innermost open node" {
     b.finish_node(1);
     let s = b.finish();
 
-    assert cst_alt(&s, 0) == 2;
+    assert s.alt(0) == 2;
     let ch = children_of(&s, 0);
-    assert cst_alt(&s, ch[0]) == 3;
+    assert s.alt(ch[0]) == 3;
 }
 
 // === TreeBuilder: error tokens ===
 
-test "missing terminal becomes an E_MISS child and marks the node incomplete" {
+test "missing terminal becomes a Missing child and marks the node incomplete" {
     let chars: List<char> = "a +".chars().collect();
     let mut ts = TokenStream::new(&chars);
     let lo0 = ts.trivia_mark();
@@ -165,17 +149,16 @@ test "missing terminal becomes an E_MISS child and marks the node incomplete" {
     b.finish_node(3);
     let s = b.finish();
 
-    assert cst_is_error(&s, 0);
-    assert cst_is_incomplete(&s, 0);
-    assert s.flags[0] & NODE_INCOMPLETE != 0;
+    assert s.is_error(0);
+    assert s.is_incomplete(0);
     let ch = children_of(&s, 0);
-    assert s.tag[ch[2]] == E_MISS;
-    assert s.a[ch[2]] == syn;
-    assert ts.is_synthetic(s.a[ch[2]]);
-    assert cst_to_string_tree(&s, 0, &ts, &names(["expr"]), &names(["ID", "PLUS"])) == "(expr a + <missing ID>)";
+    assert s.child_kind(ch[2]) matches { Missing };
+    assert s.token_index(ch[2]) == syn;
+    assert ts.is_synthetic(s.token_index(ch[2]));
+    assert s.to_string_tree(0, &ts, &names(["expr"]), &names(["ID", "PLUS"])) == "(expr a + <missing ID>)";
 }
 
-test "skipped terminal becomes an E_SKIP child and marks the node erroneous" {
+test "skipped terminal becomes a Skipped child and marks the node erroneous" {
     let mut ts = stream_of("a @ b", [
         [0, 0, 1],
         [2, 2, 3],
@@ -190,9 +173,11 @@ test "skipped terminal becomes an E_SKIP child and marks the node erroneous" {
     b.finish_node(5);
     let s = b.finish();
 
-    assert cst_is_error(&s, 0);
-    assert !cst_is_incomplete(&s, 0);
-    assert cst_to_string_tree(&s, 0, &ts, &names(["expr"]), &names(["ID", "PLUS", "AT"])) == "(expr a <skip @> b)";
+    assert s.is_error(0);
+    assert !s.is_incomplete(0);
+    let ch = children_of(&s, 0);
+    assert s.child_kind(ch[1]) matches { Skipped };
+    assert s.to_string_tree(0, &ts, &names(["expr"]), &names(["ID", "PLUS", "AT"])) == "(expr a <skip @> b)";
 }
 
 test "error region is a K_ERROR node and bubbles error up to the parent" {
@@ -212,12 +197,12 @@ test "error region is a K_ERROR node and bubbles error up to the parent" {
     b.finish_node(5);
     let s = b.finish();
 
-    assert cst_is_error(&s, 0);  // bubbled from the error region
+    assert s.is_error(0);  // bubbled from the error region
     let ch = children_of(&s, 0);
-    assert s.tag[ch[1]] == E_OPEN;
-    assert cst_kind(&s, ch[1]) == K_ERROR;
-    assert cst_is_error(&s, ch[1]);
-    assert cst_to_string_tree(&s, 0, &ts, &names(["expr"]), &names(["ID", "PLUS", "AT"])) == "(expr a (<error> <skip @>) b)";
+    assert s.is_node(ch[1]);
+    assert s.kind(ch[1]) == K_ERROR;
+    assert s.is_error(ch[1]);
+    assert s.to_string_tree(0, &ts, &names(["expr"]), &names(["ID", "PLUS", "AT"])) == "(expr a (<error> <skip @>) b)";
 }
 
 test "start_node_at wraps left-associatively across iterations" {
@@ -252,8 +237,8 @@ test "start_node_at wraps left-associatively across iterations" {
     b.finish_node(5);
     let s = b.finish();
 
-    assert cst_span(&s, 0) == Span::new(0, 5);
-    assert cst_to_string_tree(&s, 0, &ts, &names(["expr"]), &names(["INT", "PLUS"])) == "(expr (expr (expr 1) + (expr 2)) + (expr 3))";
+    assert s.span(0) == Span::new(0, 5);
+    assert s.to_string_tree(0, &ts, &names(["expr"]), &names(["INT", "PLUS"])) == "(expr (expr (expr 1) + (expr 2)) + (expr 3))";
 }
 
 test "truncate rolls the builder back to a checkpoint" {
@@ -274,7 +259,7 @@ test "truncate rolls the builder back to a checkpoint" {
     let s = b.finish();
 
     assert children_of(&s, 0).len() == 1;  // only the first token survives
-    assert cst_to_string_tree(&s, 0, &ts, &names(["expr", "term"]), &names(["ID"])) == "(expr a)";
+    assert s.to_string_tree(0, &ts, &names(["expr", "term"]), &names(["ID"])) == "(expr a)";
 }
 
 // === ParseResult ===
@@ -304,7 +289,7 @@ test "ParseResult has_errors when an error diagnostic is present" {
     let result = ParseResult { cst: b.finish(), tokens: ts, diagnostics: diags };
     assert result.has_errors();
     assert !result.ok();
-    assert cst_kind(&result.cst, 0) == 0 as NodeKind;
+    assert result.cst.kind(0) == 0 as NodeKind;
 }
 
 // === Diagnostic ===
