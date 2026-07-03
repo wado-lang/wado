@@ -198,13 +198,13 @@ type "functype//wado-compiler/tests/fixtures/value_copy_nested_array_helper_chai
 
 type "functype//wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado/__cm_export__run" = fn();  // TypeId(46)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado/$value_copy$T27" = fn(ref "core:prelude//List<core:prelude/list.wado/List<f64>>") -> ref "core:prelude//List<core:prelude/list.wado/List<f64>>";  // TypeId(47)
+type "functype//wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado/$value_copy$T26" = fn(ref "core:prelude//List<f64>") -> ref "core:prelude//List<f64>";  // TypeId(47)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado/$value_copy$T26" = fn(ref "core:prelude//List<f64>") -> ref "core:prelude//List<f64>";  // TypeId(48)
+type "functype//wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado/$value_copy$T27" = fn(ref "core:prelude//List<core:prelude/list.wado/List<f64>>") -> ref "core:prelude//List<core:prelude/list.wado/List<f64>>";  // TypeId(48)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado/$value_copy$T77" = fn(ref "core:json//JsonSeqAccess") -> ref "core:json//JsonSeqAccess";  // TypeId(49)
+type "functype//wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado/$value_copy$T31" = fn(ref "wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado//Item") -> ref "wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado//Item";  // TypeId(49)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado/$value_copy$T31" = fn(ref "wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado//Item") -> ref "wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado//Item";  // TypeId(50)
+type "functype//wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado/$value_copy$T77" = fn(ref "core:json//JsonSeqAccess") -> ref "core:json//JsonSeqAccess";  // TypeId(50)
 
 type "functype//wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado/$value_copy$T29" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(51)
 
@@ -462,16 +462,12 @@ fn "wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado/__cm_
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado/$value_copy$T27"(v) {
-    return struct.new "core:prelude//List<core:prelude/list.wado/List<f64>>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude//List<f64>">(/*via $value_copy$T26*/ v.repr)), used: v.used };
-}
-
 fn "wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado/$value_copy$T26"(v) {
     return struct.new "core:prelude//List<f64>" { repr: ref.as_non_null(builtin::array_clone<f64>(v.repr)), used: v.used };
 }
 
-fn "wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado/$value_copy$T77"(v) {
-    return struct.new "core:json//JsonSeqAccess" { de: v.de, first: v.first };
+fn "wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado/$value_copy$T27"(v) {
+    return struct.new "core:prelude//List<core:prelude/list.wado/List<f64>>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude//List<f64>">(/*via $value_copy$T26*/ v.repr)), used: v.used };
 }
 
 fn "wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado/$value_copy$T31"(v) {
@@ -479,6 +475,10 @@ fn "wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado/$valu
     let v_2: ref "wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado//Geom";
     let v_3: ref "core:prelude//List<core:prelude/list.wado/List<core:prelude/list.wado/List<f64>>>";
     return struct.new "wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado//Item" { name: ref.as_non_null(v_1 = v.name; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v_1.repr)), used: v_1.used }), geom: ref.as_non_null(v_2 = v.geom; struct.new "wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado//Geom" { coords: ref.as_non_null(v_3 = v_2.coords; struct.new "core:prelude//List<core:prelude/list.wado/List<core:prelude/list.wado/List<f64>>>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude//List<core:prelude/list.wado/List<f64>>">(/*via $value_copy$T27*/ v_3.repr)), used: v_3.used }) }) };
+}
+
+fn "wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado/$value_copy$T77"(v) {
+    return struct.new "core:json//JsonSeqAccess" { de: v.de, first: v.first };
 }
 
 fn "wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado/$value_copy$T29"(v) {
@@ -3032,10 +3032,11 @@ fn "core:prelude/list.wado/List<wado-compiler/tests/fixtures/value_copy_nested_a
 }
 
 fn "core:json/JsonSeqAccess^DeserializeSeq::next_element<wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado/Item>"(self) {
-    let __qm_e: ref "core:serde//DeserializeError";
+    let __qm_e_2: ref "core:serde//DeserializeError";
+    let __qm_v_3: ref "wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado//Item";
+    let __qm_e_4: ref "core:serde//DeserializeError";
     let v: ref "wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado//Item";
-    let e: ref "core:serde//DeserializeError";
-    let __match_5: ref null "core:serde//DeserializeError";
+    let __match_6: ref null "core:serde//DeserializeError";
     let index: i32;
     "core:json/JsonDeserializer::skip_whitespace"(self.de);
     if @unlikely(self.de.pos >= (self.de.input.end - self.de.input.start)) {
@@ -3046,12 +3047,12 @@ fn "core:json/JsonSeqAccess^DeserializeSeq::next_element<wado-compiler/tests/fix
         return 0, ref.null none, ref.null none;
     }
     if self.first == 0 {
-        __match_5 = "core:json/JsonDeserializer::expect_char"(self.de, 44);
-        if @likely(ref.is_null(__match_5)) {
+        __match_6 = "core:json/JsonDeserializer::expect_char"(self.de, 44);
+        if @likely(ref.is_null(__match_6)) {
         } else {
-            __qm_e = ref.as_non_null(__match_5);
+            __qm_e_2 = ref.as_non_null(__match_6);
             cold_path;
-            return 1, ref.null none, __qm_e;
+            return 1, ref.null none, __qm_e_2;
         }
     }
     self.first = 0;
@@ -3059,14 +3060,15 @@ fn "core:json/JsonSeqAccess^DeserializeSeq::next_element<wado-compiler/tests/fix
     let __sroa___match_scrut_1_case0_payload_0: ref null "wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado//Item";
     let __sroa___match_scrut_1_case1_payload_0: ref null "core:serde//DeserializeError";
     multivalue_bind [__sroa___match_scrut_1_discriminant, __sroa___match_scrut_1_case0_payload_0, __sroa___match_scrut_1_case1_payload_0] = "wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado/Item^Deserialize::deserialize<&mut core:json/JsonDeserializer>"(self.de);
-    if @likely(__sroa___match_scrut_1_discriminant == 0) {
-        v = ref.as_non_null(__sroa___match_scrut_1_case0_payload_0);
-        return 0, v, ref.null none;
+    v = (if @likely(__sroa___match_scrut_1_discriminant == 0) -> ref "wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado//Item" {
+        __qm_v_3 = ref.as_non_null(__sroa___match_scrut_1_case0_payload_0);
+        __qm_v_3;
     } else {
-        e = ref.as_non_null(__sroa___match_scrut_1_case1_payload_0);
+        __qm_e_4 = ref.as_non_null(__sroa___match_scrut_1_case1_payload_0);
         cold_path;
-        return 1, ref.null none, e;
-    }
+        return 1, ref.null none, __qm_e_4;
+    });
+    return 0, v, ref.null none;
 }
 
 fn "wado-compiler/tests/fixtures/value_copy_nested_array_helper_chain.wado/Item^Deserialize::deserialize<&mut core:json/JsonDeserializer>"(d) {
@@ -3619,10 +3621,11 @@ fn "core:prelude/list.wado/List<core:prelude/list.wado/List<core:prelude/list.wa
 }
 
 fn "core:json/JsonSeqAccess^DeserializeSeq::next_element<core:prelude/list.wado/List<core:prelude/list.wado/List<f64>>>"(self) {
-    let __qm_e: ref "core:serde//DeserializeError";
+    let __qm_e_2: ref "core:serde//DeserializeError";
+    let __qm_v_3: ref "core:prelude//List<core:prelude/list.wado/List<f64>>";
+    let __qm_e_4: ref "core:serde//DeserializeError";
     let v: ref "core:prelude//List<core:prelude/list.wado/List<f64>>";
-    let e: ref "core:serde//DeserializeError";
-    let __match_5: ref null "core:serde//DeserializeError";
+    let __match_6: ref null "core:serde//DeserializeError";
     let index: i32;
     "core:json/JsonDeserializer::skip_whitespace"(self.de);
     if @unlikely(self.de.pos >= (self.de.input.end - self.de.input.start)) {
@@ -3633,12 +3636,12 @@ fn "core:json/JsonSeqAccess^DeserializeSeq::next_element<core:prelude/list.wado/
         return 0, ref.null none, ref.null none;
     }
     if self.first == 0 {
-        __match_5 = "core:json/JsonDeserializer::expect_char"(self.de, 44);
-        if @likely(ref.is_null(__match_5)) {
+        __match_6 = "core:json/JsonDeserializer::expect_char"(self.de, 44);
+        if @likely(ref.is_null(__match_6)) {
         } else {
-            __qm_e = ref.as_non_null(__match_5);
+            __qm_e_2 = ref.as_non_null(__match_6);
             cold_path;
-            return 1, ref.null none, __qm_e;
+            return 1, ref.null none, __qm_e_2;
         }
     }
     self.first = 0;
@@ -3646,14 +3649,15 @@ fn "core:json/JsonSeqAccess^DeserializeSeq::next_element<core:prelude/list.wado/
     let __sroa___match_scrut_1_case0_payload_0: ref null "core:prelude//List<core:prelude/list.wado/List<f64>>";
     let __sroa___match_scrut_1_case1_payload_0: ref null "core:serde//DeserializeError";
     multivalue_bind [__sroa___match_scrut_1_discriminant, __sroa___match_scrut_1_case0_payload_0, __sroa___match_scrut_1_case1_payload_0] = "core:serde/List<core:prelude/list.wado/List<f64>>^Deserialize::deserialize<&mut core:json/JsonDeserializer>"(self.de);
-    if @likely(__sroa___match_scrut_1_discriminant == 0) {
-        v = ref.as_non_null(__sroa___match_scrut_1_case0_payload_0);
-        return 0, v, ref.null none;
+    v = (if @likely(__sroa___match_scrut_1_discriminant == 0) -> ref "core:prelude//List<core:prelude/list.wado/List<f64>>" {
+        __qm_v_3 = ref.as_non_null(__sroa___match_scrut_1_case0_payload_0);
+        __qm_v_3;
     } else {
-        e = ref.as_non_null(__sroa___match_scrut_1_case1_payload_0);
+        __qm_e_4 = ref.as_non_null(__sroa___match_scrut_1_case1_payload_0);
         cold_path;
-        return 1, ref.null none, e;
-    }
+        return 1, ref.null none, __qm_e_4;
+    });
+    return 0, v, ref.null none;
 }
 
 fn "core:serde/List<core:prelude/list.wado/List<f64>>^Deserialize::deserialize<&mut core:json/JsonDeserializer>"(d) {
@@ -3759,10 +3763,11 @@ fn "core:prelude/list.wado/List<core:prelude/list.wado/List<f64>>::push"(self, v
 }
 
 fn "core:json/JsonSeqAccess^DeserializeSeq::next_element<core:prelude/list.wado/List<f64>>"(self) {
-    let __qm_e: ref "core:serde//DeserializeError";
+    let __qm_e_2: ref "core:serde//DeserializeError";
+    let __qm_v_3: ref "core:prelude//List<f64>";
+    let __qm_e_4: ref "core:serde//DeserializeError";
     let v: ref "core:prelude//List<f64>";
-    let e: ref "core:serde//DeserializeError";
-    let __match_5: ref null "core:serde//DeserializeError";
+    let __match_6: ref null "core:serde//DeserializeError";
     let index: i32;
     "core:json/JsonDeserializer::skip_whitespace"(self.de);
     if @unlikely(self.de.pos >= (self.de.input.end - self.de.input.start)) {
@@ -3773,12 +3778,12 @@ fn "core:json/JsonSeqAccess^DeserializeSeq::next_element<core:prelude/list.wado/
         return 0, ref.null none, ref.null none;
     }
     if self.first == 0 {
-        __match_5 = "core:json/JsonDeserializer::expect_char"(self.de, 44);
-        if @likely(ref.is_null(__match_5)) {
+        __match_6 = "core:json/JsonDeserializer::expect_char"(self.de, 44);
+        if @likely(ref.is_null(__match_6)) {
         } else {
-            __qm_e = ref.as_non_null(__match_5);
+            __qm_e_2 = ref.as_non_null(__match_6);
             cold_path;
-            return 1, ref.null none, __qm_e;
+            return 1, ref.null none, __qm_e_2;
         }
     }
     self.first = 0;
@@ -3786,14 +3791,15 @@ fn "core:json/JsonSeqAccess^DeserializeSeq::next_element<core:prelude/list.wado/
     let __sroa___match_scrut_1_case0_payload_0: ref null "core:prelude//List<f64>";
     let __sroa___match_scrut_1_case1_payload_0: ref null "core:serde//DeserializeError";
     multivalue_bind [__sroa___match_scrut_1_discriminant, __sroa___match_scrut_1_case0_payload_0, __sroa___match_scrut_1_case1_payload_0] = "core:serde/List<f64>^Deserialize::deserialize<&mut core:json/JsonDeserializer>"(self.de);
-    if @likely(__sroa___match_scrut_1_discriminant == 0) {
-        v = ref.as_non_null(__sroa___match_scrut_1_case0_payload_0);
-        return 0, v, ref.null none;
+    v = (if @likely(__sroa___match_scrut_1_discriminant == 0) -> ref "core:prelude//List<f64>" {
+        __qm_v_3 = ref.as_non_null(__sroa___match_scrut_1_case0_payload_0);
+        __qm_v_3;
     } else {
-        e = ref.as_non_null(__sroa___match_scrut_1_case1_payload_0);
+        __qm_e_4 = ref.as_non_null(__sroa___match_scrut_1_case1_payload_0);
         cold_path;
-        return 1, ref.null none, e;
-    }
+        return 1, ref.null none, __qm_e_4;
+    });
+    return 0, v, ref.null none;
 }
 
 fn "core:serde/List<f64>^Deserialize::deserialize<&mut core:json/JsonDeserializer>"(d) {
@@ -3897,9 +3903,11 @@ fn "core:prelude/list.wado/List<f64>::push"(self, value) {
 }
 
 fn "core:json/JsonSeqAccess^DeserializeSeq::next_element<f64>"(self) {
-    let __qm_e: ref "core:serde//DeserializeError";
-    let e: ref "core:serde//DeserializeError";
-    let __match_5: ref null "core:serde//DeserializeError";
+    let __qm_e_2: ref "core:serde//DeserializeError";
+    let __qm_v_3: f64;
+    let __qm_e_4: ref "core:serde//DeserializeError";
+    let v: f64;
+    let __match_6: ref null "core:serde//DeserializeError";
     let index: i32;
     let d: ref "core:json//JsonDeserializer";
     "core:json/JsonDeserializer::skip_whitespace"(self.de);
@@ -3911,12 +3919,12 @@ fn "core:json/JsonSeqAccess^DeserializeSeq::next_element<f64>"(self) {
         return 0, 1, 0, ref.null none;
     }
     if self.first == 0 {
-        __match_5 = "core:json/JsonDeserializer::expect_char"(self.de, 44);
-        if @likely(ref.is_null(__match_5)) {
+        __match_6 = "core:json/JsonDeserializer::expect_char"(self.de, 44);
+        if @likely(ref.is_null(__match_6)) {
         } else {
-            __qm_e = ref.as_non_null(__match_5);
+            __qm_e_2 = ref.as_non_null(__match_6);
             cold_path;
-            return 1, 1, 0, __qm_e;
+            return 1, 1, 0, __qm_e_2;
         }
     }
     self.first = 0;
@@ -3925,13 +3933,14 @@ fn "core:json/JsonSeqAccess^DeserializeSeq::next_element<f64>"(self) {
     let __sroa___match_scrut_1_case1_payload_0: ref null "core:serde//DeserializeError";
     d = self.de;
     multivalue_bind [__sroa___match_scrut_1_discriminant, __sroa___match_scrut_1_case0_payload_0, __sroa___match_scrut_1_case1_payload_0] = "core:json/JsonDeserializer::parse_f64_direct"(d);
-    if @likely(__sroa___match_scrut_1_discriminant == 0) {
-        return 0, 0, __sroa___match_scrut_1_case0_payload_0, ref.null none;
+    v = (if @likely(__sroa___match_scrut_1_discriminant == 0) -> f64 {
+        local.tee __qm_v_3(__sroa___match_scrut_1_case0_payload_0);
     } else {
-        e = ref.as_non_null(__sroa___match_scrut_1_case1_payload_0);
+        __qm_e_4 = ref.as_non_null(__sroa___match_scrut_1_case1_payload_0);
         cold_path;
-        return 1, 1, 0, e;
-    }
+        return 1, 1, 0, __qm_e_4;
+    });
+    return 0, 0, v, ref.null none;
 }
 
 fn "core:prelude/list.wado/List<f64>::grow"(self) {

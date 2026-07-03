@@ -38,9 +38,14 @@
 //! `match tmp` shapes that if-let desugaring produces; this rule handles the
 //! value-producing direct-scrutinee shape. Scope: guard-free arms; `Variant`
 //! (payload `[]`, `[_]`, or `[binding]`) and `Wildcard` patterns; every exit
-//! a `VariantConstruct`. A `null` / value-less break — the `Option::None`
-//! placeholder — bails: mapping it to an arm needs the variant's null-case
-//! identity, and those call sites are if-let-shaped in practice.
+//! a `VariantConstruct`. A `null` / value-less break bails, because mapping it
+//! to an arm needs the variant's null-case identity this pass does not carry.
+//! This leaves the `Option` `?` operator unthreaded: `reify` lowers `opt?` to a
+//! direct `match L: { … break L: Some(v); … break L: null } { Some(x)=>x,
+//! None=>… }` whose `None` exit is a bare `null`, so it keeps the intermediate
+//! `Option` allocation that `Result` `?` sheds. Closing that seam (threading
+//! `null`/unit exits to the payload-less arm) is a deliberate follow-up, not a
+//! shape the existing passes already cover.
 //!
 //! Chained `?` resolves bottom-up without special handling: the engine seeds
 //! post-order, so an inner `match LB` threads first, turning into a plain
@@ -55,7 +60,7 @@ use crate::nir_value_graph::ValueKind;
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
-use super::arena_query::has_break_to;
+use super::arena_query::{has_break_to, single_payload_binding};
 use super::labeled_block_fusion::{block_contains_loop, expr_has_free_unlabeled_loop_exit};
 
 pub(super) struct MatchThreadRule;
@@ -182,15 +187,7 @@ fn arm_info(body: &Body, arm: &ArmData) -> Option<ArmInfo> {
             bindings,
             ..
         } => {
-            let binding = match bindings.as_slice() {
-                [] => None,
-                [single] => match &body.pats[*single].kind {
-                    PatKind::Wildcard => None,
-                    PatKind::Binding { local_index, .. } => Some(*local_index),
-                    _ => return None,
-                },
-                _ => return None,
-            };
+            let binding = single_payload_binding(body, bindings)?;
             Some(ArmInfo {
                 case_name: Some(variant_name.clone()),
                 binding,
@@ -396,6 +393,16 @@ fn validate_exits_in_expr(
 fn perform_threading(engine: &mut Engine, match_id: ExprId, plan: ThreadPlan) {
     let fused_label = format!("__thread_{}", plan.label);
     thread_block(engine, plan.lb_block, &plan, &fused_label);
+    // Every exit `validate_exits_*` accepted must have been rewritten to the
+    // fused label; a surviving `break plan.label` is a walker-divergence bug
+    // (the thread walk missed a child position the validate walk descended,
+    // e.g. an `if`-statement condition) and would dangle once the label is
+    // renamed. Catch it in dev/test builds rather than emitting invalid Wasm.
+    debug_assert!(
+        !has_break_to(engine.body, NodeRef::Block(plan.lb_block), &plan.label),
+        "match_thread: unrewritten `break {}` survived threading",
+        plan.label,
+    );
     // The scrutinee node's LabeledBlock kind moves onto the match node; kill
     // the vacated node first so the block is never double-claimed.
     engine.replace_expr_kind(plan.scrut, ExprKind::Dead);
@@ -440,20 +447,24 @@ fn thread_stmt(
 
     enum Shape {
         Blocks(Vec<BlockId>),
+        // An `if` statement's condition operand can host an exit too (a
+        // block/if/match condition carrying a `break plan.label`), so it must be
+        // threaded alongside the branches — validate_exits_in_stmt descends it.
+        CondAndBlocks(Operand, Vec<BlockId>),
         Other,
     }
     let shape = match &engine.body.stmts[s].kind {
         StmtKind::LabeledBlock { label: l, .. } if *l == plan.label => Shape::Blocks(vec![]),
         StmtKind::If {
+            condition,
             then_block,
             else_block,
-            ..
         } => {
             let mut v = vec![*then_block];
             if let Some(eb) = else_block {
                 v.push(*eb);
             }
-            Shape::Blocks(v)
+            Shape::CondAndBlocks(*condition, v)
         }
         StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
             Shape::Blocks(vec![*b])
@@ -462,6 +473,14 @@ fn thread_stmt(
     };
     match shape {
         Shape::Blocks(blocks) => {
+            for b in blocks {
+                thread_block(engine, b, plan, fused_label);
+            }
+        }
+        Shape::CondAndBlocks(cond, blocks) => {
+            if let Some(ce) = cond.as_expr() {
+                thread_expr(engine, ce, plan, fused_label);
+            }
             for b in blocks {
                 thread_block(engine, b, plan, fused_label);
             }

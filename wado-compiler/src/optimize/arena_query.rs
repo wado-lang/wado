@@ -6,7 +6,26 @@
 
 use crate::hashmap::IndexSet;
 use crate::nir::NirUnaryOp;
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
+use crate::nir_arena::{
+    BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
+};
+
+/// The single optional payload-binding local of a variant arm pattern's
+/// `bindings`. `Some(None)` = no binding (`[]` or `[_]`); `Some(Some(idx))` =
+/// one `Binding` slot; `None` = reject (more than one binding, or a nested
+/// non-trivial subpattern the `labeled_block_fusion` / `match_thread` payload
+/// substitution does not handle). Callers propagate the reject with `?`.
+pub(super) fn single_payload_binding(body: &Body, bindings: &[PatId]) -> Option<Option<u32>> {
+    match bindings {
+        [] => Some(None),
+        [single] => match &body.pats[*single].kind {
+            PatKind::Wildcard => Some(None),
+            PatKind::Binding { local_index, .. } => Some(Some(*local_index)),
+            _ => None,
+        },
+        _ => None,
+    }
+}
 
 /// If `expr` is a place rooted at a local — `x`, `x.f`, `x[i]`, `*x`, and any
 /// chain thereof — return that root local index; otherwise `None`. Used by

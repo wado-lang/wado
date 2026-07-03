@@ -1405,8 +1405,11 @@ impl DeserializeStruct for CborStructAccess {
         }
         // Fast path: a definite-length text key matches the schema straight from
         // the input bytes, no allocation (RFC 8949 §6.1: text-string keys).
+        // Only definite lengths (ai <= AI_8BYTE) take it; indefinite (31) and
+        // reserved (28..30) fall to the slow path, where `read_head` reports the
+        // precise malformed-head diagnostic.
         let head = self.de.peek_byte()?;
-        if head >> 5 == MAJOR_TEXT && head & 0x1f != AI_INDEFINITE {
+        if head >> 5 == MAJOR_TEXT && head & 0x1f <= AI_8BYTE {
             let key_range = self.de.read_text_key_range()?;
             let idx = match S::lookup(self.de.input.slice(key_range.0, key_range.0 + key_range.1)) {
                 Some(i) => i,

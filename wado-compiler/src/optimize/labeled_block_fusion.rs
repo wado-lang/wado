@@ -67,7 +67,7 @@ use crate::nir_visitor::NirRefVisitor;
 use crate::tir::TypeId;
 use crate::token::Span;
 
-use super::arena_query::{has_break_to, is_local, is_local_operand};
+use super::arena_query::{has_break_to, is_local, is_local_operand, single_payload_binding};
 
 /// `expr_has_break_to` arena adapter.
 fn expr_has_break_to(body: &Body, label: &str, e: ExprId) -> bool {
@@ -368,15 +368,7 @@ fn check_fusion_preconditions_match(
     let variant_name = variant_name.clone();
 
     // At most one payload binding slot.
-    let pattern_payload_binding: Option<u32> = match bindings.as_slice() {
-        [] => None,
-        [single] => match &body.pats[*single].kind {
-            PatKind::Wildcard => None,
-            PatKind::Binding { local_index, .. } => Some(*local_index),
-            _ => return None,
-        },
-        _ => return None,
-    };
+    let pattern_payload_binding = single_payload_binding(body, bindings)?;
 
     // Resolve case_index from the labeled block's breaks.
     let case_index = find_break_case_index_for_name(body, lb_block, &label, &variant_name)?;
