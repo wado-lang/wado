@@ -556,13 +556,13 @@ pub fn line_col(chars: &List<char>, pos: i32) -> [i32, i32] {
 //! Consumers read the store as a cursor — a `(&CstStore, index)` pair threaded
 //! as unbundled scalars — so traversal allocates nothing and copies nothing.
 //!
-//! A node is the row index of its `E_OPEN`; the root is row 0. The store holds
+//! A node is the row index of its `Open`; the root is row 0. The store holds
 //! no reference to the token stream, so `ParseResult` owns both the store and
 //! the stream it indexes without a self-referential borrow. Functions that need
 //! terminal text or kinds take a `&TokenStream` argument.
 //!
-//! Error tokens are first-class and lossless: `E_MISS` (an inserted synthetic
-//! terminal), `E_SKIP` (a real terminal deleted during recovery), and a
+//! Error tokens are first-class and lossless: `Miss` (an inserted synthetic
+//! terminal), `Skip` (a real terminal deleted during recovery), and a
 //! `<error>` region node (kind `K_ERROR`) together capture every recovery edit
 //! (insert / delete / region) so the original input round-trips. The token-
 //! stream flags (`TOK_SYNTHETIC` / `TOK_SKIPPED`, see `lex.wado`) carry the same
@@ -591,43 +591,45 @@ pub global K_ERROR: NodeKind = -1;
 ///   (a missing/skipped terminal or an error region). Bubbles up so a consumer
 ///   can prune clean subtrees in one check.
 /// - `NODE_INCOMPLETE` — this node is missing a required terminal that the
-///   parser had to insert (it has an `E_MISS` child).
+///   parser had to insert (it has an `Miss` child).
 pub global NODE_ERROR: i32 = 1;
 pub global NODE_INCOMPLETE: i32 = 2;
 
-/// Event-stream row tags. Every row is a triple `(tag, a, b)`; `a` / `b` carry
+/// Event-stream row tag. Every row is a triple `(tag, a, b)`; `a` / `b` carry
 /// the tag-specific payload below.
 ///
-/// - `E_OPEN`  — `a` = node kind, `b` = start byte offset (also the finalized
+/// - `Open`  — `a` = node kind, `b` = start byte offset (also the finalized
 ///   `span.start`).
-/// - `E_CLOSE` — `a` = end byte offset; `b` is stamped with the matching open's
+/// - `Close` — `a` = end byte offset; `b` is stamped with the matching open's
 ///   kind during `finalize`, so a linear walk knows whether to exit a rule.
-/// - `E_TOK` / `E_MISS` / `E_SKIP` — `a` = token index into the `TokenStream`.
-pub global E_OPEN: i32 = 0;
-pub global E_CLOSE: i32 = 1;
-pub global E_TOK: i32 = 2;
-pub global E_MISS: i32 = 3;
-pub global E_SKIP: i32 = 4;
+/// - `Tok` / `Miss` / `Skip` — `a` = token index into the `TokenStream`.
+pub enum EventTag {
+    Open,
+    Close,
+    Tok,
+    Miss,
+    Skip,
+}
 
 /// The flat CST: parallel i32 columns, one row per event, in pre-order. `tag`,
 /// `a`, `b` and `alt` are written during the parse; `end`, `flags` and `next`
 /// are derived by `finalize` (in `TreeBuilder::finish`). A node is addressed by
-/// the row index of its `E_OPEN` row. Columns are `pub` so a linear walk
+/// the row index of its `Open` row. Columns are `pub` so a linear walk
 /// (`highlight_walk`) can read them in a tight loop; external consumers use the
 /// `impl CstStore` cursor methods below for O(1) queries and child navigation.
 pub struct CstStore {
-    pub tag: List<i32>,
+    pub tag: List<EventTag>,
     pub a: List<i32>,
     pub b: List<i32>,
-    /// The matched labeled-alternative index for an `E_OPEN` row (grammar
+    /// The matched labeled-alternative index for an `Open` row (grammar
     /// declaration order), or -1 when unlabeled / unset / non-open.
     alt: List<i32>,
-    /// `span.end` for an `E_OPEN` row (max of its close offset and every child
+    /// `span.end` for an `Open` row (max of its close offset and every child
     /// end); derived.
     end: List<i32>,
-    /// `NODE_ERROR` / `NODE_INCOMPLETE` for an `E_OPEN` row; derived.
+    /// `NODE_ERROR` / `NODE_INCOMPLETE` for an `Open` row; derived.
     flags: List<i32>,
-    /// Row index just past this `E_OPEN` node's whole subtree, so a random-
+    /// Row index just past this `Open` node's whole subtree, so a random-
     /// access consumer skips a subtree in O(1); derived.
     next: List<i32>,
 }
@@ -679,28 +681,23 @@ impl CstStore {
 
     /// True when row `i` is a rule / error node (has a kind, span, children).
     pub fn is_node(&self, i: i32) -> bool {
-        return self.tag[i] == E_OPEN;
+        return self.tag[i] matches { Open };
     }
 
     /// True when row `i` is a terminal (real, missing, or skipped).
     pub fn is_token(&self, i: i32) -> bool {
         let t = self.tag[i];
-        return t == E_TOK || t == E_MISS || t == E_SKIP;
+        return t matches { Tok | Miss | Skip };
     }
 
     /// The `ChildKind` of the (child) row `i`.
     pub fn child_kind(&self, i: i32) -> ChildKind {
-        let t = self.tag[i];
-        if t == E_OPEN {
-            return ChildKind::Node;
-        }
-        if t == E_MISS {
-            return ChildKind::Missing;
-        }
-        if t == E_SKIP {
-            return ChildKind::Skipped;
-        }
-        return ChildKind::Token;
+        return match self.tag[i] {
+            Open => ChildKind::Node,
+            Miss => ChildKind::Missing,
+            Skip => ChildKind::Skipped,
+            _ => ChildKind::Token,
+        };
     }
 
     /// Token-stream index of the terminal at row `i` (valid when `is_token`).
@@ -713,7 +710,7 @@ impl CstStore {
     /// `for let mut c = s.first_child(i); c >= 0; c = s.next_sibling(c) { … }`.
     pub fn first_child(&self, i: i32) -> i32 {
         let c = i + 1;
-        if c >= self.tag.len() || self.tag[c] == E_CLOSE {
+        if c >= self.tag.len() || self.tag[c] matches { Close } {
             return -1;
         }
         return c;
@@ -724,8 +721,8 @@ impl CstStore {
     /// O(1) via its subtree extent. Returns -1 for a row with no parent (the
     /// root), rather than indexing past the columns.
     pub fn next_sibling(&self, child: i32) -> i32 {
-        let c = if self.tag[child] == E_OPEN { self.next[child] } else { child + 1 };
-        if c >= self.tag.len() || self.tag[c] == E_CLOSE {
+        let c = if self.tag[child] matches { Open } { self.next[child] } else { child + 1 };
+        if c >= self.tag.len() || self.tag[c] matches { Close } {
             return -1;
         }
         return c;
@@ -737,7 +734,7 @@ impl CstStore {
     pub fn find_child(&self, i: i32, kind: NodeKind) -> i32 {
         let k = kind as i32;
         for let mut c = self.first_child(i); c >= 0; c = self.next_sibling(c) {
-            if self.tag[c] == E_OPEN && self.a[c] == k {
+            if self.tag[c] matches { Open } && self.a[c] == k {
                 return c;
             }
         }
@@ -779,23 +776,23 @@ fn cst_to_string_tree_impl(
     let mut c = i + 1;
     while c < s.next[i] {
         match s.tag[c] {
-            E_OPEN => {
+            Open => {
                 out.push_str(&" ");
                 cst_to_string_tree_impl(out, s, c, toks, rule_names, token_names);
                 c = s.next[c];
             },
-            E_TOK => {
+            Tok => {
                 if !toks.is_empty_text(s.a[c]) {
                     out.push_str(&" ");
                     toks.push_token_text(out, s.a[c]);
                 }
                 c += 1;
             },
-            E_MISS => {
+            Miss => {
                 out.push_str(&` <missing {token_names[toks.kind_at(s.a[c])]}>`);
                 c += 1;
             },
-            E_SKIP => {
+            Skip => {
                 out.push_str(&" <skip ");
                 toks.push_token_text(out, s.a[c]);
                 out.push_str(&">");
@@ -858,7 +855,7 @@ fn bubble_to_parent(stack: &List<i32>, end: &mut List<i32>, flags: &mut List<i32
 /// copy. `open` is the stack of currently-open row indices (`set_alt` targets
 /// the innermost).
 pub struct TreeBuilder {
-    tag: List<i32>,
+    tag: List<EventTag>,
     a: List<i32>,
     b: List<i32>,
     alt: List<i32>,
@@ -891,7 +888,7 @@ impl TreeBuilder {
         };
     }
 
-    fn push_row(&mut self, tag: i32, a: i32, b: i32) {
+    fn push_row(&mut self, tag: EventTag, a: i32, b: i32) {
         self.tag.push(tag);
         self.a.push(a);
         self.b.push(b);
@@ -901,14 +898,14 @@ impl TreeBuilder {
     /// Open a rule node of `kind` starting at byte offset `start`.
     pub fn start_node(&mut self, kind: NodeKind, start: i32) {
         let row = self.tag.len();
-        self.push_row(E_OPEN, kind as i32, start);
+        self.push_row(EventTag::Open, kind as i32, start);
         self.open.push(row);
     }
 
     /// Open a `<error>` region node (kind `K_ERROR`) at byte offset `start`.
     pub fn start_error(&mut self, start: i32) {
         let row = self.tag.len();
-        self.push_row(E_OPEN, K_ERROR as i32, start);
+        self.push_row(EventTag::Open, K_ERROR as i32, start);
         self.open.push(row);
     }
 
@@ -935,7 +932,7 @@ impl TreeBuilder {
     /// holds only ancestors with index `< checkpoint`, so the insert never
     /// shifts a live open index and pushing `checkpoint` keeps `open` monotonic.
     pub fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
-        self.tag.insert(checkpoint, E_OPEN);
+        self.tag.insert(checkpoint, EventTag::Open);
         self.a.insert(checkpoint, kind as i32);
         self.b.insert(checkpoint, start);
         self.alt.insert(checkpoint, -1);
@@ -961,30 +958,30 @@ impl TreeBuilder {
 
     /// Close the innermost open node at byte offset `end`.
     pub fn finish_node(&mut self, end: i32) {
-        self.push_row(E_CLOSE, end, 0);
+        self.push_row(EventTag::Close, end, 0);
         self.last_finished = self.open[self.open.len() - 1];
         let _ = self.open.pop();
     }
 
     /// Append a real terminal (`idx` into the stream) to the open node.
     pub fn token(&mut self, idx: i32) {
-        self.push_row(E_TOK, idx, 0);
+        self.push_row(EventTag::Tok, idx, 0);
     }
 
     /// Append an inserted synthetic terminal. `syn_idx` is the index returned
     /// by `TokenStream::push_synthetic`.
     pub fn missing(&mut self, syn_idx: i32) {
-        self.push_row(E_MISS, syn_idx, 0);
+        self.push_row(EventTag::Miss, syn_idx, 0);
     }
 
     /// Append a skipped real terminal. The caller marks `idx` with
     /// `TokenStream::mark_skipped` first.
     pub fn skip(&mut self, idx: i32) {
-        self.push_row(E_SKIP, idx, 0);
+        self.push_row(EventTag::Skip, idx, 0);
     }
 
     /// Finalise the store: one linear pass that fills `end` / `flags` / `next`
-    /// and stamps each `E_CLOSE` row with its open's kind. Deferring all
+    /// and stamps each `Close` row with its open's kind. Deferring all
     /// aggregation to here (rather than patching in `finish_node`) is what makes
     /// the retro-open `start_node_at` correct: the pass sees the final structure,
     /// so a wrapped subtree's `NODE_ERROR` bubbles into the wrap node even though
@@ -1005,26 +1002,31 @@ impl TreeBuilder {
         }
         let mut stack: List<i32> = [];
         for let mut r = 0; r < n; r += 1 {
-            let t = self.tag[r];
-            if t == E_OPEN {
-                flags[r] = if self.a[r] == K_ERROR as i32 { NODE_ERROR } else { 0 };
-                end[r] = self.b[r];
-                stack.push(r);
-            } else if t == E_MISS {
-                let oi = stack[stack.len() - 1];
-                flags[oi] = flags[oi] | NODE_INCOMPLETE | NODE_ERROR;
-            } else if t == E_SKIP {
-                let oi = stack[stack.len() - 1];
-                flags[oi] = flags[oi] | NODE_ERROR;
-            } else if t == E_CLOSE {
-                let oi = stack[stack.len() - 1];
-                let _ = stack.pop();
-                if self.a[r] > end[oi] {
-                    end[oi] = self.a[r];
-                }
-                b[r] = self.a[oi];
-                next[oi] = r + 1;
-                bubble_to_parent(&stack, &mut end, &mut flags, oi);
+            match self.tag[r] {
+                Open => {
+                    flags[r] = if self.a[r] == K_ERROR as i32 { NODE_ERROR } else { 0 };
+                    end[r] = self.b[r];
+                    stack.push(r);
+                },
+                Miss => {
+                    let oi = stack[stack.len() - 1];
+                    flags[oi] = flags[oi] | NODE_INCOMPLETE | NODE_ERROR;
+                },
+                Skip => {
+                    let oi = stack[stack.len() - 1];
+                    flags[oi] = flags[oi] | NODE_ERROR;
+                },
+                Close => {
+                    let oi = stack[stack.len() - 1];
+                    let _ = stack.pop();
+                    if self.a[r] > end[oi] {
+                        end[oi] = self.a[r];
+                    }
+                    b[r] = self.a[oi];
+                    next[oi] = r + 1;
+                    bubble_to_parent(&stack, &mut end, &mut flags, oi);
+                },
+                Tok => {},
             }
         }
         while stack.len() > 0 {
@@ -1065,15 +1067,15 @@ impl TreeBuilder {
     }
 }
 
-/// Render the subtree rooted at the `E_OPEN` row `i`, returning the row after
-/// its `E_CLOSE`. Events are balanced (`start_node` / `finish_node` pair), so a
-/// linear walk with recursion at each child `E_OPEN` stands in for the finalised
-/// `next` column. Works for a closed root (stops at its `E_CLOSE`) and for a
-/// still-open root (no `E_CLOSE`, so the walk closes it at the event end) —
+/// Render the subtree rooted at the `Open` row `i`, returning the row after
+/// its `Close`. Events are balanced (`start_node` / `finish_node` pair), so a
+/// linear walk with recursion at each child `Open` stands in for the finalised
+/// `next` column. Works for a closed root (stops at its `Close`) and for a
+/// still-open root (no `Close`, so the walk closes it at the event end) —
 /// mirrors `cst_to_string_tree_impl`.
 fn render_builder_node(
     out: &mut String,
-    tag: &List<i32>,
+    tag: &List<EventTag>,
     a: &List<i32>,
     i: i32,
     toks: &TokenStream,
@@ -1089,32 +1091,31 @@ fn render_builder_node(
     let mut c = i + 1;
     while c < tag.len() {
         match tag[c] {
-            E_OPEN => {
+            Open => {
                 out.push_str(&" ");
                 c = render_builder_node(out, tag, a, c, toks, rule_names, token_names);
             },
-            E_CLOSE => {
+            Close => {
                 out.push_str(&")");
                 return c + 1;
             },
-            E_TOK => {
+            Tok => {
                 if !toks.is_empty_text(a[c]) {
                     out.push_str(&" ");
                     toks.push_token_text(out, a[c]);
                 }
                 c += 1;
             },
-            E_MISS => {
+            Miss => {
                 out.push_str(&` <missing {token_names[toks.kind_at(a[c])]}>`);
                 c += 1;
             },
-            E_SKIP => {
+            Skip => {
                 out.push_str(&" <skip ");
                 toks.push_token_text(out, a[c]);
                 out.push_str(&">");
                 c += 1;
             },
-            _ => c += 1,
         }
     }
     out.push_str(&")");
