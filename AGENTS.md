@@ -84,6 +84,7 @@ Wado-specific features:
 - `assert` statements with power-assert-like diagnostics. Assertions cannot be disabled, so they are always reliable.
 - ES-Modules-like import statements.
 - Template string literals with Rust-like `{expr:specifier}` formatting.
+- Literal spread `..base`: JS-leaning (anonymous composition, key-value merge, last-wins); a named struct allows only a single leading `..base`. See WEP: Literal Spread.
 
 ## The Compiler
 
