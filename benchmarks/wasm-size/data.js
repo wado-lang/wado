@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783083530081,
+  "lastUpdate": 1783096226138,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -37692,6 +37692,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 15323,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287029,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f82a95f781561c652d75f92104e70c4dbc017822",
+          "message": "Merge pull request #1505 from wado-lang/claude/result-expect-unwrap-panic-ce0pt4\n\nfeat(prelude): include the underlying value in Result unwrap/expect panics",
+          "timestamp": "2026-07-04T01:21:20+09:00",
+          "tree_id": "2c8b73e1c104ca26d12a6c7528ad1a15fe53fc08",
+          "url": "https://github.com/wado-lang/wado/commit/f82a95f781561c652d75f92104e70c4dbc017822"
+        },
+        "date": 1783096225431,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17049,
             "unit": "bytes"
           },
           {
