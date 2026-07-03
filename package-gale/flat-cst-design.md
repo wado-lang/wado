@@ -183,20 +183,39 @@ bearing case for the deferred bubble and stays green.
 are free by-products of a pass we already run, and both are pure O(1) query
 enablers, so **no information and no O(1) query is lost** versus the node tree.
 
-## Consumers: functions over `(&store, i)`
+## Consumers: `&self` methods over a row index
 
-Every consumer becomes a free function over the shared store and a row index —
-no owned node, no deep copy. A subtree is a **view** (an index into the shared
-store), strictly better for the read-only consumers that exist today.
+Every consumer reads the shared store through an `impl CstStore` method taking a
+row index — no owned node, no deep copy. A subtree is a **view** (an index into
+the shared store), strictly better for the read-only consumers that exist today.
+Methods (not free functions) so call sites drop module qualification and read
+`s.kind(i)` rather than `mod::cst_kind(s, i)`; they compile identically (`self`
+is the first `&` param), so the sugar is zero-cost.
 
-**O(1) queries** (replacing `CstNode` methods):
+**O(1) queries** (replacing `CstNode` methods) — `s.kind(i)`, `s.span(i)`,
+`s.alt(i)`, `s.is_error(i)`, `s.is_incomplete(i)`, `s.is_node(i)`,
+`s.is_token(i)`, `s.token_index(i)`, `s.row_count()`. `<rule>_alt` is emitted as
+a method too: `s.expr_alt(node)`. `alt`/`end`/`flags`/`next` are private
+(methods only); `tag`/`a`/`b` stay `pub` for the internal `highlight_walk` scan.
+
+**Child navigation** — `s.first_child(i)` / `s.next_sibling(c)` walk direct
+children (subtrees skipped O(1) via `next`); a C-style `for` puts init/cond/
+update in the header:
 
 ```wado
-pub fn cst_kind(s: &CstStore, i: i32) -> NodeKind { return s.a[i]; }
-pub fn cst_span(s: &CstStore, i: i32) -> Span { return Span::new(s.b[i], s.end[i]); }
-pub fn cst_alt(s: &CstStore, i: i32) -> i32 { return s.alt[i]; }
-pub fn cst_is_error(s: &CstStore, i: i32) -> bool { return s.flags[i] & NODE_ERROR != 0; }
-pub fn cst_is_incomplete(s: &CstStore, i: i32) -> bool { return s.flags[i] & NODE_INCOMPLETE != 0; }
+for let mut c = s.first_child(node); c >= 0; c = s.next_sibling(c) { … }
+```
+
+`s.child_kind(c)` returns a plain **`ChildKind`** enum (`Node`/`Token`/`Missing`/
+`Skipped` — no payload, so an `i32`; matching allocates nothing), letting a
+consumer `match` a child instead of chaining `is_node`/`is_token`:
+
+```wado
+match s.child_kind(c) {
+    Node             => …,
+    Token            => op = toks.token_text(s.token_index(c)),
+    Missing | Skipped => {},
+}
 ```
 
 **`highlight_walk`** (the ~29% frame) — a flat forward scan, no recursion, no
@@ -205,7 +224,7 @@ matching open was a rule (kind stamped in `b` by finalize):
 
 ```wado
 pub fn highlight_walk(v: &mut HighlightVisitor, toks: &TokenStream, s: &CstStore) {
-    for let mut r = 0; r < s.tag.len(); r += 1 {
+    for let mut r = 0; r < s.row_count(); r += 1 {
         let t = s.tag[r];
         if t == E_OPEN {
             if s.a[r] != K_ERROR { v.hl_enter(s.a[r]); }
@@ -239,14 +258,14 @@ fn cst_to_string_tree_at(out, s, i, toks, rule_names, token_names) {
 }
 ```
 
-**`find_child(s, i, kind)`** — skip-scan direct children via `next`, O(children):
+**`s.find_child(i, kind)`** — skip-scan direct children via `first_child` /
+`next_sibling`, O(children):
 
 ```wado
-pub fn cst_find_child(s: &CstStore, i: i32, kind: NodeKind) -> i32 {   // -1 = none
-    let mut c = i + 1;
-    while c < s.next[i] {
-        if s.tag[c] == E_OPEN { if s.a[c] == kind { return c; } c = s.next[c]; }
-        else { c += 1; }
+pub fn find_child(&self, i: i32, kind: NodeKind) -> i32 {   // -1 = none
+    let k = kind as i32;
+    for let mut c = self.first_child(i); c >= 0; c = self.next_sibling(c) {
+        if self.tag[c] == E_OPEN && self.a[c] == k { return c; }
     }
     return -1;
 }
@@ -274,10 +293,10 @@ consumer call shapes move.
 - **`parser_gen.wado`** — `ParseResult { root: p.b.finish(), ... }` becomes
   `ParseResult { cst: p.b.finish(), ... }`. The `Parser.b: TreeBuilder` field and
   every `p.b.*` call site are unchanged. (`finish()` now returns `CstStore`.)
-- **`cst_gen.wado`** — `gen_alt_enums` emits
-  `pub fn <rule>_alt(cst: &CstStore, node: i32) -> Option<…>` reading
-  `cst.alt[node]`. `gen_string_tree_helper` calls the index-based
-  `to_string_tree_at(&result.cst, 0, …)` and the index-based `find_child`.
+- **`cst_gen.wado`** — `gen_alt_enums` emits an `impl CstStore` method
+  `pub fn <rule>_alt(&self, node: i32) -> Option<…>` reading `self.alt(node)`.
+  `gen_string_tree_helper` calls `result.cst.to_string_tree(0, …)` and
+  `result.cst.find_child(0, …)`.
 - **`highlight_gen.wado`** — `highlight_walk(&mut visitor, &result.tokens,
   &result.cst)`.
 - **`tree.wado` / `highlight_walk.wado` / `highlight.wado`** — rewritten as
