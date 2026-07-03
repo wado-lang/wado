@@ -547,12 +547,13 @@ pub fn line_col(chars: &List<char>, pos: i32) -> [i32, i32] {
     return [line, col];
 }
 //! The single (untyped) concrete syntax tree produced by every generated
-//! error-resilient parser, stored as a flat i32-column event stream that is
+//! error-resilient parser, stored as a flat columnar event stream that is
 //! itself the tree (the single source of truth), the `TreeBuilder` the parser
 //! drives to construct it, and the `ParseResult` the parser returns.
 //!
 //! The parser records a flat pre-order event stream directly into parallel
-//! `List<i32>` columns; there is no per-node object tree and no walk/convert
+//! columns (an `EventTag` tag plus `i32` payloads); there is no per-node object
+//! tree and no walk/convert
 //! step. `finish()` runs one linear pass (`finalize`) that fills the derived
 //! columns (`span.end`, `flags`, subtree extent) so every query stays O(1).
 //! Consumers read the store as a cursor — a `(&CstStore, index)` pair threaded
@@ -587,15 +588,17 @@ pub type NodeKind = i32;
 /// a real rule id (those are non-negative).
 pub global K_ERROR: NodeKind = -1;
 
-/// Node `flags` bits.
+/// Derived per-node condition bits (the `flags` column, valid on an `Open` row).
 ///
-/// - `NODE_ERROR` — this node, or some descendant, contains a recovery edit
-///   (a missing/skipped terminal or an error region). Bubbles up so a consumer
-///   can prune clean subtrees in one check.
-/// - `NODE_INCOMPLETE` — this node is missing a required terminal that the
-///   parser had to insert (it has an `Miss` child).
-pub global NODE_ERROR: i32 = 1;
-pub global NODE_INCOMPLETE: i32 = 2;
+/// - `Error` — this node, or some descendant, contains a recovery edit (a
+///   missing/skipped terminal or an error region). Bubbles up so a consumer can
+///   prune clean subtrees in one check.
+/// - `Incomplete` — this node is missing a required terminal that the parser
+///   had to insert (it has a `Miss` child).
+pub flags NodeFlags {
+    Error,
+    Incomplete,
+}
 
 /// Event-stream row tag. Every row is a triple `(tag, a, b)`; `a` / `b` carry
 /// the tag-specific payload below.
@@ -613,7 +616,7 @@ pub enum EventTag {
     Skip,
 }
 
-/// The flat CST: parallel i32 columns, one row per event, in pre-order. `tag`,
+/// The flat CST: parallel columns, one row per event, in pre-order. `tag`,
 /// `a`, `b` and `alt` are written during the parse; `end`, `flags` and `next`
 /// are derived by `finalize` (in `TreeBuilder::finish`). A node is addressed by
 /// the row index of its `Open` row. Columns are `pub` so a linear walk
@@ -629,8 +632,8 @@ pub struct CstStore {
     /// `span.end` for an `Open` row (max of its close offset and every child
     /// end); derived.
     end: List<i32>,
-    /// `NODE_ERROR` / `NODE_INCOMPLETE` for an `Open` row; derived.
-    flags: List<i32>,
+    /// The `NodeFlags` for an `Open` row; derived.
+    flags: List<NodeFlags>,
     /// Row index just past this `Open` node's whole subtree, so a random-
     /// access consumer skips a subtree in O(1); derived.
     next: List<i32>,
@@ -673,12 +676,12 @@ impl CstStore {
 
     /// True when the node at row `i`, or some descendant, carries a recovery edit.
     pub fn is_error(&self, i: i32) -> bool {
-        return self.flags[i] & NODE_ERROR != 0;
+        return self.flags[i] & NodeFlags::Error != NodeFlags::none();
     }
 
     /// True when the node at row `i` is missing a required terminal.
     pub fn is_incomplete(&self, i: i32) -> bool {
-        return self.flags[i] & NODE_INCOMPLETE != 0;
+        return self.flags[i] & NodeFlags::Incomplete != NodeFlags::none();
     }
 
     /// True when row `i` is a rule / error node (has a kind, span, children).
@@ -837,15 +840,15 @@ impl ParseResult {
     }
 }
 
-/// Widen the parent open's span end and `NODE_ERROR` from a just-closed child.
+/// Widen the parent open's span end and error bit from a just-closed child.
 /// `stack` must already have the child popped, so its top is the parent (if any).
-fn bubble_to_parent(stack: &List<i32>, end: &mut List<i32>, flags: &mut List<i32>, child: i32) {
+fn bubble_to_parent(stack: &List<i32>, end: &mut List<i32>, flags: &mut List<NodeFlags>, child: i32) {
     if stack.len() > 0 {
         let parent = stack[stack.len() - 1];
         if end[child] > end[parent] {
             end[parent] = end[child];
         }
-        flags[parent] = flags[parent] | flags[child] & NODE_ERROR;
+        flags[parent] = flags[parent] | (flags[child] & NodeFlags::Error);
     }
 }
 
@@ -986,7 +989,7 @@ impl TreeBuilder {
     /// and stamps each `Close` row with its open's kind. Deferring all
     /// aggregation to here (rather than patching in `finish_node`) is what makes
     /// the retro-open `start_node_at` correct: the pass sees the final structure,
-    /// so a wrapped subtree's `NODE_ERROR` bubbles into the wrap node even though
+    /// so a wrapped subtree's error bit bubbles into the wrap node even though
     /// the wrap was inserted after its children closed. Valid once the root node
     /// has been closed; an open left unterminated by a truncated stream is folded
     /// to the stream end (its `next` never stays 0), so traversal terminates.
@@ -994,29 +997,29 @@ impl TreeBuilder {
         let n = self.tag.len();
         let mut b: List<i32> = List::with_capacity(n);
         let mut end: List<i32> = List::with_capacity(n);
-        let mut flags: List<i32> = List::with_capacity(n);
+        let mut flags: List<NodeFlags> = List::with_capacity(n);
         let mut next: List<i32> = List::with_capacity(n);
         for let mut r = 0; r < n; r += 1 {
             b.push(self.b[r]);
             end.push(0);
-            flags.push(0);
+            flags.push(NodeFlags::none());
             next.push(0);
         }
         let mut stack: List<i32> = [];
         for let mut r = 0; r < n; r += 1 {
             match self.tag[r] {
                 Open => {
-                    flags[r] = if self.a[r] == K_ERROR as i32 { NODE_ERROR } else { 0 };
+                    flags[r] = if self.a[r] == K_ERROR as i32 { NodeFlags::Error } else { NodeFlags::none() };
                     end[r] = self.b[r];
                     stack.push(r);
                 },
                 Miss => {
                     let oi = stack[stack.len() - 1];
-                    flags[oi] = flags[oi] | NODE_INCOMPLETE | NODE_ERROR;
+                    flags[oi] = flags[oi] | NodeFlags::Incomplete | NodeFlags::Error;
                 },
                 Skip => {
                     let oi = stack[stack.len() - 1];
-                    flags[oi] = flags[oi] | NODE_ERROR;
+                    flags[oi] = flags[oi] | NodeFlags::Error;
                 },
                 Close => {
                     let oi = stack[stack.len() - 1];
