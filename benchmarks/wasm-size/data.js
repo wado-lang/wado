@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783039589649,
+  "lastUpdate": 1783040166791,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -37477,6 +37477,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 288568,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1fe2c8f9d061da0393cffd306079b5a46a670cab",
+          "message": "Merge pull request #1498 from wado-lang/claude/package-gale-parser-perf-7kerfz\n\nperf(optimizer): elide adjacent-use Box<T> payload-binding locals in WIR",
+          "timestamp": "2026-07-03T09:34:42+09:00",
+          "tree_id": "90145e2fcf4997a1b152ff2b812af47666bc8eee",
+          "url": "https://github.com/wado-lang/wado/commit/1fe2c8f9d061da0393cffd306079b5a46a670cab"
+        },
+        "date": 1783040166111,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15323,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288526,
             "unit": "bytes"
           }
         ]
