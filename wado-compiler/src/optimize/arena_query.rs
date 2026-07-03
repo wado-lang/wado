@@ -10,12 +10,11 @@ use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 
-/// The single optional payload-binding local of a variant arm pattern's
-/// `bindings`. The two levels are distinct outcomes callers must tell apart, so
-/// `?` propagates the reject: `Some(None)` = no binding (`[]` or `[_]`);
-/// `Some(Some(idx))` = one `Binding` slot; `None` = reject (more than one
-/// binding, or a nested non-trivial subpattern the `labeled_block_fusion`
-/// value-discarding / value-producing payload substitution does not handle).
+/// The single optional payload-binding local of a variant arm's `bindings`,
+/// as two distinct outcomes callers tell apart (so `?` propagates the reject):
+/// `Some(None)` = no binding (`[]` or `[_]`); `Some(Some(idx))` = one `Binding`
+/// slot; `None` = reject (multiple bindings, or a nested subpattern the
+/// `labeled_block_fusion` payload substitution does not handle).
 #[allow(clippy::option_option)]
 pub(super) fn single_payload_binding(body: &Body, bindings: &[PatId]) -> Option<Option<u32>> {
     match bindings {

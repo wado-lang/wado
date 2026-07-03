@@ -81,13 +81,10 @@ enum CopySource {
 #[derive(Debug, Default)]
 struct LocalUsage {
     read_count: u32,
-    /// Number of `let` statements that define this local. A local with more
-    /// than one def has multiple reaching definitions on disjoint paths — a
-    /// shape optimizer passes produce when they reuse one binding slot across
-    /// several break sites (`labeled_block_fusion`, `match_thread`). Whole-
-    /// function copy propagation forwards every read to a *single* source, so
-    /// it is unsound for a multi-def local: one def's source would leak onto
-    /// the other def's paths.
+    /// Number of `let` statements defining this local. More than one means
+    /// multiple reaching defs on disjoint paths (the shape
+    /// `labeled_block_fusion` produces reusing one binding slot across break
+    /// sites); forwarding every read to one source would leak it across paths.
     def_count: u32,
     is_assigned: bool,
     has_field_mutation: bool,
@@ -517,11 +514,8 @@ fn can_propagate_copy(
     let Some(target_usage) = usage.get(&binding.target_local) else {
         return true;
     };
-    // A local defined by more than one `let` has multiple reaching defs on
-    // disjoint paths; forwarding every read to this binding's single source
-    // would leak it onto the other defs' paths (a miscompile after passes that
-    // reuse one binding slot across break sites, e.g. `labeled_block_fusion` /
-    // `match_thread`).
+    // Multi-def target: a single source cannot cover every reaching def (see
+    // `LocalUsage::def_count`).
     if target_usage.def_count > 1 {
         return false;
     }

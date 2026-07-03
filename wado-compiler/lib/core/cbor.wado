@@ -898,8 +898,7 @@ impl CborDeserializer {
         let ib = self.next_byte()?;
         let major = ib >> 5;
         let ai = ib & 0x1f;
-        // `match` over the additional-info code — the dense 24..31 range lowers
-        // to a `br_table`. Codes < 24 carry the argument inline (the `_` arm).
+        // Codes < 24 carry the argument inline (the `_` arm).
         match ai {
             AI_1BYTE | AI_2BYTE | AI_4BYTE | AI_8BYTE => {
                 let v = self.read_arg(ai)?;
@@ -1144,9 +1143,7 @@ impl CborDeserializer {
     /// byte range in `input` and advancing past it. Kept non-generic so the
     /// generic `next_field` only does the schema lookup.
     fn read_text_key_range(&mut self) -> Result<[i32, i32], DeserializeError> {
-        // Read the text head directly (no head tuple): a definite-length text
-        // string only. `ai > AI_8BYTE` covers indefinite (31) and reserved
-        // (28..30), all invalid for a map key here.
+        // Definite-length text head only; `next_field` pre-filters the rest.
         let head = self.next_byte()?;
         let ai = head & 0x1f;
         if head >> 5 != MAJOR_TEXT || ai > AI_8BYTE {

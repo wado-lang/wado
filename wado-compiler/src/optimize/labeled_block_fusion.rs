@@ -1,91 +1,23 @@
-//! LabeledBlock-variant fusion rule.
+//! LabeledBlock-variant fusion.
 //!
-//! One rule that eliminates the intermediate `Option<T>` / `Result<T, E>`
-//! allocation an inlined helper leaves at a variant-discriminating consumer,
-//! covering both shapes `inline` produces:
+//! Eliminates the intermediate `Option<T>` / `Result<T, E>` an inlined helper
+//! leaves at a variant-discriminating consumer, in either shape `inline`
+//! produces — one [`Rule`] with two entry points:
 //!
-//! - **Value-discarding fusion** (`apply_block`): a `let temp = LB` binding
-//!   followed by a consumer that unpacks it — an `if VariantTest(temp) { … }`
-//!   or a value-discarding two-arm `match temp`. The consumer's value is not
-//!   observed, so each `break L:` site is rewritten to the selected arm and the
-//!   fused block terminates with a value-less `break __fused_L;`.
-//! - **Value-producing threading** (`apply_expr`): the LB is *directly* the
-//!   scrutinee of a value-producing `match LB { … }` — the shape `x = f()?`
-//!   lowers to. The `Match` node is rewritten in place to the labeled block,
-//!   retyped to the match result, and each `break L:` site yields its arm's
-//!   tail via `break __thread_L: tail;`.
+//! - `apply_block`: value-discarding fusion of `let temp = LB; if
+//!   VariantTest(temp) …` / two-arm `match temp`. Each `break L:` becomes the
+//!   selected arm; the fused block ends with a value-less `break __fused_L;`.
+//! - `apply_expr`: value-producing threading of `match LB { … }` (the `x =
+//!   f()?` shape). The `Match` is rewritten in place to the labeled block,
+//!   retyped to the match result, each `break L:` yielding its arm tail via
+//!   `break __thread_L: tail;`. Position-independent, so chained `?` resolves
+//!   bottom-up on the post-order worklist.
 //!
-//! Both share the break-site machinery (arm resolution, payload binding,
-//! loop-exit safety) and route every mutation through the engine edit API; they
-//! differ only in how the consumer is found and whether the fused block yields
-//! a value. The threading half is position-independent (the rewritten `Match`
-//! executes exactly where the scrutinee did), so it applies in any context and
-//! chained `?` resolves bottom-up via the post-order worklist.
+//! The threading half handles guard-free `Variant` / `Wildcard` arms with a
+//! `VariantConstruct` at every exit; a `null` / value-less break (the `Option`
+//! `None`) bails, leaving Option `?` to the value-discarding half.
 //!
-//! Scope of the threading half: guard-free arms; `Variant` (payload `[]`,
-//! `[_]`, or `[binding]`) and `Wildcard` patterns; every exit a
-//! `VariantConstruct`. A `null` / value-less break bails (mapping it to an arm
-//! needs the variant's null-case identity this rule does not carry), which
-//! leaves the `Option` `?` operator — whose `None` exit is a bare `null` —
-//! unthreaded for now; the value-discarding half still fuses its if-let form.
-//!
-//! Detects the pattern produced by inlining `Option<T>`/`Result<T, E>`-returning
-//! functions into if-let call sites, where an intermediate GC allocation is
-//! created for the variant result and then immediately unpacked by a
-//! `VariantTest`/`VariantPayload` pair (or a two-arm `Match`).
-//!
-//! ## Pattern detected
-//!
-//! ```text
-//! let temp: Option<T> = L: {
-//!     if cond { break L: null; }
-//!     let v = ...;
-//!     break L: Variant::Some(v);
-//! };
-//! if variant_test(temp, case=C) {
-//!     let b = variant_payload(temp, case=C);
-//!     THEN
-//! } else {
-//!     ELSE
-//! }
-//! ```
-//!
-//! ## Transformed output
-//!
-//! ```text
-//! '__fused_L: {
-//!     if cond {
-//!         ELSE;
-//!         break '__fused_L;
-//!     }
-//!     let v = ...;
-//!     let __fused_payload_N = v;
-//!     THEN (with variant_payload(temp, C) replaced by __fused_payload_N);
-//!     break '__fused_L;
-//! }
-//! ```
-//!
-//! This eliminates the GC-allocated `temp: Option<T>` entirely. Subsequent
-//! rules (`elide_local`, `copy_prop`, `branch_prune`) clean up the
-//! `break '__fused_L;` bookkeeping.
-//!
-//! ## Architecture
-//!
-//! Runs as a [`Rule`] on the unified post-inline peephole session (combine
-//! migration; formerly the standalone `nir/labeled_block_fusion` pass). The
-//! engine seeds every block in post-order, so each `apply_block` only has to
-//! find the first `(let-LB, consumer)` adjacent pair in *this* block; the
-//! worklist's `set_block_stmts` re-enqueue propagates fusion outwards
-//! naturally. All mutations route through the engine edit API so the parent
-//! map and use index stay coherent — `engine.clone_block` for THEN/ELSE
-//! clones, `engine.replace_expr_kind` for the `VariantPayload → Local`
-//! substitution, `engine.alloc_*` for fresh nodes, `engine.set_block_stmts`
-//! for the final block-list commit, and `engine.alloc_local` for the fresh
-//! `__fused_payload_N` slot.
-//!
-//! The pre-inline session does not include this rule — the
-//! `let temp = LB; if VariantTest(temp, …)` shape it matches is exposed by
-//! `inline` copying the helper body into the caller.
+//! Post-inline only: both shapes exist after `inline` copies the helper body in.
 
 use crate::nir::NirLocal;
 use crate::nir_arena::{
@@ -1761,18 +1693,12 @@ pub(super) fn expr_has_free_unlabeled_loop_exit(body: &Body, e: ExprId, loop_dep
     }
 }
 
-// ===========================================================================
 // Value-producing threading (`apply_expr`): `match LB { … }` → `LB` in place.
-// The direct-scrutinee counterpart to the value-discarding fusion above.
-// ===========================================================================
 
-/// One match arm, reduced to what the transform needs.
 struct ArmInfo {
-    /// `Some(case)` for a `Variant` pattern, `None` for a wildcard.
+    /// `None` for a wildcard arm; `Some(case)` for a `Variant` pattern.
     case_name: Option<String>,
-    /// The payload binding local, when the pattern binds one.
     binding: Option<u32>,
-    /// The original arm body; cloned per break site.
     body: Operand,
 }
 
@@ -1884,17 +1810,16 @@ fn arm_info(body: &Body, arm: &ArmData) -> Option<ArmInfo> {
     }
 }
 
-/// First arm the case selects: a wildcard, or a `Variant` pattern with the
-/// same case name. A `VariantConstruct` of case A never matches a `Variant`
-/// pattern of case B, so skipping non-matching variant arms is exact.
+/// First arm a `VariantConstruct` of `case_name` selects: the same-case
+/// `Variant` arm or a wildcard. Case A never matches a `Variant` pattern of
+/// case B, so skipping non-matching variant arms is exact.
 fn select_arm(arms: &[ArmInfo], case_name: &str) -> Option<usize> {
     arms.iter()
         .position(|a| a.case_name.as_deref().is_none_or(|n| n == case_name))
 }
 
-/// A non-unit threaded arm must decompose into `stmts + tail value` or
-/// provably diverge. Value operands and non-block expressions are their own
-/// tail; a block must end in an `Expr` tail or a terminator.
+/// Whether a non-unit arm body splits into `stmts + tail value`: a plain
+/// operand is its own tail; a block must end in an `Expr` or a terminator.
 fn arm_body_decomposable(body: &Body, e: ExprId) -> bool {
     let ExprKind::Block(b) = &body.exprs[e].kind else {
         return true;
@@ -2037,9 +1962,7 @@ fn validate_exits_in_expr(
                     validate_exits_in_block(body, eb, label, arms, locals, selected)
                 })
         }
-        // A nested `match` (over a local, e.g. a non-inlined call's result)
-        // and a `Switch` (pre-inline `match_to_switch` output) both host
-        // exits in their arms; descend like the threading walk does.
+        // A nested `Match` / `Switch` hosts exits in its arms; descend them.
         ExprKind::Match {
             expr: scrut,
             arms: inner_arms,
@@ -2073,18 +1996,16 @@ fn validate_exits_in_expr(
 fn perform_threading(engine: &mut Engine, match_id: ExprId, plan: ThreadPlan) {
     let fused_label = format!("__thread_{}", plan.label);
     thread_block(engine, plan.lb_block, &plan, &fused_label);
-    // Every exit `validate_exits_*` accepted must have been rewritten to the
-    // fused label; a surviving `break plan.label` is a walker-divergence bug
-    // (the thread walk missed a child position the validate walk descended,
-    // e.g. an `if`-statement condition) and would dangle once the label is
-    // renamed. Catch it in dev/test builds rather than emitting invalid Wasm.
+    // A `break plan.label` surviving here is a validate/thread walker divergence
+    // (a child position validated but not rewritten) that would dangle once the
+    // label is renamed. Fail loudly in dev rather than emit invalid Wasm.
     debug_assert!(
         !has_break_to(engine.body, NodeRef::Block(plan.lb_block), &plan.label),
         "labeled-block threading: unrewritten `break {}` survived",
         plan.label,
     );
-    // The scrutinee node's LabeledBlock kind moves onto the match node; kill
-    // the vacated node first so the block is never double-claimed.
+    // Move the scrutinee's LabeledBlock kind onto the match node, killing the
+    // vacated node first so the block is never double-claimed.
     engine.replace_expr_kind(plan.scrut, ExprKind::Dead);
     engine.replace_expr_kind(
         match_id,
@@ -2127,9 +2048,8 @@ fn thread_stmt(
 
     enum Shape {
         Blocks(Vec<BlockId>),
-        // An `if` statement's condition operand can host an exit too (a
-        // block/if/match condition carrying a `break plan.label`), so it must be
-        // threaded alongside the branches — validate_exits_in_stmt descends it.
+        // An `if` condition can host an exit too, so thread it with the
+        // branches — `validate_exits_in_stmt` descends it.
         CondAndBlocks(Operand, Vec<BlockId>),
         Other,
     }
