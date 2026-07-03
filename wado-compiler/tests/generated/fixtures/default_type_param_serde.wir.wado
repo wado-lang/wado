@@ -6,49 +6,33 @@ struct core:prelude/types.wado//Box<core:value/Value> {  // TypeId(0)
     mut value: ref "core:value//Value",
 }
 
-struct core:prelude/types.wado//Box<f64> {  // TypeId(1)
-    mut value: f64,
-}
-
-struct core:prelude/types.wado//Box<bool> {  // TypeId(2)
-    mut value: bool,
-}
-
-struct core:prelude/types.wado//Box<i32> {  // TypeId(3)
+struct core:prelude/types.wado//Box<i32> {  // TypeId(1)
     mut value: i32,
 }
 
-struct core:prelude/types.wado//Box<i64> {  // TypeId(4)
-    mut value: i64,
-}
-
-struct core:prelude/types.wado//Box<u64> {  // TypeId(5)
-    mut value: u64,
-}
-
-struct core:value//ValueStructSerializer {  // TypeId(6)
+struct core:value//ValueStructSerializer {  // TypeId(2)
     mut out: ref "core:prelude/types.wado//Box<core:value/Value>",
     mut entries: ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>",
 }
 
-struct core:value//ValueSerializer {  // TypeId(7)
+struct core:value//ValueSerializer {  // TypeId(3)
     mut out: ref "core:prelude/types.wado//Box<core:value/Value>",
 }
 
-array Array<u8> (mut u8);  // TypeId(8)
+array Array<u8> (mut u8);  // TypeId(4)
 
-struct core:prelude/string.wado//StrCharIter {  // TypeId(9)
+struct core:prelude/string.wado//StrCharIter {  // TypeId(5)
     mut repr: ref Array<u8>,
     mut used: i32,
     mut byte_index: i32,
 }
 
-struct core:prelude/string.wado//String {  // TypeId(10)
+struct core:prelude/string.wado//String {  // TypeId(6)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct core:prelude/format.wado//Formatter {  // TypeId(11)
+struct core:prelude/format.wado//Formatter {  // TypeId(7)
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
@@ -59,37 +43,37 @@ struct core:prelude/format.wado//Formatter {  // TypeId(11)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct core:json//JsonSerializer {  // TypeId(12)
+struct core:json//JsonSerializer {  // TypeId(8)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct core:json//JsonMapSerializer {  // TypeId(13)
+struct core:json//JsonMapSerializer {  // TypeId(9)
     mut buf: ref "core:prelude/string.wado//String",
     mut count: i32,
     mut need_value: bool,
 }
 
-struct core:json//JsonSeqSerializer {  // TypeId(14)
+struct core:json//JsonSeqSerializer {  // TypeId(10)
     mut buf: ref "core:prelude/string.wado//String",
     mut count: i32,
 }
 
-struct core:serde//SerializeError {  // TypeId(15)
+struct core:serde//SerializeError {  // TypeId(11)
     mut kind: i32,
     mut message: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude/int128.wado//i128 {  // TypeId(16)
+struct core:prelude/int128.wado//i128 {  // TypeId(12)
     mut low: u64,
     mut high: i64,
 }
 
-struct core:prelude/int128.wado//u128 {  // TypeId(17)
+struct core:prelude/int128.wado//u128 {  // TypeId(13)
     mut low: u64,
     mut high: u64,
 }
 
-variant core:value//Value {  // TypeId(18)
+variant core:value//Value {  // TypeId(14)
     Null,
     Bool(bool),
     Int(i64),
@@ -105,95 +89,95 @@ variant core:value//Value {  // TypeId(18)
     Unknown(ref "core:prelude//List<u8>"),
 }
 
-struct core:value//Value::Bool {  // TypeId(19)
+struct core:value//Value::Bool {  // TypeId(15)
     discriminant: i32,
     payload_0: bool,
 }
 
-struct core:value//Value::Int {  // TypeId(20)
+struct core:value//Value::Int {  // TypeId(16)
     discriminant: i32,
     payload_0: i64,
 }
 
-struct core:value//Value::UInt {  // TypeId(21)
+struct core:value//Value::UInt {  // TypeId(17)
     discriminant: i32,
     payload_0: u64,
 }
 
-struct core:value//Value::Int128 {  // TypeId(22)
+struct core:value//Value::Int128 {  // TypeId(18)
     discriminant: i32,
     payload_0: ref "core:prelude/int128.wado//i128",
 }
 
-struct core:value//Value::UInt128 {  // TypeId(23)
+struct core:value//Value::UInt128 {  // TypeId(19)
     discriminant: i32,
     payload_0: ref "core:prelude/int128.wado//u128",
 }
 
-struct core:value//Value::Float {  // TypeId(24)
+struct core:value//Value::Float {  // TypeId(20)
     discriminant: i32,
     payload_0: f64,
 }
 
-struct core:value//Value::String {  // TypeId(25)
+struct core:value//Value::String {  // TypeId(21)
     discriminant: i32,
     payload_0: ref "core:prelude/string.wado//String",
 }
 
-struct core:value//Value::Bytes {  // TypeId(26)
+struct core:value//Value::Bytes {  // TypeId(22)
     discriminant: i32,
     payload_0: ref "core:prelude//List<u8>",
 }
 
-struct core:value//Value::List {  // TypeId(27)
+struct core:value//Value::List {  // TypeId(23)
     discriminant: i32,
     payload_0: ref "core:prelude//List<core:value/Value>",
 }
 
-struct core:value//Value::Object {  // TypeId(28)
+struct core:value//Value::Object {  // TypeId(24)
     discriminant: i32,
     payload_0: ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>",
 }
 
-struct core:value//Value::Unknown {  // TypeId(29)
+struct core:value//Value::Unknown {  // TypeId(25)
     discriminant: i32,
     payload_0: ref "core:prelude//List<u8>",
 }
 
-struct tuple//[core:prelude/string.wado/String, core:value/Value] {  // TypeId(30)
+struct tuple//[core:prelude/string.wado/String, core:value/Value] {  // TypeId(26)
     mut 0: ref "core:prelude/string.wado//String",
     mut 1: ref "core:value//Value",
 }
 
-struct wado-compiler/tests/fixtures/default_type_param_serde.wado//__anon_{a:i32} {  // TypeId(31)
+struct wado-compiler/tests/fixtures/default_type_param_serde.wado//__anon_{a:i32} {  // TypeId(27)
     mut a: i32,
 }
 
-struct wado-compiler/tests/fixtures/default_type_param_serde.wado//NoFields {  // TypeId(32)}
+struct wado-compiler/tests/fixtures/default_type_param_serde.wado//NoFields {  // TypeId(28)}
 
-array Array<core:value/Value> (mut ref "core:value//Value");  // TypeId(33)
+array Array<core:value/Value> (mut ref "core:value//Value");  // TypeId(29)
 
-array Array<[core:prelude/string.wado/String,core:value/Value]> (mut ref "tuple//[core:prelude/string.wado/String, core:value/Value]");  // TypeId(34)
+array Array<[core:prelude/string.wado/String,core:value/Value]> (mut ref "tuple//[core:prelude/string.wado/String, core:value/Value]");  // TypeId(30)
 
-array Array<u64> (mut u64);  // TypeId(35)
+array Array<u64> (mut u64);  // TypeId(31)
 
-array Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>> (mut ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>");  // TypeId(36)
+array Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>> (mut ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>");  // TypeId(32)
 
-array Array<core:collections/TreeMapNode<core:prelude/string.wado/String>> (mut ref "core:collections//TreeMapNode<core:prelude/string.wado/String>");  // TypeId(37)
+array Array<core:collections/TreeMapNode<core:prelude/string.wado/String>> (mut ref "core:collections//TreeMapNode<core:prelude/string.wado/String>");  // TypeId(33)
 
-struct core:prelude/slice.wado//ArrayRefIter<core:value/Value> {  // TypeId(38)
+struct core:prelude/slice.wado//ArrayRefIter<core:value/Value> {  // TypeId(34)
     mut repr: ref "Array<core:value/Value>",
     mut index: i32,
     mut end: i32,
 }
 
-struct core:prelude/slice.wado//ArrayIter<[core:prelude/string.wado/String,core:value/Value]> {  // TypeId(39)
+struct core:prelude/slice.wado//ArrayIter<[core:prelude/string.wado/String,core:value/Value]> {  // TypeId(35)
     mut repr: ref "Array<[core:prelude/string.wado/String,core:value/Value]>",
     mut index: i32,
     mut end: i32,
 }
 
-struct core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value> {  // TypeId(40)
+struct core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value> {  // TypeId(36)
     mut root: ref "core:prelude/types.wado//Option<i32>",
     mut nodes: ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>",
     mut entries: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>",
@@ -201,19 +185,19 @@ struct core:collections//TreeMap<core:prelude/string.wado/String,core:value/Valu
     mut deleted_count: i32,
 }
 
-struct core:prelude/slice.wado//ArraySlice<u8> {  // TypeId(41)
+struct core:prelude/slice.wado//ArraySlice<u8> {  // TypeId(37)
     mut repr: ref Array<u8>,
     mut start: i32,
     mut end: i32,
 }
 
-struct core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value> {  // TypeId(42)
+struct core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value> {  // TypeId(38)
     mut key: ref "core:prelude/string.wado//String",
     mut value: ref "core:value//Value",
     mut deleted: bool,
 }
 
-struct core:collections//TreeMapNode<core:prelude/string.wado/String> {  // TypeId(43)
+struct core:collections//TreeMapNode<core:prelude/string.wado/String> {  // TypeId(39)
     mut key: ref "core:prelude/string.wado//String",
     mut index: i32,
     mut level: i32,
@@ -221,349 +205,349 @@ struct core:collections//TreeMapNode<core:prelude/string.wado/String> {  // Type
     mut right: ref "core:prelude/types.wado//Option<i32>",
 }
 
-struct core:prelude/slice.wado//ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>> {  // TypeId(44)
+struct core:prelude/slice.wado//ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>> {  // TypeId(40)
     mut repr: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>",
     mut index: i32,
     mut end: i32,
 }
 
-variant core:prelude/types.wado//Option<i32> {  // TypeId(45)
+variant core:prelude/types.wado//Option<i32> {  // TypeId(41)
     Some(i32),
     None,
 }
 
-struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(46)
+struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(42)
     discriminant: i32,
     payload_0: i32,
 }
 
-variant core:prelude/types.wado//Result<core:value/Value,core:serde/SerializeError> {  // TypeId(47)
+variant core:prelude/types.wado//Result<core:value/Value,core:serde/SerializeError> {  // TypeId(43)
     Ok(ref "core:value//Value"),
     Err(ref "core:serde//SerializeError"),
 }
 
-struct core:prelude/types.wado//Result<core:value/Value,core:serde/SerializeError>::Ok {  // TypeId(48)
+struct core:prelude/types.wado//Result<core:value/Value,core:serde/SerializeError>::Ok {  // TypeId(44)
     discriminant: i32,
     payload_0: ref "core:value//Value",
 }
 
-struct core:prelude/types.wado//Result<core:value/Value,core:serde/SerializeError>::Err {  // TypeId(49)
+struct core:prelude/types.wado//Result<core:value/Value,core:serde/SerializeError>::Err {  // TypeId(45)
     discriminant: i32,
     payload_0: ref "core:serde//SerializeError",
 }
 
-variant core:prelude/types.wado//Result<core:value/ValueStructSerializer,core:serde/SerializeError> {  // TypeId(50)
+variant core:prelude/types.wado//Result<core:value/ValueStructSerializer,core:serde/SerializeError> {  // TypeId(46)
     Ok(ref "core:value//ValueStructSerializer"),
     Err(ref "core:serde//SerializeError"),
 }
 
-struct core:prelude/types.wado//Result<core:value/ValueStructSerializer,core:serde/SerializeError>::Ok {  // TypeId(51)
+struct core:prelude/types.wado//Result<core:value/ValueStructSerializer,core:serde/SerializeError>::Ok {  // TypeId(47)
     discriminant: i32,
     payload_0: ref "core:value//ValueStructSerializer",
 }
 
-struct core:prelude/types.wado//Result<core:value/ValueStructSerializer,core:serde/SerializeError>::Err {  // TypeId(52)
+struct core:prelude/types.wado//Result<core:value/ValueStructSerializer,core:serde/SerializeError>::Err {  // TypeId(48)
     discriminant: i32,
     payload_0: ref "core:serde//SerializeError",
 }
 
-variant core:prelude/types.wado//Result<core:json/JsonSeqSerializer,core:serde/SerializeError> {  // TypeId(53)
+variant core:prelude/types.wado//Result<core:json/JsonSeqSerializer,core:serde/SerializeError> {  // TypeId(49)
     Ok(ref "core:json//JsonSeqSerializer"),
     Err(ref "core:serde//SerializeError"),
 }
 
-struct core:prelude/types.wado//Result<core:json/JsonSeqSerializer,core:serde/SerializeError>::Ok {  // TypeId(54)
+struct core:prelude/types.wado//Result<core:json/JsonSeqSerializer,core:serde/SerializeError>::Ok {  // TypeId(50)
     discriminant: i32,
     payload_0: ref "core:json//JsonSeqSerializer",
 }
 
-struct core:prelude/types.wado//Result<core:json/JsonSeqSerializer,core:serde/SerializeError>::Err {  // TypeId(55)
+struct core:prelude/types.wado//Result<core:json/JsonSeqSerializer,core:serde/SerializeError>::Err {  // TypeId(51)
     discriminant: i32,
     payload_0: ref "core:serde//SerializeError",
 }
 
-variant core:prelude/types.wado//Result<core:json/JsonMapSerializer,core:serde/SerializeError> {  // TypeId(56)
+variant core:prelude/types.wado//Result<core:json/JsonMapSerializer,core:serde/SerializeError> {  // TypeId(52)
     Ok(ref "core:json//JsonMapSerializer"),
     Err(ref "core:serde//SerializeError"),
 }
 
-struct core:prelude/types.wado//Result<core:json/JsonMapSerializer,core:serde/SerializeError>::Ok {  // TypeId(57)
+struct core:prelude/types.wado//Result<core:json/JsonMapSerializer,core:serde/SerializeError>::Ok {  // TypeId(53)
     discriminant: i32,
     payload_0: ref "core:json//JsonMapSerializer",
 }
 
-struct core:prelude/types.wado//Result<core:json/JsonMapSerializer,core:serde/SerializeError>::Err {  // TypeId(58)
+struct core:prelude/types.wado//Result<core:json/JsonMapSerializer,core:serde/SerializeError>::Err {  // TypeId(54)
     discriminant: i32,
     payload_0: ref "core:serde//SerializeError",
 }
 
-struct core:prelude//List<u8> {  // TypeId(59)
+struct core:prelude//List<u8> {  // TypeId(55)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct core:prelude//List<core:value/Value> {  // TypeId(60)
+struct core:prelude//List<core:value/Value> {  // TypeId(56)
     mut repr: ref "Array<core:value/Value>",
     mut used: i32,
 }
 
-struct core:prelude//List<u64> {  // TypeId(61)
+struct core:prelude//List<u64> {  // TypeId(57)
     mut repr: ref Array<u64>,
     mut used: i32,
 }
 
-struct core:prelude//List<[core:prelude/string.wado/String,core:value/Value]> {  // TypeId(62)
+struct core:prelude//List<[core:prelude/string.wado/String,core:value/Value]> {  // TypeId(58)
     mut repr: ref "Array<[core:prelude/string.wado/String,core:value/Value]>",
     mut used: i32,
 }
 
-struct core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>> {  // TypeId(63)
+struct core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>> {  // TypeId(59)
     mut repr: ref "Array<core:collections/TreeMapNode<core:prelude/string.wado/String>>",
     mut used: i32,
 }
 
-struct core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>> {  // TypeId(64)
+struct core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>> {  // TypeId(60)
     mut repr: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>",
     mut used: i32,
 }
 
-enum core:prelude/fpfmt.wado//enum:SpecialKind { NotSpecial = 0, Zero = 1, Inf = 2, NaN = 3 };  // TypeId(65)
+enum core:prelude/fpfmt.wado//enum:SpecialKind { NotSpecial = 0, Zero = 1, Inf = 2, NaN = 3 };  // TypeId(61)
 
-enum core:prelude/traits.wado//enum:Ordering { Less = 0, Equal = 1, Greater = 2 };  // TypeId(66)
+enum core:prelude/traits.wado//enum:Ordering { Less = 0, Equal = 1, Greater = 2 };  // TypeId(62)
 
-enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(67)
+enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(63)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(68)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(64)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(69)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(65)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(70)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(66)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(71)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(67)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(72)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(68)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(73)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(69)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(74)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(70)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(75)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(71)
 
-type "functype//wado-compiler/tests/fixtures/default_type_param_serde.wado/__test_0_omitted_payload_serializes_the_default_empty_struct" = fn();  // TypeId(76)
+type "functype//wado-compiler/tests/fixtures/default_type_param_serde.wado/__test_0_omitted_payload_serializes_the_default_empty_struct" = fn();  // TypeId(72)
 
-type "functype//wado-compiler/tests/fixtures/default_type_param_serde.wado/__test_1_an_explicit_anonymous_struct_payload_overrides_the_default" = fn();  // TypeId(77)
+type "functype//wado-compiler/tests/fixtures/default_type_param_serde.wado/__test_1_an_explicit_anonymous_struct_payload_overrides_the_default" = fn();  // TypeId(73)
 
-type "functype//wado-compiler/tests/fixtures/default_type_param_serde.wado/__cm_export____test_0_omitted_payload_serializes_the_default_empty_struct" = fn();  // TypeId(78)
+type "functype//wado-compiler/tests/fixtures/default_type_param_serde.wado/__cm_export____test_0_omitted_payload_serializes_the_default_empty_struct" = fn();  // TypeId(74)
 
-type "functype//wado-compiler/tests/fixtures/default_type_param_serde.wado/__cm_export____test_1_an_explicit_anonymous_struct_payload_overrides_the_default" = fn();  // TypeId(79)
+type "functype//wado-compiler/tests/fixtures/default_type_param_serde.wado/__cm_export____test_1_an_explicit_anonymous_struct_payload_overrides_the_default" = fn();  // TypeId(75)
 
-type "functype//wado-compiler/tests/fixtures/default_type_param_serde.wado/$value_copy$T84" = fn(ref "core:json//JsonMapSerializer") -> ref "core:json//JsonMapSerializer";  // TypeId(80)
+type "functype//wado-compiler/tests/fixtures/default_type_param_serde.wado/$value_copy$T84" = fn(ref "core:json//JsonMapSerializer") -> ref "core:json//JsonMapSerializer";  // TypeId(76)
 
-type "functype//wado-compiler/tests/fixtures/default_type_param_serde.wado/$value_copy$T83" = fn(ref "core:json//JsonSeqSerializer") -> ref "core:json//JsonSeqSerializer";  // TypeId(81)
+type "functype//wado-compiler/tests/fixtures/default_type_param_serde.wado/$value_copy$T83" = fn(ref "core:json//JsonSeqSerializer") -> ref "core:json//JsonSeqSerializer";  // TypeId(77)
 
-type "functype//wado-compiler/tests/fixtures/default_type_param_serde.wado/$value_copy$T30" = fn(ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(82)
+type "functype//wado-compiler/tests/fixtures/default_type_param_serde.wado/$value_copy$T30" = fn(ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(78)
 
-type "functype//core:base64/encode_impl" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>", ref "core:prelude//List<u8>", bool) -> ref "core:prelude/string.wado//String";  // TypeId(83)
+type "functype//core:base64/encode_impl" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>", ref "core:prelude//List<u8>", bool) -> ref "core:prelude/string.wado//String";  // TypeId(79)
 
-type "functype//core:prelude/fpfmt.wado/unpack64" = fn(f64) -> [u64, i32];  // TypeId(84)
+type "functype//core:prelude/fpfmt.wado/unpack64" = fn(f64) -> [u64, i32];  // TypeId(80)
 
-type "functype//core:prelude/fpfmt.wado/unrounded_div" = fn(u64, u64) -> u64;  // TypeId(85)
+type "functype//core:prelude/fpfmt.wado/unrounded_div" = fn(u64, u64) -> u64;  // TypeId(81)
 
-type "functype//core:prelude/fpfmt.wado/pow10_coarse" = fn(i32) -> [u64, u64];  // TypeId(86)
+type "functype//core:prelude/fpfmt.wado/pow10_coarse" = fn(i32) -> [u64, u64];  // TypeId(82)
 
-type "functype//core:prelude/fpfmt.wado/pow10_fine" = fn(i32) -> u64;  // TypeId(87)
+type "functype//core:prelude/fpfmt.wado/pow10_fine" = fn(i32) -> u64;  // TypeId(83)
 
-type "functype//core:prelude/fpfmt.wado/mul_pow10" = fn(i32) -> [u64, u64];  // TypeId(88)
+type "functype//core:prelude/fpfmt.wado/mul_pow10" = fn(i32) -> [u64, u64];  // TypeId(84)
 
-type "functype//core:prelude/fpfmt.wado/uscale" = fn(u64, u64, u64, i32) -> u64;  // TypeId(89)
+type "functype//core:prelude/fpfmt.wado/uscale" = fn(u64, u64, u64, i32) -> u64;  // TypeId(85)
 
-type "functype//core:prelude/fpfmt.wado/fixed_width_for_prec" = fn(f64, i32) -> [u64, i32, i32];  // TypeId(90)
+type "functype//core:prelude/fpfmt.wado/fixed_width_for_prec" = fn(f64, i32) -> [u64, i32, i32];  // TypeId(86)
 
-type "functype//core:prelude/fpfmt.wado/short" = fn(f64) -> [u64, i32, i32];  // TypeId(91)
+type "functype//core:prelude/fpfmt.wado/short" = fn(f64) -> [u64, i32, i32];  // TypeId(87)
 
-type "functype//core:prelude/fpfmt.wado/trim_zeros" = fn(u64, i32) -> [u64, i32];  // TypeId(92)
+type "functype//core:prelude/fpfmt.wado/trim_zeros" = fn(u64, i32) -> [u64, i32];  // TypeId(88)
 
-type "functype//core:prelude/fpfmt.wado/write_digits_at" = fn(ref "core:prelude/string.wado//String", i32, u64, i32);  // TypeId(93)
+type "functype//core:prelude/fpfmt.wado/write_digits_at" = fn(ref "core:prelude/string.wado//String", i32, u64, i32);  // TypeId(89)
 
-type "functype//core:prelude/fpfmt.wado/write_decimal" = fn(ref "core:prelude/string.wado//String", u64, i32, i32);  // TypeId(94)
+type "functype//core:prelude/fpfmt.wado/write_decimal" = fn(ref "core:prelude/string.wado//String", u64, i32, i32);  // TypeId(90)
 
-type "functype//core:prelude/fpfmt.wado/write_decimal_prec" = fn(ref "core:prelude/string.wado//String", u64, i32, i32, i32);  // TypeId(95)
+type "functype//core:prelude/fpfmt.wado/write_decimal_prec" = fn(ref "core:prelude/string.wado//String", u64, i32, i32, i32);  // TypeId(91)
 
-type "functype//core:prelude/fpfmt.wado/check_special" = fn(f64) -> [bool, bool, "core:prelude/fpfmt.wado//enum:SpecialKind"];  // TypeId(96)
+type "functype//core:prelude/fpfmt.wado/check_special" = fn(f64) -> [bool, bool, "core:prelude/fpfmt.wado//enum:SpecialKind"];  // TypeId(92)
 
-type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(97)
+type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(93)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, i64, i32);  // TypeId(98)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, i64, i32);  // TypeId(94)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64_base" = fn(i64, i32) -> i32;  // TypeId(99)
+type "functype//core:prelude/primitive.wado/count_digits_u64_base" = fn(i64, i32) -> i32;  // TypeId(95)
 
-type "functype//core:prelude/primitive.wado/write_u64_base_digits" = fn(ref Array<u8>, i32, i64, i32, i32, i32, bool);  // TypeId(100)
+type "functype//core:prelude/primitive.wado/write_u64_base_digits" = fn(ref Array<u8>, i32, i64, i32, i32, i32, bool);  // TypeId(96)
 
-type "functype//core:prelude/primitive.wado/fmt_float_special" = fn(ref "core:prelude/format.wado//Formatter", bool, "core:prelude/fpfmt.wado//enum:SpecialKind", ref "core:prelude/string.wado//String");  // TypeId(101)
+type "functype//core:prelude/primitive.wado/fmt_float_special" = fn(ref "core:prelude/format.wado//Formatter", bool, "core:prelude/fpfmt.wado//enum:SpecialKind", ref "core:prelude/string.wado//String");  // TypeId(97)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(102)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(98)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(103)
+type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(99)
 
-type "functype//core:rt/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(104)
+type "functype//core:rt/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(100)
 
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(105)
+type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(101)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(106)
+type "functype//core:rt/unreachable" = fn();  // TypeId(102)
 
-type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(107)
+type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(103)
 
-type "functype//core:rt/wait_for_blocked" = fn(i32) -> i32;  // TypeId(108)
+type "functype//core:rt/wait_for_blocked" = fn(i32) -> i32;  // TypeId(104)
 
-type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(109)
+type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(105)
 
-type "functype//core:rt/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(110)
+type "functype//core:rt/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(106)
 
-type "functype//core:json/write_escaped_string" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(111)
+type "functype//core:json/write_escaped_string" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(107)
 
-type "functype//core:json/write_json_i64" = fn(ref "core:prelude/string.wado//String", i64) -> ref null "core:serde//SerializeError";  // TypeId(112)
+type "functype//core:json/write_json_i64" = fn(ref "core:prelude/string.wado//String", i64) -> ref null "core:serde//SerializeError";  // TypeId(108)
 
-type "functype//core:json/write_json_u64" = fn(ref "core:prelude/string.wado//String", u64) -> ref null "core:serde//SerializeError";  // TypeId(113)
+type "functype//core:json/write_json_u64" = fn(ref "core:prelude/string.wado//String", u64) -> ref null "core:serde//SerializeError";  // TypeId(109)
 
-type "functype//core:json/write_json_i128" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/int128.wado//i128") -> ref null "core:serde//SerializeError";  // TypeId(114)
+type "functype//core:json/write_json_i128" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/int128.wado//i128") -> ref null "core:serde//SerializeError";  // TypeId(110)
 
-type "functype//core:json/write_json_u128" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/int128.wado//u128") -> ref null "core:serde//SerializeError";  // TypeId(115)
+type "functype//core:json/write_json_u128" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/int128.wado//u128") -> ref null "core:serde//SerializeError";  // TypeId(111)
 
-type "functype//core:json/write_json_f64" = fn(ref "core:prelude/string.wado//String", f64) -> ref null "core:serde//SerializeError";  // TypeId(116)
+type "functype//core:json/write_json_f64" = fn(ref "core:prelude/string.wado//String", f64) -> ref null "core:serde//SerializeError";  // TypeId(112)
 
-type "functype//core:json/write_json_bool" = fn(ref "core:prelude/string.wado//String", bool) -> ref null "core:serde//SerializeError";  // TypeId(117)
+type "functype//core:json/write_json_bool" = fn(ref "core:prelude/string.wado//String", bool) -> ref null "core:serde//SerializeError";  // TypeId(113)
 
-type "functype//core:json/write_json_bytes" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref null "core:serde//SerializeError";  // TypeId(118)
+type "functype//core:json/write_json_bytes" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref null "core:serde//SerializeError";  // TypeId(114)
 
-type "functype//core:json/write_json_null" = fn(ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(119)
+type "functype//core:json/write_json_null" = fn(ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(115)
 
-type "functype//core:base64/core/base64/encode_with<core:prelude/bytes.wado/ByteSlice>" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>", u32) -> ref "core:prelude/string.wado//String";  // TypeId(120)
+type "functype//core:base64/core/base64/encode_with<core:prelude/bytes.wado/ByteSlice>" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>", u32) -> ref "core:prelude/string.wado//String";  // TypeId(116)
 
-type "functype//core:value/core/value/to_value<wado-compiler/tests/fixtures/default_type_param_serde.wado/NoFields>" = fn(ref "wado-compiler/tests/fixtures/default_type_param_serde.wado//NoFields") -> ref "core:prelude/types.wado//Result<core:value/Value,core:serde/SerializeError>";  // TypeId(121)
+type "functype//core:value/core/value/to_value<wado-compiler/tests/fixtures/default_type_param_serde.wado/NoFields>" = fn(ref "wado-compiler/tests/fixtures/default_type_param_serde.wado//NoFields") -> ref "core:prelude/types.wado//Result<core:value/Value,core:serde/SerializeError>";  // TypeId(117)
 
-type "functype//core:value/core/value/to_value<wado-compiler/tests/fixtures/default_type_param_serde.wado/__anon_{a:i32}>" = fn(ref "wado-compiler/tests/fixtures/default_type_param_serde.wado//__anon_{a:i32}") -> ref "core:prelude/types.wado//Result<core:value/Value,core:serde/SerializeError>";  // TypeId(122)
+type "functype//core:value/core/value/to_value<wado-compiler/tests/fixtures/default_type_param_serde.wado/__anon_{a:i32}>" = fn(ref "wado-compiler/tests/fixtures/default_type_param_serde.wado//__anon_{a:i32}") -> ref "core:prelude/types.wado//Result<core:value/Value,core:serde/SerializeError>";  // TypeId(118)
 
-type "functype//core:base64/__initialize_module" = fn();  // TypeId(123)
+type "functype//core:base64/__initialize_module" = fn();  // TypeId(119)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(124)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(120)
 
-type "functype//core:prelude/int128.wado/u128::div_rem" = fn(ref "core:prelude/int128.wado//u128", ref "core:prelude/int128.wado//u128") -> [ref "core:prelude/int128.wado//u128", ref "core:prelude/int128.wado//u128"];  // TypeId(125)
+type "functype//core:prelude/int128.wado/u128::div_rem" = fn(ref "core:prelude/int128.wado//u128", ref "core:prelude/int128.wado//u128") -> [ref "core:prelude/int128.wado//u128", ref "core:prelude/int128.wado//u128"];  // TypeId(121)
 
-type "functype//core:prelude/int128.wado/u128::get_bit" = fn(ref "core:prelude/int128.wado//u128", i32) -> bool;  // TypeId(126)
+type "functype//core:prelude/int128.wado/u128::get_bit" = fn(ref "core:prelude/int128.wado//u128", i32) -> bool;  // TypeId(122)
 
-type "functype//core:prelude/int128.wado/u128::set_bit" = fn(ref "core:prelude/int128.wado//u128", i32) -> ref "core:prelude/int128.wado//u128";  // TypeId(127)
+type "functype//core:prelude/int128.wado/u128::set_bit" = fn(ref "core:prelude/int128.wado//u128", i32) -> ref "core:prelude/int128.wado//u128";  // TypeId(123)
 
-type "functype//core:prelude/int128.wado/u128::fmt_decimal_magnitude" = fn(ref "core:prelude/int128.wado//u128", ref "core:prelude/format.wado//Formatter", bool);  // TypeId(128)
+type "functype//core:prelude/int128.wado/u128::fmt_decimal_magnitude" = fn(ref "core:prelude/int128.wado//u128", ref "core:prelude/format.wado//Formatter", bool);  // TypeId(124)
 
-type "functype//core:prelude/int128.wado/u128^Ord::cmp" = fn(ref "core:prelude/int128.wado//u128", ref "core:prelude/int128.wado//u128") -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(129)
+type "functype//core:prelude/int128.wado/u128^Ord::cmp" = fn(ref "core:prelude/int128.wado//u128", ref "core:prelude/int128.wado//u128") -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(125)
 
-type "functype//core:prelude/int128.wado/u128^Sub::sub" = fn(ref "core:prelude/int128.wado//u128", ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(130)
+type "functype//core:prelude/int128.wado/u128^Sub::sub" = fn(ref "core:prelude/int128.wado//u128", ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(126)
 
-type "functype//core:prelude/int128.wado/u128^Shl::shl" = fn(ref "core:prelude/int128.wado//u128", u32) -> ref "core:prelude/int128.wado//u128";  // TypeId(131)
+type "functype//core:prelude/int128.wado/u128^Shl::shl" = fn(ref "core:prelude/int128.wado//u128", u32) -> ref "core:prelude/int128.wado//u128";  // TypeId(127)
 
-type "functype//core:prelude/int128.wado/i128^Sub::sub" = fn(ref "core:prelude/int128.wado//i128", ref "core:prelude/int128.wado//i128") -> ref "core:prelude/int128.wado//i128";  // TypeId(132)
+type "functype//core:prelude/int128.wado/i128^Sub::sub" = fn(ref "core:prelude/int128.wado//i128", ref "core:prelude/int128.wado//i128") -> ref "core:prelude/int128.wado//i128";  // TypeId(128)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(133)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(129)
 
-type "functype//core:prelude/primitive.wado/i64::fmt_decimal" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(134)
+type "functype//core:prelude/primitive.wado/i64::fmt_decimal" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(130)
 
-type "functype//core:prelude/primitive.wado/u64::fmt_decimal" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(135)
+type "functype//core:prelude/primitive.wado/u64::fmt_decimal" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(131)
 
-type "functype//core:prelude/primitive.wado/u64::fmt_base" = fn(u64, ref "core:prelude/format.wado//Formatter", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(136)
+type "functype//core:prelude/primitive.wado/u64::fmt_base" = fn(u64, ref "core:prelude/format.wado//Formatter", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(132)
 
-type "functype//core:prelude/primitive.wado/f64::fmt_into" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(137)
+type "functype//core:prelude/primitive.wado/f64::fmt_into" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(133)
 
-type "functype//core:prelude/primitive.wado/f64::fmt_fixed" = fn(f64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(138)
+type "functype//core:prelude/primitive.wado/f64::fmt_fixed" = fn(f64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(134)
 
-type "functype//core:prelude/primitive.wado/i32^Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(139)
+type "functype//core:prelude/primitive.wado/i32^Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(135)
 
-type "functype//core:prelude/primitive.wado/i32^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(140)
+type "functype//core:prelude/primitive.wado/i32^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(136)
 
-type "functype//core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(141)
+type "functype//core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(137)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(142)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(138)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(143)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(139)
 
-type "functype//core:prelude/string.wado/String::append_byte_filled" = fn(ref "core:prelude/string.wado//String", u8, i32);  // TypeId(144)
+type "functype//core:prelude/string.wado/String::append_byte_filled" = fn(ref "core:prelude/string.wado//String", u8, i32);  // TypeId(140)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(145)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(141)
 
-type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(146)
+type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(142)
 
-type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref Array<u8>, ref Array<u8>, i32) -> bool;  // TypeId(147)
+type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref Array<u8>, ref Array<u8>, i32) -> bool;  // TypeId(143)
 
-type "functype//core:prelude/string.wado/String^Ord::cmp" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(148)
+type "functype//core:prelude/string.wado/String^Ord::cmp" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(144)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(149)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(145)
 
-type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(150)
+type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(146)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(151)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(147)
 
-type "functype//core:prelude/format.wado/Formatter::apply_padding" = fn(ref "core:prelude/format.wado//Formatter", i32);  // TypeId(152)
+type "functype//core:prelude/format.wado/Formatter::apply_padding" = fn(ref "core:prelude/format.wado//Formatter", i32);  // TypeId(148)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(153)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(149)
 
-type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(154)
+type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(150)
 
-type "functype//core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::new" = fn() -> ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>";  // TypeId(155)
+type "functype//core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::new" = fn() -> ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>";  // TypeId(151)
 
-type "functype//core:prelude/slice.wado/ArrayIter<[core:prelude/string.wado/String,core:value/Value]>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<[core:prelude/string.wado/String,core:value/Value]>") -> ref null "tuple//[core:prelude/string.wado/String, core:value/Value]";  // TypeId(156)
+type "functype//core:prelude/slice.wado/ArrayIter<[core:prelude/string.wado/String,core:value/Value]>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<[core:prelude/string.wado/String,core:value/Value]>") -> ref null "tuple//[core:prelude/string.wado/String, core:value/Value]";  // TypeId(152)
 
-type "functype//core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::entries" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>") -> ref "core:prelude//List<[core:prelude/string.wado/String,core:value/Value]>";  // TypeId(157)
+type "functype//core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::entries" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>") -> ref "core:prelude//List<[core:prelude/string.wado/String,core:value/Value]>";  // TypeId(153)
 
-type "functype//core:prelude/slice.wado/ArraySlice<u8>^IndexValue<i32>::index_value" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>", i32) -> u8;  // TypeId(158)
+type "functype//core:prelude/slice.wado/ArraySlice<u8>^IndexValue<i32>::index_value" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>", i32) -> u8;  // TypeId(154)
 
-type "functype//core:value/Value^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "core:prelude/types.wado//Box<core:value/Value>", ref "core:json//JsonSerializer") -> ref null "core:serde//SerializeError";  // TypeId(159)
+type "functype//core:value/Value^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "core:prelude/types.wado//Box<core:value/Value>", ref "core:json//JsonSerializer") -> ref null "core:serde//SerializeError";  // TypeId(155)
 
-type "functype//core:prelude/list.wado/List<[core:prelude/string.wado/String,core:value/Value]>::push" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:value/Value]>", ref "tuple//[core:prelude/string.wado/String, core:value/Value]");  // TypeId(160)
+type "functype//core:prelude/list.wado/List<[core:prelude/string.wado/String,core:value/Value]>::push" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:value/Value]>", ref "tuple//[core:prelude/string.wado/String, core:value/Value]");  // TypeId(156)
 
-type "functype//core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::find_index" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>", ref "core:prelude/string.wado//String") -> i32;  // TypeId(161)
+type "functype//core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::find_index" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>", ref "core:prelude/string.wado//String") -> i32;  // TypeId(157)
 
-type "functype//core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::insert" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>", ref "core:prelude/string.wado//String", ref "core:value//Value");  // TypeId(162)
+type "functype//core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::insert" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>", ref "core:prelude/string.wado//String", ref "core:value//Value");  // TypeId(158)
 
-type "functype//core:prelude/slice.wado/ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>") -> ref null "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>";  // TypeId(163)
+type "functype//core:prelude/slice.wado/ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>") -> ref null "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>";  // TypeId(159)
 
-type "functype//core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::insert_node" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>", ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(164)
+type "functype//core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::insert_node" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>", ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(160)
 
-type "functype//core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>::push" = fn(ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>", ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>");  // TypeId(165)
+type "functype//core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>::push" = fn(ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>", ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>");  // TypeId(161)
 
-type "functype//core:prelude/list.wado/List<[core:prelude/string.wado/String,core:value/Value]>::grow" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:value/Value]>");  // TypeId(166)
+type "functype//core:prelude/list.wado/List<[core:prelude/string.wado/String,core:value/Value]>::grow" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:value/Value]>");  // TypeId(162)
 
-type "functype//wado-compiler/tests/fixtures/default_type_param_serde.wado/__anon_{a:i32}^Serialize::serialize<core:value/ValueSerializer>" = fn(ref "wado-compiler/tests/fixtures/default_type_param_serde.wado//__anon_{a:i32}", ref "core:value//ValueSerializer") -> ref null "core:serde//SerializeError";  // TypeId(167)
+type "functype//wado-compiler/tests/fixtures/default_type_param_serde.wado/__anon_{a:i32}^Serialize::serialize<core:value/ValueSerializer>" = fn(ref "wado-compiler/tests/fixtures/default_type_param_serde.wado//__anon_{a:i32}", ref "core:value//ValueSerializer") -> ref null "core:serde//SerializeError";  // TypeId(163)
 
-type "functype//core:json/JsonMapSerializer^SerializeMap::value<core:value/Value>" = fn(ref "core:json//JsonMapSerializer", ref "core:prelude/types.wado//Box<core:value/Value>") -> ref null "core:serde//SerializeError";  // TypeId(168)
+type "functype//core:json/JsonMapSerializer^SerializeMap::value<core:value/Value>" = fn(ref "core:json//JsonMapSerializer", ref "core:prelude/types.wado//Box<core:value/Value>") -> ref null "core:serde//SerializeError";  // TypeId(164)
 
-type "functype//core:json/JsonMapSerializer^SerializeMap::key<core:prelude/string.wado/String>" = fn(ref "core:json//JsonMapSerializer", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(169)
+type "functype//core:json/JsonMapSerializer^SerializeMap::key<core:prelude/string.wado/String>" = fn(ref "core:json//JsonMapSerializer", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(165)
 
-type "functype//core:json/JsonSeqSerializer^SerializeSeq::element<core:value/Value>" = fn(ref "core:json//JsonSeqSerializer", ref "core:prelude/types.wado//Box<core:value/Value>") -> ref null "core:serde//SerializeError";  // TypeId(170)
+type "functype//core:json/JsonSeqSerializer^SerializeSeq::element<core:value/Value>" = fn(ref "core:json//JsonSeqSerializer", ref "core:prelude/types.wado//Box<core:value/Value>") -> ref null "core:serde//SerializeError";  // TypeId(166)
 
-type "functype//core:prelude/slice.wado/ArrayRefIter<core:value/Value>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayRefIter<core:value/Value>") -> ref null "core:prelude/types.wado//Box<core:value/Value>";  // TypeId(171)
+type "functype//core:prelude/slice.wado/ArrayRefIter<core:value/Value>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayRefIter<core:value/Value>") -> ref null "core:prelude/types.wado//Box<core:value/Value>";  // TypeId(167)
 
-type "functype//wado-compiler/tests/fixtures/default_type_param_serde.wado/NoFields^Serialize::serialize<core:value/ValueSerializer>" = fn(ref "wado-compiler/tests/fixtures/default_type_param_serde.wado//NoFields", ref "core:value//ValueSerializer") -> ref null "core:serde//SerializeError";  // TypeId(172)
+type "functype//wado-compiler/tests/fixtures/default_type_param_serde.wado/NoFields^Serialize::serialize<core:value/ValueSerializer>" = fn(ref "wado-compiler/tests/fixtures/default_type_param_serde.wado//NoFields", ref "core:value//ValueSerializer") -> ref null "core:serde//SerializeError";  // TypeId(168)
 
-type "functype//core:value/ValueStructSerializer^SerializeStruct::field<i32>" = fn(ref "core:value//ValueStructSerializer", ref "core:prelude/string.wado//String", ref "core:prelude/types.wado//Box<i32>") -> ref null "core:serde//SerializeError";  // TypeId(173)
+type "functype//core:value/ValueStructSerializer^SerializeStruct::field<i32>" = fn(ref "core:value//ValueStructSerializer", ref "core:prelude/string.wado//String", ref "core:prelude/types.wado//Box<i32>") -> ref null "core:serde//SerializeError";  // TypeId(169)
 
-type "functype//core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>::grow" = fn(ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>");  // TypeId(174)
+type "functype//core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>::grow" = fn(ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>");  // TypeId(170)
 
-type "functype//core:prelude/list.wado/List<core:collections/TreeMapNode<core:prelude/string.wado/String>>::push" = fn(ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>", ref "core:collections//TreeMapNode<core:prelude/string.wado/String>");  // TypeId(175)
+type "functype//core:prelude/list.wado/List<core:collections/TreeMapNode<core:prelude/string.wado/String>>::push" = fn(ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>", ref "core:collections//TreeMapNode<core:prelude/string.wado/String>");  // TypeId(171)
 
-type "functype//core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::split" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>", ref "core:prelude/types.wado//Option<i32>") -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(176)
+type "functype//core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::split" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>", ref "core:prelude/types.wado//Option<i32>") -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(172)
 
-type "functype//core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::skew" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>", ref "core:prelude/types.wado//Option<i32>") -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(177)
+type "functype//core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::skew" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>", ref "core:prelude/types.wado//Option<i32>") -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(173)
 
-type "functype//core:prelude/list.wado/List<core:collections/TreeMapNode<core:prelude/string.wado/String>>::grow" = fn(ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>");  // TypeId(178)
+type "functype//core:prelude/list.wado/List<core:collections/TreeMapNode<core:prelude/string.wado/String>>::grow" = fn(ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>");  // TypeId(174)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(179)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(175)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(180)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(176)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(181)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(177)
 
-type "functype//core:json/core/json/to_string<core:value/Value>" = fn(ref "core:prelude/types.wado//Box<core:value/Value>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(182)
+type "functype//core:json/core/json/to_string<core:value/Value>" = fn(ref "core:prelude/types.wado//Box<core:value/Value>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(178)
 
-type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(183)
+type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(179)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -2939,12 +2923,8 @@ fn "core:prelude/slice.wado/ArraySlice<u8>^IndexValue<i32>::index_value"(self, i
 }
 
 fn "core:value/Value^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
-    let b: ref "core:prelude/types.wado//Box<bool>";
-    let n_3: ref "core:prelude/types.wado//Box<i64>";
-    let n_4: ref "core:prelude/types.wado//Box<u64>";
     let n_5: ref "core:prelude/int128.wado//i128";
     let n_6: ref "core:prelude/int128.wado//u128";
-    let n_7: ref "core:prelude/types.wado//Box<f64>";
     let str_val: ref "core:prelude/string.wado//String";
     let bytes: ref "core:prelude//List<u8>";
     let arr: ref "core:prelude//List<core:value/Value>";
@@ -2984,16 +2964,13 @@ fn "core:value/Value^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
     return let __match_scrut_0: ref "core:value//Value", __match_scrut_0 = self.value, (if __match_scrut_0.discriminant == 0 -> ref null "core:serde//SerializeError" {
         "core:json/write_json_null"(s.buf);
     } else if ref.test "core:value//Value::Bool"(__match_scrut_0) -> ref null "core:serde//SerializeError" {
-        b = struct.new "core:prelude/types.wado//Box<bool>" { value: ref.cast "core:value//Value::Bool"(__match_scrut_0).payload_0 };
-        v_36 = b.value;
+        v_36 = ref.cast "core:value//Value::Bool"(__match_scrut_0).payload_0;
         "core:json/write_json_bool"(s.buf, v_36);
     } else if ref.test "core:value//Value::Int"(__match_scrut_0) -> ref null "core:serde//SerializeError" {
-        n_3 = struct.new "core:prelude/types.wado//Box<i64>" { value: ref.cast "core:value//Value::Int"(__match_scrut_0).payload_0 };
-        v_38 = n_3.value;
+        v_38 = ref.cast "core:value//Value::Int"(__match_scrut_0).payload_0;
         "core:json/write_json_i64"(s.buf, v_38);
     } else if ref.test "core:value//Value::UInt"(__match_scrut_0) -> ref null "core:serde//SerializeError" {
-        n_4 = struct.new "core:prelude/types.wado//Box<u64>" { value: ref.cast "core:value//Value::UInt"(__match_scrut_0).payload_0 };
-        v_40 = n_4.value;
+        v_40 = ref.cast "core:value//Value::UInt"(__match_scrut_0).payload_0;
         "core:json/write_json_u64"(s.buf, v_40);
     } else if ref.test "core:value//Value::Int128"(__match_scrut_0) -> ref null "core:serde//SerializeError" {
         n_5 = ref.cast "core:value//Value::Int128"(__match_scrut_0).payload_0;
@@ -3002,8 +2979,7 @@ fn "core:value/Value^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
         n_6 = ref.cast "core:value//Value::UInt128"(__match_scrut_0).payload_0;
         "core:json/write_json_u128"(s.buf, n_6);
     } else if ref.test "core:value//Value::Float"(__match_scrut_0) -> ref null "core:serde//SerializeError" {
-        n_7 = struct.new "core:prelude/types.wado//Box<f64>" { value: ref.cast "core:value//Value::Float"(__match_scrut_0).payload_0 };
-        v_46 = n_7.value;
+        v_46 = ref.cast "core:value//Value::Float"(__match_scrut_0).payload_0;
         "core:json/write_json_f64"(s.buf, v_46);
     } else if ref.test "core:value//Value::String"(__match_scrut_0) -> ref null "core:serde//SerializeError" {
         str_val = ref.cast "core:value//Value::String"(__match_scrut_0).payload_0;

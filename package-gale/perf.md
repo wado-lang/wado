@@ -124,6 +124,84 @@ don't decode/build what the grammar never reads. The residual cost of even
 flat resident data (~+0.9 ms/parse per 160 KB) is a Wado-runtime GC
 characteristic, tracked outside Gale.
 
+## `syntax_highlight` is GC-bound: ~77% of wall-clock is collection (2026-07)
+
+Measure GC time directly by swapping the collector (`wado run --collector
+<null|copying|drc>`): `null` never collects, so `copying − null` is the
+collection cost. `null` leaks, so use a fixed-iteration driver (40×
+`highlight`), not the auto-tuned harness (which OOMs the GC heap under `null`).
+
+| collector           | ms/iter | note                          |
+| ------------------- | ------: | ----------------------------- |
+| `null` (no GC)      |    ~5.3 | pure compute + bump-allocate  |
+| `copying` (default) |   ~23.0 | **+17.7 ms = ~77% is GC**     |
+| `drc`               |    ~234 | pathological here — never use |
+
+So the benchmark is GC-bound, and the copying collector's cost is the **live
+set it traces/copies each cycle** — the whole CST during build-and-walk — not
+the allocation _count_. This explains why cutting transient allocations does
+not move wall-clock: a `Box`/node that dies before the next collection is never
+copied, so it is free under `copying` regardless of how many there are. The
+lever is the live CST footprint (§1), not allocation volume.
+
+Corollary — measured on the compiler-side `wir/elide_adjacent_box_locals` pass
+(elides the `Box<i32>` a `&primitive` payload binding lowers to, e.g.
+`highlight_walk`'s `Token(i) => hl_visit_token(*i)`): it removes thousands of
+per-token box allocs and shaves ~0.7 ms/iter off the `null` (bump-alloc) path,
+but is **within noise under `copying`** — the boxes never entered the live set.
+A correct, general optimizer win; not a lever for this GC-bound benchmark.
+
+## Direction: flat event-stream CST (SSOT) — measured ~5× on syntax_highlight (2026-07)
+
+Prototyped and measured (40× fixed driver, byte-identical output). The whole CST
+— `CstNode` tree + per-node `List<CstChild>` + `CstChild` variants, plus the
+`List<BuildEvent>` it is built from — is thousands of small GC objects, and
+that live-object count is the copying-collector tax the section above measures.
+Replacing it with a **flat i32-column event stream as the single source of
+truth** collapses that to a handful of arrays:
+
+| path                       | `null` | `copying` | GC part |
+| -------------------------- | -----: | --------: | ------: |
+| tree (current)             |   5.18 |     20.33 |    15.2 |
+| flat event-stream + cursor |   3.32 |      3.92 |     0.6 |
+
+`copying` 20.3 → 3.9 ms (**~5.2×**); GC 15.2 → 0.6 ms (**GC essentially gone** —
+no longer GC-bound). `null` also drops (no tree build, no walk-time iterator
+box). This is the failed "flat green-tree + cursor" spike (below) done right:
+the two prior losses were **value-cursor re-boxing** (a `Cst`/`CstChild` per
+visited node — every struct is a WasmGC object) and **`array.new_default`
+zero-fill of an over-sized second arena**. Both are avoided here: the parser's
+event stream _is_ the store (no second arena), and traversal threads
+`(&columns, index: i32)` as unbundled scalars (columns by ref, index an i32) —
+no node/cursor struct is ever constructed, so the walk allocates nothing.
+
+Design:
+
+- `TreeBuilder` stores three parallel `List<i32>` columns (`tag` / `a` / `b`)
+  instead of `List<BuildEvent>`. Method signatures are unchanged, so the
+  generated parser is byte-for-byte the same driver. `Open` carries
+  `end` / `flags` / `alt` columns too, patched at `finish_node` / `set_alt`
+  (bubble `NODE_ERROR` up the open-stack on close), so `is_error` / `span.end` /
+  `alt` stay O(1) — **no information and no O(1) query is lost** vs the node
+  tree.
+- Every consumer is a function over `(&columns, index)`. Linear consumers
+  (`highlight`, `to_string_tree`, rendering) walk the columns forward — no
+  index. Random-access consumers (`find_child`, Nth-child, typed
+  `<rule>_alt`) skip-scan by depth, or use a child-offset index built once on
+  demand. Only semantic change: a subtree is a **view** (cursor) into the
+  shared store, not an owned deep copy — strictly better for the read-only
+  consumers that exist today.
+
+Execution: do the whole migration in one pass — retire `CstNode` / `CstChild` /
+`tree_build_node`, move all consumers to the `(&columns, index)` cursor, no
+`highlight`-only bypass and no build-gate. A parallel "old tree + new flat"
+bridge is more total code and more risk than a single cutover; one representation
+is the lowest-work, highest-ROI path. Land it with driver tests over
+error-recovery input (K_ERROR / Miss / Skip columns) plus the existing
+`to_string_tree` goldens, and re-confirm with `--collector null,copying` on both
+`syntax_highlight` and `sqlite_parse` (build-then-discard pays column zero-fill
+for less GC benefit — verify it does not regress).
+
 ## What would move the needle
 
 Ordered by profile self-time. None are mutually exclusive.
