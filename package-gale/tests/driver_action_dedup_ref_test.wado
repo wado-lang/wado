@@ -1,0 +1,18 @@
+//! Stage C deduped cross-rule value reference: a token `E` and a rule `e`
+//! collide on field base `e`, so the rule call is deduped to `e_2`. `$e.v` must
+//! read that actual binding, not the token's.
+
+use dr from "./grammars/wado_dedup_ref.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_dedup_ref",
+        },
+    };
+
+test "$e.v resolves to the deduped rule binding, not the shadowing token" {
+    let result = dr::parse(&"e n");
+    assert result.ok(), "clean parse";
+    assert result.output == "v=7", `output: '{result.output}'`;
+}

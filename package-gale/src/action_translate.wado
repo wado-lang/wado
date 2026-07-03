@@ -31,14 +31,28 @@ pub fn translate_wado_action(
     body: &String,
     vals_in_scope: bool,
     rule_text_in_scope: bool,
+    bindings: &List<[bool, String, String]>,
 ) -> Result<String, String> {
     let resolved = resolve_attrs(body, rule, rules)?;
     let mut repls: List<String> = [];
     for let r of &resolved {
-        let e = action_attr_expr(rule, rules, r, vals_in_scope, rule_text_in_scope)?;
+        let e = action_attr_expr(rule, rules, r, vals_in_scope, rule_text_in_scope, bindings)?;
         repls.push(e);
     }
     return Result::<String, String>::Ok(splice_attrs(body, &resolved, &repls));
+}
+
+/// The actual local a `$ref` binds to. Prefers the emit's post-dedup binding
+/// (from `GenContext.alt_bindings`, keyed by token-vs-rule kind and pre-dedup
+/// base) so a collision-deduped reference (`e_2`) resolves correctly; falls back
+/// to the base when the reference is not in the map (nested groups, prequels).
+fn binding_for(bindings: &List<[bool, String, String]>, is_token: bool, base: &String) -> String {
+    for let b of bindings {
+        if b.0 == is_token && b.1 == *base {
+            return b.2;
+        }
+    }
+    return *base;
 }
 
 /// The `let _rule_start_tok = p.pos;` local a `$text` / `$start` / `$stop`
@@ -90,6 +104,7 @@ fn action_attr_expr(
     r: &ResolvedAttr,
     vals_in_scope: bool,
     rule_text_in_scope: bool,
+    bindings: &List<[bool, String, String]>,
 ) -> Result<String, String> {
     if r.target matches { ParserSpecial } {
         return parser_special_expr(r, rule_text_in_scope);
@@ -116,10 +131,10 @@ fn action_attr_expr(
                 Result::<String, String>::Ok(`vals.{r.name}`);
             }
         },
-        RuleLabel => rule_member_expr(rules, r),
-        RuleRef => rule_member_expr(rules, r),
-        TokenLabel => token_member_expr(r),
-        TokenRef => token_member_expr(r),
+        RuleLabel => rule_member_expr(rules, r, bindings),
+        RuleRef => rule_member_expr(rules, r, bindings),
+        TokenLabel => token_member_expr(r, bindings),
+        TokenRef => token_member_expr(r, bindings),
         _ => Result::<String, String>::Err(`${r.name}: this attribute form is not yet emitted`),
     };
 }
@@ -162,8 +177,8 @@ fn binding_name(name: &String) -> String {
 /// bound; a member reads that token through the context API. `.index` is the
 /// index itself and `.channel` is 0 (parser-visible tokens are default channel),
 /// so neither needs a runtime call.
-fn token_member_expr(r: &ResolvedAttr) -> Result<String, String> {
-    return token_member_of(&binding_name(&r.name), &r.member);
+fn token_member_expr(r: &ResolvedAttr, bindings: &List<[bool, String, String]>) -> Result<String, String> {
+    return token_member_of(&binding_for(bindings, true, &binding_name(&r.name)), &r.member);
 }
 
 /// A token member read on an arbitrary token-index expression `idx` (a bound
@@ -201,8 +216,12 @@ fn token_member_of(idx: &String, member: &Option<String>) -> Result<String, Stri
     return Result::<String, String>::Err(`.{m}: unknown token member`);
 }
 
-fn rule_member_expr(rules: &List<ParserRule>, r: &ResolvedAttr) -> Result<String, String> {
-    let binding = binding_name(&r.name);
+fn rule_member_expr(
+    rules: &List<ParserRule>,
+    r: &ResolvedAttr,
+    bindings: &List<[bool, String, String]>,
+) -> Result<String, String> {
+    let binding = binding_for(bindings, false, &binding_name(&r.name));
     let target = match find_rule(rules, &r.rule_name) {
         Some(t) => t,
         None => {

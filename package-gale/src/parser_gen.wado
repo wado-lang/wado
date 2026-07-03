@@ -237,7 +237,7 @@ fn translate_caller_arg(expr: &String, ctx: &GenContext) -> Option<String> {
     let rule = &ctx.parser_rules()[ridx];
     let vals_in_scope = rule_emits_vals(ctx, rule);
     let span_in_scope = rule_captures_span(rule, ctx.parser_rules());
-    return match translate_wado_action(rule, ctx.parser_rules(), expr, vals_in_scope, span_in_scope) {
+    return match translate_wado_action(rule, ctx.parser_rules(), expr, vals_in_scope, span_in_scope, ctx.alt_bindings()) {
         Ok(c) => Option::Some(c),
         Err(_) => null,
     };
@@ -3366,6 +3366,33 @@ fn peel_scalar_label(elem: &Element) -> &Element {
     return cur;
 }
 
+/// Collect the actual post-dedup bindings of an alt's ops (`[is_token, base,
+/// field]`), so the action translator resolves a `$ref` to its real local even
+/// when a token / rule field-name collision deduped it (`e_2`). Top-level leaf
+/// ops plus `Repeat` inners; nested-group refs fall back to `binding_name`.
+fn collect_alt_bindings(ops: &List<Op>) -> List<[bool, String, String]> {
+    let mut out: List<[bool, String, String]> = [];
+    for let op of ops {
+        collect_op_binding(op, &mut out);
+    }
+    return out;
+}
+
+fn collect_op_binding(op: &Op, out: &mut List<[bool, String, String]>) {
+    match *op {
+        Token(t) => out.push([true, t.dedup_base, t.field]),
+        Literal(l) => out.push([true, l.dedup_base, l.field]),
+        Excluded(e) => out.push([true, e.dedup_base, e.field]),
+        Wildcard(wop) => out.push([true, wop.dedup_base, wop.field]),
+        RuleCall(rc) => out.push([false, rc.dedup_base, rc.field]),
+        Repeat(rep) => collect_op_binding(&rep.body, out),
+        ListLabel(_) => {
+        },
+        Group(_) => {
+        },
+    }
+}
+
 fn gen_alt_elements(
     w: &mut CodeWriter,
     elements: &List<Element>,
@@ -3388,6 +3415,9 @@ fn gen_alt_elements(
     // (today's g4 parser keeps the `*` outside the label, so this
     // arm is defensive — see `peel_scalar_label` for the contract).
     assert ops.len() == elements.len(), "gen_alt_elements: ops / elements length mismatch — LR-suffix bodies are emitted by gen_lr_fn";
+    if ctx.emit_actions() {
+        ctx.set_alt_bindings(collect_alt_bindings(ops));
+    }
     let mut name_counts: List<[String, i32]> = [];
     // The emitter walks the surface elements + lowered ops in parallel: the
     // leaves/groups/repeats append to the `TreeBuilder`. The surface elements
@@ -3499,7 +3529,7 @@ fn gate_condition_for(a: &AltAction, ctx: &GenContext) -> Option<String> {
     let rule = &ctx.parser_rules()[ridx];
     let vals_in_scope = rule_emits_vals(ctx, rule);
     let span_in_scope = rule_captures_span(rule, ctx.parser_rules());
-    return match translate_wado_action(rule, ctx.parser_rules(), &a.source.text, vals_in_scope, span_in_scope) {
+    return match translate_wado_action(rule, ctx.parser_rules(), &a.source.text, vals_in_scope, span_in_scope, ctx.alt_bindings()) {
         Ok(code) => Option::Some(code),
         Err(_) => null,
     };
@@ -3759,7 +3789,7 @@ fn translate_action_or_warn(src: &ActionSource, ctx: &mut GenContext) -> Option<
     }
     let vals_in_scope = rule_emits_vals(ctx, &ctx.parser_rules()[ridx]);
     let span_in_scope = rule_captures_span(&ctx.parser_rules()[ridx], ctx.parser_rules());
-    return match translate_wado_action(&ctx.parser_rules()[ridx], ctx.parser_rules(), &src.text, vals_in_scope, span_in_scope) {
+    return match translate_wado_action(&ctx.parser_rules()[ridx], ctx.parser_rules(), &src.text, vals_in_scope, span_in_scope, ctx.alt_bindings()) {
         Ok(code) => Option::Some(code),
         Err(msg) => {
             ctx.warn(&`action {src.action_id}`, DiagnosticKind::UnsupportedAction, msg);
@@ -4393,6 +4423,12 @@ fn emit_lr_branch_body(
     // reached here — it is an LR loop-entry decision, not a suffix action.
     let actions = &rule.alternatives[lr.alt_index].actions;
     let ops = &lr.suffix.ops;
+    if ctx.emit_actions() {
+        // The suffix ops give the right operand's binding; the stripped leading
+        // self-ref (`$l`) falls back to `prefix_self_ref.name`, which is exactly
+        // the `let {name} = _lr_acc;` bound above.
+        ctx.set_alt_bindings(collect_alt_bindings(ops));
+    }
     for let mut i = 0; i < ops.len(); i += 1 {
         gen_alt_actions_at(w, actions, i + 1, ctx);
         gen_op(w, &ops[i], ctx, nc);
