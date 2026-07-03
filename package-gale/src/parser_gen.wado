@@ -3112,10 +3112,13 @@ fn gen_parse_fn_named(
             type_str: "i32",
             default_value: Option::Some("0"),
         });
-        f.set_return_type(&rule_result_type());
+        f.set_return_type(&rule_result_type_for(rule, ctx));
         f.emit_begin(w);
         if needs_start {
             w.line(&"let start = p.peek_start();");
+        }
+        if rule_emits_vals(ctx, rule) {
+            w.line(&`let mut vals = {vals_struct_name(rule)} \{\};`);
         }
         if has_overlaps {
             gen_multi_alt_body_alt(
@@ -4130,13 +4133,20 @@ fn gen_lr_fn(
         type_str: "i32",
         default_value: Option::Some("0"),
     });
-    f.set_return_type(&"()");
+    f.set_return_type(&rule_result_type_for(rule, ctx));
     f.emit_begin(w);
+    let emits_vals = rule_emits_vals(ctx, rule);
     let fsep = follow_sep(ctx.emit_follow());
     w.line(&"let _cp = p.b.checkpoint();");
     w.line(&"let _start = p.peek_start();");
     w.line(&`p.b.start_node({rk}, _start);`);
-    w.line(&`{*fn_name}_atom(p{fsep}, min_prec);`);
+    // The atom seeds the accumulator (the left operand's value); each LR
+    // continuation folds a right operand into it (`emit_lr_branch_body`).
+    if emits_vals {
+        w.line(&`let mut _lr_acc = {*fn_name}_atom(p{fsep}, min_prec);`);
+    } else {
+        w.line(&`{*fn_name}_atom(p{fsep}, min_prec);`);
+    }
     w.line(&"p.b.finish_node(p.last_end());");
     // ATN-class LR: the suffix loop-entry can't be resolved by static
     // suffix-first tokens (a shared delimiter goes to the wrong alt), so the
@@ -4146,7 +4156,11 @@ fn gen_lr_fn(
     // `atn_lr_loop_decision`, so the per-branch precedence gate is dropped.
     if atn_class && loop_dec >= 0 {
         gen_lr_fn_atn(w, rule, lr_alts, lr_dispatch, ctx, &rk, loop_dec);
-        w.line(&"return;");
+        if emits_vals {
+            w.line(&"return _lr_acc;");
+        } else {
+            w.line(&"return;");
+        }
         w.end();
         w.blank();
         return;
@@ -4189,7 +4203,11 @@ fn gen_lr_fn(
         w.end();
     }
     w.end();
-    w.line(&"return;");
+    if emits_vals {
+        w.line(&"return _lr_acc;");
+    } else {
+        w.line(&"return;");
+    }
     w.end();
     w.blank();
 }
@@ -4287,6 +4305,16 @@ fn emit_lr_branch_body(
     if labeled {
         w.line(&`p.b.set_alt({lr.alt_index});`);
     }
+    // Value channel: bind the accumulated left operand under the stripped
+    // leading self-ref's name (so `$l.v` reads it), and give this continuation a
+    // fresh `vals` the suffix action writes (`$v`). The suffix's own right
+    // operand is bound by its recursive call (`$r.v`). After the body, fold this
+    // level's value back into the accumulator.
+    let emits_vals = rule_emits_vals(ctx, rule);
+    if emits_vals {
+        w.line(&`let {lr.prefix_self_ref.name} = _lr_acc;`);
+        w.line(&`let mut vals = {vals_struct_name(rule)} \{\};`);
+    }
     // Interleave the alt's actions with the suffix ops. The LR rewrite strips
     // the leading self-ref (element 0), so an action at surface `before_index b`
     // runs before suffix op `b - 1`: pass the original `before` to
@@ -4301,6 +4329,9 @@ fn emit_lr_branch_body(
     }
     gen_alt_actions_at(w, actions, ops.len() + 1, ctx);
     w.line(&"p.b.finish_node(p.last_end());");
+    if emits_vals {
+        w.line(&"_lr_acc = vals;");
+    }
 }
 
 /// Overlap group (suffixes sharing a first token), unique first

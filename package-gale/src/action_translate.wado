@@ -253,16 +253,15 @@ fn is_arg(rule: &ParserRule, name: &String) -> bool {
     return false;
 }
 
-/// Whether a rule exposes a value channel to callers: a non-left-recursive
-/// rule declaring a defaultable `returns` / `locals`. Such a rule's
-/// `_parse_<rule>` returns `<Rule>Vals`, its body gets a `vals` local (one per
-/// alternative, or one shared local for the inlined dispatch), and a caller's
-/// `$a.v` reads the returned struct. This is the return-type decision —
-/// independent of whether the rule's own actions read the channel, since a
-/// caller might. LR rules are excluded: threading the channel through the
-/// precedence-climbing loop is a separate step.
+/// Whether a rule exposes a value channel to callers: any rule declaring a
+/// defaultable `returns` / `locals` (or threaded args). Such a rule's
+/// `_parse_<rule>` returns `<Rule>Vals`, its body gets a `vals` local, and a
+/// caller's `$a.v` reads the returned struct. This is the return-type decision
+/// — independent of whether the rule's own actions read the channel, since a
+/// caller might. Left-recursive rules thread the channel through the
+/// precedence loop (the atom seeds it, each continuation accumulates it).
 pub fn rule_returns_vals(rule: &ParserRule) -> bool {
-    return !rule_is_left_recursive(rule) && rule_value_channel_ready(rule);
+    return rule_value_channel_ready(rule);
 }
 
 /// Whether any alternative is directly left-recursive (its first element
