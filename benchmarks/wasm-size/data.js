@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783096226138,
+  "lastUpdate": 1783113751976,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -37721,6 +37721,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f82a95f781561c652d75f92104e70c4dbc017822"
         },
         "date": 1783096225431,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17049,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287029,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f6baaad94c2d8eeb28055c4b60b5a37db1ab2dda",
+          "message": "Merge pull request #1506 from wado-lang/claude/workflow-benchmark-json-series-szu98c\n\nfix(benchmark): order runtime graphs by latest run, retire legacy json/* series",
+          "timestamp": "2026-07-04T06:13:42+09:00",
+          "tree_id": "71faf14ead24c33c4cf51d5204e05a9d8f9daceb",
+          "url": "https://github.com/wado-lang/wado/commit/f6baaad94c2d8eeb28055c4b60b5a37db1ab2dda"
+        },
+        "date": 1783113751294,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
