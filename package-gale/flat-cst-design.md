@@ -4,6 +4,16 @@ Design for the [`perf.md`](./perf.md) direction *"flat event-stream CST
 (SSOT) — measured ~5× on syntax_highlight"*. Read `perf.md` first for the
 measurements and the two failed cursor spikes this design supersedes.
 
+**Status: landed.** `benchmark-syntax-highlight` went 29.5 → 9.9 ms/iter
+copying (~3.0× wall), GC portion 21.5 → 4.1 ms (~5.2×, no longer GC-bound);
+`sqlite_parse` build-only did not regress. All 1845 package-gale tests pass.
+One deviation from the sketch below: Wado has no by-value `self` / move
+(methods are `&self` / `&mut self`), so `finish` cannot move the columns out of
+the builder — it copies `tag`/`a`/`alt` into the store (exact-sized, transient,
+free under `copying`) rather than the zero-copy hand-off the "no second arena"
+note imagines. The event stream is still the sole representation (no node tree,
+no `BuildEvent` log); only the finalize hand-off copies.
+
 ## Goal
 
 `syntax_highlight` is GC-bound: the copying collector re-traces the whole live

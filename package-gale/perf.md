@@ -151,7 +151,33 @@ per-token box allocs and shaves ~0.7 ms/iter off the `null` (bump-alloc) path,
 but is **within noise under `copying`** — the boxes never entered the live set.
 A correct, general optimizer win; not a lever for this GC-bound benchmark.
 
-## Direction: flat event-stream CST (SSOT) — measured ~5× on syntax_highlight (2026-07)
+## Flat event-stream CST (SSOT) — LANDED, ~3× wall / ~5× GC on syntax_highlight (2026-07)
+
+**Landed.** The per-node `CstNode` / `CstChild` tree (and the `List<BuildEvent>`
+it was built from) is retired; the parser records a flat i32-column event stream
+that *is* the tree (SSOT), finalized in one linear pass, and every consumer is a
+function over `(&CstStore, index)` threaded as scalars. Full design and the
+retired-tree baseline in [`flat-cst-design.md`](./flat-cst-design.md). All 1845
+package-gale tests pass; goldens regenerated.
+
+Measured on `benchmark-syntax-highlight` (dev host, `-O2` guest, auto-tuned
+harness), tree baseline → flat:
+
+| collector           | tree | flat | change          |
+| ------------------- | ---: | ---: | --------------- |
+| `copying` (default) | 29.5 |  9.9 | **~3.0× wall**  |
+| `null` (no GC)      |  8.0 |  5.8 | ~1.4×           |
+| GC portion          | 21.5 |  4.1 | **~5.2× less**  |
+
+GC share fell 73% → ~42%: no longer GC-bound. The residual ~4.1 ms GC is
+highlight's own captures/HTML allocation (§4), not the CST — `sqlite_parse`
+(build-then-discard, no highlight) is ~4.4 ms/iter copying, no regression vs the
+~5 ms dev-host baseline. One known transient: `TreeBuilder::finish` copies the
+`tag`/`a`/`alt` columns into the store because Wado has no by-value `self` /
+move (methods are `&self`/`&mut self`), so the columns cannot be moved out of
+the builder; the copy is exact-sized, dies immediately, and is free under
+`copying`. The original prototype note (40× fixed driver, `copying` 20.3 → 3.9)
+follows.
 
 Prototyped and measured (40× fixed driver, byte-identical output). The whole CST
 — `CstNode` tree + per-node `List<CstChild>` + `CstChild` variants, plus the
