@@ -1,0 +1,25 @@
+//! Stage C: predicate-gated prediction on an all-single-token multi-alt rule.
+//! The compact single-token fast path runs no actions/predicates, so a rule
+//! carrying them must take the general path. Alts 0 and 1 tie on `A`; their
+//! alt-initial predicates pick alt 1.
+
+use ps from "./grammars/wado_pred_single.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_pred_single",
+        },
+    };
+
+test "an alt-initial predicate selects a single-token alternative" {
+    let result = ps::parse_item(&"a");
+    assert result.ok(), "clean parse under a true predicate";
+    assert result.output == "alt1", `output: '{result.output}'`;
+}
+
+test "a distinct single-token alt stays a plain branch" {
+    let result = ps::parse_item(&"b");
+    assert result.ok(), "clean parse of the distinct-token alt";
+    assert result.output == "alt2", `output: '{result.output}'`;
+}

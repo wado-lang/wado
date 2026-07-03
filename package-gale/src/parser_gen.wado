@@ -197,6 +197,19 @@ fn warn_unhandled_actions(grammar: &Grammar, ctx: &mut GenContext) {
     }
 }
 
+/// Whether codegen will emit any action / predicate for this rule — i.e.
+/// action execution is on and the rule declares at least one alt action,
+/// prequel (`@init` / `@after`), or predicate. Gates rules off the compact
+/// single-token fast path, which emits no per-alt body to host them.
+fn rule_has_emittable_actions(rule: &ParserRule, ctx: &GenContext) -> bool {
+    if !ctx.emit_actions() {
+        return false;
+    }
+    let mut ids: List<i32> = [];
+    collect_rule_action_ids(rule, &mut ids);
+    return ids.len() > 0;
+}
+
 fn collect_rule_action_ids(rule: &ParserRule, out: &mut List<i32>) {
     if let Some(a) = &rule.init_action {
         out.push(a.action_id);
@@ -2707,7 +2720,11 @@ fn gen_parse_fn_named(
     // construction instead of an N-way `if kind == TK_X` cascade. The scan
     // side already collapses these (`gen_scan_function_named`); the result is
     // far smaller and no slower than the cascade.
-    if all_alts_are_single_token(&rule.alternatives) {
+    // The compact single-token fast path builds no per-alt body, so it runs
+    // no actions or predicates. A rule carrying emittable ones takes the
+    // general multi-alt path instead (where actions execute and alt-initial
+    // predicates gate prediction). Actionless grammars stay byte-identical.
+    if all_alts_are_single_token(&rule.alternatives) && !rule_has_emittable_actions(rule, ctx) {
         gen_parse_fn_single_token(w, rule, ctx, fn_name);
         return;
     }
@@ -2746,11 +2763,11 @@ fn gen_parse_fn_named(
         }
     }
 
-    if has_overlaps {
-        // Record the alt-initial predicates prediction-time gating resolves,
-        // before the alt bodies emit (their in-body copies must know to skip).
-        mark_gated_predicates(rule, &groups, &first_sets, &non_lr_indices, ctx);
+    // Record the alt-initial predicates prediction-time gating resolves,
+    // before any alt body emits (its in-body copy must know to skip).
+    mark_gated_predicates(rule, has_overlaps, &groups, &first_sets, &non_lr_indices, ctx);
 
+    if has_overlaps {
         // Pre-compute which alts' scan helpers the dispatch will call so the
         // emission loop can skip the dead ones (see `collect_referenced_scan_alts`).
         let mut referenced_scans: List<i32> = [];
@@ -2959,11 +2976,17 @@ fn gen_multi_alt_body(
         let pos_sets = &all_pos_sets[i];
         let cond_depth = if depth < pos_sets.len() { depth } else { pos_sets.len() };
 
+        // An alt-initial context-independent predicate guards this branch
+        // (action.md "Predicates in prediction", static dispatch): a false
+        // predicate skips the alt into the rule's no-viable fallback.
+        let gate = alt_gate_and_suffix(alt, ctx);
         if cond_depth > 0 {
             let cond = build_lookahead_condition(ctx, pos_sets, cond_depth);
-            w.begin(&`if {cond}`);
-        } else {
+            w.begin(&`if {cond}{gate}`);
+        } else if gate.is_empty() {
             w.begin(&"scope:");
+        } else {
+            w.begin(&`if {join_gate_conds(&alt_initial_gate_conditions(alt))}`);
         }
 
         let body = rule_alt_body(lowered_rule, alt_index).unwrap();
@@ -3166,12 +3189,15 @@ fn ambiguous_group_has_gate(amb_alts: &List<i32>, alts: &List<Alternative>) -> b
 }
 
 /// Record which alt-initial predicates prediction-time gating resolves for
-/// this rule, so `gen_alt_actions_at` suppresses their in-body copy. Only
-/// overlap groups that render as a top-level `Ambiguous` node (alts the
-/// tournament cannot separate by lookahead) are gated; predicates on
-/// token-led / deeper-dispatch groups stay on the inline-guard path.
+/// this rule, so `gen_alt_actions_at` suppresses their in-body copy. Every
+/// site that uniquely selects an alt folds its gateable alt-initial predicate
+/// into the branch: a token-led `Direct` branch (`gen_multi_alt_body`), a
+/// singleton overlap group (`gen_multi_alt_body_alt`), and the grammar-order
+/// chain of an `Ambiguous` group. A deeper-dispatch (`Dispatch` / `Consume`)
+/// overlap group is not yet gated — its predicates stay on the inline path.
 fn mark_gated_predicates(
     rule: &ParserRule,
+    has_overlaps: bool,
     groups: &List<List<i32>>,
     first_sets: &List<List<String>>,
     non_lr_indices: &List<i32>,
@@ -3180,25 +3206,55 @@ fn mark_gated_predicates(
     if !ctx.emit_actions() {
         return;
     }
-    for let group of groups {
-        if group.len() <= 1 {
-            continue;
+    if !has_overlaps {
+        // Token-led `Direct` dispatch: every alt's `if {lookahead}` folds in
+        // its alt-initial predicate.
+        for let idx of non_lr_indices {
+            mark_alt_gate_predicates(&rule.alternatives[*idx], ctx);
         }
-        let tree = build_group_prediction_tree(&rule.alternatives, group, first_sets, non_lr_indices, ctx);
-        if let Ambiguous(a) = &tree {
-            for let idx of &a.alts {
-                for let act of &rule.alternatives[*idx].actions {
-                    if act.before_index == 0 {
-                        if let Predicate = act.kind {
-                            if find_attr_refs(&act.source.text).len() == 0 {
-                                ctx.mark_predicate_gated(act.source.action_id);
-                            }
-                        }
-                    }
+        return;
+    }
+    for let group of groups {
+        if group.len() == 1 {
+            mark_alt_gate_predicates(&rule.alternatives[non_lr_indices[group[0]]], ctx);
+        } else {
+            let tree = build_group_prediction_tree(&rule.alternatives, group, first_sets, non_lr_indices, ctx);
+            if let Ambiguous(a) = &tree {
+                for let idx of &a.alts {
+                    mark_alt_gate_predicates(&rule.alternatives[*idx], ctx);
                 }
             }
         }
     }
+}
+
+/// Mark an alt's gateable alt-initial predicates (see `alt_initial_gate_conditions`)
+/// as prediction-gated.
+fn mark_alt_gate_predicates(alt: &Alternative, ctx: &mut GenContext) {
+    for let a of &alt.actions {
+        if a.before_index == 0 {
+            if let Predicate = a.kind {
+                if find_attr_refs(&a.source.text).len() == 0 {
+                    ctx.mark_predicate_gated(a.source.action_id);
+                }
+            }
+        }
+    }
+}
+
+/// The ` && (pred0) && (pred1)` suffix folding an alt's gateable alt-initial
+/// predicates into a token-led dispatch condition, or "" if action execution
+/// is off or the alt has none. Off ⇒ empty keeps non-Wado grammars
+/// byte-identical (a Java predicate body would otherwise emit untranslated).
+fn alt_gate_and_suffix(alt: &Alternative, ctx: &GenContext) -> String {
+    if !ctx.emit_actions() {
+        return String::new();
+    }
+    let conds = alt_initial_gate_conditions(alt);
+    if conds.is_empty() {
+        return String::new();
+    }
+    return ` && {join_gate_conds(&conds)}`;
 }
 
 /// Predicate-gated dispatch for an `Ambiguous` overlap group (action.md
@@ -6913,8 +6969,17 @@ fn gen_multi_alt_body_alt(
             dedup_append_arr(&mut union_first, &first_sets[*idx]);
         }
 
+        // A singleton group is uniquely token-led; fold its alt-initial
+        // predicate into the branch condition (a false predicate skips the
+        // alt into the rule's no-viable fallback). Multi-alt groups gate
+        // inside their prediction tree instead.
+        let gate = if group.len() == 1 {
+            alt_gate_and_suffix(&rule.alternatives[non_lr_indices[group[0]]], ctx)
+        } else {
+            String::new()
+        };
         let cond = ctx.kind_check_str(&union_first, &"kind");
-        w.begin(&`if {cond}`);
+        w.begin(&`if {cond}{gate}`);
 
         if group.len() == 1 {
             let alt_index = non_lr_indices[group[0]];
