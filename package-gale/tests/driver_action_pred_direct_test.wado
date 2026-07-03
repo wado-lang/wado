@@ -1,0 +1,29 @@
+//! Stage C: an alt-initial predicate guards a token-led (`Direct`) branch.
+//! The alt is uniquely selected by lookahead, yet its predicate is still
+//! evaluated — a false one fails the parse into no-viable.
+
+use pd from "./grammars/wado_pred_direct.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_pred_direct",
+        },
+    };
+
+test "a true predicate lets the token-led branch run" {
+    let result = pd::parse_ok(&"1");
+    assert result.ok(), "clean parse under a true predicate";
+    assert result.output == "num", `output: '{result.output}'`;
+}
+
+test "the unpredicated sibling is unaffected" {
+    let result = pd::parse_ok(&"x");
+    assert result.ok(), "clean parse of the unpredicated alt";
+    assert result.output == "id", `output: '{result.output}'`;
+}
+
+test "a false predicate on the selected branch fails the parse" {
+    let result = pd::parse_bad(&"1");
+    assert !result.ok(), "false predicate must reject the input";
+}

@@ -845,7 +845,7 @@ fn bubble_to_parent(stack: &List<i32>, end: &mut List<i32>, flags: &mut List<i32
         if end[child] > end[parent] {
             end[parent] = end[child];
         }
-        flags[parent] = flags[parent] | (flags[child] & NODE_ERROR);
+        flags[parent] = flags[parent] | flags[child] & NODE_ERROR;
     }
 }
 
