@@ -2979,14 +2979,15 @@ fn gen_multi_alt_body(
         // An alt-initial context-independent predicate guards this branch
         // (action.md "Predicates in prediction", static dispatch): a false
         // predicate skips the alt into the rule's no-viable fallback.
-        let gate = alt_gate_and_suffix(alt, ctx);
+        let gate_conds: List<String> = if ctx.emit_actions() { alt_initial_gate_conditions(alt) } else { [] };
         if cond_depth > 0 {
             let cond = build_lookahead_condition(ctx, pos_sets, cond_depth);
+            let gate = if gate_conds.is_empty() { String::new() } else { ` && {join_gate_conds(&gate_conds)}` };
             w.begin(&`if {cond}{gate}`);
-        } else if gate.is_empty() {
+        } else if gate_conds.is_empty() {
             w.begin(&"scope:");
         } else {
-            w.begin(&`if {join_gate_conds(&alt_initial_gate_conditions(alt))}`);
+            w.begin(&`if {join_gate_conds(&gate_conds)}`);
         }
 
         let body = rule_alt_body(lowered_rule, alt_index).unwrap();
@@ -3156,29 +3157,38 @@ fn current_rule_is_multi_alt(ctx: &GenContext) -> bool {
     return ctx.parser_rules()[ridx].alternatives.len() > 1;
 }
 
-/// The alt-initial (`before_index == 0`) semantic predicates prediction can
-/// gate on: context-independent, i.e. no `$` attribute references (action.md
-/// "Predicates in prediction"). Their bodies pass through the identity
-/// translator verbatim, so the conditions are returned as-is. A context-
-/// dependent alt-initial predicate (referencing `$arg` / `$local` / `$ret`)
-/// is excluded here and stays on the unsupported-prediction path.
+/// A semantic predicate prediction can gate on: alt-initial (`before_index
+/// == 0`) and context-independent, i.e. no `$` attribute references (action.md
+/// "Predicates in prediction"). A context-dependent one (referencing `$arg` /
+/// `$local` / `$ret`) is excluded and stays on the unsupported-prediction
+/// path. The single source of truth for "gateable" — both the condition
+/// collector and the id-marking pass filter through it, so the emitted
+/// conditions and the gated-id set cannot diverge.
+fn is_gateable_alt_initial_predicate(a: &AltAction) -> bool {
+    if a.before_index != 0 {
+        return false;
+    }
+    return match a.kind {
+        Predicate => find_attr_refs(&a.source.text).len() == 0,
+        Action => false,
+    };
+}
+
+/// The gateable alt-initial predicate conditions of an alt, in grammar order.
+/// Bodies pass through the identity translator verbatim, so the conditions are
+/// returned as-is.
 fn alt_initial_gate_conditions(alt: &Alternative) -> List<String> {
     let mut conds: List<String> = [];
     for let a of &alt.actions {
-        if a.before_index != 0 {
-            continue;
-        }
-        if let Predicate = a.kind {
-            if find_attr_refs(&a.source.text).len() == 0 {
-                conds.push(a.source.text);
-            }
+        if is_gateable_alt_initial_predicate(a) {
+            conds.push(a.source.text);
         }
     }
     return conds;
 }
 
 /// Whether any alt in an `Ambiguous` overlap group carries a gateable
-/// alt-initial predicate — the trigger for predicate-gated dispatch.
+/// alt-initial predicate.
 fn ambiguous_group_has_gate(amb_alts: &List<i32>, alts: &List<Alternative>) -> bool {
     for let idx of amb_alts {
         if !alt_initial_gate_conditions(&alts[*idx]).is_empty() {
@@ -3186,6 +3196,65 @@ fn ambiguous_group_has_gate(amb_alts: &List<i32>, alts: &List<Alternative>) -> b
         }
     }
     return false;
+}
+
+/// Whether every alt in an overlap group matches the same terminal sequence,
+/// so any predicate-viable alt is structurally interchangeable with the rest.
+/// Predicate-gated dispatch replaces the length tournament with a grammar-order
+/// predicate chain, which is only sound when the alts genuinely tie: a group
+/// whose alts differ in length or token (distinguishable by the tournament /
+/// deeper lookahead) would be misrouted by the chain, so it keeps the
+/// tournament instead. Conservative — a non-terminal element (`elements_match`
+/// only compares `TokenRef` / `Literal`) makes the group ineligible.
+fn group_alts_interchangeable(amb_alts: &List<i32>, alts: &List<Alternative>) -> bool {
+    if amb_alts.is_empty() {
+        return false;
+    }
+    let first = &alts[amb_alts[0]].elements;
+    for let idx of amb_alts {
+        let els = &alts[*idx].elements;
+        if els.len() != first.len() {
+            return false;
+        }
+        for let mut i = 0; i < els.len(); i += 1 {
+            if !elements_match(&els[i], &first[i]) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+/// Whether an `Ambiguous` overlap group is resolved by predicate-gated
+/// dispatch: it carries a gateable alt-initial predicate and its alts are
+/// interchangeable. The marking pass and every emit site key on this so the
+/// gated set and the emitted conditions never diverge.
+fn ambiguous_group_predicate_gated(amb_alts: &List<i32>, alts: &List<Alternative>) -> bool {
+    return ambiguous_group_has_gate(amb_alts, alts) && group_alts_interchangeable(amb_alts, alts);
+}
+
+/// Collect the alts of every `Ambiguous` node the dispatch will predicate-gate.
+/// Mirrors `gen_prediction_code_inner`: each post-strip `Ambiguous` node is
+/// reached at `skip == 0`, so the marking pass walks the whole tree (not just
+/// its root) to stay symmetric with emit — a gated node nested under a
+/// `Dispatch` must be marked too.
+fn collect_gated_ambiguous_alts(node: &PredictionNode, alts: &List<Alternative>, out: &mut List<i32>) {
+    match *node {
+        Leaf(_) => {},
+        Consume(c) => collect_gated_ambiguous_alts(&c.child, alts, out),
+        Dispatch(d) => {
+            for let branch of &d.branches {
+                collect_gated_ambiguous_alts(&branch.child, alts, out);
+            }
+        },
+        Ambiguous(a) => {
+            if ambiguous_group_predicate_gated(&a.alts, alts) {
+                for let idx of &a.alts {
+                    out.push(*idx);
+                }
+            }
+        },
+    }
 }
 
 /// Record which alt-initial predicates prediction-time gating resolves for
@@ -3219,10 +3288,10 @@ fn mark_gated_predicates(
             mark_alt_gate_predicates(&rule.alternatives[non_lr_indices[group[0]]], ctx);
         } else {
             let tree = build_group_prediction_tree(&rule.alternatives, group, first_sets, non_lr_indices, ctx);
-            if let Ambiguous(a) = &tree {
-                for let idx of &a.alts {
-                    mark_alt_gate_predicates(&rule.alternatives[*idx], ctx);
-                }
+            let mut gated: List<i32> = [];
+            collect_gated_ambiguous_alts(&tree, &rule.alternatives, &mut gated);
+            for let idx of &gated {
+                mark_alt_gate_predicates(&rule.alternatives[*idx], ctx);
             }
         }
     }
@@ -3232,12 +3301,8 @@ fn mark_gated_predicates(
 /// as prediction-gated.
 fn mark_alt_gate_predicates(alt: &Alternative, ctx: &mut GenContext) {
     for let a of &alt.actions {
-        if a.before_index == 0 {
-            if let Predicate = a.kind {
-                if find_attr_refs(&a.source.text).len() == 0 {
-                    ctx.mark_predicate_gated(a.source.action_id);
-                }
-            }
+        if is_gateable_alt_initial_predicate(a) {
+            ctx.mark_predicate_gated(a.source.action_id);
         }
     }
 }
@@ -6683,8 +6748,10 @@ fn gen_prediction_code_inner(
         if skip == 0 {
             // Predicate-gated ambiguity: alt-initial context-independent
             // predicates resolve which alternative prediction takes, ahead of
-            // any length tournament (the alts tie on lookahead).
-            if ctx.emit_actions() && ambiguous_group_has_gate(&a.alts, alts) {
+            // any length tournament — but only when the alts are
+            // interchangeable, so the grammar-order chain cannot misroute a
+            // longer/distinct alt (`ambiguous_group_predicate_gated`).
+            if ctx.emit_actions() && ambiguous_group_predicate_gated(&a.alts, alts) {
                 gen_predicate_gated_dispatch(w, &a.alts, alts, fn_name, ctx, rule_display);
                 return;
             }
@@ -6901,7 +6968,7 @@ fn collect_referenced_scan_alts(
         Ambiguous(a) => {
             // A predicate-gated group dispatches on its alt-initial predicates,
             // never the length tournament — so it references no scan helper.
-            if ctx.emit_actions() && ambiguous_group_has_gate(&a.alts, alts) {
+            if ctx.emit_actions() && ambiguous_group_predicate_gated(&a.alts, alts) {
                 return;
             }
             let mut sorted_indices = a.alts.sorted();

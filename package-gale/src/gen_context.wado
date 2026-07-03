@@ -422,12 +422,7 @@ impl GenContext {
 
     /// Whether an alt-initial predicate is resolved by prediction-time gating.
     pub fn is_predicate_gated(&self, id: i32) -> bool {
-        for let g of &self.predicate_gated {
-            if *g == id {
-                return true;
-            }
-        }
-        return false;
+        return self.predicate_gated.contains(&id);
     }
 
     /// Record a prediction-strategy diagnostic for `rule`, deduped on
