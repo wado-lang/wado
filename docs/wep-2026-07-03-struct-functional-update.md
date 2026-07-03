@@ -118,7 +118,7 @@ Key properties:
 When `..base` is present, **every omitted field is taken from `base`**; field
 defaults (`port: i32 = 8080`) are not consulted. `base` already holds a complete,
 valid value for every field, so defaults are redundant, and letting `base` win
-keeps the rule simple: *listed → explicit; unlisted → from `base`*. Consequently
+keeps the rule simple: _listed → explicit; unlisted → from `base`_. Consequently
 a literal with `..base` can never be "missing a required field" — the
 missing-field diagnostic is suppressed for all fields `base` covers.
 
@@ -139,7 +139,7 @@ read-reachability as any field access:
 
 This preserves encapsulation: `..base` cannot smuggle a private field across a
 boundary. It is deliberately stricter than default-omission (a private field
-with a default may be *omitted* cross-module because its default runs in the
+with a default may be _omitted_ cross-module because its default runs in the
 defining module and no read crosses the boundary); with `..base` a real read
 does cross the boundary, so it must be permitted.
 
@@ -190,7 +190,7 @@ Pipeline touchpoints:
 - `syntax.rs` — highlight `..base` in struct literals; regenerate the VS Code
   grammar (`mise run update-wado-vscode-grammar`) and formatter fixtures.
 
-Docs to update on implementation: `docs/spec.md` (Struct Construction), 
+Docs to update on implementation: `docs/spec.md` (Struct Construction),
 `docs/cheatsheet.md` (Structs section), and the WEP index in `docs/CLAUDE.md`.
 
 ### Tests (red/green TDD)
