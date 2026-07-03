@@ -94,6 +94,13 @@ no highlight) is ~4.4 ms/iter and did not regress. One known transient:
 Wado has no by-value `self` / move (methods are `&self`/`&mut self`); the copy
 is exact-sized, dies immediately, and is free under `copying`.
 
+**Column pre-size (landed).** `TreeBuilder::with_capacity` sizes the event columns
+to `4 × tokens` (measured `rows ≈ 3.44 × tokens`) so they never grow from empty —
+one right-sized `array.new_default` instead of `log2(rows)` doubling reallocs, at
+~16% over-fill (comparable to `TokenStream`'s `chars/4`). Release `sqlite_parse`
+2.52 → 2.36 ms/iter (~6%, build-heavy), `syntax_highlight` ~2% (build is a smaller
+share); no over-fill regression.
+
 ### Standing rules (measured)
 
 - **Live-set is the cost, not allocation count.** Under the copying collector,
@@ -151,15 +158,14 @@ captures + `String` grow/push + `to_ascii_lowercase` + `hl_visit_token`) ≈
 **~39%**; **CST build** (flat columns push/grow/pop + `finish` +
 `bubble_to_parent`) ≈ **~24%**; **scan/predict** (`follow_yields` + `scan_*` +
 kind-set) ≈ **~15%**. The walk is gone; **highlight is now the single dominant
-cost**, and the CST is moderate to _build_ (column pushes + a grow-from-empty
-realloc tax) but cheap to _walk_.
+cost**, and the CST is moderate to _build_ (column pushes; the `List<i32>::grow`
+row above is since cut by the landed column pre-size) but cheap to _walk_.
 
 ## What's next
 
-Candidate levers from the post-flat-CST profile, ordered by bucket, none
-mutually exclusive.
+Candidate levers from the post-flat-CST profile, none mutually exclusive.
 
-### 1. Highlight (~39%) — now the dominant cost
+### Highlight (~39%) — now the dominant cost
 
 The whole highlight path is the biggest bucket; several independent levers, all
 in `highlight.wado`:
@@ -173,21 +179,11 @@ in `highlight.wado`:
   appends escaped source char-at-a-time. Emit class names without the per-char
   loop, append larger unescaped runs, and pre-size the output `String`.
 - **Captures (`List<HighlightCapture>::push` 4.5%)** — the captures list grows
-  from empty (see the column-presize lever below), and each `HighlightCapture` is
-  a GC object — this list is the ~4.1 ms residual GC the current-state section
-  flags. Pre-size it, or render directly without materialising the list.
+  from empty and each `HighlightCapture` is a GC object — this list is the ~4.1 ms
+  residual GC the current-state section flags. Pre-size it (as the CST columns now
+  are), or render directly without materialising the list.
 - **`to_ascii_lowercase` (3.0%)** — case-insensitive keyword matching in the
   lexer; a lower-on-read or a case-folded scan table would remove it.
-
-### 2. CST column grow-from-empty (`List<i32>::grow` ~6%)
-
-The `TreeBuilder` columns (`tag`/`a`/`b`/`alt`) grow from `[]`, reallocating
-`log2(rows)` times over the parse — the same grow-from-empty tax the old lexer
-buffer and child-list presizes fixed. Pre-size them to a fraction of the token or
-char count (`TokenStream` uses `chars/4`). **Watch the `array.new_default`
-over-zero-fill trap** (a loose `with_capacity` regressed the failed cursor spike):
-right-size, don't reserve big, and re-check `sqlite_parse` (build-then-discard
-pays the fill for less benefit).
 
 ## Tried and didn't pan out
 

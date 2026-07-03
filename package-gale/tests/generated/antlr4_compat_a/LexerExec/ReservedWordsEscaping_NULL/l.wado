@@ -865,6 +865,21 @@ impl TreeBuilder {
         return TreeBuilder { tag: [], a: [], b: [], alt: [], open: [] };
     }
 
+    /// Pre-size the event columns to `rows`, avoiding the grow-from-empty
+    /// reallocations (each column would otherwise double `log2(rows)` times).
+    /// The parser passes ~`4 × tokens` — measured `rows ≈ 3.44 × tokens`, so this
+    /// sizes just above the final length: no grow, and only ~16% over-fill (a
+    /// doubling grow from under-sizing over-fills far more). Right-size, not big.
+    pub fn with_capacity(rows: i32) -> TreeBuilder {
+        return TreeBuilder {
+            tag: List::with_capacity(rows),
+            a: List::with_capacity(rows),
+            b: List::with_capacity(rows),
+            alt: List::with_capacity(rows),
+            open: [],
+        };
+    }
+
     fn push_row(&mut self, tag: i32, a: i32, b: i32) {
         self.tag.push(tag);
         self.a.push(a);
@@ -1379,7 +1394,7 @@ struct Parser {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, b: TreeBuilder::new(), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {

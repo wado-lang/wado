@@ -168,7 +168,7 @@ Parse 81 SQL statements (13366 bytes). Gale-generated parser vs sqlparser-rs.
 | Implementation      | Throughput | ms/iter  | vs best |
 | ------------------- | ---------- | -------- | ------- |
 | Rust (sqlparser-rs) | 7.86 MB/s  | 1.701 ms | 1.00x   |
-| **Wado** (Gale)     | 5.31 MB/s  | 2.516 ms | 1.48x   |
+| **Wado** (Gale)     | 5.67 MB/s  | 2.357 ms | 1.39x   |
 
 ### Syntax Highlight
 
@@ -187,7 +187,7 @@ reference SQL highlighters:
 | Implementation               | Throughput  | ms/iter   | vs best |
 | ---------------------------- | ----------- | --------- | ------- |
 | JavaScript (Prism)           | 9.07 MB/s   | 1.474 ms  | 1.00x   |
-| **Wado** (Gale)              | 3.88 MB/s   | 3.446 ms  | 2.34x   |
+| **Wado** (Gale)              | 3.97 MB/s   | 3.368 ms  | 2.28x   |
 | JavaScript (Lezer)           | 2.74 MB/s   | 4.874 ms  | 3.31x   |
 | Rust (tree-sitter)           | 2.69 MB/s   | 4.962 ms  | 3.37x   |
 | JavaScript (web-tree-sitter) | 1.58 MB/s   | 8.482 ms  | 5.74x   |

@@ -115,6 +115,24 @@ test "builder nests child nodes and computes spans" {
     assert s.to_string_tree(0, &ts, &names(["expr", "term"]), &names(["ID", "PLUS"])) == "(expr (term x) + (term y))";
 }
 
+test "with_capacity pre-sizes without changing the tree" {
+    let ts = stream_of("a + b", [
+        [0, 0, 1],
+        [1, 2, 3],
+        [0, 4, 5],
+    ]);
+    let mut b = TreeBuilder::with_capacity(16);
+    b.start_node(0 as NodeKind, 0);
+    b.token(0);
+    b.token(1);
+    b.token(2);
+    b.finish_node(5);
+    let s = b.finish();
+
+    assert children_of(&s, 0).len() == 3;
+    assert s.to_string_tree(0, &ts, &names(["expr"]), &names(["ID", "PLUS"])) == "(expr a + b)";
+}
+
 test "set_alt stamps the innermost open node" {
     let mut b = TreeBuilder::new();
     b.start_node(0 as NodeKind, 0);
