@@ -709,6 +709,10 @@ pub(crate) struct GenericInstantiation {
     /// class WEP 2026-05-26 §"Stage 7 gap" calls out (`type_name(t)`
     /// drift between annotate and reify) goes away by construction.
     pub(crate) mangled_name: Option<String>,
+    /// True for an anonymous-composition literal (`{ ..a, ..b }`): reify then
+    /// projects the union fields from the spread bases rather than reifying the
+    /// literal's explicit fields alone (see WEP: Literal Spread).
+    pub(crate) is_union: bool,
 }
 
 /// A single mutating outer-binding captured by a closure. The closure

@@ -4467,8 +4467,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // a non-trivial `base` to a `__base_N` temporary so it is evaluated once.
         // Defaults are not consulted when a spread is present.
         let mut spread_binding: Option<(u32, String, TirExpr)> = None;
-        if let Some(base) = &struct_lit.spread {
-            let base_expr = self.reify_expr(base, ctx, Some(struct_type));
+        if let Some(spread) = struct_lit.spreads.first() {
+            let base_expr = self.reify_expr(&spread.expr, ctx, Some(struct_type));
             let base_type = base_expr.type_id;
             let base_ref = if matches!(base_expr.kind, TirExprKind::Local { .. }) {
                 base_expr
@@ -5999,55 +5999,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         )];
 
-        // --- Functional-update seed: __b.insert_all(base) before the explicit
-        //     inserts, so explicit keys override the base's entries. ---
-        if let Some(base) = &struct_lit.spread {
-            let base_expr = self.reify_expr(base, ctx, Some(facts.target_type));
-            let builder_local = TirExpr::new(
-                TirExprKind::Local {
-                    index: builder_index,
-                    name: "__b".to_string(),
-                },
-                facts.builder_type,
-                span,
-            );
-            let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
-                builder_local,
-                facts.insert_self_kind,
-                false,
-                span,
-                &self.tysys.type_table,
-            );
-            let insert_all_method_info = LocalMethodName::new(
-                facts.builder_base_name.clone(),
-                Some(facts.trait_name.clone()),
-                "insert_all".to_string(),
-            );
-            let insert_all_call = super::Elaborator::<H>::build_tir_method_call(
-                receiver,
-                FunctionRef {
-                    module_source: facts.impl_module_source.clone(),
-                    name: facts.insert_all_mangled_name.clone(),
-                    monomorph_info: None,
-                    method_info: Some(insert_all_method_info),
-                },
-                vec![],
-                vec![CallArg::new(base_expr, false)],
-                TypeTable::UNIT,
-                span,
-            );
-            stmts.push(TirStmt::new(TirStmtKind::Expr(insert_all_call), span));
-        }
-
-        // --- For each field: __b.insert_literal("name", value) ---
+        // --- Members in source order: `__b.insert_all(base)` for each spread and
+        //     `__b.insert_literal("name", value)` for each explicit field. Later
+        //     inserts override earlier ones, giving explicit-over-base and
+        //     last-spread-wins. ---
         let insert_method_info = LocalMethodName::new(
             facts.builder_base_name.clone(),
             Some(facts.trait_name.clone()),
             "insert_literal".to_string(),
         );
-
-        for field in &struct_lit.fields {
-            let value = self.reify_expr(&field.value, ctx, Some(facts.value_type));
+        let insert_all_method_info = LocalMethodName::new(
+            facts.builder_base_name.clone(),
+            Some(facts.trait_name.clone()),
+            "insert_all".to_string(),
+        );
+        let builder_receiver = |this: &mut Self| {
             let builder_local = TirExpr::new(
                 TirExprKind::Local {
                     index: builder_index,
@@ -6056,32 +6022,61 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 facts.builder_type,
                 span,
             );
-            let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+            super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
                 builder_local,
                 facts.insert_self_kind,
                 false,
                 span,
-                &self.tysys.type_table,
-            );
-            let key_expr = TirExpr::new(
-                TirExprKind::StringLiteral(field.name.clone()),
-                string_type,
-                span,
-            );
-            let insert_call = super::Elaborator::<H>::build_tir_method_call(
-                receiver,
-                FunctionRef {
-                    module_source: facts.impl_module_source.clone(),
-                    name: facts.insert_mangled_name.clone(),
-                    monomorph_info: None,
-                    method_info: Some(insert_method_info.clone()),
-                },
-                vec![],
-                vec![CallArg::new(key_expr, false), CallArg::new(value, false)],
-                TypeTable::UNIT,
-                span,
-            );
-            stmts.push(TirStmt::new(TirStmtKind::Expr(insert_call), span));
+                &this.tysys.type_table,
+            )
+        };
+
+        let mut si = 0;
+        for pos in 0..=struct_lit.fields.len() {
+            while si < struct_lit.spreads.len() && struct_lit.spreads[si].field_pos == pos {
+                let base_expr =
+                    self.reify_expr(&struct_lit.spreads[si].expr, ctx, Some(facts.target_type));
+                let receiver = builder_receiver(self);
+                let insert_all_call = super::Elaborator::<H>::build_tir_method_call(
+                    receiver,
+                    FunctionRef {
+                        module_source: facts.impl_module_source.clone(),
+                        name: facts.insert_all_mangled_name.clone(),
+                        monomorph_info: None,
+                        method_info: Some(insert_all_method_info.clone()),
+                    },
+                    vec![],
+                    vec![CallArg::new(base_expr, false)],
+                    TypeTable::UNIT,
+                    span,
+                );
+                stmts.push(TirStmt::new(TirStmtKind::Expr(insert_all_call), span));
+                si += 1;
+            }
+            if pos < struct_lit.fields.len() {
+                let field = &struct_lit.fields[pos];
+                let value = self.reify_expr(&field.value, ctx, Some(facts.value_type));
+                let receiver = builder_receiver(self);
+                let key_expr = TirExpr::new(
+                    TirExprKind::StringLiteral(field.name.clone()),
+                    string_type,
+                    span,
+                );
+                let insert_call = super::Elaborator::<H>::build_tir_method_call(
+                    receiver,
+                    FunctionRef {
+                        module_source: facts.impl_module_source.clone(),
+                        name: facts.insert_mangled_name.clone(),
+                        monomorph_info: None,
+                        method_info: Some(insert_method_info.clone()),
+                    },
+                    vec![],
+                    vec![CallArg::new(key_expr, false), CallArg::new(value, false)],
+                    TypeTable::UNIT,
+                    span,
+                );
+                stmts.push(TirStmt::new(TirStmtKind::Expr(insert_call), span));
+            }
         }
 
         // --- break __kv_lit: __b.build() (new API) or __b (legacy) ---
@@ -6316,6 +6311,55 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
+    /// A struct value's fields for spread projection: `(name, concrete type,
+    /// declared index)`. Mirrors `Elaborator::spread_struct_fields` so the
+    /// union plan reify replays matches the one resolve recorded.
+    fn spread_base_field_list(&self, type_id: TypeId) -> Vec<(String, TypeId, u32)> {
+        use crate::tir::ResolvedType;
+        let (name, module, type_args) = {
+            let tt = self.tysys.type_table.borrow();
+            let peeled = tt.peel_refs(type_id);
+            match tt.get(peeled) {
+                ResolvedType::Struct {
+                    name,
+                    module_source,
+                    ..
+                } => (name.clone(), module_source.clone(), Vec::new()),
+                ResolvedType::GenericInstance {
+                    name,
+                    module_source,
+                    type_args,
+                    ..
+                } => (name.clone(), module_source.clone(), type_args.clone()),
+                _ => return Vec::new(),
+            }
+        };
+        let raw: Vec<(String, TypeId, u32)> = {
+            let lookup = self.type_lookup();
+            let Some(info) = lookup.struct_fields_in(&name, &module) else {
+                return Vec::new();
+            };
+            info.fields
+                .iter()
+                .enumerate()
+                .map(|(i, (fname, fty, _vis))| (fname.clone(), *fty, i as u32))
+                .collect()
+        };
+        let subst: crate::hashmap::IndexMap<u32, TypeId> = (0..type_args.len() as u32)
+            .zip(type_args.iter().copied())
+            .collect();
+        raw.into_iter()
+            .map(|(fname, fty, i)| {
+                let concrete = self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .substitute_type_params(fty, &subst);
+                (fname, concrete, i)
+            })
+            .collect()
+    }
+
     /// Reify an anonymous struct literal `{ x: 1, y: 2 }`. Annotate
     /// synthesises the struct from the field shape, gives it a
     /// deterministic `__anon_{x:i32,y:i32}`-style name, and registers
@@ -6330,59 +6374,148 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
-        use crate::tir::{TirExprKind, TirStructField};
+        use super::expr::UnionSource;
+        use crate::tir::{TirBlock, TirExprKind, TirStmt, TirStmtKind, TirStructField};
 
-        // Anonymous-struct composition (`{ ..a, ..b }` synthesising a union) is a
-        // later phase; a spread that reaches here did not coerce to a key-value
-        // builder, so reject it rather than silently dropping it.
-        if let Some(base) = &struct_lit.spread {
-            let _ = self
-                .logger
-                .error(crate::elaborator::types::TypeError::InvalidLiteral {
-                    message: "`..base` spread in an anonymous struct literal is not yet \
-                          supported; use a named struct literal `S { ..base }` or a \
-                          key-value literal coerced to a map"
-                        .to_string(),
-                    span: base.span(),
-                });
+        // Read the registered type back — the deterministic name derived from
+        // reified field types can diverge from annotate's (evaporated coercion
+        // wrappers). `resolve_anonymous_struct_literal` records the synthesised
+        // `__anon_{…}` name on the `GenericInstantiation` slot.
+        let struct_type = recorded_type;
+        let gi = self.ann_generic_instantiations(struct_lit.id).expect(
+            "resolve_anonymous_struct_literal records the synthesised name on \
+             generic_instantiations for every anonymous struct literal",
+        );
+        let struct_name = gi.mangled_name.expect(
+            "resolve_anonymous_struct_literal records the synthesised name on \
+             generic_instantiations for every anonymous struct literal",
+        );
+
+        // Only a union composition (`{ ..a, ..b }`) projects from spread bases;
+        // otherwise the literal's own explicit fields are the shape.
+        if !gi.is_union {
+            let fields: Vec<TirStructField> = struct_lit
+                .fields
+                .iter()
+                .enumerate()
+                .map(|(index, field)| TirStructField {
+                    name: field.name.clone(),
+                    value: self.reify_expr(&field.value, ctx, None),
+                    field_index: index as u32,
+                })
+                .collect();
+            return TirExpr::new(
+                TirExprKind::StructLiteral {
+                    struct_type,
+                    struct_name,
+                    fields,
+                },
+                struct_type,
+                struct_lit.span,
+            );
         }
 
-        let resolved_fields: Vec<TirStructField> = struct_lit
+        // Composition: reify each base once (binding a non-trivial base to a
+        // `__base_N` temporary), reify the explicit fields, then assemble the
+        // union — each field taken from its last contributor (`compose_union_plan`).
+        let mut base_refs: Vec<TirExpr> = Vec::new();
+        let mut base_types: Vec<TypeId> = Vec::new();
+        let mut spread_bindings: Vec<(u32, String, TirExpr)> = Vec::new();
+        for spread in &struct_lit.spreads {
+            let base_expr = self.reify_expr(&spread.expr, ctx, None);
+            base_types.push(base_expr.type_id);
+            let base_ref = if matches!(base_expr.kind, TirExprKind::Local { .. }) {
+                base_expr
+            } else {
+                let ty = base_expr.type_id;
+                let tmp_name = format!("__base_{}", ctx.next_local);
+                let tmp_idx = ctx.add_local(tmp_name.clone(), ty, false, None);
+                spread_bindings.push((tmp_idx, tmp_name.clone(), base_expr));
+                TirExpr::new(
+                    TirExprKind::Local {
+                        index: tmp_idx,
+                        name: tmp_name,
+                    },
+                    ty,
+                    struct_lit.span,
+                )
+            };
+            base_refs.push(base_ref);
+        }
+
+        let explicit_exprs: Vec<TirExpr> = struct_lit
             .fields
             .iter()
+            .map(|f| self.reify_expr(&f.value, ctx, None))
+            .collect();
+        let explicit_types: Vec<TypeId> = explicit_exprs.iter().map(|e| e.type_id).collect();
+
+        let base_field_lists: Vec<Vec<(String, TypeId, u32)>> = base_types
+            .iter()
+            .map(|&t| self.spread_base_field_list(t))
+            .collect();
+        let plan = super::expr::compose_union_plan(struct_lit, &base_field_lists, &explicit_types);
+        let fields: Vec<TirStructField> = plan
+            .iter()
             .enumerate()
-            .map(|(index, field)| {
-                let value = self.reify_expr(&field.value, ctx, None);
+            .map(|(i, uf)| {
+                let value = match uf.source {
+                    UnionSource::Explicit(idx) => explicit_exprs[idx].clone(),
+                    UnionSource::Base {
+                        base_idx,
+                        field_index,
+                    } => TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(base_refs[base_idx].clone()),
+                            field_index,
+                            field_name: uf.name.clone(),
+                        },
+                        uf.type_id,
+                        struct_lit.span,
+                    ),
+                };
                 TirStructField {
-                    name: field.name.clone(),
+                    name: uf.name.clone(),
                     value,
-                    field_index: index as u32,
+                    field_index: i as u32,
                 }
             })
             .collect();
 
-        // Read the registered type back from `expression_types` — the
-        // deterministic name derived from reified field types can
-        // diverge from annotate's (evaporated coercion wrappers).
-        // Production registers it in expr.rs:3603+.
-        let struct_type = recorded_type;
-        // Single source of truth: `resolve_anonymous_struct_literal`
-        // records the synthesised `__anon_{…}` name on the
-        // `GenericInstantiation` slot for every anonymous struct literal.
-        let struct_name = self
-            .ann_generic_instantiations(struct_lit.id)
-            .and_then(|gi| gi.mangled_name)
-            .expect(
-                "resolve_anonymous_struct_literal records the synthesised name on \
-                 generic_instantiations for every anonymous struct literal",
-            );
-
-        TirExpr::new(
+        let literal = TirExpr::new(
             TirExprKind::StructLiteral {
                 struct_type,
                 struct_name,
-                fields: resolved_fields,
+                fields,
             },
+            struct_type,
+            struct_lit.span,
+        );
+
+        if spread_bindings.is_empty() {
+            return literal;
+        }
+        let mut stmts: Vec<TirStmt> = spread_bindings
+            .into_iter()
+            .map(|(idx, name, value)| {
+                let type_id = value.type_id;
+                TirStmt::new(
+                    TirStmtKind::Let {
+                        name,
+                        local_index: idx,
+                        value,
+                        is_mut: false,
+                        is_reactive: false,
+                        type_id,
+                        skip_value_copy: false,
+                    },
+                    struct_lit.span,
+                )
+            })
+            .collect();
+        stmts.push(TirStmt::new(TirStmtKind::Expr(literal), struct_lit.span));
+        TirExpr::new(
+            TirExprKind::Block(TirBlock::new(stmts, struct_lit.span)),
             struct_type,
             struct_lit.span,
         )

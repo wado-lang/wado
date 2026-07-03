@@ -13,10 +13,10 @@ use crate::ast::{
     MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype,
     Param, PathSegment, Pattern, RangeExpr, RangeKind, ResourceDecl, ReturnStmt, SelfKind,
     StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
-    StructLiteralField, StructPatternField, TaskReturnStmt, TemplatePart, TemplateStringExpr,
-    TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
-    UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WorldDecl,
-    WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
+    StructLiteralField, StructLiteralSpread, StructPatternField, TaskReturnStmt, TemplatePart,
+    TemplateStringExpr, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type,
+    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility,
+    WhileStmt, WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
 };
 use crate::compiler_host::{Code, DiagnosticSpan, Severity};
 use crate::token::{Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
@@ -5801,13 +5801,14 @@ impl Parser {
         }
 
         let mut fields = Vec::new();
-        let mut spread: Option<Box<Expr>> = None;
+        let mut spreads: Vec<StructLiteralSpread> = Vec::new();
         let mut has_trailing_comma = false;
 
         if !self.check(&TokenKind::RBrace) {
             loop {
-                // Functional-update base: `{ ..base, field: v }`. Leading and
-                // single (see WEP: Literal Spread).
+                // Spread element `..base`, in any position (the dead-write /
+                // leading-single rule is applied semantically per literal kind;
+                // see WEP: Literal Spread).
                 if self.check(&TokenKind::DotDotDot) {
                     return Err(self
                         .error_at_span(self.peek().span, "unexpected `...`; did you mean `..`?"));
@@ -5816,20 +5817,12 @@ impl Parser {
                     let dotdot_span = self.peek().span;
                     self.advance();
                     let base = self.parse_expr()?;
-                    if spread.is_some() {
-                        return Err(self.error_at_span(
-                            dotdot_span,
-                            "at most one `..` spread is allowed per struct literal",
-                        ));
-                    }
-                    if !fields.is_empty() {
-                        return Err(self.error_at_span(
-                            dotdot_span,
-                            "a field before the `..` spread is overwritten and never used; \
-                             put the `..` spread first",
-                        ));
-                    }
-                    spread = Some(Box::new(base));
+                    let spread_span = dotdot_span.merge(&base.span());
+                    spreads.push(StructLiteralSpread {
+                        expr: Box::new(base),
+                        field_pos: fields.len(),
+                        span: spread_span,
+                    });
                     if !self.check(&TokenKind::Comma) {
                         break;
                     }
@@ -5906,7 +5899,7 @@ impl Parser {
             name_id,
             name_span,
             fields,
-            spread,
+            spreads,
             has_trailing_comma,
             span: start_span.merge(&end_span),
         })))

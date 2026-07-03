@@ -1,0 +1,12 @@
+// `{ ..a, ..b }` with same-typed bases: `a` is fully overwritten by `b`.
+struct CP { x: i32, y: i32 }
+
+test "fully shadowed spread is an error" {
+    let a = CP { x: 1, y: 2 };
+    let b = CP { x: 3, y: 4 };
+    let c = { ..a, ..b };
+    assert c.x == 3;
+}
+
+__DATA__
+{"test": {}, "compile_error": "fully overwritten by a later spread"}

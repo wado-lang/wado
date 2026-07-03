@@ -1,0 +1,9 @@
+// A spread base that is neither a struct nor a map has nothing to contribute.
+test "spread of a non-struct is an error" {
+    let n = 5;
+    let c = { ..n, x: 1 };
+    assert c.x == 1;
+}
+
+__DATA__
+{"test": {}, "compile_error": "requires a struct or a key-value map"}

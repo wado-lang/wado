@@ -792,8 +792,8 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
                 v.visit_id(field.name_id, field.name_span);
                 v.visit_expr(&field.value);
             }
-            if let Some(base) = &s.spread {
-                v.visit_expr(base);
+            for spread in &s.spreads {
+                v.visit_expr(&spread.expr);
             }
         }
         Expr::TupleLiteral(t) => {
@@ -2294,8 +2294,8 @@ impl Expr {
                 for f in &mut sl.fields {
                     f.value.substitute_idents(subs);
                 }
-                if let Some(base) = &mut sl.spread {
-                    base.substitute_idents(subs);
+                for spread in &mut sl.spreads {
+                    spread.expr.substitute_idents(subs);
                 }
             }
             Expr::Range(r) => {
@@ -2348,13 +2348,26 @@ pub struct StructLiteralExpr {
     /// Always `Some` iff `name` is `Some`.
     pub name_span: Option<Span>,
     pub fields: Vec<StructLiteralField>,
-    /// Functional-update base: `S { ..base, field: v }`. Supplies every declared
-    /// field the literal does not list explicitly. Leading and single for a
-    /// named struct literal (see WEP: Literal Spread).
-    pub spread: Option<Box<Expr>>,
+    /// Functional-update / spread bases (`{ ..a, field: v, ..b }`), in source
+    /// order. Each supplies the fields the literal does not list explicitly.
+    /// A named struct literal permits a single leading spread; anonymous
+    /// composition and key-value merge permit any position and multiple
+    /// spreads (see WEP: Literal Spread).
+    pub spreads: Vec<StructLiteralSpread>,
     /// Whether the original source had a trailing comma (for formatting purposes).
     /// Multiline formatting is used when this is true.
     pub has_trailing_comma: bool,
+    pub span: Span,
+}
+
+/// A `..base` spread element inside a struct/key-value literal.
+#[derive(Debug, Clone)]
+pub struct StructLiteralSpread {
+    /// The base value whose fields fill the literal.
+    pub expr: Box<Expr>,
+    /// Number of explicit fields appearing before this spread in source order.
+    /// Used to reconstruct the source-order member sequence.
+    pub field_pos: usize,
     pub span: Span,
 }
 

@@ -87,10 +87,15 @@ changing the semantics of the first two.
       field projection, once-evaluated base, generic inference from base, and the
       cross-module read-reachability guard.
 - [x] Key-value merge (`{ ..base, "k": v }`): `KeyValueLiteralBuilder::insert_all`
-      seeds the builder with `base` before the explicit inserts, so explicit keys
-      override. Currently leading-single like the struct case; relaxing key-value
-      spread to any position / multiple sources (its full JS form) is a follow-up.
-- [ ] Anonymous composition (union synthesis).
+      seeds the builder with each spread before the following inserts, so later
+      members override. Any position and multiple spreads are allowed.
+- [x] Anonymous composition (`{ ..a, ..b, field: v }`): the anonymous struct type
+      is the union of the spread bases' and explicit fields (source order,
+      last-wins on collision), synthesized and auto-`Serialize`d like any
+      anonymous struct. The parser accepts spreads in any position / multiple; the
+      dead-write rule and named-struct leading-single restriction are applied
+      semantically. Generic-instance bases are supported (field types are
+      substituted with the instance's type arguments).
 
 ## Consequences
 

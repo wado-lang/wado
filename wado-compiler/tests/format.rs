@@ -465,6 +465,16 @@ fn test_format_struct_spread_roundtrips() {
     assert_eq!(formatted, formatted2, "idempotent");
 }
 
+/// Anonymous composition round-trips with spreads interleaved by position.
+#[test]
+fn test_format_anon_composition_roundtrips() {
+    let inline = "fn run() {\n    let c = { ..a, x: 1, ..b };\n}\n";
+    let formatted = wado_compiler::format(inline).expect("format failed");
+    assert_eq!(formatted, inline);
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "idempotent");
+}
+
 /// A flat struct literal that fits stays inline.
 #[test]
 fn test_format_flat_struct_stays_inline() {
