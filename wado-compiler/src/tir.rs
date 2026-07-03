@@ -2766,9 +2766,8 @@ impl TypeTable {
                 assoc_name
             )),
             ResolvedType::TypePack { name, .. } => TypeNameInfo::Named(format!("..{name}")),
-            ResolvedType::Never | ResolvedType::Unknown | ResolvedType::Error => {
-                TypeNameInfo::Unknown
-            }
+            ResolvedType::Never => TypeNameInfo::Named("!".to_string()),
+            ResolvedType::Unknown | ResolvedType::Error => TypeNameInfo::Unknown,
         }
     }
 }
@@ -4189,6 +4188,7 @@ pub struct TirResource {
     pub name: String,
     pub visibility: crate::ast::Visibility,
     pub operations: Vec<TirEffectOp>,
+    pub is_generic: bool,
     pub span: Span,
 }
 
