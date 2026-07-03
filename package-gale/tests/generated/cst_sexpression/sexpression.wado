@@ -776,27 +776,30 @@ fn cst_to_string_tree_impl(
     }
     let mut c = i + 1;
     while c < s.next[i] {
-        let t = s.tag[c];
-        if t == E_OPEN {
-            out.push_str(&" ");
-            cst_to_string_tree_impl(out, s, c, toks, rule_names, token_names);
-            c = s.next[c];
-        } else if t == E_TOK {
-            if !toks.is_empty_text(s.a[c]) {
+        match s.tag[c] {
+            E_OPEN => {
                 out.push_str(&" ");
+                cst_to_string_tree_impl(out, s, c, toks, rule_names, token_names);
+                c = s.next[c];
+            },
+            E_TOK => {
+                if !toks.is_empty_text(s.a[c]) {
+                    out.push_str(&" ");
+                    toks.push_token_text(out, s.a[c]);
+                }
+                c += 1;
+            },
+            E_MISS => {
+                out.push_str(&` <missing {token_names[toks.kind_at(s.a[c])]}>`);
+                c += 1;
+            },
+            E_SKIP => {
+                out.push_str(&" <skip ");
                 toks.push_token_text(out, s.a[c]);
-            }
-            c += 1;
-        } else if t == E_MISS {
-            out.push_str(&` <missing {token_names[toks.kind_at(s.a[c])]}>`);
-            c += 1;
-        } else if t == E_SKIP {
-            out.push_str(&" <skip ");
-            toks.push_token_text(out, s.a[c]);
-            out.push_str(&">");
-            c += 1;
-        } else {
-            c += 1;
+                out.push_str(&">");
+                c += 1;
+            },
+            _ => c += 1,
         }
     }
     out.push_str(&")");
@@ -1083,29 +1086,33 @@ fn render_builder_node(
     }
     let mut c = i + 1;
     while c < tag.len() {
-        let t = tag[c];
-        if t == E_OPEN {
-            out.push_str(&" ");
-            c = render_builder_node(out, tag, a, c, toks, rule_names, token_names);
-        } else if t == E_CLOSE {
-            out.push_str(&")");
-            return c + 1;
-        } else if t == E_TOK {
-            if !toks.is_empty_text(a[c]) {
+        match tag[c] {
+            E_OPEN => {
                 out.push_str(&" ");
+                c = render_builder_node(out, tag, a, c, toks, rule_names, token_names);
+            },
+            E_CLOSE => {
+                out.push_str(&")");
+                return c + 1;
+            },
+            E_TOK => {
+                if !toks.is_empty_text(a[c]) {
+                    out.push_str(&" ");
+                    toks.push_token_text(out, a[c]);
+                }
+                c += 1;
+            },
+            E_MISS => {
+                out.push_str(&` <missing {token_names[toks.kind_at(a[c])]}>`);
+                c += 1;
+            },
+            E_SKIP => {
+                out.push_str(&" <skip ");
                 toks.push_token_text(out, a[c]);
-            }
-            c += 1;
-        } else if t == E_MISS {
-            out.push_str(&` <missing {token_names[toks.kind_at(a[c])]}>`);
-            c += 1;
-        } else if t == E_SKIP {
-            out.push_str(&" <skip ");
-            toks.push_token_text(out, a[c]);
-            out.push_str(&">");
-            c += 1;
-        } else {
-            c += 1;
+                out.push_str(&">");
+                c += 1;
+            },
+            _ => c += 1,
         }
     }
     out.push_str(&")");
