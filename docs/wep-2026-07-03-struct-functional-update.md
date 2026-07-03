@@ -59,21 +59,24 @@ lowering differs.
 `..base` is an element of a `{ … }` literal's element list, in **any position**:
 
 ```wado
-S { a: expr, ..base }        // tail
-S { ..base, a: expr }        // head
-S { a: expr, ..base, b: e }  // between
+S { a: expr, ..base }
 ```
 
-Rules:
+The grammar matches Rust's Functional Record Update (FRU) exactly:
 
+- `..base` is the **last** element, after all explicit members. Head or middle
+  position is a parse error.
 - **At most one** `..base` per literal.
-- Position is free (see [Precedence](#precedence-explicit-always-wins) for why).
-- A trailing comma after `..base` is allowed, matching every other element
-  (`{ ..base, }`); the only restriction is the single-spread rule.
+- **No trailing comma** after `..base` (`{ a: 1, ..base, }` is a parse error).
 - `base` is an arbitrary expression whose type is the same as the literal being
   constructed (see [Type rules](#type-rules)).
 - `..` is the existing single `DotDot` token; `{ ...base }` is the same
   "did you mean `..`?" parse error as elsewhere.
+
+We match Rust for structs deliberately: it is the familiar spelling, and because
+precedence is by explicitness (below), a leading `..base` would carry no extra
+meaning — so there is nothing to gain by diverging. The key-value literal reuses
+the same tail-only grammar for one consistent rule.
 
 It works with named and implicit (anonymous) struct literals, and with key-value
 literals, taking the target type from context exactly as today:
@@ -85,16 +88,15 @@ let m2: TreeMap<String, i32> = { "a": 1, ..m };   // key-value
 
 ### Precedence — explicit always wins
 
-For a duplicated member, the **explicitly listed** value wins; `..base` only
-supplies members whose key/field is **not** listed explicitly. Precedence is by
-explicitness, **not by source order** — Wado does not adopt JS's positional
-last-wins.
+The **explicitly listed** value wins; `..base` only supplies members whose
+key/field is **not** listed explicitly. Precedence is by explicitness, **not by
+source order** — even though `..base` is written last, it does not override an
+explicit member. This is exactly Rust's FRU rule.
 
-This single rule is what lets `..base` sit anywhere: since a member is either
-explicit or from `base` (never a race between them), moving `..base` around the
-literal cannot change the result. It is also what keeps the struct case correct:
-`{ min_prec_arg: Some(prec), ..rc }` and `{ ..rc, min_prec_arg: Some(prec) }`
-both mean "`min_prec_arg` explicit, every other field from `rc`."
+For structs this is automatic: a field cannot be both explicit and repeated, so
+`..base` fills the complement and there is never a conflict. For key-value
+literals the rule matters, because an explicit key can also exist in `base`:
+`{ "a": 1, ..m }` yields `"a" = 1` (explicit), every other key from `m`.
 
 Trade-off (key-value only): you cannot express "let `base` override my explicit
 keys." That base-wins merge is rare and belongs to an explicit method
@@ -245,10 +247,11 @@ So the syntax and AST change once and both paths pick it up.
 Pipeline touchpoints:
 
 - `ast.rs` — add `spread: Option<Box<Expr>>` (plus its span) to
-  `StructLiteralExpr`, independent of the element list so its position does not
-  matter. Extend the `Expr` walkers/rewriters to visit the spread operand.
-- `parser.rs` — in `parse_struct_literal`, accept a `..expr` element anywhere in
-  the field list; enforce the single-spread rule; store it in the new field.
+  `StructLiteralExpr` for the trailing base. Extend the `Expr` walkers/rewriters
+  to visit the spread operand.
+- `parser.rs` — in `parse_struct_literal`, after the field list accept a
+  trailing `..expr`; enforce last-position, the single-spread rule, and
+  no-trailing-comma; store it in the new field.
 - `elaborator/expr.rs` (`resolve_struct_literal` / the anonymous path) —
   resolve `base`, typecheck it against the literal's type, feed its type into
   type-argument inference, and for the struct case suppress the missing-field
@@ -277,15 +280,14 @@ literals), `docs/cheatsheet.md`, and the WEP index in `docs/CLAUDE.md`.
 ### Tests (red/green TDD)
 
 - Struct: named and implicit literals; overriding zero / one / several fields;
-  `..base` at head, tail, and between fields (identical result); `base` a
-  non-trivial expression evaluated once (observable via a side-effecting helper);
-  generic struct with type args inferred from `base`; `..base` overriding a field
-  with a default; cross-module `..base` over `pub` fields (ok) and a private
-  field (error).
-- Key-value: `{ "k": v, ..m }` and `{ ..m, "k": v }` (explicit-wins, same
-  result); seeding from an empty base; overriding an existing key; type inference
-  from `base`.
-- Parse errors: two spreads in one literal; `{ ...base }`.
+  `base` a non-trivial expression evaluated once (observable via a side-effecting
+  helper); generic struct with type args inferred from `base`; `..base`
+  overriding a field with a default; cross-module `..base` over `pub` fields (ok)
+  and a private field (error).
+- Key-value: `{ "k": v, ..m }` (explicit `"k"` wins over `m`'s `"k"`); seeding
+  from an empty base; type inference from `base`.
+- Parse errors: `..base` not last (`{ ..base, a: 1 }`); trailing comma after the
+  spread (`{ a: 1, ..base, }`); two spreads in one literal; `{ ...base }`.
 - `format.rs` fixtures for the formatter layouts.
 
 ## Consequences
