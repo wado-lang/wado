@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783040166791,
+  "lastUpdate": 1783069641813,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -37501,6 +37501,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1fe2c8f9d061da0393cffd306079b5a46a670cab"
         },
         "date": 1783040166111,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15323,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288526,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b673e4745ed8de864ad6099dc6dba8a6480f034c",
+          "message": "Merge pull request #1502 from wado-lang/claude/kiln-protocol-improvements-e4wuza\n\nfeat(kiln)!: revise the generator options protocol (CBOR, optional Options)",
+          "timestamp": "2026-07-03T17:58:28+09:00",
+          "tree_id": "cf2bfaccfd92a81c0cd71be495c99d8adf046e13",
+          "url": "https://github.com/wado-lang/wado/commit/b673e4745ed8de864ad6099dc6dba8a6480f034c"
+        },
+        "date": 1783069641449,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
