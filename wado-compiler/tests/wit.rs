@@ -9,7 +9,7 @@
 mod common;
 
 use common::InMemoryHost;
-use wado_compiler::semantics::semantics;
+use wado_compiler::semantics::{semantics, semantics_for_world};
 use wado_compiler::wit_emit::{WitEmitOptions, WitScope, emit_wit_text};
 use wado_compiler::{OptLevel, dump_with_host_and_world};
 
@@ -81,6 +81,52 @@ fn check(source: &str, expected: &str) {
     resolve
         .push_str("emitted.wit", &text)
         .expect("emitted WIT failed to re-parse");
+}
+
+/// Regression for issue #1478: WIT emission re-derives `Semantics` off the
+/// codegen path, so it must apply the Kiln `Request<T>` adapter for the
+/// generator world. Otherwise the `generate` export exposes the generic
+/// `Request<Options>`, which is not representable in WIT, and the whole
+/// component-type section is dropped. `semantics_for_world` runs the adapter,
+/// leaving the representable `generate(req: raw-request)` signature.
+#[test]
+fn kiln_generator_world_emits_raw_request_not_generic_request() {
+    const GENERATOR: &str = r#"
+use { Request, Response, Error } from "core:kiln";
+
+pub struct Options {
+    pub verbose: bool,
+}
+
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
+    let _ = req.options.verbose;
+    return Result::Ok(Response { files: [] });
+}
+"#;
+    let host = InMemoryHost::new();
+    let sem = block_on(semantics_for_world(
+        GENERATOR,
+        &host,
+        Some("entry.wado"),
+        Some("core:kiln/generator"),
+    ));
+    assert!(sem.is_complete(), "generator semantics did not complete");
+    let opts = WitEmitOptions {
+        scope: WitScope::Local,
+        world_fq: "core:kiln/generator".to_string(),
+        default_interface_name: "entry".to_string(),
+        world_imports: Vec::new(),
+    };
+    let text = emit_wit_text(&sem, &opts)
+        .expect("emit_wit_text must succeed for the generator world (issue #1478)");
+    assert!(
+        text.contains("req: raw-request"),
+        "generate must export the representable raw-request param:\n{text}"
+    );
+    assert!(
+        !text.contains("Request<") && !text.contains("request<options"),
+        "the generic Request must not leak into WIT:\n{text}"
+    );
 }
 
 #[test]

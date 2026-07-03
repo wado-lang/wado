@@ -358,9 +358,16 @@ struct CompileArtifacts {
 /// every transitively imported `.wado`. Without that sidecar an edit
 /// to a dep (e.g. `parser_gen.wado` behind a `generator.wado` entry)
 /// would silently keep returning stale wasm.
+/// Generator-component ABI generation. The compiled component embeds the
+/// `core:kiln` world types, so bump this on any `core:kiln/generator.wit` /
+/// `emit_kiln_world_types` change to invalidate caches built against the old
+/// ABI even when the generator source is unchanged. `v2`: `raw-request.options`
+/// became `list<u8>` (CBOR).
+const KILN_GENERATOR_ABI_TAG: &[u8] = b"kiln-generator-v2\n";
+
 fn stable_id_for_local(path_str: &str, content: &[u8]) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(b"kiln-generator-v1\n");
+    hasher.update(KILN_GENERATOR_ABI_TAG);
     hasher.update(path_str.as_bytes());
     hasher.update(b"\n");
     hasher.update(content);

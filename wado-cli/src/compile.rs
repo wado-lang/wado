@@ -1040,7 +1040,13 @@ async fn embed_wit_section(
         project,
         &base_path,
     );
-    let sem = wado_compiler::semantics(&source, &host, Some(input)).await;
+    let sem = wado_compiler::semantics_for_world(
+        &source,
+        &host,
+        Some(input),
+        opts.target_world.as_deref(),
+    )
+    .await;
     if !sem.is_complete() {
         let msg = "WIT analysis did not complete";
         if explicit {

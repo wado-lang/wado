@@ -78,7 +78,7 @@ pub use logger::{Bail, Logger};
 pub use remarks::{Remark, collect_value_copy_remarks};
 pub use semantics::{
     Cursor, Definition, Semantics, SymbolResolveError, lex_error_diagnostic,
-    parse_error_diagnostic, semantics, semantics_of,
+    parse_error_diagnostic, semantics, semantics_for_world, semantics_of,
 };
 
 #[cfg(test)]

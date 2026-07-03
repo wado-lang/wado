@@ -114,12 +114,14 @@ pub enum CanonicalValue {
 /// Locate `pub struct Options` in the generator's entry module and describe
 /// it as an [`OptionsDescriptor`].
 ///
+/// `Options` is optional: a generator with no configuration omits it and gets
+/// an empty descriptor. `generate` is always required.
+///
 /// # Errors
-/// Diagnostics are batched: a single bad field does not prevent the rest of
-/// the struct from being reported. The returned `Err` variant is only taken
-/// when the `Options` struct is missing or the generator is missing its
-/// `generate` function — shape-level failures all come back as
-/// [`Code::GeneratorOptionsUnsupported`] diagnostics.
+/// Returns `Err` when the module has no TIR or does not export `generate`.
+/// Shape-level failures inside a present `Options` come back as batched
+/// [`Code::GeneratorOptionsUnsupported`] diagnostics (a single bad field does
+/// not hide the rest).
 pub fn extract_options_descriptor(
     sem: &Semantics,
     module: &ModuleSource,
@@ -139,28 +141,6 @@ pub fn extract_options_descriptor(
         return Err(diagnostics);
     };
 
-    let Some(options_struct) = tir_module.find_struct("Options") else {
-        diagnostics.push(Diagnostic {
-            severity: Severity::Error,
-            code: Code::GeneratorOptionsUnsupported,
-            message: format!(
-                "kiln: generator {:?} does not declare `pub struct Options`",
-                module.diagnostic_filename()
-            ),
-            span: None,
-        });
-        return Err(diagnostics);
-    };
-
-    if !options_struct.visibility.is_public() {
-        diagnostics.push(Diagnostic {
-            severity: Severity::Error,
-            code: Code::GeneratorOptionsUnsupported,
-            message: "kiln: `Options` struct must be declared `pub`".to_string(),
-            span: Some(span_of(&options_struct.span, module)),
-        });
-    }
-
     if tir_module.find_function("generate").is_none() {
         diagnostics.push(Diagnostic {
             severity: Severity::Error,
@@ -170,6 +150,20 @@ pub fn extract_options_descriptor(
                 module.diagnostic_filename()
             ),
             span: None,
+        });
+        return Err(diagnostics);
+    }
+
+    let Some(options_struct) = tir_module.find_struct("Options") else {
+        return Ok(OptionsDescriptor { fields: vec![] });
+    };
+
+    if !options_struct.visibility.is_public() {
+        diagnostics.push(Diagnostic {
+            severity: Severity::Error,
+            code: Code::GeneratorOptionsUnsupported,
+            message: "kiln: `Options` struct must be declared `pub`".to_string(),
+            span: Some(span_of(&options_struct.span, module)),
         });
     }
 
@@ -421,6 +415,15 @@ fn evaluate_literal(
             Some(CanonicalValue::U64(*value))
         }
         (TirExprKind::FloatLiteral { value, .. }, OptionsType::F32 | OptionsType::F64) => {
+            if !value.is_finite() {
+                push_unsupported(
+                    diagnostics,
+                    module,
+                    field_name,
+                    &format!("default float value must be finite, got {value}"),
+                );
+                return None;
+            }
             Some(CanonicalValue::F64(*value))
         }
         (TirExprKind::StringLiteral(s), OptionsType::String) => {

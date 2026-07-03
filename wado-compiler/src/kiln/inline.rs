@@ -17,7 +17,7 @@ use crate::ast::{AttrValue, Module, UseDecl};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::IndexMap;
 
-use super::cache::{encode_options_canonical, hex_digest};
+use super::cache::{empty_options_canonical, encode_options_canonical, hex_digest};
 use super::invocation::{DeclSite, GeneratorModule, Invocation, InvocationPath};
 use super::options::OptionsDescriptor;
 use super::options_check::{CanonicalOptions, validate};
@@ -513,7 +513,8 @@ fn encode_options(
 ) -> Vec<u8> {
     let key = module_key(module);
     let Some(descriptor) = descriptors.get(&key) else {
-        return Vec::new();
+        // The descriptor is filled in later by the CLI provider.
+        return empty_options_canonical();
     };
 
     let canonical: CanonicalOptions = match validate(descriptor, options_value) {
@@ -525,7 +526,7 @@ fn encode_options(
                 }
             }
             errors.append(&mut errs);
-            return Vec::new();
+            return empty_options_canonical();
         }
     };
     encode_options_canonical(&canonical)

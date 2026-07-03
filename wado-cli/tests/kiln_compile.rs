@@ -61,6 +61,18 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 }
 "#;
 
+/// No-options ergonomic form: the author declares no `Options` struct and
+/// writes the bare `fn generate(req: Request)`. `Request`'s default type
+/// argument is `NoOptions`, so the adapter binds an empty options blob.
+const NO_OPTIONS_GENERATOR: &str = r#"
+use { Request, Response, Error } from "core:kiln";
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    let _ = req.primary.path;
+    return Result::Ok(Response { files: [] });
+}
+"#;
+
 fn unique_tmp(label: &str) -> PathBuf {
     std::env::temp_dir().join(format!("wado-{label}-{}", std::process::id()))
 }
@@ -214,6 +226,45 @@ fn adapter_generator_compiles_like_raw_request_generator() {
         component.wasm.len() > 100,
         "adapter generator must produce a non-trivial component"
     );
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn no_options_generator_compiles_and_runs() {
+    let tmp = unique_tmp("kiln-compile-no-options");
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).unwrap();
+
+    let gen_path = tmp.join("no_options_generator.wado");
+    std::fs::write(&gen_path, NO_OPTIONS_GENERATOR).unwrap();
+
+    let provider = CliGeneratorProvider::new(tmp.clone());
+    let module =
+        GeneratorModule::LocalPath(InvocationPath::normalize("./no_options_generator.wado"));
+    let resolved = runtime()
+        .block_on(async { provider.resolve(&module).await })
+        .expect("no-options generator must compile");
+    assert!(
+        resolved
+            .descriptor
+            .as_ref()
+            .is_none_or(|d| d.fields.is_empty()),
+        "no-options generator must have no option fields"
+    );
+
+    let host = FilesystemCompilerHost::with_log_level(tmp.clone(), LogLevel::Off);
+    let request = GeneratorRequest {
+        primary: GeneratorInputFile {
+            path: "schema.proto".to_string(),
+            content: "syntax = \"proto3\";".to_string(),
+        },
+        inputs: vec![],
+        options: vec![0xa0], // empty CBOR map
+    };
+    runtime()
+        .block_on(async { host.run_generator(&resolved.wasm, request).await })
+        .expect("no-options generator must run");
 
     let _ = std::fs::remove_dir_all(&tmp);
 }
@@ -626,7 +677,8 @@ fn host_caches_compiled_component_across_run_generator_calls() {
             content: "syntax = \"proto3\";".to_string(),
         },
         inputs: vec![],
-        options: r#"{"verbose": false}"#.to_string(),
+        // CBOR for `{ verbose: false }`.
+        options: vec![0xa1, 0x67, b'v', b'e', b'r', b'b', b'o', b's', b'e', 0xf4],
     };
 
     // First call: cranelift AOT runs, count goes to 1.
@@ -694,7 +746,8 @@ fn shared_kiln_cache_compiles_generator_once_across_hosts() {
             content: "syntax = \"proto3\";".to_string(),
         },
         inputs: vec![],
-        options: r#"{"verbose": false}"#.to_string(),
+        // CBOR for `{ verbose: false }`.
+        options: vec![0xa1, 0x67, b'v', b'e', b'r', b'b', b'o', b's', b'e', 0xf4],
     };
 
     let cache = std::sync::Arc::new(KilnComponentCache::new());

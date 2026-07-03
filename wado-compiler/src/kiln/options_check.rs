@@ -128,7 +128,18 @@ fn check_value(
             }
             Some(CanonicalValue::U64(v))
         }
-        (OptionsType::F32 | OptionsType::F64, AttrValue::Float(f)) => Some(CanonicalValue::F64(*f)),
+        (OptionsType::F32 | OptionsType::F64, AttrValue::Float(f)) => {
+            if !f.is_finite() {
+                diagnostics.push(Diagnostic {
+                    severity: Severity::Error,
+                    code: Code::GeneratorOptionsInvalid,
+                    message: format!("kiln: `{path}` float value must be finite, got {f}"),
+                    span: None,
+                });
+                return None;
+            }
+            Some(CanonicalValue::F64(*f))
+        }
         (OptionsType::F32 | OptionsType::F64, AttrValue::Int(n)) => {
             Some(CanonicalValue::F64(*n as f64))
         }
@@ -318,6 +329,17 @@ mod tests {
         };
         let err = validate(&desc, None).unwrap_err();
         assert!(err.iter().any(|d| d.message.contains("required")));
+    }
+
+    #[test]
+    fn non_finite_float_rejected() {
+        let desc = OptionsDescriptor {
+            fields: vec![field("ratio", OptionsType::F64, None)],
+        };
+        let mut obj: IndexMap<String, AttrValue> = IndexMap::default();
+        obj.insert("ratio".to_string(), AttrValue::Float(f64::INFINITY));
+        let err = validate(&desc, Some(&AttrValue::Object(obj))).unwrap_err();
+        assert!(err.iter().any(|d| d.message.contains("must be finite")));
     }
 
     #[test]

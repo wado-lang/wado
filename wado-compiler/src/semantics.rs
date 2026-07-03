@@ -930,6 +930,22 @@ pub async fn semantics<H: CompilerHost>(
     host: &H,
     filename: Option<&str>,
 ) -> Semantics {
+    semantics_for_world(source, host, filename, None).await
+}
+
+/// [`semantics`] with the target world threaded through, so the Kiln
+/// `Request<T>` adapter rewrite (`compile_with_options` phase 1b) is applied
+/// before analysis when `target_world == "core:kiln/generator"`. WIT emission
+/// re-derives `Semantics` off the codegen path and must see the same rewritten
+/// `generate(req: raw-request)` signature the component exports; without the
+/// rewrite it sees the un-representable generic `Request<Options>` and skips
+/// the component-type section (issue #1478).
+pub async fn semantics_for_world<H: CompilerHost>(
+    source: &str,
+    host: &H,
+    filename: Option<&str>,
+    target_world: Option<&str>,
+) -> Semantics {
     let parsed = crate::parse(source);
     // Surface every recovered lex/parse error, then analyze the partial AST
     // so queries still resolve in the regions outside the error. If load/bind
@@ -955,7 +971,14 @@ pub async fn semantics<H: CompilerHost>(
         // General entry: build TIR so consumers that read `tir_modules`
         // (kiln options extraction) work. The LSP engine uses its own
         // annotate-only path (`semantics_of(.., build_tir = false)`).
-        Ok(loaded) => semantics_of(loaded, host, LogLevel::default(), true),
+        Ok(mut loaded) => {
+            crate::kiln::import_check::inject_kiln_request_adapter(
+                target_world,
+                &loaded.entry_module_source,
+                &mut loaded.modules,
+            );
+            semantics_of(loaded, host, LogLevel::default(), true)
+        }
         Err(e) => {
             let logger = Logger::new(host, LogLevel::default());
             if let Some(f) = filename {

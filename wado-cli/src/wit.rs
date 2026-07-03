@@ -127,7 +127,9 @@ pub async fn run(opts: WitOptions) -> Result<(), CliExit> {
     let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
     let host = FilesystemCompilerHost::new(base_path);
 
-    let sem = wado_compiler::semantics(&source, &host, Some(&input)).await;
+    let sem =
+        wado_compiler::semantics_for_world(&source, &host, Some(&input), opts.world.as_deref())
+            .await;
     if !sem.is_complete() {
         // Diagnostics are already emitted by the host; signal silently.
         return Err(CliExit::silent_failure(1));

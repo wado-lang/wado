@@ -34,7 +34,7 @@ the `core:kiln/generator` world, so authors never write
 `impl Deserialize for Options;` explicitly.
 
 A `Result::Err` return signals a corrupt `options` payload; the
-compiler's caller-side encoder guarantees well-formed JSON, so this
+compiler's caller-side encoder guarantees well-formed CBOR, so this
 branch should only fire if the wire bytes were tampered with
 out-of-band.
 
@@ -62,15 +62,27 @@ response.
 
 ## Structs
 
-### `pub struct Request<T>`
+### `pub struct NoOptions`
+
+The options type of a generator that takes no configuration. It is the
+default type argument of `Request`, so a generator with no `Options`
+struct writes `fn generate(req: Request)` and never mentions options.
+Its CBOR wire form is the empty map, which decodes back into `NoOptions`.
+
+### `pub struct Request<T = NoOptions>`
 
 The typed request a Kiln generator receives after `bind_request` decodes
-the canonical-JSON `options` payload into its typed `Options` struct.
+the CBOR `options` payload into its typed `Options` struct.
 
-The long-term plan is for the compiler to synthesize the decode step
-so authors write `fn generate(req: Request<Options>)` directly; the
-`#[compiler_item("kiln_request")]` attribute is the lookup anchor for
-that future adapter. See the M6.5-stage-2 notes in the WEP.
+`Request<T>` is Wado-only sugar: it never crosses the WIT boundary (the
+wire type is `RawRequest`, whose `options` is an opaque CBOR blob). A
+generic cannot be expressed in a fixed WIT world, so options travel as a
+serialized blob by design rather than as a typed WIT record. The
+compiler rewrites `fn generate(req: Request<T>)` into the `RawRequest` +
+`bind_request::<T>` shape; the `#[compiler_item("kiln_request")]`
+attribute is that rewrite's lookup anchor. `T` defaults to `NoOptions`,
+so a generator that takes no options writes `fn generate(req: Request)`.
+See WEP 2026-04-12 §"Protocol revision v0.2".
 
 #### `primary: InputFile`
 
@@ -117,19 +129,18 @@ whose `options: Options` field is populated from
 `raw-request` is an internal wire-form type and should not
 appear in generator source.
 
-`options` is a canonical JSON string encoding of the user's
+`options` is a deterministic CBOR encoding of the user's
 `options = { ... }` block. The compiler uses the generator's
 typed `Options` descriptor (see `wado-compiler::kiln::options`)
-to encode on the caller side and decode on the generator side.
-Canonical JSON (sorted keys, NFC-normalized strings, fixed
-numeric representation) lets the cache key hash the wire bytes
-directly.
+to encode on the caller side; the generator decodes it with
+`core:cbor::from_bytes`. The same bytes feed the invocation
+cache key directly.
 
 #### `primary: InputFile`
 
 #### `inputs: List<InputFile>`
 
-#### `options: String`
+#### `options: List<u8>`
 
 ### `pub struct OutputFile`
 

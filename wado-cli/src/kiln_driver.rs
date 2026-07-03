@@ -35,8 +35,8 @@ use wado_compiler::compiler_host::{
 use wado_compiler::kiln::DeclSite;
 use wado_compiler::kiln::{
     FileHash, GeneratedHeader, GeneratorModule, Invocation, InvocationPath, OptionsDescriptor,
-    Plan, PlanError, content_hash, encode_options_canonical, file_hash, generator_identity,
-    has_generated_marker, hex_digest, validate_options,
+    Plan, PlanError, content_hash, empty_options_canonical, encode_options_canonical, file_hash,
+    generator_identity, has_generated_marker, hex_digest, validate_options,
 };
 use wado_compiler::{Code, Diagnostic, Severity};
 use wado_manifest::Manifest;
@@ -233,15 +233,10 @@ pub async fn execute_with_mode<H: CompilerHost>(
         inputs.push(file);
     }
 
-    // Canonical options are UTF-8 JSON bytes produced by
-    // `encode_options_canonical`. Converting to `String` at the wire
-    // boundary upholds the invariant; non-UTF-8 here is a compiler bug.
-    let options = String::from_utf8(invocation.options_canonical.clone())
-        .expect("kiln: canonical options must be UTF-8");
     let request = GeneratorRequest {
         primary,
         inputs,
-        options,
+        options: invocation.options_canonical.clone(),
     };
 
     let response = host
@@ -1369,6 +1364,9 @@ fn typed_encode_options<H: CompilerHost>(
 ) {
     let _ = manifest;
     for inv in invocations.iter_mut() {
+        if inv.options_canonical.is_empty() {
+            inv.options_canonical = empty_options_canonical();
+        }
         let descriptor = match lookup_resolved(resolved, &inv.module) {
             Ok(arc) => match &arc.descriptor {
                 Some(d) => d.clone(),
@@ -1675,17 +1673,14 @@ mod tests {
             };
             let host = MockHost::new(&[("schema.proto", b"x"), ("dep.proto", b"y")], Ok(response));
             let mut inv = sample_invocation();
-            // Canonical options travel to the generator as a UTF-8 JSON
-            // string (see WEP §"The `kiln` world"). Use a well-formed
-            // canonical JSON fixture so the UTF-8 invariant holds.
-            inv.options_canonical = br#"{"k":"v"}"#.to_vec();
+            inv.options_canonical = vec![0xa1, 0x61, b'k', 0x61, b'v'];
 
             runtime()
                 .block_on(async { execute(&inv, b"wasm", tmp.path(), &host).await })
                 .unwrap();
             let reqs = host.requests.lock().unwrap();
             assert_eq!(reqs.len(), 1);
-            assert_eq!(reqs[0].options, r#"{"k":"v"}"#);
+            assert_eq!(reqs[0].options, vec![0xa1, 0x61, b'k', 0x61, b'v']);
             assert_eq!(reqs[0].primary.path, "schema.proto");
             assert_eq!(reqs[0].inputs.len(), 1);
             assert_eq!(reqs[0].inputs[0].path, "dep.proto");

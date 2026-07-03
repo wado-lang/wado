@@ -131,17 +131,17 @@ pub fn generate() {}
 }
 
 #[test]
-fn descriptor_missing_options_struct_errors() {
+fn descriptor_missing_options_struct_is_empty() {
+    // `Options` is optional: a generator that only exports `generate` gets an
+    // empty descriptor rather than an error (WEP §"Protocol revision v0.2").
     let source = r"
 pub fn generate() {}
 ";
     let host = InMemoryHost::new();
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
-    let err = extract_options_descriptor(&sem, &entry(&sem)).unwrap_err();
-    assert!(
-        err.iter()
-            .any(|d| d.message.contains("does not declare `pub struct Options`"))
-    );
+    let descriptor =
+        extract_options_descriptor(&sem, &entry(&sem)).expect("missing Options is allowed");
+    assert!(descriptor.fields.is_empty());
 }
 
 #[test]
