@@ -330,7 +330,7 @@ impl Parser {
             return true;
         }
 
-        // Functional-update spread leads the literal: `Name { ..base }`
+        // Leading spread: `Name { ..base }`
         if matches!(after_brace, TokenKind::DotDot) {
             return true;
         }
@@ -3934,7 +3934,7 @@ impl Parser {
             return self.parse_struct_literal(None, start_span);
         }
 
-        // Functional-update spread leads the literal: `{ ..base, "k": v }`.
+        // Leading spread: `{ ..base, "k": v }`
         if self.check(&TokenKind::DotDot) {
             return self.parse_struct_literal(None, start_span);
         }
@@ -5806,9 +5806,8 @@ impl Parser {
 
         if !self.check(&TokenKind::RBrace) {
             loop {
-                // Spread element `..base`, in any position (the dead-write /
-                // leading-single rule is applied semantically per literal kind;
-                // see WEP: Literal Spread).
+                // `..base` is accepted in any position; the elaborator applies
+                // the position/dead-write rule per literal kind.
                 if self.check(&TokenKind::DotDotDot) {
                     return Err(self
                         .error_at_span(self.peek().span, "unexpected `...`; did you mean `..`?"));

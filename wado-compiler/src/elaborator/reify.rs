@@ -4463,9 +4463,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let provided: crate::hashmap::IndexSet<String> =
             struct_lit.fields.iter().map(|f| f.name.clone()).collect();
 
-        // Functional-update: fill every omitted field from `base.field`, binding
-        // a non-trivial `base` to a `__base_N` temporary so it is evaluated once.
-        // Defaults are not consulted when a spread is present.
+        // Fill omitted fields from `base.field` (not defaults), evaluating a
+        // non-trivial `base` once via a `__base_N` temporary.
         let mut spread_binding: Option<(u32, String, TirExpr)> = None;
         if let Some(spread) = struct_lit.spreads.first() {
             let base_expr = self.reify_expr(&spread.expr, ctx, Some(struct_type));
@@ -5999,10 +5998,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         )];
 
-        // --- Members in source order: `__b.insert_all(base)` for each spread and
-        //     `__b.insert_literal("name", value)` for each explicit field. Later
-        //     inserts override earlier ones, giving explicit-over-base and
-        //     last-spread-wins. ---
+        // In source order, `insert_all(base)` per spread and `insert_literal` per
+        // field; later inserts override, giving explicit-over-base / last-wins.
         let insert_method_info = LocalMethodName::new(
             facts.builder_base_name.clone(),
             Some(facts.trait_name.clone()),
@@ -6309,9 +6306,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// A struct value's fields for spread projection: `(name, concrete type,
-    /// declared index)`. Mirrors `Elaborator::spread_struct_fields` so the
-    /// union plan reify replays matches the one resolve recorded.
+    /// A struct value's `(name, concrete type, declared index)` fields. Mirrors
+    /// `Elaborator::spread_struct_fields` so reify's union plan matches resolve's.
     fn spread_base_field_list(&self, type_id: TypeId) -> Vec<(String, TypeId, u32)> {
         let Some((name, module, type_args)) =
             super::expr::peel_to_struct(&self.tysys.type_table.borrow(), type_id)
@@ -6361,23 +6357,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         use super::expr::UnionSource;
         use crate::tir::{TirBlock, TirExprKind, TirStmt, TirStmtKind, TirStructField};
 
-        // Read the registered type back — the deterministic name derived from
-        // reified field types can diverge from annotate's (evaporated coercion
-        // wrappers). `resolve_anonymous_struct_literal` records the synthesised
-        // `__anon_{…}` name on the `GenericInstantiation` slot.
+        // `resolve_anonymous_struct_literal` records the synthesised `__anon_{…}`
+        // name (and the union flag) on the `GenericInstantiation` slot.
         let struct_type = recorded_type;
-        let gi = self.ann_generic_instantiations(struct_lit.id).expect(
-            "resolve_anonymous_struct_literal records the synthesised name on \
-             generic_instantiations for every anonymous struct literal",
-        );
-        let struct_name = gi.mangled_name.expect(
-            "resolve_anonymous_struct_literal records the synthesised name on \
-             generic_instantiations for every anonymous struct literal",
-        );
+        let (struct_name, is_union) = self
+            .ann_generic_instantiations(struct_lit.id)
+            .and_then(|gi| gi.mangled_name.map(|name| (name, gi.is_union)))
+            .expect("every anonymous struct literal records its synthesised name");
 
-        // Only a union composition (`{ ..a, ..b }`) projects from spread bases;
-        // otherwise the literal's own explicit fields are the shape.
-        if !gi.is_union {
+        // Only a composition projects from spread bases; otherwise the explicit
+        // fields are the shape.
+        if !is_union {
             let fields: Vec<TirStructField> = struct_lit
                 .fields
                 .iter()
@@ -6399,11 +6389,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
 
-        // Composition: evaluate every member's subexpression once, in source
-        // order (spreads interleaved with explicit fields), binding each
-        // non-trivial one to a temporary so its effects fire in source order
-        // regardless of the union's field layout. Then assemble the union —
-        // each field taken from its last contributor (`compose_union_plan`).
+        // Evaluate each member once in source order, hoisting non-trivial ones to
+        // temporaries so effects fire in source order regardless of the union's
+        // field layout, then assemble the union from the last contributor.
         let mut stmts: Vec<TirStmt> = Vec::new();
         let mut base_refs: Vec<Option<TirExpr>> = vec![None; struct_lit.spreads.len()];
         let mut base_types: Vec<TypeId> =
@@ -6485,9 +6473,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Bind `expr` to a fresh `{prefix}_N` temporary (so it evaluates once, in
-    /// place) unless it is already a trivial place (a local), pushing the `let`
-    /// onto `stmts`. Returns a reference to the value.
+    /// Bind `expr` to a fresh `{prefix}_N` temporary (pushed onto `stmts`) so it
+    /// evaluates once in place, unless it is already a local. Returns a reference.
     fn hoist_once(
         &mut self,
         ctx: &mut FunctionContext,

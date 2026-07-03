@@ -2422,7 +2422,7 @@ impl<'a> Unparser<'a> {
         // source asked for it (trailing comma), when a field value is a nested
         // container (depth rule), or when more than one field bears a call. A
         // flat, single-call-at-most struct is inline-first and only wraps on
-        // width. Spread members (`..base`) count too.
+        // width.
         let member_count = s.fields.len() + s.spreads.len();
         let has_container = s.fields.iter().any(|f| expr_is_container(&f.value));
         let call_fields = s.fields.iter().filter(|f| contains_call(&f.value)).count()

@@ -2348,11 +2348,8 @@ pub struct StructLiteralExpr {
     /// Always `Some` iff `name` is `Some`.
     pub name_span: Option<Span>,
     pub fields: Vec<StructLiteralField>,
-    /// Functional-update / spread bases (`{ ..a, field: v, ..b }`), in source
-    /// order. Each supplies the fields the literal does not list explicitly.
-    /// A named struct literal permits a single leading spread; anonymous
-    /// composition and key-value merge permit any position and multiple
-    /// spreads (see WEP: Literal Spread).
+    /// Spread bases (`{ ..a, field: v, ..b }`) in source order, each supplying
+    /// the fields the literal does not list explicitly. See WEP: Literal Spread.
     pub spreads: Vec<StructLiteralSpread>,
     /// Whether the original source had a trailing comma (for formatting purposes).
     /// Multiline formatting is used when this is true.
@@ -2363,26 +2360,23 @@ pub struct StructLiteralExpr {
 /// A `..base` spread element inside a struct/key-value literal.
 #[derive(Debug, Clone)]
 pub struct StructLiteralSpread {
-    /// The base value whose fields fill the literal.
     pub expr: Box<Expr>,
-    /// Number of explicit fields appearing before this spread in source order.
-    /// Used to reconstruct the source-order member sequence.
+    /// Explicit fields appearing before this spread in source order.
     pub field_pos: usize,
     pub span: Span,
 }
 
-/// A struct/key-value literal member in source order, carrying its index into
-/// the owning `StructLiteralExpr`'s `spreads` / `fields` list.
+/// A struct/key-value literal member in source order, with its index into the
+/// owning `StructLiteralExpr`'s `spreads` / `fields` list.
 pub enum LiteralMember<'a> {
     Spread(usize, &'a StructLiteralSpread),
     Field(usize, &'a StructLiteralField),
 }
 
 impl StructLiteralExpr {
-    /// Members (spreads interleaved with explicit fields) in the exact source
-    /// order the parser recorded via `field_pos`. Every pass that walks members
-    /// — resolve, reify, key-value reify, unparse — must use this single order
-    /// so last-contributor-wins / insert order stay in lockstep.
+    /// Members in source order (spreads interleaved with fields via `field_pos`).
+    /// Every pass that walks members shares this order so last-wins / insert
+    /// order stay in lockstep.
     pub fn members(&self) -> Vec<LiteralMember<'_>> {
         let mut out = Vec::with_capacity(self.fields.len() + self.spreads.len());
         let mut si = 0;
