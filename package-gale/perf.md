@@ -82,8 +82,8 @@ Result vs the old node tree (dev host, `benchmark-syntax-highlight`):
 | `null` (no GC)      |       8.0 |        5.8 |          ~1.4× |
 | GC portion          |      21.5 |        4.1 | **~5.2× less** |
 
-The residual ~4.1 ms GC is highlight's own captures/HTML allocation (see
-"What's next: HTML render"), not the CST — `sqlite_parse` (build-then-discard,
+The residual ~4.1 ms GC is highlight's own captures/HTML allocation (the profile
+below and "What's next: Highlight"), not the CST — `sqlite_parse` (build-then-discard,
 no highlight) is ~4.4 ms/iter and did not regress. One known transient:
 `TreeBuilder::finish` copies the `tag`/`a`/`alt` columns into the store because
 Wado has no by-value `self` / move (methods are `&self`/`&mut self`); the copy
@@ -110,48 +110,69 @@ is exact-sized, dies immediately, and is free under `copying`.
   residual cost of even flat resident data is a Wado-runtime GC characteristic,
   tracked outside Gale.
 
-### Pre-flat-CST profile (historical — the diagnosis that drove the rewrite)
+### Live profile (post-flat-CST, `syntax_highlight`, 3 runs merged, 4123 leaf samples @1 ms)
 
-This ~28 ms profile is from the **old node tree**; the CST-build/walk frames it
-flagged (`highlight_walk` over `CstNode`, `tree_build_node`, `List<CstChild>`
-push) are now **retired**. Kept as the diagnosis that motivated the flat store; a
-fresh post-flat-CST per-frame profile is pending (see "What's next").
+`highlight_walk` no longer appears (the flat scan is cheap), and `tree_build_node`
+/ `List<CstChild>::push` are retired. Top self-time frames now:
 
-|   Pct | Symbol (old node tree)     | role                                             |
-| ----: | -------------------------- | ------------------------------------------------ |
-| 29.9% | `highlight_walk`           | walk over the `CstNode` tree (retired)           |
-| 12.1% | `List<CstChild>::push`     | per-node child-list build (retired)              |
-|  8.4% | `TokenStream::new`         | SoA token-array alloc (WasmGC zero-fill)         |
-|  8.1% | `tree_build_node`          | CST materialization (retired)                    |
-|  3.8% | `String::push`             | HTML output build (still live — see What's next) |
-|  2.3% | `push_class`               | HTML class emit (still live)                     |
-|  2.2% | `scan_any_name`            | scan (prediction)                                |
-|  2.0% | `char::to_ascii_lowercase` | case-insensitive keyword match                   |
-|  2.0% | `_kind_set_8`              | membership over the big keyword set              |
+|   Pct | Symbol                         | bucket                                   |
+| ----: | ------------------------------ | ---------------------------------------- |
+| 10.5% | `List<i32>::push`              | CST column build (+ `rule_stack`/trivia) |
+|  8.2% | `HighlightVisitor::classify`   | highlight                                |
+|  7.1% | `follow_yields`                | scan/predict (LL FOLLOW gate)            |
+|  6.2% | `push_class`                   | highlight (HTML class emit)              |
+|  6.1% | `List<i32>::grow`              | CST column realloc (grow-from-empty)     |
+|  5.1% | `highlight_html`               | highlight (HTML render)                  |
+|  4.9% | `TreeBuilder::finish`          | CST finalize + column copy               |
+|  4.5% | `List<HighlightCapture>::push` | highlight (captures)                     |
+|  4.2% | `String::grow`                 | HTML output realloc                      |
+|  4.1% | `String::push`                 | HTML output build                        |
+|  3.0% | `char::to_ascii_lowercase`     | case-insensitive keyword match           |
+|  2.6% | `scan_any_name`                | scan                                     |
+|  2.5% | `_kind_set_8`                  | kind-set membership                      |
 
-On the old tree, CST build+walk was ~57% of self-time — the whole reason for the
-flat-store rewrite. What remains after it: token-array alloc (`TokenStream::new`,
-inherent zero-fill, a non-lever), HTML render, `scan_*`, and kind-set.
+Rough buckets: **highlight** (`classify` + `push_class` + `highlight_html` +
+captures + `String` grow/push + `to_ascii_lowercase` + `hl_visit_token`) ≈
+**~39%**; **CST build** (flat columns push/grow/pop + `finish` +
+`bubble_to_parent`) ≈ **~24%**; **scan/predict** (`follow_yields` + `scan_*` +
+kind-set) ≈ **~15%**. The walk is gone; **highlight is now the single dominant
+cost**, and the CST is moderate to _build_ (column pushes + a grow-from-empty
+realloc tax) but cheap to _walk_.
 
 ## What's next
 
-Candidate levers, none taken yet, none mutually exclusive.
+Candidate levers from the post-flat-CST profile, ordered by bucket, none
+mutually exclusive.
 
-### Re-profile post-flat-CST
+### 1. Highlight (~39%) — now the dominant cost
 
-The dominant frames the old profile flagged are gone. Capture a fresh guest
-profile on `syntax_highlight` to find the new top self-time frame before
-committing to the next lever — the buckets below are extrapolated from the old
-profile, not freshly measured.
+The whole highlight path is the biggest bucket; several independent levers, all
+in `highlight.wado`:
 
-### HTML render output (highlight only)
+- **`classify` (8.2%)** — per token it linear-scans the resolved overrides, then
+  looks up `defaults[kind]`. Called once per terminal (and once per trivia). The
+  override scan is O(overrides) per token; a kind-indexed override table (or a
+  short-circuit when a rule has no overrides) would cut it.
+- **HTML render (`push_class` 6.2% + `highlight_html` 5.1% + `String`
+  grow/push 8.3%)** — `push_class` splits `.` → space char-by-char; `highlight_html`
+  appends escaped source char-at-a-time. Emit class names without the per-char
+  loop, append larger unescaped runs, and pre-size the output `String`.
+- **Captures (`List<HighlightCapture>::push` 4.5%)** — the captures list grows
+  from empty (see the column-presize lever below), and each `HighlightCapture` is
+  a GC object — this list is the ~4.1 ms residual GC the current-state section
+  flags. Pre-size it, or render directly without materialising the list.
+- **`to_ascii_lowercase` (3.0%)** — case-insensitive keyword matching in the
+  lexer; a lower-on-read or a case-folded scan table would remove it.
 
-`String::push` building the HTML output, plus `push_class` (per-capture class
-string, splitting `.` → space char-by-char). It is now a larger _share_ of the
-much-smaller wall-clock, and the ~4.1 ms residual GC is its captures/HTML
-allocation. Levers: emit class names without the per-char `push_class` loop, and
-append larger runs of unescaped source instead of char-at-a-time. Lives in
-`highlight_html` / `push_class` (`highlight.wado`).
+### 2. CST column grow-from-empty (`List<i32>::grow` ~6%)
+
+The `TreeBuilder` columns (`tag`/`a`/`b`/`alt`) grow from `[]`, reallocating
+`log2(rows)` times over the parse — the same grow-from-empty tax the old lexer
+buffer and child-list presizes fixed. Pre-size them to a fraction of the token or
+char count (`TokenStream` uses `chars/4`). **Watch the `array.new_default`
+over-zero-fill trap** (a loose `with_capacity` regressed the failed cursor spike):
+right-size, don't reserve big, and re-check `sqlite_parse` (build-then-discard
+pays the fill for less benefit).
 
 ## Tried and didn't pan out
 
