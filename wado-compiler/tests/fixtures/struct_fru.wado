@@ -1,0 +1,82 @@
+struct RuleCallOp {
+    target_name: String,
+    variant_id: i32,
+    min_prec_arg: i32,
+    field: i32,
+    dedup_base: i32,
+}
+
+struct SP3 {
+    x: i32,
+    y: i32,
+    z: i32,
+}
+
+struct FBox<T> {
+    value: T,
+    tag: i32,
+}
+
+global mut FRU_CALLS: i32 = 0;
+
+fn make_base() -> SP3 {
+    FRU_CALLS = FRU_CALLS + 1;
+    return SP3 { x: 1, y: 2, z: 3 };
+}
+
+test "override one field" {
+    let rc = RuleCallOp {
+        target_name: "a",
+        variant_id: 1,
+        min_prec_arg: 0,
+        field: 2,
+        dedup_base: 3,
+    };
+    let rc2 = RuleCallOp { ..rc, min_prec_arg: 9 };
+    assert rc2.target_name == "a";
+    assert rc2.variant_id == 1;
+    assert rc2.min_prec_arg == 9;
+    assert rc2.field == 2;
+    assert rc2.dedup_base == 3;
+}
+
+test "base value is not mutated" {
+    let p = SP3 { x: 1, y: 2, z: 3 };
+    let q = SP3 { ..p, x: 10 };
+    assert q.x == 10;
+    assert q.y == 2;
+    assert q.z == 3;
+    assert p.x == 1;
+}
+
+test "override several fields" {
+    let p = SP3 { x: 1, y: 2, z: 3 };
+    let q = SP3 { ..p, x: 10, z: 30 };
+    assert q.x == 10;
+    assert q.y == 2;
+    assert q.z == 30;
+}
+
+test "spread only overrides, no explicit changes" {
+    let p = SP3 { x: 5, y: 6, z: 7 };
+    let q = SP3 { ..p, x: 5 };
+    assert q.x == 5;
+    assert q.y == 6;
+    assert q.z == 7;
+}
+
+test "base evaluated once" {
+    FRU_CALLS = 0;
+    let q = SP3 { ..make_base(), y: 20 };
+    assert q.x == 1;
+    assert q.y == 20;
+    assert q.z == 3;
+    assert FRU_CALLS == 1;
+}
+
+test "generic struct infers args from base" {
+    let b = FBox { value: 7, tag: 100 };
+    let b2 = FBox { ..b, value: 9 };
+    assert b2.value == 9;
+    assert b2.tag == 100;
+}

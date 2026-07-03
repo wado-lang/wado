@@ -2254,6 +2254,20 @@ let bob: User = { name, age, active: false };
 let user: User = { name: "Alice", age: 30, active: true };
 ```
 
+Functional update (`..base`): a leading `..base` fills every field the literal
+does not list explicitly from the struct value `base` (same type). The listed
+fields override; `base` is evaluated once and left unchanged (value semantics).
+
+```wado
+let u2 = User { ..user, age: 31 };  // every field from `user`, age replaced
+```
+
+The spread is leading and single: a field written before it would be overwritten
+and unused, so `User { age: 31, ..user }`, a second spread, and a bare
+`User { ..user }` (a plain copy) are all errors. A `..base` cannot read a field
+that is not reachable at the use site, so it never exposes a private field across
+a module boundary. See [WEP: Literal Spread](./wep-2026-07-03-literal-spread.md).
+
 **Struct Destructuring:**
 
 ```wado

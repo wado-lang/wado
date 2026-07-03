@@ -159,7 +159,10 @@ fn contains_call(expr: &Expr) -> bool {
         Expr::Unary(e) => contains_call(&e.expr),
         Expr::Cast(e) => contains_call(&e.expr),
         Expr::TupleLiteral(e) => e.elements.iter().any(contains_call),
-        Expr::StructLiteral(e) => e.fields.iter().any(|f| contains_call(&f.value)),
+        Expr::StructLiteral(e) => {
+            e.fields.iter().any(|f| contains_call(&f.value))
+                || e.spread.as_ref().is_some_and(|b| contains_call(b))
+        }
         Expr::Index(e) => contains_call(&e.expr) || contains_call(&e.index),
         Expr::FieldAccess(e) => contains_call(&e.expr),
         Expr::TryOp(e) => contains_call(&e.expr),
@@ -174,7 +177,7 @@ fn contains_call(expr: &Expr) -> bool {
 fn expr_is_container(expr: &Expr) -> bool {
     match expr {
         Expr::TupleLiteral(t) => !t.elements.is_empty(),
-        Expr::StructLiteral(s) => !s.fields.is_empty(),
+        Expr::StructLiteral(s) => !s.fields.is_empty() || s.spread.is_some(),
         _ => false,
     }
 }
@@ -2410,7 +2413,7 @@ impl<'a> Unparser<'a> {
             self.output.push(' ');
         }
 
-        if s.fields.is_empty() {
+        if s.fields.is_empty() && s.spread.is_none() {
             self.output.push_str("{}");
             return;
         }
@@ -2419,16 +2422,30 @@ impl<'a> Unparser<'a> {
         // source asked for it (trailing comma), when a field value is a nested
         // container (depth rule), or when more than one field bears a call. A
         // flat, single-call-at-most struct is inline-first and only wraps on
-        // width.
+        // width. The functional-update base (`..base`) counts as a leading member.
+        let member_count = s.fields.len() + usize::from(s.spread.is_some());
         let has_container = s.fields.iter().any(|f| expr_is_container(&f.value));
-        let call_fields = s.fields.iter().filter(|f| contains_call(&f.value)).count();
+        let call_fields = s.fields.iter().filter(|f| contains_call(&f.value)).count()
+            + usize::from(s.spread.as_ref().is_some_and(|b| contains_call(b)));
         if !s.has_trailing_comma && !has_container && call_fields <= 1 {
             let snap = self.snapshot();
             self.output.push_str("{ ");
-            self.comma_sep(&s.fields, Unparser::emit_struct_literal_field);
+            let mut first = true;
+            if let Some(base) = &s.spread {
+                self.output.push_str("..");
+                self.unparse_expr(base);
+                first = false;
+            }
+            for field in &s.fields {
+                if !first {
+                    self.output.push_str(", ");
+                }
+                self.emit_struct_literal_field(field);
+                first = false;
+            }
             self.output.push_str(" }");
 
-            if s.fields.len() <= 1 || !self.exceeds_width_since(snap) {
+            if member_count <= 1 || !self.exceeds_width_since(snap) {
                 return;
             }
             self.rollback(snap);
@@ -2436,6 +2453,12 @@ impl<'a> Unparser<'a> {
 
         self.output.push_str("{\n");
         self.indent_level += 1;
+        if let Some(base) = &s.spread {
+            self.write_indent();
+            self.output.push_str("..");
+            self.unparse_expr(base);
+            self.output.push_str(",\n");
+        }
         for field in &s.fields {
             self.write_indent();
             self.emit_struct_literal_field(field);

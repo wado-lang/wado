@@ -83,6 +83,12 @@ Phasing: named-struct FRU and key-value merge land first; anonymous composition
 (union synthesis) is additive under the same rule and can follow, without
 changing the semantics of the first two.
 
+- [x] Named-struct FRU (`S { ..base, overrides… }`): leading-single spread,
+      field projection, once-evaluated base, generic inference from base, and the
+      cross-module read-reachability guard.
+- [ ] Key-value merge (`insert_all`).
+- [ ] Anonymous composition (union synthesis).
+
 ## Consequences
 
 - One rule (last-wins + dead-write) covers structs, anonymous composition, and

@@ -330,6 +330,11 @@ impl Parser {
             return true;
         }
 
+        // Functional-update spread leads the literal: `Name { ..base }`
+        if matches!(after_brace, TokenKind::DotDot) {
+            return true;
+        }
+
         // First token must be a valid field name (identifier, keyword, or string literal)
         let is_string_lit = matches!(after_brace, TokenKind::StringLit(_));
         if after_brace.as_ident_name().is_none()
@@ -5791,10 +5796,46 @@ impl Parser {
         }
 
         let mut fields = Vec::new();
+        let mut spread: Option<Box<Expr>> = None;
         let mut has_trailing_comma = false;
 
         if !self.check(&TokenKind::RBrace) {
             loop {
+                // Functional-update base: `{ ..base, field: v }`. Leading and
+                // single (see WEP: Literal Spread).
+                if self.check(&TokenKind::DotDotDot) {
+                    return Err(self
+                        .error_at_span(self.peek().span, "unexpected `...`; did you mean `..`?"));
+                }
+                if self.check(&TokenKind::DotDot) {
+                    let dotdot_span = self.peek().span;
+                    self.advance();
+                    let base = self.parse_expr()?;
+                    if spread.is_some() {
+                        return Err(self.error_at_span(
+                            dotdot_span,
+                            "at most one `..` spread is allowed per struct literal",
+                        ));
+                    }
+                    if !fields.is_empty() {
+                        return Err(self.error_at_span(
+                            dotdot_span,
+                            "a field before the `..` spread is overwritten and never used; \
+                             put the `..` spread first",
+                        ));
+                    }
+                    spread = Some(Box::new(base));
+                    if !self.check(&TokenKind::Comma) {
+                        break;
+                    }
+                    self.advance(); // consume comma
+                    if self.check(&TokenKind::RBrace) {
+                        has_trailing_comma = true;
+                        break;
+                    }
+                    continue;
+                }
+
                 let field_name_span = self.peek().span;
                 // Allow string literals as field names for JSON compatibility
                 let field_name = if let TokenKind::StringLit(s) = self.peek_kind().clone() {
@@ -5860,6 +5901,7 @@ impl Parser {
             name_id,
             name_span,
             fields,
+            spread,
             has_trailing_comma,
             span: start_span.merge(&end_span),
         })))

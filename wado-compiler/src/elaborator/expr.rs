@@ -3105,6 +3105,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .unwrap_or_default();
 
+        // Functional-update base (`S { ..base, ... }`): resolve it for facts and
+        // (for generic structs) to drive backward type-argument inference. The
+        // base supplies every field the literal omits, so omitted fields below
+        // are neither defaulted nor reported missing when a spread is present.
+        let spread_base_type: Option<TypeId> = struct_lit
+            .spread
+            .as_ref()
+            .map(|base| self.resolve_expr(base, ctx, expected_type));
+
         // Record use→def references for each field name, pointing at the
         // field definition's AstId in the struct declaration.
         let field_refs: Vec<(AstId, AstId)> = self
@@ -3256,7 +3265,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // mistaken for an explicitly-provided one (matters for the visibility
         // check further down).
         let provided_names: IndexSet<String> = fields.iter().map(|f| f.name.clone()).collect();
-        if !struct_field_types.is_empty() {
+        if !struct_field_types.is_empty() && struct_lit.spread.is_none() {
             for (idx, (expected_name, expected_type_id)) in struct_field_types.iter().enumerate() {
                 if provided_names.contains(expected_name) {
                     continue;
@@ -3311,7 +3320,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let same_package = struct_module_source.same_package(&self.current_module_source);
             for (fname, _, vis) in &struct_info.fields {
-                if !vis.reachable_from(same_package) && provided_names.contains(fname) {
+                // A non-reachable field is flagged when explicitly set, or when a
+                // `..base` spread would read it from `base` across the boundary
+                // (`base.field` is not a read the caller may perform).
+                let set_explicitly = provided_names.contains(fname);
+                let read_via_spread = struct_lit.spread.is_some() && !set_explicitly;
+                if !vis.reachable_from(same_package) && (set_explicitly || read_via_spread) {
                     let _ = self.logger.error(TypeError::PrivateFieldAccess {
                         struct_name: struct_name.clone(),
                         field_name: fname.clone(),
@@ -3341,7 +3355,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &struct_name,
                 &struct_module_source,
                 &fields,
-                expected_type,
+                expected_type.or(spread_base_type),
             );
 
             // Substitute type parameters in field value types.
@@ -3455,6 +3469,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (struct_type, struct_name, fields)
         };
 
+        // The functional-update base must be the same struct type as the literal.
+        if let (Some(base_ty), Some(base)) = (spread_base_type, struct_lit.spread.as_ref()) {
+            self.typecheck(base_ty, struct_type, base.span());
+        }
+
         // Stage 7-B: reify rebuilds the `StructLiteral` (`reify_struct_literal`)
         // from the AST + the recorded `generic_instantiations` mangled name /
         // instance type; the combined walk resolved the fields (and applied any
@@ -3470,6 +3489,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_lit: &ast::StructLiteralExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
+        // Functional-update spread is implemented only for named struct literals
+        // so far (see WEP: Literal Spread — anonymous composition and key-value
+        // merge are later phases).
+        if let Some(base) = &struct_lit.spread {
+            let _ = self.logger.error(TypeError::InvalidLiteral {
+                message: "`..base` spread is only supported in a named struct literal; \
+                          write the struct name, e.g. `S { ..base }`"
+                    .to_string(),
+                span: base.span(),
+            });
+        }
+
         // Resolve all field expressions first
         let mut resolved_fields: Vec<TirStructField> = Vec::new();
         for (index, field) in struct_lit.fields.iter().enumerate() {

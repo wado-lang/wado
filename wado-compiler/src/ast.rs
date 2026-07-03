@@ -792,6 +792,9 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
                 v.visit_id(field.name_id, field.name_span);
                 v.visit_expr(&field.value);
             }
+            if let Some(base) = &s.spread {
+                v.visit_expr(base);
+            }
         }
         Expr::TupleLiteral(t) => {
             for el in &t.elements {
@@ -2291,6 +2294,9 @@ impl Expr {
                 for f in &mut sl.fields {
                     f.value.substitute_idents(subs);
                 }
+                if let Some(base) = &mut sl.spread {
+                    base.substitute_idents(subs);
+                }
             }
             Expr::Range(r) => {
                 r.start.substitute_idents(subs);
@@ -2342,6 +2348,10 @@ pub struct StructLiteralExpr {
     /// Always `Some` iff `name` is `Some`.
     pub name_span: Option<Span>,
     pub fields: Vec<StructLiteralField>,
+    /// Functional-update base: `S { ..base, field: v }`. Supplies every declared
+    /// field the literal does not list explicitly. Leading and single for a
+    /// named struct literal (see WEP: Literal Spread).
+    pub spread: Option<Box<Expr>>,
     /// Whether the original source had a trailing comma (for formatting purposes).
     /// Multiline formatting is used when this is true.
     pub has_trailing_comma: bool,

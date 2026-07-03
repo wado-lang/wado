@@ -309,6 +309,10 @@ let c = ServerConfig { host: "localhost" };  // port=8080, debug=false
 let p = Point { x: 10, y: 20 };
 let b = Pair { first: 0, second: 1 };  // F and S are inferred as i32
 
+// Functional update: `..base` (leading, single) fills unlisted fields from a
+// same-type value; listed fields override, base is evaluated once, unchanged.
+let p2 = Point { ..p, x: 99 };  // y from p, x replaced
+
 // Shorthand
 let x = 10;
 let y = 20;

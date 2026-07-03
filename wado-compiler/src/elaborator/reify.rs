@@ -4462,35 +4462,79 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let provided: crate::hashmap::IndexSet<String> =
             struct_lit.fields.iter().map(|f| f.name.clone()).collect();
-        for (name, field_index, raw_ty, default) in &decl_fields {
-            if provided.contains(name) {
-                continue;
-            }
-            if let Some(default_expr) = default {
-                let expected_field_ty = substitute(self, *raw_ty);
-                // Reify a foreign default under its owning module's
-                // perspective: fact lookups key by the node's own globally-
-                // unique `AstId` (no module qualifier), but the default's
-                // free identifiers and decl lookups still resolve in the
-                // struct module's scope, so the perspective swap remains for
-                // name resolution.
-                let value = if struct_module == self.current_module_source {
-                    self.reify_expr(default_expr, ctx, Some(expected_field_ty))
-                } else {
-                    self.with_const_module_perspective(&struct_module, |this| {
-                        this.reify_expr(default_expr, ctx, Some(expected_field_ty))
-                    })
-                };
+
+        // Functional-update: fill every omitted field from `base.field`, binding
+        // a non-trivial `base` to a `__base_N` temporary so it is evaluated once.
+        // Defaults are not consulted when a spread is present.
+        let mut spread_binding: Option<(u32, String, TirExpr)> = None;
+        if let Some(base) = &struct_lit.spread {
+            let base_expr = self.reify_expr(base, ctx, Some(struct_type));
+            let base_type = base_expr.type_id;
+            let base_ref = if matches!(base_expr.kind, TirExprKind::Local { .. }) {
+                base_expr
+            } else {
+                let tmp_name = format!("__base_{}", ctx.next_local);
+                let tmp_idx = ctx.add_local(tmp_name.clone(), base_type, false, None);
+                spread_binding = Some((tmp_idx, tmp_name.clone(), base_expr));
+                TirExpr::new(
+                    TirExprKind::Local {
+                        index: tmp_idx,
+                        name: tmp_name,
+                    },
+                    base_type,
+                    struct_lit.span,
+                )
+            };
+            for (name, field_index, raw_ty, _default) in &decl_fields {
+                if provided.contains(name) {
+                    continue;
+                }
+                let field_ty = substitute(self, *raw_ty);
                 fields.push(TirStructField {
                     name: name.clone(),
-                    value,
+                    value: TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(base_ref.clone()),
+                            field_index: *field_index,
+                            field_name: name.clone(),
+                        },
+                        field_ty,
+                        struct_lit.span,
+                    ),
                     field_index: *field_index,
                 });
+            }
+        } else {
+            for (name, field_index, raw_ty, default) in &decl_fields {
+                if provided.contains(name) {
+                    continue;
+                }
+                if let Some(default_expr) = default {
+                    let expected_field_ty = substitute(self, *raw_ty);
+                    // Reify a foreign default under its owning module's
+                    // perspective: fact lookups key by the node's own globally-
+                    // unique `AstId` (no module qualifier), but the default's
+                    // free identifiers and decl lookups still resolve in the
+                    // struct module's scope, so the perspective swap remains for
+                    // name resolution.
+                    let value = if struct_module == self.current_module_source {
+                        self.reify_expr(default_expr, ctx, Some(expected_field_ty))
+                    } else {
+                        self.with_const_module_perspective(&struct_module, |this| {
+                            this.reify_expr(default_expr, ctx, Some(expected_field_ty))
+                        })
+                    };
+                    fields.push(TirStructField {
+                        name: name.clone(),
+                        value,
+                        field_index: *field_index,
+                    });
+                }
             }
         }
         fields.sort_by_key(|f| f.field_index);
 
-        TirExpr::new(
+        let literal = TirExpr::new(
             TirExprKind::StructLiteral {
                 struct_type,
                 struct_name: mangled_struct_name,
@@ -4498,7 +4542,35 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             },
             struct_type,
             struct_lit.span,
-        )
+        );
+
+        match spread_binding {
+            None => literal,
+            Some((idx, name, value)) => {
+                use crate::tir::{TirBlock, TirStmt, TirStmtKind};
+                let type_id = value.type_id;
+                let stmts = vec![
+                    TirStmt::new(
+                        TirStmtKind::Let {
+                            name,
+                            local_index: idx,
+                            value,
+                            is_mut: false,
+                            is_reactive: false,
+                            type_id,
+                            skip_value_copy: false,
+                        },
+                        struct_lit.span,
+                    ),
+                    TirStmt::new(TirStmtKind::Expr(literal), struct_lit.span),
+                ];
+                TirExpr::new(
+                    TirExprKind::Block(TirBlock::new(stmts, struct_lit.span)),
+                    struct_type,
+                    struct_lit.span,
+                )
+            }
+        }
     }
 
     /// Reify a compound assignment `x += y` / `x -= y` / etc. The
