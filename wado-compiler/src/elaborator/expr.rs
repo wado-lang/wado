@@ -3225,6 +3225,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: spread.span,
             });
         }
+        // A spread with no other fields is a deep copy of `base`; use `base`.
+        if let Some(spread) = named_spread
+            && struct_lit.fields.is_empty()
+        {
+            let _ = self.logger.error(TypeError::InvalidLiteral {
+                message: "`{ ..base }` with no other fields just copies `base`; \
+                          use `base` directly"
+                    .to_string(),
+                span: spread.span,
+            });
+        }
         let spread_base_type: Option<TypeId> =
             named_spread.map(|spread| self.resolve_expr(&spread.expr, ctx, expected_type));
 
@@ -3748,7 +3759,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .any(|&t| t == TypeTable::ERROR || t == TypeTable::UNKNOWN);
 
-        if has_spread && !compose_union && !is_kv_merge && !base_errored {
+        // A single spread with no other members is a deep copy of `base` (a
+        // multi-spread composition of distinct bases is not, so only reject one);
+        // otherwise the only valid non-composition spread is a key-value merge.
+        // Skip both when a base already errored, to avoid a cascading diagnostic.
+        let is_copy = struct_lit.spreads.len() == 1 && struct_lit.fields.is_empty();
+        if base_errored {
+        } else if is_copy {
+            let _ = self.logger.error(TypeError::InvalidLiteral {
+                message: "`{ ..base }` with no other members just copies `base`; \
+                          use `base` directly"
+                    .to_string(),
+                span: struct_lit.spreads[0].span,
+            });
+        } else if has_spread && !compose_union && !is_kv_merge {
             let _ = self.logger.error(TypeError::InvalidLiteral {
                 message: "a `..base` spread must be a struct value (composition) or a \
                           key-value map with a map-typed target; a non-struct base or a \
