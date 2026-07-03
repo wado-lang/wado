@@ -88,7 +88,7 @@ below). Still enough to move Gale from 4th to 2nd place, ahead of native
 tree-sitter and Lezer.
 
 The residual ~4.1 ms GC is highlight's own captures/HTML allocation (the profile
-below and "What's next: Highlight"), not the CST — `sqlite_parse` (build-then-discard,
+below), not the CST — `sqlite_parse` (build-then-discard,
 no highlight) is ~4.4 ms/iter and did not regress. One known transient:
 `TreeBuilder::finish` copies the `tag`/`a`/`alt` columns into the store because
 Wado has no by-value `self` / move (methods are `&self`/`&mut self`); the copy
@@ -161,39 +161,14 @@ Rough buckets: **highlight** (`classify` + HTML output `String` grow/push +
 **~32%**; **CST build + walk** (`List<i32>` push/pop + `highlight_walk` +
 `finish` + `bubble_to_parent`) ≈ **~24%**; **scan/predict** (`follow_yields` +
 `scan_*` + kind-set) ≈ **~18%**; **token-array alloc** (`TokenStream::new`,
-inherent zero-fill, a non-lever) ≈ **~6%**. Highlight is the largest bucket; the
-notable frame is `String::grow` — the HTML output `String` still grows from empty
-despite a `source.len() * 5` pre-size, so its multiplier is under (see What's
-next).
+inherent zero-fill, a non-lever) ≈ **~6%**. Highlight is the largest bucket.
 
 ## What's next
 
-Candidate levers from the post-flat-CST profile, none mutually exclusive.
-
-### Highlight (~32%) — now the dominant cost
-
-The whole highlight path is the biggest bucket; several independent levers, all
-in `highlight.wado`:
-
-- **HTML output `String` (`String::grow` 9.0% + `String::push` 4.2%)** — the
-  cheapest lever. `highlight_html` pre-sizes the output to `source.len() * 5`, but
-  the highlighted HTML (source plus every `<span class="…">`) exceeds 5×, so the
-  `String` still grows from empty. Bump the multiplier the way the CST columns and
-  `TokenStream` are sized (measure the real HTML/source ratio first).
-- **`classify` (~10%)** — per token it linear-scans the resolved overrides, then
-  looks up `defaults[kind]`. Called once per terminal (and once per trivia). The
-  override scan is O(overrides) per token; a kind-indexed override table (or a
-  short-circuit when a rule has no overrides) would cut it.
-- **Class / escape emit (`push_class` 2.5% + `highlight_html` 1.4%)** —
-  `push_class` splits `.` → space char-by-char; `highlight_html` escapes source
-  char-at-a-time. Emit class names without the per-char loop and append larger
-  unescaped runs.
-- **Captures** — the `List<HighlightCapture>` (each capture a GC object) is the
-  ~4.1 ms residual GC the current-state section flags; it does not show large in
-  dev _self-time_ but is live-set under `copying`. Pre-size it (as the CST columns
-  now are), or render directly without materialising the list.
-- **`to_ascii_lowercase` (3.0%)** — case-insensitive keyword matching in the
-  lexer; a lower-on-read or a case-folded scan table would remove it.
+Highlight (`highlight.wado`) is the largest remaining bucket — the CST is no
+longer the bottleneck. Pick the current top frame off the live profile above
+rather than a fixed recipe here: the frames shift as levers land, and the
+mid-size ones are noisy, so re-measure before committing.
 
 ## Tried and didn't pan out
 
