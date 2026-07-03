@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783008546750,
+  "lastUpdate": 1783038507724,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -37369,6 +37369,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d30d155ac8863bf884cece741511ab9a36daa984"
         },
         "date": 1783008546344,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15323,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288551,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "91920d37e06f75aea35f19d75afc562849bd4c27",
+          "message": "Merge pull request #1499 from wado-lang/claude/on-bound-traits-kpmg8c\n\nfeat(traits): move Default and the format traits onto the on_bound derivation policy",
+          "timestamp": "2026-07-03T09:18:36+09:00",
+          "tree_id": "10c4baa4fc00a1f8fca04f029fde438848d6b3a0",
+          "url": "https://github.com/wado-lang/wado/commit/91920d37e06f75aea35f19d75afc562849bd4c27"
+        },
+        "date": 1783038507131,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
