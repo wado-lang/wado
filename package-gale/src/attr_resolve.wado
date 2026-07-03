@@ -75,7 +75,7 @@ pub fn resolve_attrs(body: &String, rule: &ParserRule, rules: &List<ParserRule>)
         let resolved = resolve_one(r, &env, rules)?;
         out.push(resolved);
     }
-    return Result::<List<ResolvedAttr>, String>::Ok(out);
+    return Result::Ok(out);
 }
 
 fn resolve_one(r: &AttrRef, env: &AttrEnv, rules: &List<ParserRule>) -> Result<ResolvedAttr, String> {
@@ -108,11 +108,11 @@ fn resolve_one(r: &AttrRef, env: &AttrEnv, rules: &List<ParserRule>) -> Result<R
         check_member(r, &AttrTarget::RuleRef, &r.name, rules)?;
         return ok_attr(r, AttrTarget::RuleRef, &r.name);
     }
-    return Result::<ResolvedAttr, String>::Err(`unresolved attribute reference '${r.name}'`);
+    return Result::Err(`unresolved attribute reference '${r.name}'`);
 }
 
 fn ok_attr(r: &AttrRef, target: AttrTarget, rule_name: &String) -> Result<ResolvedAttr, String> {
-    return Result::<ResolvedAttr, String>::Ok(ResolvedAttr {
+    return Result::Ok(ResolvedAttr {
         target,
         name: r.name,
         member: r.member,
@@ -130,7 +130,7 @@ fn check_member(r: &AttrRef, target: &AttrTarget, rule_name: &String, rules: &Li
     let member = match &r.member {
         Some(m) => *m,
         None => {
-            return Result::<(), String>::Ok(());
+            return Result::Ok(());
         },
     };
     let ok = match *target {
@@ -148,9 +148,9 @@ fn check_member(r: &AttrRef, target: &AttrTarget, rule_name: &String, rules: &Li
         ListLabel => false,
     };
     if ok {
-        return Result::<(), String>::Ok(());
+        return Result::Ok(());
     }
-    return Result::<(), String>::Err(`invalid member '.${member}' on '${r.name}'`);
+    return Result::Err(`invalid member '.${member}' on '${r.name}'`);
 }
 
 fn is_token_member(m: &String) -> bool {

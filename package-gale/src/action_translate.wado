@@ -49,7 +49,7 @@ pub fn translate_wado_action(
         }
         adjusted.push(r2);
     }
-    return Result::<String, String>::Ok(splice_attrs(body, &adjusted, &repls));
+    return Result::Ok(splice_attrs(body, &adjusted, &repls));
 }
 
 fn is_ctx_to_string_tree(r: &ResolvedAttr) -> bool {
@@ -155,29 +155,29 @@ fn action_attr_expr(
         RuleAttr => {
             if is_arg(rule, &r.name) {
                 if !rule_threads_args(rule) {
-                    Result::<String, String>::Err(
+                    Result::Err(
                         `${r.name}: rule arguments are threaded only for single-alt rules with defaultable arg types`,
                     );
                 } else if !vals_in_scope {
-                    Result::<String, String>::Err(`${r.name}: no value channel in the enclosing rule`);
+                    Result::Err(`${r.name}: no value channel in the enclosing rule`);
                 } else {
-                    Result::<String, String>::Ok(`vals.{r.name}`);
+                    Result::Ok(`vals.{r.name}`);
                 }
             } else if field_default(rule, &r.name) matches { None } {
-                Result::<String, String>::Err(
+                Result::Err(
                     `${r.name}: value-channel field type '{field_type(rule, &r.name)}' has no Wado default`,
                 );
             } else if !vals_in_scope {
-                Result::<String, String>::Err(`${r.name}: no value channel in the enclosing rule`);
+                Result::Err(`${r.name}: no value channel in the enclosing rule`);
             } else {
-                Result::<String, String>::Ok(`vals.{r.name}`);
+                Result::Ok(`vals.{r.name}`);
             }
         },
         RuleLabel => rule_member_expr(rules, r, bindings),
         RuleRef => rule_member_expr(rules, r, bindings),
         TokenLabel => token_member_expr(r, bindings),
         TokenRef => token_member_expr(r, bindings),
-        _ => Result::<String, String>::Err(`${r.name}: this attribute form is not yet emitted`),
+        _ => Result::Err(`${r.name}: this attribute form is not yet emitted`),
     };
 }
 
@@ -189,10 +189,10 @@ fn action_attr_expr(
 /// remain a loud error.
 fn parser_special_expr(r: &ResolvedAttr, span_in_scope: bool, is_lr: bool) -> Result<String, String> {
     if r.name matches { "text" | "start" | "stop" } && !span_in_scope {
-        return Result::<String, String>::Err(`${r.name}: no rule-span capture in the enclosing rule`);
+        return Result::Err(`${r.name}: no rule-span capture in the enclosing rule`);
     }
     return match r.name {
-        "text" && r.member matches { None } => Result::<String, String>::Ok(
+        "text" && r.member matches { None } => Result::Ok(
             `p.text_span(p.token_start({RULE_START_TOK_LOCAL}), p.last_end())`,
         ),
         "start" => token_member_of(&RULE_START_TOK_LOCAL, &r.member),
@@ -202,9 +202,9 @@ fn parser_special_expr(r: &ResolvedAttr, span_in_scope: bool, is_lr: bool) -> Re
         // already folded shut, so it reads the just-finished node instead.
         "ctx" && r.member matches { Some("toStringTree") } => {
             let method = if is_lr { "rule_string_tree_final" } else { "rule_string_tree" };
-            Result::<String, String>::Ok(`p.{method}()`)
+            Result::Ok(`p.{method}()`)
         },
-        _ => Result::<String, String>::Err(`${r.name}: this parser special is not yet emitted`),
+        _ => Result::Err(`${r.name}: this parser special is not yet emitted`),
     };
 }
 
@@ -232,31 +232,31 @@ fn token_member_of(idx: &String, member: &Option<String>) -> Result<String, Stri
     let m = match member {
         Some(m) => *m,
         None => {
-            return Result::<String, String>::Ok(*idx);
+            return Result::Ok(*idx);
         },
     };
     if m == "text" {
-        return Result::<String, String>::Ok(`p.token_text({*idx})`);
+        return Result::Ok(`p.token_text({*idx})`);
     }
     if m == "int" {
-        return Result::<String, String>::Ok(`p.token_int({*idx})`);
+        return Result::Ok(`p.token_int({*idx})`);
     }
     if m == "type" {
-        return Result::<String, String>::Ok(`p.token_kind({*idx})`);
+        return Result::Ok(`p.token_kind({*idx})`);
     }
     if m == "line" {
-        return Result::<String, String>::Ok(`p.token_line({*idx})`);
+        return Result::Ok(`p.token_line({*idx})`);
     }
     if m == "pos" {
-        return Result::<String, String>::Ok(`p.token_col({*idx})`);
+        return Result::Ok(`p.token_col({*idx})`);
     }
     if m == "index" {
-        return Result::<String, String>::Ok(*idx);
+        return Result::Ok(*idx);
     }
     if m == "channel" {
-        return Result::<String, String>::Ok(String::from("0"));
+        return Result::Ok(String::from("0"));
     }
-    return Result::<String, String>::Err(`.{m}: unknown token member`);
+    return Result::Err(`.{m}: unknown token member`);
 }
 
 fn rule_member_expr(
@@ -268,23 +268,23 @@ fn rule_member_expr(
     let target = match find_rule(rules, &r.rule_name) {
         Some(t) => t,
         None => {
-            return Result::<String, String>::Err(`${r.name}: unknown referenced rule '{r.rule_name}'`);
+            return Result::Err(`${r.name}: unknown referenced rule '{r.rule_name}'`);
         },
     };
     if !rule_returns_vals(&target) {
-        return Result::<String, String>::Err(
+        return Result::Err(
             `${r.name}: rule '{r.rule_name}' does not expose a value channel (needs single-alt + defaultable returns/locals)`,
         );
     }
     return match &r.member {
         Some(m) => {
             if field_default(&target, m) matches { Some(_) } {
-                Result::<String, String>::Ok(`{binding}.{*m}`);
+                Result::Ok(`{binding}.{*m}`);
             } else {
-                Result::<String, String>::Err(`${r.name}.{*m}: not an emittable value-channel field of '{r.rule_name}'`);
+                Result::Err(`${r.name}.{*m}: not an emittable value-channel field of '{r.rule_name}'`);
             }
         },
-        None => Result::<String, String>::Ok(binding),
+        None => Result::Ok(binding),
     };
 }
 
@@ -415,16 +415,16 @@ pub fn field_in_vals(d: &AttrDecl) -> bool {
 pub fn wado_type_default(type_text: &String) -> Option<String> {
     let t = type_text.trim();
     if t == "bool" {
-        return Option::<String>::Some("false");
+        return Option::Some("false");
     }
     if t == "String" {
-        return Option::<String>::Some("\"\"");
+        return Option::Some("\"\"");
     }
     if t.starts_with("List") || t.starts_with("[") {
-        return Option::<String>::Some("[]");
+        return Option::Some("[]");
     }
     if is_numeric_type(&t) {
-        return Option::<String>::Some("0");
+        return Option::Some("0");
     }
     return null;
 }
