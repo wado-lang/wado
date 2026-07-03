@@ -95,7 +95,15 @@ fn action_attr_expr(
     return match r.target {
         RuleAttr => {
             if is_arg(rule, &r.name) {
-                Result::<String, String>::Err(`${r.name}: rule arguments are not yet threaded into the value channel`);
+                if !rule_threads_args(rule) {
+                    Result::<String, String>::Err(
+                        `${r.name}: rule arguments are threaded only for single-alt rules with defaultable arg types`,
+                    );
+                } else if !vals_in_scope {
+                    Result::<String, String>::Err(`${r.name}: no value channel in the enclosing rule`);
+                } else {
+                    Result::<String, String>::Ok(`vals.{r.name}`);
+                }
             } else if field_default(rule, &r.name) matches { None } {
                 Result::<String, String>::Err(
                     `${r.name}: value-channel field type '{field_type(rule, &r.name)}' has no Wado default`,
@@ -271,11 +279,11 @@ pub fn rule_is_left_recursive(rule: &ParserRule) -> bool {
 }
 
 /// Whether a rule exposes an emittable value channel: it declares a
-/// returns / locals field whose type has a Wado default. Fields with an
-/// unsupported type are excluded per-field (they do not appear in the
-/// `<Rule>Vals` struct and a reference to one is a loud error), so one
-/// unsupported field no longer disables the whole channel. Args are excluded
-/// (not yet threaded).
+/// returns / locals field whose type has a Wado default, or it threads
+/// rule arguments (which live in the same `<Rule>Vals` struct). Fields with
+/// an unsupported type are excluded per-field (they do not appear in the
+/// struct and a reference to one is a loud error), so one unsupported field
+/// no longer disables the whole channel.
 pub fn rule_value_channel_ready(rule: &ParserRule) -> bool {
     for let d of &rule.returns_decls {
         if wado_type_default(&d.type_text) matches { Some(_) } {
@@ -287,7 +295,27 @@ pub fn rule_value_channel_ready(rule: &ParserRule) -> bool {
             return true;
         }
     }
-    return false;
+    return rule_threads_args(rule);
+}
+
+/// Whether a rule's arguments are threaded as `_parse_<rule>` parameters and
+/// stored into its `<Rule>Vals`. Scoped to single-alt rules (no `_alt_<n>` /
+/// dispatch forwarding) whose every arg type has a Wado default (so the param
+/// can be defaulted and the vals field `Default`-init). A multi-alt or
+/// non-defaultable-arg rule keeps `$arg` a loud error.
+pub fn rule_threads_args(rule: &ParserRule) -> bool {
+    if rule.alternatives.len() != 1 {
+        return false;
+    }
+    if rule.args.is_empty() {
+        return false;
+    }
+    for let a of &rule.args {
+        if wado_type_default(&a.type_text) matches { None } {
+            return false;
+        }
+    }
+    return true;
 }
 
 /// Whether a returns / locals field goes into the `<Rule>Vals` struct: it has

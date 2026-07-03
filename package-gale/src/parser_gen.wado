@@ -110,9 +110,11 @@ use {
     wado_type_default,
     field_in_vals,
     rule_uses_parser_text,
+    rule_threads_args,
     RULE_TEXT_START_LOCAL,
 } from "./action_translate.wado";
 use { unwrap_label } from "./lr_util.wado";
+use { escape_ident } from "./ident.wado";
 use { compute_shapes_for_alt, shape_lookahead_signature_for_alt, rebind_op_field } from "./lower.wado";
 
 /// Append the defaulted runtime FOLLOW-continuation argument to a
@@ -129,6 +131,149 @@ fn add_follow_param(f: &mut FnSpec) {
         type_str: "&List<List<i32>>",
         default_value: Option::Some("&EMPTY_FOLLOW"),
     });
+}
+
+/// The callee-local parameter name a rule argument binds to. `escape_ident`
+/// keeps a keyword-named arg (`type`) a legal identifier; the value is stored
+/// into the vals field under the raw arg name so `$arg` -> `vals.<name>` holds.
+fn arg_param_name(name: &String) -> String {
+    return escape_ident(&to_snake_case(name));
+}
+
+/// Append one defaulted parameter per rule argument (`escape(name): <type> =
+/// <default>`), in declaration order, at the end of the signature. Defaulted so
+/// the public entry and plain `a` call sites (no `a[...]`) fill them in. Only
+/// emitted for rules whose args are threaded (`rule_threads_args`).
+fn add_arg_params(f: &mut FnSpec, rule: &ParserRule, ctx: &GenContext) {
+    if !ctx.emit_actions() || !rule_threads_args(rule) {
+        return;
+    }
+    for let a of &rule.args {
+        let def = match wado_type_default(&a.type_text) {
+            Some(v) => v,
+            None => panic("add_arg_params: rule_threads_args/wado_type_default disagree"),
+        };
+        f.add_param_spec(ParamSpec {
+            name: arg_param_name(&a.name),
+            type_str: a.type_text.trim(),
+            default_value: Option::Some(def),
+        });
+    }
+}
+
+/// The `, n, m` a rule wrapper forwards to its inner body for threaded args.
+fn wrapper_arg_forward(rule: &ParserRule, ctx: &GenContext) -> String {
+    if !ctx.emit_actions() || !rule_threads_args(rule) {
+        return String::new();
+    }
+    let mut s = String::new();
+    for let a of &rule.args {
+        s.push_str(&", ");
+        s.push_str(&arg_param_name(&a.name));
+    }
+    return s;
+}
+
+/// Store each threaded rule argument into the rule's `vals` local, so `$arg`
+/// (which resolves to `vals.<name>`) reads the passed-in value. Emitted right
+/// after the `vals` local, before `@init`.
+fn emit_arg_stores(w: &mut CodeWriter, rule: &ParserRule, ctx: &GenContext) {
+    if !ctx.emit_actions() || !rule_threads_args(rule) {
+        return;
+    }
+    for let a of &rule.args {
+        w.line(&`vals.{a.name} = {arg_param_name(&a.name)};`);
+    }
+}
+
+/// The `, arg0, arg1` a caller passes for the callee's threaded arguments, or
+/// `""`. `arg_action` (`a[$i, $j]`) is split on top-level commas and each
+/// expression is translated against the *caller's* environment. A plain `a`
+/// call passes nothing (the callee's defaulted params fill in).
+fn call_arg_suffix(rc: &RuleCallOp, ctx: &mut GenContext) -> String {
+    if !ctx.emit_actions() {
+        return String::new();
+    }
+    let callee = match ctx.find_rule(&rc.target_name) {
+        Some(r) => r,
+        None => {
+            return String::new();
+        },
+    };
+    if !rule_threads_args(callee) {
+        return String::new();
+    }
+    let src = match &rc.arg_action {
+        Some(s) => s,
+        None => {
+            return String::new();
+        },
+    };
+    let exprs = split_top_level_commas(&src.text);
+    let mut out = String::new();
+    for let e of &exprs {
+        let code = match translate_caller_arg(e, ctx) {
+            Some(c) => c,
+            None => *e,
+        };
+        out.push_str(&", ");
+        out.push_str(&code.trim());
+    }
+    return out;
+}
+
+/// Translate a single caller-side argument expression against the caller's
+/// (current) rule environment, so `$i` resolves to the caller's channel. A
+/// ref-free expression passes through; an untranslatable one is returned raw
+/// (a later type error is clearer than a silent drop).
+fn translate_caller_arg(expr: &String, ctx: &GenContext) -> Option<String> {
+    if find_attr_refs(expr).len() == 0 {
+        return Option::Some(*expr);
+    }
+    let ridx = ctx.current_rule_index();
+    if ridx < 0 {
+        return null;
+    }
+    let rule = &ctx.parser_rules()[ridx];
+    let vals_in_scope = rule_emits_vals(ctx, rule);
+    let rule_text = rule_captures_rule_text(rule, ctx.parser_rules());
+    return match translate_wado_action(rule, ctx.parser_rules(), expr, vals_in_scope, rule_text) {
+        Ok(c) => Option::Some(c),
+        Err(_) => null,
+    };
+}
+
+/// Split an argument-action text on commas that are not nested inside
+/// parentheses / brackets / braces / angle brackets, so `f(a, b), c` splits
+/// into `f(a, b)` and `c`. String / char literals are skipped.
+fn split_top_level_commas(text: &String) -> List<String> {
+    let mut out: List<String> = [];
+    let mut cur = String::new();
+    let mut depth = 0;
+    let chars: List<char> = text.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if c == '(' || c == '[' || c == '{' || c == '<' {
+            depth += 1;
+            cur.push(c);
+        } else if c == ')' || c == ']' || c == '}' || c == '>' {
+            if depth > 0 {
+                depth -= 1;
+            }
+            cur.push(c);
+        } else if c == ',' && depth == 0 {
+            out.push(cur.trim());
+            cur = String::new();
+        } else {
+            cur.push(c);
+        }
+        i += 1;
+    }
+    if !cur.trim().is_empty() {
+        out.push(cur.trim());
+    }
+    return out;
 }
 
 /// `", follow"` when the grammar emits FOLLOW machinery, else `""`.
@@ -389,6 +534,9 @@ fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar) {
             continue;
         }
         w.begin(&`struct {vals_struct_name(rule)}`);
+        if rule_threads_args(rule) {
+            gen_vals_fields(w, &rule.args);
+        }
         gen_vals_fields(w, &rule.returns_decls);
         gen_vals_fields(w, &rule.locals_decls);
         w.end();
@@ -2425,12 +2573,13 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
         w,
         &canonical,
         &inner,
-        &rule.name,
+        rule,
         rule_takes_min_prec(lowered_rule),
         ctx.emit_follow(),
         ctx.is_trace(),
         ctx.needs_atn(),
         &rule_result_type_for(rule, ctx),
+        ctx,
     );
 }
 
@@ -2553,13 +2702,15 @@ fn gen_rule_entry_wrapper(
     w: &mut CodeWriter,
     outer_name: &String,
     inner_name: &String,
-    rule_display: &String,
+    rule: &ParserRule,
     takes_min_prec: bool,
     emit_follow: bool,
     trace: bool,
     needs_atn: bool,
     result_type: &String,
+    ctx: &GenContext,
 ) {
+    let rule_display = &rule.name;
     let returns_vals = result_type_carries_vals(result_type);
     let mut f = FnSpec::new(outer_name);
     f.add_param(&"p", &"&mut Parser");
@@ -2577,6 +2728,10 @@ fn gen_rule_entry_wrapper(
             default_value: Option::Some("0"),
         });
     }
+    // Threaded rule arguments come last (defaulted), so the entry and plain
+    // callers omit them. Only single-alt rules thread args, so `takes_min_prec`
+    // is always false here for an arg-bearing rule.
+    add_arg_params(&mut f, rule, ctx);
     f.set_return_type(result_type);
     f.emit_begin(w);
     let lit = str_lit(*rule_display);
@@ -2591,7 +2746,12 @@ fn gen_rule_entry_wrapper(
     // Forward `follow`/`min_prec` so the inner body's tail-greedy gate sees
     // the caller's continuation.
     let fsep = if emit_follow { ", follow" } else { "" };
-    let call = if takes_min_prec { `{*inner_name}(p{fsep}, min_prec)` } else { `{*inner_name}(p{fsep})` };
+    let argfwd = wrapper_arg_forward(rule, ctx);
+    let call = if takes_min_prec {
+        `{*inner_name}(p{fsep}, min_prec{argfwd})`;
+    } else {
+        `{*inner_name}(p{fsep}{argfwd})`;
+    };
     // open this rule's `CstNode` before the body and close it after, so the
     // body's appended terminals / subtrees become its children. The body may
     // set `p.recovering`; `finish_node` still runs, folding the open node closed
@@ -2665,12 +2825,14 @@ fn gen_parse_fn_simple_named(
     if ctx.emit_follow() {
         add_follow_param(&mut f);
     }
+    add_arg_params(&mut f, rule, ctx);
     f.set_return_type(&rule_result_type_for(rule, ctx));
     f.emit_begin(w);
     w.line(&"let start = p.peek_start();");
     if rule_emits_vals(ctx, rule) {
         w.line(&`let mut vals = {vals_struct_name(rule)} \{\};`);
     }
+    emit_arg_stores(w, rule, ctx);
     if ctx.emit_actions() && rule_captures_rule_text(rule, ctx.parser_rules()) {
         w.line(&`let {RULE_TEXT_START_LOCAL} = p.peek_start();`);
     }
@@ -3805,10 +3967,11 @@ pub fn gen_op_leaf(
             // trailing self-ref of a prefix LR alt (e.g. `'-' e`) so emit
             // reads a single source.
             gen_atn_ret_pending(w, ctx, r.atn_call_site);
+            let argsfx = call_arg_suffix(&r, ctx);
             if let Some(min_prec) = r.min_prec_arg {
-                w.line(&`let {r.field} = {fn_name}(p{follow_arg_str}, {min_prec});`);
+                w.line(&`let {r.field} = {fn_name}(p{follow_arg_str}, {min_prec}{argsfx});`);
             } else {
-                w.line(&`let {r.field} = {fn_name}(p{follow_arg_str});`);
+                w.line(&`let {r.field} = {fn_name}(p{follow_arg_str}{argsfx});`);
             }
         },
         Wildcard(wop) => w.line(&`let {wop.field} = p.any();`),

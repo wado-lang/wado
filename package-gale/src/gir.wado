@@ -36,7 +36,7 @@
 //! are pure markers or unmodified passthrough data; duplicating them
 //! would invite drift without semantic benefit.
 
-use { Visibility, OptionValue, GrammarOption, NamedAction, LexerRule, RepeatKind } from "./ir.wado";
+use { Visibility, OptionValue, GrammarOption, NamedAction, LexerRule, RepeatKind, ActionSource } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
 
 // ==========================================================================
@@ -553,6 +553,11 @@ pub struct RuleCallOp {
     /// `RuleCallOp`-rebuilding lowering step. -1 for synthesized calls with
     /// no surface origin.
     pub atn_call_site: i32 = -1,
+    /// The surface `RuleRefElement.arg_action` (`a[$i]`): the verbatim
+    /// argument-expression list passed to the callee. Emit translates its
+    /// `$`-refs against the caller's environment and forwards them as the
+    /// callee's rule-argument parameters. `null` for a plain `a` call.
+    pub arg_action: Option<ActionSource> = null,
 }
 
 pub struct WildcardOp {

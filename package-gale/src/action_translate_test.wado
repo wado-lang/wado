@@ -99,12 +99,20 @@ r returns [int v] : ID { $v = 1; } ;
     assert res.is_err(), "non-Wado field type must be an error, not an uncompilable struct";
 }
 
-test "translate rejects rule-argument refs (not yet threaded)" {
+test "translate threads a single-alt rule argument through the value channel" {
     let g = parse("grammar T;
 r[i32 n] : ID { $n = 2; } ;
 ").unwrap();
-    let res = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" $n = 2; ", true, false);
-    assert res.is_err(), "arg ref must be unsupported for now";
+    let out = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" $n = 2; ", true, false).unwrap();
+    assert out == " vals.n = 2; ", `out: '{out}'`;
+}
+
+test "translate rejects a rule argument on a multi-alt rule" {
+    let g = parse("grammar T;
+r[i32 n] : A { $n = 1; } | B { $n = 2; } ;
+").unwrap();
+    let res = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" $n = 1; ", true, false);
+    assert res.is_err(), "multi-alt rule args are not threaded yet";
 }
 
 test "value channel readiness and return-vals detection" {
