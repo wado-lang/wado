@@ -3215,7 +3215,8 @@ fn ambiguous_group_predicate_gated(amb_alts: &List<i32>, alts: &List<Alternative
 /// gates a node nested under a `Dispatch` too).
 fn collect_gated_ambiguous_alts(node: &PredictionNode, alts: &List<Alternative>, out: &mut List<i32>) {
     match *node {
-        Leaf(_) => {},
+        Leaf(_) => {
+        },
         Consume(c) => collect_gated_ambiguous_alts(&c.child, alts, out),
         Dispatch(d) => {
             for let branch of &d.branches {
@@ -6992,9 +6993,9 @@ fn gen_multi_alt_body_alt(
         }
 
         let gate = if group.len() == 1 {
-            alt_gate_and_suffix(&rule.alternatives[non_lr_indices[group[0]]], ctx)
+            alt_gate_and_suffix(&rule.alternatives[non_lr_indices[group[0]]], ctx);
         } else {
-            String::new()
+            String::new();
         };
         let cond = ctx.kind_check_str(&union_first, &"kind");
         w.begin(&`if {cond}{gate}`);
