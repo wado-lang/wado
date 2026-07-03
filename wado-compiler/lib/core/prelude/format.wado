@@ -11,6 +11,7 @@
 use { Display, DisplayAlt, Inspect, InspectAlt } from "core:prelude/traits.wado";
 use { String, StrCharIter } from "core:prelude/string.wado";
 use { Option } from "core:prelude/types.wado";
+use { unreachable } from "core:rt";
 /// Text alignment for padding.
 #[compiler_item("alignment")]
 internal enum Alignment {
@@ -372,6 +373,14 @@ impl Inspect for String {
     }
 }
 
+/// `never` is uninhabited, so no value ever reaches this body; it exists only
+/// so `Inspect` is total (e.g. `Result<T, !>::unwrap` can format its `Err`).
+impl Inspect for ! {
+    pub fn inspect(&self, f: &mut Formatter) {
+        unreachable();
+    }
+}
+
 impl<T: Inspect> Inspect for &T {
     pub fn inspect(&self, f: &mut Formatter) {
         f.write_str(&"&");
@@ -385,6 +394,12 @@ impl<T: Inspect> Inspect for &mut T {
         f.write_str(&"&mut ");
         let inner: &mut T = *self;
         (*inner).inspect(f);
+    }
+}
+
+impl InspectAlt for ! {
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        unreachable();
     }
 }
 

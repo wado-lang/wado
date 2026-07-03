@@ -83,13 +83,21 @@ impl Option<T> {
     }
 }
 
+/// Cold slow path for `unwrap`/`expect` failures: traps with `{msg}: {value:?}`.
+/// Kept out of line (`#[inline(never)]`) so the whole `Formatter`/`Inspect`
+/// stack stays out of the callers, leaving them small and inlinable.
+#[inline(never)]
+internal fn unwrap_failed<V>(msg: String, value: V) -> ! {
+    panic(`{msg}: {value:?}`);
+}
+
 impl Result<T, E> {
-    /// Returns the contained Ok value, panicking if Err.
+    /// Returns the contained Ok value, panicking (with the Err value) if Err.
     pub fn unwrap(&self) -> T {
-        if let Ok(v) = *self {
-            return v;
-        }
-        panic("called Result::unwrap() on an Err value");
+        return match *self {
+            Ok(v) => v,
+            Err(e) => unwrap_failed("called Result::unwrap() on an Err value", e),
+        };
     }
 
     /// Returns true if this is an Ok value.
@@ -108,28 +116,28 @@ impl Result<T, E> {
         return false;
     }
 
-    /// Returns the contained Ok value, panicking with `msg` if Err.
+    /// Returns the contained Ok value, panicking with `msg` (and the Err value) if Err.
     pub fn expect(&self, msg: String) -> T {
-        if let Ok(v) = *self {
-            return v;
-        }
-        panic(msg);
+        return match *self {
+            Ok(v) => v,
+            Err(e) => unwrap_failed(msg, e),
+        };
     }
 
-    /// Returns the contained Err value, panicking if Ok.
+    /// Returns the contained Err value, panicking (with the Ok value) if Ok.
     pub fn unwrap_err(&self) -> E {
-        if let Err(e) = *self {
-            return e;
-        }
-        panic("called Result::unwrap_err() on an Ok value");
+        return match *self {
+            Err(e) => e,
+            Ok(v) => unwrap_failed("called Result::unwrap_err() on an Ok value", v),
+        };
     }
 
-    /// Returns the contained Err value, panicking with `msg` if Ok.
+    /// Returns the contained Err value, panicking with `msg` (and the Ok value) if Ok.
     pub fn expect_err(&self, msg: String) -> E {
-        if let Err(e) = *self {
-            return e;
-        }
-        panic(msg);
+        return match *self {
+            Err(e) => e,
+            Ok(v) => unwrap_failed(msg, v),
+        };
     }
 }
 

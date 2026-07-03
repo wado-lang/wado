@@ -791,6 +791,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             name: decl.name.clone(),
             visibility: decl.visibility,
             operations,
+            is_generic: !decl.type_params.is_empty(),
             span: decl.span,
         }
     }

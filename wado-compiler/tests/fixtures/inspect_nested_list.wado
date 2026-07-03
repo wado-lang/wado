@@ -1,0 +1,12 @@
+// Nested `List<List<T>>` inspects recursively.
+test "nested list inspect" {
+    let a: List<List<i32>> = [[1, 2], [3, 4]];
+    assert `{a:?}` == "[[1, 2], [3, 4]]";
+    let empty: List<List<i32>> = [];
+    assert `{empty:?}` == "[]";
+    let b: List<List<String>> = [["a"], []];
+    assert `{b:?}` == "[[\"a\"], []]";
+}
+
+__DATA__
+{"test": {}}

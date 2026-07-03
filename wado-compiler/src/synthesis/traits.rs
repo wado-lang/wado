@@ -52,6 +52,10 @@ pub(crate) struct TraitsStdlibNames {
     pub inspect_alt: String,
     /// `InspectAlt::inspect_alt` method name, resolved via the registry.
     pub inspect_alt_method: String,
+    pub lower_hex: String,
+    /// `LowerHex::fmt` method name — used to render a resource's opaque i32
+    /// handle as hex in its synthesized Inspect (`Name#0x<hex>`).
+    pub lower_hex_method: String,
     pub less_name: String,
     pub less_index: u32,
     pub equal_name: String,
@@ -80,6 +84,8 @@ impl TraitsStdlibNames {
             inspect_alt_method: items
                 .trait_method_name(CompilerItem::InspectAlt)
                 .to_string(),
+            lower_hex: items.trait_name(CompilerItem::LowerHex).to_string(),
+            lower_hex_method: items.trait_method_name(CompilerItem::LowerHex).to_string(),
             less_name: less_name.to_string(),
             less_index,
             equal_name: equal_name.to_string(),
@@ -1060,6 +1066,17 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
     let formatter_name = ctx.names.formatter.clone();
     let inspect_name = ctx.names.inspect.clone();
     let inspect_method = ctx.names.inspect_method.clone();
+    let lower_hex_name = ctx.names.lower_hex.clone();
+    let lower_hex_method = ctx.names.lower_hex_method.clone();
+
+    // Plain (non-generic) resources inspect as `Name#0x<hex>`; collected before
+    // borrowing `type_table` since the loop below builds the resource type.
+    let resource_infos: Vec<(String, Span)> = module
+        .resources
+        .iter()
+        .filter(|r| !r.is_generic)
+        .map(|r| (r.name.clone(), r.span))
+        .collect();
 
     let mut tt = module.type_table.borrow_mut();
     let formatter_type = tt.make_struct(formatter_name.clone(), ModuleSource::format());
@@ -1306,26 +1323,62 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
                 // Tuple Inspect is provided by variadic impl in core:prelude/tuple.wado
             }
             _ => {
-                // Opaque/resource types (Future, Stream, etc.): write type name as string
+                // Opaque/resource types (Future, Stream, etc.): `Name#0x<hex>`.
                 let type_name = tt.type_name(type_id);
                 generated.push(Rc::new(RefCell::new(generate_opaque_inspect_fn(
                     &base_name,
                     &type_arg_names,
                     &type_name,
+                    type_id,
                     ref_type,
                     fmt_type,
                     string_type,
                     ref_string_type,
+                    ctx.trait_env,
+                    &module_source,
+                    &mut tt,
                     span,
                     &inspect_name,
                     &inspect_method,
                     &formatter_name,
+                    &lower_hex_name,
+                    &lower_hex_method,
                 ))));
                 // Intentionally do NOT `ctx.record_impl` — these per-module
                 // stubs are emitted into every module that uses the shape,
                 // so call sites resolve to a stub in the caller's module.
             }
         }
+    }
+
+    // Plain resources: one Inspect impl per declaration, in the declaring
+    // module (like structs/enums), rendering `Name#0x<hex>`.
+    for (name, rspan) in &resource_infos {
+        if ctx.has_methodful_impl_anywhere(name, &inspect_name) {
+            continue;
+        }
+        let resource_type = tt.make_resource(name.clone(), module_source.clone());
+        let ref_type = tt.make_ref(resource_type);
+        generated.push(Rc::new(RefCell::new(generate_opaque_inspect_fn(
+            name,
+            &[],
+            name,
+            resource_type,
+            ref_type,
+            fmt_type,
+            string_type,
+            ref_string_type,
+            ctx.trait_env,
+            &module_source,
+            &mut tt,
+            *rspan,
+            &inspect_name,
+            &inspect_method,
+            &formatter_name,
+            &lower_hex_name,
+            &lower_hex_method,
+        ))));
+        ctx.record_impl(name, &inspect_name);
     }
 
     // `Fn` dispatch stubs — one per canonical `(arity, return_type)`.
@@ -2104,34 +2157,68 @@ fn generate_fn_canonical_dispatch_stub(
 
 /// Generate Inspect for opaque/resource types (Future, Stream, etc.).
 ///
-/// Body: writes the type name as a static string, e.g., `Future<i32>`.
+/// Body writes the opaque handle as `Name#0x<hex>` (WEP: Inspect > Resource),
+/// e.g. `Future<i32>#0x3`. The handle is the resource's underlying i32, cast
+/// out and rendered through `LowerHex::fmt`.
+#[allow(clippy::too_many_arguments)]
 fn generate_opaque_inspect_fn(
     base_name: &str,
     type_arg_names: &[String],
     type_name: &str,
+    resource_type: TypeId,
     ref_type: TypeId,
     fmt_type: TypeId,
     string_type: TypeId,
     ref_string_type: TypeId,
+    trait_env: &TraitEnv,
+    module_source: &ModuleSource,
+    tt: &mut TypeTable,
     span: Span,
     inspect_trait: &str,
     inspect_method: &str,
     formatter_name: &str,
+    lower_hex_trait: &str,
+    lower_hex_method: &str,
 ) -> TirFunction {
     let method_info = trait_method_info(base_name, inspect_trait, inspect_method)
         .with_struct_type_args(type_arg_names);
     let qualified_name = method_info.to_mangled_name();
 
-    let fmt = local_expr(1, "f", fmt_type, span);
+    let fmt = || local_expr(1, "f", fmt_type, span);
+    let deref_self = deref_local(0, "self", ref_type, resource_type, span);
+    let handle = TirExpr::new(
+        TirExprKind::Cast {
+            expr: Box::new(deref_self),
+            target_type: TypeTable::I32,
+        },
+        TypeTable::I32,
+        span,
+    );
+    let hex_call = trait_call_on_type(
+        handle,
+        TypeTable::I32,
+        lower_hex_trait,
+        lower_hex_method,
+        TypeTable::UNIT,
+        vec![fmt()],
+        true,
+        trait_env,
+        module_source,
+        tt,
+        span,
+    );
     let body = TirBlock::new(
-        vec![write_str_stmt(
-            type_name.to_string(),
-            fmt,
-            string_type,
-            ref_string_type,
-            span,
-            formatter_name,
-        )],
+        vec![
+            write_str_stmt(
+                format!("{type_name}#0x"),
+                fmt(),
+                string_type,
+                ref_string_type,
+                span,
+                formatter_name,
+            ),
+            TirStmt::new(TirStmtKind::Expr(hex_call), span),
+        ],
         span,
     );
 
