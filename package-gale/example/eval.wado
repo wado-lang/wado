@@ -29,7 +29,6 @@ pub fn eval(input: &String) -> Result<i64, String> {
         let d = &result.diagnostics[0];
         return Result::Err(`{d.line}:{d.col}: {d.message}`);
     }
-    // The root is `prog`: its only child node is the top-level `expr`.
     return eval_first_child(&result.cst, 0, &result.tokens);
 }
 

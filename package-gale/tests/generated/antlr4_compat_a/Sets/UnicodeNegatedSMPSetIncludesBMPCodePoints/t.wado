@@ -634,10 +634,10 @@ pub struct CstStore {
 /// is an `i32` — matching over it allocates nothing. `child_kind` yields it
 /// so a consumer can `match` a child instead of chaining `is_node` / `is_token`.
 pub enum ChildKind {
-    Node,  // a rule / error sub-node
-    Token,  // a real terminal
-    Missing,  // an inserted synthetic terminal
-    Skipped,  // a real terminal deleted during recovery
+    Node,
+    Token,
+    Missing,
+    Skipped,
 }
 
 /// The read cursor over the flat store. Every method is `&self` over an `i32`
@@ -711,7 +711,6 @@ impl CstStore {
     /// `for let mut c = s.first_child(i); c >= 0; c = s.next_sibling(c) { … }`.
     pub fn first_child(&self, i: i32) -> i32 {
         let c = i + 1;
-        // Past the end (an unterminated root) or the node's own close: no child.
         if c >= self.tag.len() || self.tag[c] == E_CLOSE {
             return -1;
         }
@@ -797,7 +796,7 @@ fn cst_to_string_tree_impl(
             out.push_str(&">");
             c += 1;
         } else {
-            c += 1;  // the node's own E_CLOSE (bounds the loop)
+            c += 1;
         }
     }
     out.push_str(&")");
@@ -831,6 +830,18 @@ impl ParseResult {
     /// True when the parse produced no error-severity diagnostics.
     pub fn ok(&self) -> bool {
         return !self.has_errors();
+    }
+}
+
+/// Widen the parent open's span end and `NODE_ERROR` from a just-closed child.
+/// `stack` must already have the child popped, so its top is the parent (if any).
+fn bubble_to_parent(stack: &List<i32>, end: &mut List<i32>, flags: &mut List<i32>, child: i32) {
+    if stack.len() > 0 {
+        let parent = stack[stack.len() - 1];
+        if end[child] > end[parent] {
+            end[parent] = end[child];
+        }
+        flags[parent] = flags[parent] | (flags[child] & NODE_ERROR);
     }
 }
 
@@ -951,7 +962,8 @@ impl TreeBuilder {
     /// the retro-open `start_node_at` correct: the pass sees the final structure,
     /// so a wrapped subtree's `NODE_ERROR` bubbles into the wrap node even though
     /// the wrap was inserted after its children closed. Valid once the root node
-    /// has been closed.
+    /// has been closed; an open left unterminated by a truncated stream is folded
+    /// to the stream end (its `next` never stays 0), so traversal terminates.
     pub fn finish(&self) -> CstStore {
         let n = self.tag.len();
         let mut b: List<i32> = List::with_capacity(n);
@@ -983,32 +995,16 @@ impl TreeBuilder {
                 if self.a[r] > end[oi] {
                     end[oi] = self.a[r];
                 }
-                b[r] = self.a[oi];  // stamp the open's kind onto the close row
+                b[r] = self.a[oi];
                 next[oi] = r + 1;
-                if stack.len() > 0 {
-                    let pi = stack[stack.len() - 1];
-                    if end[oi] > end[pi] {
-                        end[pi] = end[oi];
-                    }
-                    flags[pi] = flags[pi] | (flags[oi] & NODE_ERROR);
-                }
+                bubble_to_parent(&stack, &mut end, &mut flags, oi);
             }
         }
-        // Defensive: an open with no matching close (a truncated event stream)
-        // is folded to the end of the stream so its `next` points past the
-        // columns and traversal terminates instead of looping on `next == 0`.
-        // Well-formed streams leave `stack` empty, so this is a no-op there.
         while stack.len() > 0 {
             let oi = stack[stack.len() - 1];
             let _ = stack.pop();
             next[oi] = n;
-            if stack.len() > 0 {
-                let pi = stack[stack.len() - 1];
-                if end[oi] > end[pi] {
-                    end[pi] = end[oi];
-                }
-                flags[pi] = flags[pi] | (flags[oi] & NODE_ERROR);
-            }
+            bubble_to_parent(&stack, &mut end, &mut flags, oi);
         }
         return CstStore { tag: self.tag, a: self.a, b, alt: self.alt, end, flags, next };
     }

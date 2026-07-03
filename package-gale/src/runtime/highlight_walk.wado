@@ -18,10 +18,10 @@ pub fn highlight_walk(visitor: &mut HighlightVisitor, toks: &TokenStream, s: &Cs
                 visitor.hl_enter(s.a[r]);
             }
         } else if t == E_CLOSE {
-            if s.b[r] != K_ERROR as i32 {  // b stamped with the open's kind in finalize
+            if s.b[r] != K_ERROR as i32 {
                 visitor.hl_exit();
             }
-        } else {  // E_TOK / E_MISS / E_SKIP
+        } else {
             visitor.hl_visit_token(toks, s.a[r]);
         }
     }
