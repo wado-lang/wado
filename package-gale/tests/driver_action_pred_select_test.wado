@@ -1,0 +1,30 @@
+//! Stage C: an alt-initial semantic predicate gates prediction. Two alts share
+//! the `A B` prefix; the predicates pick alt 1 over the grammar-order-first
+//! alt 0. Verifies prediction-time gating, not the post-commit inline guard.
+
+use ps from "./grammars/wado_pred_select.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_pred_select",
+        },
+    };
+
+test "an alt-initial predicate selects the alternative in prediction" {
+    let result = ps::parse_item(&"a b");
+    assert result.ok(), "clean parse under a true predicate";
+    assert result.output == "alt1", `output: '{result.output}'`;
+}
+
+test "a distinct-token alt stays a plain token-led branch" {
+    let result = ps::parse_item(&"c d");
+    assert result.ok(), "clean parse of the third alt";
+    assert result.output == "alt2", `output: '{result.output}'`;
+}
+
+test "a failed predicate falls through to the unpredicated alt" {
+    let result = ps::parse_fallback(&"a b");
+    assert result.ok(), "clean parse via the fallback alt";
+    assert result.output == "fb1", `output: '{result.output}'`;
+}

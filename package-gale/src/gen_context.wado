@@ -155,6 +155,11 @@ pub struct GenContext {
     /// group, LR suffix, single-token multi-alt, multi-alt prequel) surfaces
     /// loudly instead of vanishing silently.
     action_seen: List<i32>,
+    /// `action_id`s of alt-initial predicates that prediction-time gating
+    /// resolves at the dispatch (an `Ambiguous` overlap group). Their in-body
+    /// emit in `gen_alt_actions_at` is a no-op — the dispatch already
+    /// evaluated them to choose the alternative.
+    predicate_gated: List<i32>,
     rule_follow_kinds: TreeMap<String, List<String>>,
     rule_follow_exact: bool,
 }
@@ -192,6 +197,7 @@ impl GenContext {
             trace: false,
             emit_actions: false,
             action_seen: [],
+            predicate_gated: [],
             rule_follow_kinds: TreeMap::new(),
             rule_follow_exact: false,
         };
@@ -402,6 +408,22 @@ impl GenContext {
     pub fn action_was_seen(&self, id: i32) -> bool {
         for let s of &self.action_seen {
             if *s == id {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// Record that prediction-time gating resolves this alt-initial predicate
+    /// at the dispatch, so its in-body emit is suppressed.
+    pub fn mark_predicate_gated(&mut self, id: i32) {
+        self.predicate_gated.push(id);
+    }
+
+    /// Whether an alt-initial predicate is resolved by prediction-time gating.
+    pub fn is_predicate_gated(&self, id: i32) -> bool {
+        for let g of &self.predicate_gated {
+            if *g == id {
                 return true;
             }
         }

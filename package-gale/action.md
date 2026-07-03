@@ -251,8 +251,11 @@ Recovery invariants with actions present:
     - [ ] `@init` / `@after` for multi-alt / LR rules.
 - [~] Phase 2 — predicates in prediction (`SemPredEvalParser` / `SemPredEvalLexer` descriptors are the acceptance suite).
   - [x] Inline runtime guard for mid-alt / single-alt-rule predicates: a `{cond}?` compiles to `if !p.speculating { if !(<cond>) { p.no_viable(...); return; } }`, so a false predicate fails the parse into normal recovery. Substitution applies to the condition (identity translator).
-  - [ ] Prediction-time gating: alt-initial predicates choosing which alt to take (static dispatch / scan tournament / ATN), the `SemPredEvalParser` acceptance suite.
-  - [ ] `pred_<id>` effect-free standalone fns; lexer predicates.
+  - [~] Prediction-time gating: alt-initial predicates choosing which alt to take (static dispatch / scan tournament / ATN), the `SemPredEvalParser` acceptance suite.
+    - [x] Static dispatch over an `Ambiguous` overlap group: context-independent (`$`-free) alt-initial predicates gate the parse-side dispatch. The group's length tournament is bypassed for a grammar-order predicate chain (`if pred0 … else if pred1 … else no_viable`); an unpredicated alt in the group is the always-viable fallback. Gated ids are marked (`mark_gated_predicates`) so the in-body copy is suppressed and the now-dead per-alt scan helpers are not emitted. Driver fixture `wado_pred_select.g4`.
+    - [ ] Single-token multi-alt rules (the `SemPredEvalParser/Simple` shape, `a : {p}? ID | {q}? ID | INT`): `all_alts_are_single_token` takes the compact fast path that runs no actions/predicates — needs the general path (or predicate-awareness in `gen_parse_fn_single_token`) before those descriptors execute.
+    - [ ] Context-dependent predicates ($arg/$local/$ret), the scan-tournament cross-rule exclusion, and the ATN predicate-callback path.
+  - [ ] `pred_<id>` effect-free standalone fns (currently the condition is inlined at the dispatch); lexer predicates.
 - [ ] Phase 3 — java2wado for the corpus subset + members translation.
 - [ ] Phase 4 — lexer actions / position-sensitive predicates + SuperClass trait (`tokenVocab` falls out).
 

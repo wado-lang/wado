@@ -2747,6 +2747,10 @@ fn gen_parse_fn_named(
     }
 
     if has_overlaps {
+        // Record the alt-initial predicates prediction-time gating resolves,
+        // before the alt bodies emit (their in-body copies must know to skip).
+        mark_gated_predicates(rule, &groups, &first_sets, &non_lr_indices, ctx);
+
         // Pre-compute which alts' scan helpers the dispatch will call so the
         // emission loop can skip the dead ones (see `collect_referenced_scan_alts`).
         let mut referenced_scans: List<i32> = [];
@@ -3089,7 +3093,12 @@ fn gen_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before: i32
         match a.kind {
             Action => gen_action_body(w, &a.source, ctx),
             Predicate => {
-                if predicate_selects_alternative(before, ctx) {
+                if ctx.is_predicate_gated(a.source.action_id) {
+                    // Prediction-time gating already evaluated this alt-initial
+                    // predicate at the dispatch to choose the alternative; the
+                    // in-body copy is a no-op.
+                    ctx.mark_action_seen(a.source.action_id);
+                } else if predicate_selects_alternative(before, ctx) {
                     warn_unsupported_prediction_predicate(&a.source, ctx);
                 } else {
                     gen_predicate_guard(w, &a.source, ctx);
@@ -3122,6 +3131,141 @@ fn current_rule_is_multi_alt(ctx: &GenContext) -> bool {
         return false;
     }
     return ctx.parser_rules()[ridx].alternatives.len() > 1;
+}
+
+/// The alt-initial (`before_index == 0`) semantic predicates prediction can
+/// gate on: context-independent, i.e. no `$` attribute references (action.md
+/// "Predicates in prediction"). Their bodies pass through the identity
+/// translator verbatim, so the conditions are returned as-is. A context-
+/// dependent alt-initial predicate (referencing `$arg` / `$local` / `$ret`)
+/// is excluded here and stays on the unsupported-prediction path.
+fn alt_initial_gate_conditions(alt: &Alternative) -> List<String> {
+    let mut conds: List<String> = [];
+    for let a of &alt.actions {
+        if a.before_index != 0 {
+            continue;
+        }
+        if let Predicate = a.kind {
+            if find_attr_refs(&a.source.text).len() == 0 {
+                conds.push(a.source.text);
+            }
+        }
+    }
+    return conds;
+}
+
+/// Whether any alt in an `Ambiguous` overlap group carries a gateable
+/// alt-initial predicate — the trigger for predicate-gated dispatch.
+fn ambiguous_group_has_gate(amb_alts: &List<i32>, alts: &List<Alternative>) -> bool {
+    for let idx of amb_alts {
+        if !alt_initial_gate_conditions(&alts[*idx]).is_empty() {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Record which alt-initial predicates prediction-time gating resolves for
+/// this rule, so `gen_alt_actions_at` suppresses their in-body copy. Only
+/// overlap groups that render as a top-level `Ambiguous` node (alts the
+/// tournament cannot separate by lookahead) are gated; predicates on
+/// token-led / deeper-dispatch groups stay on the inline-guard path.
+fn mark_gated_predicates(
+    rule: &ParserRule,
+    groups: &List<List<i32>>,
+    first_sets: &List<List<String>>,
+    non_lr_indices: &List<i32>,
+    ctx: &mut GenContext,
+) {
+    if !ctx.emit_actions() {
+        return;
+    }
+    for let group of groups {
+        if group.len() <= 1 {
+            continue;
+        }
+        let tree = build_group_prediction_tree(&rule.alternatives, group, first_sets, non_lr_indices, ctx);
+        if let Ambiguous(a) = &tree {
+            for let idx of &a.alts {
+                for let act of &rule.alternatives[*idx].actions {
+                    if act.before_index == 0 {
+                        if let Predicate = act.kind {
+                            if find_attr_refs(&act.source.text).len() == 0 {
+                                ctx.mark_predicate_gated(act.source.action_id);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Predicate-gated dispatch for an `Ambiguous` overlap group (action.md
+/// "Predicates in prediction", static dispatch). The alts tie on lookahead,
+/// so their alt-initial context-independent predicates decide which one
+/// prediction takes. Evaluated in grammar (alt) order; the first alt whose
+/// predicates all hold wins, an unpredicated alt is always viable and closes
+/// the chain, and an all-false state is no viable alternative.
+fn gen_predicate_gated_dispatch(
+    w: &mut CodeWriter,
+    amb_alts: &List<i32>,
+    alts: &List<Alternative>,
+    fn_name: &String,
+    ctx: &GenContext,
+    rule_display: &String,
+) {
+    let order = amb_alts.sorted();
+    let mut opened = false;
+    for let idx of &order {
+        let conds = alt_initial_gate_conditions(&alts[*idx]);
+        if conds.is_empty() {
+            if !opened {
+                emit_gated_pick(w, *idx, fn_name, ctx, rule_display);
+                return;
+            }
+            w.else_begin(&"else");
+            emit_gated_pick(w, *idx, fn_name, ctx, rule_display);
+            w.end();
+            return;
+        }
+        let cond = join_gate_conds(&conds);
+        if !opened {
+            w.begin(&`if {cond}`);
+            opened = true;
+        } else {
+            w.else_begin(&`else if {cond}`);
+        }
+        emit_gated_pick(w, *idx, fn_name, ctx, rule_display);
+    }
+    w.else_begin(&"else");
+    w.line(&`p.no_viable("no viable alternative", p.peek_span(), []);`);
+    w.line(&"return;");
+    w.end();
+}
+
+/// Emit one predicate-gated branch body: the trace pick and the tail call
+/// into the chosen alt's helper.
+fn emit_gated_pick(w: &mut CodeWriter, idx: i32, fn_name: &String, ctx: &GenContext, rule_display: &String) {
+    if ctx.is_trace() {
+        w.line(&`trace_pick(p, &{str_lit(*rule_display)}, {idx});`);
+    }
+    w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
+}
+
+/// Combine an alt's multiple alt-initial predicate conditions into a single
+/// short-circuit `&&` guard (one predicate is the common case).
+fn join_gate_conds(conds: &List<String>) -> String {
+    let mut out = String::new();
+    for let mut i = 0; i < conds.len(); i += 1 {
+        if i > 0 {
+            out.push_str(&" && ");
+        }
+        out.push('(');
+        out.push_str(&conds[i]);
+        out.push(')');
+    }
+    return out;
 }
 
 /// Emit one action body under the identity translator (`language = Wado`):
@@ -6481,6 +6625,13 @@ fn gen_prediction_code_inner(
         let mut sorted_indices = a.alts.sorted();
         sort_group_by_element_count(&mut sorted_indices, alts);
         if skip == 0 {
+            // Predicate-gated ambiguity: alt-initial context-independent
+            // predicates resolve which alternative prediction takes, ahead of
+            // any length tournament (the alts tie on lookahead).
+            if ctx.emit_actions() && ambiguous_group_has_gate(&a.alts, alts) {
+                gen_predicate_gated_dispatch(w, &a.alts, alts, fn_name, ctx, rule_display);
+                return;
+            }
             let amb_rule = ctx.current_rule_index();
             let route_via_atn = if let AtEndConflict = a.reason {
                 ctx.emits_at_end_conflict_via_atn(amb_rule, rule_display, &a.branch_tokens);
@@ -6692,6 +6843,11 @@ fn collect_referenced_scan_alts(
             }
         },
         Ambiguous(a) => {
+            // A predicate-gated group dispatches on its alt-initial predicates,
+            // never the length tournament — so it references no scan helper.
+            if ctx.emit_actions() && ambiguous_group_has_gate(&a.alts, alts) {
+                return;
+            }
             let mut sorted_indices = a.alts.sorted();
             sort_group_by_element_count(&mut sorted_indices, alts);
             let mut all_have_scans = true;
