@@ -126,7 +126,17 @@ fn collect_and_validate(
             continue;
         }
         let Some(key) = func.id else { continue };
+        let is_trait_method = func.is_trait_method();
         for (pi, param) in func.params.iter().enumerate() {
+            // A trait method's `self` receiver stays pinned. Scalarizing a
+            // single-field-struct receiver (e.g. a `SequenceLiteralBuilder`
+            // wrapper like `SeqVec { items: List<T> }`) changes the receiver
+            // shape that later collapse passes match on. Non-receiver params —
+            // notably serde's boxed `value: &T` — are still unwrapped, which is
+            // where the box-per-scalar win comes from.
+            if is_trait_method && pi == 0 && param.name == "self" {
+                continue;
+            }
             if func.address_taken_locals.contains(&param.local_index) {
                 continue;
             }
@@ -680,7 +690,10 @@ fn lookup_function<'a>(
     project.functions.get(key.index())
 }
 
-/// Same pinning rules DAE uses — see `optimize::dae::is_eligible`.
+/// Pinning rules close to DAE's (`optimize::dae::is_eligible`), but — unlike
+/// DAE — concrete trait-impl methods are NOT pinned here: rewriting a
+/// single-field-struct parameter and its call sites is sound after
+/// monomorphization (see the note by the `is_closure_call` guard).
 fn is_eligible(func: &NirFunction) -> bool {
     if func.is_cm_export || func.is_cm_binding || func.is_dispatch_wrapper || func.is_ambient {
         return false;
@@ -694,11 +707,16 @@ fn is_eligible(func: &NirFunction) -> bool {
     if func.allocator_tag.is_some() {
         return false;
     }
-    if let Some(mi) = func.method_info.as_ref()
-        && mi.trait_name.is_some()
-    {
-        return false;
-    }
+    // A concrete trait-impl method is a plain function after monomorphization:
+    // Wado has no dynamic dispatch, every call site carries the resolved
+    // `func_id`, and `rewrite_call_sites` rewrites all of them, so scalarizing a
+    // single-field-struct parameter (and its call-site allocation) is sound.
+    // This unwraps the `Box<Scalar>` that `&T` reference parameters box the
+    // value into — e.g. every scalar `serde` field/element (`SerializeStruct::
+    // field<i32>`, `SerializeSeq::element<f64>`). The genuinely-pinned shapes —
+    // closure `__call` functors (their function-table wrapper snapshots the
+    // signature), CM bindings, dispatch wrappers, non-`Regular` kinds — are
+    // still excluded by the checks above and below.
     if func.is_closure_call() {
         return false;
     }

@@ -189,7 +189,7 @@ type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelud
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(69)
 
-type "functype//wado-compiler/tests/fixtures/variant_qualified_pattern.wado/Op^Eq::eq" = fn(ref "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/variant_qualified_pattern.wado/Op>", ref "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/variant_qualified_pattern.wado/Op>") -> bool;  // TypeId(70)
+type "functype//wado-compiler/tests/fixtures/variant_qualified_pattern.wado/Op^Eq::eq" = fn(ref "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/variant_qualified_pattern.wado/Op>", ref "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op") -> bool;  // TypeId(70)
 
 type "functype//wado-compiler/tests/fixtures/variant_qualified_pattern.wado/Op^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/variant_qualified_pattern.wado/Op>", ref "core:prelude/format.wado//Formatter");  // TypeId(71)
 
@@ -242,7 +242,7 @@ fn "wado-compiler/tests/fixtures/variant_qualified_pattern.wado/check"(op) {
         return 0;
     } else {
     }
-    return "wado-compiler/tests/fixtures/variant_qualified_pattern.wado/Op^Eq::eq"(struct.new "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/variant_qualified_pattern.wado/Op>" { value: any }, struct.new "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/variant_qualified_pattern.wado/Op>" { value: struct.new "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op" { 0 } });
+    return "wado-compiler/tests/fixtures/variant_qualified_pattern.wado/Op^Eq::eq"(struct.new "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/variant_qualified_pattern.wado/Op>" { value: any }, struct.new "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op" { 0 });
 }
 
 fn "wado-compiler/tests/fixtures/variant_qualified_pattern.wado/run"() {
@@ -1589,27 +1589,21 @@ fn "wado-compiler/tests/fixtures/variant_qualified_pattern.wado/Op^Eq::eq"(self,
     let __match_4: ref "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op";
     __match_4 = self.value;
     if __match_4.discriminant == 0 {
-        let __match_scrut_3: ref "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op";
-        __match_scrut_3 = other.value;
-        if __match_scrut_3.discriminant == 0 {
+        if other.discriminant == 0 {
             return 1;
         } else {
             return 0;
         }
     } else if __match_4.discriminant == 1 {
-        let __match_scrut_2: ref "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op";
-        __match_scrut_2 = other.value;
-        if __match_scrut_2.discriminant == 1 {
+        if other.discriminant == 1 {
             return 1;
         } else {
             return 0;
         }
     } else {
         __eq_self_Token_2 = ref.cast "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(__match_4).payload_0;
-        let __match_scrut_1: ref "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op";
-        __match_scrut_1 = other.value;
-        if ref.test "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(__match_scrut_1) {
-            __eq_other_Token_3 = ref.cast "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(__match_scrut_1).payload_0;
+        if ref.test "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(other) {
+            __eq_other_Token_3 = ref.cast "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(other).payload_0;
             return __eq_self_Token_2 == __eq_other_Token_3;
         } else {
             return 0;

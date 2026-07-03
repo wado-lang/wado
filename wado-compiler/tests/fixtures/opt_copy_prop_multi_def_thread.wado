@@ -1,0 +1,35 @@
+// Regression: match_thread (and labeled_block_fusion) reuse one binding local
+// across multiple same-variant break sites, producing two `let v = <const>`
+// defs of the same local on disjoint paths. copy_prop must NOT collapse a
+// multi-def local to a single source, or path A reads path B's value.
+use { println, Stdout } from "core:cli";
+
+struct S { flag: bool }
+
+impl S {
+    #[inline]
+    fn pick(&self) -> Result<i32, i32> {
+        if self.flag {
+            return Result::Ok(10);
+        }
+        return Result::Ok(20);
+    }
+
+    fn run(&self) -> Result<i32, i32> {
+        let v = self.pick()?;
+        return Result::Ok(v + 1);
+    }
+}
+
+export fn run() with Stdout {
+    let a = S { flag: true };
+    let b = S { flag: false };
+    assert a.run() matches { Ok(11) };
+    assert b.run() matches { Ok(21) };
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n"
+}
