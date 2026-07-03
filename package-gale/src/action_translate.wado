@@ -299,12 +299,13 @@ pub fn rule_value_channel_ready(rule: &ParserRule) -> bool {
 }
 
 /// Whether a rule's arguments are threaded as `_parse_<rule>` parameters and
-/// stored into its `<Rule>Vals`. Scoped to single-alt rules (no `_alt_<n>` /
-/// dispatch forwarding) whose every arg type has a Wado default (so the param
-/// can be defaulted and the vals field `Default`-init). A multi-alt or
-/// non-defaultable-arg rule keeps `$arg` a loud error.
+/// stored into its `<Rule>Vals`. Any non-left-recursive rule qualifies (the
+/// seeded `vals` threads through the multi-alt `_alt_<n>` helpers), provided
+/// every arg type has a Wado default so the param can be defaulted and the vals
+/// field `Default`-init. An LR or non-defaultable-arg rule keeps `$arg` a loud
+/// error.
 pub fn rule_threads_args(rule: &ParserRule) -> bool {
-    if rule.alternatives.len() != 1 {
+    if rule_is_left_recursive(rule) {
         return false;
     }
     if rule.args.is_empty() {

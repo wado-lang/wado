@@ -3051,11 +3051,17 @@ fn gen_parse_fn_named(
                     if ctx.emit_follow() {
                         add_follow_param(&mut f);
                     }
+                    // The seeded `vals` (rule args + `@init`) is threaded in from
+                    // the inner fn so overlap-group dispatch keeps value
+                    // continuity; the helper mutates its own copy and returns it.
+                    if rule_emits_vals(ctx, rule) {
+                        f.add_param(&"vals", &vals_struct_name(rule));
+                    }
                     f.set_return_type(&rule_result_type_for(rule, ctx));
                     f.emit_begin(w);
                     w.line(&"let start = p.peek_start();");
                     if rule_emits_vals(ctx, rule) {
-                        w.line(&`let mut vals = {vals_struct_name(rule)} \{\};`);
+                        w.line(&"let mut vals = vals;");
                     }
                     let body = rule_alt_body(lowered_rule, alt_index).unwrap();
                     let after = rule_after_for(rule, lowered_rule, ctx);
@@ -3150,6 +3156,7 @@ fn gen_parse_fn_named(
         if ctx.emit_follow() {
             add_follow_param(&mut f);
         }
+        add_arg_params(&mut f, rule, ctx);
         f.set_return_type(&rule_result_type_for(rule, ctx));
         f.emit_begin(w);
         if needs_start {
@@ -3158,22 +3165,13 @@ fn gen_parse_fn_named(
         if rule_emits_vals(ctx, rule) {
             w.line(&`let mut vals = {vals_struct_name(rule)} \{\};`);
         }
+        emit_arg_stores(w, rule, ctx);
+        // `@init` shares the inner fn's `vals`; the seed is threaded into the
+        // `_alt_<n>` helpers (see `alt_vals_arg`), so overlap-group dispatch
+        // preserves it.
         if ctx.emit_actions() {
             if let Some(a) = &rule.init_action {
-                // `@init` shares the inner fn's `vals`. Overlap groups dispatch
-                // through `_alt_<n>` helpers that own a fresh `vals`, so an
-                // `@init` seeding the channel there would be lost — defer it
-                // loudly rather than drop a write. Side-effect-only `@init`
-                // (no channel) and the inlined dispatch are unaffected.
-                if has_overlaps && rule_emits_vals(ctx, rule) {
-                    ctx.warn(
-                        &`action {a.action_id}`,
-                        DiagnosticKind::UnsupportedAction,
-                        `@init on a value-channel rule with overlapping alternatives is not yet supported (its channel seed would not reach the per-alt helpers)`,
-                    );
-                } else {
-                    gen_action_body(w, a, ctx);
-                }
+                gen_action_body(w, a, ctx);
             }
         }
         if has_overlaps {
@@ -3662,6 +3660,16 @@ fn gen_predicate_gated_dispatch(
     w.end();
 }
 
+/// The `, vals` a multi-alt dispatch forwards to an `_alt_<n>` helper so the
+/// seeded value channel (rule args + `@init`) reaches the chosen alternative,
+/// or `""` when the rule has no channel.
+fn alt_vals_arg(ctx: &GenContext) -> String {
+    if current_rule_emits_vals(ctx) {
+        return String::from(", vals");
+    }
+    return String::new();
+}
+
 /// Return statement after a `no_viable` in a rule body: `return vals;` when the
 /// rule exposes a value channel (so a `Default`-init struct flows back), else
 /// `return;`.
@@ -3678,7 +3686,7 @@ fn emit_gated_pick(w: &mut CodeWriter, idx: i32, fn_name: &String, ctx: &GenCont
     if ctx.is_trace() {
         w.line(&`trace_pick(p, &{str_lit(*rule_display)}, {idx});`);
     }
-    w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
+    w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())}{alt_vals_arg(ctx)});`);
 }
 
 /// Join predicate conditions into one short-circuit `(c0) && (c1)` guard.
@@ -6979,11 +6987,11 @@ fn emit_index_pick_dispatch(
     for let mut i = 0; i < sorted_indices.len(); i += 1 {
         let idx = sorted_indices[i];
         w.begin(&`if {*var} == {idx}`);
-        w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
+        w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())}{alt_vals_arg(ctx)});`);
         w.end();
     }
     let last_idx = sorted_indices[sorted_indices.len() - 1];
-    w.line(&`return {*fn_name}_alt_{last_idx}(p{follow_sep(ctx.emit_follow())});`);
+    w.line(&`return {*fn_name}_alt_{last_idx}(p{follow_sep(ctx.emit_follow())}{alt_vals_arg(ctx)});`);
 }
 
 /// Emit one speculative alt attempt. The alt runs under `speculating` so a
@@ -7030,7 +7038,7 @@ fn gen_prediction_code_inner(
         if skip > 0 {
             w.line(&`p.pos -= {skip};`);
         }
-        w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
+        w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())}{alt_vals_arg(ctx)});`);
         return;
     }
     if let Consume(c) = node {
@@ -7146,7 +7154,7 @@ fn gen_prediction_code_inner(
                             if ctx.is_trace() {
                                 w.line(&`trace_pick(p, &{str_lit(*rule_display)}, {idx});`);
                             }
-                            w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
+                            w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())}{alt_vals_arg(ctx)});`);
                         } else {
                             let has_scan = alt_has_scan(&alts[idx].elements, ctx);
                             let is_full = has_scan && alt_scan_is_full(&alts[idx].elements, ctx);
@@ -7156,14 +7164,14 @@ fn gen_prediction_code_inner(
                                 if ctx.is_trace() {
                                     w.line(&`trace_pick(p, &{str_lit(*rule_display)}, {idx});`);
                                 }
-                                w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
+                                w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())}{alt_vals_arg(ctx)});`);
                                 w.end();
                             } else if has_scan {
                                 // Partial scan: try parse, fall through on failure.
                                 w.begin(&`if {*fn_name}_scan_{idx}(&p.kinds, p.pos) >= 0`);
                                 emit_spec_alt_try(
                                     w,
-                                    &`{*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())})`,
+                                    &`{*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())}{alt_vals_arg(ctx)})`,
                                     idx,
                                     ctx,
                                     rule_display,
@@ -7173,7 +7181,7 @@ fn gen_prediction_code_inner(
                                 // No scan: save-and-rewind speculative parse.
                                 emit_spec_alt_try(
                                     w,
-                                    &`{*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())})`,
+                                    &`{*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())}{alt_vals_arg(ctx)})`,
                                     idx,
                                     ctx,
                                     rule_display,
@@ -7192,11 +7200,11 @@ fn gen_prediction_code_inner(
                         if ctx.is_trace() {
                             w.line(&`trace_pick(p, &{str_lit(*rule_display)}, {idx});`);
                         }
-                        w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
+                        w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())}{alt_vals_arg(ctx)});`);
                     } else {
                         emit_spec_alt_try(
                             w,
-                            &`{*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())})`,
+                            &`{*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())}{alt_vals_arg(ctx)})`,
                             idx,
                             ctx,
                             rule_display,

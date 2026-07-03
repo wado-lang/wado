@@ -107,12 +107,20 @@ r[i32 n] : ID { $n = 2; } ;
     assert out == " vals.n = 2; ", `out: '{out}'`;
 }
 
-test "translate rejects a rule argument on a multi-alt rule" {
+test "translate threads a multi-alt rule argument through the value channel" {
     let g = parse("grammar T;
 r[i32 n] : A { $n = 1; } | B { $n = 2; } ;
 ").unwrap();
-    let res = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" $n = 1; ", true, false);
-    assert res.is_err(), "multi-alt rule args are not threaded yet";
+    let out = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" $n = 1; ", true, false).unwrap();
+    assert out == " vals.n = 1; ", `out: '{out}'`;
+}
+
+test "translate rejects a rule argument on a left-recursive rule" {
+    let g = parse("grammar T;
+e[i32 n] : e '+' e | INT { $n = 1; } ;
+").unwrap();
+    let res = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" $n = 1; ", false, false);
+    assert res.is_err(), "LR rule args are not threaded yet";
 }
 
 test "value channel readiness and return-vals detection" {
