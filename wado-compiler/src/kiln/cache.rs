@@ -116,32 +116,16 @@ pub fn hex_digest(digest: &[u8; 32]) -> String {
     hex(digest)
 }
 
-/// CBOR encoding constants used by the options encoder (RFC 8949 §3).
-mod cbor {
-    // Major types (top 3 bits of the head byte).
-    pub const UINT: u8 = 0;
-    pub const NINT: u8 = 1;
-    pub const TEXT: u8 = 3;
-    pub const MAP: u8 = 5;
-    // Additional-info values selecting the argument width.
-    pub const AI_U8: u8 = 0x18;
-    pub const AI_U16: u8 = 0x19;
-    pub const AI_U32: u8 = 0x1a;
-    pub const AI_U64: u8 = 0x1b;
-    // Simple / float head bytes.
-    pub const FALSE: u8 = 0xf4;
-    pub const TRUE: u8 = 0xf5;
-    pub const F64: u8 = 0xfb;
-}
-
 /// Encode a [`CanonicalOptions`] to the canonical cache-key / wire byte
-/// string: a deterministic CBOR (RFC 8949) encoding of the options tree.
+/// string: a deterministic CBOR (RFC 8949) encoding of the options tree,
+/// produced with the dependency-free `minicbor` encoder.
 ///
 /// - A struct/table is a definite-length CBOR map whose entries are sorted
-///   by the bytewise order of their encoded keys (RFC 8949 §4.2.1). Field
-///   names are text-string keys, matching how `core:cbor` decodes a struct.
-/// - Integers use the preferred (shortest) head; `I64` renders as an
-///   unsigned or negative integer by sign, `U64` always unsigned.
+///   in canonical key order (shorter encoded key first, then bytewise —
+///   for text keys that is `(len, bytes)`). Field names are text-string
+///   keys, matching how `core:cbor` decodes a struct.
+/// - Integers use `minicbor`'s preferred (shortest) head; `I64` renders as
+///   an unsigned or negative integer by sign, `U64` always unsigned.
 /// - `F64` is always the 8-byte double form. `core:cbor::deserialize_f32`
 ///   narrows a double, so a single width decodes into both `f32` and `f64`
 ///   fields. `NaN` / `±Inf` panic — no Wado options schema yields them.
@@ -154,90 +138,59 @@ mod cbor {
 /// since nothing re-encodes the blob on the generator side.
 #[must_use]
 pub fn encode_options_canonical(options: &CanonicalOptions) -> Vec<u8> {
-    let mut out = Vec::new();
-    encode_options_table(&mut out, &options.values);
-    out
+    let mut enc = minicbor::Encoder::new(Vec::new());
+    encode_options_table(&mut enc, &options.values);
+    enc.into_writer()
 }
 
-fn encode_options_table(out: &mut Vec<u8>, entries: &[(String, CanonicalValue)]) {
-    // Encode each surviving (key, value) into its own buffer so the map can
-    // be emitted in canonical (encoded-key-bytewise) order.
-    let mut pairs: Vec<(Vec<u8>, Vec<u8>)> = Vec::with_capacity(entries.len());
-    for (k, v) in entries {
-        if matches!(v, CanonicalValue::None) {
-            continue;
-        }
-        let mut key = Vec::new();
-        write_cbor_text(&mut key, k);
-        let mut value = Vec::new();
-        encode_canonical_value(&mut value, v);
-        pairs.push((key, value));
-    }
-    pairs.sort_by(|a, b| a.0.cmp(&b.0));
+/// Writing into a `Vec<u8>` is infallible, so `minicbor` encode results are
+/// unwrapped through this alias to keep the walk readable.
+type EncVec = minicbor::Encoder<Vec<u8>>;
 
-    write_cbor_head(out, cbor::MAP, pairs.len() as u64);
-    for (key, value) in pairs {
-        out.extend_from_slice(&key);
-        out.extend_from_slice(&value);
+fn encode_options_table(enc: &mut EncVec, entries: &[(String, CanonicalValue)]) {
+    let mut kept: Vec<&(String, CanonicalValue)> = entries
+        .iter()
+        .filter(|(_, v)| !matches!(v, CanonicalValue::None))
+        .collect();
+    // Canonical CBOR map order (RFC 8949 §4.2.1): by encoded key bytes. For
+    // text keys the head length is monotonic in the string length, so this
+    // reduces to (byte length, bytewise).
+    kept.sort_by(|a, b| a.0.len().cmp(&b.0.len()).then_with(|| a.0.cmp(&b.0)));
+
+    enc.map(kept.len() as u64).expect("vec writer is infallible");
+    for (k, v) in kept {
+        enc.str(k).expect("vec writer is infallible");
+        encode_canonical_value(enc, v);
     }
 }
 
-fn encode_canonical_value(out: &mut Vec<u8>, v: &CanonicalValue) {
+fn encode_canonical_value(enc: &mut EncVec, v: &CanonicalValue) {
+    let infallible = "vec writer is infallible";
     match v {
-        CanonicalValue::Bool(true) => out.push(cbor::TRUE),
-        CanonicalValue::Bool(false) => out.push(cbor::FALSE),
-        CanonicalValue::I64(n) => {
-            if *n >= 0 {
-                write_cbor_head(out, cbor::UINT, *n as u64);
-            } else {
-                write_cbor_head(out, cbor::NINT, (-1 - *n) as u64);
-            }
+        CanonicalValue::Bool(b) => {
+            enc.bool(*b).expect(infallible);
         }
-        CanonicalValue::U64(n) => write_cbor_head(out, cbor::UINT, *n),
+        CanonicalValue::I64(n) => {
+            enc.i64(*n).expect(infallible);
+        }
+        CanonicalValue::U64(n) => {
+            enc.u64(*n).expect(infallible);
+        }
         CanonicalValue::F64(f) => {
             assert!(
                 f.is_finite(),
                 "kiln: CBOR options cannot encode non-finite float {f}"
             );
-            out.push(cbor::F64);
-            out.extend_from_slice(&f.to_bits().to_be_bytes());
+            enc.f64(*f).expect(infallible);
         }
-        CanonicalValue::String(s) | CanonicalValue::Enum(s) => write_cbor_text(out, s),
+        CanonicalValue::String(s) | CanonicalValue::Enum(s) => {
+            enc.str(s).expect(infallible);
+        }
         CanonicalValue::None => {
             panic!("kiln: encode_options_canonical reached bare None value");
         }
-        CanonicalValue::Some(inner) => encode_canonical_value(out, inner),
-        CanonicalValue::Struct(fields) => encode_options_table(out, fields),
-    }
-}
-
-/// Write a CBOR text string: a text-major head carrying the UTF-8 byte
-/// length, followed by the literal UTF-8 payload. No Unicode normalization
-/// is applied, so two strings differing only in NFC vs NFD form encode
-/// differently (intended: keys reflect literal input).
-fn write_cbor_text(out: &mut Vec<u8>, s: &str) {
-    write_cbor_head(out, cbor::TEXT, s.len() as u64);
-    out.extend_from_slice(s.as_bytes());
-}
-
-/// Write a CBOR type head (major type + argument) using the preferred
-/// (shortest) encoding (RFC 8949 §3, §4.2.1).
-fn write_cbor_head(out: &mut Vec<u8>, major: u8, arg: u64) {
-    let high = major << 5;
-    if arg < 24 {
-        out.push(high | arg as u8);
-    } else if arg < 0x100 {
-        out.push(high | cbor::AI_U8);
-        out.push(arg as u8);
-    } else if arg < 0x1_0000 {
-        out.push(high | cbor::AI_U16);
-        out.extend_from_slice(&(arg as u16).to_be_bytes());
-    } else if arg < 0x1_0000_0000 {
-        out.push(high | cbor::AI_U32);
-        out.extend_from_slice(&(arg as u32).to_be_bytes());
-    } else {
-        out.push(high | cbor::AI_U64);
-        out.extend_from_slice(&arg.to_be_bytes());
+        CanonicalValue::Some(inner) => encode_canonical_value(enc, inner),
+        CanonicalValue::Struct(fields) => encode_options_table(enc, fields),
     }
 }
 
