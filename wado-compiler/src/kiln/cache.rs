@@ -147,6 +147,20 @@ pub fn encode_options_canonical(options: &CanonicalOptions) -> Vec<u8> {
 /// unwrapped through this alias to keep the walk readable.
 type EncVec = minicbor::Encoder<Vec<u8>>;
 
+/// Writing into a `Vec<u8>` cannot fail (`minicbor`'s `Write` for `Vec`
+/// has `Error = Infallible`), so every encode result is unwrapped with this.
+const INFALLIBLE: &str = "vec writer is infallible";
+
+/// The canonical CBOR "no options" blob: the empty map `0xa0`. Used as the
+/// wire/cache-key fallback whenever a generator has no options descriptor,
+/// so the bytes on the wire are always a decodable CBOR document.
+#[must_use]
+pub fn empty_options_canonical() -> Vec<u8> {
+    let mut enc = minicbor::Encoder::new(Vec::new());
+    enc.map(0).expect(INFALLIBLE);
+    enc.into_writer()
+}
+
 fn encode_options_table(enc: &mut EncVec, entries: &[(String, CanonicalValue)]) {
     let mut kept: Vec<&(String, CanonicalValue)> = entries
         .iter()
@@ -157,34 +171,37 @@ fn encode_options_table(enc: &mut EncVec, entries: &[(String, CanonicalValue)]) 
     // reduces to (byte length, bytewise).
     kept.sort_by(|a, b| a.0.len().cmp(&b.0.len()).then_with(|| a.0.cmp(&b.0)));
 
-    enc.map(kept.len() as u64).expect("vec writer is infallible");
+    enc.map(kept.len() as u64).expect(INFALLIBLE);
     for (k, v) in kept {
-        enc.str(k).expect("vec writer is infallible");
+        enc.str(k).expect(INFALLIBLE);
         encode_canonical_value(enc, v);
     }
 }
 
 fn encode_canonical_value(enc: &mut EncVec, v: &CanonicalValue) {
-    let infallible = "vec writer is infallible";
     match v {
         CanonicalValue::Bool(b) => {
-            enc.bool(*b).expect(infallible);
+            enc.bool(*b).expect(INFALLIBLE);
         }
         CanonicalValue::I64(n) => {
-            enc.i64(*n).expect(infallible);
+            enc.i64(*n).expect(INFALLIBLE);
         }
         CanonicalValue::U64(n) => {
-            enc.u64(*n).expect(infallible);
+            enc.u64(*n).expect(INFALLIBLE);
         }
         CanonicalValue::F64(f) => {
+            // Non-finite floats are rejected during options validation
+            // (`options_check`), so they never reach the encoder. `-0.0`
+            // canonicalizes to `0.0` so `+0.0`/`-0.0` share a cache key.
             assert!(
                 f.is_finite(),
                 "kiln: CBOR options cannot encode non-finite float {f}"
             );
-            enc.f64(*f).expect(infallible);
+            let f = if *f == 0.0 { 0.0 } else { *f };
+            enc.f64(f).expect(INFALLIBLE);
         }
         CanonicalValue::String(s) | CanonicalValue::Enum(s) => {
-            enc.str(s).expect(infallible);
+            enc.str(s).expect(INFALLIBLE);
         }
         CanonicalValue::None => {
             panic!("kiln: encode_options_canonical reached bare None value");
@@ -482,6 +499,23 @@ mod tests {
     fn cbor_f64_decodes_as_float() {
         let bytes = encode_options_canonical(&opts(vec![("ratio", CanonicalValue::F64(5.5))]));
         assert_eq!(decode_map(&bytes)[&key("ratio")], Cbor::Float(5.5));
+    }
+
+    #[test]
+    fn empty_options_is_the_empty_cbor_map() {
+        // The no-options wire form must be a decodable empty map (0xa0), not
+        // a zero-length blob that `core:cbor::from_bytes` rejects with EOF.
+        assert_eq!(empty_options_canonical(), vec![0xa0]);
+        assert_eq!(empty_options_canonical(), encode_options_canonical(&opts(vec![])));
+        assert!(decode_map(&empty_options_canonical()).is_empty());
+    }
+
+    #[test]
+    fn cbor_negative_zero_canonicalizes_to_positive_zero() {
+        // +0.0 and -0.0 must produce identical bytes so they share a cache key.
+        let pos = encode_options_canonical(&opts(vec![("z", CanonicalValue::F64(0.0))]));
+        let neg = encode_options_canonical(&opts(vec![("z", CanonicalValue::F64(-0.0))]));
+        assert_eq!(pos, neg);
     }
 
     #[test]

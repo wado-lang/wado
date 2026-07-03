@@ -35,8 +35,8 @@ use wado_compiler::compiler_host::{
 use wado_compiler::kiln::DeclSite;
 use wado_compiler::kiln::{
     FileHash, GeneratedHeader, GeneratorModule, Invocation, InvocationPath, OptionsDescriptor,
-    Plan, PlanError, content_hash, encode_options_canonical, file_hash, generator_identity,
-    has_generated_marker, hex_digest, validate_options,
+    Plan, PlanError, content_hash, empty_options_canonical, encode_options_canonical, file_hash,
+    generator_identity, has_generated_marker, hex_digest, validate_options,
 };
 use wado_compiler::{Code, Diagnostic, Severity};
 use wado_manifest::Manifest;
@@ -1367,6 +1367,12 @@ fn typed_encode_options<H: CompilerHost>(
 ) {
     let _ = manifest;
     for inv in invocations.iter_mut() {
+        // Every invocation must ship a decodable CBOR document. When the
+        // descriptor is unavailable (skipped below), fall back to the empty
+        // map rather than the zero-length blob that fails `from_bytes`.
+        if inv.options_canonical.is_empty() {
+            inv.options_canonical = empty_options_canonical();
+        }
         let descriptor = match lookup_resolved(resolved, &inv.module) {
             Ok(arc) => match &arc.descriptor {
                 Some(d) => d.clone(),

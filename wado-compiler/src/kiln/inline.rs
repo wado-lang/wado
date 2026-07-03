@@ -17,7 +17,7 @@ use crate::ast::{AttrValue, Module, UseDecl};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::IndexMap;
 
-use super::cache::{encode_options_canonical, hex_digest};
+use super::cache::{empty_options_canonical, encode_options_canonical, hex_digest};
 use super::invocation::{DeclSite, GeneratorModule, Invocation, InvocationPath};
 use super::options::OptionsDescriptor;
 use super::options_check::{CanonicalOptions, validate};
@@ -513,7 +513,10 @@ fn encode_options(
 ) -> Vec<u8> {
     let key = module_key(module);
     let Some(descriptor) = descriptors.get(&key) else {
-        return Vec::new();
+        // No descriptor yet (the CLI provider fills it in later): ship a
+        // valid empty CBOR map so the wire is always decodable, never a
+        // zero-length blob that fails `core:cbor::from_bytes`.
+        return empty_options_canonical();
     };
 
     let canonical: CanonicalOptions = match validate(descriptor, options_value) {
@@ -525,7 +528,9 @@ fn encode_options(
                 }
             }
             errors.append(&mut errs);
-            return Vec::new();
+            // Validation already errored; ship a decodable empty map so a
+            // secondary CBOR-decode failure does not mask the real diagnostic.
+            return empty_options_canonical();
         }
     };
     encode_options_canonical(&canonical)

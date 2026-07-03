@@ -22,8 +22,9 @@ pub mod options_check;
 pub mod plan;
 
 pub use cache::{
-    CacheKeyInputs, FileHash, compose_cache_key, content_hash, encode_options_canonical, file_hash,
-    gather_file_hashes, generator_identity, hash_options_canonical, hex_digest,
+    CacheKeyInputs, FileHash, compose_cache_key, content_hash, empty_options_canonical,
+    encode_options_canonical, file_hash, gather_file_hashes, generator_identity,
+    hash_options_canonical, hex_digest,
 };
 pub use header::{GeneratedHeader, has_generated_marker, parse_header};
 pub use inline::{InvocationIndex, collect_inline_invocations};

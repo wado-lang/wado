@@ -360,7 +360,12 @@ struct CompileArtifacts {
 /// would silently keep returning stale wasm.
 fn stable_id_for_local(path_str: &str, content: &[u8]) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(b"kiln-generator-v1\n");
+    // The magic encodes the generator-component ABI generation: the compiled
+    // component embeds the `core:kiln` world types, so it must be invalidated
+    // whenever that ABI changes even if the generator source is unchanged.
+    // Bump on any `core:kiln/generator.wit` / `emit_kiln_world_types` change.
+    // `-v2`: `raw-request.options` moved from `string` to `list<u8>` (CBOR).
+    hasher.update(b"kiln-generator-v2\n");
     hasher.update(path_str.as_bytes());
     hasher.update(b"\n");
     hasher.update(content);
