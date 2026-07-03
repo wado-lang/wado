@@ -10,8 +10,8 @@
 //! than emitting invalid code. The supported subset grows as the value
 //! channel and context API land.
 
-use { ParserRule, AttrDecl } from "./ir.wado";
-use { resolve_attrs, ResolvedAttr } from "./attr_resolve.wado";
+use { ParserRule, AttrDecl, AltAction } from "./ir.wado";
+use { resolve_attrs, ResolvedAttr, AttrTarget } from "./attr_resolve.wado";
 use { splice_attrs } from "./attr_substitute.wado";
 use { to_pascal_case, to_snake_case, escape_ident } from "./ident.wado";
 
@@ -29,14 +29,54 @@ pub fn translate_wado_action(
     rules: &List<ParserRule>,
     body: &String,
     vals_in_scope: bool,
+    rule_text_in_scope: bool,
 ) -> Result<String, String> {
     let resolved = resolve_attrs(body, rule, rules)?;
     let mut repls: List<String> = [];
     for let r of &resolved {
-        let e = action_attr_expr(rule, rules, r, vals_in_scope)?;
+        let e = action_attr_expr(rule, rules, r, vals_in_scope, rule_text_in_scope)?;
         repls.push(e);
     }
     return Result::<String, String>::Ok(splice_attrs(body, &resolved, &repls));
+}
+
+/// The `let _rule_text_start = p.peek_start();` local a `$text`-substituted
+/// action reads. Named once so codegen (which emits it at inner-body entry) and
+/// the translator (which references it) cannot diverge.
+pub global RULE_TEXT_START_LOCAL: String = "_rule_text_start";
+
+/// Whether any of `rule`'s actions references the `$text` special, so codegen
+/// must capture the rule's start byte before the body.
+pub fn rule_uses_parser_text(rule: &ParserRule, rules: &List<ParserRule>) -> bool {
+    if let Some(a) = &rule.init_action {
+        if body_uses_parser_text(&a.text, rule, rules) {
+            return true;
+        }
+    }
+    if let Some(a) = &rule.after_action {
+        if body_uses_parser_text(&a.text, rule, rules) {
+            return true;
+        }
+    }
+    for let alt of &rule.alternatives {
+        for let a of &alt.actions {
+            if body_uses_parser_text(&a.source.text, rule, rules) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+fn body_uses_parser_text(body: &String, rule: &ParserRule, rules: &List<ParserRule>) -> bool {
+    if let Ok(resolved) = resolve_attrs(body, rule, rules) {
+        for let r of &resolved {
+            if r.target matches { ParserSpecial } && r.name == "text" {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 /// The Wado expression a resolved reference becomes, or an error if this
@@ -46,7 +86,11 @@ fn action_attr_expr(
     rules: &List<ParserRule>,
     r: &ResolvedAttr,
     vals_in_scope: bool,
+    rule_text_in_scope: bool,
 ) -> Result<String, String> {
+    if r.target matches { ParserSpecial } {
+        return parser_special_expr(r, rule_text_in_scope);
+    }
     return match r.target {
         RuleAttr => {
             if is_arg(rule, &r.name) {
@@ -64,8 +108,23 @@ fn action_attr_expr(
         RuleLabel => rule_member_expr(rules, r),
         RuleRef => rule_member_expr(rules, r),
         TokenLabel => token_member_expr(r),
+        TokenRef => token_member_expr(r),
         _ => Result::<String, String>::Err(`${r.name}: this attribute form is not yet emitted`),
     };
+}
+
+/// A parser special (`$text`, `$ctx`, `$start`, `$stop`, `$_p`). Only `$text`
+/// is emitted so far — the input the current rule has consumed, spanning the
+/// captured rule-start byte to the last consumed token. The rest await the CST
+/// context handle and remain a loud error.
+fn parser_special_expr(r: &ResolvedAttr, rule_text_in_scope: bool) -> Result<String, String> {
+    if r.name == "text" && r.member matches { None } {
+        if !rule_text_in_scope {
+            return Result::<String, String>::Err("$text: only emitted for single-alt rules so far");
+        }
+        return Result::<String, String>::Ok(`p.text_span({RULE_TEXT_START_LOCAL}, p.last_end())`);
+    }
+    return Result::<String, String>::Err(`${r.name}: this parser special is not yet emitted`);
 }
 
 /// The local variable a call site binds a rule / label / token result to:
@@ -76,18 +135,40 @@ fn binding_name(name: &String) -> String {
     return escape_ident(&to_snake_case(name));
 }
 
+/// A token reference resolves to the stream index its `let x = p.expect(...)`
+/// bound; a member reads that token through the context API. `.index` is the
+/// index itself and `.channel` is 0 (parser-visible tokens are default channel),
+/// so neither needs a runtime call.
 fn token_member_expr(r: &ResolvedAttr) -> Result<String, String> {
     let binding = binding_name(&r.name);
-    return match &r.member {
-        Some(m) => {
-            if *m == "text" {
-                Result::<String, String>::Ok(`p.token_text({binding})`);
-            } else {
-                Result::<String, String>::Err(`${r.name}.{*m}: only .text is emitted for tokens so far`);
-            }
+    let m = match &r.member {
+        Some(m) => *m,
+        None => {
+            return Result::<String, String>::Ok(binding);
         },
-        None => Result::<String, String>::Ok(binding),
     };
+    if m == "text" {
+        return Result::<String, String>::Ok(`p.token_text({binding})`);
+    }
+    if m == "int" {
+        return Result::<String, String>::Ok(`p.token_int({binding})`);
+    }
+    if m == "type" {
+        return Result::<String, String>::Ok(`p.token_kind({binding})`);
+    }
+    if m == "line" {
+        return Result::<String, String>::Ok(`p.token_line({binding})`);
+    }
+    if m == "pos" {
+        return Result::<String, String>::Ok(`p.token_col({binding})`);
+    }
+    if m == "index" {
+        return Result::<String, String>::Ok(binding);
+    }
+    if m == "channel" {
+        return Result::<String, String>::Ok(String::from("0"));
+    }
+    return Result::<String, String>::Err(`${r.name}.{m}: unknown token member`);
 }
 
 fn rule_member_expr(rules: &List<ParserRule>, r: &ResolvedAttr) -> Result<String, String> {

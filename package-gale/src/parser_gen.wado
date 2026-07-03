@@ -109,6 +109,8 @@ use {
     vals_struct_name,
     wado_type_default,
     field_in_vals,
+    rule_uses_parser_text,
+    RULE_TEXT_START_LOCAL,
 } from "./action_translate.wado";
 use { unwrap_label } from "./lr_util.wado";
 use { compute_shapes_for_alt, shape_lookahead_signature_for_alt, rebind_op_field } from "./lower.wado";
@@ -513,6 +515,107 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_acti
         ftt.set_return_type(&"String");
         ftt.emit_begin(w);
         w.line(&"return self.tokens.token_text(i);");
+        w.end();
+        w.blank();
+
+        let mut fk = FnSpec::new("token_kind");
+        fk.set_receiver(&"&self");
+        fk.add_param(&"i", &"i32");
+        fk.set_return_type(&"i32");
+        fk.emit_begin(w);
+        w.line(&"return self.tokens.kind_at(i);");
+        w.end();
+        w.blank();
+
+        let mut fint = FnSpec::new("token_int");
+        fint.set_receiver(&"&self");
+        fint.add_param(&"i", &"i32");
+        fint.set_return_type(&"i64");
+        fint.emit_begin(w);
+        w.line(&"let sp = self.tokens.span_at(i);");
+        w.line(&"let mut acc: i64 = 0;");
+        w.line(&"let mut neg = false;");
+        w.line(&"let mut j = sp.start;");
+        w.begin(&"if j < sp.end && self.tokens.chars[j] == '-'");
+        w.line(&"neg = true;");
+        w.line(&"j += 1;");
+        w.end();
+        w.begin(&"while j < sp.end");
+        w.line(&"let c = self.tokens.chars[j];");
+        w.begin(&"if c >= '0' && c <= '9'");
+        w.line(&"acc = acc * 10 + (c as i32 - '0' as i32) as i64;");
+        w.end();
+        w.line(&"j += 1;");
+        w.end();
+        w.line(&"return if neg { -acc } else { acc };");
+        w.end();
+        w.blank();
+
+        let mut fln = FnSpec::new("token_line");
+        fln.set_receiver(&"&self");
+        fln.add_param(&"i", &"i32");
+        fln.set_return_type(&"i32");
+        fln.emit_begin(w);
+        w.line(&"return line_col(self.tokens.chars, self.tokens.span_at(i).start).0;");
+        w.end();
+        w.blank();
+
+        let mut fcol = FnSpec::new("token_col");
+        fcol.set_receiver(&"&self");
+        fcol.add_param(&"i", &"i32");
+        fcol.set_return_type(&"i32");
+        fcol.emit_begin(w);
+        w.line(&"return line_col(self.tokens.chars, self.tokens.span_at(i).start).1;");
+        w.end();
+        w.blank();
+
+        // `_input.LA(k)` — the token kind k positions ahead (k=1 is current).
+        let mut fla = FnSpec::new("la");
+        fla.set_receiver(&"&self");
+        fla.add_param(&"k", &"i32");
+        fla.set_return_type(&"i32");
+        fla.emit_begin(w);
+        w.line(&"return self.peek_at(k - 1);");
+        w.end();
+        w.blank();
+
+        // `_input.LT(k)` — the stream index k positions ahead, clamped to the
+        // final (EOF) token so a lookahead past end stays in bounds.
+        let mut flt = FnSpec::new("lt");
+        flt.set_receiver(&"&self");
+        flt.add_param(&"k", &"i32");
+        flt.set_return_type(&"i32");
+        flt.emit_begin(w);
+        w.line(&"let idx = self.pos + k - 1;");
+        w.line(&"if idx >= self.tokens.len() { return self.tokens.len() - 1; }");
+        w.line(&"if idx < 0 { return 0; }");
+        w.line(&"return idx;");
+        w.end();
+        w.blank();
+
+        // Source text of the half-open byte range `[start, end)` — backs `$text`
+        // (the current rule's consumed input) and `_input.getText()`.
+        let mut fts = FnSpec::new("text_span");
+        fts.set_receiver(&"&self");
+        fts.add_param(&"start", &"i32");
+        fts.add_param(&"end", &"i32");
+        fts.set_return_type(&"String");
+        fts.emit_begin(w);
+        w.line(&"let mut out = String::new();");
+        w.line(&"let hi = if end < self.tokens.chars.len() { end } else { self.tokens.chars.len() };");
+        w.begin(&"for let mut i = start; i < hi; i += 1");
+        w.line(&"out.push(self.tokens.chars[i]);");
+        w.end();
+        w.line(&"return out;");
+        w.end();
+        w.blank();
+
+        // `_input.getText()` — the entire input.
+        let mut fit = FnSpec::new("input_text");
+        fit.set_receiver(&"&self");
+        fit.set_return_type(&"String");
+        fit.emit_begin(w);
+        w.line(&"return self.text_span(0, self.tokens.chars.len());");
         w.end();
         w.blank();
     }
@@ -2568,6 +2671,9 @@ fn gen_parse_fn_simple_named(
     if rule_emits_vals(ctx, rule) {
         w.line(&`let mut vals = {vals_struct_name(rule)} \{\};`);
     }
+    if ctx.emit_actions() && rule_captures_rule_text(rule, ctx.parser_rules()) {
+        w.line(&`let {RULE_TEXT_START_LOCAL} = p.peek_start();`);
+    }
     if ctx.emit_actions() {
         if let Some(a) = &rule.init_action {
             gen_action_body(w, a, ctx);
@@ -3384,13 +3490,21 @@ fn translate_action_or_warn(src: &ActionSource, ctx: &mut GenContext) -> Option<
         return null;
     }
     let vals_in_scope = rule_emits_vals(ctx, &ctx.parser_rules()[ridx]);
-    return match translate_wado_action(&ctx.parser_rules()[ridx], ctx.parser_rules(), &src.text, vals_in_scope) {
+    let rule_text_in_scope = rule_captures_rule_text(&ctx.parser_rules()[ridx], ctx.parser_rules());
+    return match translate_wado_action(&ctx.parser_rules()[ridx], ctx.parser_rules(), &src.text, vals_in_scope, rule_text_in_scope) {
         Ok(code) => Option::Some(code),
         Err(msg) => {
             ctx.warn(&`action {src.action_id}`, DiagnosticKind::UnsupportedAction, msg);
             null;
         },
     };
+}
+
+/// Whether codegen emits the `_rule_text_start` capture for this rule — a
+/// single-alt rule whose actions reference `$text`. The translator keys `$text`
+/// substitution on the same predicate so the local it reads is always in scope.
+fn rule_captures_rule_text(rule: &ParserRule, rules: &List<ParserRule>) -> bool {
+    return rule.alternatives.len() == 1 && rule_uses_parser_text(rule, rules);
 }
 
 /// Emit a semantic predicate `{cond}?` as an inline runtime guard: when the

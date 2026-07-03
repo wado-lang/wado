@@ -241,13 +241,13 @@ Recovery invariants with actions present:
     - [x] Identity translator (`action_translate`): resolves refs and maps the supported subset to Wado exprs; loud error otherwise.
     - [x] Own-rule value channel: a single-alt rule declaring `returns` / `locals` (defaultable types) gets a `<Rule>Vals` struct + `vals` local; `$v` / `$local` in its actions substitute to `vals.<name>`. Write-then-read across a rule's actions works end to end.
     - [x] Cross-rule `$a.v`: a value-channel rule's `_parse_<rule>` (inner + wrapper) returns `<Rule>Vals`; call sites already bind `let <name> = _parse_<rule>(p)`, so `$a.v` → `a.v`. Entry closures discard the vals (`|p| { let _ = _parse_<rule>(p); }`). The corpus LR-binary `$a.v + $b.v` shape works (non-LR).
-    - [x] Token label member `$x.text` → `p.token_text(<index>)` (the `let x = p.expect(...)` binding). Only `.text` so far.
+    - [x] Token label member `$x.text` → `p.token_text(<index>)` (the `let x = p.expect(...)` binding).
     - [ ] Rule arguments as `_parse_<rule>` params; multi-alt / LR rule value channels (currently a loud `UnsupportedAction` diagnostic).
-    - [ ] Other token members (`$x.int`/`.type`/`.line`/…), unlabeled `$ID.text`.
+    - [x] Other token members: `$x.int` → `p.token_int`, `.type` → `p.token_kind`, `.line` → `p.token_line`, `.pos` → `p.token_col`, `.index` → the bound index, `.channel` → 0. Unlabeled `$ID`/`$ID.member` route through the same path (the first-occurrence binding; deduped bindings below). Fixture `wado_tok_members.g4`.
     - [ ] Unlabeled `$e.v` when the call-site binding is deduped (`e_2`); currently assumes the first-occurrence binding name (labeled refs are exact via `escape_ident(to_snake_case(name))`).
   - [~] 1b-4 — runtime context API + prequel timing.
     - [x] `@init` (rule entry) / `@after` (after body) for single-alt rules, sharing the rule's `vals` local; execution order pinned by a driver test.
-    - [ ] Runtime context API surface (`p.la`/`lt`/`rule_text`/`input_text`/…) and `$text`/`$ctx`-backed substitution.
+    - [~] Runtime context API surface. `p.la(k)` / `p.lt(k)` / `p.text_span(start, end)` / `p.input_text()` emitted on the generated `Parser` (under `emit_actions`), so a Wado action / predicate body calls them verbatim (`{p.la(2) != TK_NL}?`). `$text` (single-alt rules) substitutes to `p.text_span(_rule_text_start, p.last_end())` — codegen captures `_rule_text_start` at inner-body entry only when the rule references `$text`. `$ctx` / `$start` / `$stop` remain a loud error (need the CST context handle). Fixture `wado_rule_text.g4`.
     - [ ] `@init` / `@after` for multi-alt / LR rules.
 - [~] Phase 2 — predicates in prediction (`SemPredEvalParser` / `SemPredEvalLexer` descriptors are the acceptance suite).
   - [x] Inline runtime guard for mid-alt / single-alt-rule predicates: a `{cond}?` compiles to `if !p.speculating { if !(<cond>) { p.no_viable(...); return; } }`, so a false predicate fails the parse into normal recovery. Substitution applies to the condition (identity translator).
