@@ -132,56 +132,66 @@ share); no over-fill regression.
   carries over to release largely intact, since the dev host does not inflate
   pure compute.
 
-### Live profile (post-flat-CST, `syntax_highlight`, 3 runs merged, 4123 leaf samples @1 ms)
+### Live profile (post-flat-CST + column pre-size, `syntax_highlight`, 6 runs merged, 8861 leaf samples @1 ms)
 
-`highlight_walk` no longer appears (the flat scan is cheap), and `tree_build_node`
-/ `List<CstChild>::push` are retired. Top self-time frames now:
+`tree_build_node` / `List<CstChild>::push` are retired, and `List<i32>::grow` is
+gone (the column pre-size landed). `highlight_walk` is now a flat,
+allocation-free loop — ~8% self-time iterating the rows, down from the ~30%
+node-tree walk, but **not** free. The dev profile is noisy per-frame (see the
+measurement note); mid-size frames swing ±several points across runs, so read the
+buckets, not the individual rows.
 
-|   Pct | Symbol                         | bucket                                   |
-| ----: | ------------------------------ | ---------------------------------------- |
-| 10.5% | `List<i32>::push`              | CST column build (+ `rule_stack`/trivia) |
-|  8.2% | `HighlightVisitor::classify`   | highlight                                |
-|  7.1% | `follow_yields`                | scan/predict (LL FOLLOW gate)            |
-|  6.2% | `push_class`                   | highlight (HTML class emit)              |
-|  6.1% | `List<i32>::grow`              | CST column realloc (grow-from-empty)     |
-|  5.1% | `highlight_html`               | highlight (HTML render)                  |
-|  4.9% | `TreeBuilder::finish`          | CST finalize + column copy               |
-|  4.5% | `List<HighlightCapture>::push` | highlight (captures)                     |
-|  4.2% | `String::grow`                 | HTML output realloc                      |
-|  4.1% | `String::push`                 | HTML output build                        |
-|  3.0% | `char::to_ascii_lowercase`     | case-insensitive keyword match           |
-|  2.6% | `scan_any_name`                | scan                                     |
-|  2.5% | `_kind_set_8`                  | kind-set membership                      |
+|   Pct | Symbol                       | bucket                                   |
+| ----: | ---------------------------- | ---------------------------------------- |
+| 10.9% | `List<i32>::push`            | CST column build (+ `rule_stack`/trivia) |
+| 10.3% | `HighlightVisitor::classify` | highlight                                |
+|  9.0% | `String::grow`               | HTML output realloc (grows from empty)   |
+|  8.6% | `follow_yields`              | scan/predict (LL FOLLOW gate)            |
+|  7.8% | `highlight_walk`             | CST walk (flat, no alloc)                |
+|  5.6% | `TokenStream::new`           | SoA token-array alloc (WasmGC zero-fill) |
+|  4.2% | `String::push`               | HTML output build                        |
+|  2.8% | `TreeBuilder::finish`        | CST finalize + column copy               |
+|  2.8% | `_kind_set_8`                | kind-set membership                      |
+|  2.6% | `char::to_ascii_lowercase`   | case-insensitive keyword match           |
+|  2.5% | `scan_any_name`              | scan                                     |
+|  2.5% | `push_class`                 | highlight (HTML class emit)              |
 
-Rough buckets: **highlight** (`classify` + `push_class` + `highlight_html` +
-captures + `String` grow/push + `to_ascii_lowercase` + `hl_visit_token`) ≈
-**~39%**; **CST build** (flat columns push/grow/pop + `finish` +
-`bubble_to_parent`) ≈ **~24%**; **scan/predict** (`follow_yields` + `scan_*` +
-kind-set) ≈ **~15%**. The walk is gone; **highlight is now the single dominant
-cost**, and the CST is moderate to _build_ (column pushes; the `List<i32>::grow`
-row above is since cut by the landed column pre-size) but cheap to _walk_.
+Rough buckets: **highlight** (`classify` + HTML output `String` grow/push +
+`push_class` + `highlight_html` + `to_ascii_lowercase` + `hl_visit_token`) ≈
+**~32%**; **CST build + walk** (`List<i32>` push/pop + `highlight_walk` +
+`finish` + `bubble_to_parent`) ≈ **~24%**; **scan/predict** (`follow_yields` +
+`scan_*` + kind-set) ≈ **~18%**; **token-array alloc** (`TokenStream::new`,
+inherent zero-fill, a non-lever) ≈ **~6%**. Highlight is the largest bucket; the
+notable frame is `String::grow` — the HTML output `String` still grows from empty
+despite a `source.len() * 5` pre-size, so its multiplier is under (see What's
+next).
 
 ## What's next
 
 Candidate levers from the post-flat-CST profile, none mutually exclusive.
 
-### Highlight (~39%) — now the dominant cost
+### Highlight (~32%) — now the dominant cost
 
 The whole highlight path is the biggest bucket; several independent levers, all
 in `highlight.wado`:
 
-- **`classify` (8.2%)** — per token it linear-scans the resolved overrides, then
+- **HTML output `String` (`String::grow` 9.0% + `String::push` 4.2%)** — the
+  cheapest lever. `highlight_html` pre-sizes the output to `source.len() * 5`, but
+  the highlighted HTML (source plus every `<span class="…">`) exceeds 5×, so the
+  `String` still grows from empty. Bump the multiplier the way the CST columns and
+  `TokenStream` are sized (measure the real HTML/source ratio first).
+- **`classify` (~10%)** — per token it linear-scans the resolved overrides, then
   looks up `defaults[kind]`. Called once per terminal (and once per trivia). The
   override scan is O(overrides) per token; a kind-indexed override table (or a
   short-circuit when a rule has no overrides) would cut it.
-- **HTML render (`push_class` 6.2% + `highlight_html` 5.1% + `String`
-  grow/push 8.3%)** — `push_class` splits `.` → space char-by-char; `highlight_html`
-  appends escaped source char-at-a-time. Emit class names without the per-char
-  loop, append larger unescaped runs, and pre-size the output `String`.
-- **Captures (`List<HighlightCapture>::push` 4.5%)** — the captures list grows
-  from empty and each `HighlightCapture` is a GC object — this list is the ~4.1 ms
-  residual GC the current-state section flags. Pre-size it (as the CST columns now
-  are), or render directly without materialising the list.
+- **Class / escape emit (`push_class` 2.5% + `highlight_html` 1.4%)** —
+  `push_class` splits `.` → space char-by-char; `highlight_html` escapes source
+  char-at-a-time. Emit class names without the per-char loop and append larger
+  unescaped runs.
+- **Captures** — the `List<HighlightCapture>` (each capture a GC object) is the
+  ~4.1 ms residual GC the current-state section flags; it does not show large in
+  dev _self-time_ but is live-set under `copying`. Pre-size it (as the CST columns
+  now are), or render directly without materialising the list.
 - **`to_ascii_lowercase` (3.0%)** — case-insensitive keyword matching in the
   lexer; a lower-on-read or a case-folded scan table would remove it.
 
