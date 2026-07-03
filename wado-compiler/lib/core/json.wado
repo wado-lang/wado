@@ -1863,14 +1863,18 @@ impl Deserializer for JsonDeserializer {
             builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
-        let b = self.input.get_unchecked(self.pos) as i32;
-        if b == 't' as i32 {
-            self.expect_true()?;
-            return Result::Ok(true);
-        }
-        if b == 'f' as i32 {
-            self.expect_false()?;
-            return Result::Ok(false);
+        let b = self.input.get_unchecked(self.pos) as u8 as char;
+        match b {
+            't' => {
+                self.expect_true()?;
+                return Result::Ok(true);
+            },
+            'f' => {
+                self.expect_false()?;
+                return Result::Ok(false);
+            },
+            _ => {
+            },
         }
         builtin::cold_path();
         return Result::Err(

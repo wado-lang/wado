@@ -1715,13 +1715,17 @@ impl Deserializer for CborDeserializer {
         // other byte (tag-wrapped, malformed) leaves `pos` untouched for the
         // tolerant slow loop.
         let b = self.peek_byte()?;
-        if b == INIT_FALSE {
-            self.pos += 1;
-            return Result::Ok(false);
-        }
-        if b == INIT_TRUE {
-            self.pos += 1;
-            return Result::Ok(true);
+        match b {
+            INIT_FALSE => {
+                self.pos += 1;
+                return Result::Ok(false);
+            },
+            INIT_TRUE => {
+                self.pos += 1;
+                return Result::Ok(true);
+            },
+            _ => {
+            },
         }
         loop {
             let [major, ai, arg, indef] = self.read_head()?;
