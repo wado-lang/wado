@@ -80,7 +80,6 @@ mod inline;
 mod labeled_block_fusion;
 mod licm;
 mod loop_version_bce;
-mod match_thread;
 mod match_to_switch;
 mod mod_ref;
 mod multi_value_return;
