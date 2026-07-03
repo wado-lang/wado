@@ -260,6 +260,14 @@ ATN literal is a measured problem.)
   dispatch-bound**; a perfect-hash/bitset would not help (Cranelift already
   lowers the cascade competitively). A pure-compute frame the dev host does _not_
   inflate, so its release share is a touch higher.
+- **HTML-output `String` pre-size** (`String::grow`, 9% dev self-time). The
+  `highlight_html` output grows once past its `source.len() * 5` reserve (HTML is
+  ~6× source for keyword-dense SQL). Bumping to `* 7` removes the grow but a
+  release A/B (best-of-5) was **identical** (3.90 vs 3.91 MB/s): `String::grow` is
+  an allocation/zero-fill cost the dev host inflates, so its release share is
+  ~1–2%, below the `syntax_highlight` benchmark's noise. A live example of the
+  dev-vs-release standing rule — unlike the CST-column pre-size, which lands a
+  clear ~6% because `sqlite_parse` is build-only. Left at `* 5`.
 
 ## Correctness items with a performance flavor
 
