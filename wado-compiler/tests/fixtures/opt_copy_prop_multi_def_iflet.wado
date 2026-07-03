@@ -1,0 +1,36 @@
+// Regression: labeled_block_fusion reuses one payload local across multiple
+// same-variant break sites (an inlined helper with two `Some` returns consumed
+// by `if let`). copy_prop must not collapse the two disjoint-path `let v` defs.
+use { println, Stdout } from "core:cli";
+
+struct S { flag: bool }
+
+impl S {
+    #[inline]
+    fn pick(&self) -> Option<i32> {
+        if self.flag {
+            return Option::Some(10);
+        }
+        return Option::Some(20);
+    }
+
+    fn run(&self) -> i32 {
+        if let Some(v) = self.pick() {
+            return v + 1;
+        }
+        return -1;
+    }
+}
+
+export fn run() with Stdout {
+    let a = S { flag: true };
+    let b = S { flag: false };
+    assert a.run() == 11;
+    assert b.run() == 21;
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n"
+}

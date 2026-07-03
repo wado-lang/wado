@@ -18,7 +18,9 @@ use cranelift_entity::EntityRef;
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, NirFunction, NirUnaryOp};
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
+use crate::nir_arena::{
+    BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
+};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -79,6 +81,11 @@ enum CopySource {
 #[derive(Debug, Default)]
 struct LocalUsage {
     read_count: u32,
+    /// Number of `let` statements defining this local. More than one means
+    /// multiple reaching defs on disjoint paths (the shape
+    /// `labeled_block_fusion` produces reusing one binding slot across break
+    /// sites); forwarding every read to one source would leak it across paths.
+    def_count: u32,
     is_assigned: bool,
     has_field_mutation: bool,
     address_taken: bool,
@@ -234,6 +241,15 @@ fn analyze_block(
         collect_mutated_locals(body, NodeRef::Stmt(stmt), &mut last_mut, i);
     }
     for (k, &stmt) in stmts.iter().enumerate() {
+        match &body.stmts[stmt].kind {
+            StmtKind::Let { local_index, .. } => {
+                result.usage.entry(*local_index).or_default().def_count += 1;
+            }
+            StmtKind::LetDestructure { pattern, .. } => {
+                count_pattern_defs(body, *pattern, result);
+            }
+            _ => {}
+        }
         if let Some(mut binding) = analyze_copy_binding(body, stmt, copy_value_id) {
             // The target's uses are confined to this block from `k` onward, so
             // the source is stable for the propagation iff it is not mutated in
@@ -292,6 +308,35 @@ fn collect_mutated_locals(
         }
     }
     body.for_each_child(node, |c| collect_mutated_locals(body, c, last_mut, idx));
+}
+
+/// Count every `Binding` local a destructuring pattern introduces as a def.
+fn count_pattern_defs(body: &Body, pat: PatId, result: &mut AnalysisResult) {
+    match &body.pats[pat].kind {
+        PatKind::Binding { local_index, .. } => {
+            result.usage.entry(*local_index).or_default().def_count += 1;
+        }
+        PatKind::Tuple(pats, _) | PatKind::Or(pats) => {
+            for p in pats {
+                count_pattern_defs(body, *p, result);
+            }
+        }
+        PatKind::Variant { bindings, .. } => {
+            for p in bindings {
+                count_pattern_defs(body, *p, result);
+            }
+        }
+        PatKind::Struct { fields, .. } => {
+            for f in fields {
+                count_pattern_defs(body, f.pattern, result);
+            }
+        }
+        PatKind::Wildcard
+        | PatKind::Literal(_)
+        | PatKind::Enum { .. }
+        | PatKind::ConstantValue { .. }
+        | PatKind::Range { .. } => {}
+    }
 }
 
 fn analyze_stmt(
@@ -469,6 +514,11 @@ fn can_propagate_copy(
     let Some(target_usage) = usage.get(&binding.target_local) else {
         return true;
     };
+    // Multi-def target: a single source cannot cover every reaching def (see
+    // `LocalUsage::def_count`).
+    if target_usage.def_count > 1 {
+        return false;
+    }
     if target_usage.is_assigned {
         return false;
     }

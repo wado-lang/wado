@@ -1,0 +1,37 @@
+// Regression: an inlined callee whose early return sits inside an `if`
+// STATEMENT's condition becomes a `break L:` in that condition after
+// threading. thread_stmt must rewrite the condition operand (not just the
+// then/else branches) or the break dangles → invalid Wasm.
+use { println, Stdout } from "core:cli";
+
+struct S { flag: bool, g: bool }
+
+impl S {
+    #[inline]
+    fn pick(&self) -> Result<i32, i32> {
+        if (if self.flag { return Result::Err(-1); } else { self.g }) {
+            return Result::Ok(1);
+        }
+        return Result::Ok(2);
+    }
+
+    fn run(&self) -> Result<i32, i32> {
+        let v = self.pick()?;
+        return Result::Ok(v + 100);
+    }
+}
+
+export fn run() with Stdout {
+    let a = S { flag: true, g: true };
+    let b = S { flag: false, g: true };
+    let c = S { flag: false, g: false };
+    assert a.run() matches { Err(-1) };
+    assert b.run() matches { Ok(101) };
+    assert c.run() matches { Ok(102) };
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n"
+}

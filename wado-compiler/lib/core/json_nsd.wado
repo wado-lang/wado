@@ -335,20 +335,11 @@ impl DeserializeSeq for NsdSeqAccess {
             return Result::Ok(null);
         }
         if !self.first {
-            let r = self.de.expect_char(',' as i32);
-            if let Err(e) = r {
-                return Result::Err(e);
-            }
+            self.de.expect_char(',' as i32)?;
         }
         self.first = false;
-        let elem = T::deserialize(&mut NsdDeserializer { de: self.de });
-        if let Ok(v) = elem {
-            return Result::Ok(Option::Some(v));
-        }
-        if let Err(e) = elem {
-            return Result::Err(e);
-        }
-        unreachable();
+        let v = T::deserialize(&mut NsdDeserializer { de: self.de })?;
+        return Result::Ok(Option::Some(v));
     }
 
     fn end(&mut self) -> Result<(), DeserializeError> {
@@ -366,24 +357,12 @@ impl DeserializeMap for NsdMapAccess {
             return Result::Ok(null);
         }
         if !self.first {
-            let r = self.de.expect_char(',' as i32);
-            if let Err(e) = r {
-                return Result::Err(e);
-            }
+            self.de.expect_char(',' as i32)?;
         }
         self.first = false;
-        let key_r = self.de.read_json_string();
-        if let Ok(key) = key_r {
-            let r = self.de.expect_char(':' as i32);
-            if let Err(e) = r {
-                return Result::Err(e);
-            }
-            return Result::Ok(Option::Some(key));
-        }
-        if let Err(e) = key_r {
-            return Result::Err(e);
-        }
-        unreachable();
+        let key = self.de.read_json_string()?;
+        self.de.expect_char(':' as i32)?;
+        return Result::Ok(Option::Some(key));
     }
 
     fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError> {
@@ -408,10 +387,7 @@ impl DeserializeStruct for NsdStructAccess {
             return Result::Ok(null);
         }
         if !self.first {
-            let r = self.de.expect_char(',' as i32);
-            if let Err(e) = r {
-                return Result::Err(e);
-            }
+            self.de.expect_char(',' as i32)?;
         }
         self.first = false;
         // NSD: return sequential field index
@@ -521,10 +497,7 @@ impl Deserializer for NsdDeserializer {
     }
 
     fn begin_seq(&mut self) -> Result<NsdSeqAccess, DeserializeError> with stores[self] {
-        let r = self.de.expect_char('[' as i32);
-        if let Err(e) = r {
-            return Result::Err(e);
-        }
+        self.de.expect_char('[' as i32)?;
         return Result::Ok(NsdSeqAccess {
             de: self.de,
             first: true,
@@ -532,10 +505,7 @@ impl Deserializer for NsdDeserializer {
     }
 
     fn begin_map(&mut self) -> Result<NsdMapAccess, DeserializeError> with stores[self] {
-        let r = self.de.expect_char('{' as i32);
-        if let Err(e) = r {
-            return Result::Err(e);
-        }
+        self.de.expect_char('{' as i32)?;
         return Result::Ok(NsdMapAccess {
             de: self.de,
             first: true,
@@ -548,10 +518,7 @@ impl Deserializer for NsdDeserializer {
         num_fields: i32,
     ) -> Result<NsdStructAccess, DeserializeError> with stores[self] {
         // NSD: struct encoded as array
-        let r = self.de.expect_char('[' as i32);
-        if let Err(e) = r {
-            return Result::Err(e);
-        }
+        self.de.expect_char('[' as i32)?;
         return Result::Ok(NsdStructAccess {
             de: self.de,
             index: 0,
@@ -573,36 +540,21 @@ impl Deserializer for NsdDeserializer {
         if b == '[' as i32 {
             // Payload variant: [disc, payload]
             self.de.pos += 1;
-            let disc_r = self.de.parse_i32_direct();
-            if let Ok(disc) = disc_r {
-                let comma_r = self.de.expect_char(',' as i32);
-                if let Err(e) = comma_r {
-                    return Result::Err(e);
-                }
-                return Result::Ok(NsdVariantAccess {
-                    de: self.de,
-                    disc,
-                    is_unit: false,
-                });
-            }
-            if let Err(e) = disc_r {
-                return Result::Err(e);
-            }
-            unreachable();
-        }
-        // Unit variant: bare integer discriminant
-        let disc_r = self.de.parse_i32_direct();
-        if let Ok(disc) = disc_r {
+            let disc = self.de.parse_i32_direct()?;
+            self.de.expect_char(',' as i32)?;
             return Result::Ok(NsdVariantAccess {
                 de: self.de,
                 disc,
-                is_unit: true,
+                is_unit: false,
             });
         }
-        if let Err(e) = disc_r {
-            return Result::Err(e);
-        }
-        unreachable();
+        // Unit variant: bare integer discriminant
+        let disc = self.de.parse_i32_direct()?;
+        return Result::Ok(NsdVariantAccess {
+            de: self.de,
+            disc,
+            is_unit: true,
+        });
     }
 
     fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError> {
@@ -623,10 +575,7 @@ pub fn to_bytes<T: Serialize>(value: &T) -> Result<List<u8>, SerializeError> {
 pub fn to_string<T: Serialize>(value: &T) -> Result<String, SerializeError> {
     let mut buf: String = "";
     let mut ser = NsdSerializer { buf: &mut buf };
-    let r = value.serialize::<NsdSerializer>(&mut ser);
-    if let Err(e) = r {
-        return Result::Err(e);
-    }
+    value.serialize::<NsdSerializer>(&mut ser)?;
     return Result::Ok(buf);
 }
 
@@ -643,16 +592,10 @@ pub fn from_bytes<T: Deserialize, S: AsByteSlice>(input: S) -> Result<T, Deseria
         pos: 0,
     };
     let mut nsd = NsdDeserializer { de: &mut de };
-    let r = T::deserialize(&mut nsd);
-    if let Ok(v) = r {
-        de.skip_whitespace();
-        if de.pos < de.input.len() {
-            return Result::Err(DeserializeError::trailing(de.pos as i64));
-        }
-        return Result::Ok(v);
+    let v = T::deserialize(&mut nsd)?;
+    de.skip_whitespace();
+    if de.pos < de.input.len() {
+        return Result::Err(DeserializeError::trailing(de.pos as i64));
     }
-    if let Err(e) = r {
-        return Result::Err(e);
-    }
-    unreachable();
+    return Result::Ok(v);
 }

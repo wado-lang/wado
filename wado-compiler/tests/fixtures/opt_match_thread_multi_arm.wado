@@ -1,0 +1,54 @@
+// A multi-arm variant match over an inlined call threads every arm:
+// payload arms, a payload-less arm, and a wildcard arm all jump straight
+// from the inlined body's break sites, so the `Shape` variant is never
+// constructed.
+use { println, Stdout } from "core:cli";
+
+variant Shape {
+    Circle(i32),
+    Square(i32),
+    Dot,
+    Blob(i32),
+}
+
+#[inline]
+fn make(k: i32) -> Shape {
+    if k == 0 {
+        return Shape::Circle(3);
+    }
+    if k == 1 {
+        return Shape::Square(4);
+    }
+    if k == 2 {
+        return Shape::Dot;
+    }
+    return Shape::Blob(k);
+}
+
+fn area(k: i32) -> i32 {
+    let a = match make(k) {
+        Circle(r) => r * r * 3,
+        Square(s) => s * s,
+        Dot => 0,
+        _ => -1,
+    };
+    return a;
+}
+
+export fn run() with Stdout {
+    assert area(0) == 27;
+    assert area(1) == 16;
+    assert area(2) == 0;
+    assert area(9) == -1;
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_not_expect:O2": [
+        "Shape::Circle\" { discriminant",
+        "Shape::Square\" { discriminant",
+        "Shape::Blob\" { discriminant"
+    ]
+}

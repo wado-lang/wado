@@ -1,0 +1,25 @@
+//! Stage C regression: an alt-initial predicate must not replace the
+//! longest-match tournament when the overlap group's alts are not
+//! interchangeable (differ in length / token). `{true}? A B | A B C` on
+//! `a b c` must take the longer alt, not commit to `A B` in grammar order.
+
+use pm from "./grammars/wado_pred_mixed.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_pred_mixed",
+        },
+    };
+
+test "the longest alt wins a non-interchangeable overlap group" {
+    let result = pm::parse_s(&"a b c");
+    assert result.ok(), "the A B C alt must parse cleanly";
+    assert result.output == "abc", `output: '{result.output}'`;
+}
+
+test "the shorter alt still parses when it is the only match" {
+    let result = pm::parse_s(&"a b");
+    assert result.ok(), "the A B alt must parse cleanly";
+    assert result.output == "ab", `output: '{result.output}'`;
+}

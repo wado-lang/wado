@@ -197,6 +197,18 @@ fn warn_unhandled_actions(grammar: &Grammar, ctx: &mut GenContext) {
     }
 }
 
+/// Whether codegen will emit any action / predicate for this rule. Rules that
+/// do are kept off the compact single-token fast path (which has no per-alt
+/// body to host them).
+fn rule_has_emittable_actions(rule: &ParserRule, ctx: &GenContext) -> bool {
+    if !ctx.emit_actions() {
+        return false;
+    }
+    let mut ids: List<i32> = [];
+    collect_rule_action_ids(rule, &mut ids);
+    return ids.len() > 0;
+}
+
 fn collect_rule_action_ids(rule: &ParserRule, out: &mut List<i32>) {
     if let Some(a) = &rule.init_action {
         out.push(a.action_id);
@@ -2707,7 +2719,7 @@ fn gen_parse_fn_named(
     // construction instead of an N-way `if kind == TK_X` cascade. The scan
     // side already collapses these (`gen_scan_function_named`); the result is
     // far smaller and no slower than the cascade.
-    if all_alts_are_single_token(&rule.alternatives) {
+    if all_alts_are_single_token(&rule.alternatives) && !rule_has_emittable_actions(rule, ctx) {
         gen_parse_fn_single_token(w, rule, ctx, fn_name);
         return;
     }
@@ -2745,6 +2757,8 @@ fn gen_parse_fn_named(
             }
         }
     }
+
+    mark_gated_predicates(rule, has_overlaps, &groups, &first_sets, &non_lr_indices, ctx);
 
     if has_overlaps {
         // Pre-compute which alts' scan helpers the dispatch will call so the
@@ -2955,11 +2969,15 @@ fn gen_multi_alt_body(
         let pos_sets = &all_pos_sets[i];
         let cond_depth = if depth < pos_sets.len() { depth } else { pos_sets.len() };
 
+        let gate_conds: List<String> = if ctx.emit_actions() { alt_initial_gate_conditions(alt) } else { [] };
         if cond_depth > 0 {
             let cond = build_lookahead_condition(ctx, pos_sets, cond_depth);
-            w.begin(&`if {cond}`);
-        } else {
+            let gate = if gate_conds.is_empty() { String::new() } else { ` && {join_gate_conds(&gate_conds)}` };
+            w.begin(&`if {cond}{gate}`);
+        } else if gate_conds.is_empty() {
             w.begin(&"scope:");
+        } else {
+            w.begin(&`if {join_gate_conds(&gate_conds)}`);
         }
 
         let body = rule_alt_body(lowered_rule, alt_index).unwrap();
@@ -3089,7 +3107,9 @@ fn gen_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before: i32
         match a.kind {
             Action => gen_action_body(w, &a.source, ctx),
             Predicate => {
-                if predicate_selects_alternative(before, ctx) {
+                if ctx.is_predicate_gated(a.source.action_id) {
+                    ctx.mark_action_seen(a.source.action_id);
+                } else if predicate_selects_alternative(before, ctx) {
                     warn_unsupported_prediction_predicate(&a.source, ctx);
                 } else {
                     gen_predicate_guard(w, &a.source, ctx);
@@ -3122,6 +3142,214 @@ fn current_rule_is_multi_alt(ctx: &GenContext) -> bool {
         return false;
     }
     return ctx.parser_rules()[ridx].alternatives.len() > 1;
+}
+
+/// Whether prediction can gate on this action: an alt-initial (`before_index
+/// == 0`), context-independent (no `$` attribute references) predicate. The
+/// condition collector and the id-marking pass share it so they cannot diverge.
+fn is_gateable_alt_initial_predicate(a: &AltAction) -> bool {
+    if a.before_index != 0 {
+        return false;
+    }
+    return match a.kind {
+        Predicate => find_attr_refs(&a.source.text).len() == 0,
+        Action => false,
+    };
+}
+
+/// An alt's gateable alt-initial predicate conditions, in grammar order.
+fn alt_initial_gate_conditions(alt: &Alternative) -> List<String> {
+    let mut conds: List<String> = [];
+    for let a of &alt.actions {
+        if is_gateable_alt_initial_predicate(a) {
+            conds.push(a.source.text);
+        }
+    }
+    return conds;
+}
+
+/// Whether any alt in an `Ambiguous` overlap group carries a gateable
+/// alt-initial predicate.
+fn ambiguous_group_has_gate(amb_alts: &List<i32>, alts: &List<Alternative>) -> bool {
+    for let idx of amb_alts {
+        if !alt_initial_gate_conditions(&alts[*idx]).is_empty() {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Whether every alt in an overlap group matches the same terminal sequence, so
+/// they genuinely tie. Only then is the grammar-order predicate chain sound: a
+/// group whose alts differ in length or token must keep the length tournament,
+/// which the chain would misroute. A non-terminal element (`elements_match`
+/// compares only `TokenRef` / `Literal`) makes the group ineligible.
+fn group_alts_interchangeable(amb_alts: &List<i32>, alts: &List<Alternative>) -> bool {
+    if amb_alts.is_empty() {
+        return false;
+    }
+    let first = &alts[amb_alts[0]].elements;
+    for let idx of amb_alts {
+        let els = &alts[*idx].elements;
+        if els.len() != first.len() {
+            return false;
+        }
+        for let mut i = 0; i < els.len(); i += 1 {
+            if !elements_match(&els[i], &first[i]) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+/// Whether an `Ambiguous` group is resolved by predicate-gated dispatch: it has
+/// a gateable predicate and its alts are interchangeable. The marking pass and
+/// every emit site key on this so the gated set and emitted conditions agree.
+fn ambiguous_group_predicate_gated(amb_alts: &List<i32>, alts: &List<Alternative>) -> bool {
+    return ambiguous_group_has_gate(amb_alts, alts) && group_alts_interchangeable(amb_alts, alts);
+}
+
+/// Collect the alts of every predicate-gated `Ambiguous` node in the tree.
+/// Walks the whole tree, not just its root, to stay symmetric with emit (which
+/// gates a node nested under a `Dispatch` too).
+fn collect_gated_ambiguous_alts(node: &PredictionNode, alts: &List<Alternative>, out: &mut List<i32>) {
+    match *node {
+        Leaf(_) => {
+        },
+        Consume(c) => collect_gated_ambiguous_alts(&c.child, alts, out),
+        Dispatch(d) => {
+            for let branch of &d.branches {
+                collect_gated_ambiguous_alts(&branch.child, alts, out);
+            }
+        },
+        Ambiguous(a) => {
+            if ambiguous_group_predicate_gated(&a.alts, alts) {
+                for let idx of &a.alts {
+                    out.push(*idx);
+                }
+            }
+        },
+    }
+}
+
+/// Record every alt-initial predicate a dispatch site will gate, so
+/// `gen_alt_actions_at` suppresses its in-body copy. Covers the `Direct`
+/// branch, the singleton overlap group, and interchangeable `Ambiguous`
+/// groups; a deeper `Dispatch` / `Consume` group is left for the inline path.
+fn mark_gated_predicates(
+    rule: &ParserRule,
+    has_overlaps: bool,
+    groups: &List<List<i32>>,
+    first_sets: &List<List<String>>,
+    non_lr_indices: &List<i32>,
+    ctx: &mut GenContext,
+) {
+    if !ctx.emit_actions() {
+        return;
+    }
+    if !has_overlaps {
+        for let idx of non_lr_indices {
+            mark_alt_gate_predicates(&rule.alternatives[*idx], ctx);
+        }
+        return;
+    }
+    for let group of groups {
+        if group.len() == 1 {
+            mark_alt_gate_predicates(&rule.alternatives[non_lr_indices[group[0]]], ctx);
+        } else {
+            let tree = build_group_prediction_tree(&rule.alternatives, group, first_sets, non_lr_indices, ctx);
+            let mut gated: List<i32> = [];
+            collect_gated_ambiguous_alts(&tree, &rule.alternatives, &mut gated);
+            for let idx of &gated {
+                mark_alt_gate_predicates(&rule.alternatives[*idx], ctx);
+            }
+        }
+    }
+}
+
+fn mark_alt_gate_predicates(alt: &Alternative, ctx: &mut GenContext) {
+    for let a of &alt.actions {
+        if is_gateable_alt_initial_predicate(a) {
+            ctx.mark_predicate_gated(a.source.action_id);
+        }
+    }
+}
+
+/// The ` && (pred)` suffix folding an alt's gateable predicates into a
+/// token-led dispatch condition, or "" when off (keeping non-Wado grammars
+/// byte-identical) or the alt has none.
+fn alt_gate_and_suffix(alt: &Alternative, ctx: &GenContext) -> String {
+    if !ctx.emit_actions() {
+        return String::new();
+    }
+    let conds = alt_initial_gate_conditions(alt);
+    if conds.is_empty() {
+        return String::new();
+    }
+    return ` && {join_gate_conds(&conds)}`;
+}
+
+/// Emit predicate-gated selection for an interchangeable `Ambiguous` group, in
+/// grammar order: the first alt whose predicates hold wins, an unpredicated alt
+/// is always viable and closes the chain, and all-false is no viable alternative.
+fn gen_predicate_gated_dispatch(
+    w: &mut CodeWriter,
+    amb_alts: &List<i32>,
+    alts: &List<Alternative>,
+    fn_name: &String,
+    ctx: &GenContext,
+    rule_display: &String,
+) {
+    let order = amb_alts.sorted();
+    let mut opened = false;
+    for let idx of &order {
+        let conds = alt_initial_gate_conditions(&alts[*idx]);
+        if conds.is_empty() {
+            if !opened {
+                emit_gated_pick(w, *idx, fn_name, ctx, rule_display);
+                return;
+            }
+            w.else_begin(&"else");
+            emit_gated_pick(w, *idx, fn_name, ctx, rule_display);
+            w.end();
+            return;
+        }
+        let cond = join_gate_conds(&conds);
+        if !opened {
+            w.begin(&`if {cond}`);
+            opened = true;
+        } else {
+            w.else_begin(&`else if {cond}`);
+        }
+        emit_gated_pick(w, *idx, fn_name, ctx, rule_display);
+    }
+    w.else_begin(&"else");
+    w.line(&`p.no_viable("no viable alternative", p.peek_span(), []);`);
+    w.line(&"return;");
+    w.end();
+}
+
+/// Emit a gated branch body: the trace pick and the tail call into the alt.
+fn emit_gated_pick(w: &mut CodeWriter, idx: i32, fn_name: &String, ctx: &GenContext, rule_display: &String) {
+    if ctx.is_trace() {
+        w.line(&`trace_pick(p, &{str_lit(*rule_display)}, {idx});`);
+    }
+    w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
+}
+
+/// Join predicate conditions into one short-circuit `(c0) && (c1)` guard.
+fn join_gate_conds(conds: &List<String>) -> String {
+    let mut out = String::new();
+    for let mut i = 0; i < conds.len(); i += 1 {
+        if i > 0 {
+            out.push_str(&" && ");
+        }
+        out.push('(');
+        out.push_str(&conds[i]);
+        out.push(')');
+    }
+    return out;
 }
 
 /// Emit one action body under the identity translator (`language = Wado`):
@@ -6481,6 +6709,10 @@ fn gen_prediction_code_inner(
         let mut sorted_indices = a.alts.sorted();
         sort_group_by_element_count(&mut sorted_indices, alts);
         if skip == 0 {
+            if ctx.emit_actions() && ambiguous_group_predicate_gated(&a.alts, alts) {
+                gen_predicate_gated_dispatch(w, &a.alts, alts, fn_name, ctx, rule_display);
+                return;
+            }
             let amb_rule = ctx.current_rule_index();
             let route_via_atn = if let AtEndConflict = a.reason {
                 ctx.emits_at_end_conflict_via_atn(amb_rule, rule_display, &a.branch_tokens);
@@ -6692,6 +6924,9 @@ fn collect_referenced_scan_alts(
             }
         },
         Ambiguous(a) => {
+            if ctx.emit_actions() && ambiguous_group_predicate_gated(&a.alts, alts) {
+                return;
+            }
             let mut sorted_indices = a.alts.sorted();
             sort_group_by_element_count(&mut sorted_indices, alts);
             let mut all_have_scans = true;
@@ -6757,8 +6992,13 @@ fn gen_multi_alt_body_alt(
             dedup_append_arr(&mut union_first, &first_sets[*idx]);
         }
 
+        let gate = if group.len() == 1 {
+            alt_gate_and_suffix(&rule.alternatives[non_lr_indices[group[0]]], ctx);
+        } else {
+            String::new();
+        };
         let cond = ctx.kind_check_str(&union_first, &"kind");
-        w.begin(&`if {cond}`);
+        w.begin(&`if {cond}{gate}`);
 
         if group.len() == 1 {
             let alt_index = non_lr_indices[group[0]];

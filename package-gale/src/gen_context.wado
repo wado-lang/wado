@@ -155,6 +155,9 @@ pub struct GenContext {
     /// group, LR suffix, single-token multi-alt, multi-alt prequel) surfaces
     /// loudly instead of vanishing silently.
     action_seen: List<i32>,
+    /// `action_id`s of alt-initial predicates resolved at the dispatch by
+    /// prediction-time gating; their in-body emit is suppressed.
+    predicate_gated: List<i32>,
     rule_follow_kinds: TreeMap<String, List<String>>,
     rule_follow_exact: bool,
 }
@@ -192,6 +195,7 @@ impl GenContext {
             trace: false,
             emit_actions: false,
             action_seen: [],
+            predicate_gated: [],
             rule_follow_kinds: TreeMap::new(),
             rule_follow_exact: false,
         };
@@ -406,6 +410,14 @@ impl GenContext {
             }
         }
         return false;
+    }
+
+    pub fn mark_predicate_gated(&mut self, id: i32) {
+        self.predicate_gated.push(id);
+    }
+
+    pub fn is_predicate_gated(&self, id: i32) -> bool {
+        return self.predicate_gated.contains(&id);
     }
 
     /// Record a prediction-strategy diagnostic for `rule`, deduped on

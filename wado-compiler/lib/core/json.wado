@@ -90,7 +90,7 @@ fn write_json_i32(buf: &mut String, v: i32) -> Result<(), SerializeError> {
 fn write_json_i64(buf: &mut String, v: i64) -> Result<(), SerializeError> {
     // Values outside the f64 safe-integer range are serialized as strings
     // so JS consumers don't lose precision.
-    if v > f64::MAX_SAFE_INTEGER as i64 || v < f64::MIN_SAFE_INTEGER as i64 {
+    if !(f64::MIN_SAFE_INTEGER as i64 <= v <= f64::MAX_SAFE_INTEGER as i64) {
         buf.push_str(&`"{v}"`);
     } else {
         buf.push_str(&`{v}`);
@@ -746,7 +746,7 @@ fn checked_int_f64(v: f64, min: f64, over: f64, range_msg: String, start: i64) -
         builtin::cold_path();
         return Result::Err(DeserializeError::unexpected_type("expected integer, got float", start));
     }
-    if v < min || v >= over {
+    if !(min <= v < over) {
         builtin::cold_path();
         return Result::Err(DeserializeError::overflow(range_msg, start));
     }
@@ -1608,13 +1608,8 @@ impl DeserializeSeq for JsonSeqAccess {
             self.de.expect_char(',' as i32)?;
         }
         self.first = false;
-        return match T::deserialize(&mut self.de) {
-            Ok(v) => Result::Ok(Option::Some(v)),
-            Err(e) => {
-                builtin::cold_path();
-                Result::Err(e);
-            },
-        };
+        let v = T::deserialize(&mut self.de)?;
+        return Result::Ok(Option::Some(v));
     }
 
     fn end(&mut self) -> Result<(), DeserializeError> {
@@ -1792,7 +1787,7 @@ impl Deserializer for JsonDeserializer {
         self.skip_whitespace();
         let start = self.pos as i64;
         let v = self.parse_i64_direct()?;
-        if v < 0 || v > u32::MAX as i64 {
+        if !(0 <= v <= u32::MAX as i64) {
             builtin::cold_path();
             return Result::Err(DeserializeError::overflow(
                 "value out of range for u32",
@@ -1868,14 +1863,18 @@ impl Deserializer for JsonDeserializer {
             builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
-        let b = self.input.get_unchecked(self.pos) as i32;
-        if b == 't' as i32 {
-            self.expect_true()?;
-            return Result::Ok(true);
-        }
-        if b == 'f' as i32 {
-            self.expect_false()?;
-            return Result::Ok(false);
+        let b = self.input.get_unchecked(self.pos) as u8 as char;
+        match b {
+            't' => {
+                self.expect_true()?;
+                return Result::Ok(true);
+            },
+            'f' => {
+                self.expect_false()?;
+                return Result::Ok(false);
+            },
+            _ => {
+            },
         }
         builtin::cold_path();
         return Result::Err(

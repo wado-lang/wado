@@ -135,6 +135,9 @@ pub(super) fn run_peephole(
         // into an if-let caller. The rule allocates fresh `__fused_payload_N`
         // locals via the engine, so it sits next to the other block-level
         // rules.
+        // One rule, two entry points: `apply_block` fuses the value-discarding
+        // if-let shape, `apply_expr` threads the value-producing `match LB`
+        // (`?`) shape. Both only exist post-inline.
         let labeled_block_fusion_rule = (!pre_inline).then(build_labeled_block_fusion);
         // Disjoint borrow of the body arena and the local list so rules can
         // both rewrite the body and allocate fresh locals via the engine.
