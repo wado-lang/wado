@@ -1,0 +1,42 @@
+// Test: `impl Default for T;` marker is a conformance check (WEP: Trait
+// Derivation Policy). It validates that every field carries a default
+// expression and is otherwise interchangeable with the structural
+// auto-derive.
+struct Config {
+    retries: i32 = 3,
+    verbose: bool = false,
+}
+
+impl Default for Config;
+
+test "explicit Default marker validates and default() works" {
+    let c = Config::default();
+    assert c.retries == 3;
+    assert !c.verbose;
+}
+
+struct Manual {
+    id: i32,
+}
+
+impl Default for Manual {
+    pub fn default() -> Manual {
+        return Manual { id: 42 };
+    }
+}
+
+test "manual Default impl wins" {
+    assert Manual::default().id == 42;
+}
+
+fn make<T: Default>() -> T {
+    return T::default();
+}
+
+test "T: Default bound resolves through the marker'd type" {
+    let c: Config = make();
+    assert c.retries == 3;
+}
+
+__DATA__
+{"test": {}}

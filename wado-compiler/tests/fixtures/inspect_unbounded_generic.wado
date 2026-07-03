@@ -1,0 +1,45 @@
+// Regression: a template string formatting an *unbounded* type param must
+// still work. The format traits are total, so `{v:?}` over `T` type-checks
+// with no written bound, and the concrete `P^Inspect` body (generated eagerly)
+// resolves once monomorphize substitutes `T` → `P`.
+struct P {
+    x: i32,
+}
+
+enum E {
+    A,
+    B,
+}
+
+variant V {
+    Leaf(i32),
+    Empty,
+}
+
+fn show<T>(v: &T) -> String {
+    return `{v:?}`;
+}
+
+fn show_display<T>(v: &T) -> String {
+    return `{v}`;
+}
+
+fn indirect<U>(v: &U) -> String {
+    return show(v);
+}
+
+test "unbounded generic inspect discovered at monomorphize" {
+    let p = P { x: 7 };
+    assert show(&p) == "P { x: 7 }";
+    assert show_display(&p) == "P { x: 7 }";
+    assert show(&E::A) == "E::A";
+    assert show(&V::Leaf(3)) == "V::Leaf(3)";
+}
+
+test "transitive unbounded generic" {
+    let p = P { x: 9 };
+    assert indirect(&p) == "P { x: 9 }";
+}
+
+__DATA__
+{"test": {}}

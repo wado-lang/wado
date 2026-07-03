@@ -47,6 +47,8 @@ Escalate the test scope as the work matures, so the fast feedback stays fast:
 
 Standard libraries (stdlib) are implemented in `lib`, with `lib/wasi/` for WASI interface and `lib/core/` for the core library.
 
+The stdlib sources are embedded into the compiler binary at build time (`include_str!` in `src/stdlib.rs`), so editing a `.wado` file under `lib/` has no effect until the crate is rebuilt.
+
 For other important files:
 
 - `lib/core/builtin.wado` for compiler intrinsics.

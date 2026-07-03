@@ -1,0 +1,37 @@
+// Test: `impl Inspect for T;` / `impl Display for T;` (and Alt siblings)
+// markers are accepted as conformance checks (WEP: Trait Derivation Policy).
+// Formatting still works through them.
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Inspect for Point;
+impl InspectAlt for Point;
+impl Display for Point;
+impl DisplayAlt for Point;
+
+test "format-trait markers validate and formatting works" {
+    let p = Point { x: 1, y: 2 };
+    assert `{p:?}` == "Point { x: 1, y: 2 }";
+    assert `{p}` == "Point { x: 1, y: 2 }";
+}
+
+struct Custom {
+    v: i32,
+}
+
+impl Display for Custom {
+    pub fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&"custom!");
+    }
+}
+
+test "manual Display impl wins over the fallback" {
+    let c = Custom { v: 1 };
+    assert `{c}` == "custom!";
+    assert `{c:?}` == "Custom { v: 1 }";
+}
+
+__DATA__
+{"test": {}}

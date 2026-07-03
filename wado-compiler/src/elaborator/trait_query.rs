@@ -22,11 +22,30 @@ pub(super) enum OnBoundTrait {
     Ord,
     Serialize,
     Deserialize,
+    Default,
+    Inspect,
+    InspectAlt,
+    Display,
+    DisplayAlt,
 }
 
 impl OnBoundTrait {
     pub(super) fn is_serde(self) -> bool {
         matches!(self, Self::Serialize | Self::Deserialize)
+    }
+
+    pub(super) fn is_format(self) -> bool {
+        matches!(
+            self,
+            Self::Inspect | Self::InspectAlt | Self::Display | Self::DisplayAlt
+        )
+    }
+
+    pub(super) fn is_field_recursive(self) -> bool {
+        matches!(
+            self,
+            Self::Eq | Self::Ord | Self::Serialize | Self::Deserialize
+        )
     }
 }
 
@@ -420,6 +439,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(tr) = self.classify_on_bound_trait(trait_name) else {
             return;
         };
+        if !tr.is_field_recursive() {
+            return;
+        }
         let resolved = self.tysys.type_table.borrow().get(type_id).clone();
 
         let mut failing: Option<(String, TypeId)> = None;
@@ -442,19 +464,58 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     pub(super) fn classify_on_bound_trait(&self, trait_name: &str) -> Option<OnBoundTrait> {
-        let tt = self.tysys.type_table.borrow();
-        let items = tt.compiler_items();
-        if trait_name == items.trait_name(CompilerItem::Eq) {
-            Some(OnBoundTrait::Eq)
-        } else if trait_name == items.trait_name(CompilerItem::Ord) {
-            Some(OnBoundTrait::Ord)
-        } else if items.trait_name_opt(CompilerItem::Serialize) == Some(trait_name) {
-            Some(OnBoundTrait::Serialize)
-        } else if items.trait_name_opt(CompilerItem::Deserialize) == Some(trait_name) {
-            Some(OnBoundTrait::Deserialize)
-        } else {
-            None
+        let (on_bound, compiler_module) = {
+            let tt = self.tysys.type_table.borrow();
+            let items = tt.compiler_items();
+            let of = |item: CompilerItem, on_bound: OnBoundTrait| {
+                items.trait_module(item).map(|m| (on_bound, m.clone()))
+            };
+            if trait_name == items.trait_name(CompilerItem::Eq) {
+                of(CompilerItem::Eq, OnBoundTrait::Eq)
+            } else if trait_name == items.trait_name(CompilerItem::Ord) {
+                of(CompilerItem::Ord, OnBoundTrait::Ord)
+            } else if items.trait_name_opt(CompilerItem::Serialize) == Some(trait_name) {
+                of(CompilerItem::Serialize, OnBoundTrait::Serialize)
+            } else if items.trait_name_opt(CompilerItem::Deserialize) == Some(trait_name) {
+                of(CompilerItem::Deserialize, OnBoundTrait::Deserialize)
+            } else if trait_name == items.trait_name(CompilerItem::Default) {
+                of(CompilerItem::Default, OnBoundTrait::Default)
+            } else if trait_name == items.trait_name(CompilerItem::Inspect) {
+                of(CompilerItem::Inspect, OnBoundTrait::Inspect)
+            } else if trait_name == items.trait_name(CompilerItem::InspectAlt) {
+                of(CompilerItem::InspectAlt, OnBoundTrait::InspectAlt)
+            } else if trait_name == items.trait_name(CompilerItem::Display) {
+                of(CompilerItem::Display, OnBoundTrait::Display)
+            } else if trait_name == items.trait_name(CompilerItem::DisplayAlt) {
+                of(CompilerItem::DisplayAlt, OnBoundTrait::DisplayAlt)
+            } else {
+                None
+            }
+        }?;
+        match self.scoped_trait_decl_module(trait_name) {
+            Some(module) => (*module == compiler_module).then_some(on_bound),
+            None => Some(on_bound),
         }
+    }
+
+    /// The trait declaration `trait_name` binds to in scope (local, else an
+    /// explicit import); `None` when it falls through to the ambient compiler
+    /// trait. Lets a same-name user `trait` be distinguished from the compiler's.
+    fn scoped_trait_decl_module(&self, trait_name: &str) -> Option<&ModuleSource> {
+        let trait_env = &self.tysys.trait_env;
+        let declares = |module: &ModuleSource| {
+            trait_env
+                .decl_index
+                .contains_key(&(module.clone(), trait_name.to_string()))
+        };
+        if declares(&self.current_module_source) {
+            return Some(&self.current_module_source);
+        }
+        self.sem
+            .imports
+            .imported_type_sources
+            .get(trait_name)
+            .filter(|src| declares(src))
     }
 
     fn walk_structural_derive_members(
@@ -546,6 +607,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(tr) = self.classify_on_bound_trait(trait_name) else {
             return false;
         };
+        if tr.is_format() {
+            return true;
+        }
+        if tr == OnBoundTrait::Default {
+            return self.is_defaultable_struct(type_id);
+        }
         let resolved = self.tysys.type_table.borrow().get(type_id).clone();
         match &resolved {
             ResolvedType::Newtype { base_type, .. } => {
@@ -565,12 +632,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    fn is_defaultable_struct(&self, type_id: TypeId) -> bool {
+        let name = {
+            let tt = self.tysys.type_table.borrow();
+            if !matches!(tt.get(type_id), ResolvedType::Struct { .. }) {
+                return false;
+            }
+            tt.type_name(type_id)
+        };
+        self.auto_derive_default_struct_type(&name).is_some()
+    }
+
     fn type_implements_trait_inner(
         &self,
         ctx: &AnnotateCtx,
         resolved: &ResolvedType,
         trait_name: &str,
     ) -> bool {
+        let on_bound = self.classify_on_bound_trait(trait_name);
+
+        if on_bound.is_some_and(OnBoundTrait::is_format) {
+            return true;
+        }
+
         // Type parameters satisfy bounds declared on them (e.g., T: Describable
         // means T implements Describable within the scope of that declaration)
         if let ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } = resolved
@@ -581,13 +665,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return false;
         }
 
-        let default_name = {
-            let tt = self.tysys.type_table.borrow();
-            tt.compiler_items()
-                .trait_name(CompilerItem::Default)
-                .to_string()
-        };
-        let on_bound = self.classify_on_bound_trait(trait_name);
         let is_eq = on_bound == Some(OnBoundTrait::Eq);
         let is_eq_or_ord = is_eq || on_bound == Some(OnBoundTrait::Ord);
 
@@ -608,6 +685,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         if let Some(tr) = on_bound
+            && tr.is_field_recursive()
             && let ResolvedType::Enum {
                 name,
                 module_source,
@@ -646,14 +724,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Structs auto-implement Default when every field has a declared
-        // default expression (`= expr`) — the synthesis pass emits the body.
-        // Share the eligibility predicate with the method-lookup helper so
-        // the bound check and `S::default()` resolution agree.
-        if let ResolvedType::Struct { name, .. } = &resolved
-            && trait_name == default_name
+        if let ResolvedType::Struct {
+            name,
+            module_source,
+            ..
+        } = &resolved
+            && on_bound == Some(OnBoundTrait::Default)
             && self.auto_derive_default_struct_type(name).is_some()
         {
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .record_bound_driven_synth_request(name, module_source, trait_name);
             return true;
         }
 

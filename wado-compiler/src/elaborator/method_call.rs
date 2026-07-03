@@ -2902,8 +2902,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Auto-derived `Default::default()` — no user impl block exists, but
-        // the synthesis pass emits one in the struct's own module.
         if method_name == "default" && self.auto_derive_default_struct_type(struct_name).is_some() {
             let default_trait_name = self
                 .tysys
@@ -2911,8 +2909,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow()
                 .compiler_trait_name(crate::compiler_item::CompilerItem::Default)
                 .to_string();
+            let module_source = self.find_struct_module_source(struct_name);
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .record_bound_driven_synth_request(
+                    struct_name,
+                    &module_source,
+                    &default_trait_name,
+                );
             return Some(StaticMethodRef::new(
-                self.find_struct_module_source(struct_name),
+                module_source,
                 struct_name,
                 method_name,
                 Some(default_trait_name),

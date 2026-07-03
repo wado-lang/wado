@@ -1,0 +1,19 @@
+// Test: `impl Default for T;` marker is a hard conformance check — a
+// compile error at the marker's own span when some field has no default
+// expression and no manual impl covers the type.
+struct Broken {
+    retries: i32 = 3,
+    name: String,
+}
+
+impl Default for Broken;
+
+export fn run() {
+    let b = Broken { name: "x" };
+    assert b.retries == 3;
+}
+
+__DATA__
+{
+    "compile_error": "cannot derive `Default` for `Broken`"
+}

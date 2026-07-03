@@ -1,18 +1,25 @@
 # Trait Derivation Policy — Bound-Driven Synthesis
 
-Status: Implemented for `Serialize` / `Deserialize` / `Eq` / `Ord` over struct,
-variant, enum, and flags types, including anonymous structs (`Eq` / `Ord` are
-struct/variant/enum only — flags erase to `u32` and need no impl of their
-own). The shipped discovery mechanism records a request at each
-call-resolution site that happens to check eligibility (`operators.rs`,
-`trait_query.rs`); [Discovery Mechanism](#discovery-mechanism) below
-specifies a placeholder-based redesign that closes the gap this leaves (a
-resolution path that doesn't call the check silently skips generation — see
-`operators.rs`'s `Variant` comment) but is not yet implemented. Generic
-structs and variants derive all four traits (`Serialize` / `Deserialize` /
-`Eq` / `Ord`), recorded against the base declaration and synthesized as a
-generic template monomorphize instantiates. A policy declaration for
-user-defined traits is open. See Open Questions.
+Status: Implemented. `Eq` / `Ord` / `Default` / `Serialize` / `Deserialize`
+are _demand_ `on_bound`: a body is synthesized only where a reference needs
+it, discovered through the shared `bound_driven_synth_requests` channel a
+bound check or explicit marker records into. They are not total — a `fn`-typed
+field blocks `Eq` / `Ord` / serde, a field without a default blocks `Default`
+— so a `T: Trait` obligation there is real, and gating avoids code-size waste
+on types that never use the trait.
+
+The format traits (`Inspect` / `InspectAlt` / `Display` / `DisplayAlt`) are
+_total_ `on_bound`: every type is structurally formattable, so a `T: Inspect`
+/ `T: Display` obligation always holds (for a type parameter or any concrete
+type), and `impl Inspect for T;` is a conformance check that always validates.
+Because they are total and universal debug output is a feature rather than
+waste, their _generation_ stays eager (a body for every type kind, as under
+the previous automatic policy) — gating it would demand a discovery mechanism
+for `{v:?}` over an unbounded type param (whose concrete reference only
+materializes at monomorphize) with no offsetting code-size benefit. Their
+move to `on_bound` is therefore in the obligation and marker semantics, not
+the generation schedule. A policy declaration for user-defined traits is
+open. See Open Questions.
 
 ## Context
 
@@ -52,129 +59,121 @@ instantiated for a given `T`.
 
 ### A per-trait derivation policy
 
-| Policy      | A `T: Trait` obligation is satisfied by …                | Examples                                                    |
-| ----------- | -------------------------------------------------------- | ----------------------------------------------------------- |
-| `automatic` | structural synthesis, always; the impl always exists     | `Inspect`, `InspectAlt`, `Display`, `DisplayAlt`, `Default` |
-| `on_bound`  | structural synthesis, on demand when a bound requires it | `Serialize`, `Deserialize`, `Eq`, `Ord` (the change)        |
-| `explicit`  | only a written `impl Trait for T;` (or full manual impl) | default for user traits                                     |
+| Policy              | A `T: Trait` obligation is satisfied by …                    | Generation | Examples                                           |
+| ------------------- | ------------------------------------------------------------ | ---------- | -------------------------------------------------- |
+| `on_bound` (demand) | structural synthesis, on demand when a reference requires it | on demand  | `Eq`, `Ord`, `Default`, `Serialize`, `Deserialize` |
+| `on_bound` (total)  | always — the trait is total over all types                   | eager      | `Inspect`, `InspectAlt`, `Display`, `DisplayAlt`   |
+| `explicit`          | only a written `impl Trait for T;` (or full manual impl)     | on demand  | default for user traits                            |
+
+There is no longer an `automatic` policy: its members split by totality.
+`Default` joined the demand `on_bound` traits (`Eq` / `Ord` / serde) — it is
+not total (a field without a default blocks it), so gating its generation
+saves code on structs never defaulted. The format traits stayed eager but
+gained `on_bound` obligation semantics (see below). `Display` / `DisplayAlt`
+synthesize a fallback that delegates to `Inspect` / `InspectAlt`.
+
+The format traits are _total_: every type is structurally formattable (the
+former automatic policy already generated an `Inspect` body for every type
+kind — struct, enum, variant, flags, newtype, tuple, closure, opaque
+resource). Totality is now a type-system fact — a `T: Inspect` / `T: Display`
+(and `Alt`) obligation always holds, for a type parameter or any concrete
+type — so those bounds compile where the old policy rejected them, and an
+`impl Inspect for T;` marker always validates. Generation stays eager: a total
+trait wastes nothing meaningful by existing for every type (universal debug
+output is the point), and gating it would need a discovery mechanism for
+`{v:?}` over an unbounded type param — whose concrete `T^Inspect` reference
+only materializes at monomorphize, after synthesis — for no code-size gain.
+The other four traits are _not_ total (a `fn`-typed field, a field without a
+default, blocks them), so a `T: Trait` there is a real obligation and gating
+its generation removes genuine waste.
 
 - A hand-written `impl Trait for T { … }` always wins.
-- An `impl` declaration — hand-written or the empty marker `impl Trait for
-  T;` — is a conformance check, never a synthesis trigger. It asserts (and,
-  for the marker, validates immediately) that `T` can implement `Trait`; it
-  does not by itself cause any code to be generated. The marker `impl Trait
-  for T;` stays valid under every policy: under `explicit` it's the only way
-  to make `T` eligible at all (the policy runs no structural scan on its
-  own); under `automatic` / `on_bound` it's redundant but harmless, since
-  the same eligibility already holds structurally. For `Eq` / `Ord` (and,
-  after closing the historical gap, `Serialize` / `Deserialize`) the marker
-  is also a hard guarantee: a compile error at the marker's own span if any
-  field/case is ineligible, unlike a bound (simply unsatisfied elsewhere) or
-  the structural rule (nothing to reject).
-- The actual trigger for synthesis — the point where a body gets generated —
-  is usage: some call site resolves a reference to the trait method. See
-  [Discovery Mechanism](#discovery-mechanism).
-- `automatic`, `on_bound`, and `explicit` differ along two independent axes:
-  whether eligibility is discovered by an unprompted structural scan
-  (`automatic` / `on_bound`) or only via an explicit marker (`explicit`),
-  and whether a body is generated unconditionally (`automatic`) or only on
-  a reference (`on_bound` / `explicit`). For `Eq` / `Ord` the eligibility
-  axis is invisible at the bound-check level — `T: Eq` was already satisfied
-  the moment fields qualified, whether or not any code emits — so the only
-  observable difference `automatic` → `on_bound` makes is whether a body
-  gets generated for a type nothing referenced.
+- An `impl Trait for T;` marker is a conformance check that validates `T`
+  structurally at its own span and records a bound-driven request — the same
+  effect a `T: Trait` bound has, except a marker is a hard compile error if
+  `T` is ineligible (a bound is merely unsatisfied elsewhere). For the
+  structurally-checkable traits (`Eq` / `Ord` / `Default` / serde) that hard
+  error fires when any field/case is ineligible (`Default` additionally
+  requires every field to carry a default expression). A format-trait marker
+  always validates — every nominal type is structurally formattable — so it
+  serves as an intent/documentation annotation. Under `explicit` a marker is
+  the only way to make `T` eligible at all; under `on_bound` it is redundant
+  with the structural rule but still a useful declaration of intent.
+- For the demand `on_bound` traits, the trigger for a body is usage: a bound
+  check, marker, or operator/call reference records the request. See
+  [Discovery Mechanism](#discovery-mechanism). The total format traits skip
+  discovery — their bodies are always generated.
+- `on_bound` and `explicit` differ on one axis: whether eligibility is
+  discovered by an unprompted structural scan (`on_bound`) or only via an
+  explicit marker (`explicit`).
 
 ### Bound-driven synthesis semantics
 
 An `on_bound` obligation `T: Trait` is satisfied structurally: no manual impl
-exists, and every field/case of `T` satisfies `Trait` recursively. On
-failure, the error reason-chains from the bound site to the offending
-field/case ([Diagnostic Reason Chains](./wep-2026-06-02-diagnostic-reason-chains.md)).
+exists, and every field/case of `T` satisfies `Trait` recursively (`Default`
+instead requires every field to carry a default expression). On failure, the
+error reason-chains from the bound site to the offending field/case
+([Diagnostic Reason Chains](./wep-2026-06-02-diagnostic-reason-chains.md)).
 
-Both `Eq` / `Ord`'s marker and (closing the historical gap) `Serialize` /
-`Deserialize`'s marker validate `T` structurally at their own span and are a
-hard compile error if ineligible — see [Discovery Mechanism](#discovery-mechanism)
-for how that validation feeds the same eligibility state a bare bound
-consults.
+A marker for any of the structurally-checkable traits (`Eq` / `Ord` /
+`Default` / `Serialize` / `Deserialize`) validates `T` at its own span and is
+a hard compile error if ineligible, then records the request exactly as a bare
+bound does.
 
 Whole-program and monomorphized, so there's no orphan rule to violate.
 Generic types record nominally against the base declaration — the many
 instantiations collapse onto one request, and synthesis emits a generic
-template that monomorphize instantiates per concrete type. This is how
-`Eq` / `Ord` have always worked and, as of this WEP's implementation, all
-four `on_bound` traits: `Serialize` and `Deserialize` synthesize generic
-templates too (the `Deserialize` `FieldSchema` keying is handled by keeping
-the `next_field` selector on the base type — see
-[Serde](./wep-2026-02-28-serde.md)).
+template that monomorphize instantiates per concrete type. `Serialize` /
+`Deserialize` templates are additionally generic over the _serializer_ type
+`S` / `D` (the `Deserialize` `FieldSchema` keying keeps the `next_field`
+selector on the base type — see [Serde](./wep-2026-02-28-serde.md)).
 
 ### Discovery mechanism
 
-A structural obligation is only ever satisfiable if it can be _found_ by
-whichever code path resolves a method call — an operator, a `.method()`
-call, or a generic bound check at a call site. Recording eligibility as a
-side effect of each such path checking it (the shipped mechanism today) is
-fragile: every resolution path must remember to run the check, and a path
-that doesn't silently skips generation (documented in `operators.rs`'s
-`Variant` comparison comment — comparison dispatch that fell through to
-`try_lower_comparison` at monomorphize time, after synthesis had already
-run, would never see its method generated). Nothing in the type system
-enforces that every current and future resolution path remembers to opt in.
+Discovery applies to the _demand_ `on_bound` traits (`Eq` / `Ord` / `Default`
+/ serde) only; the total format traits generate unconditionally and need none.
+A demand obligation is satisfiable only if the reference that needs it can be
+_found_, and discovery funnels into one shared set,
+`TypeTable::bound_driven_synth_requests`: the pre-monomorphize synthesis pass
+reads it and emits a body (concrete or generic template) for each recorded
+`(type, trait)` pair, gated so nothing is generated for a pair no reference
+recorded.
 
-The fix is to stop treating eligibility-checking and reference-discovery as
-one event. They become two:
+Each demand reference records at its own resolution site: `Eq` / `Ord` at
+operator dispatch and `==` / `<` method lowering (`type_implements_trait`
+records while it recurses through fields, so a struct and every field it
+reaches are recorded together); `Default` at a `T: Default` bound check or a
+`P::default()` static-call resolution; serde at a `T: Serialize` /
+`T: Deserialize` bound. None of these has an unbounded reference path — a
+value is compared, defaulted, or serialized only through a bound or a concrete
+call the resolver sees — so per-site recording is complete.
 
-1. Conformance check, at `TraitEnv::build()` — before any module's Annotate
-   pass runs, `TraitEnv` is extended to precompute, from AST-level struct /
-   variant / enum field types (no full type inference needed, mirroring
-   `TraitEnv::build`'s existing struct-field-dependency pass), which
-   `(type, on_bound trait)` pairs are structurally eligible. Each eligible
-   pair gets a body-less placeholder entry inserted into the same
-   `impl_index` / `all_impl_index` tables a hand-written `impl Trait for T {
-   … }` occupies. An `explicit`-policy trait runs no such scan; its only
-   placeholders come from an explicit marker, validated immediately at its
-   own span exactly as `record_explicit_derive_request` does today, with the
-   same result (a placeholder registration) instead of a synthesis request.
-   This is a genuine cost paid for every declared type under `automatic` /
-   `on_bound`, but it is the check only — the WEP's compile-time / code-size
-   concern is about body generation, not this structural scan.
-2. Reference discovery, during Annotate and after — every method-resolution
-   path (operator dispatch, direct `.method()` calls, generic bound checks)
-   already queries `TraitEnv`'s impl tables to find its target; it now finds
-   the placeholder there directly; no call site needs auto-derive-aware
-   fallback logic of its own. The one place that still needs to know about
-   placeholders is where a resolved match is lowered into a TIR
-   `Call` / `FunctionRef` — if the target is a placeholder rather than a
-   real impl, that single site records the reference. This mirrors
-   monomorphize's existing generic-instantiation dispatch loop: a template
-   is registered once and materialized only when something references it;
-   a referenced-but-unmaterialized entry is a bug, not a silently-skipped
-   feature (see [Link → Monomorphize → Erase](./compiler.md#link--monomorphize--erase)).
+A total format trait has no such gate: `type_implements_trait` short-circuits
+`true` for it (totality), and generation is eager, so `{v:?}` over an
+unbounded type param — whose concrete `T^Inspect` reference only appears after
+monomorphize substitutes `T` — always finds its body already emitted. This is
+exactly the case that made gating the format traits unattractive, and eager
+generation sidesteps it.
 
-Synthesis (`synthesis::traits`, `synthesis::serde_synth`) then drains
-exactly the set of referenced placeholders, the same shape as today's
-`bound_driven_synth_requests` snapshot-read, just fed by one funnel instead
-of many. An explicit marker with zero references still validates (hard
-error if ineligible) but generates nothing — see
-[Consequences](#consequences) for the trade-off this changes from today's
-shipped behavior.
-
-This redesign only changes _how_ eligibility and reference discovery are
-recorded, not the policy semantics in [A per-trait derivation policy](#a-per-trait-derivation-policy) above. It is scoped to
-compiler-synthesized bodies; a hand-written `impl Trait for T { … }` (with a
-body) is ordinary source, type-checked once because it exists, and left to
-ordinary dead-code elimination — it was never part of the eligibility /
-reference-discovery problem this section solves.
+An explicit marker feeds the demand request set: it validates structurally at
+its own span (hard error if ineligible) and records the request like a bound.
+A format-trait marker validates but records nothing meaningful (generation is
+already eager). This is scoped to compiler-synthesized bodies; a hand-written
+`impl Trait for T { … }` is ordinary source, type-checked because it exists and
+left to ordinary dead-code elimination.
 
 ### Policy assignment
 
-- `Inspect` / `InspectAlt` / `Default` stay `automatic` — no behavior change.
-- `Serialize` / `Deserialize` move from `explicit` to `on_bound`.
-- `Eq` / `Ord` move from `automatic` to `on_bound`: an impl is generated only
-  for a `(type, trait)` pair some call site or bound actually references. A
-  marker makes the pair eligible (or, under `explicit`, eligible at all);
-  it never references it by itself.
-- User-defined traits default to `explicit`; opting into `automatic` /
-  `on_bound` is an open question (see below).
+- `Inspect` / `InspectAlt` / `Display` / `DisplayAlt` / `Default` move from
+  `automatic` to `on_bound`: a body is generated only for a `(type, trait)`
+  pair some reference actually needs.
+- `Inspect` / `InspectAlt` / `Display` / `DisplayAlt` gain total `on_bound`
+  obligation and marker semantics (a `T: <format>` bound always holds; a
+  marker always validates) but keep eager generation.
+- `Eq` / `Ord` / `Serialize` / `Deserialize` were already `on_bound`; no
+  change.
+- User-defined traits default to `explicit`; opting into `on_bound` is an open
+  question (see below).
 
 ### The trust boundary
 
@@ -193,11 +192,16 @@ motivation is pure compile-time / code size, with no opt-out to weigh.
 
 ### Benefits
 
-- One uniform model replaces the ad-hoc split.
+- One uniform model replaces the ad-hoc split: every derivable trait is
+  `on_bound`, discovered through one shared request set.
 - Removes serde's per-type marker boilerplate and unblocks anonymous-struct
   serialization.
-- Removes `Eq` / `Ord` compile-time and code-size waste on types the program
-  never compares.
+- Removes compile-time and code-size waste on unused impls — `Eq` / `Ord` for
+  types never compared, and now `Default` for types never defaulted (`Default`
+  is not total, so its waste is real).
+- `T: Inspect` / `T: Display` (and `Alt`) bounds now hold for every type, which
+  the old automatic policy rejected at bound-check for plain aggregates, and
+  `impl Inspect for T;` markers are accepted.
 - No macros, no dynamic reflection; synthesis stays static and monomorphized.
 
 ### Trade-offs
@@ -209,19 +213,23 @@ motivation is pure compile-time / code size, with no opt-out to weigh.
   keep them legible.
 - A future `Reflect`-based rewrite of the synthesized body must not let a
   blanket `impl<T: Reflect> Trait for T` conflict with concrete impls — an
-  open coherence question the shipped mechanism doesn't hit yet, since it
+  open coherence question the current mechanism doesn't hit yet, since it
   instantiates the existing per-type synthesizer directly.
-- `Eq` / `Ord` no longer exist "for free" without a reference; the explicit
-  marker guarantees a hard validation error at declaration if `T` is
-  ineligible, but — unlike the shipped mechanism — no longer guarantees a
-  body is generated in advance. A type intended for future comparison with
-  zero current call sites gets no code until something references it.
-- Moving the per-type-trait eligibility scan to `TraitEnv::build()` means
-  paying it for every declared type under `automatic` / `on_bound`, before
-  Annotate has run and full type resolution is available. The scan has to
-  work from AST-level field types (mirroring the existing struct-field
-  topological sort), which is less information than
-  `type_implements_trait_inner` uses today — see Open Questions.
+- No on_bound impl exists "for free" from a mere declaration without a bound,
+  marker, or reference; an unmarked type intended for future use with zero
+  current call sites gets no code until something references it. An explicit
+  marker both guarantees a hard validation error if `T` is ineligible
+  (`Eq` / `Ord` / `Default` / serde) and records a request, so a marked type
+  does get its body.
+- The format traits' totality is now a type-system commitment: "every type is
+  formattable." This matches the pre-existing automatic policy (which generated
+  `Inspect` for every type), but removes the freedom to introduce a genuinely
+  non-formattable type later without revisiting the totality short-circuit.
+- Format generation stays eager, so this WEP does not reduce format code size —
+  a deliberate trade (see Alternatives): gating a total trait buys little and
+  costs a discovery mechanism. `Default` gating uses a finite set of recording
+  sites (bound check, `P::default()` resolution, marker); a missed site fails
+  loud at monomorphize / link rather than miscompiling.
 
 ### Relationship and prerequisites
 
@@ -246,33 +254,27 @@ changes _when_ a request is created, not _how_ the body is written. A future
 - **Keep `Eq` / `Ord` automatic (status quo).** Simplest, but pays synthesis
   cost for every declared type regardless of use, with no offsetting
   benefit. Rejected.
-- **Record eligibility as a side effect of each call-resolution path
-  checking it (the shipped mechanism).** What's implemented today: works,
-  but every resolution path (operator dispatch, method-call resolution,
-  generic bound checks) must remember to opt in, and nothing enforces that a
-  future path does. Superseded by [Discovery Mechanism](#discovery-mechanism)
-  once implemented.
-- **Keep per-call-site recording but centralize it behind one funnel
-  function every resolution path is required to call.** Removes some
-  duplication but keeps the same failure mode as the status quo — a new
-  resolution path can still forget to call the funnel. Rejected in favor of
-  placeholders, which resolution paths find through the lookup they already
-  perform, needing no trait-derivation-specific awareness at all.
+- **Gate format generation on demand, like `Eq` / `Ord`.** Would save the
+  code of `Inspect` / `Display` bodies for types never formatted. But the
+  format traits are total, and `{v:?}` over an unbounded type param has no
+  bound to record and no concrete reference until monomorphize — closing that
+  gap needs either a post-monomorphize discovery sweep (reimplementing the
+  per-type synthesizers against concrete `FlatPackage` data, a whole pass) or
+  implicit format bounds on every type parameter (which over-records for every
+  type used generically, erasing most of the saving). Neither buys enough
+  against a total trait whose universal availability is a feature. Rejected in
+  favor of eager generation plus total obligation semantics.
+- **Implicit bounds for `Eq` / `Ord` / `Default`.** Would let those ride the
+  same bound-check recording, but they are not total (a `fn`-typed field blocks
+  `Eq`; a field without a default blocks `Default`), so an implicit bound would
+  reject ordinary generic code over ineligible types. Rejected.
 
 ## Open Questions
 
-- Declaration syntax for a user-defined trait's policy.
-- Whether `TraitEnv::build()`'s AST-level field-type scan (before Annotate,
-  no full type resolution) can decide structural eligibility correctly for
-  every case `type_implements_trait_inner` handles today — generic struct
-  fields, cross-module recursive types, newtypes of newtypes. If some cases
-  can't be decided that early, they need a documented fallback (e.g. treat
-  as ineligible until Annotate revisits it, or keep those cases on the
-  interim per-call-site mechanism).
-- Whether "lower a resolved match into a TIR `Call` / `FunctionRef`" is
-  truly the single funnel every reference path goes through, including
-  paths synthesis itself introduces (template-string desugaring calling
-  `Display` / `Inspect`, effect dispatch, CM boundary adapters) — needs an
-  audit before the interim per-call-site checks can be deleted.
+- Declaration syntax for a user-defined trait's policy (opting a user trait
+  into `on_bound`).
+- Whether the format traits should eventually gate generation after all (via a
+  post-monomorphize discovery pass), should code size on debug output ever
+  matter enough to justify the machinery.
 - Coherence interaction with concrete impls, relevant once a `Reflect`-based
   rewrite of the synthesized body lands.
