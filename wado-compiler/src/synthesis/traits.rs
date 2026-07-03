@@ -2194,18 +2194,16 @@ fn generate_opaque_inspect_fn(
         TypeTable::I32,
         span,
     );
-    let hex_call = trait_call_on_type(
+    let hex_stmt = inspect_call(
         handle,
         TypeTable::I32,
-        lower_hex_trait,
-        lower_hex_method,
-        TypeTable::UNIT,
-        vec![fmt()],
-        true,
+        fmt(),
         trait_env,
         module_source,
         tt,
         span,
+        lower_hex_trait,
+        lower_hex_method,
     );
     let body = TirBlock::new(
         vec![
@@ -2217,7 +2215,7 @@ fn generate_opaque_inspect_fn(
                 span,
                 formatter_name,
             ),
-            TirStmt::new(TirStmtKind::Expr(hex_call), span),
+            hex_stmt,
         ],
         span,
     );
