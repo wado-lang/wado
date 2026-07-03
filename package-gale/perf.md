@@ -175,7 +175,9 @@ event stream _is_ the store (no second arena), and traversal threads
 `(&columns, index: i32)` as unbundled scalars (columns by ref, index an i32) —
 no node/cursor struct is ever constructed, so the walk allocates nothing.
 
-Design:
+Design (full write-up in [`flat-cst-design.md`](./flat-cst-design.md); the
+`benchmark-syntax-highlight` baseline it targets, re-measured on the dev host at
+`copying` ~29.5 ms/iter vs `null` ~8.0 ms/iter ⇒ ~73% GC, is recorded there):
 
 - `TreeBuilder` stores three parallel `List<i32>` columns (`tag` / `a` / `b`)
   instead of `List<BuildEvent>`. Method signatures are unchanged, so the
