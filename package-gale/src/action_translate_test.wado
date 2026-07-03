@@ -3,6 +3,7 @@ use {
     rule_value_channel_ready,
     rule_returns_vals,
     rule_is_left_recursive,
+    rule_threads_args,
     vals_struct_name,
     wado_type_default,
 } from "./action_translate.wado";
@@ -136,13 +137,14 @@ plain : ID ;
     assert vals_struct_name(&g.parser_rules[0]) == "RVals", `name: {vals_struct_name(&g.parser_rules[0])}`;
 }
 
-test "left-recursive rules are excluded from the value channel" {
+test "left-recursive rules expose the value channel (threaded through the loop)" {
     let g = parse("grammar T;
 e returns [i32 v] : e '+' e | INT ;
 ").unwrap();
     assert rule_value_channel_ready(&g.parser_rules[0]), "e declares a defaultable channel";
     assert rule_is_left_recursive(&g.parser_rules[0]), "e is left-recursive";
-    assert !rule_returns_vals(&g.parser_rules[0]), "LR rule value channel is not yet threaded";
+    assert rule_returns_vals(&g.parser_rules[0]), "LR rule value channel is threaded";
+    assert !rule_threads_args(&g.parser_rules[0]), "LR rule args stay deferred";
 }
 
 test "wado_type_default covers the corpus surface" {
