@@ -566,15 +566,38 @@ fn i2a_second(n: i32) -> char {
     return char::from_u32_unchecked('0' as u32 + (n % 10) as u32);
 }
 
-// Write nd decimal digits of val into buf at offset, right-to-left using set_byte_unchecked.
+// Two ASCII digits for each value 0..=99: index `d * 2` yields the tens digit,
+// `d * 2 + 1` the ones digit. Lets `write_digits_at` emit two digits per 64-bit
+// division instead of one, replacing the inner `% 10` / `/ 10` with a load.
+global DIGIT_PAIRS: List<u8> = [
+    48, 48, 48, 49, 48, 50, 48, 51, 48, 52, 48, 53, 48, 54, 48, 55, 48, 56, 48, 57,
+    49, 48, 49, 49, 49, 50, 49, 51, 49, 52, 49, 53, 49, 54, 49, 55, 49, 56, 49, 57,
+    50, 48, 50, 49, 50, 50, 50, 51, 50, 52, 50, 53, 50, 54, 50, 55, 50, 56, 50, 57,
+    51, 48, 51, 49, 51, 50, 51, 51, 51, 52, 51, 53, 51, 54, 51, 55, 51, 56, 51, 57,
+    52, 48, 52, 49, 52, 50, 52, 51, 52, 52, 52, 53, 52, 54, 52, 55, 52, 56, 52, 57,
+    53, 48, 53, 49, 53, 50, 53, 51, 53, 52, 53, 53, 53, 54, 53, 55, 53, 56, 53, 57,
+    54, 48, 54, 49, 54, 50, 54, 51, 54, 52, 54, 53, 54, 54, 54, 55, 54, 56, 54, 57,
+    55, 48, 55, 49, 55, 50, 55, 51, 55, 52, 55, 53, 55, 54, 55, 55, 55, 56, 55, 57,
+    56, 48, 56, 49, 56, 50, 56, 51, 56, 52, 56, 53, 56, 54, 56, 55, 56, 56, 56, 57,
+    57, 48, 57, 49, 57, 50, 57, 51, 57, 52, 57, 53, 57, 54, 57, 55, 57, 56, 57, 57,
+];
+
+// Write nd decimal digits of val into buf at offset, right-to-left.
 // buf must already have space (pre-filled with '0' chars).
 fn write_digits_at(buf: &mut String, offset: i32, val: u64, nd: i32) {
+    let mut raw = buf.internal_raw_bytes();
+    let pairs = DIGIT_PAIRS.internal_raw_data();
     let mut v = val;
-    let mut idx = offset + nd - 1;
-    while idx >= offset {
-        buf.set_byte_unchecked(idx, '0' as u8 + (v % 10) as u8);
-        v = v / 10;
-        idx = idx - 1;
+    let mut idx = offset + nd;
+    while idx - offset >= 2 {
+        let pair = (v % 100) as i32 * 2;
+        v = v / 100;
+        idx -= 2;
+        builtin::array_set_u8(&mut raw, idx, builtin::array_get_u8(&pairs, pair));
+        builtin::array_set_u8(&mut raw, idx + 1, builtin::array_get_u8(&pairs, pair + 1));
+    }
+    if idx > offset {
+        builtin::array_set_u8(&mut raw, offset, ('0' as u32 + (v % 10) as u32) as u8);
     }
 }
 

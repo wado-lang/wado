@@ -320,6 +320,25 @@ impl Display for String {
     }
 }
 
+/// Writes a `Display` value into a `String` in place, skipping the temporary
+/// `String` that a `` `{value}` `` template allocates before copying it in. The
+/// alloc-free counterpart to `buf.push_str(&`{value}`)` for a single value with
+/// no format spec — the hot path in the serde numeric encoders.
+///
+/// A trait (not an inherent `impl String`, which the coherence rules forbid on a
+/// foreign type) and placed here, not in string.wado, so `String` stays a leaf
+/// that `Formatter` depends on — mirroring `impl Display for String` above.
+pub trait PushDisplay {
+    fn push_display<T: Display>(&mut self, value: &T);
+}
+
+impl PushDisplay for String {
+    fn push_display<T: Display>(&mut self, value: &T) {
+        let mut f = Formatter::new(self);
+        value.fmt(&mut f);
+    }
+}
+
 impl Inspect for String {
     pub fn inspect(&self, f: &mut Formatter) {
         // The escape policy below is mirrored by `write_literal_char` in
