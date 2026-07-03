@@ -1,7 +1,7 @@
 //! Unit tests for the flat CST (`tree.wado`), the `TreeBuilder`, the
 //! token-stream recovery flags (`lex.wado`), and `Diagnostic` (`diag.wado`).
 
-use { Span, TokenStream, TOK_SYNTHETIC, TOK_SKIPPED } from "./lex.wado";
+use { Span, TokenStream, TokenFlags } from "./lex.wado";
 use { NodeKind, K_ERROR, CstStore, ChildKind, TreeBuilder, ParseResult } from "./tree.wado";
 use { Severity, DiagnosticCode, RecoveryAction, RelatedInfo, Diagnostic } from "./diag.wado";
 
@@ -36,7 +36,7 @@ test "push_token leaves flags zero" {
         [0, 0, 1],
         [1, 1, 2],
     ]);
-    assert ts.flags_at(0) == 0;
+    assert ts.flags_at(0) == TokenFlags::none();
     assert !ts.is_synthetic(0);
     assert !ts.is_skipped(0);
 }
