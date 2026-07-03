@@ -262,6 +262,34 @@ test "truncate rolls the builder back to a checkpoint" {
     assert s.to_string_tree(0, &ts, &names(["expr", "term"]), &names(["ID"])) == "(expr a)";
 }
 
+test "next_sibling on the root returns -1 without indexing past the columns" {
+    let mut b = TreeBuilder::new();
+    b.start_node(0 as NodeKind, 0);
+    b.token(0);
+    b.finish_node(1);
+    let s = b.finish();
+
+    // The root has no parent, so it has no sibling — and must not read
+    // tag[row_count]. first_child on a childless leaf is likewise bounded.
+    assert s.next_sibling(0) == -1;
+    let ch = children_of(&s, 0);
+    assert ch.len() == 1;
+    assert s.first_child(ch[0]) == -1;  // the token child has no children
+}
+
+test "an unterminated open finalizes gracefully instead of corrupting traversal" {
+    // A truncated event stream (an open with no matching finish_node) must not
+    // leave `next == 0` — traversal would otherwise loop back to the root.
+    let mut b = TreeBuilder::new();
+    b.start_node(0 as NodeKind, 0);
+    b.token(0);
+    // no finish_node
+    let s = b.finish();
+
+    assert children_of(&s, 0).len() == 1;  // the token, then bounded stop
+    assert s.next_sibling(0) == -1;
+}
+
 // === ParseResult ===
 
 test "ParseResult ok when there are no diagnostics" {

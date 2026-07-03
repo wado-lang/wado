@@ -89,9 +89,9 @@ pub fn gen_node_kinds(w: &mut CodeWriter, rules: &List<Rule>) {
 }
 
 /// Emit, for every parser rule whose alternatives carry `# Label`s, a
-/// `pub enum <Rule>Alt { ... }` plus a `pub fn <rule>_alt(node) ->
-/// Option<<Rule>Alt>` accessor, so a consumer can dispatch on the matched
-/// alternative (`match expr_alt(node) { Some(MulDiv) => ..., None => ... }`).
+/// `pub enum <Rule>Alt { ... }` plus a `CstStore` method `<rule>_alt(&self,
+/// node: i32) -> Option<<Rule>Alt>`, so a consumer can dispatch on the matched
+/// alternative (`match s.expr_alt(node) { Some(MulDiv) => ..., None => ... }`).
 ///
 /// The parser stamps the per-rule alternative index (grammar declaration
 /// order) onto the node's `alt` column; the enum cases are emitted in that same order,

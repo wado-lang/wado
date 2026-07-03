@@ -169,7 +169,8 @@ impl CstStore {
     /// `for let mut c = s.first_child(i); c >= 0; c = s.next_sibling(c) { … }`.
     pub fn first_child(&self, i: i32) -> i32 {
         let c = i + 1;
-        if self.tag[c] == E_CLOSE {  // c is `i`'s own close row: no children
+        // Past the end (an unterminated root) or the node's own close: no child.
+        if c >= self.tag.len() || self.tag[c] == E_CLOSE {
             return -1;
         }
         return c;
@@ -177,10 +178,11 @@ impl CstStore {
 
     /// Row of the next direct child after `child`, or -1 when `child` is the
     /// last (the next row is the parent's close). A child node is skipped in
-    /// O(1) via its subtree extent.
+    /// O(1) via its subtree extent. Returns -1 for a row with no parent (the
+    /// root), rather than indexing past the columns.
     pub fn next_sibling(&self, child: i32) -> i32 {
         let c = if self.tag[child] == E_OPEN { self.next[child] } else { child + 1 };
-        if self.tag[c] == E_CLOSE {  // reached the parent's close row
+        if c >= self.tag.len() || self.tag[c] == E_CLOSE {
             return -1;
         }
         return c;
@@ -448,6 +450,22 @@ impl TreeBuilder {
                     }
                     flags[pi] = flags[pi] | (flags[oi] & NODE_ERROR);
                 }
+            }
+        }
+        // Defensive: an open with no matching close (a truncated event stream)
+        // is folded to the end of the stream so its `next` points past the
+        // columns and traversal terminates instead of looping on `next == 0`.
+        // Well-formed streams leave `stack` empty, so this is a no-op there.
+        while stack.len() > 0 {
+            let oi = stack[stack.len() - 1];
+            let _ = stack.pop();
+            next[oi] = n;
+            if stack.len() > 0 {
+                let pi = stack[stack.len() - 1];
+                if end[oi] > end[pi] {
+                    end[pi] = end[oi];
+                }
+                flags[pi] = flags[pi] | (flags[oi] & NODE_ERROR);
             }
         }
         return CstStore { tag: self.tag, a: self.a, b, alt: self.alt, end, flags, next };

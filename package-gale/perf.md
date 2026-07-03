@@ -155,19 +155,20 @@ A correct, general optimizer win; not a lever for this GC-bound benchmark.
 
 **Landed.** The per-node `CstNode` / `CstChild` tree (and the `List<BuildEvent>`
 it was built from) is retired; the parser records a flat i32-column event stream
-that *is* the tree (SSOT), finalized in one linear pass, and every consumer is a
-function over `(&CstStore, index)` threaded as scalars. Full design and the
-retired-tree baseline in [`flat-cst-design.md`](./flat-cst-design.md). All 1845
-package-gale tests pass; goldens regenerated.
+that _is_ the tree (SSOT), finalized in one linear pass, and every consumer reads
+it through a `CstStore` cursor method over an `i32` row index (`s.kind(i)`,
+`s.first_child`/`s.next_sibling`, `s.child_kind`, …). All 1845 package-gale tests
+pass; goldens regenerated. The design and the retired-tree rationale are captured
+in the "Design" subsection below plus `resilient-parser.md`.
 
 Measured on `benchmark-syntax-highlight` (dev host, `-O2` guest, auto-tuned
 harness), tree baseline → flat:
 
-| collector           | tree | flat | change          |
-| ------------------- | ---: | ---: | --------------- |
-| `copying` (default) | 29.5 |  9.9 | **~3.0× wall**  |
-| `null` (no GC)      |  8.0 |  5.8 | ~1.4×           |
-| GC portion          | 21.5 |  4.1 | **~5.2× less**  |
+| collector           | tree | flat | change         |
+| ------------------- | ---: | ---: | -------------- |
+| `copying` (default) | 29.5 |  9.9 | **~3.0× wall** |
+| `null` (no GC)      |  8.0 |  5.8 | ~1.4×          |
+| GC portion          | 21.5 |  4.1 | **~5.2× less** |
 
 GC share fell 73% → ~42%: no longer GC-bound. The residual ~4.1 ms GC is
 highlight's own captures/HTML allocation (§4), not the CST — `sqlite_parse`
@@ -201,9 +202,7 @@ event stream _is_ the store (no second arena), and traversal threads
 `(&columns, index: i32)` as unbundled scalars (columns by ref, index an i32) —
 no node/cursor struct is ever constructed, so the walk allocates nothing.
 
-Design (full write-up in [`flat-cst-design.md`](./flat-cst-design.md); the
-`benchmark-syntax-highlight` baseline it targets, re-measured on the dev host at
-`copying` ~29.5 ms/iter vs `null` ~8.0 ms/iter ⇒ ~73% GC, is recorded there):
+Design:
 
 - `TreeBuilder` stores three parallel `List<i32>` columns (`tag` / `a` / `b`)
   instead of `List<BuildEvent>`. Method signatures are unchanged, so the
