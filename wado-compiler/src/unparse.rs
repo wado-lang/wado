@@ -152,12 +152,6 @@ fn blank_lines_between(prev_line: usize, next_line: usize) -> usize {
     }
 }
 
-/// A struct-literal member in source order: a `..base` spread or a field.
-enum Member<'a> {
-    Spread(&'a crate::ast::StructLiteralSpread),
-    Field(&'a crate::ast::StructLiteralField),
-}
-
 fn contains_call(expr: &Expr) -> bool {
     match expr {
         Expr::Call(_) | Expr::MethodCall(_) | Expr::StaticMethodCall(_) => true,
@@ -2439,20 +2433,12 @@ impl<'a> Unparser<'a> {
         if !s.has_trailing_comma && !has_container && call_fields <= 1 {
             let snap = self.snapshot();
             self.output.push_str("{ ");
-            let mut first = true;
-            self.for_each_member(s, |this, sep_needed, member| {
-                if sep_needed && !first {
-                    this.output.push_str(", ");
+            for (i, member) in s.members().into_iter().enumerate() {
+                if i > 0 {
+                    self.output.push_str(", ");
                 }
-                first = false;
-                match member {
-                    Member::Spread(sp) => {
-                        this.output.push_str("..");
-                        this.unparse_expr(&sp.expr);
-                    }
-                    Member::Field(f) => this.emit_struct_literal_field(f),
-                }
-            });
+                self.emit_literal_member(member);
+            }
             self.output.push_str(" }");
 
             if member_count <= 1 || !self.exceeds_width_since(snap) {
@@ -2463,42 +2449,23 @@ impl<'a> Unparser<'a> {
 
         self.output.push_str("{\n");
         self.indent_level += 1;
-        self.for_each_member(s, |this, _sep, member| {
-            this.write_indent();
-            match member {
-                Member::Spread(sp) => {
-                    this.output.push_str("..");
-                    this.unparse_expr(&sp.expr);
-                }
-                Member::Field(f) => this.emit_struct_literal_field(f),
-            }
-            this.output.push_str(",\n");
-        });
+        for member in s.members() {
+            self.write_indent();
+            self.emit_literal_member(member);
+            self.output.push_str(",\n");
+        }
         self.indent_level -= 1;
         self.write_indent();
         self.output.push('}');
     }
 
-    /// Visit a struct literal's members in source order — spreads interleaved
-    /// with explicit fields by `field_pos`. `sep_needed` is true for every
-    /// member after the first.
-    fn for_each_member(
-        &mut self,
-        s: &StructLiteralExpr,
-        mut f: impl FnMut(&mut Self, bool, Member<'_>),
-    ) {
-        let mut si = 0;
-        let mut emitted = false;
-        for pos in 0..=s.fields.len() {
-            while si < s.spreads.len() && s.spreads[si].field_pos == pos {
-                f(self, emitted, Member::Spread(&s.spreads[si]));
-                emitted = true;
-                si += 1;
+    fn emit_literal_member(&mut self, member: crate::ast::LiteralMember<'_>) {
+        match member {
+            crate::ast::LiteralMember::Spread(_, sp) => {
+                self.output.push_str("..");
+                self.unparse_expr(&sp.expr);
             }
-            if pos < s.fields.len() {
-                f(self, emitted, Member::Field(&s.fields[pos]));
-                emitted = true;
-            }
+            crate::ast::LiteralMember::Field(_, f) => self.emit_struct_literal_field(f),
         }
     }
 

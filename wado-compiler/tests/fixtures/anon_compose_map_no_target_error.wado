@@ -1,0 +1,10 @@
+use { TreeMap } from "core:collections";
+
+test "map spread with no map target is rejected" {
+    let m: TreeMap<String, i32> = { "a": 1 };
+    let x = { ..m };
+    assert x.len() == 0;
+}
+
+__DATA__
+{"test": {}, "compile_error": "key-value map with a map-typed target"}

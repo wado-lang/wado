@@ -2371,6 +2371,34 @@ pub struct StructLiteralSpread {
     pub span: Span,
 }
 
+/// A struct/key-value literal member in source order, carrying its index into
+/// the owning `StructLiteralExpr`'s `spreads` / `fields` list.
+pub enum LiteralMember<'a> {
+    Spread(usize, &'a StructLiteralSpread),
+    Field(usize, &'a StructLiteralField),
+}
+
+impl StructLiteralExpr {
+    /// Members (spreads interleaved with explicit fields) in the exact source
+    /// order the parser recorded via `field_pos`. Every pass that walks members
+    /// — resolve, reify, key-value reify, unparse — must use this single order
+    /// so last-contributor-wins / insert order stay in lockstep.
+    pub fn members(&self) -> Vec<LiteralMember<'_>> {
+        let mut out = Vec::with_capacity(self.fields.len() + self.spreads.len());
+        let mut si = 0;
+        for pos in 0..=self.fields.len() {
+            while si < self.spreads.len() && self.spreads[si].field_pos == pos {
+                out.push(LiteralMember::Spread(si, &self.spreads[si]));
+                si += 1;
+            }
+            if pos < self.fields.len() {
+                out.push(LiteralMember::Field(pos, &self.fields[pos]));
+            }
+        }
+        out
+    }
+}
+
 /// A field in a struct literal: `x: 10` or `x` (shorthand)
 #[derive(Debug, Clone)]
 pub struct StructLiteralField {

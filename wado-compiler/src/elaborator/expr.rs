@@ -39,6 +39,17 @@ enum FuncRefInference {
 
 use super::util::placeholder;
 
+/// Per spread base in an anonymous literal: whether it is a key-value map, and
+/// (for a plain struct base) its defining module plus field list
+/// `(name, concrete type, declared index, visibility)`.
+type BaseSpreadInfo = (
+    bool,
+    Option<(
+        ModuleSource,
+        Vec<(String, TypeId, u32, crate::ast::Visibility)>,
+    )>,
+);
+
 /// One field of an anonymous composition's union, and where its value comes from.
 pub(super) struct UnionField {
     pub(super) name: String,
@@ -53,6 +64,30 @@ pub(super) enum UnionSource {
     Explicit(usize),
     /// A spread base's field: `spread_base_types[base_idx].field_index`.
     Base { base_idx: usize, field_index: u32 },
+}
+
+/// Peel references off `type_id` and, if it names a struct, return its
+/// `(name, defining module, type arguments)`. Shared by the resolve and reify
+/// spread-field projections so both classify a base identically.
+pub(super) fn peel_to_struct(
+    tt: &TypeTable,
+    type_id: TypeId,
+) -> Option<(String, ModuleSource, Vec<TypeId>)> {
+    let peeled = tt.peel_refs(type_id);
+    match tt.get(peeled) {
+        ResolvedType::Struct {
+            name,
+            module_source,
+            ..
+        } => Some((name.clone(), module_source.clone(), Vec::new())),
+        ResolvedType::GenericInstance {
+            name,
+            module_source,
+            type_args,
+            ..
+        } => Some((name.clone(), module_source.clone(), type_args.clone())),
+        _ => None,
+    }
 }
 
 /// Merge the field plan for anonymous composition `{ ..a, field: v, ..b }`:
@@ -77,27 +112,27 @@ pub(super) fn compose_union_plan(
         entry.source = source;
     };
 
-    let mut si = 0;
-    for pos in 0..=struct_lit.fields.len() {
-        while si < struct_lit.spreads.len() && struct_lit.spreads[si].field_pos == pos {
-            for (fname, fty, fidx) in &base_field_lists[si] {
+    for member in struct_lit.members() {
+        match member {
+            ast::LiteralMember::Spread(si, _) => {
+                for (fname, fty, fidx) in &base_field_lists[si] {
+                    apply(
+                        fname.clone(),
+                        *fty,
+                        UnionSource::Base {
+                            base_idx: si,
+                            field_index: *fidx,
+                        },
+                    );
+                }
+            }
+            ast::LiteralMember::Field(pos, field) => {
                 apply(
-                    fname.clone(),
-                    *fty,
-                    UnionSource::Base {
-                        base_idx: si,
-                        field_index: *fidx,
-                    },
+                    field.name.clone(),
+                    explicit_field_types[pos],
+                    UnionSource::Explicit(pos),
                 );
             }
-            si += 1;
-        }
-        if pos < struct_lit.fields.len() {
-            apply(
-                struct_lit.fields[pos].name.clone(),
-                explicit_field_types[pos],
-                UnionSource::Explicit(pos),
-            );
         }
     }
     merged.into_values().collect()
@@ -3093,7 +3128,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         // Handle implicit struct literals (name is None) — anonymous struct inference
         let Some(raw_name) = &struct_lit.name else {
-            return self.resolve_anonymous_struct_literal(struct_lit, ctx);
+            return self.resolve_anonymous_struct_literal(struct_lit, ctx, expected_type);
         };
         // `ns::Struct` canonicalizes to its `ns$Struct` alias for the registry
         // lookups below (struct_fields, symbols, …).
@@ -3575,24 +3610,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ModuleSource,
         Vec<(String, TypeId, u32, crate::ast::Visibility)>,
     )> {
-        let (name, module, type_args) = {
-            let tt = self.tysys.type_table.borrow();
-            let peeled = tt.peel_refs(type_id);
-            match tt.get(peeled) {
-                ResolvedType::Struct {
-                    name,
-                    module_source,
-                    ..
-                } => (name.clone(), module_source.clone(), Vec::new()),
-                ResolvedType::GenericInstance {
-                    name,
-                    module_source,
-                    type_args,
-                    ..
-                } => (name.clone(), module_source.clone(), type_args.clone()),
-                _ => return None,
-            }
-        };
+        let (name, module, type_args) = peel_to_struct(&self.tysys.type_table.borrow(), type_id)?;
         let info = self.lookup_struct_fields_in(&name, &module)?.clone();
         let subst: IndexMap<u32, TypeId> = (0..type_args.len() as u32)
             .zip(type_args.iter().copied())
@@ -3620,34 +3638,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_lit: &ast::StructLiteralExpr,
         base_types: &[TypeId],
+        base_info: &[BaseSpreadInfo],
     ) {
-        // Source-order members as (diagnostic span, contributed field names).
-        let base_fields: Vec<(
-            Option<ModuleSource>,
-            Vec<(String, TypeId, u32, crate::ast::Visibility)>,
-        )> = base_types
+        // Per-base contributed field names, in source order.
+        let base_names: Vec<Vec<String>> = base_info
             .iter()
-            .map(|&t| match self.spread_struct_fields(t) {
-                Some((m, f)) => (Some(m), f),
-                None => (None, Vec::new()),
+            .map(|(_, f)| {
+                f.as_ref()
+                    .map(|(_, fs)| fs.iter().map(|(n, ..)| n.clone()).collect())
+                    .unwrap_or_default()
             })
             .collect();
 
-        let mut members: Vec<(crate::token::Span, Vec<String>)> = Vec::new();
-        let mut si = 0;
-        for pos in 0..=struct_lit.fields.len() {
-            while si < struct_lit.spreads.len() && struct_lit.spreads[si].field_pos == pos {
-                let names = base_fields[si].1.iter().map(|(n, ..)| n.clone()).collect();
-                members.push((struct_lit.spreads[si].span, names));
-                si += 1;
-            }
-            if pos < struct_lit.fields.len() {
-                members.push((
-                    struct_lit.fields[pos].span,
-                    vec![struct_lit.fields[pos].name.clone()],
-                ));
-            }
-        }
+        // Dead-write: a member whose every field is contributed by a later member.
+        let members: Vec<(crate::token::Span, Vec<String>)> = struct_lit
+            .members()
+            .iter()
+            .map(|m| match m {
+                ast::LiteralMember::Spread(si, sp) => (sp.span, base_names[*si].clone()),
+                ast::LiteralMember::Field(_, f) => (f.span, vec![f.name.clone()]),
+            })
+            .collect();
         for i in 0..members.len() {
             let names = &members[i].1;
             if names.is_empty() {
@@ -3666,22 +3677,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // A cross-module spread may not read a non-reachable field.
-        for (module, fields) in &base_fields {
-            let Some(module) = module else { continue };
+        // A field is read from a base only when that base is its *final*
+        // contributor (a later explicit field or spread overrides it, so it is
+        // never read). Compute the final base source per name, then reject a
+        // cross-module read of a non-reachable field, naming the owning base.
+        let mut final_base_src: IndexMap<String, usize> = IndexMap::default();
+        for m in struct_lit.members() {
+            match m {
+                ast::LiteralMember::Spread(si, _) => {
+                    for name in &base_names[si] {
+                        final_base_src.insert(name.clone(), si);
+                    }
+                }
+                ast::LiteralMember::Field(_, f) => {
+                    final_base_src.shift_remove(&f.name);
+                }
+            }
+        }
+        for (name, &base_idx) in &final_base_src {
+            let Some((module, fields)) = &base_info[base_idx].1 else {
+                continue;
+            };
             if *module == self.current_module_source {
                 continue;
             }
             let same_package = module.same_package(&self.current_module_source);
-            for (fname, _, _, vis) in fields {
-                if !vis.reachable_from(same_package) {
-                    let _ = self.logger.error(TypeError::PrivateFieldAccess {
-                        struct_name: self.tysys.type_id_to_string(base_types[0]),
-                        field_name: fname.clone(),
-                        visibility: *vis,
-                        span: struct_lit.span,
-                    });
-                }
+            let Some((.., vis)) = fields.iter().find(|(n, ..)| n == name) else {
+                continue;
+            };
+            if !vis.reachable_from(same_package) {
+                let _ = self.logger.error(TypeError::PrivateFieldAccess {
+                    struct_name: self.tysys.type_id_to_string(base_types[base_idx]),
+                    field_name: name.clone(),
+                    visibility: *vis,
+                    span: struct_lit.span,
+                });
             }
         }
     }
@@ -3692,38 +3722,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_lit: &ast::StructLiteralExpr,
         ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
     ) -> TypeId {
-        // Resolve spread bases for their types/facts. Union composition applies
-        // only when every base is a struct value; a non-struct base (e.g. a map)
-        // means this literal coerces to a key-value builder, handled by
-        // `reify_key_value_coercion`, so the spread is left out of the anonymous
-        // shape here.
+        // Resolve spread bases for their types/facts, and gather each one's field
+        // list once (reused for classification, the dead-write/visibility check,
+        // and the union plan). A key-value map (`TreeMap`) is a struct too, so an
+        // implemented `KeyValueLiteral` marks it as a map rather than a plain
+        // composable struct.
         let spread_base_types: Vec<TypeId> = struct_lit
             .spreads
             .iter()
             .map(|spread| self.resolve_expr(&spread.expr, ctx, None))
             .collect();
+        let base_info: Vec<BaseSpreadInfo> = spread_base_types
+            .iter()
+            .map(|&t| {
+                let is_map = self.type_implements_trait(&self.annotate_ctx, t, "KeyValueLiteral");
+                let fields = if is_map {
+                    None
+                } else {
+                    self.spread_struct_fields(t)
+                };
+                (is_map, fields)
+            })
+            .collect();
 
-        // Classify the bases: union composition applies only when every base is
-        // a plain data struct. A key-value map base means this literal is a
-        // key-value merge (handled by `reify_key_value_coercion`), not a
-        // composition, so it is excluded here.
         let has_spread = !struct_lit.spreads.is_empty();
-        let mut compose_union = has_spread;
-        let mut any_map = false;
-        for &t in &spread_base_types {
-            let is_map = self.type_implements_trait(&self.annotate_ctx, t, "KeyValueLiteral");
-            if is_map {
-                any_map = true;
-                compose_union = false;
-            } else if self.spread_struct_fields(t).is_none() {
-                compose_union = false;
-            }
-        }
-        // A spread base that is neither a struct nor a map has nothing to spread.
-        if has_spread && !compose_union && !any_map {
+        // Composition applies only when every base is a plain data struct.
+        let compose_union = has_spread && base_info.iter().all(|(m, f)| !m && f.is_some());
+        let all_map = has_spread && base_info.iter().all(|(m, _)| *m);
+        let expected_is_map = expected_type
+            .is_some_and(|t| self.type_implements_trait(&self.annotate_ctx, t, "KeyValueLiteral"));
+
+        // The only valid non-composition shape with a spread is a pure key-value
+        // merge (`{ ..map, "k": v }` with a map-typed target, handled by
+        // `reify_key_value_coercion`). Anything else — a non-struct base, or a mix
+        // of struct and map spreads, or a map spread without a map target — is an
+        // error rather than a silently-dropped spread.
+        if has_spread && !compose_union && !(all_map && expected_is_map) {
             let _ = self.logger.error(TypeError::InvalidLiteral {
-                message: "a `..base` spread requires a struct or a key-value map value".to_string(),
+                message: "a `..base` spread must be a struct value (composition) or a \
+                          key-value map with a map-typed target; a non-struct base or a \
+                          mix of struct and map spreads is not allowed"
+                    .to_string(),
                 span: struct_lit.spreads[0].span,
             });
         }
@@ -3746,17 +3787,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (source order, last contributor wins) for a composition, else the
         // explicit fields alone.
         let effective_fields: Vec<(String, TypeId)> = if compose_union {
-            self.check_union_composition(struct_lit, &spread_base_types);
-            let explicit_types: Vec<TypeId> =
-                resolved_fields.iter().map(|f| f.value.type_id).collect();
-            let base_field_lists: Vec<Vec<(String, TypeId, u32)>> = spread_base_types
+            self.check_union_composition(struct_lit, &spread_base_types, &base_info);
+            let base_field_lists: Vec<Vec<(String, TypeId, u32)>> = base_info
                 .iter()
-                .map(|&t| {
-                    self.spread_struct_fields(t)
-                        .map(|(_, f)| f.into_iter().map(|(n, ty, i, _)| (n, ty, i)).collect())
+                .map(|(_, f)| {
+                    f.as_ref()
+                        .map(|(_, fs)| {
+                            fs.iter()
+                                .map(|(n, ty, i, _)| (n.clone(), *ty, *i))
+                                .collect()
+                        })
                         .unwrap_or_default()
                 })
                 .collect();
+            let explicit_types: Vec<TypeId> =
+                resolved_fields.iter().map(|f| f.value.type_id).collect();
             compose_union_plan(struct_lit, &base_field_lists, &explicit_types)
                 .into_iter()
                 .map(|uf| (uf.name, uf.type_id))

@@ -242,7 +242,12 @@ fn expr_references_var(expr: &Expr, name: &str) -> bool {
             }
         }),
         Expr::TupleLiteral(t) => t.elements.iter().any(|e| expr_references_var(e, name)),
-        Expr::StructLiteral(s) => s.fields.iter().any(|f| expr_references_var(&f.value, name)),
+        Expr::StructLiteral(s) => {
+            s.fields.iter().any(|f| expr_references_var(&f.value, name))
+                || s.spreads
+                    .iter()
+                    .any(|sp| expr_references_var(&sp.expr, name))
+        }
         Expr::ComparisonChain(cc) => {
             expr_references_var(&cc.first, name)
                 || cc
@@ -912,6 +917,9 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             Expr::StructLiteral(struct_lit) => {
                 for field in &struct_lit.fields {
                     self.bind_expr(&field.value)?;
+                }
+                for spread in &struct_lit.spreads {
+                    self.bind_expr(&spread.expr)?;
                 }
             }
 
