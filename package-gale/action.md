@@ -179,7 +179,7 @@ trait ActionTranslator {
 }
 ```
 
-`ResolvedFragment` is the `ActionSource` text plus its `ResolvedAttr` spans (already mapped to Wado expressions). A translation failure is a generation diagnostic with the fragment's span — loud, never a silent no-op. Execution is gated by a generator option (`execute_actions`, default off) until the phases complete; the default then flips, since drop-in compatibility is the end state.
+`ResolvedFragment` is the `ActionSource` text plus its `ResolvedAttr` spans (already mapped to Wado expressions). A translation failure is a generation diagnostic with the fragment's span — loud, never a silent no-op. Actions execute for grammars whose action language Gale can emit: `language = Wado` today, `language = Java` once java2wado lands. That later change makes existing Java grammars execute their actions — an intentional, correct step toward drop-in compatibility, not something to gate against.
 
 - Identity translator (`language = Wado`): body and types pass through; only `$`-spans are substituted.
 - java2wado (`language = Java`): a small Java parser covering — statements: expression statements, local variable declarations, assignments (incl. compound `+=`), `assert`; expressions: literals, arithmetic / comparison / logical / `%`, string concatenation, mapped method calls, `this.field`, ctx casts in the LR-binary pattern. API map: `System.out.println/print` → `p.emit`, `getText()` → context API, `_input.LA/LT`, `getCharPositionInLine()` / `_tokenStartCharPositionInLine`, lexer `setType/setChannel/skip/more/pushMode/popMode`, `toStringTree(this)` → `p.rule_string_tree()`. Type map: `int` → `i32`, `boolean` → `bool`, `String` → `String`, `List<String>` → `List<String>`, `void` → `()`. Anything outside this subset is a loud error; the subset grows on corpus demand.
@@ -231,8 +231,28 @@ Recovery invariants with actions present:
 ## Staging
 
 - [x] Phase 1a — IR retention, byte-identical (1a-i: rule signatures, named-action / option bodies; 1a-ii: per-alternative `actions` sidecar).
-- [ ] Phase 1b — attribute resolution + value channel + Wado actions (identity translator) + `@after` / print-style actions via `p.emit`.
-- [ ] Phase 2 — predicates in prediction (`SemPredEvalParser` / `SemPredEvalLexer` descriptors are the acceptance suite).
+- [~] Phase 1b — attribute resolution + value channel + Wado actions (identity translator) + `@after` / print-style actions via `p.emit`.
+  - [x] Phase 0 — `assign_action_ids` normalize pass (stable ids, byte-identical).
+  - [x] 1b-1 — attribute scanner (`attr_scan::find_attr_refs`).
+  - [x] 1b-1b — attribute resolution (`attr_resolve::resolve_attrs`, target classification + member validation, loud errors). Not yet wired into emit.
+  - [x] 1b-2 — print-style Wado actions execute via `p.emit`, surfaced on `ParseResult.output` (`language = Wado`). Interleaved by `before_index` in `gen_alt_elements`, guarded on `!p.speculating`. Attribute-referencing bodies raise a loud `UnsupportedAction` diagnostic pending substitution.
+  - [~] 1b-3 — value channel + attribute-substitution engine.
+    - [x] Span-splicing engine (`attr_substitute::splice_attrs`).
+    - [x] Identity translator (`action_translate`): resolves refs and maps the supported subset to Wado exprs; loud error otherwise.
+    - [x] Own-rule value channel: a single-alt rule declaring `returns` / `locals` (defaultable types) gets a `<Rule>Vals` struct + `vals` local; `$v` / `$local` in its actions substitute to `vals.<name>`. Write-then-read across a rule's actions works end to end.
+    - [x] Cross-rule `$a.v`: a value-channel rule's `_parse_<rule>` (inner + wrapper) returns `<Rule>Vals`; call sites already bind `let <name> = _parse_<rule>(p)`, so `$a.v` → `a.v`. Entry closures discard the vals (`|p| { let _ = _parse_<rule>(p); }`). The corpus LR-binary `$a.v + $b.v` shape works (non-LR).
+    - [x] Token label member `$x.text` → `p.token_text(<index>)` (the `let x = p.expect(...)` binding). Only `.text` so far.
+    - [ ] Rule arguments as `_parse_<rule>` params; multi-alt / LR rule value channels (currently a loud `UnsupportedAction` diagnostic).
+    - [ ] Other token members (`$x.int`/`.type`/`.line`/…), unlabeled `$ID.text`.
+    - [ ] Unlabeled `$e.v` when the call-site binding is deduped (`e_2`); currently assumes the first-occurrence binding name (labeled refs are exact via `escape_ident(to_snake_case(name))`).
+  - [~] 1b-4 — runtime context API + prequel timing.
+    - [x] `@init` (rule entry) / `@after` (after body) for single-alt rules, sharing the rule's `vals` local; execution order pinned by a driver test.
+    - [ ] Runtime context API surface (`p.la`/`lt`/`rule_text`/`input_text`/…) and `$text`/`$ctx`-backed substitution.
+    - [ ] `@init` / `@after` for multi-alt / LR rules.
+- [~] Phase 2 — predicates in prediction (`SemPredEvalParser` / `SemPredEvalLexer` descriptors are the acceptance suite).
+  - [x] Inline runtime guard for mid-alt / single-alt-rule predicates: a `{cond}?` compiles to `if !p.speculating { if !(<cond>) { p.no_viable(...); return; } }`, so a false predicate fails the parse into normal recovery. Substitution applies to the condition (identity translator).
+  - [ ] Prediction-time gating: alt-initial predicates choosing which alt to take (static dispatch / scan tournament / ATN), the `SemPredEvalParser` acceptance suite.
+  - [ ] `pred_<id>` effect-free standalone fns; lexer predicates.
 - [ ] Phase 3 — java2wado for the corpus subset + members translation.
 - [ ] Phase 4 — lexer actions / position-sensitive predicates + SuperClass trait (`tokenVocab` falls out).
 
@@ -248,7 +268,7 @@ Recovery invariants with actions present:
 
 - Where Wado actions live: in-grammar via `options { language=Wado }` and SuperClass trait impl are primary. Sidecar ID→snippet mapping is fragile (positional IDs); keep as escape hatch only?
 - SuperClass methods with arguments: signature source (sidecar vs user-pre-declared trait).
-- Whether a Kiln generator option may override `action_language`; interaction with `execute_actions` default flip.
+- Whether a Kiln generator option may override `action_language`.
 - `$v` semantics after recovery beyond Default-init (is Default always right for user types?).
 - Predicate eval-count divergence policy: how much trace mismatch is acceptable before a descriptor is `[skip]` instead of `[todo]`.
 - IR details: which element `<p=3>` legally attaches to (confirm via jar); whether upstream accepts `@init` / `@after` on lexer rules.

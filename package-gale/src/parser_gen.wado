@@ -1,4 +1,15 @@
-use { Grammar, ParserRule, Alternative, Element, RepeatElement, GroupElement } from "./ir.wado";
+use {
+    Grammar,
+    ParserRule,
+    Alternative,
+    Element,
+    RepeatElement,
+    GroupElement,
+    AltAction,
+    ActionKind,
+    ActionSource,
+    AttrDecl,
+} from "./ir.wado";
 use {
     rule_type_name,
     literal_field_name,
@@ -89,7 +100,16 @@ use {
     rule_header,
     rule_alt_body,
     rule_alt_scan_body,
+    DiagnosticKind,
 } from "./gir.wado";
+use { find_attr_refs } from "./attr_scan.wado";
+use {
+    translate_wado_action,
+    rule_returns_vals,
+    vals_struct_name,
+    wado_type_default,
+    field_in_vals,
+} from "./action_translate.wado";
 use { unwrap_label } from "./lr_util.wado";
 use { compute_shapes_for_alt, shape_lookahead_signature_for_alt, rebind_op_field } from "./lower.wado";
 
@@ -136,7 +156,10 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // `LoweredGrammar` is threaded through so we can dispatch on
     // `Rule::Simple` / `MultiAlt` / `LeftRecursive` instead of
     // recomputing the classification at every emit site.
-    gen_parser_struct(w, ctx.is_trace(), ctx.needs_atn());
+    gen_parser_struct(w, ctx.is_trace(), ctx.needs_atn(), ctx.emit_actions());
+    if ctx.emit_actions() {
+        gen_vals_structs(w, grammar);
+    }
     if ctx.is_trace() {
         gen_trace_helpers(w);
     }
@@ -151,7 +174,63 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // caller's continuation at runtime via the `follow` argument (see
     // `follow_yields` / `FollowArg`). The follow-mask globals are
     // emitted by `gen_follow_mask_globals` at the end of codegen.
-    gen_parse_entry(w, lowered);
+    gen_parse_entry(w, lowered, ctx);
+    warn_unhandled_actions(grammar, ctx);
+}
+
+fn warn_unhandled_actions(grammar: &Grammar, ctx: &mut GenContext) {
+    if !ctx.emit_actions() {
+        return;
+    }
+    for let rule of &grammar.parser_rules {
+        let mut ids: List<i32> = [];
+        collect_rule_action_ids(rule, &mut ids);
+        for let id of &ids {
+            if !ctx.action_was_seen(*id) {
+                ctx.warn(
+                    &`action {*id}`,
+                    DiagnosticKind::UnsupportedAction,
+                    `action {*id} in rule '{rule.name}' is on a code path that does not yet execute actions (nested group, LR suffix, single-token multi-alt, or multi-alt prequel)`,
+                );
+            }
+        }
+    }
+}
+
+fn collect_rule_action_ids(rule: &ParserRule, out: &mut List<i32>) {
+    if let Some(a) = &rule.init_action {
+        out.push(a.action_id);
+    }
+    if let Some(a) = &rule.after_action {
+        out.push(a.action_id);
+    }
+    for let alt of &rule.alternatives {
+        collect_alt_action_ids(alt, out);
+    }
+}
+
+fn collect_alt_action_ids(alt: &Alternative, out: &mut List<i32>) {
+    for let a of &alt.actions {
+        out.push(a.source.action_id);
+    }
+    for let e of &alt.elements {
+        collect_element_action_ids(e, out);
+    }
+}
+
+fn collect_element_action_ids(elem: &Element, out: &mut List<i32>) {
+    match *elem {
+        Group(g) => {
+            for let alt of &g.alternatives {
+                collect_alt_action_ids(alt, out);
+            }
+        },
+        Repeat(rep) => collect_element_action_ids(&rep.element, out),
+        Label(lab) => collect_element_action_ids(&lab.element, out),
+        Not(n) => collect_element_action_ids(&n.element, out),
+        _ => {
+        },
+    }
 }
 
 /// Public `parse` entry under the emitter: tokenize, run the start
@@ -159,14 +238,14 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
 /// infallible; a failure leaves `p.recovering` set and the deepest error in
 /// `p.pending`, surfaced as one diagnostic. The partial tree (open nodes folded
 /// by each wrapper's `finish_node`) is still returned.
-fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar) {
+fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenContext) {
     if lowered.parser_rules.len() == 0 {
         return;
     }
     // The tokenize → run-entry → fold-error body is identical for every rule, so
     // it lives in a single `_run_parse_entry` helper; each `parse_<rule>` is a thin
     // wrapper that hands it the rule's `_parse_<rule>` entry as a fn value.
-    gen_run_parse_entry(w);
+    gen_run_parse_entry(w, ctx);
     w.blank();
     // `parse` is the start (first) rule. Per-rule `parse_<rule>` entries let a
     // caller parse from any rule (ANTLR4 lets you pick a start rule; the
@@ -177,7 +256,7 @@ fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar) {
     w.end();
     w.blank();
     for let rule of &lowered.parser_rules {
-        gen_parse_rule_entry(w, rule);
+        gen_parse_rule_entry(w, rule, ctx);
     }
 }
 
@@ -186,7 +265,7 @@ fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar) {
 /// or LR entry's defaulted `follow` / `min_prec` arguments fill in), fold the
 /// partial tree, and on error push a single diagnostic (deepest of the
 /// propagated error and `p.pending`).
-fn gen_run_parse_entry(w: &mut CodeWriter) {
+fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
     w.begin(
         &"fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult",
     );
@@ -213,19 +292,38 @@ fn gen_run_parse_entry(w: &mut CodeWriter) {
     w.line(&"p.diagnostics.push(d);");
     w.end();
     w.end();
-    w.line(&"return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };");
+    if ctx.emit_actions() {
+        w.line(
+            &"return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics, output: p.output };",
+        );
+    } else {
+        w.line(&"return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };");
+    }
     w.end();
 }
 
 /// Emit one `pub fn parse_<rule>(input) -> ParseResult` entry as a thin wrapper
 /// over `_run_parse_entry`. The closure defers to `_parse_<rule>(p)` so a follow-gated
 /// or LR entry's defaulted `follow` / `min_prec` arguments fill in.
-fn gen_parse_rule_entry(w: &mut CodeWriter, rule: &Rule) {
+fn gen_parse_rule_entry(w: &mut CodeWriter, rule: &Rule, ctx: &GenContext) {
     let header = rule_header(rule);
     w.begin(&`pub fn parse_{header.snake_name}(input: &String, max_errors: i32 = i32::MAX) -> ParseResult`);
-    w.line(&`return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_{header.snake_name}(p));`);
+    let call = `_parse_{header.snake_name}(p)`;
+    let entry = if entry_emits_vals(ctx, &header.name) {
+        `|p: &mut Parser| \{ let _ = {call}; \}`;
+    } else {
+        `|p: &mut Parser| {call}`;
+    };
+    w.line(&`return _run_parse_entry(input, max_errors, {entry});`);
     w.end();
     w.blank();
+}
+
+fn entry_emits_vals(ctx: &GenContext, rule_name: &String) -> bool {
+    return match ctx.find_rule(rule_name) {
+        Some(r) => rule_emits_vals(ctx, r),
+        None => false,
+    };
 }
 
 fn join_kinds(kinds: &List<String>) -> String {
@@ -268,7 +366,36 @@ fn emit_diag_prologue(w: &mut CodeWriter) {
     w.line(&"let lc = line_col(self.tokens.chars, span.start);");
 }
 
-fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
+/// Emit a `<Rule>Vals` struct per rule that exposes a value channel. Fields
+/// are the rule's returns then locals, each with a defaulted Wado type, so
+/// the rule function can default-construct `<Rule>Vals {}`.
+fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar) {
+    for let rule of &grammar.parser_rules {
+        if !rule_returns_vals(rule) {
+            continue;
+        }
+        w.begin(&`struct {vals_struct_name(rule)}`);
+        gen_vals_fields(w, &rule.returns_decls);
+        gen_vals_fields(w, &rule.locals_decls);
+        w.end();
+        w.blank();
+    }
+}
+
+fn gen_vals_fields(w: &mut CodeWriter, decls: &List<AttrDecl>) {
+    for let d of decls {
+        if !field_in_vals(d) {
+            continue;
+        }
+        let def = match wado_type_default(&d.type_text) {
+            Some(v) => v,
+            None => panic("gen_vals_fields: field_in_vals/wado_type_default disagree"),
+        };
+        w.line(&`{d.name}: {d.type_text} = {def},`);
+    }
+}
+
+fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_actions: bool) {
     let mut s = StructSpec::new("Parser");
     s.add_field(&"tokens", &"TokenStream");
     // Token kinds as a bare `Array<i32>` — the hot scan/peek read. A flat
@@ -329,6 +456,9 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     // against it unchanged.
     s.add_field(&"b", &"TreeBuilder");
     s.add_field(&"diagnostics", &"List<Diagnostic>");
+    if emit_actions {
+        s.add_field(&"output", &"String");
+    }
     s.emit(w);
     w.blank();
 
@@ -349,9 +479,31 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
         init.push_str(&", atn_stack: [], atn_ret_pending: -1");
     }
     init.push_str(&", b: TreeBuilder::new(), diagnostics: []");
+    if emit_actions {
+        init.push_str(&", output: \"\"");
+    }
     w.line(&`return Parser \{ {init} \};`);
     w.end();
     w.blank();
+
+    if emit_actions {
+        let mut fem = FnSpec::new("emit");
+        fem.set_receiver(&"&mut self");
+        fem.add_param(&"s", &"String");
+        fem.emit_begin(w);
+        w.line(&"self.output.push_str(&s);");
+        w.end();
+        w.blank();
+
+        let mut ftt = FnSpec::new("token_text");
+        ftt.set_receiver(&"&self");
+        ftt.add_param(&"i", &"i32");
+        ftt.set_return_type(&"String");
+        ftt.emit_begin(w);
+        w.line(&"return self.tokens.token_text(i);");
+        w.end();
+        w.blank();
+    }
 
     // Build a ParseError at the current position, resolving `line:col` from the
     // source. `rule_stack` is filled by the rule-entry wrappers as it propagates.
@@ -2163,6 +2315,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
         ctx.emit_follow(),
         ctx.is_trace(),
         ctx.needs_atn(),
+        &rule_result_type_for(rule, ctx),
     );
 }
 
@@ -2170,6 +2323,12 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
 /// emitter (the tree accrues in the `TreeBuilder`).
 fn rule_result_type() -> String {
     return String::from("()");
+}
+
+/// Whether a rule's result type is a `<Rule>Vals` struct rather than the
+/// value-less `()` — i.e. the rule exposes a value channel.
+fn result_type_carries_vals(result_type: &String) -> bool {
+    return *result_type != rule_result_type();
 }
 
 /// `RK_<UPPER>` node-kind constant name for a rule (matches `gen_node_kinds`).
@@ -2284,7 +2443,9 @@ fn gen_rule_entry_wrapper(
     emit_follow: bool,
     trace: bool,
     needs_atn: bool,
+    result_type: &String,
 ) {
+    let returns_vals = result_type_carries_vals(result_type);
     let mut f = FnSpec::new(outer_name);
     f.add_param(&"p", &"&mut Parser");
     // `follow` precedes `min_prec` so a non-precedence call site can pass
@@ -2301,13 +2462,17 @@ fn gen_rule_entry_wrapper(
             default_value: Option::Some("0"),
         });
     }
-    f.set_return_type(&"()");
+    f.set_return_type(result_type);
     f.emit_begin(w);
     let lit = str_lit(*rule_display);
     // Already unwinding from a deeper failure: no-op so the descent collapses
     // to the entry without opening spurious nodes (the infallible analogue of a
     // `?` that would have skipped this call entirely).
-    w.line(&"if p.recovering { return; }");
+    if returns_vals {
+        w.line(&`if p.recovering \{ return {*result_type} \{\}; \}`);
+    } else {
+        w.line(&"if p.recovering { return; }");
+    }
     // Forward `follow`/`min_prec` so the inner body's tail-greedy gate sees
     // the caller's continuation.
     let fsep = if emit_follow { ", follow" } else { "" };
@@ -2332,7 +2497,11 @@ fn gen_rule_entry_wrapper(
         w.line(&`let _start = p.peek_start();`);
         w.line(&`p.b.start_node({rk}, _start);`);
     }
-    w.line(&`{call};`);
+    if returns_vals {
+        w.line(&`let __vals = {call};`);
+    } else {
+        w.line(&`{call};`);
+    }
     if !takes_min_prec {
         w.line(&"p.b.finish_node(p.last_end());");
     }
@@ -2350,6 +2519,9 @@ fn gen_rule_entry_wrapper(
         w.line(&`trace_ok(p, &{lit});`);
     }
     w.end();
+    if returns_vals {
+        w.line(&"return __vals;");
+    }
     w.end();
     w.blank();
 }
@@ -2378,13 +2550,56 @@ fn gen_parse_fn_simple_named(
     if ctx.emit_follow() {
         add_follow_param(&mut f);
     }
-    f.set_return_type(&rule_result_type());
+    f.set_return_type(&rule_result_type_for(rule, ctx));
     f.emit_begin(w);
     w.line(&"let start = p.peek_start();");
+    if rule_emits_vals(ctx, rule) {
+        w.line(&`let mut vals = {vals_struct_name(rule)} \{\};`);
+    }
+    if ctx.emit_actions() {
+        if let Some(a) = &rule.init_action {
+            gen_action_body(w, a, ctx);
+        }
+    }
     let body = rule_alt_body(lowered_rule, 0).unwrap();
-    gen_alt_body(w, &type_name, null, null, &rule.alternatives[0], body, 0, rule_alts_labeled(&rule.alternatives), ctx);
+    gen_alt_body(
+        w,
+        &type_name,
+        null,
+        null,
+        &rule.alternatives[0],
+        body,
+        0,
+        rule_alts_labeled(&rule.alternatives),
+        &rule.after_action,
+        ctx,
+    );
     w.end();
     w.blank();
+}
+
+/// A rule's inner / wrapper result type: `<Rule>Vals` when the rule exposes a
+/// value channel (action execution on), else `()`.
+fn rule_result_type_for(rule: &ParserRule, ctx: &GenContext) -> String {
+    if rule_emits_vals(ctx, rule) {
+        return vals_struct_name(rule);
+    }
+    return rule_result_type();
+}
+
+/// Whether `rule` gets a value channel emitted: action execution is on and the
+/// rule exposes one. The single source of truth for the `vals` struct, local,
+/// return type, and `$v` substitution.
+fn rule_emits_vals(ctx: &GenContext, rule: &ParserRule) -> bool {
+    return ctx.emit_actions() && rule_returns_vals(rule);
+}
+
+fn current_rule_emits_vals(ctx: &GenContext) -> bool {
+    let ridx = ctx.current_rule_index();
+    if ridx < 0 {
+        return false;
+    }
+    return rule_emits_vals(ctx, &ctx.parser_rules()[ridx]);
 }
 
 
@@ -2567,6 +2782,7 @@ fn gen_parse_fn_named(
                         body,
                         alt_index,
                         rule_alts_labeled(&rule.alternatives),
+                        &null,
                         ctx,
                     );
                     w.end();
@@ -2682,6 +2898,7 @@ fn gen_alt_body(
     body: &AltBody,
     alt_index: i32,
     rule_labeled: bool,
+    after_action: &Option<ActionSource>,
     ctx: &mut GenContext,
 ) {
     let _ = type_name;
@@ -2695,12 +2912,22 @@ fn gen_alt_body(
     if rule_labeled {
         w.line(&`p.b.set_alt({alt_index});`);
     }
-    gen_alt_elements(w, &alt.elements, &body.ops, ctx);
+    gen_alt_elements(w, &alt.elements, &body.ops, &alt.actions, ctx);
+
+    if ctx.emit_actions() {
+        if let Some(a) = after_action {
+            gen_action_body(w, a, ctx);
+        }
+    }
 
     // the alt's terminals / subtrees already appended to the
     // builder via the Parser methods, so there is no struct to assemble — the
     // rule wrapper's `finish_node` closes the node.
-    w.line(&"return;");
+    if current_rule_emits_vals(ctx) {
+        w.line(&"return vals;");
+    } else {
+        w.line(&"return;");
+    }
 }
 
 fn gen_multi_alt_body(
@@ -2753,6 +2980,7 @@ fn gen_multi_alt_body(
             body,
             alt_index,
             rule_alts_labeled(&rule.alternatives),
+            &null,
             ctx,
         );
         w.end();
@@ -2791,7 +3019,13 @@ fn peel_scalar_label(elem: &Element) -> &Element {
     return cur;
 }
 
-fn gen_alt_elements(w: &mut CodeWriter, elements: &List<Element>, ops: &List<Op>, ctx: &mut GenContext) {
+fn gen_alt_elements(
+    w: &mut CodeWriter,
+    elements: &List<Element>,
+    ops: &List<Op>,
+    actions: &List<AltAction>,
+    ctx: &mut GenContext,
+) {
     // gen_alt_elements requires 1:1 correspondence between
     // `elements` and `ops` — full-alt bodies (Simple / MultiAlt /
     // LR atom). LR-suffix bodies strip the leading self-ref op and are
@@ -2813,6 +3047,7 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &List<Element>, ops: &List<Op>
     // are required so group dispatch can reuse the shared prediction
     // (`build_prediction` / scan tournament).
     for let mut i = 0; i < elements.len(); i += 1 {
+        gen_alt_actions_at(w, actions, i, ctx);
         let elem = &elements[i];
         let op = &ops[i];
         if let Repeat(rep) = peel_scalar_label(elem) {
@@ -2836,6 +3071,129 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &List<Element>, ops: &List<Op>
             panic("gen_alt_elements: unreachable op shape — every Op variant is handled");
         }
     }
+    gen_alt_actions_at(w, actions, elements.len(), ctx);
+}
+
+/// Emit every retained action / predicate whose position is `before` (it
+/// runs after `elements[before - 1]` and before `elements[before]`). No-op
+/// unless action execution is on. Predicates emit an inline runtime guard
+/// (a false one fails the parse); prediction-time gating is Phase 2 proper.
+fn gen_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before: i32, ctx: &mut GenContext) {
+    if !ctx.emit_actions() {
+        return;
+    }
+    for let a of actions {
+        if a.before_index != before {
+            continue;
+        }
+        match a.kind {
+            Action => gen_action_body(w, &a.source, ctx),
+            Predicate => {
+                if predicate_selects_alternative(before, ctx) {
+                    warn_unsupported_prediction_predicate(&a.source, ctx);
+                } else {
+                    gen_predicate_guard(w, &a.source, ctx);
+                }
+            },
+        }
+    }
+}
+
+/// An alt-initial predicate in a multi-alt rule chooses which alternative the
+/// prediction takes. Gale's prediction ignores predicates, so this shape is
+/// not an inline guard but a prediction gate — surfaced loudly until
+/// prediction-time gating lands (Phase 2).
+fn predicate_selects_alternative(before: i32, ctx: &GenContext) -> bool {
+    return before == 0 && current_rule_is_multi_alt(ctx);
+}
+
+fn warn_unsupported_prediction_predicate(src: &ActionSource, ctx: &mut GenContext) {
+    ctx.mark_action_seen(src.action_id);
+    ctx.warn(
+        &`action {src.action_id}`,
+        DiagnosticKind::UnsupportedAction,
+        `predicate {src.action_id}: alt-initial predicates in a multi-alt rule need prediction-time gating (not yet supported)`,
+    );
+}
+
+fn current_rule_is_multi_alt(ctx: &GenContext) -> bool {
+    let ridx = ctx.current_rule_index();
+    if ridx < 0 {
+        return false;
+    }
+    return ctx.parser_rules()[ridx].alternatives.len() > 1;
+}
+
+/// Emit one action body under the identity translator (`language = Wado`):
+/// the host text is Wado, so it passes through verbatim inside a block,
+/// with `p` in scope as the current `Parser`. Actions must not observably
+/// run inside a speculative attempt, so the body is guarded on
+/// `!p.speculating`. `$`-references are substituted against the current
+/// rule's environment — its own `vals` local (`$v`) and child bindings
+/// (`$a.v`). A reference the translator cannot emit yet is a loud
+/// `UnsupportedAction` diagnostic rather than invalid `$x`.
+fn gen_action_body(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext) {
+    ctx.mark_action_seen(src.action_id);
+    if let Some(code) = translate_action_or_warn(src, ctx) {
+        emit_action_stmt(w, &code);
+    }
+}
+
+/// Translate an action / predicate body's `$`-references, or warn (loud) and
+/// return `null` if a reference cannot be emitted. A ref-free body passes
+/// through verbatim (the identity translator on Wado host text).
+fn translate_action_or_warn(src: &ActionSource, ctx: &mut GenContext) -> Option<String> {
+    if find_attr_refs(&src.text).len() == 0 {
+        return Option::Some(src.text);
+    }
+    let ridx = ctx.current_rule_index();
+    if ridx < 0 {
+        ctx.warn(
+            &`action {src.action_id}`,
+            DiagnosticKind::UnsupportedAction,
+            `action {src.action_id} references attributes outside a rule context`,
+        );
+        return null;
+    }
+    let vals_in_scope = rule_emits_vals(ctx, &ctx.parser_rules()[ridx]);
+    return match translate_wado_action(&ctx.parser_rules()[ridx], ctx.parser_rules(), &src.text, vals_in_scope) {
+        Ok(code) => Option::Some(code),
+        Err(msg) => {
+            ctx.warn(&`action {src.action_id}`, DiagnosticKind::UnsupportedAction, msg);
+            null;
+        },
+    };
+}
+
+/// Emit a semantic predicate `{cond}?` as an inline runtime guard: when the
+/// (translated) condition is false during a real (non-speculative) parse, the
+/// rule fails into normal recovery. Prediction-time gating of which alt to
+/// take is Phase 2 proper; this serves mid-alt predicates and single-alt-rule
+/// gates, where a false predicate is a parse failure at that point.
+fn gen_predicate_guard(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext) {
+    ctx.mark_action_seen(src.action_id);
+    let cond = match translate_action_or_warn(src, ctx) {
+        Some(c) => c,
+        None => {
+            return;
+        },
+    };
+    w.begin(&"if !p.speculating");
+    w.begin(&`if !({cond})`);
+    w.line(&`p.no_viable("failed semantic predicate", p.peek_span(), []);`);
+    if current_rule_emits_vals(ctx) {
+        w.line(&"return vals;");
+    } else {
+        w.line(&"return;");
+    }
+    w.end();
+    w.end();
+}
+
+fn emit_action_stmt(w: &mut CodeWriter, code: &String) {
+    w.begin(&"if !p.speculating");
+    w.line(code);
+    w.end();
 }
 
 /// Group / single-alt-body internal walker. Mirrors `gen_alt_elements`
@@ -6421,6 +6779,7 @@ fn gen_multi_alt_body_alt(
                 body,
                 alt_index,
                 rule_alts_labeled(&rule.alternatives),
+                &null,
                 ctx,
             );
         } else {

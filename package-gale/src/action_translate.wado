@@ -1,0 +1,237 @@
+//! Identity translator (`language = Wado`): rewrite an action body's
+//! `$`-references to Wado expressions over the value channel, leaving the
+//! surrounding host text (already Wado) verbatim.
+//!
+//! This slice covers a rule's own value channel — `$v` / `$local` map to
+//! the `vals` struct local emitted in the rule function. References that
+//! need infrastructure not yet emitted (rule arguments, cross-rule
+//! `$a.v`, token members via the context API, specials) return a loud
+//! error naming the reference, so codegen surfaces a diagnostic rather
+//! than emitting invalid code. The supported subset grows as the value
+//! channel and context API land.
+
+use { ParserRule, AttrDecl } from "./ir.wado";
+use { resolve_attrs, ResolvedAttr } from "./attr_resolve.wado";
+use { splice_attrs } from "./attr_substitute.wado";
+use { to_pascal_case, to_snake_case, escape_ident } from "./ident.wado";
+
+/// Name of a rule's value-channel struct (`e` -> `EVals`).
+pub fn vals_struct_name(rule: &ParserRule) -> String {
+    return `{to_pascal_case(&rule.name)}Vals`;
+}
+
+/// Translate `body` against `rule`'s environment. `vals_in_scope` is true
+/// when the enclosing rule emits a `vals` local (so `$v` / `$local` can be
+/// served). Returns ready-to-emit Wado, or an error naming the first
+/// unsupported reference.
+pub fn translate_wado_action(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    body: &String,
+    vals_in_scope: bool,
+) -> Result<String, String> {
+    let resolved = resolve_attrs(body, rule, rules)?;
+    let mut repls: List<String> = [];
+    for let r of &resolved {
+        let e = action_attr_expr(rule, rules, r, vals_in_scope)?;
+        repls.push(e);
+    }
+    return Result::<String, String>::Ok(splice_attrs(body, &resolved, &repls));
+}
+
+/// The Wado expression a resolved reference becomes, or an error if this
+/// slice cannot emit it yet.
+fn action_attr_expr(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    r: &ResolvedAttr,
+    vals_in_scope: bool,
+) -> Result<String, String> {
+    return match r.target {
+        RuleAttr => {
+            if is_arg(rule, &r.name) {
+                Result::<String, String>::Err(`${r.name}: rule arguments are not yet threaded into the value channel`);
+            } else if field_default(rule, &r.name) matches { None } {
+                Result::<String, String>::Err(
+                    `${r.name}: value-channel field type '{field_type(rule, &r.name)}' has no Wado default`,
+                );
+            } else if !vals_in_scope {
+                Result::<String, String>::Err(`${r.name}: no value channel in the enclosing rule`);
+            } else {
+                Result::<String, String>::Ok(`vals.{r.name}`);
+            }
+        },
+        RuleLabel => rule_member_expr(rules, r),
+        RuleRef => rule_member_expr(rules, r),
+        TokenLabel => token_member_expr(r),
+        _ => Result::<String, String>::Err(`${r.name}: this attribute form is not yet emitted`),
+    };
+}
+
+/// The local variable a call site binds a rule / label / token result to:
+/// `escape_ident(to_snake_case(name))`, matching `RuleRefElement`/`LabelElement`
+/// field-name derivation. The translator must reproduce it exactly — a raw
+/// grammar name (e.g. camelCase `myTok`) would reference an undefined local.
+fn binding_name(name: &String) -> String {
+    return escape_ident(&to_snake_case(name));
+}
+
+fn token_member_expr(r: &ResolvedAttr) -> Result<String, String> {
+    let binding = binding_name(&r.name);
+    return match &r.member {
+        Some(m) => {
+            if *m == "text" {
+                Result::<String, String>::Ok(`p.token_text({binding})`);
+            } else {
+                Result::<String, String>::Err(`${r.name}.{*m}: only .text is emitted for tokens so far`);
+            }
+        },
+        None => Result::<String, String>::Ok(binding),
+    };
+}
+
+fn rule_member_expr(rules: &List<ParserRule>, r: &ResolvedAttr) -> Result<String, String> {
+    let binding = binding_name(&r.name);
+    let target = match find_rule(rules, &r.rule_name) {
+        Some(t) => t,
+        None => {
+            return Result::<String, String>::Err(`${r.name}: unknown referenced rule '{r.rule_name}'`);
+        },
+    };
+    if !rule_returns_vals(&target) {
+        return Result::<String, String>::Err(
+            `${r.name}: rule '{r.rule_name}' does not expose a value channel (needs single-alt + defaultable returns/locals)`,
+        );
+    }
+    return match &r.member {
+        Some(m) => {
+            if field_default(&target, m) matches { Some(_) } {
+                Result::<String, String>::Ok(`{binding}.{*m}`);
+            } else {
+                Result::<String, String>::Err(`${r.name}.{*m}: not an emittable value-channel field of '{r.rule_name}'`);
+            }
+        },
+        None => Result::<String, String>::Ok(binding),
+    };
+}
+
+fn find_rule(rules: &List<ParserRule>, name: &String) -> Option<ParserRule> {
+    for let rule of rules {
+        if rule.name == *name {
+            return Option::Some(*rule);
+        }
+    }
+    return null;
+}
+
+/// The `wado_type_default` of a rule's returns/locals field named `name`, or
+/// `None` if there is no such field or its type has no Wado default.
+fn field_default(rule: &ParserRule, name: &String) -> Option<String> {
+    return match find_field(rule, name) {
+        Some(d) => wado_type_default(&d.type_text),
+        None => null,
+    };
+}
+
+fn field_type(rule: &ParserRule, name: &String) -> String {
+    return match find_field(rule, name) {
+        Some(d) => d.type_text,
+        None => "",
+    };
+}
+
+fn find_field(rule: &ParserRule, name: &String) -> Option<AttrDecl> {
+    for let d of &rule.returns_decls {
+        if d.name == *name {
+            return Option::Some(*d);
+        }
+    }
+    for let d of &rule.locals_decls {
+        if d.name == *name {
+            return Option::Some(*d);
+        }
+    }
+    return null;
+}
+
+fn is_arg(rule: &ParserRule, name: &String) -> bool {
+    for let d of &rule.args {
+        if d.name == *name {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Whether a rule exposes a value channel to callers: a single-alt (non-LR)
+/// rule declaring a defaultable `returns` / `locals`. Such a rule's
+/// `_parse_<rule>` returns `<Rule>Vals`, its body gets a `vals` local, and a
+/// caller's `$a.v` reads the returned struct. This is the return-type
+/// decision — independent of whether the rule's own actions read the channel,
+/// since a caller might.
+pub fn rule_returns_vals(rule: &ParserRule) -> bool {
+    return rule.alternatives.len() == 1 && rule_value_channel_ready(rule);
+}
+
+/// Whether a rule exposes an emittable value channel: it declares a
+/// returns / locals field whose type has a Wado default. Fields with an
+/// unsupported type are excluded per-field (they do not appear in the
+/// `<Rule>Vals` struct and a reference to one is a loud error), so one
+/// unsupported field no longer disables the whole channel. Args are excluded
+/// (not yet threaded).
+pub fn rule_value_channel_ready(rule: &ParserRule) -> bool {
+    for let d of &rule.returns_decls {
+        if wado_type_default(&d.type_text) matches { Some(_) } {
+            return true;
+        }
+    }
+    for let d of &rule.locals_decls {
+        if wado_type_default(&d.type_text) matches { Some(_) } {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Whether a returns / locals field goes into the `<Rule>Vals` struct: it has
+/// a Wado default. Codegen and the translator agree on this predicate so the
+/// struct's fields and the substituted `vals.<name>` reads stay in lockstep.
+pub fn field_in_vals(d: &AttrDecl) -> bool {
+    return wado_type_default(&d.type_text) matches { Some(_) };
+}
+
+/// A Wado default-value expression for a value-channel field type, or `None`
+/// if the type has no known Wado default. Types are Wado (`language = Wado`,
+/// identity translator), so only genuine Wado types are recognized — a
+/// non-Wado name like `int` / `str` has no default and its field is skipped.
+pub fn wado_type_default(type_text: &String) -> Option<String> {
+    let t = type_text.trim();
+    if t == "bool" {
+        return Option::<String>::Some("false");
+    }
+    if t == "String" {
+        return Option::<String>::Some("\"\"");
+    }
+    if t.starts_with("List") || t.starts_with("[") {
+        return Option::<String>::Some("[]");
+    }
+    if is_numeric_type(&t) {
+        return Option::<String>::Some("0");
+    }
+    return null;
+}
+
+fn is_numeric_type(t: &String) -> bool {
+    return *t == "i8"
+        || *t == "i16"
+        || *t == "i32"
+        || *t == "i64"
+        || *t == "u8"
+        || *t == "u16"
+        || *t == "u32"
+        || *t == "u64"
+        || *t == "f32"
+        || *t == "f64"
+        || *t == "usize"
+        || *t == "isize";
+}

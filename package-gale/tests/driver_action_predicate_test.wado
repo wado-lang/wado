@@ -1,0 +1,23 @@
+//! Stage C semantic predicates: a `{cond}?` predicate compiles to an inline
+//! runtime guard. A true predicate lets the parse continue; a false one fails
+//! it (no viable alternative), feeding normal recovery.
+
+use wp from "./grammars/wado_predicate.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_predicate",
+        },
+    };
+
+test "a true predicate lets the parse complete" {
+    let result = wp::parse_ok(&"a b");
+    assert result.ok(), "clean parse under a true predicate";
+    assert result.output == "go", `output: '{result.output}'`;
+}
+
+test "a false predicate fails the parse" {
+    let result = wp::parse_bad(&"a b");
+    assert !result.ok(), "false predicate must reject the input";
+}

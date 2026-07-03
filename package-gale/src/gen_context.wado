@@ -144,6 +144,17 @@ pub struct GenContext {
     /// multi-alt scan/pick/try decisions) — the `trace: true` generator
     /// option. Off by default.
     trace: bool,
+    /// When set, parser emit executes retained actions (Stage C) instead of
+    /// discarding them: true for grammars whose action language Gale can
+    /// currently emit (`language = Wado`). Actionless / other-language
+    /// grammars stay byte-identical.
+    emit_actions: bool,
+    /// `action_id`s codegen has handled (emitted, or already raised a loud
+    /// diagnostic for). A post-emit sweep warns for any stamped parser action
+    /// left unhandled, so an action on a not-yet-supported code path (nested
+    /// group, LR suffix, single-token multi-alt, multi-alt prequel) surfaces
+    /// loudly instead of vanishing silently.
+    action_seen: List<i32>,
     rule_follow_kinds: TreeMap<String, List<String>>,
     rule_follow_exact: bool,
 }
@@ -179,6 +190,8 @@ impl GenContext {
             lr_loop_entry_decisions: [],
             atn_rule_body_decisions: [],
             trace: false,
+            emit_actions: false,
+            action_seen: [],
             rule_follow_kinds: TreeMap::new(),
             rule_follow_exact: false,
         };
@@ -367,6 +380,34 @@ impl GenContext {
         return self.trace;
     }
 
+    /// Enable action execution in the generated parser (set for an emittable
+    /// action language). Read by `gen_parser_struct` (the `output` buffer +
+    /// `emit` method), the parse entry (`output` on `ParseResult`), and
+    /// `gen_alt_elements` (the interleaved action bodies).
+    pub fn set_emit_actions(&mut self, on: bool) {
+        self.emit_actions = on;
+    }
+
+    /// Whether retained actions should be executed rather than discarded.
+    pub fn emit_actions(&self) -> bool {
+        return self.emit_actions;
+    }
+
+    /// Record that codegen handled this action id (emitted or diagnosed).
+    pub fn mark_action_seen(&mut self, id: i32) {
+        self.action_seen.push(id);
+    }
+
+    /// Whether an action id was handled by codegen.
+    pub fn action_was_seen(&self, id: i32) -> bool {
+        for let s of &self.action_seen {
+            if *s == id {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /// Record a prediction-strategy diagnostic for `rule`, deduped on
     /// `(rule, message)`. A single decision site can be revisited: the
     /// parse and scan passes lower the same alts twice — both re-enter
@@ -409,6 +450,12 @@ impl GenContext {
             return Option::Some(&self.parser_rules[i]);
         }
         return null;
+    }
+
+    /// The parser-rule table (for action attribute resolution, which validates
+    /// cross-rule members against a referenced rule's `returns`).
+    pub fn parser_rules(&self) -> &List<ParserRule> {
+        return &self.parser_rules;
     }
 
     pub fn first_of_rule(&mut self, name: &String, visiting: &mut List<String>) -> List<String> {

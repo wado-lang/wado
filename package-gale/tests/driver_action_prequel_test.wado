@@ -1,0 +1,19 @@
+//! Stage C prequels: `@init` runs at rule entry, `@after` after the body,
+//! and both share the rule's value channel. The emit order `i` (init) → `b`
+//! (body) → `a2` (@after, reading the body's final `$v`) proves the timing
+//! and that prequels see the same `vals` local as the body.
+
+use wp from "./grammars/wado_prequel.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_prequel",
+        },
+    };
+
+test "@init / body / @after execute in order over a shared value channel" {
+    let result = wp::parse(&"a");
+    assert result.ok(), "clean parse";
+    assert result.output == "iba2", `output: '{result.output}'`;
+}

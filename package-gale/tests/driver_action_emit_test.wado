@@ -1,0 +1,25 @@
+//! Stage C: a `language = Wado` print action executes during the parse and
+//! its text is surfaced on `ParseResult.output`. Drives the end-to-end path:
+//! `Parser.emit` / `output` field → action body emitted inline (guarded on
+//! `!p.speculating`) → threaded onto the returned `ParseResult`.
+
+use wa from "./grammars/wado_action.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_emit",
+        },
+    };
+
+test "wado actions emit into ParseResult.output in execution order" {
+    let result = wa::parse(&"a b");
+    assert result.ok(), "clean parse";
+    assert result.output == "hi!", `output: '{result.output}'`;
+}
+
+test "recovery that still traverses an action executes it" {
+    let result = wa::parse(&"b");
+    assert !result.ok(), "recovered parse reports the missing token";
+    assert result.output == "hi!", `output on recovered parse: '{result.output}'`;
+}

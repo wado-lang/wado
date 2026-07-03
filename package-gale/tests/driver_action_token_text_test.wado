@@ -1,0 +1,18 @@
+//! Stage C token member access: `$a.text` / `$b.text` read the matched text
+//! of labeled tokens via `p.token_text(<index>)`, where the index is what the
+//! call site's `let a = p.expect(...)` bound.
+
+use wt from "./grammars/wado_token_text.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_token_text",
+        },
+    };
+
+test "token .text reads the matched lexeme" {
+    let result = wt::parse(&"foo + bar");
+    assert result.ok(), "clean parse";
+    assert result.output == "foo-bar", `output: '{result.output}'`;
+}

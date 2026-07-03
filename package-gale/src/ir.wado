@@ -893,145 +893,222 @@ pub fn canonicalize_empty_alt_groups(grammar: &mut Grammar) {
     }
 }
 
-/// Assign every parser-rule `RuleRefElement` a unique, increasing
-/// `atn_call_site` id (a depth-first walk over rules, alternatives, and
-/// nested elements). The id is the stable correspondence key between a
-/// surface call site and its ATN return state: `build_atn` records
-/// `call_site -> return_state`, and codegen (P4.2b) pushes that return state
-/// around the call so the simulator pops to the exact caller continuation.
-///
-/// Runs on the `generate()` path after `canonicalize_empty_alt_groups` (so
-/// the post-canonicalization element shape is what gets numbered) and before
-/// lowering / `build_atn`. Value semantics: each rule's alternatives are
-/// rebuilt with stamped elements and reassigned. Idempotent re-runs simply
-/// re-number from 0.
+/// Assign every parser-rule `RuleRefElement` a unique `atn_call_site` id, the
+/// correspondence key `build_atn` records as `call_site -> return_state` so
+/// codegen can push the exact caller continuation. Runs after
+/// `canonicalize_empty_alt_groups` and before lowering / `build_atn`.
 pub fn assign_atn_call_sites(grammar: &mut Grammar) {
+    stamp_parser_elements(grammar, StampMode::CallSites);
+}
+
+/// Which id a single traversal of the parser element tree assigns: the
+/// `RuleRef` call-site id, the `Repeat`/`Group` decision id, or the retained
+/// action ids (alt actions + arg-actions). One walk, one mode.
+enum StampMode {
+    CallSites,
+    Decisions,
+    ActionIds,
+}
+
+/// Walk every parser rule's element tree once, assigning the `mode`-selected
+/// id in depth-first order and rebuilding (value semantics). The other modes'
+/// ids are preserved, so the passes compose. Idempotent per mode.
+fn stamp_parser_elements(grammar: &mut Grammar, mode: StampMode) {
     let mut next: i32 = 0;
     for let mut ri = 0; ri < grammar.parser_rules.len(); ri += 1 {
-        let stamped = stamp_call_sites_alternatives(&grammar.parser_rules[ri].alternatives, &mut next);
-        grammar.parser_rules[ri].alternatives = stamped;
+        grammar.parser_rules[ri].alternatives = stamp_alternatives(
+            &grammar.parser_rules[ri].alternatives,
+            mode,
+            &mut next,
+        );
     }
 }
 
-fn stamp_call_sites_alternatives(alts: &List<Alternative>, next: &mut i32) -> List<Alternative> {
+fn stamp_alternatives(alts: &List<Alternative>, mode: StampMode, next: &mut i32) -> List<Alternative> {
     let mut out: List<Alternative> = [];
     for let alt of alts {
+        let acts = if mode matches { ActionIds } { stamp_alt_actions(&alt.actions, next) } else { alt.actions };
         let mut elems: List<Element> = [];
         for let e of &alt.elements {
-            elems.push(stamp_call_sites_element(e, next));
+            elems.push(stamp_element(e, mode, next));
         }
-        out.push(Alternative { label: alt.label, options: alt.options, elements: elems, actions: alt.actions });
+        out.push(Alternative { label: alt.label, options: alt.options, elements: elems, actions: acts });
     }
     return out;
 }
 
-/// Stamp this element (and any nested elements) with call-site ids. Only
-/// `RuleRef` leaves consume an id; transformer / group wrappers recurse.
-fn stamp_call_sites_element(elem: &Element, next: &mut i32) -> Element {
+fn stamp_element(elem: &Element, mode: StampMode, next: &mut i32) -> Element {
     return match *elem {
         RuleRef(rr) => {
-            let id = *next;
-            *next += 1;
+            let mut call_site = rr.atn_call_site;
+            let mut arg = rr.arg_action;
+            match mode {
+                CallSites => {
+                    call_site = *next;
+                    *next += 1;
+                },
+                ActionIds => arg = stamp_action_source_opt(rr.arg_action, next),
+                Decisions => {
+                },
+            }
             Element::RuleRef(RuleRefElement {
                 name: rr.name,
                 options: rr.options,
                 snake_name: rr.snake_name,
                 field_name: rr.field_name,
-                atn_call_site: id,
-                arg_action: rr.arg_action,
+                atn_call_site: call_site,
+                arg_action: arg,
+            });
+        },
+        Repeat(rep) => {
+            let mut decision = rep.atn_decision;
+            if mode matches { Decisions } {
+                decision = *next;
+                *next += 1;
+            }
+            Element::Repeat(RepeatElement {
+                kind: rep.kind,
+                element: stamp_element(&rep.element, mode, next),
+                non_greedy: rep.non_greedy,
+                atn_decision: decision,
+            });
+        },
+        Group(g) => {
+            let mut decision = g.atn_decision;
+            if mode matches { Decisions } {
+                decision = *next;
+                *next += 1;
+            }
+            Element::Group(GroupElement {
+                alternatives: stamp_alternatives(&g.alternatives, mode, next),
+                options: g.options,
+                atn_decision: decision,
             });
         },
         Label(lab) => Element::Label(LabelElement {
             name: lab.name,
             list: lab.list,
-            element: stamp_call_sites_element(&lab.element, next),
+            element: stamp_element(&lab.element, mode, next),
             snake_name: lab.snake_name,
             field_name: lab.field_name,
         }),
-        Repeat(rep) => Element::Repeat(RepeatElement {
-            kind: rep.kind,
-            element: stamp_call_sites_element(&rep.element, next),
-            non_greedy: rep.non_greedy,
-        }),
         Not(n) => Element::Not(NotElement {
-            element: stamp_call_sites_element(&n.element, next),
-        }),
-        Group(g) => Element::Group(GroupElement {
-            alternatives: stamp_call_sites_alternatives(&g.alternatives, next),
-            options: g.options,
+            element: stamp_element(&n.element, mode, next),
         }),
         _ => *elem,
     };
 }
 
-/// Assign every parser-rule `RepeatElement` / `GroupElement` a unique,
-/// increasing `atn_decision` id (a depth-first walk over rules, alternatives,
-/// and nested elements — the same traversal as `assign_atn_call_sites`). The
-/// id is the stable correspondence key between a surface decision-bearing node
-/// and its ATN decision number: `build_atn` records `atn_decision -> decision`
-/// in `Atn.decision_sites`, and codegen reads it to emit
-/// `atn_predict_with_stack(sim, decision, …)` for the node (a non-greedy `??`,
-/// or an ATN-class multi-alt group).
-///
-/// Runs on the `generate()` path after `assign_atn_call_sites` (so its in-place
-/// rebuild of `Repeat` / `Group` does not clobber the freshly stamped ids) and
-/// before lowering / `build_atn`. Value semantics: each rule's alternatives are
-/// rebuilt with stamped elements and reassigned. Idempotent re-runs re-number
-/// from 0. The `atn_call_site` ids stamped on nested `RuleRef`s survive because
-/// the `RuleRef` arm returns the element unchanged.
-pub fn assign_atn_decisions(grammar: &mut Grammar) {
-    let mut next: i32 = 0;
-    for let mut ri = 0; ri < grammar.parser_rules.len(); ri += 1 {
-        let stamped = stamp_decisions_alternatives(&grammar.parser_rules[ri].alternatives, &mut next);
-        grammar.parser_rules[ri].alternatives = stamped;
-    }
-}
-
-fn stamp_decisions_alternatives(alts: &List<Alternative>, next: &mut i32) -> List<Alternative> {
-    let mut out: List<Alternative> = [];
-    for let alt of alts {
-        let mut elems: List<Element> = [];
-        for let e of &alt.elements {
-            elems.push(stamp_decisions_element(e, next));
-        }
-        out.push(Alternative { label: alt.label, options: alt.options, elements: elems, actions: alt.actions });
+fn stamp_alt_actions(actions: &List<AltAction>, next: &mut i32) -> List<AltAction> {
+    let mut out: List<AltAction> = [];
+    for let a of actions {
+        let mut src = a.source;
+        src.action_id = *next;
+        *next += 1;
+        out.push(AltAction { kind: a.kind, source: src, before_index: a.before_index });
     }
     return out;
 }
 
-/// Stamp this element (and any nested elements) with decision-site ids. Only
-/// `Repeat` and `Group` consume an id (they are the surface nodes `build_atn`
-/// can mark a decision for); other wrappers recurse, leaves pass through.
-fn stamp_decisions_element(elem: &Element, next: &mut i32) -> Element {
+/// Assign every parser-rule `RepeatElement` / `GroupElement` a unique
+/// `atn_decision` id, the correspondence key `build_atn` records as
+/// `atn_decision -> decision` in `Atn.decision_sites`. Runs after
+/// `assign_atn_call_sites` and before lowering / `build_atn`.
+pub fn assign_atn_decisions(grammar: &mut Grammar) {
+    stamp_parser_elements(grammar, StampMode::Decisions);
+}
+
+/// Assign every retained `ActionSource` a unique, increasing `action_id`
+/// (a depth-first walk over parser rules, their alternatives / nested
+/// groups / arg-actions and prequel slots, lexer rules, grammar-level
+/// named actions, and option actions). The id is the stable name of the
+/// emitted action fn and the anchor for action diagnostics — the same
+/// role `atn_call_site` plays for rule-call return states.
+///
+/// Runs on the `generate()` path after `assign_atn_decisions`; the rebuilds
+/// here preserve `atn_call_site` / `atn_decision` explicitly so stamping
+/// action ids last does not clobber them. Idempotent re-runs renumber from 0.
+pub fn assign_action_ids(grammar: &mut Grammar) {
+    let mut next: i32 = 0;
+    for let mut ri = 0; ri < grammar.parser_rules.len(); ri += 1 {
+        grammar.parser_rules[ri].init_action = stamp_action_source_opt(grammar.parser_rules[ri].init_action, &mut next);
+        grammar.parser_rules[ri].alternatives = stamp_alternatives(
+            &grammar.parser_rules[ri].alternatives,
+            StampMode::ActionIds,
+            &mut next,
+        );
+        grammar.parser_rules[ri].after_action = stamp_action_source_opt(
+            grammar.parser_rules[ri].after_action,
+            &mut next,
+        );
+        let mut new_catches: List<CatchClause> = [];
+        for let c of &grammar.parser_rules[ri].catches {
+            let mut body = c.body;
+            body.action_id = next;
+            next += 1;
+            new_catches.push(CatchClause { decl_text: c.decl_text, body });
+        }
+        grammar.parser_rules[ri].catches = new_catches;
+        grammar.parser_rules[ri].finally_action = stamp_action_source_opt(
+            grammar.parser_rules[ri].finally_action,
+            &mut next,
+        );
+    }
+    for let mut li = 0; li < grammar.lexer_rules.len(); li += 1 {
+        let stamped = stamp_actions_lexer_alternatives(&grammar.lexer_rules[li].body, &mut next);
+        grammar.lexer_rules[li].body = stamped;
+    }
+    for let mut ni = 0; ni < grammar.named_actions.len(); ni += 1 {
+        grammar.named_actions[ni].body.action_id = next;
+        next += 1;
+    }
+    for let mut oi = 0; oi < grammar.options.len(); oi += 1 {
+        if let Action(src) = &grammar.options[oi].value {
+            let mut ns = *src;
+            ns.action_id = next;
+            next += 1;
+            grammar.options[oi].value = OptionValue::Action(ns);
+        }
+    }
+}
+
+fn stamp_action_source_opt(opt: Option<ActionSource>, next: &mut i32) -> Option<ActionSource> {
+    match opt {
+        Some(s) => {
+            let mut ns = s;
+            ns.action_id = *next;
+            *next += 1;
+            return Option::<ActionSource>::Some(ns);
+        },
+        None => {
+            return opt;
+        },
+    }
+}
+
+fn stamp_actions_lexer_alternatives(alts: &List<LexerAlternative>, next: &mut i32) -> List<LexerAlternative> {
+    let mut out: List<LexerAlternative> = [];
+    for let alt of alts {
+        let acts = stamp_alt_actions(&alt.actions, next);
+        let mut elems: List<LexerElement> = [];
+        for let e of &alt.elements {
+            elems.push(stamp_actions_lexer_element(e, next));
+        }
+        out.push(LexerAlternative { elements: elems, actions: acts });
+    }
+    return out;
+}
+
+fn stamp_actions_lexer_element(elem: &LexerElement, next: &mut i32) -> LexerElement {
     return match *elem {
-        Repeat(rep) => {
-            let id = *next;
-            *next += 1;
-            Element::Repeat(RepeatElement {
-                kind: rep.kind,
-                element: stamp_decisions_element(&rep.element, next),
-                non_greedy: rep.non_greedy,
-                atn_decision: id,
-            });
-        },
-        Group(g) => {
-            let id = *next;
-            *next += 1;
-            Element::Group(GroupElement {
-                alternatives: stamp_decisions_alternatives(&g.alternatives, next),
-                options: g.options,
-                atn_decision: id,
-            });
-        },
-        Label(lab) => Element::Label(LabelElement {
-            name: lab.name,
-            list: lab.list,
-            element: stamp_decisions_element(&lab.element, next),
-            snake_name: lab.snake_name,
-            field_name: lab.field_name,
+        Group(alts) => LexerElement::Group(stamp_actions_lexer_alternatives(&alts, next)),
+        Repeat(rep) => LexerElement::Repeat(LexerRepeatElement {
+            kind: rep.kind,
+            element: stamp_actions_lexer_element(&rep.element, next),
+            non_greedy: rep.non_greedy,
         }),
-        Not(n) => Element::Not(NotElement {
-            element: stamp_decisions_element(&n.element, next),
+        Not(n) => LexerElement::Not(LexerNotElement {
+            element: stamp_actions_lexer_element(&n.element, next),
         }),
         _ => *elem,
     };

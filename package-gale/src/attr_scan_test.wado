@@ -1,0 +1,74 @@
+use { find_attr_refs } from "./attr_scan.wado";
+
+test "find_attr_refs locates bare and member references in order" {
+    let refs = find_attr_refs(&"$v = $a.v * $b.v;");
+    assert refs.len() == 3, `count: {refs.len()}`;
+    assert refs[0].name == "v", `0: {refs[0].name}`;
+    assert refs[0].member matches { None }, "0 no member";
+    assert refs[1].name == "a" && refs[1].member matches { Some(_) }, "1 a.member";
+    if let Some(m) = &refs[1].member {
+        assert *m == "v", `1 member: {*m}`;
+    }
+    assert refs[2].name == "b", `2: {refs[2].name}`;
+}
+
+test "find_attr_refs records spans at the dollar sign" {
+    let refs = find_attr_refs(&"x = $ctx;");
+    assert refs.len() == 1;
+    assert refs[0].name == "ctx", `name: {refs[0].name}`;
+    assert refs[0].start == 4, `start: {refs[0].start}`;
+    assert refs[0].end == 8, `end: {refs[0].end}`;
+}
+
+test "find_attr_refs skips references inside strings and comments" {
+    let refs = find_attr_refs(&"print(\"$x not a ref\"); // $y also not\n$real.text");
+    assert refs.len() == 1, `count: {refs.len()}`;
+    assert refs[0].name == "real";
+    if let Some(m) = &refs[0].member {
+        assert *m == "text", `member: {*m}`;
+    } else {
+        panic("expected .text member");
+    }
+}
+
+test "find_attr_refs skips single-quoted char and block comments" {
+    let refs = find_attr_refs(&"c == '$' /* $ignored */ && $keep");
+    assert refs.len() == 1, `count: {refs.len()}`;
+    assert refs[0].name == "keep";
+}
+
+test "find_attr_refs skips a literal dollar in backtick text but scans interpolations" {
+    let refs = find_attr_refs(&"p.emit(`cost $amount, v={$v} done`)");
+    assert refs.len() == 1, `count: {refs.len()}`;
+    assert refs[0].name == "v", `name: {refs[0].name}`;
+}
+
+test "find_attr_refs scans nested member refs inside a backtick interpolation" {
+    let refs = find_attr_refs(&"`{$a.v + $b.v}`");
+    assert refs.len() == 2, `count: {refs.len()}`;
+    assert refs[0].name == "a" && refs[1].name == "b";
+}
+
+test "find_attr_refs treats a lone dollar as host text" {
+    let refs = find_attr_refs(&"a $ b $$ c");
+    assert refs.len() == 0, `count: {refs.len()}`;
+}
+
+test "find_attr_refs special names resolve as bare identifiers" {
+    let refs = find_attr_refs(&"$text $_p $start.line");
+    assert refs.len() == 3;
+    assert refs[0].name == "text" && refs[0].member matches { None };
+    assert refs[1].name == "_p", `underscore name: {refs[1].name}`;
+    assert refs[2].name == "start";
+    if let Some(m) = &refs[2].member {
+        assert *m == "line", `member: {*m}`;
+    }
+}
+
+test "find_attr_refs stops member at a non-identifier after the dot" {
+    let refs = find_attr_refs(&"$a.5");
+    assert refs.len() == 1;
+    assert refs[0].name == "a";
+    assert refs[0].member matches { None }, "no member for $a.5";
+    assert refs[0].end == 2, `end: {refs[0].end}`;
+}

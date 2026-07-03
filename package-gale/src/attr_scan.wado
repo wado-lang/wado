@@ -1,0 +1,130 @@
+//! Attribute-reference scanner for action / predicate bodies.
+//!
+//! ANTLR4 `$x` / `$x.member` attribute references are ANTLR semantics, not
+//! host-language semantics (see `action.md`, "Attribute resolution"), so
+//! Gale scans the opaque fragment for them itself, independent of the
+//! action language. This module is the raw lexical layer: it locates every
+//! `$ident(.ident)?` reference and its span within the fragment, skipping
+//! string literals (`'...'`, `"..."`) and comments (`//`, `/* */`) so a
+//! `$` inside host text is never mistaken for a reference. Mapping a raw
+//! reference onto a rule's attribute environment (labels, args, returns,
+//! specials) is a later resolution step that consumes these.
+
+use {
+    scan_string,
+    scan_line_comment,
+    scan_block_comment,
+    scan_balanced,
+    is_id_start_char,
+    is_id_continue_char,
+} from "./g4/scan.wado";
+
+/// A raw `$name` or `$name.member` attribute reference located in a
+/// fragment, with its char span within the fragment text (`start` points
+/// at the `$`, `end` is one past the last char of the reference).
+pub struct AttrRef {
+    pub name: String,
+    /// The `.member` suffix (`text`, `int`, a `returns` field, ...), or
+    /// `null` for a bare `$name`. Only the first `.ident` is captured;
+    /// deeper host access chains are resolved by the substitution layer.
+    pub member: Option<String> = null,
+    pub start: i32,
+    pub end: i32,
+}
+
+/// Locate every `$ident(.ident)?` reference in `body`, in source order.
+/// String literals and comments are skipped so their contents never yield
+/// a reference. Backtick template strings are skipped too, EXCEPT their
+/// `{ ... }` interpolation regions, where `$refs` are Wado expressions to
+/// substitute — a literal `$` in template text is not a reference. A lone
+/// `$` not followed by an identifier is host text.
+pub fn find_attr_refs(body: &String) -> List<AttrRef> {
+    let chars: List<char> = body.chars().collect();
+    let mut out: List<AttrRef> = [];
+    scan_refs(&chars, 0, chars.len(), &mut out);
+    return out;
+}
+
+fn scan_refs(chars: &List<char>, start: i32, end: i32, out: &mut List<AttrRef>) {
+    let mut i = start;
+    while i < end {
+        let c = chars[i];
+        if c == '\'' || c == '"' {
+            i = scan_string(chars, i);
+            continue;
+        }
+        if c == '`' {
+            i = scan_template(chars, i, end, out);
+            continue;
+        }
+        if c == '/' && i + 1 < end && chars[i + 1] == '/' {
+            i = scan_line_comment(chars, i);
+            continue;
+        }
+        if c == '/' && i + 1 < end && chars[i + 1] == '*' {
+            i = scan_block_comment(chars, i);
+            continue;
+        }
+        if c == '$' && i + 1 < end && is_id_start_char(chars[i + 1]) {
+            let start_ref = i;
+            let mut j = i + 1;
+            while j < end && is_id_continue_char(chars[j]) {
+                j += 1;
+            }
+            let name = collect_range(chars, i + 1, j);
+            let mut member: Option<String> = null;
+            let mut ref_end = j;
+            if j + 1 < end && chars[j] == '.' && is_id_start_char(chars[j + 1]) {
+                let mut k = j + 1;
+                while k < end && is_id_continue_char(chars[k]) {
+                    k += 1;
+                }
+                member = Option::<String>::Some(collect_range(chars, j + 1, k));
+                ref_end = k;
+            }
+            out.push(AttrRef { name, member, start: start_ref, end: ref_end });
+            i = ref_end;
+            continue;
+        }
+        i += 1;
+    }
+}
+
+/// Skip a backtick template, scanning only its `{ ... }` interpolation regions
+/// for references. `pos` points at the opening backtick; returns the index
+/// just past the closing backtick.
+fn scan_template(chars: &List<char>, pos: i32, end: i32, out: &mut List<AttrRef>) -> i32 {
+    let mut i = pos + 1;
+    while i < end {
+        let c = chars[i];
+        if c == '\\' && i + 1 < end {
+            i += 2;
+            continue;
+        }
+        if c == '`' {
+            return i + 1;
+        }
+        if c == '{' {
+            match scan_balanced(chars, i, '{', '}') {
+                Some(e) => {
+                    scan_refs(chars, i + 1, e - 1, out);
+                    i = e;
+                },
+                None => {
+                    i += 1;
+                },
+            }
+            continue;
+        }
+        i += 1;
+    }
+    return end;
+}
+
+fn collect_range(chars: &List<char>, start: i32, end: i32) -> String {
+    let mut s = String::with_capacity(end - start);
+    for let mut i = start; i < end; i += 1 {
+        s.push(chars[i]);
+    }
+    return s;
+}

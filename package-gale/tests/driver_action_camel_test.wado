@@ -1,0 +1,18 @@
+//! Stage C: a camelCase label binds a snake_case local (`myTok` -> `my_tok`),
+//! so `$myTok.text` must substitute to `p.token_text(my_tok)` — regression for
+//! the raw-name-vs-binding mismatch that miscompiled camelCase references.
+
+use wc from "./grammars/wado_camel_label.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_camel",
+        },
+    };
+
+test "camelCase token label reads its matched text" {
+    let result = wc::parse(&"foo");
+    assert result.ok(), "clean parse";
+    assert result.output == "foo", `output: '{result.output}'`;
+}

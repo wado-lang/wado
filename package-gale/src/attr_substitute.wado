@@ -1,0 +1,42 @@
+//! Attribute substitution: rewrite the `$`-reference spans in an action /
+//! predicate body to Wado expressions.
+//!
+//! The engine is a pure span splicer. The decision of *what* each reference
+//! becomes — a value-channel field (`$v` → `vals.v`), a context-API call
+//! (`$x.text` → `p.token_text(...)`), a special (`$text` →
+//! `p.rule_text()`) — belongs to codegen, which knows the runtime bindings
+//! in scope. Codegen resolves each `ResolvedAttr` (from `attr_resolve`) to
+//! its replacement string and hands the parallel list here; the engine
+//! stitches the surrounding host text (already Wado under the identity
+//! translator) around the replacements. Keeping the splice separate from
+//! the expression mapping keeps both trivially testable.
+
+use { ResolvedAttr } from "./attr_resolve.wado";
+
+/// Rewrite `body`, replacing each `ResolvedAttr`'s `[start, end)` char span
+/// with the corresponding entry in `replacements`. `refs` must be in
+/// ascending, non-overlapping span order (as `attr_resolve` produces them)
+/// and the same length as `replacements`.
+pub fn splice_attrs(body: &String, refs: &List<ResolvedAttr>, replacements: &List<String>) -> String {
+    assert refs.len() == replacements.len(), "splice_attrs: refs / replacements length mismatch";
+    let chars: List<char> = body.chars().collect();
+    let n = chars.len();
+    let mut out = String::with_capacity(body.len());
+    let mut cursor = 0;
+    for let mut i = 0; i < refs.len(); i += 1 {
+        let r = &refs[i];
+        assert r.start >= cursor, "splice_attrs: refs must be ascending and non-overlapping";
+        assert r.end <= n, "splice_attrs: ref span exceeds body";
+        push_range(&mut out, &chars, cursor, r.start);
+        out.push_str(&replacements[i]);
+        cursor = r.end;
+    }
+    push_range(&mut out, &chars, cursor, n);
+    return out;
+}
+
+fn push_range(out: &mut String, chars: &List<char>, start: i32, end: i32) {
+    for let mut i = start; i < end; i += 1 {
+        out.push(chars[i]);
+    }
+}
