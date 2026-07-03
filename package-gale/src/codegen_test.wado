@@ -124,7 +124,7 @@ WS : [ \\t\\r\\n]+ -> skip ;
     assert str_contains(&output, &"    Num,");
     // The accessor returns Option so an unstamped/error node is None, not a
     // silent first-alternative; both `# Bin` alts (0 and 1) map to one case.
-    assert str_contains(&output, &"pub fn e_alt(node: &CstNode) -> Option<EAlt>");
+    assert str_contains(&output, &"pub fn e_alt(&self, node: i32) -> Option<EAlt>");
     assert str_contains(&output, &"0 => Option::Some(EAlt::Bin),");
     assert str_contains(&output, &"1 => Option::Some(EAlt::Bin),");
     assert str_contains(&output, &"2 => Option::Some(EAlt::Num),");

@@ -6,47 +6,54 @@ language front ends, LSP, and syntax highlighting all work on broken input.
 
 ## Principles
 
-- **One uniform tree.** The parser builds a single untyped `CstNode` tree
-  directly — no typed-CST and no walk/convert step. The generic view consumers
-  want (LSP, highlight) is the parser's only output, so it is free.
+- **One uniform tree.** The parser builds a single untyped CST directly, as a
+  flat columnar store (`CstStore`) — no typed-CST and no walk/convert step. The
+  generic view consumers want (LSP, highlight) is the parser's only output, so
+  it is free.
 - **Infallible parsing.** Every rule function returns its node; it never returns
   `Result` and never propagates `?`. Errors are recovered locally and recorded.
 - **Lossless error tokens.** Every recovery edit is representable in the tree, so
   the original input round-trips.
 - **Diagnostics are the error currency.** A clean parse has an empty diagnostic
   list; a broken parse still yields a usable tree alongside the diagnostics.
-- **Fast machine-generated highlight.** Highlight is one direct walk over the
-  uniform tree (rule-kind stack → `(span, class)`), no intermediate tree.
+- **Fast machine-generated highlight.** Highlight is one flat forward scan over
+  the store (rule-kind stack → `(span, class)`), no intermediate tree.
 
 ## The tree
 
+The CST is a flat pre-order event stream held in parallel `i32` columns — the
+single source of truth, not a node object tree. A node is addressed by the row
+index of its `E_OPEN` event (row 0 is the root):
+
 ```
-CstNode  { kind: NodeKind, span, children: List<CstChild>, flags }
-CstChild = Token(i32) | Missing(i32) | Skipped(i32) | Node(CstNode)
+CstStore { tag, a, b, alt, end, flags, next }   // parallel List<i32>
+row tags: E_OPEN | E_CLOSE | E_TOK | E_MISS | E_SKIP
 ```
 
-- `CstNode` is a pure value tree: terminals are `i32` indices into a
-  `TokenStream` held by `ParseResult`, and the node stores no reference to it,
-  so the result is a freely movable value. Rendering methods (`to_string_tree`)
-  take the `&TokenStream`. (A `&TokenStream` field on the node tripped a current
-  WIR-lowering ICE when the result was returned by value, and the value tree is
-  the cleaner design anyway — composable and cacheable.)
+- Consumers read the store through `CstStore` cursor methods over a row index —
+  `kind` / `span` / `alt` / `is_error` / `first_child` / `next_sibling` /
+  `child_kind` / `find_child` / `to_string_tree` — threaded as unbundled scalars
+  (`&CstStore`, `i32`), so traversal allocates nothing. The store holds no
+  reference to the `TokenStream` (owned by `ParseResult`), so the result is a
+  freely movable value; methods that need terminal text take a `&TokenStream`.
 - `NodeKind` is an `i32` newtype (rule id; `K_ERROR` for a recovery region).
   Its `Display` renders the rule name and `Inspect` renders `name(id)`, so
   debugging shows names. The name table is grammar-specific, emitted by codegen.
 - `flags`: `NODE_ERROR` (this node or a descendant was repaired; bubbles up),
-  `NODE_INCOMPLETE` (a required terminal was inserted).
+  `NODE_INCOMPLETE` (a required terminal was inserted). `end` is `span.end` and
+  `next` the row past a node's subtree — both derived by the `finish()` finalize
+  pass so every query stays O(1).
 
 ### Error-token vocabulary (the full set)
 
 The three recovery edits — insert, delete, region — are each first-class:
 
-| Concern           | Tree                  | Token-stream flag (`lex.wado`) |
+| Concern           | Store                 | Token-stream flag (`lex.wado`) |
 | ----------------- | --------------------- | ------------------------------ |
-| Inserted terminal | `CstChild::Missing`   | `TOK_SYNTHETIC` (zero-width)   |
-| Deleted terminal  | `CstChild::Skipped`   | `TOK_SKIPPED`                  |
-| Error region      | `Node` of `K_ERROR`   | —                              |
-| Lexer no-match    | `Token` of `TK_ERROR` | `TOK_LEX_ERROR`                |
+| Inserted terminal | `E_MISS` row          | `TOK_SYNTHETIC` (zero-width)   |
+| Deleted terminal  | `E_SKIP` row          | `TOK_SKIPPED`                  |
+| Error region      | `E_OPEN` of `K_ERROR` | —                              |
+| Lexer no-match    | `E_TOK` of `TK_ERROR` | `TOK_LEX_ERROR`                |
 
 A `Missing` token keeps the _expected_ kind in the stream, so a `Missing` slot is
 still "a STRING", just synthetic.
@@ -54,8 +61,8 @@ still "a STRING", just synthetic.
 ## Building: TreeBuilder + recovery
 
 The parser drives a `TreeBuilder` (`start_node` / `token` / `missing` / `skip` /
-`start_error` / `finish_node`), which records a flat event stream and
-materialises each node once.
+`start_error` / `finish_node`), which appends a flat event stream into the
+columns and finalizes them once (one linear pass in `finish()`).
 
 Recovery replaces `expect(k)` with `expect_or_recover(k, sync)`:
 
@@ -88,7 +95,7 @@ applied; `related` carries secondary notes (e.g. "'(' opened here").
 
 ```
 parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult
-ParseResult { root: CstNode, tokens: TokenStream, diagnostics: List<Diagnostic> }
+ParseResult { cst: CstStore, tokens: TokenStream, diagnostics: List<Diagnostic> }
 ```
 
 One entry point, behaviour tuned by a number: `max_errors` caps how many

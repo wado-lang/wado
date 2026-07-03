@@ -294,10 +294,10 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
     w.end();
     if ctx.emit_actions() {
         w.line(
-            &"return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics, output: p.output };",
+            &"return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics, output: p.output };",
         );
     } else {
-        w.line(&"return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };");
+        w.line(&"return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };");
     }
     w.end();
 }
@@ -478,7 +478,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_acti
     if needs_atn {
         init.push_str(&", atn_stack: [], atn_ret_pending: -1");
     }
-    init.push_str(&", b: TreeBuilder::new(), diagnostics: []");
+    init.push_str(&", b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: []");
     if emit_actions {
         init.push_str(&", output: \"\"");
     }

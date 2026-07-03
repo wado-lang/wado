@@ -6,7 +6,7 @@
 //! `.g4` — there is no parser runtime to depend on or version-sync.
 //!
 //! The grammar is left-recursive with `# Label`s, so the generated parser
-//! exposes an `ExprAlt` enum and an `arith::expr_alt(node)` accessor. The
+//! exposes an `ExprAlt` enum and an `expr_alt` method on the CST store. The
 //! interpreter dispatches on that label, not on tree shape; precedence and
 //! associativity are already baked into the tree by the precedence-climbing
 //! parser.
@@ -29,29 +29,28 @@ pub fn eval(input: &String) -> Result<i64, String> {
         let d = &result.diagnostics[0];
         return Result::Err(`{d.line}:{d.col}: {d.message}`);
     }
-    // The root is `prog`: its only child node is the top-level `expr`.
-    return eval_first_child(&result.root, &result.tokens);
+    return eval_first_child(&result.cst, 0, &result.tokens);
 }
 
-/// Fold one `expr` node to its value, dispatching on the matched label.
-/// `expr_alt` is `None` only for a node that isn't a parsed `expr` (an
+/// Fold the `expr` node at row `node` to its value, dispatching on the matched
+/// label. `expr_alt` is `None` only for a node that isn't a parsed `expr` (an
 /// error-recovery node, say) — impossible here after `ok()`, so a codegen bug.
-fn eval_expr(node: &arith::CstNode, toks: &arith::TokenStream) -> Result<i64, String> {
-    return match arith::expr_alt(node) {
-        Some(Num) => int_value(node, toks),
-        Some(Paren) => eval_first_child(node, toks),
-        Some(MulDiv) => fold_binary(node, toks),
-        Some(AddSub) => fold_binary(node, toks),
+fn eval_expr(s: &arith::CstStore, node: i32, toks: &arith::TokenStream) -> Result<i64, String> {
+    return match s.expr_alt(node) {
+        Some(Num) => int_value(s, node, toks),
+        Some(Paren) => eval_first_child(s, node, toks),
+        Some(MulDiv) => fold_binary(s, node, toks),
+        Some(AddSub) => fold_binary(s, node, toks),
         None => panic("expr: node has no stamped alternative"),
     };
 }
 
 /// Evaluate the first child rule node. `prog` and `Paren` each wrap exactly
 /// one `expr`, so a missing child is a codegen bug, not a runtime error.
-fn eval_first_child(node: &arith::CstNode, toks: &arith::TokenStream) -> Result<i64, String> {
-    for let child of &node.children {
-        if let Node(n) = *child {
-            return eval_expr(&n, toks);
+fn eval_first_child(s: &arith::CstStore, node: i32, toks: &arith::TokenStream) -> Result<i64, String> {
+    for let mut c = s.first_child(node); c >= 0; c = s.next_sibling(c) {
+        if s.is_node(c) {
+            return eval_expr(s, c, toks);
         }
     }
     panic("expr: expected a child rule node");
@@ -59,22 +58,25 @@ fn eval_first_child(node: &arith::CstNode, toks: &arith::TokenStream) -> Result<
 
 /// A `MulDiv` / `AddSub` node's children are `expr OP expr`: evaluate both
 /// operands and apply the single operator token between them.
-fn fold_binary(node: &arith::CstNode, toks: &arith::TokenStream) -> Result<i64, String> {
+fn fold_binary(s: &arith::CstStore, node: i32, toks: &arith::TokenStream) -> Result<i64, String> {
     let mut left: i64 = 0;
     let mut right: i64 = 0;
     let mut have_left = false;
     let mut op = "";
-    for let child of &node.children {
-        if let Node(n) = *child {
-            let v = eval_expr(&n, toks)?;
-            if have_left {
-                right = v;
-            } else {
-                left = v;
-                have_left = true;
-            }
-        } else if let Token(i) = *child {
-            op = toks.token_text(i);
+    for let mut c = s.first_child(node); c >= 0; c = s.next_sibling(c) {
+        match s.child_kind(c) {
+            Node => {
+                let v = eval_expr(s, c, toks)?;
+                if have_left {
+                    right = v;
+                } else {
+                    left = v;
+                    have_left = true;
+                }
+            },
+            Token => op = toks.token_text(s.token_index(c)),
+            Missing | Skipped => {
+            },
         }
     }
     return apply(left, &op, right);
@@ -98,10 +100,10 @@ fn apply(a: i64, op: &String, b: i64) -> Result<i64, String> {
 
 /// The integer value of a `Num` node (its single `INT` token). The token text
 /// is all digits, but it can still overflow `i64`, so that surfaces as `Err`.
-fn int_value(node: &arith::CstNode, toks: &arith::TokenStream) -> Result<i64, String> {
-    for let child of &node.children {
-        if let Token(i) = *child {
-            let text = toks.token_text(i);
+fn int_value(s: &arith::CstStore, node: i32, toks: &arith::TokenStream) -> Result<i64, String> {
+    for let mut c = s.first_child(node); c >= 0; c = s.next_sibling(c) {
+        if s.is_token(c) {
+            let text = toks.token_text(s.token_index(c));
             return match i64::from_str(&text) {
                 Ok(v) => Result::Ok(v),
                 Err(_) => Result::Err(`integer literal out of range: {text}`),

@@ -112,22 +112,30 @@ types, and — because the rules are labeled — an `ExprAlt` enum with an
 ### 3. Walking the tree: the interpreter
 
 `arith::parse(input)` returns a `ParseResult`. A clean parse has
-`result.ok() == true`; `result.root` is the tree and `result.tokens` holds the
+`result.ok() == true`; `result.cst` is the tree and `result.tokens` holds the
 terminals it indexes.
 
-The tree is one uniform `CstNode` type:
+The tree is a flat store read through a cursor — a `CstStore` method over a row
+index (`i32`), where row 0 is the root. A node's children are walked with
+`first_child` / `next_sibling`, and each is classified by `child_kind`:
 
 ```wado
-struct CstNode { kind: NodeKind, span: Span, children: List<CstChild>, ... }
-variant CstChild { Token(i32), Missing(i32), Skipped(i32), Node(CstNode) }
+pub enum ChildKind { Node, Token, Missing, Skipped }
+
+impl CstStore {
+    pub fn first_child(&self, node: i32) -> i32    // -1 when none
+    pub fn next_sibling(&self, child: i32) -> i32  // -1 after the last
+    pub fn child_kind(&self, i: i32) -> ChildKind
+    pub fn token_index(&self, i: i32) -> i32       // stream index of a terminal
+}
 ```
 
 Because `expr`'s alternatives are labeled, the parser stamps which one matched
-onto each node, and exposes it as a per-rule enum plus an accessor:
+onto each node, and exposes it as a per-rule enum plus a `CstStore` method:
 
 ```wado
 pub enum ExprAlt { MulDiv, AddSub, Paren, Num }
-pub fn expr_alt(node: &CstNode) -> Option<ExprAlt>
+pub fn expr_alt(&self, node: i32) -> Option<ExprAlt>   // on CstStore
 ```
 
 The accessor returns `Option`: a node that isn't a parsed `expr` (an
@@ -137,22 +145,24 @@ Precedence and associativity are already baked into the tree, so evaluation is
 a plain fold (from [`example/eval.wado`](./example/eval.wado)):
 
 ```wado
-fn eval_expr(node: &arith::CstNode, toks: &arith::TokenStream) -> Result<i64, String> {
-    return match arith::expr_alt(node) {
-        Some(Num) => int_value(node, toks),
-        Some(Paren) => eval_first_child(node, toks),
-        Some(MulDiv) => fold_binary(node, toks),
-        Some(AddSub) => fold_binary(node, toks),
+fn eval_expr(s: &arith::CstStore, node: i32, toks: &arith::TokenStream) -> Result<i64, String> {
+    return match s.expr_alt(node) {
+        Some(Num) => int_value(s, node, toks),
+        Some(Paren) => eval_first_child(s, node, toks),
+        Some(MulDiv) => fold_binary(s, node, toks),
+        Some(AddSub) => fold_binary(s, node, toks),
         None => panic("expr: node has no stamped alternative"),
     };
 }
 ```
 
-`fold_binary` walks the node's children — sub-`expr` nodes (`CstChild::Node`)
-and the operator token (`CstChild::Token`, read with `toks.token_text(i)`) —
-and applies the operator. `int_value` reads a `Num` node's single `INT` token.
-The public entry point surfaces a syntax error — or a runtime error like
-division by zero — as `Err` instead of trapping:
+`fold_binary` walks the node's children with
+`for let mut c = s.first_child(node); c >= 0; c = s.next_sibling(c)`, matching
+each on `s.child_kind(c)` — sub-`expr` nodes (`Node`) and the operator token
+(`Token`, read with `toks.token_text(s.token_index(c))`) — and applies the
+operator. `int_value` reads a `Num` node's single `INT` token. The public entry
+point surfaces a syntax error — or a runtime error like division by zero — as
+`Err` instead of trapping:
 
 ```wado
 pub fn eval(input: &String) -> Result<i64, String> {
@@ -161,7 +171,7 @@ pub fn eval(input: &String) -> Result<i64, String> {
         let d = &result.diagnostics[0];
         return Result::Err(`{d.line}:{d.col}: {d.message}`);
     }
-    return eval_first_child(&result.root, &result.tokens);
+    return eval_first_child(&result.cst, 0, &result.tokens);
 }
 ```
 
@@ -241,11 +251,11 @@ let r = arith::parse(&"1 + 2 *");
 Recovery is three first-class edits, each representable in the tree, so the
 original tokens always round-trip:
 
-| Edit                       | Tree                                | Diagnostic code   |
-| -------------------------- | ----------------------------------- | ----------------- |
-| delete a spurious terminal | `<skip x>` (`CstChild::Skipped`)    | `ExtraToken`      |
-| insert a missing terminal  | `<missing X>` (`CstChild::Missing`) | `MissingToken`    |
-| skip an unrecoverable run  | `<error>` region (`K_ERROR` node)   | `UnexpectedToken` |
+| Edit                       | Store                             | Diagnostic code   |
+| -------------------------- | --------------------------------- | ----------------- |
+| delete a spurious terminal | `<skip x>` (`E_SKIP` row)         | `ExtraToken`      |
+| insert a missing terminal  | `<missing X>` (`E_MISS` row)      | `MissingToken`    |
+| skip an unrecoverable run  | `<error>` region (`K_ERROR` node) | `UnexpectedToken` |
 
 A token that doesn't start any alternative produces a `NoViableAlternative`
 diagnostic; the parser then folds the open nodes closed and carries on. The
@@ -258,16 +268,16 @@ partial tree.
 
 Every generated parser module exports, at minimum:
 
-| Item                                                       | What it is                                                     |
-| ---------------------------------------------------------- | -------------------------------------------------------------- |
-| `parse(input: &String) -> ParseResult`                     | parse from the start rule                                      |
-| `parse_<rule>(input) -> ParseResult`                       | parse starting from any rule                                   |
-| `tokenize(input: &String) -> TokenStream`                  | run only the lexer                                             |
-| `to_string_tree(result: &ParseResult) -> String`           | ANTLR4-style S-expression of the tree                          |
-| `ParseResult { root, tokens, diagnostics }`                | `.ok()` is true on a clean parse                               |
-| `CstNode` / `CstChild`                                     | the uniform parse tree (see above)                             |
-| `RK_<RULE>: NodeKind`                                      | node-kind constant for each rule (match on `node.kind`)        |
-| `<Rule>Alt` enum + `<rule>_alt(node) -> Option<<Rule>Alt>` | the matched `# Label`, for labeled rules (`None` if unstamped) |
+| Item                                                         | What it is                                                     |
+| ------------------------------------------------------------ | -------------------------------------------------------------- |
+| `parse(input: &String) -> ParseResult`                       | parse from the start rule                                      |
+| `parse_<rule>(input) -> ParseResult`                         | parse starting from any rule                                   |
+| `tokenize(input: &String) -> TokenStream`                    | run only the lexer                                             |
+| `to_string_tree(result: &ParseResult) -> String`             | ANTLR4-style S-expression of the tree                          |
+| `ParseResult { cst, tokens, diagnostics }`                   | `.ok()` is true on a clean parse                               |
+| `CstStore` + cursor methods                                  | the flat parse tree (see above)                                |
+| `RK_<RULE>: NodeKind`                                        | node-kind constant for each rule (match on `s.kind(node)`)     |
+| `<Rule>Alt` enum + `s.<rule>_alt(node) -> Option<<Rule>Alt>` | the matched `# Label`, for labeled rules (`None` if unstamped) |
 
 `Diagnostic` carries `line`, `col`, `message`, a `code`, and a severity
 (`is_error()`); a resilient parse reports recovery edits as `Missing` /

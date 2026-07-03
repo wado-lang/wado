@@ -8,8 +8,8 @@
 // `6 / 2 * 3` is `(6 / 2) * 3`.
 //
 // Because the rule is labeled, the generated parser exposes an `ExprAlt`
-// enum and an `expr_alt(node)` accessor; the interpreter in `eval.wado`
-// dispatches on those rather than inspecting tree shape.
+// enum and an `expr_alt` method on the CST store; the interpreter in
+// `eval.wado` dispatches on those rather than inspecting tree shape.
 grammar Arith;
 
 prog : expr EOF ;

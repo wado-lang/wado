@@ -265,7 +265,7 @@ generated file via `#include_str` in `gen_runtime` (`codegen.wado`), gated so a
 generated parser carries only the fragments it needs:
 
 - `lex.wado` (Span / LexerSlice / Token / ParseError), `diag.wado`
-  (`Diagnostic`), `tree.wado` (the untyped `CstNode` tree + `TreeBuilder` +
+  (`Diagnostic`), `tree.wado` (the flat `CstStore` + `TreeBuilder` +
   `NodeKind` + `to_string_tree`), and `tools.wado` (consumer-facing
   `normalize_tree` / `to_lexer_string`) are **always** emitted.
 - `follow.wado` only when lowering built a caller-FOLLOW gate (`emit_follow`).
