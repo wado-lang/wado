@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783081981285,
+  "lastUpdate": 1783083530081,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -37633,6 +37633,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e5788028cc4d6a58474f000265064fd6052f4b9d"
         },
         "date": 1783081980876,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15323,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287029,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "134be46a734d499b4cef9e50a804204d3316d8a2",
+          "message": "Merge pull request #1504 from wado-lang/claude/cbor-performance-optimization-6qa434\n\nperf(cbor): non-allocating decode + generalize labeled-block fusion to `?`",
+          "timestamp": "2026-07-03T21:46:32+09:00",
+          "tree_id": "6ca48174d3c6ec6c8dbf8c5024481b8207371a40",
+          "url": "https://github.com/wado-lang/wado/commit/134be46a734d499b4cef9e50a804204d3316d8a2"
+        },
+        "date": 1783083529809,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
