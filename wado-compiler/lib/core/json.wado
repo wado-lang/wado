@@ -1608,13 +1608,8 @@ impl DeserializeSeq for JsonSeqAccess {
             self.de.expect_char(',' as i32)?;
         }
         self.first = false;
-        return match T::deserialize(&mut self.de) {
-            Ok(v) => Result::Ok(Option::Some(v)),
-            Err(e) => {
-                builtin::cold_path();
-                Result::Err(e);
-            },
-        };
+        let v = T::deserialize(&mut self.de)?;
+        return Result::Ok(Option::Some(v));
     }
 
     fn end(&mut self) -> Result<(), DeserializeError> {
