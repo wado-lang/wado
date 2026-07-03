@@ -513,9 +513,7 @@ fn encode_options(
 ) -> Vec<u8> {
     let key = module_key(module);
     let Some(descriptor) = descriptors.get(&key) else {
-        // No descriptor yet (the CLI provider fills it in later): ship a
-        // valid empty CBOR map so the wire is always decodable, never a
-        // zero-length blob that fails `core:cbor::from_bytes`.
+        // The descriptor is filled in later by the CLI provider.
         return empty_options_canonical();
     };
 
@@ -528,8 +526,6 @@ fn encode_options(
                 }
             }
             errors.append(&mut errs);
-            // Validation already errored; ship a decodable empty map so a
-            // secondary CBOR-decode failure does not mask the real diagnostic.
             return empty_options_canonical();
         }
     };

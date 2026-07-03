@@ -534,8 +534,6 @@ mod tests {
 
     #[test]
     fn empty_options_is_the_empty_cbor_map() {
-        // The no-options wire form must be a decodable empty map (0xa0), not
-        // a zero-length blob that `core:cbor::from_bytes` rejects with EOF.
         assert_eq!(empty_options_canonical(), vec![0xa0]);
         assert_eq!(empty_options_canonical(), encode_options_canonical(&opts(vec![])));
         assert!(decode_map(&empty_options_canonical()).is_empty());
@@ -543,7 +541,6 @@ mod tests {
 
     #[test]
     fn cbor_negative_zero_canonicalizes_to_positive_zero() {
-        // +0.0 and -0.0 must produce identical bytes so they share a cache key.
         let pos = encode_options_canonical(&opts(vec![("z", CanonicalValue::F64(0.0))]));
         let neg = encode_options_canonical(&opts(vec![("z", CanonicalValue::F64(-0.0))]));
         assert_eq!(pos, neg);

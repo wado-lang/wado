@@ -1040,9 +1040,6 @@ async fn embed_wit_section(
         project,
         &base_path,
     );
-    // Thread the target world so the Kiln `Request<T>` adapter runs during
-    // this re-analysis; otherwise WIT emission sees the un-representable
-    // generic `Request<Options>` and skips the section (issue #1478).
     let sem = wado_compiler::semantics_for_world(
         &source,
         &host,

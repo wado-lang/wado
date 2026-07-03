@@ -127,9 +127,6 @@ pub async fn run(opts: WitOptions) -> Result<(), CliExit> {
     let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
     let host = FilesystemCompilerHost::new(base_path);
 
-    // Thread the target world so the Kiln `Request<T>` adapter runs, matching
-    // the compiled component's `generate(req: raw-request)` signature rather
-    // than the un-representable generic `Request<Options>` (issue #1478).
     let sem =
         wado_compiler::semantics_for_world(&source, &host, Some(&input), opts.world.as_deref())
             .await;

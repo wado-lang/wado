@@ -113,8 +113,6 @@ pub fn inject_kiln_request_adapter(
     let let_id = module.alloc_ast_id();
     let pattern_id = module.alloc_ast_id();
 
-    // `Request<T>` binds `T`; the bare `Request` form binds the default
-    // `NoOptions`, which the synthesis must materialize and import.
     let inner_type = match request_options {
         RequestOptions::Explicit(ty) => ty,
         RequestOptions::Default => {
@@ -196,11 +194,9 @@ enum RequestOptions {
 /// `RawRequest` form), which the pass leaves untouched.
 fn request_options_type(ty: &Type) -> Option<RequestOptions> {
     match ty {
-        // `Request<T>` — a `<...>` always parses as `Type::Generic`.
         Type::Generic(g) if g.name == "Request" && g.args.len() == 1 => {
             Some(RequestOptions::Explicit(g.args[0].clone()))
         }
-        // Bare `Request` (no angle brackets) parses as `Type::Named`.
         Type::Named(n) if n.name == "Request" => Some(RequestOptions::Default),
         _ => None,
     }

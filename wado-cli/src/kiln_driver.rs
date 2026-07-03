@@ -233,9 +233,6 @@ pub async fn execute_with_mode<H: CompilerHost>(
         inputs.push(file);
     }
 
-    // Canonical options are the deterministic CBOR bytes produced by
-    // `encode_options_canonical`; they cross the wire as `list<u8>` and the
-    // generator decodes them with `core:cbor::from_bytes`.
     let request = GeneratorRequest {
         primary,
         inputs,
@@ -1367,9 +1364,6 @@ fn typed_encode_options<H: CompilerHost>(
 ) {
     let _ = manifest;
     for inv in invocations.iter_mut() {
-        // Every invocation must ship a decodable CBOR document. When the
-        // descriptor is unavailable (skipped below), fall back to the empty
-        // map rather than the zero-length blob that fails `from_bytes`.
         if inv.options_canonical.is_empty() {
             inv.options_canonical = empty_options_canonical();
         }
@@ -1679,10 +1673,6 @@ mod tests {
             };
             let host = MockHost::new(&[("schema.proto", b"x"), ("dep.proto", b"y")], Ok(response));
             let mut inv = sample_invocation();
-            // Canonical options travel to the generator verbatim as the
-            // CBOR bytes `encode_options_canonical` produced (see WEP
-            // §"Protocol revision v0.2"). The wire field is `list<u8>`, so
-            // the exact bytes — here an opaque fixture — are forwarded as-is.
             inv.options_canonical = vec![0xa1, 0x61, b'k', 0x61, b'v'];
 
             runtime()

@@ -245,7 +245,6 @@ fn no_options_generator_compiles_and_runs() {
     let resolved = runtime()
         .block_on(async { provider.resolve(&module).await })
         .expect("no-options generator must compile");
-    // A generator with no `Options` struct extracts an empty descriptor.
     assert!(
         resolved
             .descriptor
@@ -261,9 +260,7 @@ fn no_options_generator_compiles_and_runs() {
             content: "syntax = \"proto3\";".to_string(),
         },
         inputs: vec![],
-        // The driver encodes absent options as an empty CBOR map (0xa0),
-        // which `bind_request::<NoOptions>` decodes back into `NoOptions`.
-        options: vec![0xa0],
+        options: vec![0xa0], // empty CBOR map
     };
     runtime()
         .block_on(async { host.run_generator(&resolved.wasm, request).await })
@@ -680,7 +677,7 @@ fn host_caches_compiled_component_across_run_generator_calls() {
             content: "syntax = \"proto3\";".to_string(),
         },
         inputs: vec![],
-        // CBOR for `{ verbose: false }`: map(1), text(7) "verbose", false.
+        // CBOR for `{ verbose: false }`.
         options: vec![0xa1, 0x67, b'v', b'e', b'r', b'b', b'o', b's', b'e', 0xf4],
     };
 
@@ -749,7 +746,7 @@ fn shared_kiln_cache_compiles_generator_once_across_hosts() {
             content: "syntax = \"proto3\";".to_string(),
         },
         inputs: vec![],
-        // CBOR for `{ verbose: false }`: map(1), text(7) "verbose", false.
+        // CBOR for `{ verbose: false }`.
         options: vec![0xa1, 0x67, b'v', b'e', b'r', b'b', b'o', b's', b'e', 0xf4],
     };
 

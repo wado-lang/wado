@@ -154,9 +154,6 @@ pub fn extract_options_descriptor(
         return Err(diagnostics);
     }
 
-    // A generator that takes no configuration may omit `pub struct Options`
-    // entirely; the empty descriptor then rejects any use-site `options`
-    // field and encodes to an empty CBOR map on the wire.
     let Some(options_struct) = tir_module.find_struct("Options") else {
         return Ok(OptionsDescriptor { fields: vec![] });
     };
