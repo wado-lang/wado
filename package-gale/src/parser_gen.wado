@@ -2896,6 +2896,7 @@ fn gen_parse_fn_named(
                         w.line(&`let mut vals = {vals_struct_name(rule)} \{\};`);
                     }
                     let body = rule_alt_body(lowered_rule, alt_index).unwrap();
+                    let after = rule_after_for(rule, lowered_rule, ctx);
                     gen_alt_body(
                         w,
                         &type_name,
@@ -2905,7 +2906,7 @@ fn gen_parse_fn_named(
                         body,
                         alt_index,
                         rule_alts_labeled(&rule.alternatives),
-                        &null,
+                        &after,
                         ctx,
                     );
                     w.end();
@@ -2995,6 +2996,24 @@ fn gen_parse_fn_named(
         if rule_emits_vals(ctx, rule) {
             w.line(&`let mut vals = {vals_struct_name(rule)} \{\};`);
         }
+        if ctx.emit_actions() {
+            if let Some(a) = &rule.init_action {
+                // `@init` shares the inner fn's `vals`. Overlap groups dispatch
+                // through `_alt_<n>` helpers that own a fresh `vals`, so an
+                // `@init` seeding the channel there would be lost — defer it
+                // loudly rather than drop a write. Side-effect-only `@init`
+                // (no channel) and the inlined dispatch are unaffected.
+                if has_overlaps && rule_emits_vals(ctx, rule) {
+                    ctx.warn(
+                        &`action {a.action_id}`,
+                        DiagnosticKind::UnsupportedAction,
+                        `@init on a value-channel rule with overlapping alternatives is not yet supported (its channel seed would not reach the per-alt helpers)`,
+                    );
+                } else {
+                    gen_action_body(w, a, ctx);
+                }
+            }
+        }
         if has_overlaps {
             gen_multi_alt_body_alt(
                 w,
@@ -3013,6 +3032,20 @@ fn gen_parse_fn_named(
         w.end();
         w.blank();
     }
+}
+
+/// The rule's `@after` prequel to run at the end of each alt body, or `null`.
+/// Emitted for multi-alt non-LR rules (each alt ends with it, so it runs once
+/// for the chosen alt); LR rules defer it (the atom's alt bodies must not carry
+/// a whole-expression `@after`). Single-alt rules pass their own directly.
+fn rule_after_for(rule: &ParserRule, lowered_rule: &Rule, ctx: &GenContext) -> Option<ActionSource> {
+    if !ctx.emit_actions() {
+        return null;
+    }
+    if let LeftRecursive(_) = lowered_rule {
+        return null;
+    }
+    return rule.after_action;
 }
 
 fn gen_alt_body(
@@ -3101,6 +3134,7 @@ fn gen_multi_alt_body(
         if ctx.is_trace() && !all_alts_are_single_token(&rule.alternatives) {
             w.line(&`trace_pick(p, &{str_lit(rule.name)}, {alt_index});`);
         }
+        let after = rule_after_for(rule, lowered_rule, ctx);
         gen_alt_body(
             w,
             type_name,
@@ -3110,7 +3144,7 @@ fn gen_multi_alt_body(
             body,
             alt_index,
             rule_alts_labeled(&rule.alternatives),
-            &null,
+            &after,
             ctx,
         );
         w.end();
@@ -7141,6 +7175,7 @@ fn gen_multi_alt_body_alt(
             if ctx.is_trace() && !all_alts_are_single_token(&rule.alternatives) {
                 w.line(&`trace_pick(p, &{str_lit(rule.name)}, {alt_index});`);
             }
+            let after = rule_after_for(rule, lowered_rule, ctx);
             gen_alt_body(
                 w,
                 type_name,
@@ -7150,7 +7185,7 @@ fn gen_multi_alt_body_alt(
                 body,
                 alt_index,
                 rule_alts_labeled(&rule.alternatives),
-                &null,
+                &after,
                 ctx,
             );
         } else {

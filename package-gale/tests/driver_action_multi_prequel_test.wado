@@ -1,0 +1,22 @@
+//! Stage C @init / @after on a multi-alt rule: @init runs once at rule entry
+//! before the dispatch, @after once after the chosen alt's body. Both share the
+//! rule's value channel with the selected alternative.
+
+use mp from "./grammars/wado_multi_prequel.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_multi_prequel",
+        },
+    };
+
+test "@init seeds, the chosen alt runs, @after reads on a multi-alt rule" {
+    let a = mp::parse(&"a");
+    assert a.ok(), "clean parse of a";
+    assert a.output == "iAa1", `output: '{a.output}'`;
+
+    let b = mp::parse(&"b");
+    assert b.ok(), "clean parse of b";
+    assert b.output == "iBa2", `output: '{b.output}'`;
+}
