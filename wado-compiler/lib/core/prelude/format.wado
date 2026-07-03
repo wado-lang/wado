@@ -373,8 +373,6 @@ impl Inspect for String {
     }
 }
 
-/// `never` is uninhabited, so no value ever reaches this body; it exists only
-/// so `Inspect` is total (e.g. `Result<T, !>::unwrap` can format its `Err`).
 impl Inspect for ! {
     pub fn inspect(&self, f: &mut Formatter) {
         unreachable();

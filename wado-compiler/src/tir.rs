@@ -2766,9 +2766,6 @@ impl TypeTable {
                 assoc_name
             )),
             ResolvedType::TypePack { name, .. } => TypeNameInfo::Named(format!("..{name}")),
-            // `never` gets a distinct identity so its mangled name agrees with
-            // its `Inspect` impl (`!^Inspect::inspect`); collapsing it into
-            // `Unknown` would name the dispatch `unknown^Inspect` and miss.
             ResolvedType::Never => TypeNameInfo::Named("!".to_string()),
             ResolvedType::Unknown | ResolvedType::Error => TypeNameInfo::Unknown,
         }
@@ -4191,9 +4188,6 @@ pub struct TirResource {
     pub name: String,
     pub visibility: crate::ast::Visibility,
     pub operations: Vec<TirEffectOp>,
-    /// `true` for generic resources (`resource Future<T>`), whose Inspect is
-    /// synthesized per instantiation; `false` for plain resources, which get a
-    /// single Inspect impl in the declaring module.
     pub is_generic: bool,
     pub span: Span,
 }

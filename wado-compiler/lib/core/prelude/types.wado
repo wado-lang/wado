@@ -84,8 +84,6 @@ impl Option<T> {
 }
 
 /// Cold slow path for `unwrap`/`expect` failures: traps with `{msg}: {value:?}`.
-/// Kept out of line (`#[inline(never)]`) so the whole `Formatter`/`Inspect`
-/// stack stays out of the callers, leaving them small and inlinable.
 #[inline(never)]
 internal fn unwrap_failed<V>(msg: String, value: V) -> ! {
     panic(`{msg}: {value:?}`);

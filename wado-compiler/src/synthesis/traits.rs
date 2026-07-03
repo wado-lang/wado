@@ -53,8 +53,7 @@ pub(crate) struct TraitsStdlibNames {
     /// `InspectAlt::inspect_alt` method name, resolved via the registry.
     pub inspect_alt_method: String,
     pub lower_hex: String,
-    /// `LowerHex::fmt` method name — used to render a resource's opaque i32
-    /// handle as hex in its synthesized Inspect (`Name#0x<hex>`).
+    /// `LowerHex::fmt` method name, resolved via the registry.
     pub lower_hex_method: String,
     pub less_name: String,
     pub less_index: u32,
@@ -1069,8 +1068,6 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
     let lower_hex_name = ctx.names.lower_hex.clone();
     let lower_hex_method = ctx.names.lower_hex_method.clone();
 
-    // Plain (non-generic) resources inspect as `Name#0x<hex>`; collected before
-    // borrowing `type_table` since the loop below builds the resource type.
     let resource_infos: Vec<(String, Span)> = module
         .resources
         .iter()
@@ -1323,7 +1320,6 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
                 // Tuple Inspect is provided by variadic impl in core:prelude/tuple.wado
             }
             _ => {
-                // Opaque/resource types (Future, Stream, etc.): `Name#0x<hex>`.
                 let type_name = tt.type_name(type_id);
                 generated.push(Rc::new(RefCell::new(generate_opaque_inspect_fn(
                     &base_name,
@@ -1351,8 +1347,6 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         }
     }
 
-    // Plain resources: one Inspect impl per declaration, in the declaring
-    // module (like structs/enums), rendering `Name#0x<hex>`.
     for (name, rspan) in &resource_infos {
         if ctx.has_methodful_impl_anywhere(name, &inspect_name) {
             continue;
@@ -2157,9 +2151,7 @@ fn generate_fn_canonical_dispatch_stub(
 
 /// Generate Inspect for opaque/resource types (Future, Stream, etc.).
 ///
-/// Body writes the opaque handle as `Name#0x<hex>` (WEP: Inspect > Resource),
-/// e.g. `Future<i32>#0x3`. The handle is the resource's underlying i32, cast
-/// out and rendered through `LowerHex::fmt`.
+/// Generate `Inspect` for an opaque resource handle, rendered as `Name#0x<hex>`.
 #[allow(clippy::too_many_arguments)]
 fn generate_opaque_inspect_fn(
     base_name: &str,

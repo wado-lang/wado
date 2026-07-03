@@ -1,6 +1,4 @@
-// `never` (`!`) is inspectable (unreachable body), so `Inspect` is total:
-// `Result<T, !>::unwrap()` type-checks its `Err` arm's `{e:?}` and runs.
-// The `Err(!)` case is uninhabited, so the inspect body never executes.
+// `never` (`!`) is inspectable, so `Result<T, !>::unwrap()` type-checks and runs.
 export fn run() {
     let r: Result<i32, !> = Result::<i32, !>::Ok(5);
     assert r.unwrap() == 5;
