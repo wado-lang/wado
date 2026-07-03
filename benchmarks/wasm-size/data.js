@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783070429694,
+  "lastUpdate": 1783081981285,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -37589,6 +37589,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ed1bbfd0b29c6c5abd7c432617b64ac2c8b821fa"
         },
         "date": 1783070429020,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15323,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287029,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e5788028cc4d6a58474f000265064fd6052f4b9d",
+          "message": "Merge pull request #1503 from wado-lang/claude/package-gale-action-predicate-o8whr7\n\nfeat(gale): prediction-time gating of alt-initial semantic predicates",
+          "timestamp": "2026-07-03T21:24:27+09:00",
+          "tree_id": "f9864011661cbefd207eeaea03c03f85f9d034b8",
+          "url": "https://github.com/wado-lang/wado/commit/e5788028cc4d6a58474f000265064fd6052f4b9d"
+        },
+        "date": 1783081980876,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
