@@ -3104,6 +3104,14 @@ fn gen_parse_fn_named(
         if ctx.emit_follow() {
             add_follow_param(&mut f);
         }
+        // The atom is the LR rule's primary alt body, so — like any alt body —
+        // it receives the invocation's seeded `vals` (rule args + `@init`)
+        // rather than minting its own, keeping value continuity into the
+        // primary alt's action (`$v` sees the `@init` seed). Placed before the
+        // defaulted `min_prec` so it stays a required positional argument.
+        if rule_emits_vals(ctx, rule) {
+            f.add_param(&"vals", &vals_struct_name(rule));
+        }
         // The atom carries `min_prec` so a non-greedy `??` inside it predicts
         // against the rule's invocation precedence (`atn_optional_enter_cond`
         // reads it). Defaulted, so non-precedence call sites are unaffected.
@@ -3118,7 +3126,7 @@ fn gen_parse_fn_named(
             w.line(&"let start = p.peek_start();");
         }
         if rule_emits_vals(ctx, rule) {
-            w.line(&`let mut vals = {vals_struct_name(rule)} \{\};`);
+            w.line(&"let mut vals = vals;");
         }
         if has_overlaps {
             gen_multi_alt_body_alt(
@@ -4140,10 +4148,28 @@ fn gen_lr_fn(
     w.line(&"let _cp = p.b.checkpoint();");
     w.line(&"let _start = p.peek_start();");
     w.line(&`p.b.start_node({rk}, _start);`);
+    // Seed the invocation's `vals` at rule entry (rule args, then `@init`), as
+    // ANTLR's `enterRecursionRule` seeds the primary context. The atom receives
+    // it, so `@init`'s `$v` reaches the primary alt's action; each LR
+    // continuation then opens a new context with its own fresh `vals`. `mut`
+    // only when something in this fn writes it (`@init`, args, or the `@after`
+    // reassignment); a plain value-channel LR rule just passes it through.
+    if emits_vals {
+        let entry_needs_mut = ctx.emit_actions()
+            && (rule.init_action matches { Some(_) } || rule.after_action matches { Some(_) } || rule_threads_args(rule));
+        let mut_kw = if entry_needs_mut { "mut " } else { "" };
+        w.line(&`let {mut_kw}vals = {vals_struct_name(rule)} \{\};`);
+    }
+    if ctx.emit_actions() {
+        emit_arg_stores(w, rule, ctx);
+        if let Some(a) = &rule.init_action {
+            gen_action_body(w, a, ctx);
+        }
+    }
     // The atom seeds the accumulator (the left operand's value); each LR
     // continuation folds a right operand into it (`emit_lr_branch_body`).
     if emits_vals {
-        w.line(&`let mut _lr_acc = {*fn_name}_atom(p{fsep}, min_prec);`);
+        w.line(&`let mut _lr_acc = {*fn_name}_atom(p{fsep}, vals, min_prec);`);
     } else {
         w.line(&`{*fn_name}_atom(p{fsep}, min_prec);`);
     }
@@ -4156,11 +4182,7 @@ fn gen_lr_fn(
     // `atn_lr_loop_decision`, so the per-branch precedence gate is dropped.
     if atn_class && loop_dec >= 0 {
         gen_lr_fn_atn(w, rule, lr_alts, lr_dispatch, ctx, &rk, loop_dec);
-        if emits_vals {
-            w.line(&"return _lr_acc;");
-        } else {
-            w.line(&"return;");
-        }
+        emit_lr_after_return(w, rule, emits_vals, ctx);
         w.end();
         w.blank();
         return;
@@ -4203,13 +4225,36 @@ fn gen_lr_fn(
         w.end();
     }
     w.end();
-    if emits_vals {
-        w.line(&"return _lr_acc;");
-    } else {
-        w.line(&"return;");
-    }
+    emit_lr_after_return(w, rule, emits_vals, ctx);
     w.end();
     w.blank();
+}
+
+/// Emit an LR rule's exit: bind the final accumulated `vals` (so `@after`'s
+/// `$v` reads the whole expression's value), run `@after`, and return. ANTLR
+/// runs `@after` once at `exitRule`, on the outermost (final) context. For a
+/// channel-less rule this is just the `@after` side effect and a bare return.
+fn emit_lr_after_return(w: &mut CodeWriter, rule: &ParserRule, emits_vals: bool, ctx: &mut GenContext) {
+    let has_after = ctx.emit_actions() && rule.after_action matches { Some(_) };
+    if emits_vals && has_after {
+        // `@after` reads (and may write) the final value under the name `vals`.
+        // The entry `vals` is still in scope (value semantics copied it into the
+        // atom call), so reassign rather than redeclare.
+        w.line(&"vals = _lr_acc;");
+        if let Some(a) = &rule.after_action {
+            gen_action_body(w, a, ctx);
+        }
+        w.line(&"return vals;");
+    } else if emits_vals {
+        w.line(&"return _lr_acc;");
+    } else {
+        if let Some(a) = &rule.after_action {
+            if ctx.emit_actions() {
+                gen_action_body(w, a, ctx);
+            }
+        }
+        w.line(&"return;");
+    }
 }
 
 /// ATN-class LR loop: the runtime simulator picks the suffix

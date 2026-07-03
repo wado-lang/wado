@@ -1,4 +1,4 @@
-#![generated(by = "gale", sources = ["tests/grammars/wado_lr_vals.g4"])]
+#![generated(by = "gale", sources = ["tests/grammars/wado_lr_prequel.g4"])]
 
 // Grammar metadata from source .g4 prequels:
 //   option language = Wado
@@ -1227,8 +1227,7 @@ pub global TK_INT: i32 = 0;
 pub global TK_WS: i32 = 1;
 pub global TK_EOF: i32 = 2;
 pub global TK_ERROR: i32 = 3;
-pub global TK_LIT_STAR: i32 = 4;
-pub global TK_LIT_PLUS: i32 = 5;
+pub global TK_LIT_PLUS: i32 = 4;
 
 struct Lexer {
     chars: List<char>,
@@ -1275,12 +1274,6 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_lit_star(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '*' { return -1; }
-    return pos + 1;
-}
-
 fn try_lit_plus(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '+' { return -1; }
@@ -1300,9 +1293,6 @@ pub fn tokenize(input: &String) -> TokenStream {
         if first_char == ' ' {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char == '*' {
-            end = try_lit_star(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_STAR; }
         } else if first_char == '+' {
             end = try_lit_plus(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_PLUS; }
@@ -1339,7 +1329,6 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_WS => "WS",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_STAR => "TK_LIT_STAR",
         TK_LIT_PLUS => "TK_LIT_PLUS",
         _ => "Unknown",
     };
@@ -1690,15 +1679,6 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_e_lr_0(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { return -1; }
-    pos += 1;
-    pos = scan_e(tokens, pos, 3);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_e_lr_1(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { return -1; }
     pos += 1;
     pos = scan_e(tokens, pos, 2);
@@ -1712,18 +1692,10 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         let _lr_pos0 = pos;
-        if suffix_kind == TK_LIT_STAR {
-            if 2 >= min_prec {
-                let lr_saved_pos = pos;
-                pos = scan_e_lr_0(tokens, pos);
-                if pos < 0 { pos = lr_saved_pos; break; }
-            } else {
-                break;
-            }
-        } else if suffix_kind == TK_LIT_PLUS {
+        if suffix_kind == TK_LIT_PLUS {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_1(tokens, pos);
+                pos = scan_e_lr_0(tokens, pos);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -1742,7 +1714,7 @@ fn _parse_s__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     let x = _parse_e(p);
     if !p.speculating {
-         p.emit(`={x.v}`); 
+         p.emit(`v={x.v} `); 
     }
     return;
 }
@@ -1765,7 +1737,7 @@ fn _parse_e__inner_atom(p: &mut Parser, vals: EVals, min_prec: i32 = 0) -> EVals
     if kind == TK_INT {
         let n = p.expect(TK_INT, &EMPTY_SYNC);
         if !p.speculating {
-             vals.v = p.token_int(n); 
+             vals.v = p.token_int(n) + vals.v; 
         }
         return vals;
     }
@@ -1781,33 +1753,18 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> EVals {
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_E, _start);
-    let vals = EVals {};
+    let mut vals = EVals {};
+    if !p.speculating {
+         vals.v = 1000; 
+    }
     let mut _lr_acc = _parse_e__inner_atom(p, vals, min_prec);
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }
         let _sk = p.peek_kind();
-        if _sk == TK_LIT_STAR {
-            if 2 >= min_prec {
-                if scan_e_lr_0(&p.kinds, p.pos) < 0 {
-                    break;
-                }
-                p.b.start_node_at(_cp, RK_E, _start);
-                let l = _lr_acc;
-                let mut vals = EVals {};
-                let star = p.expect(TK_LIT_STAR, &EMPTY_SYNC);
-                let r = _parse_e(p, 3);
-                if !p.speculating {
-                     vals.v = l.v * r.v; 
-                }
-                p.b.finish_node(p.last_end());
-                _lr_acc = vals;
-            } else {
-                break;
-            }
-        } else if _sk == TK_LIT_PLUS {
+        if _sk == TK_LIT_PLUS {
             if 1 >= min_prec {
-                if scan_e_lr_1(&p.kinds, p.pos) < 0 {
+                if scan_e_lr_0(&p.kinds, p.pos) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -1827,7 +1784,11 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> EVals {
             break;
         }
     }
-    return _lr_acc;
+    vals = _lr_acc;
+    if !p.speculating {
+         p.emit(`[after={vals.v}]`); 
+    }
+    return vals;
 }
 
 fn _parse_e(p: &mut Parser, min_prec: i32 = 0) -> EVals {
@@ -1869,16 +1830,16 @@ pub fn parse_e(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 }
 
 pub fn to_string_tree(result: &ParseResult) -> String {
-    let mut token_names: List<String> = List::with_capacity(6);
-    for let mut k = 0; k < 6; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(5);
+    for let mut k = 0; k < 5; k += 1 {
         token_names.push(token_kind_name(k));
     }
     return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &token_names);
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
-    let mut token_names: List<String> = List::with_capacity(6);
-    for let mut k = 0; k < 6; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(5);
+    for let mut k = 0; k < 5; k += 1 {
         token_names.push(token_kind_name(k));
     }
     let mut _kind: i32 = -1;
