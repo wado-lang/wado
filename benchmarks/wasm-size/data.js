@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783069641813,
+  "lastUpdate": 1783070429694,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -37565,6 +37565,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 288526,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ed1bbfd0b29c6c5abd7c432617b64ac2c8b821fa",
+          "message": "Merge pull request #1501 from wado-lang/claude/flat-event-stream-cst-butw2n\n\nperf(gale)!: flat event-stream CST (SSOT)",
+          "timestamp": "2026-07-03T17:58:49+09:00",
+          "tree_id": "adf0bc417be249f5eb36e5cccfdfc2a6cf7e2ec3",
+          "url": "https://github.com/wado-lang/wado/commit/ed1bbfd0b29c6c5abd7c432617b64ac2c8b821fa"
+        },
+        "date": 1783070429020,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15323,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287029,
             "unit": "bytes"
           }
         ]
