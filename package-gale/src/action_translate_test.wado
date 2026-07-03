@@ -2,6 +2,7 @@ use {
     translate_wado_action,
     rule_value_channel_ready,
     rule_returns_vals,
+    rule_is_left_recursive,
     vals_struct_name,
     wado_type_default,
 } from "./action_translate.wado";
@@ -81,13 +82,13 @@ ID : [a-z]+ ;
     assert out == " print(p.token_text(my_tok)); ", `out: '{out}'`;
 }
 
-test "translate rejects a cross-rule member when the child returns no vals" {
+test "translate rejects a cross-rule member when the child has no channel" {
     let g = parse("grammar T;
 r : a=e { print($a.v); } ;
-e returns [i32 v] : A | B ;
+e : A | B ;
 ").unwrap();
     let res = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" print($a.v); ", false, false);
-    assert res.is_err(), "cross-rule member on a non-vals child must be an error";
+    assert res.is_err(), "cross-rule member on a channel-less child must be an error";
 }
 
 test "translate rejects a value-channel field with a non-Wado type" {
@@ -114,9 +115,18 @@ plain : ID ;
 ").unwrap();
     assert rule_value_channel_ready(&g.parser_rules[0]), "r declares a defaultable channel";
     assert rule_returns_vals(&g.parser_rules[0]), "single-alt r returns vals";
-    assert !rule_returns_vals(&g.parser_rules[1]), "multi-alt rule does not return vals yet";
+    assert rule_returns_vals(&g.parser_rules[1]), "multi-alt non-LR rule returns vals";
     assert !rule_value_channel_ready(&g.parser_rules[2]), "plain has no channel";
     assert vals_struct_name(&g.parser_rules[0]) == "RVals", `name: {vals_struct_name(&g.parser_rules[0])}`;
+}
+
+test "left-recursive rules are excluded from the value channel" {
+    let g = parse("grammar T;
+e returns [i32 v] : e '+' e | INT ;
+").unwrap();
+    assert rule_value_channel_ready(&g.parser_rules[0]), "e declares a defaultable channel";
+    assert rule_is_left_recursive(&g.parser_rules[0]), "e is left-recursive";
+    assert !rule_returns_vals(&g.parser_rules[0]), "LR rule value channel is not yet threaded";
 }
 
 test "wado_type_default covers the corpus surface" {

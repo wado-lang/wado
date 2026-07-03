@@ -1,0 +1,26 @@
+//! Stage C multi-alt value channel: a non-LR multi-alt rule with `returns`
+//! threads a `<Rule>Vals` through its token-led dispatch — each alt writes its
+//! own `$v` — and a caller reads it cross-rule via `$e.v`.
+
+use mv from "./grammars/wado_multi_vals.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_multi_vals",
+        },
+    };
+
+test "each multi-alt writes its own value channel" {
+    let a = mv::parse(&"a");
+    assert a.ok(), "clean parse of a";
+    assert a.output == "v=1", `output: '{a.output}'`;
+
+    let b = mv::parse(&"b");
+    assert b.ok(), "clean parse of b";
+    assert b.output == "v=2", `output: '{b.output}'`;
+
+    let c = mv::parse(&"c");
+    assert c.ok(), "clean parse of c";
+    assert c.output == "v=3", `output: '{c.output}'`;
+}

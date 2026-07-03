@@ -2825,7 +2825,7 @@ fn gen_parse_fn_named(
     // construction instead of an N-way `if kind == TK_X` cascade. The scan
     // side already collapses these (`gen_scan_function_named`); the result is
     // far smaller and no slower than the cascade.
-    if all_alts_are_single_token(&rule.alternatives) && !rule_has_emittable_actions(rule, ctx) {
+    if all_alts_are_single_token(&rule.alternatives) && !rule_has_emittable_actions(rule, ctx) && !rule_emits_vals(ctx, rule) {
         gen_parse_fn_single_token(w, rule, ctx, fn_name);
         return;
     }
@@ -2889,9 +2889,12 @@ fn gen_parse_fn_named(
                     if ctx.emit_follow() {
                         add_follow_param(&mut f);
                     }
-                    f.set_return_type(&rule_result_type());
+                    f.set_return_type(&rule_result_type_for(rule, ctx));
                     f.emit_begin(w);
                     w.line(&"let start = p.peek_start();");
+                    if rule_emits_vals(ctx, rule) {
+                        w.line(&`let mut vals = {vals_struct_name(rule)} \{\};`);
+                    }
                     let body = rule_alt_body(lowered_rule, alt_index).unwrap();
                     gen_alt_body(
                         w,
@@ -2984,10 +2987,13 @@ fn gen_parse_fn_named(
         if ctx.emit_follow() {
             add_follow_param(&mut f);
         }
-        f.set_return_type(&rule_result_type());
+        f.set_return_type(&rule_result_type_for(rule, ctx));
         f.emit_begin(w);
         if needs_start {
             w.line(&"let start = p.peek_start();");
+        }
+        if rule_emits_vals(ctx, rule) {
+            w.line(&`let mut vals = {vals_struct_name(rule)} \{\};`);
         }
         if has_overlaps {
             gen_multi_alt_body_alt(
@@ -3432,8 +3438,19 @@ fn gen_predicate_gated_dispatch(
     }
     w.else_begin(&"else");
     w.line(&`p.no_viable("no viable alternative", p.peek_span(), []);`);
-    w.line(&"return;");
+    emit_no_viable_return(w, ctx);
     w.end();
+}
+
+/// Return statement after a `no_viable` in a rule body: `return vals;` when the
+/// rule exposes a value channel (so a `Default`-init struct flows back), else
+/// `return;`.
+fn emit_no_viable_return(w: &mut CodeWriter, ctx: &GenContext) {
+    if current_rule_emits_vals(ctx) {
+        w.line(&"return vals;");
+    } else {
+        w.line(&"return;");
+    }
 }
 
 /// Emit a gated branch body: the trace pick and the tail call into the alt.
@@ -6771,7 +6788,7 @@ fn emit_spec_alt_try(w: &mut CodeWriter, call: &String, idx: i32, ctx: &GenConte
     if ctx.is_trace() {
         w.line(&`trace_try(p, &{str_lit(*rule_display)}, {idx}, true);`);
     }
-    w.line(&"return;");
+    emit_no_viable_return(w, ctx);
     w.end();
 }
 
@@ -7276,7 +7293,11 @@ fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
     w.write(&"],\n");
     w.dedent();
     w.line(&");");
-    w.line(&"return;");
+    if current_rule_emits_vals(ctx) {
+        w.line(&"return vals;");
+    } else {
+        w.line(&"return;");
+    }
 }
 
 fn find_needed_depth(all_position_sets: &List<List<List<String>>>) -> i32 {
