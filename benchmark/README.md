@@ -167,8 +167,8 @@ Parse 81 SQL statements (13366 bytes). Gale-generated parser vs sqlparser-rs.
 
 | Implementation      | Throughput | ms/iter  | vs best |
 | ------------------- | ---------- | -------- | ------- |
-| Rust (sqlparser-rs) | 8.14 MB/s  | 1.642 ms | 1.00x   |
-| **Wado** (Gale)     | 4.73 MB/s  | 2.825 ms | 1.72x   |
+| Rust (sqlparser-rs) | 7.86 MB/s  | 1.701 ms | 1.00x   |
+| **Wado** (Gale)     | 5.31 MB/s  | 2.516 ms | 1.48x   |
 
 ### Syntax Highlight
 
@@ -186,12 +186,12 @@ reference SQL highlighters:
 
 | Implementation               | Throughput  | ms/iter   | vs best |
 | ---------------------------- | ----------- | --------- | ------- |
-| JavaScript (Prism)           | 10.86 MB/s  | 1.230 ms  | 1.00x   |
-| JavaScript (Lezer)           | 3.33 MB/s   | 4.014 ms  | 3.26x   |
-| Rust (tree-sitter)           | 2.85 MB/s   | 4.694 ms  | 3.81x   |
-| **Wado** (Gale)              | 2.64 MB/s   | 5.062 ms  | 4.11x   |
-| JavaScript (web-tree-sitter) | 1.83 MB/s   | 7.286 ms  | 5.93x   |
-| JavaScript (Shiki)           | 711.07 KB/s | 18.797 ms | 15.27x  |
+| JavaScript (Prism)           | 9.07 MB/s   | 1.474 ms  | 1.00x   |
+| **Wado** (Gale)              | 3.88 MB/s   | 3.446 ms  | 2.34x   |
+| JavaScript (Lezer)           | 2.74 MB/s   | 4.874 ms  | 3.31x   |
+| Rust (tree-sitter)           | 2.69 MB/s   | 4.962 ms  | 3.37x   |
+| JavaScript (web-tree-sitter) | 1.58 MB/s   | 8.482 ms  | 5.74x   |
+| JavaScript (Shiki)           | 639.48 KB/s | 20.901 ms | 14.52x  |
 
 ## Application Server
 
