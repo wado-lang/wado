@@ -15,6 +15,7 @@ use {
     Element,
     RepeatElement,
     LabelElement,
+    AltAction,
 } from "./ir.wado";
 use { literal_const_name, gen_visibility_comment } from "./gen_util.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec, Vis, char_lit, char_range_pat } from "./wadopoet.wado";
@@ -295,8 +296,9 @@ pub fn gen_lexer(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitTok
     let empty_opts: List<GrammarOption> = [];
     let grammar_ci = resolve_ci(&grammar.options, &empty_opts);
     let keywords = collect_keyword_rules(&grammar.lexer_rules, &grammar.options);
+    let ea = grammar.action_language matches { Wado };
     gen_lexer_struct(w);
-    gen_lexer_match_fns(w, &grammar.lexer_rules, &keywords, lit_tokens, &grammar.options, atn_class);
+    gen_lexer_match_fns(w, &grammar.lexer_rules, &keywords, lit_tokens, &grammar.options, atn_class, ea);
     gen_literal_match_fns(w, lit_tokens, grammar_ci);
     gen_keyword_classifier_fn(w, &keywords);
     gen_tokenize_fn(w, &grammar.lexer_rules, lit_tokens, &grammar.mode_names, &keywords, &grammar.options);
@@ -348,6 +350,7 @@ fn gen_lexer_match_fns(
     lit_tokens: &List<LitToken>,
     grammar_opts: &List<GrammarOption>,
     atn_class: &TreeMap<String, i32>,
+    ea: bool,
 ) {
     let empty_opts: List<GrammarOption> = [];
     let grammar_ci = resolve_ci(grammar_opts, &empty_opts);
@@ -359,7 +362,7 @@ fn gen_lexer_match_fns(
         } else if !rule.is_fragment {
             if !is_keyword_rule_name(&rule.name, keywords)
                 && !is_literal_duplicate(rule, lit_tokens, grammar_opts, grammar_ci) {
-                gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts, atn_class);
+                gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts, atn_class, ea);
             }
         } else if fragment_is_recursive(rule, lexer_rules) {
             // A recursive fragment needs its own `try_*` matcher (non-
@@ -367,7 +370,7 @@ fn gen_lexer_match_fns(
             // resolves case-insensitivity from `resolve_ci(grammar_opts,
             // &rule.options)`, so a rule-level `options { caseInsensitive=... }`
             // on the fragment overrides the grammar-level flag.
-            gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts, atn_class);
+            gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts, atn_class, ea);
         }
     }
 }
@@ -445,6 +448,7 @@ fn gen_lexer_match_fn(
     all_rules: &List<LexerRule>,
     grammar_opts: &List<GrammarOption>,
     atn_class: &TreeMap<String, i32>,
+    ea: bool,
 ) {
     let fn_name = lexer_try_fn_name(&rule.name);
     let ci = resolve_ci(grammar_opts, &rule.options);
@@ -464,7 +468,12 @@ fn gen_lexer_match_fn(
     }
     w.line(&"let mut pos = start;");
     if rule.body.len() == 1 {
+        // Alt-initial semantic predicate (`{cond}? ...`): gate before matching.
+        gen_lexer_rule_predicates(w, &rule.body[0].actions, 0, ea);
         gen_lexer_alt_seq(w, &rule.body[0], all_rules, &"return -1", ci);
+        // Trailing predicate (`... {cond}?`): gate the completed match, so a
+        // false predicate rejects the rule and the tokenizer tries the next.
+        gen_lexer_rule_predicates(w, &rule.body[0].actions, rule.body[0].elements.len(), ea);
         w.line(&"return pos;");
     } else {
         gen_lexer_alts(w, &rule.body, all_rules, &"return -1", ci);
@@ -472,6 +481,28 @@ fn gen_lexer_match_fn(
     }
     w.end();
     w.blank();
+}
+
+/// Emit each semantic predicate at position `before` as a `pos`-rejecting guard
+/// (`if !(cond) { return -1; }`) in a lexer rule's match fn. The condition is
+/// Wado (identity translator) with `chars` / `start` / `pos` in scope. Only
+/// alt-initial (`before == 0`) and trailing (`before == elements.len()`)
+/// predicates on single-alt rules are placed today; mid-alt and multi-alt
+/// lexer predicates are not yet emitted. A `$`-referencing condition is left
+/// verbatim (surfacing loudly in the generated module) pending lexer attribute
+/// resolution.
+fn gen_lexer_rule_predicates(w: &mut CodeWriter, actions: &List<AltAction>, before: i32, ea: bool) {
+    if !ea {
+        return;
+    }
+    for let a of actions {
+        if a.before_index != before {
+            continue;
+        }
+        if a.kind matches { Predicate } {
+            w.line(&`if !({a.source.text}) \{ return -1; \}`);
+        }
+    }
 }
 
 fn gen_lexer_alts(
