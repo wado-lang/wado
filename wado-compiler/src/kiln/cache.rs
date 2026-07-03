@@ -460,21 +460,52 @@ mod tests {
         }
     }
 
-    use serde_cbor::Value as Cbor;
-
-    /// Decode the encoder's output with an independent CBOR reader
-    /// (`serde_cbor`) and return the top-level map. Verifying against a real
-    /// decoder — rather than hand-written byte literals — checks that the
-    /// output is well-formed CBOR that `core:cbor::from_bytes` can read.
-    fn decode_map(bytes: &[u8]) -> std::collections::BTreeMap<Cbor, Cbor> {
-        match serde_cbor::from_slice::<Cbor>(bytes).expect("encoder emits valid CBOR") {
-            Cbor::Map(m) => m,
-            other => panic!("expected a CBOR map, got {other:?}"),
-        }
+    /// A decoded CBOR value, just rich enough for the encoder assertions.
+    #[derive(Debug, PartialEq)]
+    enum Cbor {
+        Bool(bool),
+        Int(i64),
+        Float(f64),
+        Text(String),
+        Map(std::collections::BTreeMap<String, Cbor>),
     }
 
-    fn key(s: &str) -> Cbor {
-        Cbor::Text(s.to_string())
+    /// Decode the encoder's output by reading it back with `minicbor`'s
+    /// `Decoder` — an encode/decode split that still checks the bytes are
+    /// well-formed CBOR (the cross-implementation guarantee that
+    /// `core:cbor::from_bytes` accepts them is covered end-to-end by the
+    /// generator tests).
+    fn decode_map(bytes: &[u8]) -> std::collections::BTreeMap<String, Cbor> {
+        let mut dec = minicbor::Decoder::new(bytes);
+        let map = decode_map_inner(&mut dec);
+        assert_eq!(dec.position(), bytes.len(), "trailing bytes after map");
+        map
+    }
+
+    fn decode_map_inner(dec: &mut minicbor::Decoder<'_>) -> std::collections::BTreeMap<String, Cbor> {
+        let len = dec
+            .map()
+            .expect("expected a CBOR map")
+            .expect("map must be definite-length");
+        let mut out = std::collections::BTreeMap::new();
+        for _ in 0..len {
+            let k = dec.str().expect("map key must be text").to_string();
+            out.insert(k, decode_value(dec));
+        }
+        out
+    }
+
+    fn decode_value(dec: &mut minicbor::Decoder<'_>) -> Cbor {
+        use minicbor::data::Type;
+        match dec.datatype().expect("valid CBOR datatype") {
+            Type::Bool => Cbor::Bool(dec.bool().unwrap()),
+            Type::U8 | Type::U16 | Type::U32 | Type::U64 => Cbor::Int(dec.u64().unwrap() as i64),
+            Type::I8 | Type::I16 | Type::I32 | Type::I64 => Cbor::Int(dec.i64().unwrap()),
+            Type::F16 | Type::F32 | Type::F64 => Cbor::Float(dec.f64().unwrap()),
+            Type::String => Cbor::Text(dec.str().unwrap().to_string()),
+            Type::Map => Cbor::Map(decode_map_inner(dec)),
+            other => panic!("unexpected CBOR type {other:?}"),
+        }
     }
 
     #[test]
@@ -490,15 +521,15 @@ mod tests {
             ("u", CanonicalValue::U64(42)),
         ]));
         let m = decode_map(&bytes);
-        assert_eq!(m[&key("flag")], Cbor::Bool(true));
-        assert_eq!(m[&key("n")], Cbor::Integer(-7));
-        assert_eq!(m[&key("u")], Cbor::Integer(42));
+        assert_eq!(m["flag"], Cbor::Bool(true));
+        assert_eq!(m["n"], Cbor::Int(-7));
+        assert_eq!(m["u"], Cbor::Int(42));
     }
 
     #[test]
     fn cbor_f64_decodes_as_float() {
         let bytes = encode_options_canonical(&opts(vec![("ratio", CanonicalValue::F64(5.5))]));
-        assert_eq!(decode_map(&bytes)[&key("ratio")], Cbor::Float(5.5));
+        assert_eq!(decode_map(&bytes)["ratio"], Cbor::Float(5.5));
     }
 
     #[test]
@@ -525,8 +556,8 @@ mod tests {
             ("style", CanonicalValue::Enum("Rpc".to_string())),
         ]));
         let m = decode_map(&bytes);
-        assert_eq!(m[&key("msg")], Cbor::Text("a\"b".to_string()));
-        assert_eq!(m[&key("style")], Cbor::Text("Rpc".to_string()));
+        assert_eq!(m["msg"], Cbor::Text("a\"b".to_string()));
+        assert_eq!(m["style"], Cbor::Text("Rpc".to_string()));
     }
 
     #[test]
@@ -540,11 +571,8 @@ mod tests {
         let bytes_c =
             encode_options_canonical(&opts(vec![("a", CanonicalValue::String(composed.into()))]));
         assert_ne!(bytes_d, bytes_c, "NFC vs NFD must survive the encoder");
-        assert_eq!(
-            decode_map(&bytes_d)[&key("a")],
-            Cbor::Text(decomposed.into())
-        );
-        assert_eq!(decode_map(&bytes_c)[&key("a")], Cbor::Text(composed.into()));
+        assert_eq!(decode_map(&bytes_d)["a"], Cbor::Text(decomposed.into()));
+        assert_eq!(decode_map(&bytes_c)["a"], Cbor::Text(composed.into()));
     }
 
     #[test]
@@ -562,7 +590,7 @@ mod tests {
         assert_eq!(a, b, "reordered fields must hash-encode identically");
         let m = decode_map(&a);
         assert_eq!(m.len(), 3);
-        assert_eq!(m[&key("alpha")], Cbor::Integer(2));
+        assert_eq!(m["alpha"], Cbor::Int(2));
     }
 
     #[test]
@@ -576,8 +604,8 @@ mod tests {
             ),
         ]));
         let m = decode_map(&bytes);
-        assert!(!m.contains_key(&key("dropped")), "None field is omitted");
-        assert_eq!(m[&key("wrapped")], Cbor::Text("x".to_string()));
+        assert!(!m.contains_key("dropped"), "None field is omitted");
+        assert_eq!(m["wrapped"], Cbor::Text("x".to_string()));
         assert_eq!(m.len(), 2);
     }
 
@@ -590,10 +618,10 @@ mod tests {
                 ("x".to_string(), CanonicalValue::I64(1)),
             ]),
         )]));
-        let Cbor::Map(inner) = &decode_map(&bytes)[&key("nested")] else {
+        let Cbor::Map(inner) = &decode_map(&bytes)["nested"] else {
             panic!("nested value must be a map");
         };
-        assert_eq!(inner[&key("x")], Cbor::Integer(1));
-        assert_eq!(inner[&key("y")], Cbor::Integer(2));
+        assert_eq!(inner["x"], Cbor::Int(1));
+        assert_eq!(inner["y"], Cbor::Int(2));
     }
 }
