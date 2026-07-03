@@ -82,6 +82,11 @@ Result vs the old node tree (dev host, `benchmark-syntax-highlight`):
 | `null` (no GC)      |       8.0 |        5.8 |          ~1.4× |
 | GC portion          |      21.5 |        4.1 | **~5.2× less** |
 
+On the **release** host the same change is only **~1.47×** (5.06 → 3.45 ms/iter,
+`benchmark/README.md`) — the dev multiple is GC-inflated (see the standing rule
+below). Still enough to move Gale from 4th to 2nd place, ahead of native
+tree-sitter and Lezer.
+
 The residual ~4.1 ms GC is highlight's own captures/HTML allocation (the profile
 below and "What's next: Highlight"), not the CST — `sqlite_parse` (build-then-discard,
 no highlight) is ~4.4 ms/iter and did not regress. One known transient:
@@ -109,6 +114,16 @@ is exact-sized, dies immediately, and is free under `copying`.
   nested lists, and don't decode/build what the grammar never reads.** The
   residual cost of even flat resident data is a Wado-runtime GC characteristic,
   tracked outside Gale.
+- **A GC-bound win measured on the dev host overstates the release win.** The
+  dev-profile runtime / GC / allocator run unoptimized (~4–5× slower, the
+  measurement note above), so GC is a far larger share of dev wall-clock than
+  release, and eliminating it looks correspondingly bigger. Concrete: the flat
+  CST cut `syntax_highlight` ~3× on dev (GC ~5×) but only ~1.47× on release,
+  because release GC was only ~⅓ of wall-clock to begin with. **Size any
+  GC-focused optimization by its release number, not the dev multiple** — and
+  conversely, a compute-bound win (e.g. the highlight `classify` / render levers)
+  carries over to release largely intact, since the dev host does not inflate
+  pure compute.
 
 ### Live profile (post-flat-CST, `syntax_highlight`, 3 runs merged, 4123 leaf samples @1 ms)
 
