@@ -1,0 +1,19 @@
+//! Stage C / java2wado: a `language = Java` grammar's `System.out.print` action
+//! bodies are translated by java2wado and execute during the parse, surfacing on
+//! `ParseResult.output`. End-to-end proof of the codegen wiring (3.vii): action
+//! language routed to java2wado -> `p.emit(...)` emitted inline -> `output`.
+
+use ja from "./grammars/java_action.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/java_action",
+        },
+    };
+
+test "java print actions translate and emit into ParseResult.output" {
+    let result = ja::parse(&"a b");
+    assert result.ok(), "clean parse";
+    assert result.output == "hi!", `output: '{result.output}'`;
+}

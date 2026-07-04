@@ -227,7 +227,7 @@ fn call_arg_suffix(rc: &RuleCallOp, ctx: &mut GenContext) -> String {
 /// ref-free expression passes through; an untranslatable one is returned raw
 /// (a later type error is clearer than a silent drop).
 fn translate_caller_arg(expr: &String, ctx: &GenContext) -> Option<String> {
-    if find_attr_refs(expr).len() == 0 {
+    if ctx.action_language() matches { Wado } && find_attr_refs(expr).len() == 0 {
         return Option::Some(*expr);
     }
     let ridx = ctx.current_rule_index();
@@ -3545,7 +3545,7 @@ fn gate_condition_for(a: &AltAction, ctx: &GenContext) -> Option<String> {
     if a.kind matches { Action } {
         return null;
     }
-    if find_attr_refs(&a.source.text).len() == 0 {
+    if ctx.action_language() matches { Wado } && find_attr_refs(&a.source.text).len() == 0 {
         return Option::Some(a.source.text);
     }
     let ridx = ctx.current_rule_index();
@@ -3801,7 +3801,7 @@ fn gen_action_body(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext)
 /// return `null` if a reference cannot be emitted. A ref-free body passes
 /// through verbatim (the identity translator on Wado host text).
 fn translate_action_or_warn(src: &ActionSource, ctx: &mut GenContext) -> Option<String> {
-    if find_attr_refs(&src.text).len() == 0 {
+    if ctx.action_language() matches { Wado } && find_attr_refs(&src.text).len() == 0 {
         return Option::Some(src.text);
     }
     let ridx = ctx.current_rule_index();

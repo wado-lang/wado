@@ -77,3 +77,14 @@ pub fn grammar_has_superclass(grammar: &Grammar) -> bool {
     }
     return false;
 }
+
+/// Whether Gale can emit the grammar's action bodies: the identity translator
+/// handles `language = Wado`; java2wado handles `language = Java` unless the
+/// grammar declares `superClass` (its actions call a hand-written base class
+/// outside the `.g4` — Phase 4, the SuperClass trait). Other host languages
+/// stay discarded. Codegen gates action emission and the ctx-tree token table
+/// on this predicate.
+pub fn action_language_is_emittable(grammar: &Grammar) -> bool {
+    return grammar.action_language matches { Wado }
+        || grammar.action_language matches { Java } && !grammar_has_superclass(grammar);
+}

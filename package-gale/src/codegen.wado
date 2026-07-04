@@ -22,6 +22,7 @@ use {
     grammar_has_at_end_conflict,
 } from "./parser_gen.wado";
 use { gen_node_kinds, gen_alt_enums, gen_string_tree_helper } from "./cst_gen.wado";
+use { action_language_is_emittable } from "./java2wado.wado";
 use { gen_highlight } from "./highlight_gen.wado";
 use { GenContext, sets_overlap } from "./gen_context.wado";
 use { CodeWriter, StructSpec, VariantSpec, EnumSpec, Vis } from "./wadopoet.wado";
@@ -203,12 +204,6 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     };
 }
 
-/// Whether Gale can currently emit the grammar's action bodies: the identity
-/// translator handles `language = Wado`. Java / other host languages are a
-/// later phase and stay discarded until then.
-fn action_language_is_emittable(grammar: &Grammar) -> bool {
-    return grammar.action_language matches { Wado };
-}
 
 fn install_rule_follow(grammar: &Grammar, ctx: &mut GenContext) {
     if grammar.parser_rules.is_empty() {
