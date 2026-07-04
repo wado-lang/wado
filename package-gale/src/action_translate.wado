@@ -30,7 +30,6 @@ pub fn translate_wado_action(
     rules: &List<ParserRule>,
     body: &String,
     vals_in_scope: bool,
-    rule_text_in_scope: bool,
     bindings: &List<[bool, String, String]>,
 ) -> Result<String, String> {
     let resolved = resolve_attrs(body, rule, rules)?;
@@ -38,7 +37,7 @@ pub fn translate_wado_action(
     let mut adjusted: List<ResolvedAttr> = [];
     let mut repls: List<String> = [];
     for let r of &resolved {
-        let e = action_attr_expr(rule, rules, r, vals_in_scope, rule_text_in_scope, bindings)?;
+        let e = action_attr_expr(rule, rules, r, vals_in_scope, bindings)?;
         repls.push(e);
         // `$ctx.toStringTree` maps to a complete nullary call, so absorb the
         // source's own call syntax (`()`, `(this)`) — otherwise a leftover
@@ -145,11 +144,10 @@ fn action_attr_expr(
     rules: &List<ParserRule>,
     r: &ResolvedAttr,
     vals_in_scope: bool,
-    rule_text_in_scope: bool,
     bindings: &List<[bool, String, String]>,
 ) -> Result<String, String> {
     if r.target matches { ParserSpecial } {
-        return parser_special_expr(r, rule_text_in_scope, rule_is_left_recursive(rule));
+        return parser_special_expr(r, rule_is_left_recursive(rule));
     }
     return match r.target {
         RuleAttr => {
@@ -183,14 +181,12 @@ fn action_attr_expr(
 
 /// A parser special (`$text`, `$start`, `$stop`, `$ctx`, `$_p`). `$text` is the
 /// input the rule has consumed (rule-start byte → last consumed token); `$start`
-/// / `$stop` are the rule's first / last token (member-addressable like any
-/// token). All three read the captured `_rule_start_tok` (first token index),
-/// so they need `span_in_scope`. `$ctx` / `$_p` await the CST context handle and
-/// remain a loud error.
-fn parser_special_expr(r: &ResolvedAttr, span_in_scope: bool, is_lr: bool) -> Result<String, String> {
-    if r.name matches { "text" | "start" | "stop" } && !span_in_scope {
-        return Result::Err(`${r.name}: no rule-span capture in the enclosing rule`);
-    }
+/// is the rule's first token and `$stop` its last (member-addressable like any
+/// token). `$ctx.toStringTree` renders the node under construction. `$_p` awaits
+/// the CST context handle and remains a loud error. `$text` / `$start` read the
+/// captured `_rule_start_tok`, which codegen emits whenever a rule references a
+/// span special (`rule_captures_span`), so it is always in scope here.
+fn parser_special_expr(r: &ResolvedAttr, is_lr: bool) -> Result<String, String> {
     return match r.name {
         "text" && r.member matches { None } => Result::Ok(
             `p.text_span(p.token_start({RULE_START_TOK_LOCAL}), p.last_end())`,

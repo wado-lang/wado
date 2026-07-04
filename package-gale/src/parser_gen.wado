@@ -236,8 +236,7 @@ fn translate_caller_arg(expr: &String, ctx: &GenContext) -> Option<String> {
     }
     let rule = &ctx.parser_rules()[ridx];
     let vals_in_scope = rule_emits_vals(ctx, rule);
-    let span_in_scope = rule_captures_span(rule, ctx.parser_rules());
-    return match translate_wado_action(rule, ctx.parser_rules(), expr, vals_in_scope, span_in_scope, ctx.alt_bindings()) {
+    return match translate_wado_action(rule, ctx.parser_rules(), expr, vals_in_scope, ctx.alt_bindings()) {
         Ok(c) => Option::Some(c),
         Err(_) => null,
     };
@@ -3549,8 +3548,7 @@ fn gate_condition_for(a: &AltAction, ctx: &GenContext) -> Option<String> {
     }
     let rule = &ctx.parser_rules()[ridx];
     let vals_in_scope = rule_emits_vals(ctx, rule);
-    let span_in_scope = rule_captures_span(rule, ctx.parser_rules());
-    return match translate_wado_action(rule, ctx.parser_rules(), &a.source.text, vals_in_scope, span_in_scope, ctx.alt_bindings()) {
+    return match translate_wado_action(rule, ctx.parser_rules(), &a.source.text, vals_in_scope, ctx.alt_bindings()) {
         Ok(code) => Option::Some(code),
         Err(_) => null,
     };
@@ -3809,8 +3807,7 @@ fn translate_action_or_warn(src: &ActionSource, ctx: &mut GenContext) -> Option<
         return null;
     }
     let vals_in_scope = rule_emits_vals(ctx, &ctx.parser_rules()[ridx]);
-    let span_in_scope = rule_captures_span(&ctx.parser_rules()[ridx], ctx.parser_rules());
-    return match translate_wado_action(&ctx.parser_rules()[ridx], ctx.parser_rules(), &src.text, vals_in_scope, span_in_scope, ctx.alt_bindings()) {
+    return match translate_wado_action(&ctx.parser_rules()[ridx], ctx.parser_rules(), &src.text, vals_in_scope, ctx.alt_bindings()) {
         Ok(code) => Option::Some(code),
         Err(msg) => {
             ctx.warn(&`action {src.action_id}`, DiagnosticKind::UnsupportedAction, msg);
