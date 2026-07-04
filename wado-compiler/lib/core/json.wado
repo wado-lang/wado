@@ -905,13 +905,20 @@ impl JsonDeserializer {
         return DeserializeError::malformed("invalid UTF-8 in string", start as i64);
     }
 
-    /// Copy the already-scanned run `input[start..end)` into an owned `String`.
+    /// Copy the already-scanned run `input[start..end)` into an owned `String`,
+    /// validating UTF-8 only when the run is not pure ASCII.
     ///
-    /// The caller's scan touched every byte of the run to find the closing `"`
-    /// or an escape; `all_ascii` records whether any byte had the high bit set.
-    /// A pure-ASCII run is valid UTF-8 by construction, so validation is skipped
-    /// and only the copy is paid — the `decode_utf8_scalar` pass runs only when
-    /// the run actually contains multi-byte sequences.
+    /// Why skipping validation is safe: every byte `< 0x80` is a complete
+    /// one-byte UTF-8 scalar, so a run of them is valid UTF-8 unconditionally —
+    /// no overlong, surrogate, or truncated sequence is expressible without a
+    /// byte `>= 0x80`. Conversely every *invalid* sequence contains such a byte.
+    /// So an ASCII run is always safe to wrap unchecked, and any malformed input
+    /// necessarily has the high bit set somewhere and takes the validating path.
+    ///
+    /// Safety contract: `all_ascii` must be `true` only if every byte in
+    /// `[start, end)` — exactly the bytes copied here — is `< 0x80`. Callers
+    /// compute it by OR-ing each scanned byte (`high_bits < 0x80`); the ORed set
+    /// and the copied range must coincide, or a high byte could be missed.
     fn take_scanned_run(&self, start: i32, end: i32, all_ascii: bool) -> Result<String, DeserializeError> {
         let slice = self.input.slice(start, end);
         if all_ascii {
@@ -940,9 +947,10 @@ impl JsonDeserializer {
         self.pos += 1;
 
         // Scan ahead to the end of the escape-free prefix so it can be built
-        // in one exactly-sized allocation. `high_bits` accumulates every content
-        // byte; if it stays below 0x80 the run is pure ASCII and needs no UTF-8
-        // validation on copy-out.
+        // in one exactly-sized allocation. `high_bits` ORs every byte of the
+        // prefix — exactly the range copied out below — so `high_bits < 0x80`
+        // proves the run is pure ASCII and lets `take_scanned_run` skip UTF-8
+        // validation (see its safety contract).
         let prefix_start = self.pos;
         let mut scan_pos = self.pos;
         let mut high_bits = 0;
