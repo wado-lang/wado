@@ -1,6 +1,8 @@
 # java2wado — Java action-body translation plan
 
-Plan for Stage C's third layer (see [`action.md`](./action.md) §Translator interface, and its staging §Phase 3): translating the Java subset that appears in ANTLR action bodies to Wado, so `language = Java` grammars execute their actions. Companion to [`action.md`](./action.md) (the action-execution design) and [`TODO.md`](./TODO.md) §"Stage C". Status: plan — not yet implemented.
+Plan for Stage C's third layer (see [`action.md`](./action.md) §Translator interface, and its staging §Phase 3): translating the Java subset that appears in ANTLR action bodies to Wado, so `language = Java` grammars execute their actions. Companion to [`action.md`](./action.md) (the action-execution design) and [`TODO.md`](./TODO.md) §"Stage C".
+
+Status: **in progress.** The translator (`src/java2wado.wado` + `src/java2wado/{lexer,parser,emit}.wado`) covers the corpus subset — expressions, statements, method mapping, predicates — end to end as unit-tested pure functions (3.i–3.iv landed). Not yet wired into codegen: `language = Java` stays non-emittable until the codegen splice + flip (3.vii), so there is no behavior change to generated parsers yet.
 
 ## Where this sits
 
@@ -46,20 +48,23 @@ Surveyed from `tests/antlr4-compat/grammars/`. This is the concrete target — t
 
 ## API / type mapping
 
-| Java                              | Wado                                    |
-| --------------------------------- | --------------------------------------- |
-| `System.out.println(x)` / `print` | `p.emit(...)` (see `action.md` §Effects)|
-| `getText()`                       | `p.rule_text()` / lexer `lx.text()`     |
-| `_input.LA(k)` / `_input.LT(k)`   | `p.la(k)` / `p.lt(k)`                    |
-| `_input.getText()`                | `p.input_text()`                        |
-| `.getText()` on a token/LT        | `p.token_text(<idx>)`                    |
-| `getCharPositionInLine()`         | `lx.column()`                           |
-| `_tokenStartCharPositionInLine`   | `lx.token_start_column()`               |
-| `$ctx.toStringTree(this)`         | `p.rule_string_tree()` (already mapped) |
-| `x.equals(y)`                     | `x == y`                                 |
-| `TParser.<TOKEN>`                 | generated `TK_<TOKEN>` constant         |
-| `int` / `boolean` / `String` / `void` | `i32` / `bool` / `String` / `()`    |
-| `List<String>`                    | `List<String>`                          |
+Method mapping is **snake_case by default** — an arbitrary `@members` / superClass method (`this.NextGT()` → `this.next_gt()`) cannot be tabled, so the machine rule is `to_snake_case`. Only a small set of **semantic redirects** (not renames) plus a few **fixed recognizer methods** kept under clean Wado names stay explicit:
+
+| Java                              | Wado                                       | kind              |
+| --------------------------------- | ------------------------------------------ | ----------------- |
+| `this.foo(args)` / bare `foo()`   | `this.foo(args)` (`to_snake_case`)         | default rule      |
+| `System.out.println(x)` / `print` | `this.emit(...)` (`println` appends `\n`)  | semantic redirect |
+| `x.equals(y)`                     | `x == y`                                    | semantic redirect |
+| `TParser.<TOKEN>`                 | `TK_<TOKEN>`                                | semantic redirect |
+| `getText()`                       | `this.rule_text()`                          | fixed rename      |
+| `_input.LA(k)` / `_input.LT(k)`   | `this.la(k)` / `this.lt(k)`                  | fixed rename      |
+| `_input.getText()`                | `this.input_text()`                         | fixed rename      |
+| `X.getText()` (a token / LT)      | `this.token_text(X)`                        | fixed rename      |
+| `$ctx.toStringTree(this)`         | `this.rule_string_tree()` (via attr engine) | fixed rename      |
+| `int` / `boolean` / `String` / `void` | `i32` / `bool` / `String` / `()`       | type map          |
+| `List<String>`                    | `List<String>`                             | type map          |
+
+Lexer-side recognizer methods (`getCharPositionInLine` → `column()`, `_tokenStartCharPositionInLine` → `token_start_column()`, `setType`/`setChannel`/…) land with the lexer actions in Phase 4.
 
 The recognizer handle is the literal `this`: `this.field` / `this.method()` and the recognizer methods (`getText`, `_input.LA`) all emit onto `this`. The attribute engine is handle-parameterized (`resolve_attr_ref(..., handle)`, default `p` for the live Wado path), so java2wado passes `this` and `$`-refs read `this.token_text(...)` too — one handle across the whole translated body. Codegen binds `this` as a reference to the parser at the splice site (`let this = p;` in a parse / predicate body, `let this = self;` in a `@members` method); Wado method calls auto-deref, so no `*` is needed. This keeps the translator decoupled from codegen's parameter name.
 
@@ -74,7 +79,7 @@ Module layout mirrors `src/g4/` (lexer / parser split):
 - `src/java2wado.wado` — facade + the `ActionLanguage` dispatcher (`translate_action` / `translate_predicate` / `translate_members`).
 - `src/java2wado/lexer.wado` — Java tokens over the fragment: identifiers, `$ident` (opaque primary), int/string/bool literals, operators, `.`/`,`/`;`/`()`/`{}`, casts. Reuse the string/comment-skipping discipline in `action_strip` / `attr_scan`.
 - `src/java2wado/parser.wado` — recursive descent producing `JExpr` / `JStmt` (variants) for the subset above. `$`-refs and unknown method calls become `JExpr::Attr(span)` / a mapped-call node.
-- `src/java2wado/emit.wado` — `JStmt`/`JExpr` → Wado string. Leaves that are `$`-refs call into `action_translate`'s attribute resolution (refactored so java2wado and the identity path share `action_attr_expr`); mapped calls consult the API table; `TParser.X` consults the token-kind table.
+- `src/java2wado/emit.wado` — `JStmt`/`JExpr` → Wado string. `$`-ref leaves call the shared `resolve_attr_ref` (the per-reference entry into `action_translate`'s attribute engine, handle-parameterized); mapped calls follow the method-mapping table; `TParser.X` becomes `TK_X`.
 
 Each with a sibling `_test.wado`.
 
@@ -108,18 +113,23 @@ Distinct from a miscompile: a discarded action under the superClass carve-out is
 
 Each step is red/green: a failing `java2wado_test.wado` case (or a driver `[output]` fixture) first, then the code.
 
-- **3.i — scaffold + dispatcher + carve-out.** New `src/java2wado.wado` facade; `translate_action`/`_predicate`/`_members` dispatcher on `ActionLanguage`; add the `superClass` carve-out to `action_language_is_emittable` (`!grammar_has_superclass(g)`). Java stays **non-emittable** until 3.vii flips it, so no behavior change yet — this step only proves the dispatcher routes Wado unchanged and the carve-out predicate is correct (RustLexer/TypeScriptLexer excluded, a plain-Java grammar included).
-- **3.ii — expression core.** Java lexer + expression parser + emitter for literals, arithmetic/comparison/logical/`%`, string concatenation, `$`-leaves via shared `action_attr_expr`. Covers `{$i == 1}?`, `{this.i % 2 == 0}?` (needs `this.field`), `$v = $x.v+1;`. Fixtures per operator class.
-- **3.iii — statements.** Expression statements, local declarations, assignments incl. compound. `System.out.println/print` → `p.emit`. `getText()` → `p.rule_text()`. Unblocks the print-`[output]` descriptor family (`{System.out.println($e.v);}`, `{System.out.print($a.text);}`).
-- **3.iv — mapped calls + qualified constants.** `_input.LA/LT`, `getCharPositionInLine`, `_tokenStartCharPositionInLine`, `x.equals(y)`, `TParser.X` → `TK_X`. Unblocks `{_input.LA(1) != TParser.ELSE}?`, `{getCharPositionInLine() < 2}?`, `{getText().equals("enum")}?`.
-- **3.v — ctx-cast LR-binary.** Strip `((BinaryContext)$ctx).e(0).v` down to the LR vals locals the value channel already exposes. Fixture mirrors the corpus LR-binary grammar.
-- **3.vi — members.** `translate_members`: field decls → struct fields (translated initializers), method decls → methods (`this.` → `self.`). Wire into the generated `Parser` / `Lexer` struct emit. Unblocks `@parser::members {boolean enumKeyword = true;}` and `{int i = 0;}`, i.e. the `SemPredEvalParser` member-backed predicates.
-- **3.vii — flip + corpus sweep + acceptance.** Flip `action_language_is_emittable` to accept non-superClass Java (the cover-then-flip step). Re-triage the descriptor corpus: print-`[output]` and `SemPredEval*` descriptors lose their auto-`#[TODO]` and compare `result.output`; fix any fragment that errors (small, by construction). Confirm RustLexer/TypeScriptLexer driver tests stay byte-identical (carve-out holds). Update `action.md` staging, `TODO.md` §Stage C, `antlr4-compatibility.md`.
+- [x] **3.i — scaffold + dispatcher + carve-out.** `src/java2wado.wado` facade; `translate_action` / `translate_predicate` dispatch on `ActionLanguage`; `grammar_has_superclass` (the `superClass` carve-out predicate, wired into `action_language_is_emittable` at 3.vii). Java stays non-emittable — no behavior change.
+- [x] **3.ii — expression core.** `src/java2wado/{lexer,parser,emit}.wado`: Java tokenizer, recursive-descent `JExpr` parser (C-family precedence), Wado emitter. Literals, arithmetic/comparison/logical/`%`, string concat → **template literal**, `$`-leaves via the shared `resolve_attr_ref`. Predicate bodies (`{$i == 1}?`, `{this.i % 2 == 0}?`, `{false}?`).
+- [x] **3.iii + 3.iv — statements + method mapping** (landed together, since statements need method calls). Generalized the AST to `Name`/`Member`/`Call` with postfix parsing; statement layer (expr stmt, local decl, assignment incl. compound); `translate_action` wired. Method mapping = snake_case default + the semantic/fixed table above; `this` handle bound as a reference by codegen. Covers `{_input.LA(1) != TParser.ELSE}?`, `_input.LT(1).getText().equals("x")`, `System.out.println("ID " + $ID.text);`, `$v = $a.v + $b.v;`, `this.i += 1;`, `int x = 0;`.
+- [ ] **3.v — ctx-cast LR-binary.** Strip `((BinaryContext)$ctx).e(0).v` down to the LR vals locals the value channel already exposes. Fixture mirrors the corpus LR-binary grammar. (The Java parser has no cast syntax yet — add cast handling and route the ctx-child accessor onto the LR lhs/rhs vals.)
+- [ ] **3.vi — members.** `translate_members`: field decls → struct fields (translated initializers), method decls → methods with `this` bound to `self` (`let this = self;`). Wire into the generated `Parser` / `Lexer` struct emit. Unblocks `@parser::members {boolean enumKeyword = true;}` and `{int i = 0;}`, i.e. the `SemPredEvalParser` member-backed predicates.
+- [ ] **3.vii — codegen splice + flip + corpus sweep.** Route the codegen action/predicate splice sites through the dispatcher (`grammar.action_language`), bind `let this = p;` at each site, and flip `action_language_is_emittable` to accept non-superClass Java. Re-triage the descriptor corpus: print-`[output]` and `SemPredEval*` descriptors lose their auto-`#[TODO]` and compare `result.output`; fix any fragment that errors (small, by construction). Confirm RustLexer/TypeScriptLexer driver tests stay byte-identical (carve-out holds). Update `action.md` staging, `TODO.md` §Stage C, `antlr4-compatibility.md`.
 
 Out of scope for Phase 3 (tracked elsewhere): `superClass` trait + real-world Rust/TypeScript grammars (Phase 4); lexer actions / position-sensitive lexer predicates beyond what Phase 2 emits (Phase 4); `catch`/`finally` (parked, no Wado exceptions); `$_p` in Java predicates (open item, maps to `min_prec`); `@header` Java imports (warn-and-drop).
 
+## Resolved decisions
+
+- **String concatenation → Wado template literal** (`"ID " + $ID.text` → `` `ID {this.token_text(id)}` ``): literal parts as template text, non-literals as `{...}` interpolations. Avoids depending on a `String` `+` operator and unifies `println`'s value-vs-string args.
+- **Method mapping = snake_case default + a small semantic/fixed table** (above), not a big hand-maintained table — arbitrary user methods can only be case-converted.
+- **Recognizer handle = `this`**, bound as a reference by codegen at the splice site (auto-deref); the attribute engine is handle-parameterized so the Wado path keeps `p` and stays byte-identical.
+
 ## Open questions
 
-- Java string concatenation target: `+` over Wado `String` — does the value channel expose `String` `+`, or must java2wado emit a template literal? Decide when 3.ii lands the first `"a" + $x` fixture.
 - Method-decl bodies in `@members` recurse into the same statement translator — scope: only the subset, or a loud error on anything richer? (`DelegatorAccessesDelegateMembers` `public void foo()` is trivial; keep the parser minimal.)
+- Field-reference case: `this.enumKeyword` currently passes through verbatim; if `@members` field decls are snake_cased (`enum_keyword`) in 3.vi, the reference must match. Decide field-name casing when 3.vi lands (decl and use together).
 - Whether a Kiln generator option may force `action_language` (already open in `action.md`).
