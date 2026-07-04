@@ -3856,13 +3856,9 @@ fn gen_action_body(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext)
     }
 }
 
-/// Translate an action / predicate body's `$`-references, or warn (loud) and
-/// return `null` if a reference cannot be emitted. A ref-free body passes
-/// through verbatim (the identity translator on Wado host text).
-/// Translate an action (`is_predicate = false`, a statement list) or a
-/// predicate condition (`is_predicate = true`, an expression) to Wado, warning
-/// on failure. The predicate/action distinction is invisible under the identity
-/// translator but real for java2wado (expression vs statement front end).
+/// Translate an action (`is_predicate = false`, a statement list) or a predicate
+/// condition (`is_predicate = true`, an expression) to Wado, warning (loud) and
+/// returning `null` on failure. A ref-free Wado body passes through verbatim.
 fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut GenContext) -> Option<String> {
     if ctx.action_language() matches { Wado } && find_attr_refs(&src.text).len() == 0 {
         return Option::Some(src.text);

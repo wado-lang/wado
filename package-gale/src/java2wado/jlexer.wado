@@ -1,30 +1,18 @@
-//! Java tokenizer for the java2wado expression subset.
-//!
-//! Tokenizes an ANTLR action / predicate body's Java host code into `JToken`s.
-//! ANTLR `$name(.member)?` attribute references are lexed as one opaque `Attr`
-//! token carrying the full reference text — resolving it to a Wado expression
-//! is the language-independent attribute engine's job (`action_translate`), not
-//! the Java lexer's. String literals keep their raw inner text (escapes intact).
+//! Java tokenizer for the java2wado expression subset. A `$name(.member)?`
+//! attribute reference lexes as one opaque `Attr` token (resolved later by the
+//! language-independent attribute engine); string literals keep raw escapes.
 
 use { is_id_start_char, is_id_continue_char, scan_string } from "../g4/scan.wado";
 
-/// A Java token over an action / predicate body.
 pub variant JToken {
-    /// Identifier or keyword (`this`, `true`, `false`, a method name, ...).
     Ident(String),
-    /// Full `$name` / `$name.member` attribute reference text, delimiters kept.
+    /// Full `$name(.member)?` text, delimiters kept.
     Attr(String),
-    /// Decimal integer literal text.
     Int(String),
-    /// Double-quoted string literal, inner text with escapes preserved.
     Str(String),
-    /// Operator or punctuation (`==`, `%`, `+`, `.`, `(`, `;`, `=`, ...).
     Punct(String),
 }
 
-/// Tokenize a Java body into `JToken`s, skipping whitespace. Returns a loud
-/// error on an unexpected character so codegen surfaces a diagnostic rather
-/// than emitting invalid code.
 pub fn tokenize_java(body: &String) -> Result<List<JToken>, String> {
     let chars: List<char> = body.chars().collect();
     let n = chars.len();
@@ -79,8 +67,7 @@ pub fn tokenize_java(body: &String) -> Result<List<JToken>, String> {
     return Result::Ok(out);
 }
 
-/// Span of a `$name(.member)?` reference: `pos` at the `$`; returns one past the
-/// last char. Mirrors `attr_scan`'s single-`.member` capture.
+/// `pos` at the `$`; returns one past the last char of the `$name(.member)?`.
 fn scan_attr_ref(chars: &List<char>, pos: i32, n: i32) -> i32 {
     let mut j = pos + 1;
     while j < n && is_id_continue_char(chars[j]) {
@@ -96,8 +83,7 @@ fn scan_attr_ref(chars: &List<char>, pos: i32, n: i32) -> i32 {
     return j;
 }
 
-/// The longest operator / punctuation token starting at `pos`, or `None`. Two-
-/// char operators are matched before their one-char prefixes.
+/// Longest operator / punctuation token at `pos` (two-char before one-char).
 fn scan_punct(chars: &List<char>, pos: i32, n: i32) -> Option<String> {
     if pos + 1 < n {
         let two = slice(chars, pos, pos + 2);

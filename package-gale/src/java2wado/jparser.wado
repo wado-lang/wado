@@ -1,30 +1,21 @@
-//! Recursive-descent parser for the java2wado expression subset.
-//!
-//! Consumes `JToken`s into a `JExpr` AST with C-family operator precedence
-//! (`||` < `&&` < equality < relational < additive < multiplicative < unary <
-//! primary). The AST — not span rewriting — is what lets the emitter turn a
-//! string `+` chain into a Wado template literal soundly. A primary is an atom
-//! (`literal`, `$ref`, identifier, `( expr )`) followed by any run of `.member`
-//! / `(args)` postfixes, so `_input.LA(1)`, `this.foo()`, `System.out.println(x)`
-//! all parse; mapping those calls to Wado is the emitter's job.
+//! Recursive-descent parser for the java2wado expression subset: `JToken`s into
+//! a `JExpr` AST with C-family operator precedence (`||` < `&&` < equality <
+//! relational < additive < multiplicative < unary < primary). A primary is an
+//! atom (`literal`, `$ref`, identifier, `( expr )`) followed by any run of
+//! `.member` / `(args)` postfixes.
 
 use { JToken } from "./jlexer.wado";
 
-/// A Java expression in the java2wado subset.
 pub variant JExpr {
     Int(String),
     Str(String),
     Bool(bool),
-    /// `$name(.member)?` — resolved to Wado by the shared attribute engine.
     Attr(String),
-    /// Bare identifier or qualifier: `this`, `getText`, `_input`, `TParser`, ...
+    /// Bare identifier or qualifier: `this`, `getText`, `_input`, `TParser`.
     Name(String),
-    /// Member access `recv.name` (`this.i`, `TParser.NL`, `System.out`).
     Member(JMember),
-    /// Call `callee(args)` (`getText()`, `_input.LA(1)`, `this.foo()`).
     Call(JCall),
-    /// Cast `(Type) operand` — the context cast in `((BinaryContext)$ctx)`.
-    /// Gale's CST is untyped, so emit discards the type and keeps the operand.
+    /// `(Type) operand`; emit discards the type (Gale's CST is untyped).
     Cast(JCast),
     Unary(JUnary),
     Binary(JBinary),
@@ -61,15 +52,11 @@ pub struct JParen {
     pub inner: JExpr,
 }
 
-/// A Java statement in the java2wado subset.
 pub variant JStmt {
-    /// Expression statement (`System.out.println(x);`).
     Expr(JExpr),
-    /// Local declaration (`int x = 0;`). `ty` is the opaque Java type text.
     Local(JLocal),
-    /// Assignment, incl. compound (`$v = e;`, `this.i += 1;`).
+    /// `lhs op rhs;`, incl. compound `+=`.
     Assign(JAssign),
-    /// `return e;` / `return;` (in `@members` method bodies).
     Return(Option<JExpr>),
 }
 
@@ -129,8 +116,7 @@ fn parse_stmt(tokens: &List<JToken>, pos: &mut i32) -> Result<JStmt, String> {
     return Result::Ok(JStmt::Expr(e));
 }
 
-/// A `type ident` prefix: a known Java type keyword followed by an identifier
-/// (the variable name). The corpus's action-body locals are `int` / `boolean`.
+/// A known type keyword followed by an identifier (a local declaration).
 fn is_local_decl(tokens: &List<JToken>, pos: i32) -> bool {
     return match ident_at(tokens, pos) {
         Some(name) => is_type_keyword(&name) && ident_at(tokens, pos + 1) matches { Some(_) },
@@ -332,10 +318,8 @@ fn parse_atom(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
     };
 }
 
-/// A cast `( TypeName ) operand`: `pos` at `(`, a single-identifier type name,
-/// `)`, then a token that starts an operand (`$ctx`, an identifier, a literal,
-/// `(`, `!`). Distinguishes the corpus cast `(BinaryContext)$ctx` from a plain
-/// parenthesized group `(a) + b`, where `+` follows the `)`.
+/// `( Ident )` followed by an operand-starting token — a cast `(BinaryContext)$ctx`
+/// rather than a parenthesized group `(a) + b` (where an operator follows `)`).
 fn looks_like_cast(tokens: &List<JToken>, pos: i32) -> bool {
     if ident_at(tokens, pos + 1) matches { None } {
         return false;
@@ -391,7 +375,7 @@ pub fn punct_is(tokens: &List<JToken>, pos: i32, s: &String) -> bool {
 fn punct_at(tokens: &List<JToken>, pos: i32) -> String {
     return match &tokens[pos] {
         Punct(p) => *p,
-        _ => "",
+        _ => panic("punct_at: caller must guard with punct_is"),
     };
 }
 

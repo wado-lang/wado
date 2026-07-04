@@ -1,20 +1,8 @@
-//! Emit Wado from a parsed java2wado `JExpr`.
-//!
-//! Operators pass through (Java and Wado share C-family precedence, so the
-//! parsed AST re-emits without extra parens); `$`-references route through the
-//! shared, language-independent attribute engine (`resolve_attr_ref`); a string
-//! `+` chain becomes a Wado template literal (per the java2wado.md decision).
-//!
-//! Method mapping is snake_case by default: `this.foo()` → `<handle>.foo()`, an
-//! arbitrary `@members` / superClass method that cannot be tabled. A small set
-//! of semantic redirects that are NOT renames stays explicit — `println`/`print`
-//! → `emit`, `.equals()` → `==`, a `TParser.TOK` constant → `TK_TOK` — plus a
-//! few fixed recognizer methods kept under clean Wado names (`getText` →
-//! `rule_text`, `_input.LA/LT` → `la`/`lt`). The recognizer handle (`this_bind`)
-//! is threaded through emit and shared with the attribute engine
-//! (`resolve_attr_ref`) so `$`-refs read `<handle>.token_text(...)` too; codegen
-//! passes the in-scope handle — `p` in a parse / predicate body (the parse-fn
-//! parameter), `self` in a `@members` method body (the receiver).
+//! Emit Wado from a parsed java2wado `JExpr` / `JStmt`. Operators pass through,
+//! `$`-refs route through `resolve_attr_ref`, a string `+` chain becomes a
+//! template literal, and method mapping is snake_case with a few fixed
+//! recognizer names (see `java2wado.md`). `this_bind` is the recognizer handle:
+//! `p` in a parse / predicate body, `self` in a `@members` method body.
 
 use { ParserRule } from "../ir.wado";
 use { resolve_attr_ref, rule_binding_for, rule_is_left_recursive, LR_ACC_LOCAL } from "../action_translate.wado";
@@ -23,10 +11,6 @@ use { JExpr, JMember, JCall, JCast, JStmt, JLocal, JAssign } from "./jparser.wad
 use { tokenize_java } from "./jlexer.wado";
 use { parse_java_expr, parse_java_stmts } from "./jparser.wado";
 
-/// Translate a Java expression body to a Wado expression. `this_bind` is the
-/// recognizer handle to emit for `this` and the context API (`p` in a parse /
-/// predicate body, `self` in a `@members` method body). Ties tokenize → parse →
-/// emit.
 pub fn translate_java_expr(
     rule: &ParserRule,
     rules: &List<ParserRule>,
@@ -40,22 +24,6 @@ pub fn translate_java_expr(
     return emit_expr(rule, rules, &expr, vals_in_scope, bindings, this_bind);
 }
 
-/// Emit a parsed expression AST to Wado — shared with the `@members` field-init
-/// translation, which parses tokens directly rather than from a string.
-pub fn emit_java_expr(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
-    e: &JExpr,
-    vals_in_scope: bool,
-    bindings: &List<[bool, String, String]>,
-    this_bind: &String,
-) -> Result<String, String> {
-    return emit_expr(rule, rules, e, vals_in_scope, bindings, this_bind);
-}
-
-/// Translate a Java statement-list body (an action block) to Wado statements.
-/// `this_bind` is the recognizer handle (see `translate_java_expr`). Statements
-/// are space-joined; each already carries its trailing `;`.
 pub fn translate_java_stmts(
     rule: &ParserRule,
     rules: &List<ParserRule>,
@@ -69,8 +37,7 @@ pub fn translate_java_stmts(
     return emit_java_stmts(rule, rules, &stmts, vals_in_scope, bindings, this_bind);
 }
 
-/// Emit a parsed statement list to Wado, space-joined (each carries its `;`).
-/// Shared by the action path and the `@members` method-body translation.
+/// Space-joined statements (each already carries its `;`).
 pub fn emit_java_stmts(
     rule: &ParserRule,
     rules: &List<ParserRule>,
@@ -141,10 +108,8 @@ fn emit_local(
     return Result::Ok(`let mut {l.name}: {ty} = {init};`);
 }
 
-/// Emit `System.out.print(x)` / `println(x)` as `<this>.emit(<template>)`. The
-/// argument is rendered as a template literal — string parts verbatim, non-string
-/// parts as `{...}` interpolations (stringifying via Display) — with `println`
-/// appending a newline. This unifies string-vs-value args and the `\n` difference.
+/// Emit `System.out.print`/`println` as `<this>.emit(<template>)`, rendering the
+/// argument as a template literal and appending `\n` for `println`.
 fn emit_print(
     rule: &ParserRule,
     rules: &List<ParserRule>,
@@ -187,7 +152,7 @@ pub fn map_java_type(ty: &String) -> Option<String> {
     return null;
 }
 
-fn emit_expr(
+pub fn emit_expr(
     rule: &ParserRule,
     rules: &List<ParserRule>,
     e: &JExpr,
@@ -203,8 +168,6 @@ fn emit_expr(
         Name(n) => Result::Ok(if *n == "this" { *this_bind } else { *n }),
         Member(m) => emit_member(rule, rules, m, vals_in_scope, bindings, this_bind),
         Call(c) => emit_call(rule, rules, c, vals_in_scope, bindings, this_bind),
-        // A cast is Java's way to reach the typed context accessors; Gale's CST
-        // is untyped, so drop the type and keep the operand.
         Cast(c) => emit_expr(rule, rules, &c.operand, vals_in_scope, bindings, this_bind),
         Unary(u) => {
             let operand = emit_expr(rule, rules, &u.operand, vals_in_scope, bindings, this_bind)?;
@@ -252,8 +215,6 @@ fn emit_call(
     bindings: &List<[bool, String, String]>,
     this_bind: &String,
 ) -> Result<String, String> {
-    // ctx-child accessor `((Ctx)$ctx).<rule>(i)` — intercept before arg emission
-    // (the index is a child selector, not a Wado argument).
     if let Member(m) = &c.callee {
         if is_ctx_expr(&m.recv) {
             return emit_ctx_child(rule, m, &c.args, bindings);
@@ -284,12 +245,9 @@ fn is_ctx_expr(e: &JExpr) -> bool {
     };
 }
 
-/// Map `((Ctx)$ctx).<rule>(i)` onto the LR operand vals the value channel
-/// exposes: child 0 is the left operand (the precedence accumulator
-/// `_lr_acc`); child i>=1 is the i-th suffix self-ref (the right operand,
-/// under its post-dedup binding). Only valid inside a left-recursive rule and
-/// for the rule's own children (the LR-binary shape); anything else is a loud
-/// error. A trailing `.v` reads the field via the enclosing `Member`.
+/// Map `((Ctx)$ctx).<rule>(i)` onto the LR operand vals: child 0 is the
+/// precedence accumulator `_lr_acc`, child i>=1 is the i-th suffix self-ref.
+/// Only valid inside a left-recursive rule for its own children; else a loud error.
 fn emit_ctx_child(
     rule: &ParserRule,
     m: &JMember,
@@ -351,8 +309,6 @@ fn emit_member_call(
         }
         let r = emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, this_bind)?;
         let a = emit_expr(rule, rules, &raw_args[0], vals_in_scope, bindings, this_bind)?;
-        // Parenthesized: a tighter enclosing operator (e.g. `!x.equals(y)`) must
-        // not regroup the synthesized `==`.
         return Result::Ok(`({r} == {a})`);
     }
     let recv_w = if name_is(&m.recv, &"this") {
@@ -413,9 +369,7 @@ fn is_upper_ident(name: &String) -> bool {
     return has_alpha;
 }
 
-/// Whether a `+` expression is string concatenation: some leaf in the `+` chain
-/// is a string literal. Corpus concat chains always carry a literal (`"(" + a +
-/// ")"`), so this classifies without host-language type inference.
+/// Whether a `+` chain is string concatenation: some leaf is a string literal.
 fn is_string_concat(e: &JExpr) -> bool {
     return match e {
         Str(_) => true,
@@ -490,9 +444,8 @@ fn append_interp(
     return Result::Ok(());
 }
 
-/// Escape a string-literal part for insertion as Wado template text: the braces
-/// and backtick that carry template meaning. Java `\`-escapes (`\n`, `\"`, `\\`)
-/// already read correctly as Wado template text and pass through.
+/// Escape a string-literal part for Wado template text: the braces and backtick
+/// that carry template meaning. Java `\`-escapes pass through unchanged.
 fn escape_template(content: &String) -> String {
     let mut out = String::with_capacity(content.chars().count());
     for let c of content.chars() {

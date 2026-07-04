@@ -1,24 +1,16 @@
-//! java2wado — translate the Java subset that appears in ANTLR action bodies
-//! to Wado, so `language = Java` grammars execute their actions. Facade over
-//! the `ActionLanguage` dispatcher; the Java front end (lexer / parser / emit)
-//! lands in `java2wado/` per the staging in `java2wado.md`.
-//!
-//! The identity translator (`action_translate.wado`, `language = Wado`) already
-//! resolves `$`-attributes and substitutes them over the value channel; Java
-//! translation reuses that engine for the `$`-leaves and adds a Java host-code
-//! front end around them (`java2wado/`). A body outside the supported subset is
-//! a loud generation diagnostic, never a silent no-op.
+//! java2wado — translate the Java subset in ANTLR action bodies to Wado, so
+//! `language = Java` grammars execute their actions. Facade over the
+//! `ActionLanguage` dispatcher; the Java front end lives in `java2wado/`. It
+//! reuses the identity translator (`action_translate.wado`) for `$`-leaves. A
+//! body outside the supported subset is a loud diagnostic, never a silent no-op.
 
 use { ParserRule, Grammar, ActionLanguage, LexerRule, Alternative, NamedAction } from "./ir.wado";
 use { translate_wado_action, PARSER_HANDLE } from "./action_translate.wado";
 use { translate_java_expr, translate_java_stmts } from "./java2wado/jemit.wado";
 use { translate_java_members, MemberDecls } from "./java2wado/jmembers.wado";
 
-/// Translate an action / predicate body to Wado under the grammar's action
-/// language. `language = Wado` routes to the identity translator (verbatim host
-/// text, `$`-refs substituted); `language = Java` routes to java2wado; any other
-/// language is unsupported. A failure names the offending body — codegen turns
-/// it into a diagnostic rather than emitting invalid code.
+/// Translate an action body to Wado: `Wado` routes to the identity translator,
+/// `Java` to java2wado, any other language is a loud error.
 pub fn translate_action(
     lang: &ActionLanguage,
     rule: &ParserRule,
@@ -35,9 +27,7 @@ pub fn translate_action(
 }
 
 /// Translate a semantic-predicate body (`{ cond }?`) to a Wado boolean
-/// expression. `language = Wado` substitutes `$`-refs verbatim; `language =
-/// Java` parses the Java expression and re-emits it (java2wado). A predicate is
-/// a single expression, so this is the java2wado expression front end.
+/// expression, dispatching on the action language as `translate_action` does.
 pub fn translate_predicate(
     lang: &ActionLanguage,
     rule: &ParserRule,
@@ -53,9 +43,8 @@ pub fn translate_predicate(
     };
 }
 
-/// Translate a `@members` / `@parser::members` block to Wado struct fields +
-/// methods. `language = Java` parses the class body (java2wado); Wado members
-/// (module-level Wado) are a later item.
+/// Translate a `@members` block to Wado struct fields + methods. `Java` parses
+/// the class body; Wado members are a later item.
 pub fn translate_members(lang: &ActionLanguage, body: &String) -> Result<MemberDecls, String> {
     return match lang {
         Java => translate_java_members(body),
@@ -64,11 +53,9 @@ pub fn translate_members(lang: &ActionLanguage, body: &String) -> Result<MemberD
     };
 }
 
-/// Whether the grammar declares `options { superClass = ... }`. Such a grammar's
-/// actions call a hand-written base class living outside the `.g4`, which Gale
-/// cannot see — translating them is Phase 4 (the SuperClass trait), not
-/// java2wado's subset. The Java emit-actions rollout carves these out. See
-/// `java2wado.md`.
+/// Whether the grammar declares `options { superClass = ... }`. Its actions call
+/// a hand-written base class outside the `.g4` that Gale cannot see — Phase 4,
+/// carved out of the Java emit-actions rollout. See `java2wado.md`.
 pub fn grammar_has_superclass(grammar: &Grammar) -> bool {
     for let o of &grammar.options {
         if o.name == "superClass" {
@@ -78,21 +65,16 @@ pub fn grammar_has_superclass(grammar: &Grammar) -> bool {
     return false;
 }
 
-/// Whether Gale can emit the grammar's action bodies: the identity translator
-/// handles `language = Wado`; java2wado handles `language = Java` unless the
-/// grammar declares `superClass` (its actions call a hand-written base class
-/// outside the `.g4` — Phase 4, the SuperClass trait). Other host languages
-/// stay discarded. Codegen gates action emission and the ctx-tree token table
-/// on this predicate.
+/// Whether Gale can emit the grammar's action bodies: `Wado` always, `Java`
+/// unless the grammar declares `superClass` (Phase 4). Other languages stay
+/// discarded.
 pub fn action_language_is_emittable(grammar: &Grammar) -> bool {
     return grammar.action_language matches { Wado }
         || grammar.action_language matches { Java } && !grammar_has_superclass(grammar);
 }
 
-/// Whether the grammar actually carries action content worth emitting: a named
-/// action (`@members` / …), a rule prequel or value channel (`@init`/`@after`,
-/// args/returns/locals), or any per-alt action / predicate (parser or lexer).
-/// Actionless grammars need none of the action machinery.
+/// Whether the grammar carries any action content: a named action, a rule
+/// prequel or value channel (args/returns/locals), or a per-alt action.
 fn grammar_has_actions(grammar: &Grammar) -> bool {
     for let na of &grammar.named_actions {
         if na.body.text != "" {
@@ -123,9 +105,8 @@ fn grammar_has_actions(grammar: &Grammar) -> bool {
 }
 
 /// Whether codegen emits the action machinery: the language is emittable AND the
-/// grammar has action content. Gates both `emit_actions` and the ctx-tree token
-/// table, so an actionless grammar (e.g. one that never declares `language =
-/// Wado` and so defaults to Java) stays byte-identical to before Stage C.
+/// grammar has action content. Gates `emit_actions` and the ctx-tree token table
+/// so an actionless grammar stays byte-identical to before Stage C.
 pub fn should_emit_actions(grammar: &Grammar) -> bool {
     return action_language_is_emittable(grammar) && grammar_has_actions(grammar);
 }

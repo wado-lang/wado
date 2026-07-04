@@ -1,14 +1,8 @@
 //! Identity translator (`language = Wado`): rewrite an action body's
 //! `$`-references to Wado expressions over the value channel, leaving the
-//! surrounding host text (already Wado) verbatim.
-//!
-//! This slice covers a rule's own value channel — `$v` / `$local` map to
-//! the `vals` struct local emitted in the rule function. References that
-//! need infrastructure not yet emitted (rule arguments, cross-rule
-//! `$a.v`, token members via the context API, specials) return a loud
-//! error naming the reference, so codegen surfaces a diagnostic rather
-//! than emitting invalid code. The supported subset grows as the value
-//! channel and context API land.
+//! surrounding host text (already Wado) verbatim. A reference the current subset
+//! cannot emit returns a loud error naming it, so codegen surfaces a diagnostic
+//! rather than emitting invalid code. Shared with java2wado via `resolve_attr_ref`.
 
 use { ParserRule, AttrDecl, AltAction } from "./ir.wado";
 use { resolve_attrs, ResolvedAttr, AttrTarget } from "./attr_resolve.wado";
@@ -21,17 +15,14 @@ pub fn vals_struct_name(rule: &ParserRule) -> String {
     return `{to_pascal_case(&rule.name)}Vals`;
 }
 
-/// Translate `body` against `rule`'s environment. `vals_in_scope` is true
-/// when the enclosing rule emits a `vals` local (so `$v` / `$local` can be
-/// served). Returns ready-to-emit Wado, or an error naming the first
-/// unsupported reference.
-/// The Wado expression naming the recognizer handle in emitted context-API
-/// calls (`p.token_text(...)`, `p.rule_string_tree()`). Defaults to `p` — the
-/// parameter of the generated `parse_*` / `pred_*` functions. java2wado passes
-/// `this`, which codegen binds as a reference to the parser at the splice site
-/// (method calls auto-deref).
+/// The recognizer handle in emitted context-API calls (`p.token_text(...)`):
+/// `p` in a parse / predicate body, `self` in a `@members` method body.
 pub global PARSER_HANDLE: String = "p";
 
+/// Translate `body` against `rule`'s environment, resolving `$`-refs over the
+/// value channel and leaving surrounding Wado verbatim. `vals_in_scope` is true
+/// when the enclosing rule emits a `vals` local. Errors on the first unsupported
+/// reference.
 pub fn translate_wado_action(
     rule: &ParserRule,
     rules: &List<ParserRule>,
@@ -47,9 +38,6 @@ pub fn translate_wado_action(
     for let r of &resolved {
         let e = action_attr_expr(rule, rules, r, vals_in_scope, bindings, handle)?;
         repls.push(e);
-        // `$ctx.toStringTree` maps to a complete nullary call, so absorb the
-        // source's own call syntax (`()`, `(this)`) — otherwise a leftover
-        // argument list would splice after the emitted `()`.
         let mut r2 = *r;
         if is_ctx_to_string_tree(r) {
             r2.end = swallow_trailing_call(&body_chars, r.end);
@@ -60,10 +48,8 @@ pub fn translate_wado_action(
 }
 
 /// Resolve a single `$name(.member)?` reference to its Wado expression, shared
-/// by the identity translator and java2wado. Attribute resolution is
-/// language-independent (`action.md` layer 2): both front ends map `$`-refs
-/// onto the value channel / context API identically, differing only in the host
-/// code around them. `ref_text` is exactly the reference (`$x`, `$x.v`).
+/// by the identity translator and java2wado (attribute resolution is
+/// language-independent). `ref_text` is exactly the reference (`$x`, `$x.v`).
 pub fn resolve_attr_ref(
     rule: &ParserRule,
     rules: &List<ParserRule>,
@@ -112,10 +98,8 @@ fn swallow_trailing_call(chars: &List<char>, end: i32) -> i32 {
     return end;
 }
 
-/// The actual local a `$ref` binds to. Prefers the emit's post-dedup binding
-/// (from `GenContext.alt_bindings`, keyed by token-vs-rule kind and pre-dedup
-/// base) so a collision-deduped reference (`e_2`) resolves correctly; falls back
-/// to the base when the reference is not in the map (nested groups, prequels).
+/// The actual local a `$ref` binds to: the post-dedup binding (so `e_2` resolves
+/// correctly), falling back to `base` when the reference is not in the map.
 fn binding_for(bindings: &List<[bool, String, String]>, is_token: bool, base: &String) -> String {
     return match bindings.iter().find(|b: [bool, String, String]| b.0 == is_token && b.1 == *base) {
         Some(b) => b.2,
@@ -123,16 +107,12 @@ fn binding_for(bindings: &List<[bool, String, String]>, is_token: bool, base: &S
     };
 }
 
-/// The `let _rule_start_tok = p.pos;` local a `$text` / `$start` / `$stop`
-/// substitution reads — the rule's first token index, captured at rule entry.
-/// Named once so codegen (which emits it) and the translator (which references
-/// it) cannot diverge.
+/// The rule's first token index, captured at rule entry; read by a `$text` /
+/// `$start` / `$stop` substitution.
 pub global RULE_START_TOK_LOCAL: String = "_rule_start_tok";
 
 /// The LR precedence-climbing accumulator local (`gen_lr_fn`), holding the left
-/// operand's vals while a continuation's action runs. java2wado's ctx-child
-/// accessor maps `((Ctx)$ctx).<rule>(0)` (the left operand) onto it. Named once
-/// so codegen and the translator agree.
+/// operand's vals. java2wado maps `((Ctx)$ctx).<rule>(0)` onto it.
 pub global LR_ACC_LOCAL: String = "_lr_acc";
 
 /// The Wado local a rule-child reference binds to (post-dedup), for a rule child
@@ -220,13 +200,9 @@ fn action_attr_expr(
     };
 }
 
-/// A parser special (`$text`, `$start`, `$stop`, `$ctx`, `$_p`). `$text` is the
-/// input the rule has consumed (rule-start byte → last consumed token); `$start`
-/// is the rule's first token and `$stop` its last (member-addressable like any
-/// token). `$ctx.toStringTree` renders the node under construction. `$_p` awaits
-/// the CST context handle and remains a loud error. `$text` / `$start` read the
-/// captured `_rule_start_tok`, which codegen emits whenever a rule references a
-/// span special (`rule_captures_span`), so it is always in scope here.
+/// A parser special: `$text` is the consumed input span, `$start`/`$stop` the
+/// rule's first/last token, `$ctx.toStringTree` the node under construction.
+/// `$text`/`$start` read the codegen-captured `_rule_start_tok`.
 fn parser_special_expr(r: &ResolvedAttr, is_lr: bool, handle: &String) -> Result<String, String> {
     return match r.name {
         "text" && r.member matches { None } => Result::Ok(
@@ -234,9 +210,6 @@ fn parser_special_expr(r: &ResolvedAttr, is_lr: bool, handle: &String) -> Result
         ),
         "start" => token_member_of(&RULE_START_TOK_LOCAL, &r.member, handle),
         "stop" => token_member_of(&`({*handle}.pos - 1)`, &r.member, handle),
-        // `$ctx.toStringTree` — renders the rule node under construction. A non-LR
-        // rule's node is still open in `@after`; a left-recursive rule's level is
-        // already folded shut, so it reads the just-finished node instead.
         "ctx" && r.member matches { Some("toStringTree") } => {
             let method = if is_lr { "rule_string_tree_final" } else { "rule_string_tree" };
             Result::Ok(`{*handle}.{method}()`);
@@ -245,18 +218,14 @@ fn parser_special_expr(r: &ResolvedAttr, is_lr: bool, handle: &String) -> Result
     };
 }
 
-/// The local variable a call site binds a rule / label / token result to:
-/// `escape_ident(to_snake_case(name))`, matching `RuleRefElement`/`LabelElement`
-/// field-name derivation. The translator must reproduce it exactly — a raw
-/// grammar name (e.g. camelCase `myTok`) would reference an undefined local.
+/// The local a call site binds a rule / label / token result to, matching
+/// `RuleRefElement` / `LabelElement` field-name derivation.
 fn binding_name(name: &String) -> String {
     return escape_ident(&to_snake_case(name));
 }
 
-/// A token reference resolves to the stream index its `let x = p.expect(...)`
-/// bound; a member reads that token through the context API. `.index` is the
-/// index itself and `.channel` is 0 (parser-visible tokens are default channel),
-/// so neither needs a runtime call.
+/// A token reference resolves to its bound stream index; a member reads that
+/// token through the context API.
 fn token_member_expr(
     r: &ResolvedAttr,
     bindings: &List<[bool, String, String]>,
@@ -265,10 +234,8 @@ fn token_member_expr(
     return token_member_of(&binding_for(bindings, true, &binding_name(&r.name)), &r.member, handle);
 }
 
-/// A token member read on an arbitrary token-index expression `idx` (a bound
-/// label, `_rule_start_tok`, `(p.pos - 1)`, …). `.index` is the index itself and
-/// `.channel` is 0 (parser-visible tokens are default channel), so neither
-/// needs a runtime call; the rest go through the `p.token_*` context API.
+/// A token member read on a token-index expression `idx`. `.index` is `idx`
+/// itself and `.channel` is `0`; the rest go through the `token_*` context API.
 fn token_member_of(idx: &String, member: &Option<String>, handle: &String) -> Result<String, String> {
     let m = match member {
         Some(m) => *m,
@@ -365,13 +332,10 @@ fn is_arg(rule: &ParserRule, name: &String) -> bool {
     return false;
 }
 
-/// Whether a rule exposes a value channel to callers: any rule declaring a
-/// defaultable `returns` / `locals` (or threaded args). Such a rule's
-/// `_parse_<rule>` returns `<Rule>Vals`, its body gets a `vals` local, and a
-/// caller's `$a.v` reads the returned struct. This is the return-type decision
-/// — independent of whether the rule's own actions read the channel, since a
-/// caller might. Left-recursive rules thread the channel through the
-/// precedence loop (the atom seeds it, each continuation accumulates it).
+/// Whether a rule exposes a value channel to callers (a defaultable
+/// `returns`/`locals`, or threaded args), so `_parse_<rule>` returns `<Rule>Vals`
+/// and a caller's `$a.v` reads it. Independent of whether the rule's own actions
+/// read the channel — a caller might.
 pub fn rule_returns_vals(rule: &ParserRule) -> bool {
     return rule_value_channel_ready(rule);
 }
@@ -389,12 +353,9 @@ pub fn rule_is_left_recursive(rule: &ParserRule) -> bool {
     return false;
 }
 
-/// Whether a rule exposes an emittable value channel: it declares a
-/// returns / locals field whose type has a Wado default, or it threads
-/// rule arguments (which live in the same `<Rule>Vals` struct). Fields with
-/// an unsupported type are excluded per-field (they do not appear in the
-/// struct and a reference to one is a loud error), so one unsupported field
-/// no longer disables the whole channel.
+/// Whether a rule exposes an emittable value channel: a returns / locals field
+/// whose type has a Wado default, or threaded rule arguments. Unsupported-type
+/// fields are excluded per-field, so one does not disable the whole channel.
 pub fn rule_value_channel_ready(rule: &ParserRule) -> bool {
     for let d of &rule.returns_decls {
         if wado_type_default(&d.type_text) matches { Some(_) } {
@@ -410,11 +371,8 @@ pub fn rule_value_channel_ready(rule: &ParserRule) -> bool {
 }
 
 /// Whether a rule's arguments are threaded as `_parse_<rule>` parameters and
-/// stored into its `<Rule>Vals`. Any non-left-recursive rule qualifies (the
-/// seeded `vals` threads through the multi-alt `_alt_<n>` helpers), provided
-/// every arg type has a Wado default so the param can be defaulted and the vals
-/// field `Default`-init. An LR or non-defaultable-arg rule keeps `$arg` a loud
-/// error.
+/// stored into its `<Rule>Vals`: a non-left-recursive rule every arg type of
+/// which has a Wado default. Otherwise `$arg` is a loud error.
 pub fn rule_threads_args(rule: &ParserRule) -> bool {
     if rule_is_left_recursive(rule) {
         return false;
@@ -430,17 +388,14 @@ pub fn rule_threads_args(rule: &ParserRule) -> bool {
     return true;
 }
 
-/// Whether a returns / locals field goes into the `<Rule>Vals` struct: it has
-/// a Wado default. Codegen and the translator agree on this predicate so the
-/// struct's fields and the substituted `vals.<name>` reads stay in lockstep.
+/// Whether a returns / locals field goes into the `<Rule>Vals` struct: its type
+/// has a Wado default.
 pub fn field_in_vals(d: &AttrDecl) -> bool {
     return wado_type_default(&d.type_text) matches { Some(_) };
 }
 
-/// A Wado default-value expression for a value-channel field type, or `None`
-/// if the type has no known Wado default. Types are Wado (`language = Wado`,
-/// identity translator), so only genuine Wado types are recognized — a
-/// non-Wado name like `int` / `str` has no default and its field is skipped.
+/// A Wado default-value expression for a value-channel field type, or `None` if
+/// the type has no known Wado default (a non-Wado name like `int` is skipped).
 pub fn wado_type_default(type_text: &String) -> Option<String> {
     let t = type_text.trim();
     if t == "bool" {
