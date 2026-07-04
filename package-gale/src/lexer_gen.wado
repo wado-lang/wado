@@ -550,6 +550,14 @@ fn gen_lexer_alt_seq(
     ea: bool,
 ) {
     for let mut i = 0; i < alt.elements.len(); i += 1 {
+        // Mid-alt predicate (`A {cond}? B`): a `before_index` strictly interior
+        // to the alt gates the match partway through. `before_index == 0`
+        // (alt-initial) and `== elements.len()` (trailing) are placed by the
+        // caller around this sequence, so only the interior positions are
+        // emitted here.
+        if i > 0 {
+            gen_lexer_rule_predicates(w, &alt.actions, i, ea, fail_action);
+        }
         let elem = &alt.elements[i];
         if let Repeat(rep) = elem {
             if rep.non_greedy {

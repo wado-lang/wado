@@ -1,0 +1,27 @@
+//! Stage C mid-alt lexer semantic predicate: a predicate between elements of
+//! one alt (`KW : [a-z] { $text == "c" }? [a-z] [a-z]`) gates the match
+//! mid-way — a three-letter run lexes as KW only when it starts with `c`,
+//! otherwise it falls through to ID.
+
+use lp from "./grammars/wado_lex_mid_pred.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_lex_mid_pred",
+        },
+    };
+
+test "a mid-alt predicate gates the match partway through" {
+    let cat = lp::parse(&"cat");
+    assert cat.ok(), "clean parse of 'cat'";
+    assert cat.output == "kw", `output: '{cat.output}'`;
+
+    let cot = lp::parse(&"cot");
+    assert cot.ok(), "clean parse of 'cot'";
+    assert cot.output == "kw", `output: '{cot.output}'`;
+
+    let dog = lp::parse(&"dog");
+    assert dog.ok(), "clean parse of 'dog'";
+    assert dog.output == "id", `output: '{dog.output}'`;
+}
