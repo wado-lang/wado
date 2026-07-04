@@ -73,21 +73,21 @@ Serialize:
 
 | Implementation       | Throughput  | ms/iter  | vs best |
 | -------------------- | ----------- | -------- | ------- |
-| serde_cbor (Rust)    | 2.05 GB/s   | 0.308 ms | 1.00x   |
-| serde_json (Rust)    | 1.62 GB/s   | 0.391 ms | 1.27x   |
-| **core:cbor** (Wado) | 498.05 MB/s | 1.267 ms | 4.11x   |
-| JSON (JS)            | 293.89 MB/s | 2.149 ms | 6.98x   |
-| **core:json** (Wado) | 126.59 MB/s | 4.988 ms | 16.19x  |
+| serde_cbor (Rust)    | 1.76 GB/s   | 0.359 ms | 1.00x   |
+| serde_json (Rust)    | 1.74 GB/s   | 0.363 ms | 1.01x   |
+| **core:cbor** (Wado) | 551.36 MB/s | 1.145 ms | 3.19x   |
+| JSON (JS)            | 299.89 MB/s | 2.106 ms | 5.87x   |
+| **core:json** (Wado) | 220.95 MB/s | 2.858 ms | 7.96x   |
 
 Deserialize:
 
 | Implementation       | Throughput  | ms/iter  | vs best |
 | -------------------- | ----------- | -------- | ------- |
-| serde_json (Rust)    | 638.85 MB/s | 0.989 ms | 1.00x   |
-| serde_cbor (Rust)    | 631.10 MB/s | 1.001 ms | 1.01x   |
-| JSON (JS)            | 482.66 MB/s | 1.308 ms | 1.32x   |
-| **core:cbor** (Wado) | 104.16 MB/s | 6.063 ms | 6.13x   |
-| **core:json** (Wado) | 87.40 MB/s  | 7.225 ms | 7.31x   |
+| serde_json (Rust)    | 674.29 MB/s | 0.937 ms | 1.00x   |
+| serde_cbor (Rust)    | 585.84 MB/s | 1.078 ms | 1.15x   |
+| JSON (JS)            | 517.14 MB/s | 1.221 ms | 1.30x   |
+| **core:cbor** (Wado) | 105.41 MB/s | 5.990 ms | 6.39x   |
+| **core:json** (Wado) | 92.11 MB/s  | 6.855 ms | 7.32x   |
 
 ### canada
 
@@ -98,21 +98,21 @@ Serialize:
 
 | Implementation       | Throughput  | ms/iter   | vs best |
 | -------------------- | ----------- | --------- | ------- |
-| serde_cbor (Rust)    | 1.81 GB/s   | 1.245 ms  | 1.00x   |
-| serde_json (Rust)    | 701.91 MB/s | 3.207 ms  | 2.58x   |
-| **core:cbor** (Wado) | 230.62 MB/s | 9.760 ms  | 7.84x   |
-| JSON (JS)            | 144.81 MB/s | 15.545 ms | 12.49x  |
-| **core:json** (Wado) | 96.91 MB/s  | 23.228 ms | 18.66x  |
+| serde_cbor (Rust)    | 1.72 GB/s   | 1.312 ms  | 1.00x   |
+| serde_json (Rust)    | 697.24 MB/s | 3.228 ms  | 2.46x   |
+| **core:cbor** (Wado) | 247.04 MB/s | 9.111 ms  | 6.94x   |
+| JSON (JS)            | 166.58 MB/s | 13.513 ms | 10.30x  |
+| **core:json** (Wado) | 97.98 MB/s  | 22.973 ms | 17.51x  |
 
 Deserialize:
 
 | Implementation       | Throughput  | ms/iter   | vs best |
 | -------------------- | ----------- | --------- | ------- |
-| serde_cbor (Rust)    | 877.09 MB/s | 2.566 ms  | 1.00x   |
-| serde_json (Rust)    | 294.68 MB/s | 7.639 ms  | 2.98x   |
-| JSON (JS)            | 282.31 MB/s | 7.974 ms  | 3.11x   |
-| **core:cbor** (Wado) | 134.67 MB/s | 16.715 ms | 6.51x   |
-| **core:json** (Wado) | 110.30 MB/s | 20.409 ms | 7.95x   |
+| serde_cbor (Rust)    | 829.70 MB/s | 2.713 ms  | 1.00x   |
+| serde_json (Rust)    | 287.88 MB/s | 7.819 ms  | 2.88x   |
+| JSON (JS)            | 270.94 MB/s | 8.308 ms  | 3.06x   |
+| **core:cbor** (Wado) | 146.25 MB/s | 15.391 ms | 5.67x   |
+| **core:json** (Wado) | 114.32 MB/s | 19.691 ms | 7.26x   |
 
 ### catalog
 
@@ -123,21 +123,21 @@ Serialize:
 
 | Implementation       | Throughput  | ms/iter  | vs best |
 | -------------------- | ----------- | -------- | ------- |
-| serde_json (Rust)    | 3.24 GB/s   | 0.533 ms | 1.00x   |
-| serde_cbor (Rust)    | 3.07 GB/s   | 0.562 ms | 1.05x   |
-| JSON (JS)            | 762.09 MB/s | 2.266 ms | 4.25x   |
-| **core:cbor** (Wado) | 700.33 MB/s | 2.466 ms | 4.63x   |
-| **core:json** (Wado) | 275.17 MB/s | 6.276 ms | 11.77x  |
+| serde_json (Rust)    | 3.08 GB/s   | 0.561 ms | 1.00x   |
+| serde_cbor (Rust)    | 2.65 GB/s   | 0.651 ms | 1.16x   |
+| JSON (JS)            | 802.38 MB/s | 2.153 ms | 3.84x   |
+| **core:cbor** (Wado) | 788.55 MB/s | 2.190 ms | 3.90x   |
+| **core:json** (Wado) | 383.06 MB/s | 4.509 ms | 8.04x   |
 
 Deserialize:
 
 | Implementation       | Throughput  | ms/iter  | vs best |
 | -------------------- | ----------- | -------- | ------- |
-| serde_cbor (Rust)    | 1.95 GB/s   | 0.886 ms | 1.00x   |
-| serde_json (Rust)    | 794.07 MB/s | 2.175 ms | 2.45x   |
-| JSON (JS)            | 592.39 MB/s | 2.916 ms | 3.29x   |
-| **core:cbor** (Wado) | 270.51 MB/s | 6.384 ms | 7.21x   |
-| **core:json** (Wado) | 173.69 MB/s | 9.944 ms | 11.22x  |
+| serde_cbor (Rust)    | 1.86 GB/s   | 0.929 ms | 1.00x   |
+| serde_json (Rust)    | 797.87 MB/s | 2.165 ms | 2.33x   |
+| JSON (JS)            | 554.88 MB/s | 3.113 ms | 3.35x   |
+| **core:cbor** (Wado) | 303.20 MB/s | 5.696 ms | 6.13x   |
+| **core:json** (Wado) | 178.11 MB/s | 9.697 ms | 10.44x  |
 
 ### Compression: zlib
 
