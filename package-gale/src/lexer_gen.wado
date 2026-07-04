@@ -470,29 +470,30 @@ fn gen_lexer_match_fn(
     w.line(&"let mut pos = start;");
     if rule.body.len() == 1 {
         // Alt-initial semantic predicate (`{cond}? ...`): gate before matching.
-        gen_lexer_rule_predicates(w, &rule.body[0].actions, 0, ea);
+        gen_lexer_rule_predicates(w, &rule.body[0].actions, 0, ea, &"return -1");
         gen_lexer_alt_seq(w, &rule.body[0], all_rules, &"return -1", ci);
         // Trailing predicate (`... {cond}?`): gate the completed match, so a
         // false predicate rejects the rule and the tokenizer tries the next.
-        gen_lexer_rule_predicates(w, &rule.body[0].actions, rule.body[0].elements.len(), ea);
+        gen_lexer_rule_predicates(w, &rule.body[0].actions, rule.body[0].elements.len(), ea, &"return -1");
         w.line(&"return pos;");
     } else {
-        gen_lexer_alts(w, &rule.body, all_rules, &"return -1", ci);
+        gen_lexer_alts(w, &rule.body, all_rules, &"return -1", ci, ea);
         w.line(&"return pos;");
     }
     w.end();
     w.blank();
 }
 
-/// Emit each semantic predicate at position `before` as a `pos`-rejecting guard
-/// (`if !(cond) { return -1; }`) in a lexer rule's match fn. The condition runs
-/// through the identity translator (`translate_lexer_predicate`), resolving
+/// Emit each semantic predicate at position `before` as a guard
+/// (`if !(cond) { <fail_action>; }`) in a lexer rule's match fn. The condition
+/// runs through the identity translator (`translate_lexer_predicate`), resolving
 /// lexer `$`-attributes (`$text`) against the match fn's `chars` / `start` /
-/// `pos`; an unresolvable reference is a loud codegen error. Only alt-initial
-/// (`before == 0`) and trailing (`before == elements.len()`) predicates on
-/// single-alt rules are placed today; mid-alt and multi-alt lexer predicates
-/// are not yet emitted.
-fn gen_lexer_rule_predicates(w: &mut CodeWriter, actions: &List<AltAction>, before: i32, ea: bool) {
+/// `pos`; an unresolvable reference is a loud codegen error. `fail_action` is
+/// `return -1` for a single-alt rule and `break <label>` inside a multi-alt
+/// rule (a false predicate falls through to the next alt). Only alt-initial
+/// (`before == 0`) and trailing (`before == elements.len()`) predicates are
+/// placed today; mid-alt lexer predicates are not yet emitted.
+fn gen_lexer_rule_predicates(w: &mut CodeWriter, actions: &List<AltAction>, before: i32, ea: bool, fail_action: &String) {
     if !ea {
         return;
     }
@@ -505,7 +506,7 @@ fn gen_lexer_rule_predicates(w: &mut CodeWriter, actions: &List<AltAction>, befo
                 Ok(c) => c,
                 Err(e) => panic(`lexer predicate: {e}`),
             };
-            w.line(&`if !({cond}) \{ return -1; \}`);
+            w.line(&`if !({cond}) \{ {fail_action}; \}`);
         }
     }
 }
@@ -516,6 +517,7 @@ fn gen_lexer_alts(
     all_rules: &List<LexerRule>,
     fail_action: &String,
     ci: bool,
+    ea: bool,
 ) {
     let id = w.next_id();
     w.line(&`let alts_saved_{id} = pos;`);
@@ -527,7 +529,9 @@ fn gen_lexer_alts(
         let label = `alts_{id}_{i}`;
         w.begin(&`{label}:`);
         w.line(&`pos = alts_saved_{id};`);
+        gen_lexer_rule_predicates(w, &alts[i].actions, 0, ea, &`break {label}`);
         gen_lexer_alt_seq(w, &alts[i], all_rules, &`break {label}`, ci);
+        gen_lexer_rule_predicates(w, &alts[i].actions, alts[i].elements.len(), ea, &`break {label}`);
         w.line(&`alts_ok_{id} = true;`);
         w.end();
     }
@@ -807,7 +811,7 @@ fn gen_lexer_elem(w: &mut CodeWriter, elem: &LexerElement, all_rules: &List<Lexe
                     } else if f.body.len() == 1 {
                         gen_lexer_alt_seq(w, &f.body[0], all_rules, fail_action, ci);
                     } else {
-                        gen_lexer_alts(w, &f.body, all_rules, fail_action, ci);
+                        gen_lexer_alts(w, &f.body, all_rules, fail_action, ci, false);
                     }
                 } else {
                     let fn_name = lexer_try_fn_name(&name);
@@ -820,7 +824,7 @@ fn gen_lexer_elem(w: &mut CodeWriter, elem: &LexerElement, all_rules: &List<Lexe
             if alts.len() == 1 {
                 gen_lexer_alt_seq(w, &alts[0], all_rules, fail_action, ci);
             } else {
-                gen_lexer_alts(w, &alts, all_rules, fail_action, ci);
+                gen_lexer_alts(w, &alts, all_rules, fail_action, ci, false);
             }
         },
         Repeat(rep) => gen_lexer_repeat(w, &rep, all_rules, fail_action, ci),
