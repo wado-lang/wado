@@ -18,9 +18,9 @@
 //! method calls auto-deref, so the reference needs no explicit `*`.
 
 use { ParserRule } from "../ir.wado";
-use { resolve_attr_ref } from "../action_translate.wado";
+use { resolve_attr_ref, rule_binding_for, rule_is_left_recursive, LR_ACC_LOCAL } from "../action_translate.wado";
 use { to_snake_case } from "../ident.wado";
-use { JExpr, JMember, JCall, JStmt, JLocal, JAssign } from "./jparser.wado";
+use { JExpr, JMember, JCall, JCast, JStmt, JLocal, JAssign } from "./jparser.wado";
 use { tokenize_java } from "./jlexer.wado";
 use { parse_java_expr, parse_java_stmts } from "./jparser.wado";
 
@@ -171,6 +171,9 @@ fn emit_expr(
         Name(n) => Result::Ok(if *n == "this" { *this_bind } else { *n }),
         Member(m) => emit_member(rule, rules, m, vals_in_scope, bindings, this_bind),
         Call(c) => emit_call(rule, rules, c, vals_in_scope, bindings, this_bind),
+        // A cast is Java's way to reach the typed context accessors; Gale's CST
+        // is untyped, so drop the type and keep the operand.
+        Cast(c) => emit_expr(rule, rules, &c.operand, vals_in_scope, bindings, this_bind),
         Unary(u) => {
             let operand = emit_expr(rule, rules, &u.operand, vals_in_scope, bindings, this_bind)?;
             Result::Ok(`{u.op}{operand}`);
@@ -217,6 +220,13 @@ fn emit_call(
     bindings: &List<[bool, String, String]>,
     this_bind: &String,
 ) -> Result<String, String> {
+    // ctx-child accessor `((Ctx)$ctx).<rule>(i)` — intercept before arg emission
+    // (the index is a child selector, not a Wado argument).
+    if let Member(m) = &c.callee {
+        if is_ctx_expr(&m.recv) {
+            return emit_ctx_child(rule, m, &c.args, bindings);
+        }
+    }
     let args_w = emit_args(rule, rules, &c.args, vals_in_scope, bindings, this_bind)?;
     return match &c.callee {
         Member(m) => emit_member_call(rule, rules, m, &c.args, &args_w, vals_in_scope, bindings, this_bind),
@@ -229,6 +239,50 @@ fn emit_call(
         },
         _ => Result::Err("java2wado: unsupported call target"),
     };
+}
+
+/// Whether `e` reduces (through parens and casts) to the `$ctx` special — the
+/// receiver of a ctx-child accessor `((BinaryContext)$ctx).e(0)`.
+fn is_ctx_expr(e: &JExpr) -> bool {
+    return match e {
+        Attr(t) => *t == "$ctx",
+        Paren(p) => is_ctx_expr(&p.inner),
+        Cast(c) => is_ctx_expr(&c.operand),
+        _ => false,
+    };
+}
+
+/// Map `((Ctx)$ctx).<rule>(i)` onto the LR operand vals the value channel
+/// exposes: child 0 is the left operand (the precedence accumulator
+/// `_lr_acc`); child i>=1 is the i-th suffix self-ref (the right operand,
+/// under its post-dedup binding). Only valid inside a left-recursive rule and
+/// for the rule's own children (the LR-binary shape); anything else is a loud
+/// error. A trailing `.v` reads the field via the enclosing `Member`.
+fn emit_ctx_child(
+    rule: &ParserRule,
+    m: &JMember,
+    args: &List<JExpr>,
+    bindings: &List<[bool, String, String]>,
+) -> Result<String, String> {
+    if !rule_is_left_recursive(rule) {
+        return Result::Err("java2wado: `$ctx` child access is only supported in a left-recursive rule");
+    }
+    if m.name != rule.name {
+        return Result::Err(`java2wado: $ctx.{m.name}(...): only the rule's own children are supported`);
+    }
+    if args.is_empty() {
+        return Result::Err(`java2wado: $ctx.{m.name}(): token/child accessor form not yet supported`);
+    }
+    let idx = match &args[0] {
+        Int(s) => *s,
+        _ => {
+            return Result::Err(`java2wado: $ctx.{m.name}(...): child index must be an integer literal`);
+        },
+    };
+    if idx == "0" {
+        return Result::Ok(LR_ACC_LOCAL);
+    }
+    return Result::Ok(rule_binding_for(bindings, &m.name));
 }
 
 fn emit_member_call(

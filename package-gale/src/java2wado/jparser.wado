@@ -23,6 +23,9 @@ pub variant JExpr {
     Member(JMember),
     /// Call `callee(args)` (`getText()`, `_input.LA(1)`, `this.foo()`).
     Call(JCall),
+    /// Cast `(Type) operand` — the context cast in `((BinaryContext)$ctx)`.
+    /// Gale's CST is untyped, so emit discards the type and keeps the operand.
+    Cast(JCast),
     Unary(JUnary),
     Binary(JBinary),
     Paren(JParen),
@@ -31,6 +34,11 @@ pub variant JExpr {
 pub struct JMember {
     pub recv: JExpr,
     pub name: String,
+}
+
+pub struct JCast {
+    pub ty: String,
+    pub operand: JExpr,
 }
 
 pub struct JCall {
@@ -292,17 +300,48 @@ fn parse_atom(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
         },
         Punct(p) => {
             if *p == "(" {
-                *pos += 1;
-                let inner = parse_or(tokens, pos)?;
-                if !punct_is(tokens, *pos, &")") {
-                    return Result::Err("java2wado: expected ')'");
+                if looks_like_cast(tokens, *pos) {
+                    let ty = ident_at(tokens, *pos + 1).unwrap();
+                    *pos += 3;
+                    let operand = parse_unary(tokens, pos)?;
+                    Result::Ok(JExpr::Cast(JCast { ty, operand }));
+                } else {
+                    *pos += 1;
+                    let inner = parse_or(tokens, pos)?;
+                    if !punct_is(tokens, *pos, &")") {
+                        return Result::Err("java2wado: expected ')'");
+                    }
+                    *pos += 1;
+                    Result::Ok(JExpr::Paren(JParen { inner }));
                 }
-                *pos += 1;
-                Result::Ok(JExpr::Paren(JParen { inner }));
             } else {
                 Result::Err(`java2wado: unexpected '{*p}' in expression`);
             }
         },
+    };
+}
+
+/// A cast `( TypeName ) operand`: `pos` at `(`, a single-identifier type name,
+/// `)`, then a token that starts an operand (`$ctx`, an identifier, a literal,
+/// `(`, `!`). Distinguishes the corpus cast `(BinaryContext)$ctx` from a plain
+/// parenthesized group `(a) + b`, where `+` follows the `)`.
+fn looks_like_cast(tokens: &List<JToken>, pos: i32) -> bool {
+    if ident_at(tokens, pos + 1) matches { None } {
+        return false;
+    }
+    if !punct_is(tokens, pos + 2, &")") {
+        return false;
+    }
+    let nx = pos + 3;
+    if nx >= tokens.len() {
+        return false;
+    }
+    return match &tokens[nx] {
+        Attr(_) => true,
+        Int(_) => true,
+        Str(_) => true,
+        Ident(_) => true,
+        Punct(q) => *q == "(" || *q == "!",
     };
 }
 

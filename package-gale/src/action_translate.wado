@@ -129,6 +129,19 @@ fn binding_for(bindings: &List<[bool, String, String]>, is_token: bool, base: &S
 /// it) cannot diverge.
 pub global RULE_START_TOK_LOCAL: String = "_rule_start_tok";
 
+/// The LR precedence-climbing accumulator local (`gen_lr_fn`), holding the left
+/// operand's vals while a continuation's action runs. java2wado's ctx-child
+/// accessor maps `((Ctx)$ctx).<rule>(0)` (the left operand) onto it. Named once
+/// so codegen and the translator agree.
+pub global LR_ACC_LOCAL: String = "_lr_acc";
+
+/// The Wado local a rule-child reference binds to (post-dedup), for a rule child
+/// named `name` — the same lookup the identity translator uses for `$rule`.
+/// Shared with java2wado's ctx-child accessor (`((Ctx)$ctx).<rule>(k)`).
+pub fn rule_binding_for(bindings: &List<[bool, String, String]>, name: &String) -> String {
+    return binding_for(bindings, false, &binding_name(name));
+}
+
 /// Whether any of `rule`'s actions references a rule-span special (`$text`,
 /// `$start`, `$stop`), so codegen must capture the rule's start token before the
 /// body.

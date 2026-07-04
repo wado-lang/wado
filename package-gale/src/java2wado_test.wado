@@ -134,6 +134,57 @@ test "java action: multiple statements space-join" {
     assert out == "this.i += 1; this.emit(`i=`);", `out: '{out}'`;
 }
 
+test "java action: ctx-cast LR-binary value idiom" {
+    let g = parse("grammar T;
+e returns [i32 v] : e '+' e | INT ;
+").unwrap();
+    let lang = ActionLanguage::Java;
+    let bindings: List<[bool, String, String]> = [
+        [false, "e", "e"],
+    ];
+    let out = translate_action(
+        &lang,
+        &g.parser_rules[0],
+        &g.parser_rules,
+        &"$v = ((BinaryContext)$ctx).e(0).v + ((BinaryContext)$ctx).e(1).v;",
+        true,
+        &bindings,
+    ).unwrap();
+    assert out == "vals.v = _lr_acc.v + e.v;", `out: '{out}'`;
+}
+
+test "java predicate: ctx-cast child access maps to the LR accumulator" {
+    let g = parse("grammar T;
+e returns [i32 v] : e '+' e | INT ;
+").unwrap();
+    let lang = ActionLanguage::Java;
+    let out = translate_predicate(
+        &lang,
+        &g.parser_rules[0],
+        &g.parser_rules,
+        &"((BinaryContext)$ctx).e(0).v > 0",
+        true,
+        &NO_BINDINGS,
+    ).unwrap();
+    assert out == "_lr_acc.v > 0", `out: '{out}'`;
+}
+
+test "java: ctx-cast in a non-left-recursive rule is a loud error" {
+    let g = parse("grammar T;
+r returns [i32 v] : INT ;
+").unwrap();
+    let lang = ActionLanguage::Java;
+    let res = translate_predicate(
+        &lang,
+        &g.parser_rules[0],
+        &g.parser_rules,
+        &"((C)$ctx).r(0).v > 0",
+        true,
+        &NO_BINDINGS,
+    );
+    assert res.is_err(), "$ctx child access outside an LR rule must be a loud error";
+}
+
 test "grammar_has_superclass keys the Phase 4 carve-out" {
     let with_super = parse("grammar T;
 options { superClass = TBase; }
