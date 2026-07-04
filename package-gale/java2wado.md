@@ -61,6 +61,8 @@ Surveyed from `tests/antlr4-compat/grammars/`. This is the concrete target — t
 | `int` / `boolean` / `String` / `void` | `i32` / `bool` / `String` / `()`    |
 | `List<String>`                    | `List<String>`                          |
 
+The recognizer handle is the literal `this`: `this.field` / `this.method()` and the recognizer methods (`getText`, `_input.LA`) all emit onto `this`. The attribute engine is handle-parameterized (`resolve_attr_ref(..., handle)`, default `p` for the live Wado path), so java2wado passes `this` and `$`-refs read `this.token_text(...)` too — one handle across the whole translated body. Codegen binds `this` as a reference to the parser at the splice site (`let this = p;` in a parse / predicate body, `let this = self;` in a `@members` method); Wado method calls auto-deref, so no `*` is needed. This keeps the translator decoupled from codegen's parameter name.
+
 Anything outside the subset is a **loud generation diagnostic** carrying the fragment span — never a silent no-op. The subset grows on corpus demand.
 
 ## Design: a real (small) Java parser, not regex rewriting

@@ -5,13 +5,17 @@
 //! shared, language-independent attribute engine (`resolve_attr_ref`); a string
 //! `+` chain becomes a Wado template literal (per the java2wado.md decision).
 //!
-//! Method mapping is snake_case by default: `this.foo()` → `<this>.foo()`, an
+//! Method mapping is snake_case by default: `this.foo()` → `this.foo()`, an
 //! arbitrary `@members` / superClass method that cannot be tabled. A small set
 //! of semantic redirects that are NOT renames stays explicit — `println`/`print`
 //! → `emit`, `.equals()` → `==`, a `TParser.TOK` constant → `TK_TOK` — plus a
 //! few fixed recognizer methods kept under clean Wado names (`getText` →
-//! `rule_text`, `_input.LA/LT` → `la`/`lt`). `<this>` is the context handle:
-//! `p` in a parse / predicate body, `self` in a `@members` method body.
+//! `rule_text`, `_input.LA/LT` → `la`/`lt`). The recognizer handle is the
+//! literal `this`, threaded as `this_bind` and shared with the attribute engine
+//! (`resolve_attr_ref`) so `$`-refs read `this.token_text(...)` too. Codegen
+//! binds `this` as a reference to the parser at the splice site (`let this = p;`
+//! in a parse / predicate body, `let this = self;` in a `@members` method); Wado
+//! method calls auto-deref, so the reference needs no explicit `*`.
 
 use { ParserRule } from "../ir.wado";
 use { resolve_attr_ref } from "../action_translate.wado";
@@ -20,8 +24,10 @@ use { JExpr, JMember, JCall, JStmt, JLocal, JAssign } from "./parser.wado";
 use { tokenize_java } from "./lexer.wado";
 use { parse_java_expr, parse_java_stmts } from "./parser.wado";
 
-/// Translate a Java expression body to a Wado expression, binding `this` to
-/// `this_bind` (`p` in a parse / predicate body). Ties tokenize → parse → emit.
+/// Translate a Java expression body to a Wado expression. `this_bind` is the
+/// recognizer handle to emit for `this` and the context API (always `this`;
+/// codegen binds it as a reference at the splice site). Ties tokenize → parse →
+/// emit.
 pub fn translate_java_expr(
     rule: &ParserRule,
     rules: &List<ParserRule>,
@@ -35,9 +41,9 @@ pub fn translate_java_expr(
     return emit_expr(rule, rules, &expr, vals_in_scope, bindings, this_bind);
 }
 
-/// Translate a Java statement-list body (an action block) to Wado statements,
-/// binding `this` to `this_bind`. Statements are space-joined; each already
-/// carries its trailing `;`.
+/// Translate a Java statement-list body (an action block) to Wado statements.
+/// `this_bind` is the recognizer handle (see `translate_java_expr`). Statements
+/// are space-joined; each already carries its trailing `;`.
 pub fn translate_java_stmts(
     rule: &ParserRule,
     rules: &List<ParserRule>,
@@ -161,7 +167,7 @@ fn emit_expr(
         Int(v) => Result::Ok(*v),
         Bool(b) => Result::Ok(if *b { String::from("true") } else { String::from("false") }),
         Str(c) => Result::Ok(`"{*c}"`),
-        Attr(text) => resolve_attr_ref(rule, rules, text, vals_in_scope, bindings),
+        Attr(text) => resolve_attr_ref(rule, rules, text, vals_in_scope, bindings, this_bind),
         Name(n) => Result::Ok(if *n == "this" { *this_bind } else { *n }),
         Member(m) => emit_member(rule, rules, m, vals_in_scope, bindings, this_bind),
         Call(c) => emit_call(rule, rules, c, vals_in_scope, bindings, this_bind),

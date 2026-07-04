@@ -28,7 +28,7 @@ pub fn translate_action(
 ) -> Result<String, String> {
     return match lang {
         Wado => translate_wado_action(rule, rules, body, vals_in_scope, bindings),
-        Java => translate_java_stmts(rule, rules, body, vals_in_scope, bindings, &"p"),
+        Java => translate_java_stmts(rule, rules, body, vals_in_scope, bindings, &"this"),
         Other(name) => Result::Err(`unsupported action language '{*name}' for action '{*body}'`),
     };
 }
@@ -47,7 +47,7 @@ pub fn translate_predicate(
 ) -> Result<String, String> {
     return match lang {
         Wado => translate_wado_action(rule, rules, body, vals_in_scope, bindings),
-        Java => translate_java_expr(rule, rules, body, vals_in_scope, bindings, &"p"),
+        Java => translate_java_expr(rule, rules, body, vals_in_scope, bindings, &"this"),
         Other(name) => Result::Err(`unsupported action language '{*name}' for predicate '{*body}'`),
     };
 }

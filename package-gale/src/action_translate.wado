@@ -25,19 +25,27 @@ pub fn vals_struct_name(rule: &ParserRule) -> String {
 /// when the enclosing rule emits a `vals` local (so `$v` / `$local` can be
 /// served). Returns ready-to-emit Wado, or an error naming the first
 /// unsupported reference.
+/// The Wado expression naming the recognizer handle in emitted context-API
+/// calls (`p.token_text(...)`, `p.rule_string_tree()`). Defaults to `p` — the
+/// parameter of the generated `parse_*` / `pred_*` functions. java2wado passes
+/// `this`, which codegen binds as a reference to the parser at the splice site
+/// (method calls auto-deref).
+pub global PARSER_HANDLE: String = "p";
+
 pub fn translate_wado_action(
     rule: &ParserRule,
     rules: &List<ParserRule>,
     body: &String,
     vals_in_scope: bool,
     bindings: &List<[bool, String, String]>,
+    handle: &String = &PARSER_HANDLE,
 ) -> Result<String, String> {
     let resolved = resolve_attrs(body, rule, rules)?;
     let body_chars: List<char> = body.chars().collect();
     let mut adjusted: List<ResolvedAttr> = [];
     let mut repls: List<String> = [];
     for let r of &resolved {
-        let e = action_attr_expr(rule, rules, r, vals_in_scope, bindings)?;
+        let e = action_attr_expr(rule, rules, r, vals_in_scope, bindings, handle)?;
         repls.push(e);
         // `$ctx.toStringTree` maps to a complete nullary call, so absorb the
         // source's own call syntax (`()`, `(this)`) — otherwise a leftover
@@ -62,8 +70,9 @@ pub fn resolve_attr_ref(
     ref_text: &String,
     vals_in_scope: bool,
     bindings: &List<[bool, String, String]>,
+    handle: &String = &PARSER_HANDLE,
 ) -> Result<String, String> {
-    return translate_wado_action(rule, rules, ref_text, vals_in_scope, bindings);
+    return translate_wado_action(rule, rules, ref_text, vals_in_scope, bindings, handle);
 }
 
 fn is_ctx_to_string_tree(r: &ResolvedAttr) -> bool {
@@ -163,9 +172,10 @@ fn action_attr_expr(
     r: &ResolvedAttr,
     vals_in_scope: bool,
     bindings: &List<[bool, String, String]>,
+    handle: &String,
 ) -> Result<String, String> {
     if r.target matches { ParserSpecial } {
-        return parser_special_expr(r, rule_is_left_recursive(rule));
+        return parser_special_expr(r, rule_is_left_recursive(rule), handle);
     }
     return match r.target {
         RuleAttr => {
@@ -191,8 +201,8 @@ fn action_attr_expr(
         },
         RuleLabel => rule_member_expr(rules, r, bindings),
         RuleRef => rule_member_expr(rules, r, bindings),
-        TokenLabel => token_member_expr(r, bindings),
-        TokenRef => token_member_expr(r, bindings),
+        TokenLabel => token_member_expr(r, bindings, handle),
+        TokenRef => token_member_expr(r, bindings, handle),
         _ => Result::Err(`${r.name}: this attribute form is not yet emitted`),
     };
 }
@@ -204,19 +214,19 @@ fn action_attr_expr(
 /// the CST context handle and remains a loud error. `$text` / `$start` read the
 /// captured `_rule_start_tok`, which codegen emits whenever a rule references a
 /// span special (`rule_captures_span`), so it is always in scope here.
-fn parser_special_expr(r: &ResolvedAttr, is_lr: bool) -> Result<String, String> {
+fn parser_special_expr(r: &ResolvedAttr, is_lr: bool, handle: &String) -> Result<String, String> {
     return match r.name {
         "text" && r.member matches { None } => Result::Ok(
-            `p.text_span(p.token_start({RULE_START_TOK_LOCAL}), p.last_end())`,
+            `{*handle}.text_span({*handle}.token_start({RULE_START_TOK_LOCAL}), {*handle}.last_end())`,
         ),
-        "start" => token_member_of(&RULE_START_TOK_LOCAL, &r.member),
-        "stop" => token_member_of(&String::from("(p.pos - 1)"), &r.member),
+        "start" => token_member_of(&RULE_START_TOK_LOCAL, &r.member, handle),
+        "stop" => token_member_of(&`({*handle}.pos - 1)`, &r.member, handle),
         // `$ctx.toStringTree` — renders the rule node under construction. A non-LR
         // rule's node is still open in `@after`; a left-recursive rule's level is
         // already folded shut, so it reads the just-finished node instead.
         "ctx" && r.member matches { Some("toStringTree") } => {
             let method = if is_lr { "rule_string_tree_final" } else { "rule_string_tree" };
-            Result::Ok(`p.{method}()`);
+            Result::Ok(`{*handle}.{method}()`);
         },
         _ => Result::Err(`${r.name}: this parser special is not yet emitted`),
     };
@@ -234,15 +244,19 @@ fn binding_name(name: &String) -> String {
 /// bound; a member reads that token through the context API. `.index` is the
 /// index itself and `.channel` is 0 (parser-visible tokens are default channel),
 /// so neither needs a runtime call.
-fn token_member_expr(r: &ResolvedAttr, bindings: &List<[bool, String, String]>) -> Result<String, String> {
-    return token_member_of(&binding_for(bindings, true, &binding_name(&r.name)), &r.member);
+fn token_member_expr(
+    r: &ResolvedAttr,
+    bindings: &List<[bool, String, String]>,
+    handle: &String,
+) -> Result<String, String> {
+    return token_member_of(&binding_for(bindings, true, &binding_name(&r.name)), &r.member, handle);
 }
 
 /// A token member read on an arbitrary token-index expression `idx` (a bound
 /// label, `_rule_start_tok`, `(p.pos - 1)`, …). `.index` is the index itself and
 /// `.channel` is 0 (parser-visible tokens are default channel), so neither
 /// needs a runtime call; the rest go through the `p.token_*` context API.
-fn token_member_of(idx: &String, member: &Option<String>) -> Result<String, String> {
+fn token_member_of(idx: &String, member: &Option<String>, handle: &String) -> Result<String, String> {
     let m = match member {
         Some(m) => *m,
         None => {
@@ -250,11 +264,11 @@ fn token_member_of(idx: &String, member: &Option<String>) -> Result<String, Stri
         },
     };
     return match m {
-        "text" => Result::Ok(`p.token_text({*idx})`),
-        "int" => Result::Ok(`p.token_int({*idx})`),
-        "type" => Result::Ok(`p.token_kind({*idx})`),
-        "line" => Result::Ok(`p.token_line({*idx})`),
-        "pos" => Result::Ok(`p.token_col({*idx})`),
+        "text" => Result::Ok(`{*handle}.token_text({*idx})`),
+        "int" => Result::Ok(`{*handle}.token_int({*idx})`),
+        "type" => Result::Ok(`{*handle}.token_kind({*idx})`),
+        "line" => Result::Ok(`{*handle}.token_line({*idx})`),
+        "pos" => Result::Ok(`{*handle}.token_col({*idx})`),
         "index" => Result::Ok(*idx),
         "channel" => Result::Ok(String::from("0")),
         _ => Result::Err(`.{m}: unknown token member`),

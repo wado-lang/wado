@@ -14,7 +14,7 @@ fn java_pred(src: &String, rule_src: &String, vals_in_scope: bool) -> String {
 
 test "java predicate: this.field with arithmetic and comparison" {
     let out = java_pred(&"this.i % 2 == 0", &"a : ID ;", false);
-    assert out == "p.i % 2 == 0", `out: '{out}'`;
+    assert out == "this.i % 2 == 0", `out: '{out}'`;
 }
 
 test "java predicate: rule arg reference" {
@@ -24,22 +24,22 @@ test "java predicate: rule arg reference" {
 
 test "java predicate: negation with parens" {
     let out = java_pred(&"!(this.enumKeyword)", &"a : ID ;", false);
-    assert out == "!(p.enumKeyword)", `out: '{out}'`;
+    assert out == "!(this.enumKeyword)", `out: '{out}'`;
 }
 
 test "java predicate: input lookahead vs token constant" {
     let out = java_pred(&"_input.LA(1) != TParser.ELSE", &"a : ID ;", false);
-    assert out == "p.la(1) != TK_ELSE", `out: '{out}'`;
+    assert out == "this.la(1) != TK_ELSE", `out: '{out}'`;
 }
 
 test "java predicate: token text equals" {
     let out = java_pred(&"_input.LT(1).getText().equals(\"x\")", &"a : ID ;", false);
-    assert out == "p.token_text(p.lt(1)) == \"x\"", `out: '{out}'`;
+    assert out == "this.token_text(this.lt(1)) == \"x\"", `out: '{out}'`;
 }
 
 test "java predicate: member method call snake-cases" {
     let out = java_pred(&"this.pred($i == 99)", &"a[i32 i] : ID ;", true);
-    assert out == "p.pred(vals.i == 99)", `out: '{out}'`;
+    assert out == "this.pred(vals.i == 99)", `out: '{out}'`;
 }
 
 test "java predicate: boolean literal" {
@@ -70,7 +70,7 @@ r : ID ;
         false,
         &NO_BINDINGS,
     ).unwrap();
-    assert out == "`ID {p.token_text(id)}`", `out: '{out}'`;
+    assert out == "`ID {this.token_text(id)}`", `out: '{out}'`;
 }
 
 test "dispatcher routes language = Wado through the identity translator" {
@@ -92,22 +92,22 @@ fn java_action(src: &String, rule_src: &String, vals_in_scope: bool) -> String {
 
 test "java action: println appends a newline" {
     let out = java_action(&"System.out.println(\"enum\");", &"a : ID ;", false);
-    assert out == "p.emit(`enum\\n`);", `out: '{out}'`;
+    assert out == "this.emit(`enum\\n`);", `out: '{out}'`;
 }
 
 test "java action: print omits the newline" {
     let out = java_action(&"System.out.print(\"a\");", &"a : ID ;", false);
-    assert out == "p.emit(`a`);", `out: '{out}'`;
+    assert out == "this.emit(`a`);", `out: '{out}'`;
 }
 
 test "java action: println stringifies a value arg" {
     let out = java_action(&"System.out.println($x.v);", &"r : x=e ; e returns [i32 v] : ID ;", false);
-    assert out == "p.emit(`{x.v}\\n`);", `out: '{out}'`;
+    assert out == "this.emit(`{x.v}\\n`);", `out: '{out}'`;
 }
 
 test "java action: println with a concat arg" {
     let out = java_action(&"System.out.println(\"ID \" + $ID.text);", &"r : ID ;", false);
-    assert out == "p.emit(`ID {p.token_text(id)}\\n`);", `out: '{out}'`;
+    assert out == "this.emit(`ID {this.token_text(id)}\\n`);", `out: '{out}'`;
 }
 
 test "java action: assignment to the value channel" {
@@ -121,7 +121,7 @@ test "java action: assignment to the value channel" {
 
 test "java action: compound assignment on this.field" {
     let out = java_action(&"this.i += 1;", &"a : ID ;", false);
-    assert out == "p.i += 1;", `out: '{out}'`;
+    assert out == "this.i += 1;", `out: '{out}'`;
 }
 
 test "java action: local declaration maps the type" {
@@ -131,7 +131,7 @@ test "java action: local declaration maps the type" {
 
 test "java action: multiple statements space-join" {
     let out = java_action(&"this.i += 1; System.out.print(\"i=\");", &"a : ID ;", false);
-    assert out == "p.i += 1; p.emit(`i=`);", `out: '{out}'`;
+    assert out == "this.i += 1; this.emit(`i=`);", `out: '{out}'`;
 }
 
 test "grammar_has_superclass keys the Phase 4 carve-out" {
