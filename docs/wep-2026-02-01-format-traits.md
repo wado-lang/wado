@@ -109,7 +109,7 @@ Each format trait has an alternate variant activated by the `#` flag. For Inspec
 
 | Base Trait | Alt Trait     | Syntax  | Effect                        |
 | ---------- | ------------- | ------- | ----------------------------- |
-| `Display`  | `DisplayAlt`  | `{:#}`  | Delegates to `InspectAlt`     |
+| `Display`  | `DisplayAlt`  | `{:#}`  | Delegates to `Display`        |
 | `Inspect`  | `InspectAlt`  | `{:#?}` | Pretty-print with indentation |
 | `Binary`   | `BinaryAlt`   | `{:#b}` | Add `0b` prefix               |
 | `Octal`    | `OctalAlt`    | `{:#o}` | Add `0o` prefix               |

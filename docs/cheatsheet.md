@@ -955,7 +955,7 @@ impl<T: Eq> Eq for Pair<T> {
 
 All primitives implement `Eq` and `Ord`. Structs and enums auto-derive both (variants: `Eq` only) when every field/case implements the trait — synthesized on demand, not for every type. An explicit `impl Eq for T;` / `impl Ord for T;` marker forces it and is a compile error if ineligible. `Option<T: Eq>`, `Result<T: Eq, E: Eq>`, `List<T: Eq>` implement `Eq`; `List<T: Ord>` implements `Ord`.
 
-`Inspect` and `InspectAlt` are auto-derived unconditionally for every type. `Display` and `DisplayAlt` fall back to them.
+`Inspect` and `InspectAlt` are auto-derived unconditionally for every type. The delegation chain when a trait is not explicitly implemented is `InspectAlt → Inspect`, `Display → Inspect`, and `DisplayAlt → Display` — so `{x:#}` defaults to plain display, while pretty-printing stays on the inspect side (`{x:#?}`). A newtype's `Display`/`DisplayAlt` render transparently like the base value; only `Inspect`/`InspectAlt` add the `as Name` annotation.
 
 `Default` is auto-derived unconditionally for a non-generic struct when every field has a declared default expression (`f: T = expr`).
 
