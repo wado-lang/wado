@@ -77,9 +77,11 @@ Rationale: string concatenation (`"a" + $x + "b"`), operator precedence, and `th
 Module layout mirrors `src/g4/` (lexer / parser split):
 
 - `src/java2wado.wado` — facade + the `ActionLanguage` dispatcher (`translate_action` / `translate_predicate` / `translate_members`).
-- `src/java2wado/lexer.wado` — Java tokens over the fragment: identifiers, `$ident` (opaque primary), int/string/bool literals, operators, `.`/`,`/`;`/`()`/`{}`, casts. Reuse the string/comment-skipping discipline in `action_strip` / `attr_scan`.
-- `src/java2wado/parser.wado` — recursive descent producing `JExpr` / `JStmt` (variants) for the subset above. `$`-refs and unknown method calls become `JExpr::Attr(span)` / a mapped-call node.
-- `src/java2wado/emit.wado` — `JStmt`/`JExpr` → Wado string. `$`-ref leaves call the shared `resolve_attr_ref` (the per-reference entry into `action_translate`'s attribute engine, handle-parameterized); mapped calls follow the method-mapping table; `TParser.X` becomes `TK_X`.
+- `src/java2wado/jlexer.wado` — Java tokens over the fragment: identifiers, `$ident` (opaque primary), int/string/bool literals, operators, `.`/`,`/`;`/`()`/`{}`, casts. Reuse the string/comment-skipping discipline in `action_strip` / `attr_scan`.
+- `src/java2wado/jparser.wado` — recursive descent producing `JExpr` / `JStmt` (variants) for the subset above. `$`-refs become `JExpr::Attr`; method calls become `JExpr::Call` over `Name`/`Member` nodes.
+- `src/java2wado/jemit.wado` — `JStmt`/`JExpr` → Wado string. `$`-ref leaves call the shared `resolve_attr_ref` (the per-reference entry into `action_translate`'s attribute engine, handle-parameterized); mapped calls follow the method-mapping table; `TParser.X` becomes `TK_X`.
+
+(The `j`-prefix keeps each basename unique against `src/g4/{lexer,parser}.wado`.)
 
 Each with a sibling `_test.wado`.
 
