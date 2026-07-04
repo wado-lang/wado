@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783128299140,
+  "lastUpdate": 1783134402127,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -37829,6 +37829,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 287029,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ed91faf58a2db439135097e8d016a2cac3d4a4ed",
+          "message": "Merge pull request #1509 from wado-lang/claude/package-gale-action-predicate-o8whr7\n\nfeat(gale): execute Wado actions and predicates",
+          "timestamp": "2026-07-04T11:58:10+09:00",
+          "tree_id": "7536ecf09535d460db43788a66f21ccedf875078",
+          "url": "https://github.com/wado-lang/wado/commit/ed91faf58a2db439135097e8d016a2cac3d4a4ed"
+        },
+        "date": 1783134401788,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17049,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 284954,
             "unit": "bytes"
           }
         ]
