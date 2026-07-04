@@ -1029,16 +1029,18 @@ async fn embed_wit_section(
         return Ok(wasm);
     };
 
-    // A library's world is the component's anonymous root; render it as `root`
-    // (see `manifest::LIB_WORLD_NAME`) so the emitted world does not collide
-    // with the default interface (named after `[package].name`). Codegen keeps
-    // the `namespace:name/name` interface identity — the world name is textual.
-    let world = match (
-        opts.lib_world.as_deref(),
-        project.and_then(|p| p.manifest.package.as_ref()),
-    ) {
-        (Some(_), Some(pkg)) => crate::manifest::lib_emit_world_fq(pkg)?,
-        _ => opts.target_world_fq().to_string(),
+    let world = if opts.lib_world.is_some() {
+        let Some(pkg) = project.and_then(|p| p.manifest.package.as_ref()) else {
+            let msg = "--lib build has no resolvable [package] to name the library world";
+            if explicit {
+                return Err(CliExit::error(format!("--embed-wit: {msg}")));
+            }
+            eprintln!("warning: skipped embedding WIT component-type section: {msg}");
+            return Ok(wasm);
+        };
+        crate::manifest::lib_emit_world_fq(pkg)?
+    } else {
+        opts.target_world_fq().to_string()
     };
 
     let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();

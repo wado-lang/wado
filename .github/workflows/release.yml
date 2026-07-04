@@ -42,15 +42,27 @@ jobs:
         shell: bash
         run: |
           version="${{ steps.v.outputs.version }}"
-          file_version() {
-            grep -m1 -E '^version[[:space:]]*=' "$1" \
-              | sed -E 's/^version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/'
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::tag version '$version' is not a MAJOR.MINOR.PATCH release"
+            exit 1
+          fi
+          workspace_version() {
+            awk '
+              /^\[/ { in_wp = ($0 == "[workspace.package]"); next }
+              in_wp && /^version[[:space:]]*=/ {
+                v = $0
+                sub(/^version[[:space:]]*=[[:space:]]*"/, "", v)
+                sub(/".*/, "", v)
+                print v
+                exit
+              }
+            ' "$1"
           }
-          cargo_v="$(file_version Cargo.toml)"
-          wado_v="$(file_version wado.toml)"
+          cargo_v="$(workspace_version Cargo.toml)"
+          wado_v="$(workspace_version wado.toml)"
           fail=0
-          [ "$cargo_v" = "$version" ] || { echo "::error::Cargo.toml version $cargo_v != tag $version"; fail=1; }
-          [ "$wado_v"  = "$version" ] || { echo "::error::wado.toml version $wado_v != tag $version"; fail=1; }
+          [ "$cargo_v" = "$version" ] || { echo "::error::Cargo.toml [workspace.package].version '$cargo_v' != tag '$version'"; fail=1; }
+          [ "$wado_v"  = "$version" ] || { echo "::error::wado.toml [workspace.package].version '$wado_v' != tag '$version'"; fail=1; }
           exit $fail
 
   build:
@@ -186,12 +198,16 @@ jobs:
         with:
           ref: ${{ needs.validate.outputs.tag }}
 
-      - name: Check out the vendored wasmtime fork (path dependency)
-        run: git submodule update --init --depth 1 vendor/wasmtime
-
-      - uses: Swatinem/rust-cache@v2
+      - name: Download the release binary built by the build job
+        uses: actions/download-artifact@v8
         with:
-          key: release-publish
+          name: dist-x86_64-unknown-linux-gnu
+          path: dist
+
+      - name: Unpack wado onto PATH
+        run: |
+          tar xzf dist/wado-linux-x86_64.tar.gz -C dist
+          echo "$PWD/dist/wado-linux-x86_64" >> "$GITHUB_PATH"
 
       - uses: cargo-bins/cargo-binstall@main
       - name: Install wkg
@@ -205,4 +221,4 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish Wado packages
-        run: cargo run --locked -p wado-cli -- publish
+        run: wado publish

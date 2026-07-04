@@ -312,6 +312,8 @@ How it works:
    - run `wado publish` to push the workspace's Wado packages to [GHCR](https://github.com/orgs/wado-lang/packages) as OCI artifacts.
 3. Default bump is **patch**. Add a `tagpr:minor` or `tagpr:major` label on the Release PR to override.
 
+tagpr is the single version manager: the workspace version is bumped only by the Release PR, never by hand. Do not edit `[workspace.package].version` in `Cargo.toml` or `wado.toml` directly — the release job fails if the two files disagree with the tag.
+
 ## Benchmarks
 
 Per-commit performance tracking is published to GitHub Pages. Every push to `main` records runtime and binary size metrics.

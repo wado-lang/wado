@@ -232,26 +232,37 @@ impl EntryPointKind {
 /// `[package].name`) avoids the two sharing one `namespace:package/name` slot.
 pub const LIB_WORLD_NAME: &str = "root";
 
-/// The library's default-interface FQ, in the `namespace:name/name@version`
-/// shape — the identity consumers import. `[package].namespace` is required for
-/// `--lib`; this returns an error message when it is missing, or when the name
-/// collides with the reserved library world name.
-pub fn lib_world_fq(pkg: &wado_manifest::Package) -> Result<String, CliExit> {
+/// A library FQ `namespace:name/<segment>@version` for `pkg`. Both the
+/// default-interface identity and the world-emit name derive from this, so the
+/// namespace requirement and the reserved-name guard live in one place.
+///
+/// The reserved-name guard compares case-insensitively: WIT kebab-cases both
+/// the world (`root`) and the default interface (`to_kebab([package].name)`),
+/// and kebab-casing lowercases, so `Root`/`ROOT` would collide with the world
+/// exactly as `root` does. Any name equal to `root` ignoring case is rejected.
+fn lib_fq(pkg: &wado_manifest::Package, segment: &str) -> Result<String, CliExit> {
     let namespace = pkg
         .namespace
         .as_deref()
         .ok_or_else(|| CliExit::error("`--lib` requires `[package].namespace` in wado.toml"))?;
-    if pkg.name == LIB_WORLD_NAME {
+    if pkg.name.eq_ignore_ascii_case(LIB_WORLD_NAME) {
         return Err(CliExit::error(format!(
-            "[package].name {LIB_WORLD_NAME:?} is reserved: a library's world is \
-             named {LIB_WORLD_NAME:?}, so the default interface cannot share it"
+            "[package].name {name:?} is reserved: a library's world is named \
+             {LIB_WORLD_NAME:?}, so the default interface cannot share it",
+            name = pkg.name
         )));
     }
     Ok(format!(
-        "{namespace}:{name}/{name}@{version}",
+        "{namespace}:{name}/{segment}@{version}",
         name = pkg.name,
         version = pkg.version,
     ))
+}
+
+/// The library's default-interface FQ, in the `namespace:name/name@version`
+/// shape — the identity consumers import.
+pub fn lib_world_fq(pkg: &wado_manifest::Package) -> Result<String, CliExit> {
+    lib_fq(pkg, &pkg.name)
 }
 
 /// The FQ used only to *name the world* when emitting a library's WIT: the
@@ -259,15 +270,7 @@ pub fn lib_world_fq(pkg: &wado_manifest::Package) -> Result<String, CliExit> {
 /// Distinct from [`lib_world_fq`] (the default-interface identity) so the
 /// emitted `world root` and `interface <name>` never collide.
 pub fn lib_emit_world_fq(pkg: &wado_manifest::Package) -> Result<String, CliExit> {
-    let namespace = pkg
-        .namespace
-        .as_deref()
-        .ok_or_else(|| CliExit::error("`--lib` requires `[package].namespace` in wado.toml"))?;
-    Ok(format!(
-        "{namespace}:{name}/{LIB_WORLD_NAME}@{version}",
-        name = pkg.name,
-        version = pkg.version,
-    ))
+    lib_fq(pkg, LIB_WORLD_NAME)
 }
 
 /// Resolve the `--lib` entry point and library world FQ.
@@ -628,17 +631,29 @@ lib = "src/lib.wado"
     }
 
     #[test]
-    fn lib_world_fq_rejects_reserved_root_package_name() {
-        let toml = r#"
-[package]
-namespace = "wado"
-name = "root"
-version = "0.1.0"
-lib = "src/lib.wado"
-"#;
-        let m = toml.parse::<Manifest>().unwrap();
-        let err = lib_world_fq(m.package.as_ref().unwrap()).unwrap_err();
-        assert!(err.message.contains("reserved"), "{}", err.message);
+    fn lib_fq_rejects_reserved_root_package_name_any_case() {
+        // Both helpers reject a name that kebab-cases to the reserved world
+        // `root` — case-insensitively, since kebab-casing lowercases (`Root`
+        // and `root` both collide with `world root`).
+        for name in ["root", "Root", "ROOT"] {
+            let toml = format!(
+                "[package]\nnamespace = \"wado\"\nname = \"{name}\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n"
+            );
+            let m = toml.parse::<Manifest>().unwrap();
+            let pkg = m.package.as_ref().unwrap();
+            let iface_err = lib_world_fq(pkg).unwrap_err();
+            let world_err = lib_emit_world_fq(pkg).unwrap_err();
+            assert!(
+                iface_err.message.contains("reserved"),
+                "{}",
+                iface_err.message
+            );
+            assert!(
+                world_err.message.contains("reserved"),
+                "{}",
+                world_err.message
+            );
+        }
     }
 
     #[test]
