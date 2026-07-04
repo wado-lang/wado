@@ -1,0 +1,27 @@
+//! Stage C left-recursive value channel: a left-recursive rule computes a
+//! value from its operands. The accumulated left operand (`$l.v`), the
+//! recursive right operand (`$r.v`), and the continuation's own `$v` thread
+//! through the precedence-climbing loop.
+
+use lv from "./grammars/wado_lr_vals.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_lr_vals",
+        },
+    };
+
+test "the LR value channel evaluates an expression" {
+    let a = lv::parse(&"2 + 3");
+    assert a.ok(), "clean parse of 2 + 3";
+    assert a.output == "=5", `output: '{a.output}'`;
+
+    let b = lv::parse(&"2 + 3 * 4");
+    assert b.ok(), "clean parse with precedence";
+    assert b.output == "=14", `output: '{b.output}'`;
+
+    let c = lv::parse(&"2 * 3 + 4");
+    assert c.ok(), "clean parse, product first";
+    assert c.output == "=10", `output: '{c.output}'`;
+}

@@ -1,0 +1,22 @@
+//! Stage C lexer semantic predicates: a trailing `{ pos - start == 4 }?` gates
+//! whether `KW` wins the longest-match tie against `ID`, and `{ false }?`
+//! disables `DISABLED` entirely. A four-letter word lexes as KW, others as ID.
+
+use lp from "./grammars/wado_lex_pred.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_lex_pred",
+        },
+    };
+
+test "a trailing lexer predicate decides the winning rule" {
+    let four = lp::parse(&"test");
+    assert four.ok(), "clean parse of a four-letter word";
+    assert four.output == "kw", `output: '{four.output}'`;
+
+    let two = lp::parse(&"hi");
+    assert two.ok(), "clean parse of a two-letter word";
+    assert two.output == "id", `output: '{two.output}'`;
+}

@@ -1,0 +1,18 @@
+//! Stage C rule arguments: `e[i32 base]` is threaded as a `_parse_e` parameter
+//! and stored into the rule's value channel, so `$base` reads what the caller
+//! passed at each `e[N]` call site.
+
+use ra from "./grammars/wado_rule_arg.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_rule_arg",
+        },
+    };
+
+test "each call site passes its own argument value" {
+    let result = ra::parse(&"a a");
+    assert result.ok(), "clean parse";
+    assert result.output == "base=3 base=40 ", `output: '{result.output}'`;
+}

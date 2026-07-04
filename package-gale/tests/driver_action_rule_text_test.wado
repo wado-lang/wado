@@ -1,0 +1,18 @@
+//! Stage C parser context API: `$text` reads the input consumed by the current
+//! rule so far — from the captured rule-start byte to the last matched token —
+//! via `p.text_span(...)`.
+
+use rt from "./grammars/wado_rule_text.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_rule_text",
+        },
+    };
+
+test "$text spans the input the rule consumed" {
+    let result = rt::parse(&"foo bar");
+    assert result.ok(), "clean parse";
+    assert result.output == "foo bar", `output: '{result.output}'`;
+}

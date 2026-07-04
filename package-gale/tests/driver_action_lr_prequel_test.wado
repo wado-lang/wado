@@ -1,0 +1,23 @@
+//! Stage C @init / @after on a left-recursive rule: @init seeds the value
+//! channel at entry (the primary alt reads `$v == 1000`), @after runs once at
+//! exit on the final value. Each recursive operand is its own invocation, so it
+//! runs its own @init/@after.
+
+use lp from "./grammars/wado_lr_prequel.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_lr_prequel",
+        },
+    };
+
+test "@init seeds the primary and @after reads the final LR value" {
+    let one = lp::parse(&"5");
+    assert one.ok(), "clean parse of a single atom";
+    assert one.output == "[after=1005]v=1005 ", `output: '{one.output}'`;
+
+    let add = lp::parse(&"5 + 3");
+    assert add.ok(), "clean parse of a sum";
+    assert add.output == "[after=1003][after=2008]v=2008 ", `output: '{add.output}'`;
+}

@@ -1,0 +1,17 @@
+//! Stage C context-dependent predicate on a rule argument: `{$mode == 1}?`
+//! reads the value the caller passed at `e[1]`, gating the alternative.
+
+use ap from "./grammars/wado_arg_pred.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_arg_pred",
+        },
+    };
+
+test "a predicate gates on a threaded rule argument" {
+    let a = ap::parse(&"a");
+    assert a.ok(), "clean parse of a";
+    assert a.output == "one", `output: '{a.output}'`;
+}

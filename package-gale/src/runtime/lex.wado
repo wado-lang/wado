@@ -148,35 +148,22 @@ impl Token {
 // with reference-containing fields triggers a compiler bug
 // (see wado-compiler/tests/fixtures/recursive_struct_ref_eq.wado).
 
-/// TokenStream is the struct-of-arrays token storage for generated parsers.
-/// A "token" is an `i32` index into these parallel arrays; no per-token
-/// aggregate is ever allocated. The hot fields (`kinds` / `starts` / `ends`)
-/// are read on every scan/dispatch step as a single `array.get i32`; the
-/// trivia and source-char data are cold, materialised on demand only by the
-/// diagnostic / round-trip paths.
-///
-/// `Token` above stays the value-typed vocabulary for Gale's own `.g4` front
-/// end; the generated-parser runtime uses `TokenStream` instead.
-///
-/// Layout invariant: the per-token arrays (`kinds` / `starts` / `ends` /
-/// `triv_lo` / `triv_hi`) always share a length, because `push_token` is the
-/// only writer and advances all five together. Hidden / skip tokens ("trivia")
-/// live in the flat `triv_*` arrays in source order; each parser token owns the
-/// half-open range `[triv_lo[i], triv_hi[i])`.
 /// Per-token recovery flags (a bitset stored in `TokenStream.flags`). A normal
-/// lexed token has `0`. The bits mark tokens the error-resilient parser created
-/// or set aside during recovery, so the tree builder and diagnostics can render
-/// them without a side table:
+/// lexed token has `none()`. The bits mark tokens the error-resilient parser
+/// created or set aside during recovery, so the tree builder and diagnostics can
+/// render them without a side table:
 ///
-/// - `TOK_SYNTHETIC` — a zero-width token the parser *inserted* to stand in for
+/// - `Synthetic` — a zero-width token the parser *inserted* to stand in for
 ///   a required terminal that was absent (its `kinds[i]` is the expected kind).
-/// - `TOK_SKIPPED` — a real lexed token the parser *deleted* during recovery
+/// - `Skipped` — a real lexed token the parser *deleted* during recovery
 ///   (it belongs to no rule; preserved for lossless round-trip).
-/// - `TOK_LEX_ERROR` — a fast mirror of the `TK_ERROR` kind: a char run that
+/// - `LexError` — a fast mirror of the `TK_ERROR` kind: a char run that
 ///   matched no lexer rule.
-pub global TOK_SYNTHETIC: i32 = 1;
-pub global TOK_SKIPPED: i32 = 2;
-pub global TOK_LEX_ERROR: i32 = 4;
+pub flags TokenFlags {
+    Synthetic,
+    Skipped,
+    LexError,
+}
 
 /// TokenStream is the struct-of-arrays token storage for generated parsers.
 /// A "token" is an `i32` index into these parallel arrays; no per-token
@@ -204,7 +191,7 @@ pub struct TokenStream {
     pub triv_starts: List<i32>,
     pub triv_ends: List<i32>,
     pub triv_chans: List<i32>,
-    pub flags: List<i32>,
+    pub flags: List<TokenFlags>,
 }
 
 impl TokenStream {
@@ -251,12 +238,20 @@ impl TokenStream {
     /// Append one parser (default-channel) token. The sole writer of the
     /// per-token arrays, so their lengths stay in lockstep by construction.
     pub fn push_token(&mut self, kind: i32, start: i32, end: i32, triv_lo: i32, triv_hi: i32) {
-        self.push_token_flagged(kind, start, end, triv_lo, triv_hi, 0);
+        self.push_token_flagged(kind, start, end, triv_lo, triv_hi, TokenFlags::none());
     }
 
     /// Append a token carrying recovery `flags`, returning its index. The
     /// real lockstep writer; `push_token` is the `flags = 0` common case.
-    pub fn push_token_flagged(&mut self, kind: i32, start: i32, end: i32, triv_lo: i32, triv_hi: i32, flags: i32) -> i32 {
+    pub fn push_token_flagged(
+        &mut self,
+        kind: i32,
+        start: i32,
+        end: i32,
+        triv_lo: i32,
+        triv_hi: i32,
+        flags: TokenFlags,
+    ) -> i32 {
         let idx = self.kinds.len();
         self.kinds.push(kind);
         self.starts.push(start);
@@ -272,39 +267,39 @@ impl TokenStream {
     /// during recovery. Returns the new token index. The token owns no trivia.
     pub fn push_synthetic(&mut self, expected_kind: i32, at: i32) -> i32 {
         let m = self.trivia_mark();
-        return self.push_token_flagged(expected_kind, at, at, m, m, TOK_SYNTHETIC);
+        return self.push_token_flagged(expected_kind, at, at, m, m, TokenFlags::Synthetic);
     }
 
-    pub fn flags_at(&self, i: i32) -> i32 {
+    pub fn flags_at(&self, i: i32) -> TokenFlags {
         return self.flags[i];
     }
 
-    pub fn set_flag(&mut self, i: i32, flag: i32) {
+    pub fn set_flag(&mut self, i: i32, flag: TokenFlags) {
         self.flags[i] = self.flags[i] | flag;
     }
 
     /// Mark token `i` as deleted by recovery (preserved, but bound to no rule).
     pub fn mark_skipped(&mut self, i: i32) {
-        self.set_flag(i, TOK_SKIPPED);
+        self.set_flag(i, TokenFlags::Skipped);
     }
 
     /// Mark token `i` as a lexer error (a char run that matched no rule). The
     /// lexer sets this alongside the `TK_ERROR` kind so consumers can test the
     /// flag without knowing the grammar's `TK_ERROR` id.
     pub fn mark_lex_error(&mut self, i: i32) {
-        self.set_flag(i, TOK_LEX_ERROR);
+        self.set_flag(i, TokenFlags::LexError);
     }
 
     pub fn is_synthetic(&self, i: i32) -> bool {
-        return self.flags[i] & TOK_SYNTHETIC != 0;
+        return self.flags[i] & TokenFlags::Synthetic != TokenFlags::none();
     }
 
     pub fn is_skipped(&self, i: i32) -> bool {
-        return self.flags[i] & TOK_SKIPPED != 0;
+        return self.flags[i] & TokenFlags::Skipped != TokenFlags::none();
     }
 
     pub fn is_lex_error(&self, i: i32) -> bool {
-        return self.flags[i] & TOK_LEX_ERROR != 0;
+        return self.flags[i] & TokenFlags::LexError != TokenFlags::none();
     }
 
     pub fn kind_at(&self, i: i32) -> i32 {

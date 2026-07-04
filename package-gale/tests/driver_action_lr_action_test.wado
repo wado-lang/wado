@@ -1,0 +1,26 @@
+//! Stage C left-recursive alt actions: the atom alt and each LR suffix alt run
+//! their action. A suffix action runs after its right operand, so the emitted
+//! stream follows the parse's left-associative operator order.
+
+use la from "./grammars/wado_lr_action.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_lr_action",
+        },
+    };
+
+test "atom and LR suffix actions emit in parse order" {
+    let add = la::parse(&"1 + 2 + 3");
+    assert add.ok(), "clean parse of a + chain";
+    assert add.output == "ii+i+", `output: '{add.output}'`;
+
+    let mul = la::parse(&"2 * 3");
+    assert mul.ok(), "clean parse of a product";
+    assert mul.output == "ii*", `output: '{mul.output}'`;
+
+    let mixed = la::parse(&"1 + 2 * 3");
+    assert mixed.ok(), "clean parse with precedence";
+    assert mixed.output == "iii*+", `output: '{mixed.output}'`;
+}

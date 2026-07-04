@@ -10,10 +10,11 @@
 //! than emitting invalid code. The supported subset grows as the value
 //! channel and context API land.
 
-use { ParserRule, AttrDecl } from "./ir.wado";
-use { resolve_attrs, ResolvedAttr } from "./attr_resolve.wado";
+use { ParserRule, AttrDecl, AltAction } from "./ir.wado";
+use { resolve_attrs, ResolvedAttr, AttrTarget } from "./attr_resolve.wado";
 use { splice_attrs } from "./attr_substitute.wado";
 use { to_pascal_case, to_snake_case, escape_ident } from "./ident.wado";
+use { is_self_ref_element } from "./lr_util.wado";
 
 /// Name of a rule's value-channel struct (`e` -> `EVals`).
 pub fn vals_struct_name(rule: &ParserRule) -> String {
@@ -29,14 +30,114 @@ pub fn translate_wado_action(
     rules: &List<ParserRule>,
     body: &String,
     vals_in_scope: bool,
+    bindings: &List<[bool, String, String]>,
 ) -> Result<String, String> {
     let resolved = resolve_attrs(body, rule, rules)?;
+    let body_chars: List<char> = body.chars().collect();
+    let mut adjusted: List<ResolvedAttr> = [];
     let mut repls: List<String> = [];
     for let r of &resolved {
-        let e = action_attr_expr(rule, rules, r, vals_in_scope)?;
+        let e = action_attr_expr(rule, rules, r, vals_in_scope, bindings)?;
         repls.push(e);
+        // `$ctx.toStringTree` maps to a complete nullary call, so absorb the
+        // source's own call syntax (`()`, `(this)`) — otherwise a leftover
+        // argument list would splice after the emitted `()`.
+        let mut r2 = *r;
+        if is_ctx_to_string_tree(r) {
+            r2.end = swallow_trailing_call(&body_chars, r.end);
+        }
+        adjusted.push(r2);
     }
-    return Result::<String, String>::Ok(splice_attrs(body, &resolved, &repls));
+    return Result::Ok(splice_attrs(body, &adjusted, &repls));
+}
+
+fn is_ctx_to_string_tree(r: &ResolvedAttr) -> bool {
+    return r.target matches { ParserSpecial } && r.name == "ctx" && r.member matches { Some("toStringTree") };
+}
+
+/// Extend past an immediately-following call `(...)` (skipping leading spaces),
+/// so `$ctx.toStringTree()` and `$ctx.toStringTree(this)` both reduce to a bare
+/// call. Bails (returns `end` unchanged) if a nested `$`-ref lives inside the
+/// parens — that ref is spliced on its own.
+fn swallow_trailing_call(chars: &List<char>, end: i32) -> i32 {
+    let n = chars.len();
+    let mut j = end;
+    while j < n && chars[j].is_ascii_whitespace() {
+        j += 1;
+    }
+    if j >= n || chars[j] != '(' {
+        return end;
+    }
+    let mut depth = 0;
+    for let mut k = j; k < n; k += 1 {
+        match chars[k] {
+            '$' => {
+                return end;
+            },
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return k + 1;
+                }
+            },
+            _ => {
+            },
+        }
+    }
+    return end;
+}
+
+/// The actual local a `$ref` binds to. Prefers the emit's post-dedup binding
+/// (from `GenContext.alt_bindings`, keyed by token-vs-rule kind and pre-dedup
+/// base) so a collision-deduped reference (`e_2`) resolves correctly; falls back
+/// to the base when the reference is not in the map (nested groups, prequels).
+fn binding_for(bindings: &List<[bool, String, String]>, is_token: bool, base: &String) -> String {
+    return match bindings.iter().find(|b: [bool, String, String]| b.0 == is_token && b.1 == *base) {
+        Some(b) => b.2,
+        None => *base,
+    };
+}
+
+/// The `let _rule_start_tok = p.pos;` local a `$text` / `$start` / `$stop`
+/// substitution reads — the rule's first token index, captured at rule entry.
+/// Named once so codegen (which emits it) and the translator (which references
+/// it) cannot diverge.
+pub global RULE_START_TOK_LOCAL: String = "_rule_start_tok";
+
+/// Whether any of `rule`'s actions references a rule-span special (`$text`,
+/// `$start`, `$stop`), so codegen must capture the rule's start token before the
+/// body.
+pub fn rule_uses_rule_span(rule: &ParserRule, rules: &List<ParserRule>) -> bool {
+    if let Some(a) = &rule.init_action {
+        if body_uses_rule_span(&a.text, rule, rules) {
+            return true;
+        }
+    }
+    if let Some(a) = &rule.after_action {
+        if body_uses_rule_span(&a.text, rule, rules) {
+            return true;
+        }
+    }
+    for let alt of &rule.alternatives {
+        for let a of &alt.actions {
+            if body_uses_rule_span(&a.source.text, rule, rules) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+fn body_uses_rule_span(body: &String, rule: &ParserRule, rules: &List<ParserRule>) -> bool {
+    if let Ok(resolved) = resolve_attrs(body, rule, rules) {
+        for let r of &resolved {
+            if r.target matches { ParserSpecial } && (r.name == "text" || r.name == "start" || r.name == "stop") {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 /// The Wado expression a resolved reference becomes, or an error if this
@@ -46,25 +147,63 @@ fn action_attr_expr(
     rules: &List<ParserRule>,
     r: &ResolvedAttr,
     vals_in_scope: bool,
+    bindings: &List<[bool, String, String]>,
 ) -> Result<String, String> {
+    if r.target matches { ParserSpecial } {
+        return parser_special_expr(r, rule_is_left_recursive(rule));
+    }
     return match r.target {
         RuleAttr => {
             if is_arg(rule, &r.name) {
-                Result::<String, String>::Err(`${r.name}: rule arguments are not yet threaded into the value channel`);
+                if !rule_threads_args(rule) {
+                    Result::Err(
+                        `${r.name}: rule arguments are threaded only for single-alt rules with defaultable arg types`,
+                    );
+                } else if !vals_in_scope {
+                    Result::Err(`${r.name}: no value channel in the enclosing rule`);
+                } else {
+                    Result::Ok(`vals.{r.name}`);
+                }
             } else if field_default(rule, &r.name) matches { None } {
-                Result::<String, String>::Err(
+                Result::Err(
                     `${r.name}: value-channel field type '{field_type(rule, &r.name)}' has no Wado default`,
                 );
             } else if !vals_in_scope {
-                Result::<String, String>::Err(`${r.name}: no value channel in the enclosing rule`);
+                Result::Err(`${r.name}: no value channel in the enclosing rule`);
             } else {
-                Result::<String, String>::Ok(`vals.{r.name}`);
+                Result::Ok(`vals.{r.name}`);
             }
         },
-        RuleLabel => rule_member_expr(rules, r),
-        RuleRef => rule_member_expr(rules, r),
-        TokenLabel => token_member_expr(r),
-        _ => Result::<String, String>::Err(`${r.name}: this attribute form is not yet emitted`),
+        RuleLabel => rule_member_expr(rules, r, bindings),
+        RuleRef => rule_member_expr(rules, r, bindings),
+        TokenLabel => token_member_expr(r, bindings),
+        TokenRef => token_member_expr(r, bindings),
+        _ => Result::Err(`${r.name}: this attribute form is not yet emitted`),
+    };
+}
+
+/// A parser special (`$text`, `$start`, `$stop`, `$ctx`, `$_p`). `$text` is the
+/// input the rule has consumed (rule-start byte → last consumed token); `$start`
+/// is the rule's first token and `$stop` its last (member-addressable like any
+/// token). `$ctx.toStringTree` renders the node under construction. `$_p` awaits
+/// the CST context handle and remains a loud error. `$text` / `$start` read the
+/// captured `_rule_start_tok`, which codegen emits whenever a rule references a
+/// span special (`rule_captures_span`), so it is always in scope here.
+fn parser_special_expr(r: &ResolvedAttr, is_lr: bool) -> Result<String, String> {
+    return match r.name {
+        "text" && r.member matches { None } => Result::Ok(
+            `p.text_span(p.token_start({RULE_START_TOK_LOCAL}), p.last_end())`,
+        ),
+        "start" => token_member_of(&RULE_START_TOK_LOCAL, &r.member),
+        "stop" => token_member_of(&String::from("(p.pos - 1)"), &r.member),
+        // `$ctx.toStringTree` — renders the rule node under construction. A non-LR
+        // rule's node is still open in `@after`; a left-recursive rule's level is
+        // already folded shut, so it reads the just-finished node instead.
+        "ctx" && r.member matches { Some("toStringTree") } => {
+            let method = if is_lr { "rule_string_tree_final" } else { "rule_string_tree" };
+            Result::Ok(`p.{method}()`);
+        },
+        _ => Result::Err(`${r.name}: this parser special is not yet emitted`),
     };
 }
 
@@ -76,42 +215,63 @@ fn binding_name(name: &String) -> String {
     return escape_ident(&to_snake_case(name));
 }
 
-fn token_member_expr(r: &ResolvedAttr) -> Result<String, String> {
-    let binding = binding_name(&r.name);
-    return match &r.member {
-        Some(m) => {
-            if *m == "text" {
-                Result::<String, String>::Ok(`p.token_text({binding})`);
-            } else {
-                Result::<String, String>::Err(`${r.name}.{*m}: only .text is emitted for tokens so far`);
-            }
+/// A token reference resolves to the stream index its `let x = p.expect(...)`
+/// bound; a member reads that token through the context API. `.index` is the
+/// index itself and `.channel` is 0 (parser-visible tokens are default channel),
+/// so neither needs a runtime call.
+fn token_member_expr(r: &ResolvedAttr, bindings: &List<[bool, String, String]>) -> Result<String, String> {
+    return token_member_of(&binding_for(bindings, true, &binding_name(&r.name)), &r.member);
+}
+
+/// A token member read on an arbitrary token-index expression `idx` (a bound
+/// label, `_rule_start_tok`, `(p.pos - 1)`, …). `.index` is the index itself and
+/// `.channel` is 0 (parser-visible tokens are default channel), so neither
+/// needs a runtime call; the rest go through the `p.token_*` context API.
+fn token_member_of(idx: &String, member: &Option<String>) -> Result<String, String> {
+    let m = match member {
+        Some(m) => *m,
+        None => {
+            return Result::Ok(*idx);
         },
-        None => Result::<String, String>::Ok(binding),
+    };
+    return match m {
+        "text" => Result::Ok(`p.token_text({*idx})`),
+        "int" => Result::Ok(`p.token_int({*idx})`),
+        "type" => Result::Ok(`p.token_kind({*idx})`),
+        "line" => Result::Ok(`p.token_line({*idx})`),
+        "pos" => Result::Ok(`p.token_col({*idx})`),
+        "index" => Result::Ok(*idx),
+        "channel" => Result::Ok(String::from("0")),
+        _ => Result::Err(`.{m}: unknown token member`),
     };
 }
 
-fn rule_member_expr(rules: &List<ParserRule>, r: &ResolvedAttr) -> Result<String, String> {
-    let binding = binding_name(&r.name);
+fn rule_member_expr(
+    rules: &List<ParserRule>,
+    r: &ResolvedAttr,
+    bindings: &List<[bool, String, String]>,
+) -> Result<String, String> {
+    let binding = binding_for(bindings, false, &binding_name(&r.name));
     let target = match find_rule(rules, &r.rule_name) {
         Some(t) => t,
         None => {
-            return Result::<String, String>::Err(`${r.name}: unknown referenced rule '{r.rule_name}'`);
+            return Result::Err(`${r.name}: unknown referenced rule '{r.rule_name}'`);
         },
     };
     if !rule_returns_vals(&target) {
-        return Result::<String, String>::Err(
+        return Result::Err(
             `${r.name}: rule '{r.rule_name}' does not expose a value channel (needs single-alt + defaultable returns/locals)`,
         );
     }
     return match &r.member {
         Some(m) => {
             if field_default(&target, m) matches { Some(_) } {
-                Result::<String, String>::Ok(`{binding}.{*m}`);
+                Result::Ok(`{binding}.{*m}`);
             } else {
-                Result::<String, String>::Err(`${r.name}.{*m}: not an emittable value-channel field of '{r.rule_name}'`);
+                Result::Err(`${r.name}.{*m}: not an emittable value-channel field of '{r.rule_name}'`);
             }
         },
-        None => Result::<String, String>::Ok(binding),
+        None => Result::Ok(binding),
     };
 }
 
@@ -163,22 +323,36 @@ fn is_arg(rule: &ParserRule, name: &String) -> bool {
     return false;
 }
 
-/// Whether a rule exposes a value channel to callers: a single-alt (non-LR)
-/// rule declaring a defaultable `returns` / `locals`. Such a rule's
+/// Whether a rule exposes a value channel to callers: any rule declaring a
+/// defaultable `returns` / `locals` (or threaded args). Such a rule's
 /// `_parse_<rule>` returns `<Rule>Vals`, its body gets a `vals` local, and a
-/// caller's `$a.v` reads the returned struct. This is the return-type
-/// decision — independent of whether the rule's own actions read the channel,
-/// since a caller might.
+/// caller's `$a.v` reads the returned struct. This is the return-type decision
+/// — independent of whether the rule's own actions read the channel, since a
+/// caller might. Left-recursive rules thread the channel through the
+/// precedence loop (the atom seeds it, each continuation accumulates it).
 pub fn rule_returns_vals(rule: &ParserRule) -> bool {
-    return rule.alternatives.len() == 1 && rule_value_channel_ready(rule);
+    return rule_value_channel_ready(rule);
+}
+
+/// Whether any alternative is directly left-recursive (its first element
+/// references the rule itself). Mirrors lowering's LR classification at the
+/// surface level so the value-channel decision can exclude LR rules without a
+/// lowered `Rule`.
+pub fn rule_is_left_recursive(rule: &ParserRule) -> bool {
+    for let alt of &rule.alternatives {
+        if !alt.elements.is_empty() && is_self_ref_element(&alt.elements[0], &rule.name) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /// Whether a rule exposes an emittable value channel: it declares a
-/// returns / locals field whose type has a Wado default. Fields with an
-/// unsupported type are excluded per-field (they do not appear in the
-/// `<Rule>Vals` struct and a reference to one is a loud error), so one
-/// unsupported field no longer disables the whole channel. Args are excluded
-/// (not yet threaded).
+/// returns / locals field whose type has a Wado default, or it threads
+/// rule arguments (which live in the same `<Rule>Vals` struct). Fields with
+/// an unsupported type are excluded per-field (they do not appear in the
+/// struct and a reference to one is a loud error), so one unsupported field
+/// no longer disables the whole channel.
 pub fn rule_value_channel_ready(rule: &ParserRule) -> bool {
     for let d of &rule.returns_decls {
         if wado_type_default(&d.type_text) matches { Some(_) } {
@@ -190,7 +364,28 @@ pub fn rule_value_channel_ready(rule: &ParserRule) -> bool {
             return true;
         }
     }
-    return false;
+    return rule_threads_args(rule);
+}
+
+/// Whether a rule's arguments are threaded as `_parse_<rule>` parameters and
+/// stored into its `<Rule>Vals`. Any non-left-recursive rule qualifies (the
+/// seeded `vals` threads through the multi-alt `_alt_<n>` helpers), provided
+/// every arg type has a Wado default so the param can be defaulted and the vals
+/// field `Default`-init. An LR or non-defaultable-arg rule keeps `$arg` a loud
+/// error.
+pub fn rule_threads_args(rule: &ParserRule) -> bool {
+    if rule_is_left_recursive(rule) {
+        return false;
+    }
+    if rule.args.is_empty() {
+        return false;
+    }
+    for let a of &rule.args {
+        if wado_type_default(&a.type_text) matches { None } {
+            return false;
+        }
+    }
+    return true;
 }
 
 /// Whether a returns / locals field goes into the `<Rule>Vals` struct: it has
@@ -207,16 +402,16 @@ pub fn field_in_vals(d: &AttrDecl) -> bool {
 pub fn wado_type_default(type_text: &String) -> Option<String> {
     let t = type_text.trim();
     if t == "bool" {
-        return Option::<String>::Some("false");
+        return Option::Some("false");
     }
     if t == "String" {
-        return Option::<String>::Some("\"\"");
+        return Option::Some("\"\"");
     }
     if t.starts_with("List") || t.starts_with("[") {
-        return Option::<String>::Some("[]");
+        return Option::Some("[]");
     }
     if is_numeric_type(&t) {
-        return Option::<String>::Some("0");
+        return Option::Some("0");
     }
     return null;
 }

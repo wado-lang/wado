@@ -156,6 +156,21 @@ fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
 /// `token_kind_name`). Used by driver tests; never called by the parser.
 pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>) {
     let n = num_token_kinds(&grammar.lexer_rules, lit_tokens);
+    // The parser's own `$ctx.toStringTree()` (emitted under `emit_actions`) needs
+    // the token-name table; build it once into a module global rather than
+    // rebuilding it on every call.
+    if grammar.action_language matches { Wado } {
+        w.begin(&"fn _ctx_token_names() -> List<String>");
+        w.line(&`let mut v: List<String> = List::with_capacity({n});`);
+        w.begin(&`for let mut k = 0; k < {n}; k += 1`);
+        w.line(&"v.push(token_kind_name(k));");
+        w.end();
+        w.line(&"return v;");
+        w.end();
+        w.blank();
+        w.line(&"global CTX_TOKEN_NAMES: List<String> = _ctx_token_names();");
+        w.blank();
+    }
     w.begin(&"pub fn to_string_tree(result: &ParseResult) -> String");
     w.line(&`let mut token_names: List<String> = List::with_capacity({n});`);
     w.begin(&`for let mut k = 0; k < {n}; k += 1`);

@@ -109,8 +109,12 @@ use {
     vals_struct_name,
     wado_type_default,
     field_in_vals,
+    rule_uses_rule_span,
+    rule_threads_args,
+    RULE_START_TOK_LOCAL,
 } from "./action_translate.wado";
 use { unwrap_label } from "./lr_util.wado";
+use { escape_ident } from "./ident.wado";
 use { compute_shapes_for_alt, shape_lookahead_signature_for_alt, rebind_op_field } from "./lower.wado";
 
 /// Append the defaulted runtime FOLLOW-continuation argument to a
@@ -127,6 +131,151 @@ fn add_follow_param(f: &mut FnSpec) {
         type_str: "&List<List<i32>>",
         default_value: Option::Some("&EMPTY_FOLLOW"),
     });
+}
+
+/// The callee-local parameter name a rule argument binds to. `escape_ident`
+/// keeps a keyword-named arg (`type`) a legal identifier; the value is stored
+/// into the vals field under the raw arg name so `$arg` -> `vals.<name>` holds.
+fn arg_param_name(name: &String) -> String {
+    return escape_ident(&to_snake_case(name));
+}
+
+/// Append one defaulted parameter per rule argument (`escape(name): <type> =
+/// <default>`), in declaration order, at the end of the signature. Defaulted so
+/// the public entry and plain `a` call sites (no `a[...]`) fill them in. Only
+/// emitted for rules whose args are threaded (`rule_threads_args`).
+fn add_arg_params(f: &mut FnSpec, rule: &ParserRule, ctx: &GenContext) {
+    if !ctx.emit_actions() || !rule_threads_args(rule) {
+        return;
+    }
+    for let a of &rule.args {
+        let def = match wado_type_default(&a.type_text) {
+            Some(v) => v,
+            None => panic("add_arg_params: rule_threads_args/wado_type_default disagree"),
+        };
+        f.add_param_spec(ParamSpec {
+            name: arg_param_name(&a.name),
+            type_str: a.type_text.trim(),
+            default_value: Option::Some(def),
+        });
+    }
+}
+
+/// The `, n, m` a rule wrapper forwards to its inner body for threaded args.
+fn wrapper_arg_forward(rule: &ParserRule, ctx: &GenContext) -> String {
+    if !ctx.emit_actions() || !rule_threads_args(rule) {
+        return String::new();
+    }
+    let mut s = String::new();
+    for let a of &rule.args {
+        s.push_str(&", ");
+        s.push_str(&arg_param_name(&a.name));
+    }
+    return s;
+}
+
+/// Store each threaded rule argument into the rule's `vals` local, so `$arg`
+/// (which resolves to `vals.<name>`) reads the passed-in value. Emitted right
+/// after the `vals` local, before `@init`.
+fn emit_arg_stores(w: &mut CodeWriter, rule: &ParserRule, ctx: &GenContext) {
+    if !ctx.emit_actions() || !rule_threads_args(rule) {
+        return;
+    }
+    for let a of &rule.args {
+        w.line(&`vals.{a.name} = {arg_param_name(&a.name)};`);
+    }
+}
+
+/// The `, arg0, arg1` a caller passes for the callee's threaded arguments, or
+/// `""`. `arg_action` (`a[$i, $j]`) is split on top-level commas and each
+/// expression is translated against the *caller's* environment. A plain `a`
+/// call passes nothing (the callee's defaulted params fill in).
+fn call_arg_suffix(rc: &RuleCallOp, ctx: &mut GenContext) -> String {
+    if !ctx.emit_actions() {
+        return String::new();
+    }
+    let callee = match ctx.find_rule(&rc.target_name) {
+        Some(r) => r,
+        None => {
+            return String::new();
+        },
+    };
+    if !rule_threads_args(callee) {
+        return String::new();
+    }
+    let src = match &rc.arg_action {
+        Some(s) => s,
+        None => {
+            return String::new();
+        },
+    };
+    let exprs = split_top_level_commas(&src.text);
+    let mut out = String::new();
+    for let e of &exprs {
+        let code = match translate_caller_arg(e, ctx) {
+            Some(c) => c,
+            None => *e,
+        };
+        out.push_str(&", ");
+        out.push_str(&code.trim());
+    }
+    return out;
+}
+
+/// Translate a single caller-side argument expression against the caller's
+/// (current) rule environment, so `$i` resolves to the caller's channel. A
+/// ref-free expression passes through; an untranslatable one is returned raw
+/// (a later type error is clearer than a silent drop).
+fn translate_caller_arg(expr: &String, ctx: &GenContext) -> Option<String> {
+    if find_attr_refs(expr).len() == 0 {
+        return Option::Some(*expr);
+    }
+    let ridx = ctx.current_rule_index();
+    if ridx < 0 {
+        return null;
+    }
+    let rule = &ctx.parser_rules()[ridx];
+    let vals_in_scope = rule_emits_vals(ctx, rule);
+    return match translate_wado_action(rule, ctx.parser_rules(), expr, vals_in_scope, ctx.alt_bindings()) {
+        Ok(c) => Option::Some(c),
+        Err(_) => null,
+    };
+}
+
+/// Split an argument-action text on commas that are not nested inside
+/// parentheses / brackets / braces / angle brackets, so `f(a, b), c` splits
+/// into `f(a, b)` and `c`. String / char literals are skipped.
+fn split_top_level_commas(text: &String) -> List<String> {
+    let mut out: List<String> = [];
+    let mut cur = String::new();
+    let mut depth = 0;
+    let chars: List<char> = text.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        match c {
+            '(' | '[' | '{' | '<' => {
+                depth += 1;
+                cur.push(c);
+            },
+            ')' | ']' | '}' | '>' => {
+                if depth > 0 {
+                    depth -= 1;
+                }
+                cur.push(c);
+            },
+            ',' && depth == 0 => {
+                out.push(cur.trim());
+                cur = String::new();
+            },
+            _ => cur.push(c),
+        }
+        i += 1;
+    }
+    if !cur.trim().is_empty() {
+        out.push(cur.trim());
+    }
+    return out;
 }
 
 /// `", follow"` when the grammar emits FOLLOW machinery, else `""`.
@@ -387,6 +536,9 @@ fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar) {
             continue;
         }
         w.begin(&`struct {vals_struct_name(rule)}`);
+        if rule_threads_args(rule) {
+            gen_vals_fields(w, &rule.args);
+        }
         gen_vals_fields(w, &rule.returns_decls);
         gen_vals_fields(w, &rule.locals_decls);
         w.end();
@@ -513,6 +665,139 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_acti
         ftt.set_return_type(&"String");
         ftt.emit_begin(w);
         w.line(&"return self.tokens.token_text(i);");
+        w.end();
+        w.blank();
+
+        let mut fk = FnSpec::new("token_kind");
+        fk.set_receiver(&"&self");
+        fk.add_param(&"i", &"i32");
+        fk.set_return_type(&"i32");
+        fk.emit_begin(w);
+        w.line(&"return self.tokens.kind_at(i);");
+        w.end();
+        w.blank();
+
+        let mut fint = FnSpec::new("token_int");
+        fint.set_receiver(&"&self");
+        fint.add_param(&"i", &"i32");
+        fint.set_return_type(&"i64");
+        fint.emit_begin(w);
+        w.line(&"let sp = self.tokens.span_at(i);");
+        w.line(&"let mut acc: i64 = 0;");
+        w.line(&"let mut neg = false;");
+        w.line(&"let mut j = sp.start;");
+        w.begin(&"if j < sp.end && self.tokens.chars[j] == '-'");
+        w.line(&"neg = true;");
+        w.line(&"j += 1;");
+        w.end();
+        w.begin(&"while j < sp.end");
+        w.line(&"let c = self.tokens.chars[j];");
+        w.begin(&"if c >= '0' && c <= '9'");
+        w.line(&"acc = acc * 10 + (c as i32 - '0' as i32) as i64;");
+        w.end();
+        w.line(&"j += 1;");
+        w.end();
+        w.line(&"return if neg { -acc } else { acc };");
+        w.end();
+        w.blank();
+
+        let mut fln = FnSpec::new("token_line");
+        fln.set_receiver(&"&self");
+        fln.add_param(&"i", &"i32");
+        fln.set_return_type(&"i32");
+        fln.emit_begin(w);
+        w.line(&"return line_col(self.tokens.chars, self.tokens.span_at(i).start).0;");
+        w.end();
+        w.blank();
+
+        let mut fcol = FnSpec::new("token_col");
+        fcol.set_receiver(&"&self");
+        fcol.add_param(&"i", &"i32");
+        fcol.set_return_type(&"i32");
+        fcol.emit_begin(w);
+        w.line(&"return line_col(self.tokens.chars, self.tokens.span_at(i).start).1;");
+        w.end();
+        w.blank();
+
+        // Byte offset where token `i` begins — backs `$text` (span from the
+        // rule's first token) and `$start`-derived spans.
+        let mut fts0 = FnSpec::new("token_start");
+        fts0.set_receiver(&"&self");
+        fts0.add_param(&"i", &"i32");
+        fts0.set_return_type(&"i32");
+        fts0.emit_begin(w);
+        w.line(&"return self.tokens.starts[i];");
+        w.end();
+        w.blank();
+
+        // `_input.LA(k)` — the token kind k positions ahead (k=1 is current).
+        let mut fla = FnSpec::new("la");
+        fla.set_receiver(&"&self");
+        fla.add_param(&"k", &"i32");
+        fla.set_return_type(&"i32");
+        fla.emit_begin(w);
+        w.line(&"return self.peek_at(k - 1);");
+        w.end();
+        w.blank();
+
+        // `_input.LT(k)` — the stream index k positions ahead, clamped to the
+        // final (EOF) token so a lookahead past end stays in bounds.
+        let mut flt = FnSpec::new("lt");
+        flt.set_receiver(&"&self");
+        flt.add_param(&"k", &"i32");
+        flt.set_return_type(&"i32");
+        flt.emit_begin(w);
+        w.line(&"let idx = self.pos + k - 1;");
+        w.line(&"if idx >= self.tokens.len() { return self.tokens.len() - 1; }");
+        w.line(&"if idx < 0 { return 0; }");
+        w.line(&"return idx;");
+        w.end();
+        w.blank();
+
+        // Source text of the half-open byte range `[start, end)` — backs `$text`
+        // (the current rule's consumed input) and `_input.getText()`.
+        let mut fts = FnSpec::new("text_span");
+        fts.set_receiver(&"&self");
+        fts.add_param(&"start", &"i32");
+        fts.add_param(&"end", &"i32");
+        fts.set_return_type(&"String");
+        fts.emit_begin(w);
+        w.line(&"let mut out = String::new();");
+        w.line(&"let hi = if end < self.tokens.chars.len() { end } else { self.tokens.chars.len() };");
+        w.begin(&"for let mut i = start; i < hi; i += 1");
+        w.line(&"out.push(self.tokens.chars[i]);");
+        w.end();
+        w.line(&"return out;");
+        w.end();
+        w.blank();
+
+        // `_input.getText()` — the entire input.
+        let mut fit = FnSpec::new("input_text");
+        fit.set_receiver(&"&self");
+        fit.set_return_type(&"String");
+        fit.emit_begin(w);
+        w.line(&"return self.text_span(0, self.tokens.chars.len());");
+        w.end();
+        w.blank();
+
+        // `$ctx.toStringTree()` — the S-expression of the rule currently under
+        // construction. A non-LR rule's node is still open in `@after`
+        // (`render_open`); a left-recursive rule's level is already folded shut
+        // by then, so its `@after` reads the just-finished node
+        // (`rule_string_tree_final` / `render_last_finished`).
+        let mut frst = FnSpec::new("rule_string_tree");
+        frst.set_receiver(&"&self");
+        frst.set_return_type(&"String");
+        frst.emit_begin(w);
+        w.line(&"return self.b.render_open(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);");
+        w.end();
+        w.blank();
+
+        let mut frstf = FnSpec::new("rule_string_tree_final");
+        frstf.set_receiver(&"&self");
+        frstf.set_return_type(&"String");
+        frstf.emit_begin(w);
+        w.line(&"return self.b.render_last_finished(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);");
         w.end();
         w.blank();
     }
@@ -2322,12 +2607,13 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
         w,
         &canonical,
         &inner,
-        &rule.name,
+        rule,
         rule_takes_min_prec(lowered_rule),
         ctx.emit_follow(),
         ctx.is_trace(),
         ctx.needs_atn(),
         &rule_result_type_for(rule, ctx),
+        ctx,
     );
 }
 
@@ -2450,13 +2736,15 @@ fn gen_rule_entry_wrapper(
     w: &mut CodeWriter,
     outer_name: &String,
     inner_name: &String,
-    rule_display: &String,
+    rule: &ParserRule,
     takes_min_prec: bool,
     emit_follow: bool,
     trace: bool,
     needs_atn: bool,
     result_type: &String,
+    ctx: &GenContext,
 ) {
+    let rule_display = &rule.name;
     let returns_vals = result_type_carries_vals(result_type);
     let mut f = FnSpec::new(outer_name);
     f.add_param(&"p", &"&mut Parser");
@@ -2474,6 +2762,10 @@ fn gen_rule_entry_wrapper(
             default_value: Option::Some("0"),
         });
     }
+    // Threaded rule arguments come last (defaulted), so the entry and plain
+    // callers omit them. Only single-alt rules thread args, so `takes_min_prec`
+    // is always false here for an arg-bearing rule.
+    add_arg_params(&mut f, rule, ctx);
     f.set_return_type(result_type);
     f.emit_begin(w);
     let lit = str_lit(*rule_display);
@@ -2488,7 +2780,12 @@ fn gen_rule_entry_wrapper(
     // Forward `follow`/`min_prec` so the inner body's tail-greedy gate sees
     // the caller's continuation.
     let fsep = if emit_follow { ", follow" } else { "" };
-    let call = if takes_min_prec { `{*inner_name}(p{fsep}, min_prec)` } else { `{*inner_name}(p{fsep})` };
+    let argfwd = wrapper_arg_forward(rule, ctx);
+    let call = if takes_min_prec {
+        `{*inner_name}(p{fsep}, min_prec{argfwd})`;
+    } else {
+        `{*inner_name}(p{fsep}{argfwd})`;
+    };
     // open this rule's `CstNode` before the body and close it after, so the
     // body's appended terminals / subtrees become its children. The body may
     // set `p.recovering`; `finish_node` still runs, folding the open node closed
@@ -2562,12 +2859,15 @@ fn gen_parse_fn_simple_named(
     if ctx.emit_follow() {
         add_follow_param(&mut f);
     }
+    add_arg_params(&mut f, rule, ctx);
     f.set_return_type(&rule_result_type_for(rule, ctx));
     f.emit_begin(w);
     w.line(&"let start = p.peek_start();");
     if rule_emits_vals(ctx, rule) {
         w.line(&`let mut vals = {vals_struct_name(rule)} \{\};`);
     }
+    emit_arg_stores(w, rule, ctx);
+    emit_span_capture(w, rule, ctx);
     if ctx.emit_actions() {
         if let Some(a) = &rule.init_action {
             gen_action_body(w, a, ctx);
@@ -2719,7 +3019,9 @@ fn gen_parse_fn_named(
     // construction instead of an N-way `if kind == TK_X` cascade. The scan
     // side already collapses these (`gen_scan_function_named`); the result is
     // far smaller and no slower than the cascade.
-    if all_alts_are_single_token(&rule.alternatives) && !rule_has_emittable_actions(rule, ctx) {
+    if all_alts_are_single_token(&rule.alternatives)
+        && !rule_has_emittable_actions(rule, ctx)
+        && !rule_emits_vals(ctx, rule) {
         gen_parse_fn_single_token(w, rule, ctx, fn_name);
         return;
     }
@@ -2783,10 +3085,21 @@ fn gen_parse_fn_named(
                     if ctx.emit_follow() {
                         add_follow_param(&mut f);
                     }
-                    f.set_return_type(&rule_result_type());
+                    // The seeded `vals` (rule args + `@init`) is threaded in from
+                    // the inner fn so overlap-group dispatch keeps value
+                    // continuity; the helper mutates its own copy and returns it.
+                    if rule_emits_vals(ctx, rule) {
+                        f.add_param(&"vals", &vals_struct_name(rule));
+                    }
+                    f.set_return_type(&rule_result_type_for(rule, ctx));
                     f.emit_begin(w);
                     w.line(&"let start = p.peek_start();");
+                    if rule_emits_vals(ctx, rule) {
+                        w.line(&"let mut vals = vals;");
+                    }
+                    emit_span_capture(w, rule, ctx);
                     let body = rule_alt_body(lowered_rule, alt_index).unwrap();
+                    let after = rule_after_for(rule, lowered_rule, ctx);
                     gen_alt_body(
                         w,
                         &type_name,
@@ -2796,7 +3109,7 @@ fn gen_parse_fn_named(
                         body,
                         alt_index,
                         rule_alts_labeled(&rule.alternatives),
-                        &null,
+                        &after,
                         ctx,
                     );
                     w.end();
@@ -2826,6 +3139,14 @@ fn gen_parse_fn_named(
         if ctx.emit_follow() {
             add_follow_param(&mut f);
         }
+        // The atom is the LR rule's primary alt body, so — like any alt body —
+        // it receives the invocation's seeded `vals` (rule args + `@init`)
+        // rather than minting its own, keeping value continuity into the
+        // primary alt's action (`$v` sees the `@init` seed). Placed before the
+        // defaulted `min_prec` so it stays a required positional argument.
+        if rule_emits_vals(ctx, rule) {
+            f.add_param(&"vals", &vals_struct_name(rule));
+        }
         // The atom carries `min_prec` so a non-greedy `??` inside it predicts
         // against the rule's invocation precedence (`atn_optional_enter_cond`
         // reads it). Defaulted, so non-precedence call sites are unaffected.
@@ -2834,11 +3155,15 @@ fn gen_parse_fn_named(
             type_str: "i32",
             default_value: Option::Some("0"),
         });
-        f.set_return_type(&rule_result_type());
+        f.set_return_type(&rule_result_type_for(rule, ctx));
         f.emit_begin(w);
         if needs_start {
             w.line(&"let start = p.peek_start();");
         }
+        if rule_emits_vals(ctx, rule) {
+            w.line(&"let mut vals = vals;");
+        }
+        emit_span_capture(w, rule, ctx);
         if has_overlaps {
             gen_multi_alt_body_alt(
                 w,
@@ -2878,10 +3203,24 @@ fn gen_parse_fn_named(
         if ctx.emit_follow() {
             add_follow_param(&mut f);
         }
-        f.set_return_type(&rule_result_type());
+        add_arg_params(&mut f, rule, ctx);
+        f.set_return_type(&rule_result_type_for(rule, ctx));
         f.emit_begin(w);
         if needs_start {
             w.line(&"let start = p.peek_start();");
+        }
+        if rule_emits_vals(ctx, rule) {
+            w.line(&`let mut vals = {vals_struct_name(rule)} \{\};`);
+        }
+        emit_arg_stores(w, rule, ctx);
+        emit_span_capture(w, rule, ctx);
+        // `@init` shares the inner fn's `vals`; the seed is threaded into the
+        // `_alt_<n>` helpers (see `alt_vals_arg`), so overlap-group dispatch
+        // preserves it.
+        if ctx.emit_actions() {
+            if let Some(a) = &rule.init_action {
+                gen_action_body(w, a, ctx);
+            }
         }
         if has_overlaps {
             gen_multi_alt_body_alt(
@@ -2901,6 +3240,20 @@ fn gen_parse_fn_named(
         w.end();
         w.blank();
     }
+}
+
+/// The rule's `@after` prequel to run at the end of each alt body, or `null`.
+/// Emitted for multi-alt non-LR rules (each alt ends with it, so it runs once
+/// for the chosen alt); LR rules defer it (the atom's alt bodies must not carry
+/// a whole-expression `@after`). Single-alt rules pass their own directly.
+fn rule_after_for(rule: &ParserRule, lowered_rule: &Rule, ctx: &GenContext) -> Option<ActionSource> {
+    if !ctx.emit_actions() {
+        return null;
+    }
+    if let LeftRecursive(_) = lowered_rule {
+        return null;
+    }
+    return rule.after_action;
 }
 
 fn gen_alt_body(
@@ -2969,7 +3322,7 @@ fn gen_multi_alt_body(
         let pos_sets = &all_pos_sets[i];
         let cond_depth = if depth < pos_sets.len() { depth } else { pos_sets.len() };
 
-        let gate_conds: List<String> = if ctx.emit_actions() { alt_initial_gate_conditions(alt) } else { [] };
+        let gate_conds: List<String> = if ctx.emit_actions() { alt_initial_gate_conditions(alt, ctx) } else { [] };
         if cond_depth > 0 {
             let cond = build_lookahead_condition(ctx, pos_sets, cond_depth);
             let gate = if gate_conds.is_empty() { String::new() } else { ` && {join_gate_conds(&gate_conds)}` };
@@ -2989,6 +3342,7 @@ fn gen_multi_alt_body(
         if ctx.is_trace() && !all_alts_are_single_token(&rule.alternatives) {
             w.line(&`trace_pick(p, &{str_lit(rule.name)}, {alt_index});`);
         }
+        let after = rule_after_for(rule, lowered_rule, ctx);
         gen_alt_body(
             w,
             type_name,
@@ -2998,7 +3352,7 @@ fn gen_multi_alt_body(
             body,
             alt_index,
             rule_alts_labeled(&rule.alternatives),
-            &null,
+            &after,
             ctx,
         );
         w.end();
@@ -3037,6 +3391,33 @@ fn peel_scalar_label(elem: &Element) -> &Element {
     return cur;
 }
 
+/// Collect the actual post-dedup bindings of an alt's ops (`[is_token, base,
+/// field]`), so the action translator resolves a `$ref` to its real local even
+/// when a token / rule field-name collision deduped it (`e_2`). Top-level leaf
+/// ops plus `Repeat` inners; nested-group refs fall back to `binding_name`.
+fn collect_alt_bindings(ops: &List<Op>) -> List<[bool, String, String]> {
+    let mut out: List<[bool, String, String]> = [];
+    for let op of ops {
+        collect_op_binding(op, &mut out);
+    }
+    return out;
+}
+
+fn collect_op_binding(op: &Op, out: &mut List<[bool, String, String]>) {
+    match *op {
+        Token(t) => out.push([true, t.dedup_base, t.field]),
+        Literal(l) => out.push([true, l.dedup_base, l.field]),
+        Excluded(e) => out.push([true, e.dedup_base, e.field]),
+        Wildcard(wop) => out.push([true, wop.dedup_base, wop.field]),
+        RuleCall(rc) => out.push([false, rc.dedup_base, rc.field]),
+        Repeat(rep) => collect_op_binding(&rep.body, out),
+        ListLabel(_) => {
+        },
+        Group(_) => {
+        },
+    }
+}
+
 fn gen_alt_elements(
     w: &mut CodeWriter,
     elements: &List<Element>,
@@ -3059,6 +3440,9 @@ fn gen_alt_elements(
     // (today's g4 parser keeps the `*` outside the label, so this
     // arm is defensive — see `peel_scalar_label` for the contract).
     assert ops.len() == elements.len(), "gen_alt_elements: ops / elements length mismatch — LR-suffix bodies are emitted by gen_lr_fn";
+    if ctx.emit_actions() {
+        ctx.set_alt_bindings(collect_alt_bindings(ops));
+    }
     let mut name_counts: List<[String, i32]> = [];
     // The emitter walks the surface elements + lowered ops in parallel: the
     // leaves/groups/repeats append to the `TreeBuilder`. The surface elements
@@ -3144,25 +3528,48 @@ fn current_rule_is_multi_alt(ctx: &GenContext) -> bool {
     return ctx.parser_rules()[ridx].alternatives.len() > 1;
 }
 
-/// Whether prediction can gate on this action: an alt-initial (`before_index
-/// == 0`), context-independent (no `$` attribute references) predicate. The
-/// condition collector and the id-marking pass share it so they cannot diverge.
-fn is_gateable_alt_initial_predicate(a: &AltAction) -> bool {
+/// The dispatch-gate condition an alt-initial predicate contributes, or `null`
+/// if it is not gateable. Gateable = `before_index == 0`, a `Predicate` (not an
+/// action), and a body that translates in the current rule's context:
+/// context-independent (no `$` refs) bodies pass through verbatim;
+/// context-dependent ones ($local / $ret / token members) translate over the
+/// value channel (`$v` → `vals.v`), evaluated at the dispatch where `vals` is in
+/// scope. A body the translator cannot emit is not gateable — it falls to the
+/// inline guard path. The condition collector and the id-marking pass share
+/// this, so the gated set and the emitted conditions cannot diverge.
+fn gate_condition_for(a: &AltAction, ctx: &GenContext) -> Option<String> {
     if a.before_index != 0 {
-        return false;
+        return null;
     }
-    return match a.kind {
-        Predicate => find_attr_refs(&a.source.text).len() == 0,
-        Action => false,
+    if a.kind matches { Action } {
+        return null;
+    }
+    if find_attr_refs(&a.source.text).len() == 0 {
+        return Option::Some(a.source.text);
+    }
+    let ridx = ctx.current_rule_index();
+    if ridx < 0 {
+        return null;
+    }
+    let rule = &ctx.parser_rules()[ridx];
+    let vals_in_scope = rule_emits_vals(ctx, rule);
+    return match translate_wado_action(rule, ctx.parser_rules(), &a.source.text, vals_in_scope, ctx.alt_bindings()) {
+        Ok(code) => Option::Some(code),
+        Err(_) => null,
     };
 }
 
-/// An alt's gateable alt-initial predicate conditions, in grammar order.
-fn alt_initial_gate_conditions(alt: &Alternative) -> List<String> {
+fn is_gateable_alt_initial_predicate(a: &AltAction, ctx: &GenContext) -> bool {
+    return gate_condition_for(a, ctx) matches { Some(_) };
+}
+
+/// An alt's gateable alt-initial predicate conditions, translated, in grammar
+/// order.
+fn alt_initial_gate_conditions(alt: &Alternative, ctx: &GenContext) -> List<String> {
     let mut conds: List<String> = [];
     for let a of &alt.actions {
-        if is_gateable_alt_initial_predicate(a) {
-            conds.push(a.source.text);
+        if let Some(c) = gate_condition_for(a, ctx) {
+            conds.push(c);
         }
     }
     return conds;
@@ -3170,9 +3577,9 @@ fn alt_initial_gate_conditions(alt: &Alternative) -> List<String> {
 
 /// Whether any alt in an `Ambiguous` overlap group carries a gateable
 /// alt-initial predicate.
-fn ambiguous_group_has_gate(amb_alts: &List<i32>, alts: &List<Alternative>) -> bool {
+fn ambiguous_group_has_gate(amb_alts: &List<i32>, alts: &List<Alternative>, ctx: &GenContext) -> bool {
     for let idx of amb_alts {
-        if !alt_initial_gate_conditions(&alts[*idx]).is_empty() {
+        if !alt_initial_gate_conditions(&alts[*idx], ctx).is_empty() {
             return true;
         }
     }
@@ -3206,25 +3613,25 @@ fn group_alts_interchangeable(amb_alts: &List<i32>, alts: &List<Alternative>) ->
 /// Whether an `Ambiguous` group is resolved by predicate-gated dispatch: it has
 /// a gateable predicate and its alts are interchangeable. The marking pass and
 /// every emit site key on this so the gated set and emitted conditions agree.
-fn ambiguous_group_predicate_gated(amb_alts: &List<i32>, alts: &List<Alternative>) -> bool {
-    return ambiguous_group_has_gate(amb_alts, alts) && group_alts_interchangeable(amb_alts, alts);
+fn ambiguous_group_predicate_gated(amb_alts: &List<i32>, alts: &List<Alternative>, ctx: &GenContext) -> bool {
+    return ambiguous_group_has_gate(amb_alts, alts, ctx) && group_alts_interchangeable(amb_alts, alts);
 }
 
 /// Collect the alts of every predicate-gated `Ambiguous` node in the tree.
 /// Walks the whole tree, not just its root, to stay symmetric with emit (which
 /// gates a node nested under a `Dispatch` too).
-fn collect_gated_ambiguous_alts(node: &PredictionNode, alts: &List<Alternative>, out: &mut List<i32>) {
+fn collect_gated_ambiguous_alts(node: &PredictionNode, alts: &List<Alternative>, ctx: &GenContext, out: &mut List<i32>) {
     match *node {
         Leaf(_) => {
         },
-        Consume(c) => collect_gated_ambiguous_alts(&c.child, alts, out),
+        Consume(c) => collect_gated_ambiguous_alts(&c.child, alts, ctx, out),
         Dispatch(d) => {
             for let branch of &d.branches {
-                collect_gated_ambiguous_alts(&branch.child, alts, out);
+                collect_gated_ambiguous_alts(&branch.child, alts, ctx, out);
             }
         },
         Ambiguous(a) => {
-            if ambiguous_group_predicate_gated(&a.alts, alts) {
+            if ambiguous_group_predicate_gated(&a.alts, alts, ctx) {
                 for let idx of &a.alts {
                     out.push(*idx);
                 }
@@ -3260,7 +3667,7 @@ fn mark_gated_predicates(
         } else {
             let tree = build_group_prediction_tree(&rule.alternatives, group, first_sets, non_lr_indices, ctx);
             let mut gated: List<i32> = [];
-            collect_gated_ambiguous_alts(&tree, &rule.alternatives, &mut gated);
+            collect_gated_ambiguous_alts(&tree, &rule.alternatives, ctx, &mut gated);
             for let idx of &gated {
                 mark_alt_gate_predicates(&rule.alternatives[*idx], ctx);
             }
@@ -3270,7 +3677,7 @@ fn mark_gated_predicates(
 
 fn mark_alt_gate_predicates(alt: &Alternative, ctx: &mut GenContext) {
     for let a of &alt.actions {
-        if is_gateable_alt_initial_predicate(a) {
+        if is_gateable_alt_initial_predicate(a, ctx) {
             ctx.mark_predicate_gated(a.source.action_id);
         }
     }
@@ -3283,7 +3690,7 @@ fn alt_gate_and_suffix(alt: &Alternative, ctx: &GenContext) -> String {
     if !ctx.emit_actions() {
         return String::new();
     }
-    let conds = alt_initial_gate_conditions(alt);
+    let conds = alt_initial_gate_conditions(alt, ctx);
     if conds.is_empty() {
         return String::new();
     }
@@ -3304,7 +3711,7 @@ fn gen_predicate_gated_dispatch(
     let order = amb_alts.sorted();
     let mut opened = false;
     for let idx of &order {
-        let conds = alt_initial_gate_conditions(&alts[*idx]);
+        let conds = alt_initial_gate_conditions(&alts[*idx], ctx);
         if conds.is_empty() {
             if !opened {
                 emit_gated_pick(w, *idx, fn_name, ctx, rule_display);
@@ -3326,8 +3733,29 @@ fn gen_predicate_gated_dispatch(
     }
     w.else_begin(&"else");
     w.line(&`p.no_viable("no viable alternative", p.peek_span(), []);`);
-    w.line(&"return;");
+    emit_no_viable_return(w, ctx);
     w.end();
+}
+
+/// The `, vals` a multi-alt dispatch forwards to an `_alt_<n>` helper so the
+/// seeded value channel (rule args + `@init`) reaches the chosen alternative,
+/// or `""` when the rule has no channel.
+fn alt_vals_arg(ctx: &GenContext) -> String {
+    if current_rule_emits_vals(ctx) {
+        return String::from(", vals");
+    }
+    return String::new();
+}
+
+/// Return statement after a `no_viable` in a rule body: `return vals;` when the
+/// rule exposes a value channel (so a `Default`-init struct flows back), else
+/// `return;`.
+fn emit_no_viable_return(w: &mut CodeWriter, ctx: &GenContext) {
+    if current_rule_emits_vals(ctx) {
+        w.line(&"return vals;");
+    } else {
+        w.line(&"return;");
+    }
 }
 
 /// Emit a gated branch body: the trace pick and the tail call into the alt.
@@ -3335,7 +3763,7 @@ fn emit_gated_pick(w: &mut CodeWriter, idx: i32, fn_name: &String, ctx: &GenCont
     if ctx.is_trace() {
         w.line(&`trace_pick(p, &{str_lit(*rule_display)}, {idx});`);
     }
-    w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
+    w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())}{alt_vals_arg(ctx)});`);
 }
 
 /// Join predicate conditions into one short-circuit `(c0) && (c1)` guard.
@@ -3384,13 +3812,38 @@ fn translate_action_or_warn(src: &ActionSource, ctx: &mut GenContext) -> Option<
         return null;
     }
     let vals_in_scope = rule_emits_vals(ctx, &ctx.parser_rules()[ridx]);
-    return match translate_wado_action(&ctx.parser_rules()[ridx], ctx.parser_rules(), &src.text, vals_in_scope) {
+    return match translate_wado_action(
+        &ctx.parser_rules()[ridx],
+        ctx.parser_rules(),
+        &src.text,
+        vals_in_scope,
+        ctx.alt_bindings(),
+    ) {
         Ok(code) => Option::Some(code),
         Err(msg) => {
             ctx.warn(&`action {src.action_id}`, DiagnosticKind::UnsupportedAction, msg);
             null;
         },
     };
+}
+
+/// Whether codegen emits the `_rule_start_tok` capture for this rule — its
+/// actions reference a rule-span special (`$text` / `$start` / `$stop`). The
+/// translator keys their substitution on the same predicate, so the local they
+/// read is always in scope, for every rule shape.
+fn rule_captures_span(rule: &ParserRule, rules: &List<ParserRule>) -> bool {
+    return rule_uses_rule_span(rule, rules);
+}
+
+/// Emit `let _rule_start_tok = p.pos;` at a rule-body entry (where `p.pos` is
+/// the rule's first token), when the rule references `$text` / `$start` /
+/// `$stop`. Placed at every shape's body entry (single-alt inner, multi-alt
+/// inner, `_alt_<n>` helpers, LR inner/atom), so span specials resolve
+/// uniformly regardless of dispatch.
+fn emit_span_capture(w: &mut CodeWriter, rule: &ParserRule, ctx: &GenContext) {
+    if ctx.emit_actions() && rule_captures_span(rule, ctx.parser_rules()) {
+        w.line(&`let {RULE_START_TOK_LOCAL} = p.pos;`);
+    }
 }
 
 /// Emit a semantic predicate `{cond}?` as an inline runtime guard: when the
@@ -3616,10 +4069,11 @@ pub fn gen_op_leaf(
             // trailing self-ref of a prefix LR alt (e.g. `'-' e`) so emit
             // reads a single source.
             gen_atn_ret_pending(w, ctx, r.atn_call_site);
+            let argsfx = call_arg_suffix(&r, ctx);
             if let Some(min_prec) = r.min_prec_arg {
-                w.line(&`let {r.field} = {fn_name}(p{follow_arg_str}, {min_prec});`);
+                w.line(&`let {r.field} = {fn_name}(p{follow_arg_str}, {min_prec}{argsfx});`);
             } else {
-                w.line(&`let {r.field} = {fn_name}(p{follow_arg_str});`);
+                w.line(&`let {r.field} = {fn_name}(p{follow_arg_str}{argsfx});`);
             }
         },
         Wildcard(wop) => w.line(&`let {wop.field} = p.any();`),
@@ -3770,13 +4224,39 @@ fn gen_lr_fn(
         type_str: "i32",
         default_value: Option::Some("0"),
     });
-    f.set_return_type(&"()");
+    f.set_return_type(&rule_result_type_for(rule, ctx));
     f.emit_begin(w);
+    let emits_vals = rule_emits_vals(ctx, rule);
     let fsep = follow_sep(ctx.emit_follow());
     w.line(&"let _cp = p.b.checkpoint();");
     w.line(&"let _start = p.peek_start();");
     w.line(&`p.b.start_node({rk}, _start);`);
-    w.line(&`{*fn_name}_atom(p{fsep}, min_prec);`);
+    // Seed the invocation's `vals` at rule entry (rule args, then `@init`), as
+    // ANTLR's `enterRecursionRule` seeds the primary context. The atom receives
+    // it, so `@init`'s `$v` reaches the primary alt's action; each LR
+    // continuation then opens a new context with its own fresh `vals`. `mut`
+    // only when something in this fn writes it (`@init`, args, or the `@after`
+    // reassignment); a plain value-channel LR rule just passes it through.
+    if emits_vals {
+        let entry_needs_mut = ctx.emit_actions()
+            && (rule.init_action matches { Some(_) } || rule.after_action matches { Some(_) } || rule_threads_args(rule));
+        let mut_kw = if entry_needs_mut { "mut " } else { "" };
+        w.line(&`let {mut_kw}vals = {vals_struct_name(rule)} \{\};`);
+    }
+    emit_span_capture(w, rule, ctx);
+    if ctx.emit_actions() {
+        emit_arg_stores(w, rule, ctx);
+        if let Some(a) = &rule.init_action {
+            gen_action_body(w, a, ctx);
+        }
+    }
+    // The atom seeds the accumulator (the left operand's value); each LR
+    // continuation folds a right operand into it (`emit_lr_branch_body`).
+    if emits_vals {
+        w.line(&`let mut _lr_acc = {*fn_name}_atom(p{fsep}, vals, min_prec);`);
+    } else {
+        w.line(&`{*fn_name}_atom(p{fsep}, min_prec);`);
+    }
     w.line(&"p.b.finish_node(p.last_end());");
     // ATN-class LR: the suffix loop-entry can't be resolved by static
     // suffix-first tokens (a shared delimiter goes to the wrong alt), so the
@@ -3786,7 +4266,7 @@ fn gen_lr_fn(
     // `atn_lr_loop_decision`, so the per-branch precedence gate is dropped.
     if atn_class && loop_dec >= 0 {
         gen_lr_fn_atn(w, rule, lr_alts, lr_dispatch, ctx, &rk, loop_dec);
-        w.line(&"return;");
+        emit_lr_after_return(w, rule, emits_vals, ctx);
         w.end();
         w.blank();
         return;
@@ -3816,7 +4296,7 @@ fn gen_lr_fn(
             w.else_begin(&`else if {cond}`);
         }
         if group.len() == 1 {
-            emit_lr_branch(w, &lr_alts[lr_dispatch.valid_lr_alts[group[0]]], &rk, &scan_fn, labeled, ctx, &mut nc);
+            emit_lr_branch(w, &lr_alts[lr_dispatch.valid_lr_alts[group[0]]], rule, &rk, &scan_fn, labeled, ctx, &mut nc);
         } else {
             emit_lr_overlap(w, rule, lr_alts, lr_dispatch, group, &rk, &scan_fn, ctx, &mut nc);
         }
@@ -3829,9 +4309,36 @@ fn gen_lr_fn(
         w.end();
     }
     w.end();
-    w.line(&"return;");
+    emit_lr_after_return(w, rule, emits_vals, ctx);
     w.end();
     w.blank();
+}
+
+/// Emit an LR rule's exit: bind the final accumulated `vals` (so `@after`'s
+/// `$v` reads the whole expression's value), run `@after`, and return. ANTLR
+/// runs `@after` once at `exitRule`, on the outermost (final) context. For a
+/// channel-less rule this is just the `@after` side effect and a bare return.
+fn emit_lr_after_return(w: &mut CodeWriter, rule: &ParserRule, emits_vals: bool, ctx: &mut GenContext) {
+    let has_after = ctx.emit_actions() && rule.after_action matches { Some(_) };
+    if emits_vals && has_after {
+        // `@after` reads (and may write) the final value under the name `vals`.
+        // The entry `vals` is still in scope (value semantics copied it into the
+        // atom call), so reassign rather than redeclare.
+        w.line(&"vals = _lr_acc;");
+        if let Some(a) = &rule.after_action {
+            gen_action_body(w, a, ctx);
+        }
+        w.line(&"return vals;");
+    } else if emits_vals {
+        w.line(&"return _lr_acc;");
+    } else {
+        if let Some(a) = &rule.after_action {
+            if ctx.emit_actions() {
+                gen_action_body(w, a, ctx);
+            }
+        }
+        w.line(&"return;");
+    }
 }
 
 /// ATN-class LR loop: the runtime simulator picks the suffix
@@ -3866,7 +4373,7 @@ fn gen_lr_fn_atn(
         } else {
             w.else_begin(&`else if _atn_alt == {i}`);
         }
-        emit_lr_branch_body(w, &lr_alts[valid[i]], rk, labeled, ctx, &mut nc);
+        emit_lr_branch_body(w, &lr_alts[valid[i]], rule, rk, labeled, ctx, &mut nc);
     }
     if !is_first {
         w.else_begin(&"else");
@@ -3892,6 +4399,7 @@ fn gen_lr_fn_atn(
 fn emit_lr_branch(
     w: &mut CodeWriter,
     lr: &LrAlt,
+    rule: &ParserRule,
     rk: &String,
     scan_fn: &String,
     labeled: bool,
@@ -3902,7 +4410,7 @@ fn emit_lr_branch(
     w.begin(&`if {*scan_fn}_lr_{lr.alt_index}(&p.kinds, p.pos) < 0`);
     w.line(&"break;");
     w.end();
-    emit_lr_branch_body(w, lr, rk, labeled, ctx, nc);
+    emit_lr_branch_body(w, lr, rule, rk, labeled, ctx, nc);
     w.else_begin(&"else");
     w.line(&"break;");
     w.end();
@@ -3914,6 +4422,7 @@ fn emit_lr_branch(
 fn emit_lr_branch_body(
     w: &mut CodeWriter,
     lr: &LrAlt,
+    rule: &ParserRule,
     rk: &String,
     labeled: bool,
     ctx: &mut GenContext,
@@ -3925,8 +4434,39 @@ fn emit_lr_branch_body(
     if labeled {
         w.line(&`p.b.set_alt({lr.alt_index});`);
     }
-    gen_ops(w, &lr.suffix.ops, ctx, nc);
+    // Value channel: bind the accumulated left operand under the stripped
+    // leading self-ref's name (so `$l.v` reads it), and give this continuation a
+    // fresh `vals` the suffix action writes (`$v`). The suffix's own right
+    // operand is bound by its recursive call (`$r.v`). After the body, fold this
+    // level's value back into the accumulator.
+    let emits_vals = rule_emits_vals(ctx, rule);
+    if emits_vals {
+        w.line(&`let {lr.prefix_self_ref.name} = _lr_acc;`);
+        w.line(&`let mut vals = {vals_struct_name(rule)} \{\};`);
+    }
+    // Interleave the alt's actions with the suffix ops. The LR rewrite strips
+    // the leading self-ref (element 0), so an action at surface `before_index b`
+    // runs before suffix op `b - 1`: pass the original `before` to
+    // `gen_alt_actions_at` (before op `i` → `before == i + 1`, trailing →
+    // `before == ops.len() + 1`). The alt-initial gate (`before == 0`) is never
+    // reached here — it is an LR loop-entry decision, not a suffix action.
+    let actions = &rule.alternatives[lr.alt_index].actions;
+    let ops = &lr.suffix.ops;
+    if ctx.emit_actions() {
+        // The suffix ops give the right operand's binding; the stripped leading
+        // self-ref (`$l`) falls back to `prefix_self_ref.name`, which is exactly
+        // the `let {name} = _lr_acc;` bound above.
+        ctx.set_alt_bindings(collect_alt_bindings(ops));
+    }
+    for let mut i = 0; i < ops.len(); i += 1 {
+        gen_alt_actions_at(w, actions, i + 1, ctx);
+        gen_op(w, &ops[i], ctx, nc);
+    }
+    gen_alt_actions_at(w, actions, ops.len() + 1, ctx);
     w.line(&"p.b.finish_node(p.last_end());");
+    if emits_vals {
+        w.line(&"_lr_acc = vals;");
+    }
 }
 
 /// Overlap group (suffixes sharing a first token), unique first
@@ -3968,7 +4508,7 @@ fn emit_lr_overlap(
                 } else {
                     w.else_begin(&`else if _sk == {*tk}`);
                 }
-                emit_lr_branch(w, &lr_alts[lr_dispatch.valid_lr_alts[group[k]]], rk, scan_fn, labeled, ctx, nc);
+                emit_lr_branch(w, &lr_alts[lr_dispatch.valid_lr_alts[group[k]]], rule, rk, scan_fn, labeled, ctx, nc);
                 emitted.push(*tk);
             }
         }
@@ -4003,10 +4543,10 @@ fn emit_lr_overlap(
             let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[k]]];
             if k == last_k {
                 if sub_first {
-                    emit_lr_branch(w, lr, rk, scan_fn, labeled, ctx, nc);
+                    emit_lr_branch(w, lr, rule, rk, scan_fn, labeled, ctx, nc);
                 } else {
                     w.else_begin(&"else");
-                    emit_lr_branch(w, lr, rk, scan_fn, labeled, ctx, nc);
+                    emit_lr_branch(w, lr, rule, rk, scan_fn, labeled, ctx, nc);
                     w.end();
                 }
             } else {
@@ -4019,7 +4559,7 @@ fn emit_lr_overlap(
                 } else {
                     w.else_begin(&`else if {sub_cond}`);
                 }
-                emit_lr_branch(w, lr, rk, scan_fn, labeled, ctx, nc);
+                emit_lr_branch(w, lr, rule, rk, scan_fn, labeled, ctx, nc);
             }
         }
         emitted.push(*shared_tk);
@@ -6627,11 +7167,11 @@ fn emit_index_pick_dispatch(
     for let mut i = 0; i < sorted_indices.len(); i += 1 {
         let idx = sorted_indices[i];
         w.begin(&`if {*var} == {idx}`);
-        w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
+        w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())}{alt_vals_arg(ctx)});`);
         w.end();
     }
     let last_idx = sorted_indices[sorted_indices.len() - 1];
-    w.line(&`return {*fn_name}_alt_{last_idx}(p{follow_sep(ctx.emit_follow())});`);
+    w.line(&`return {*fn_name}_alt_{last_idx}(p{follow_sep(ctx.emit_follow())}{alt_vals_arg(ctx)});`);
 }
 
 /// Emit one speculative alt attempt. The alt runs under `speculating` so a
@@ -6657,7 +7197,7 @@ fn emit_spec_alt_try(w: &mut CodeWriter, call: &String, idx: i32, ctx: &GenConte
     if ctx.is_trace() {
         w.line(&`trace_try(p, &{str_lit(*rule_display)}, {idx}, true);`);
     }
-    w.line(&"return;");
+    emit_no_viable_return(w, ctx);
     w.end();
 }
 
@@ -6678,7 +7218,7 @@ fn gen_prediction_code_inner(
         if skip > 0 {
             w.line(&`p.pos -= {skip};`);
         }
-        w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
+        w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())}{alt_vals_arg(ctx)});`);
         return;
     }
     if let Consume(c) = node {
@@ -6709,7 +7249,7 @@ fn gen_prediction_code_inner(
         let mut sorted_indices = a.alts.sorted();
         sort_group_by_element_count(&mut sorted_indices, alts);
         if skip == 0 {
-            if ctx.emit_actions() && ambiguous_group_predicate_gated(&a.alts, alts) {
+            if ctx.emit_actions() && ambiguous_group_predicate_gated(&a.alts, alts, ctx) {
                 gen_predicate_gated_dispatch(w, &a.alts, alts, fn_name, ctx, rule_display);
                 return;
             }
@@ -6794,7 +7334,7 @@ fn gen_prediction_code_inner(
                             if ctx.is_trace() {
                                 w.line(&`trace_pick(p, &{str_lit(*rule_display)}, {idx});`);
                             }
-                            w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
+                            w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())}{alt_vals_arg(ctx)});`);
                         } else {
                             let has_scan = alt_has_scan(&alts[idx].elements, ctx);
                             let is_full = has_scan && alt_scan_is_full(&alts[idx].elements, ctx);
@@ -6804,14 +7344,16 @@ fn gen_prediction_code_inner(
                                 if ctx.is_trace() {
                                     w.line(&`trace_pick(p, &{str_lit(*rule_display)}, {idx});`);
                                 }
-                                w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
+                                w.line(
+                                    &`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())}{alt_vals_arg(ctx)});`,
+                                );
                                 w.end();
                             } else if has_scan {
                                 // Partial scan: try parse, fall through on failure.
                                 w.begin(&`if {*fn_name}_scan_{idx}(&p.kinds, p.pos) >= 0`);
                                 emit_spec_alt_try(
                                     w,
-                                    &`{*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())})`,
+                                    &`{*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())}{alt_vals_arg(ctx)})`,
                                     idx,
                                     ctx,
                                     rule_display,
@@ -6821,7 +7363,7 @@ fn gen_prediction_code_inner(
                                 // No scan: save-and-rewind speculative parse.
                                 emit_spec_alt_try(
                                     w,
-                                    &`{*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())})`,
+                                    &`{*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())}{alt_vals_arg(ctx)})`,
                                     idx,
                                     ctx,
                                     rule_display,
@@ -6840,11 +7382,11 @@ fn gen_prediction_code_inner(
                         if ctx.is_trace() {
                             w.line(&`trace_pick(p, &{str_lit(*rule_display)}, {idx});`);
                         }
-                        w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
+                        w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())}{alt_vals_arg(ctx)});`);
                     } else {
                         emit_spec_alt_try(
                             w,
-                            &`{*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())})`,
+                            &`{*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())}{alt_vals_arg(ctx)})`,
                             idx,
                             ctx,
                             rule_display,
@@ -6924,7 +7466,7 @@ fn collect_referenced_scan_alts(
             }
         },
         Ambiguous(a) => {
-            if ctx.emit_actions() && ambiguous_group_predicate_gated(&a.alts, alts) {
+            if ctx.emit_actions() && ambiguous_group_predicate_gated(&a.alts, alts, ctx) {
                 return;
             }
             let mut sorted_indices = a.alts.sorted();
@@ -7010,6 +7552,7 @@ fn gen_multi_alt_body_alt(
             if ctx.is_trace() && !all_alts_are_single_token(&rule.alternatives) {
                 w.line(&`trace_pick(p, &{str_lit(rule.name)}, {alt_index});`);
             }
+            let after = rule_after_for(rule, lowered_rule, ctx);
             gen_alt_body(
                 w,
                 type_name,
@@ -7019,7 +7562,7 @@ fn gen_multi_alt_body_alt(
                 body,
                 alt_index,
                 rule_alts_labeled(&rule.alternatives),
-                &null,
+                &after,
                 ctx,
             );
         } else {
@@ -7162,7 +7705,11 @@ fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
     w.write(&"],\n");
     w.dedent();
     w.line(&");");
-    w.line(&"return;");
+    if current_rule_emits_vals(ctx) {
+        w.line(&"return vals;");
+    } else {
+        w.line(&"return;");
+    }
 }
 
 fn find_needed_depth(all_position_sets: &List<List<List<String>>>) -> i32 {

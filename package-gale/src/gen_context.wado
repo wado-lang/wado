@@ -160,6 +160,11 @@ pub struct GenContext {
     predicate_gated: List<i32>,
     rule_follow_kinds: TreeMap<String, List<String>>,
     rule_follow_exact: bool,
+    /// Actual post-dedup bindings for the alternative currently being emitted:
+    /// `[is_token, base, field]`. The action translator maps a `$ref` to its
+    /// real local (`e_2`) instead of re-deriving `binding_name`, which diverges
+    /// when a token / rule field-name collision deduped the reference.
+    alt_bindings: List<[bool, String, String]>,
 }
 
 impl GenContext {
@@ -198,6 +203,7 @@ impl GenContext {
             predicate_gated: [],
             rule_follow_kinds: TreeMap::new(),
             rule_follow_exact: false,
+            alt_bindings: [],
         };
     }
 
@@ -414,6 +420,16 @@ impl GenContext {
 
     pub fn mark_predicate_gated(&mut self, id: i32) {
         self.predicate_gated.push(id);
+    }
+
+    /// Set the actual bindings for the alternative whose actions are about to be
+    /// emitted, so the translator resolves `$ref` to its real (post-dedup) local.
+    pub fn set_alt_bindings(&mut self, bindings: List<[bool, String, String]>) {
+        self.alt_bindings = bindings;
+    }
+
+    pub fn alt_bindings(&self) -> &List<[bool, String, String]> {
+        return &self.alt_bindings;
     }
 
     pub fn is_predicate_gated(&self, id: i32) -> bool {
