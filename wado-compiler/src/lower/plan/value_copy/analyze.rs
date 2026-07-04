@@ -9,7 +9,8 @@
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::tir::{
-    TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    TirBlock, TirExpr, TirExprKind, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
+    TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -118,7 +119,7 @@ impl TirRefVisitor for SeedWalker<'_> {
 pub fn should_wrap(expr: &TirExpr, type_table: &TypeTable) -> bool {
     super::needs_value_copy(expr.type_id, type_table)
         && !is_copy_value_call(expr)
-        && !is_fresh_value(expr)
+        && !is_fresh_value(expr, type_table)
 }
 
 /// Avoid re-wrapping the `copy_value::<NestedT>(...)` markers
@@ -132,13 +133,16 @@ fn is_copy_value_call(expr: &TirExpr) -> bool {
 }
 
 /// A fresh expression does not alias existing data, so no
-/// defensive copy is needed. Mirrors
-/// `wir_build::value_copy::is_fresh_value`.
-pub fn is_fresh_value(expr: &TirExpr) -> bool {
-    is_fresh_in_context(expr, &IndexSet::default())
+/// defensive copy is needed.
+pub fn is_fresh_value(expr: &TirExpr, type_table: &TypeTable) -> bool {
+    is_fresh_in_context(expr, &IndexSet::default(), type_table)
 }
 
-fn is_fresh_in_context(expr: &TirExpr, fresh_locals: &IndexSet<u32>) -> bool {
+fn is_fresh_in_context(
+    expr: &TirExpr,
+    fresh_locals: &IndexSet<u32>,
+    type_table: &TypeTable,
+) -> bool {
     match &expr.kind {
         TirExprKind::StringLiteral(_)
         | TirExprKind::StructLiteral { .. }
@@ -157,22 +161,91 @@ fn is_fresh_in_context(expr: &TirExpr, fresh_locals: &IndexSet<u32>) -> bool {
         TirExprKind::Unary {
             op: TirUnaryOp::Deref,
             expr: inner,
-        } => is_fresh_in_context(inner, fresh_locals),
+        } => is_fresh_in_context(inner, fresh_locals, type_table),
         TirExprKind::LabeledBlock { label, block, .. } => {
-            block_breaks_are_fresh(label, block, fresh_locals)
+            block_breaks_are_fresh(label, block, fresh_locals, type_table)
+        }
+        TirExprKind::Match { expr: scrut, arms } => {
+            match_result_is_fresh(scrut, arms, fresh_locals, type_table)
         }
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. } => {
-            is_fresh_in_context(inner, fresh_locals)
+            is_fresh_in_context(inner, fresh_locals, type_table)
         }
         _ => false,
     }
 }
 
-fn block_breaks_are_fresh(label: &str, block: &TirBlock, parent_fresh: &IndexSet<u32>) -> bool {
+/// A `match` yields a fresh value when every value-producing arm yields a
+/// fresh value. Divergent arms (`Never`-typed body: `=> return …`, `=> panic()`)
+/// contribute no value and are skipped. When the scrutinee is itself fresh, an
+/// arm's pattern bindings destructure unaliased data, so they are fresh too —
+/// this is what makes `let x = f()?` (which desugars to
+/// `match f() { Ok(v) => v, Err(e) => return Err(e) }`) copy-free when `f()`
+/// returns a fresh value.
+fn match_result_is_fresh(
+    scrut: &TirExpr,
+    arms: &[TirMatchArm],
+    fresh_locals: &IndexSet<u32>,
+    type_table: &TypeTable,
+) -> bool {
+    let scrut_fresh = is_fresh_in_context(scrut, fresh_locals, type_table);
+    let mut saw_value_arm = false;
+    for arm in arms {
+        if type_table.is_never(arm.body.type_id) {
+            continue;
+        }
+        saw_value_arm = true;
+        let mut arm_fresh = fresh_locals.clone();
+        if scrut_fresh {
+            collect_pattern_bindings(&arm.pattern, &mut arm_fresh);
+        }
+        if !is_fresh_in_context(&arm.body, &arm_fresh, type_table) {
+            return false;
+        }
+    }
+    saw_value_arm
+}
+
+/// Collect every local a pattern binds, so a fresh scrutinee's destructured
+/// parts can be treated as fresh in the arm body.
+fn collect_pattern_bindings(pattern: &TirPattern, out: &mut IndexSet<u32>) {
+    match pattern {
+        TirPattern::Binding { local_index, .. } => {
+            out.insert(*local_index);
+        }
+        TirPattern::Tuple(subs, _) | TirPattern::Variant { bindings: subs, .. } => {
+            for sub in subs {
+                collect_pattern_bindings(sub, out);
+            }
+        }
+        TirPattern::Struct { fields, .. } => {
+            for field in fields {
+                collect_pattern_bindings(&field.pattern, out);
+            }
+        }
+        TirPattern::Or(alts) => {
+            for alt in alts {
+                collect_pattern_bindings(alt, out);
+            }
+        }
+        TirPattern::Wildcard
+        | TirPattern::Literal(_)
+        | TirPattern::Enum { .. }
+        | TirPattern::ConstantValue { .. }
+        | TirPattern::Range { .. } => {}
+    }
+}
+
+fn block_breaks_are_fresh(
+    label: &str,
+    block: &TirBlock,
+    parent_fresh: &IndexSet<u32>,
+    type_table: &TypeTable,
+) -> bool {
     let mut found = false;
     let mut fresh_locals = parent_fresh.clone();
-    if scan_block_for_breaks(label, block, &mut found, &mut fresh_locals) {
+    if scan_block_for_breaks(label, block, &mut found, &mut fresh_locals, type_table) {
         found
     } else {
         false
@@ -184,9 +257,10 @@ fn scan_block_for_breaks(
     block: &TirBlock,
     found: &mut bool,
     fresh_locals: &mut IndexSet<u32>,
+    type_table: &TypeTable,
 ) -> bool {
     for stmt in &block.stmts {
-        if !scan_stmt_for_breaks(label, stmt, found, fresh_locals) {
+        if !scan_stmt_for_breaks(label, stmt, found, fresh_locals, type_table) {
             return false;
         }
     }
@@ -198,12 +272,13 @@ fn scan_stmt_for_breaks(
     stmt: &TirStmt,
     found: &mut bool,
     fresh_locals: &mut IndexSet<u32>,
+    type_table: &TypeTable,
 ) -> bool {
     match &stmt.kind {
         TirStmtKind::Let {
             local_index, value, ..
         } => {
-            if is_fresh_in_context(value, fresh_locals) {
+            if is_fresh_in_context(value, fresh_locals, type_table) {
                 fresh_locals.insert(*local_index);
             }
             true
@@ -213,25 +288,29 @@ fn scan_stmt_for_breaks(
             value: Some(v),
         } if l == label => {
             *found = true;
-            is_fresh_in_context(v, fresh_locals)
+            is_fresh_in_context(v, fresh_locals, type_table)
         }
         TirStmtKind::If {
             then_block,
             else_block,
             ..
         } => {
-            if !scan_block_for_breaks(label, then_block, found, fresh_locals) {
+            if !scan_block_for_breaks(label, then_block, found, fresh_locals, type_table) {
                 return false;
             }
             if let Some(eb) = else_block
-                && !scan_block_for_breaks(label, eb, found, fresh_locals)
+                && !scan_block_for_breaks(label, eb, found, fresh_locals, type_table)
             {
                 return false;
             }
             true
         }
-        TirStmtKind::Loop { body } => scan_block_for_breaks(label, body, found, fresh_locals),
-        TirStmtKind::Expr(expr) => scan_expr_for_breaks(label, expr, found, fresh_locals),
+        TirStmtKind::Loop { body } => {
+            scan_block_for_breaks(label, body, found, fresh_locals, type_table)
+        }
+        TirStmtKind::Expr(expr) => {
+            scan_expr_for_breaks(label, expr, found, fresh_locals, type_table)
+        }
         _ => true,
     }
 }
@@ -241,21 +320,22 @@ fn scan_expr_for_breaks(
     expr: &TirExpr,
     found: &mut bool,
     fresh_locals: &mut IndexSet<u32>,
+    type_table: &TypeTable,
 ) -> bool {
     match &expr.kind {
         TirExprKind::LabeledBlock { block, .. } | TirExprKind::Block(block) => {
-            scan_block_for_breaks(label, block, found, fresh_locals)
+            scan_block_for_breaks(label, block, found, fresh_locals, type_table)
         }
         TirExprKind::If {
             then_branch,
             else_branch,
             ..
         } => {
-            if !scan_block_for_breaks(label, then_branch, found, fresh_locals) {
+            if !scan_block_for_breaks(label, then_branch, found, fresh_locals, type_table) {
                 return false;
             }
             if let Some(eb) = else_branch
-                && !scan_block_for_breaks(label, eb, found, fresh_locals)
+                && !scan_block_for_breaks(label, eb, found, fresh_locals, type_table)
             {
                 return false;
             }
