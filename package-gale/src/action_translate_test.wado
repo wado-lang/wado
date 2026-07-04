@@ -175,6 +175,20 @@ e : ID ;
     assert d == " p.emit(p.rule_string_tree()); ", `d: '{d}'`;
 }
 
+test "translate maps $_p to the min_prec precedence parameter" {
+    let g = parse("grammar T;
+e : e '+' e { print($_p); } | INT ;
+").unwrap();
+    let out = translate_wado_action(
+        &g.parser_rules[0],
+        &g.parser_rules,
+        &" print($_p); ",
+        false,
+        &NO_BINDINGS,
+    ).unwrap();
+    assert out == " print(min_prec); ", `out: '{out}'`;
+}
+
 test "translate maps $ctx.toStringTree in a left-recursive rule to the final-node render" {
     let g = parse("grammar T;
 e @after { p.emit($ctx.toStringTree()); } : e '+' e | INT ;

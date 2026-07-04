@@ -111,6 +111,10 @@ fn binding_for(bindings: &List<[bool, String, String]>, is_token: bool, base: &S
 /// `$start` / `$stop` substitution.
 pub global RULE_START_TOK_LOCAL: String = "_rule_start_tok";
 
+/// The precedence-threshold parameter every generated rule fn carries; read
+/// by a `$_p` substitution (`min_prec` is 0 outside a precedence context).
+global MIN_PREC_LOCAL: String = "min_prec";
+
 /// The LR precedence-climbing accumulator local (`gen_lr_fn`), holding the left
 /// operand's vals. java2wado maps `((Ctx)$ctx).<rule>(0)` onto it.
 pub global LR_ACC_LOCAL: String = "_lr_acc";
@@ -201,8 +205,10 @@ fn action_attr_expr(
 }
 
 /// A parser special: `$text` is the consumed input span, `$start`/`$stop` the
-/// rule's first/last token, `$ctx.toStringTree` the node under construction.
-/// `$text`/`$start` read the codegen-captured `_rule_start_tok`.
+/// rule's first/last token, `$ctx.toStringTree` the node under construction,
+/// `$_p` the current precedence threshold (the `min_prec` parameter every
+/// generated rule fn carries). `$text`/`$start` read the codegen-captured
+/// `_rule_start_tok`.
 fn parser_special_expr(r: &ResolvedAttr, is_lr: bool, handle: &String) -> Result<String, String> {
     return match r.name {
         "text" && r.member matches { None } => Result::Ok(
@@ -214,6 +220,7 @@ fn parser_special_expr(r: &ResolvedAttr, is_lr: bool, handle: &String) -> Result
             let method = if is_lr { "rule_string_tree_final" } else { "rule_string_tree" };
             Result::Ok(`{*handle}.{method}()`);
         },
+        "_p" && r.member matches { None } => Result::Ok(MIN_PREC_LOCAL),
         _ => Result::Err(`${r.name}: this parser special is not yet emitted`),
     };
 }
