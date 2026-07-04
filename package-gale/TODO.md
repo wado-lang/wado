@@ -57,7 +57,9 @@ All 17 `CompositeLexers` / `CompositeParsers` descriptors short-circuit on `pars
 
 ## Stage C — action / predicate execution
 
-Gale **recognises** but **silently discards** the contents of `{ ... }` action blocks and `{ ... }?` semantic predicates. The g4 parser accepts them, so grammars containing them (`ANTLRv4Lexer`, `RustLexer`, `RustParser`, `TypeScriptLexer`, `TypeScriptParser`) load cleanly — but the generated lexer/parser behaves as if every predicate were `true` and every action a no-op. That is wrong for:
+**Status:** the **parser** half has landed (java2wado Phase 3, [`java2wado.md`](./java2wado.md)). A non-superClass `language = Java` grammar's parser actions, predicates, `@members`, and the ctx-cast LR value idiom are translated to Wado and execute during the parse (`driver_java_{action,members,pred}_test`). Remaining (Phase 4): **lexer** actions / position-sensitive lexer predicates, and the **SuperClass trait** for the real-world grammars below. A follow-up harness step will make the ANTLR descriptor `[output]` corpus codegen-and-compare (it is parse-only today), unblocking the `[output]` acceptance.
+
+Gale still **silently discards** action / predicate contents for the cases below the parser subset does not yet cover. The g4 parser accepts them, so grammars containing them (`ANTLRv4Lexer`, `RustLexer`, `RustParser`, `TypeScriptLexer`, `TypeScriptParser`) load cleanly — but the generated lexer/parser behaves as if every predicate were `true` and every action a no-op. That is wrong for:
 
 - Rust's `>>` / `>>=` token splitting in generics (`{this.NextGT()}?`) and float-literal disambiguation (`{this.FloatLiteralPossible()}?`); without them Gale mis-parses nested generics. (Raw-string `#`-count matching is _not_ a Stage C case — `RAW_STRING_CONTENT` is a recursive fragment, a LATN concern.)
 - TypeScript's regex-vs-division disambiguation and other context-sensitive lexer and parser rules.
