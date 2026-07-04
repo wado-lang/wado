@@ -154,7 +154,7 @@ fn check_member(r: &AttrRef, target: &AttrTarget, rule_name: &String, rules: &Li
 }
 
 fn is_token_member(m: &String) -> bool {
-    return (*m) matches { "text" | "type" | "line" | "pos" | "index" | "channel" | "int" };
+    return m matches { "text" | "type" | "line" | "pos" | "index" | "channel" | "int" };
 }
 
 fn is_rule_member(m: &String, rule_name: &String, rules: &List<ParserRule>) -> bool {
@@ -176,7 +176,7 @@ fn is_rule_member(m: &String, rule_name: &String, rules: &List<ParserRule>) -> b
 /// The CST pseudo-members every rule reference exposes (`.text` / `.ctx` /
 /// `.start` / `.stop`), independent of its declared `returns`.
 pub fn is_rule_pseudo_member(name: &String) -> bool {
-    return (*name) matches { "text" | "ctx" | "start" | "stop" };
+    return name matches { "text" | "ctx" | "start" | "stop" };
 }
 
 fn is_parser_special(name: &String) -> bool {
