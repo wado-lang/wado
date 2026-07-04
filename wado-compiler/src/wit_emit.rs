@@ -37,20 +37,60 @@ pub enum WitScope {
 /// Options threaded from the CLI into the emitter. These are project-level
 /// configuration, not frontend-derived facts, so they live here rather than on
 /// [`Semantics`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct WitEmitOptions {
     /// Inlining scope for referenced interfaces.
     pub scope: WitScope,
-    /// Fully-qualified name of the target world (e.g. `wasi:cli/command`).
+}
+
+/// The emitted name of a library's world — the component's anonymous root.
+pub const LIB_WORLD_NAME: &str = "root";
+
+/// The compiler-owned facts that fix a target's emitted world name and default
+/// interface. Set on [`Semantics`] by the CLI (see
+/// [`Semantics::set_wit_contract`](crate::semantics::Semantics::set_wit_contract))
+/// so `wado wit` and the `wado compile` embed path derive them identically and
+/// cannot drift.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WitContract {
+    /// World whose local name is emitted, and the registry key for its exports.
     pub world_fq: String,
-    /// Name for the synthesized default interface that groups bare exports.
-    /// Sourced from `[package].name` or the entry-file stem.
-    pub default_interface_name: String,
-    /// The CM interface FQs the compiled component imports — the WIR-level
-    /// import plan (`NirPackage::imported_cm_interfaces`). The authoritative,
-    /// faithful world import set; injected by the caller because it is computed
-    /// post-DCE and is unavailable from `Semantics` alone.
-    pub world_imports: Vec<String>,
+    /// Name of the default interface grouping bare exports.
+    pub default_interface: String,
+}
+
+/// Single source of truth for a target's emitted world name + default interface.
+///
+/// Library (`lib_world = Some("ns:name/name@ver")`): the world is the anonymous
+/// root — `world_fq = "ns:name/root@ver"`, `default_interface` = the name
+/// segment. Non-lib: `world_fq = target_world` (default `wasi:cli/command`),
+/// `default_interface` = `default_interface` (fallback `"root"`).
+#[must_use]
+pub fn wit_contract(
+    target_world: Option<&str>,
+    lib_world: Option<&str>,
+    default_interface: Option<&str>,
+) -> WitContract {
+    if let Some(lib_fq) = lib_world
+        && let Some(parts) = FqParts::parse(lib_fq)
+    {
+        let version = if parts.version.is_empty() {
+            String::new()
+        } else {
+            format!("@{}", parts.version)
+        };
+        return WitContract {
+            world_fq: format!(
+                "{}:{}/{}{}",
+                parts.namespace, parts.package, LIB_WORLD_NAME, version
+            ),
+            default_interface: parts.interface,
+        };
+    }
+    WitContract {
+        world_fq: target_world.unwrap_or("wasi:cli/command").to_string(),
+        default_interface: default_interface.unwrap_or("root").to_string(),
+    }
 }
 
 /// A failure that prevents emitting valid WIT.
@@ -90,14 +130,20 @@ impl std::fmt::Display for WitEmitError {
 
 impl std::error::Error for WitEmitError {}
 
-/// Render the WIT text for `sem` under `opts`.
-pub fn emit_wit_text(sem: &Semantics, opts: &WitEmitOptions) -> Result<String, WitEmitError> {
+/// Render the WIT text for `sem` under `opts`. `world_imports` is the faithful
+/// import plan (`NirPackage::imported_cm_interfaces`) computed post-DCE by the
+/// caller, since it is unavailable from `Semantics` alone.
+pub fn emit_wit_text(
+    sem: &Semantics,
+    opts: &WitEmitOptions,
+    world_imports: &[String],
+) -> Result<String, WitEmitError> {
     if !sem.is_complete() {
         return Err(WitEmitError::IncompleteSemantics);
     }
 
     let mut emitter = Emitter::new(sem);
-    let package = emitter.build_package(opts)?;
+    let package = emitter.build_package(world_imports)?;
     let mut out = package.to_string();
 
     // `full` scope inlines every referenced CM interface as a nested package,
@@ -180,12 +226,17 @@ impl<'a> Emitter<'a> {
         }
     }
 
-    fn build_package(&mut self, opts: &WitEmitOptions) -> Result<Package, WitEmitError> {
+    fn build_package(&mut self, world_imports: &[String]) -> Result<Package, WitEmitError> {
+        let contract = self
+            .sem
+            .wit_contract()
+            .ok_or(WitEmitError::IncompleteSemantics)?
+            .clone();
         let exports = self.collect_exported_functions();
         let world_info = self
             .sem
             .world_registry()
-            .and_then(|registry| registry.get(&opts.world_fq));
+            .and_then(|registry| registry.get(&contract.world_fq));
 
         // World imports: the faithful set the compiled component imports,
         // computed post-DCE at the WIR layer and injected by the caller (WEP
@@ -193,7 +244,7 @@ impl<'a> Emitter<'a> {
         // includes implicit runtime imports (e.g. `wasi:cli/stderr` for assert)
         // and excludes type-alias-only interfaces — neither visible from the
         // effect rows alone.
-        let import_fqs: BTreeSet<String> = opts.world_imports.iter().cloned().collect();
+        let import_fqs: BTreeSet<String> = world_imports.iter().cloned().collect();
 
         // Partition exports into world-conformance entry points (`run` /
         // `handle`, which map to a standard export interface like
@@ -225,7 +276,7 @@ impl<'a> Emitter<'a> {
         let type_defs = self.drain_pending_type_defs()?;
 
         let mut package = Package::new(PackageName::new("root", "component", None));
-        let mut world = World::new(to_kebab(&world_local_name(&opts.world_fq)));
+        let mut world = World::new(to_kebab(&world_local_name(&contract.world_fq)));
 
         for fq in &import_fqs {
             world.named_interface_import(fq.clone());
@@ -243,7 +294,7 @@ impl<'a> Emitter<'a> {
             }
         } else {
             // Group user exports and their types into the default interface.
-            let iface_name = to_kebab(&opts.default_interface_name);
+            let iface_name = to_kebab(&contract.default_interface);
             let mut iface = Interface::new(iface_name.clone());
             for ty in type_defs {
                 iface.type_def(ty);
@@ -1086,12 +1137,17 @@ fn collect_named_type_sources(ty: &crate::ast::Type, out: &mut Vec<String>) {
     }
 }
 
-/// The WIT world name the emitter renders for `opts`, in kebab-case. This is
-/// the name to pass to `Resolve::select_world` when re-parsing the emitted text
-/// (see [`crate::wit_bundle`]).
+/// The WIT world name the emitter renders for `sem`, in kebab-case. This is the
+/// name to pass to `Resolve::select_world` when re-parsing the emitted text (see
+/// [`crate::wit_bundle`]). Reads the compiler-owned [`WitContract`]; falls back
+/// to the empty local name when unset (callers always set it before emitting).
 #[must_use]
-pub fn world_name(opts: &WitEmitOptions) -> String {
-    to_kebab(&world_local_name(&opts.world_fq))
+pub fn world_name(sem: &Semantics) -> String {
+    let world_fq = sem
+        .wit_contract()
+        .map(|c| c.world_fq.as_str())
+        .unwrap_or("");
+    to_kebab(&world_local_name(world_fq))
 }
 
 /// Extract the local name of a world FQ: `wasi:cli/command` -> `command`.

@@ -14,7 +14,7 @@ mod common;
 use common::InMemoryHost;
 use wado_compiler::semantics::semantics;
 use wado_compiler::wit_bundle::{embed_component_type, encode_component_type};
-use wado_compiler::wit_emit::{WitEmitOptions, WitScope};
+use wado_compiler::wit_emit;
 use wado_compiler::{OptLevel, dump_with_host_and_world};
 
 use wit_parser::decoding::{DecodedWasm, decode};
@@ -65,13 +65,13 @@ fn compile(source: &str, world_fq: &str) -> Vec<u8> {
     .unwrap_or_else(|_| panic!("compile failed:\n{:#?}", host.diagnostics()))
 }
 
-fn emit_opts(source: &str, world_fq: &str) -> WitEmitOptions {
-    WitEmitOptions {
-        scope: WitScope::Full,
-        world_fq: world_fq.to_string(),
-        default_interface_name: "entry".to_string(),
-        world_imports: import_plan(source, world_fq),
-    }
+/// Set the WIT contract on `sem` for `world_fq`, matching the CLI's setup.
+fn with_contract(
+    mut sem: wado_compiler::semantics::Semantics,
+    world_fq: &str,
+) -> wado_compiler::semantics::Semantics {
+    sem.set_wit_contract(wit_emit::wit_contract(Some(world_fq), None, Some("entry")));
+    sem
 }
 
 const CLI_WORLD: &str = "wasi:cli/command";
@@ -132,10 +132,13 @@ fn component_is_self_describing_without_embedding() {
 fn embedding_appends_section_and_preserves_component() {
     let wasm = compile(HELLO, CLI_WORLD);
     let host = InMemoryHost::new();
-    let sem = block_on(semantics(HELLO, &host, Some("entry.wado")));
+    let sem = with_contract(
+        block_on(semantics(HELLO, &host, Some("entry.wado"))),
+        CLI_WORLD,
+    );
     assert!(sem.is_complete());
 
-    let embedded = embed_component_type(&wasm, &sem, &emit_opts(HELLO, CLI_WORLD))
+    let embedded = embed_component_type(&wasm, &sem, &import_plan(HELLO, CLI_WORLD))
         .expect("embed_component_type");
 
     assert!(embedded.len() > wasm.len(), "section should add bytes");
@@ -165,9 +168,12 @@ fn embedding_appends_section_and_preserves_component() {
 #[test]
 fn encoded_payload_decodes_as_wit_package() {
     let host = InMemoryHost::new();
-    let sem = block_on(semantics(HELLO, &host, Some("entry.wado")));
+    let sem = with_contract(
+        block_on(semantics(HELLO, &host, Some("entry.wado"))),
+        CLI_WORLD,
+    );
     let payload =
-        encode_component_type(&sem, &emit_opts(HELLO, CLI_WORLD)).expect("encode_component_type");
+        encode_component_type(&sem, &import_plan(HELLO, CLI_WORLD)).expect("encode_component_type");
     assert!(
         matches!(decode(&payload), Ok(DecodedWasm::WitPackage(..))),
         "payload must decode as a standalone WIT package"
@@ -179,10 +185,13 @@ fn encoded_payload_decodes_as_wit_package() {
 fn pure_compute_world_embeds() {
     let wasm = compile(PURE, CLI_WORLD);
     let host = InMemoryHost::new();
-    let sem = block_on(semantics(PURE, &host, Some("entry.wado")));
-    let embedded = embed_component_type(&wasm, &sem, &emit_opts(PURE, CLI_WORLD)).expect("embed");
+    let sem = with_contract(
+        block_on(semantics(PURE, &host, Some("entry.wado"))),
+        CLI_WORLD,
+    );
+    let embedded = embed_component_type(&wasm, &sem, &import_plan(PURE, CLI_WORLD)).expect("embed");
     assert!(matches!(decode(&embedded), Ok(DecodedWasm::Component(..))));
 
-    let payload = encode_component_type(&sem, &emit_opts(PURE, CLI_WORLD)).expect("encode");
+    let payload = encode_component_type(&sem, &import_plan(PURE, CLI_WORLD)).expect("encode");
     assert!(matches!(decode(&payload), Ok(DecodedWasm::WitPackage(..))));
 }

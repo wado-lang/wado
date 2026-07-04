@@ -224,7 +224,8 @@ impl EntryPointKind {
 }
 
 /// The emitted name of a library's world — the component's anonymous root.
-pub const LIB_WORLD_NAME: &str = "root";
+/// Re-exported from [`wado_compiler::wit_emit`], the single source of truth.
+pub const LIB_WORLD_NAME: &str = wado_compiler::wit_emit::LIB_WORLD_NAME;
 
 /// A library FQ `namespace:name/<segment>@version`, rejecting a package name
 /// that (case-insensitively) equals the reserved [`LIB_WORLD_NAME`].
@@ -253,20 +254,6 @@ pub fn lib_world_fq(pkg: &wado_manifest::Package) -> Result<String, CliExit> {
     lib_fq(pkg, &pkg.name)
 }
 
-/// The FQ that names the world when emitting a library's WIT, using the
-/// reserved [`LIB_WORLD_NAME`] segment instead of the default-interface name.
-pub fn lib_emit_world_fq(pkg: &wado_manifest::Package) -> Result<String, CliExit> {
-    lib_fq(pkg, LIB_WORLD_NAME)
-}
-
-/// The `(world-emit FQ, default-interface name)` pair for emitting a library's
-/// WIT — the single source both `wado wit --lib` and the `wado compile --lib`
-/// embed path derive their `WitEmitOptions` from, so the text and the embedded
-/// `component-type` cannot disagree.
-pub fn lib_emit_target(pkg: &wado_manifest::Package) -> Result<(String, String), CliExit> {
-    Ok((lib_emit_world_fq(pkg)?, pkg.name.clone()))
-}
-
 /// A resolved `--lib` package: everything needed to build and emit its world.
 pub struct LibTarget {
     /// Entry-point source path (`[package].lib`).
@@ -274,10 +261,6 @@ pub struct LibTarget {
     /// Default-interface FQ `namespace:name/name@version` — the codegen key and
     /// the identity consumers import.
     pub interface_fq: String,
-    /// The emitted world-name FQ `namespace:name/root@version`.
-    pub world_emit_fq: String,
-    /// Default interface name (`[package].name`).
-    pub default_interface: String,
 }
 
 /// Resolve the `--lib` package: its `ProjectManifest` and [`LibTarget`].
@@ -325,7 +308,6 @@ pub fn resolve_lib_project(
         .package
         .as_ref()
         .ok_or_else(|| CliExit::error("`--lib` requires a `[package]` section in wado.toml"))?;
-    let (world_emit_fq, default_interface) = lib_emit_target(pkg)?;
     let interface_fq = lib_world_fq(pkg)?;
     let lib_rel = pkg
         .lib
@@ -334,8 +316,6 @@ pub fn resolve_lib_project(
     let target = LibTarget {
         entry: project.root.join(lib_rel),
         interface_fq,
-        world_emit_fq,
-        default_interface,
     };
     Ok((project, target))
 }
@@ -636,24 +616,6 @@ lib = "src/lib.wado"
     }
 
     #[test]
-    fn lib_emit_world_fq_uses_reserved_root_name() {
-        let toml = r#"
-[package]
-namespace = "wado"
-name = "cm-catalog-min"
-version = "0.1.0"
-lib = "src/lib.wado"
-"#;
-        let m = toml.parse::<Manifest>().unwrap();
-        let pkg = m.package.as_ref().unwrap();
-        let world = lib_emit_world_fq(pkg).unwrap();
-        let iface = lib_world_fq(pkg).unwrap();
-        assert_eq!(world, "wado:cm-catalog-min/root@0.1.0");
-        assert_eq!(iface, "wado:cm-catalog-min/cm-catalog-min@0.1.0");
-        assert_ne!(world, iface);
-    }
-
-    #[test]
     fn lib_fq_rejects_reserved_root_package_name_any_case() {
         for name in ["root", "Root", "ROOT"] {
             let toml = format!(
@@ -662,16 +624,10 @@ lib = "src/lib.wado"
             let m = toml.parse::<Manifest>().unwrap();
             let pkg = m.package.as_ref().unwrap();
             let iface_err = lib_world_fq(pkg).unwrap_err();
-            let world_err = lib_emit_world_fq(pkg).unwrap_err();
             assert!(
                 iface_err.message.contains("reserved"),
                 "{}",
                 iface_err.message
-            );
-            assert!(
-                world_err.message.contains("reserved"),
-                "{}",
-                world_err.message
             );
         }
     }

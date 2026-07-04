@@ -9,7 +9,6 @@ use lexopt::Arg::Value;
 use lexopt::Parser;
 use wado_compiler::LogLevel;
 use wado_compiler::wit_bundle;
-use wado_compiler::wit_emit::{WitEmitOptions, WitScope};
 
 use crate::args::{self, CliExit};
 use crate::compiler_host::{FilesystemCompilerHost, KilnComponentCache};
@@ -1029,23 +1028,6 @@ async fn embed_wit_section(
         return Ok(wasm);
     };
 
-    let (world, default_interface) = if opts.lib_world.is_some() {
-        let Some(pkg) = project.and_then(|p| p.manifest.package.as_ref()) else {
-            let msg = "--lib build has no resolvable [package] to name the library world";
-            if explicit {
-                return Err(CliExit::error(format!("--embed-wit: {msg}")));
-            }
-            eprintln!("warning: skipped embedding WIT component-type section: {msg}");
-            return Ok(wasm);
-        };
-        crate::manifest::lib_emit_target(pkg)?
-    } else {
-        (
-            opts.target_world_fq().to_string(),
-            crate::wit::default_interface_name(input),
-        )
-    };
-
     let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
     // Attach the manifest `[dependencies]` so a multi-package project's
     // re-analysis resolves the same imports the main compile did; a quiet host
@@ -1055,7 +1037,7 @@ async fn embed_wit_section(
         project,
         &base_path,
     );
-    let sem = wado_compiler::semantics_for_world(
+    let mut sem = wado_compiler::semantics_for_world(
         &source,
         &host,
         Some(input),
@@ -1070,15 +1052,13 @@ async fn embed_wit_section(
         eprintln!("warning: skipped embedding WIT component-type section: {msg}");
         return Ok(wasm);
     }
+    sem.set_wit_contract(wado_compiler::wit_emit::wit_contract(
+        opts.target_world.as_deref(),
+        opts.lib_world.as_deref(),
+        Some(&crate::wit::default_interface_name(input)),
+    ));
 
-    let emit_opts = WitEmitOptions {
-        scope: WitScope::Full,
-        world_fq: world,
-        default_interface_name: default_interface,
-        world_imports,
-    };
-
-    match wit_bundle::embed_component_type(&wasm, &sem, &emit_opts) {
+    match wit_bundle::embed_component_type(&wasm, &sem, &world_imports) {
         Ok(embedded) => Ok(embedded),
         Err(e) if explicit => Err(CliExit::error(format!("--embed-wit: {e}"))),
         Err(e) => {

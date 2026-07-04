@@ -143,13 +143,14 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<WitOptions, CliExit> {
 
 pub async fn run(opts: WitOptions) -> Result<(), CliExit> {
     let usage = format_usage();
-    let (sem, emit_opts) = if opts.lib {
-        lib_semantics_and_opts(opts.input, opts.scope, &usage).await?
+    let scope = opts.scope;
+    let (sem, world_imports) = if opts.lib {
+        lib_semantics_and_opts(opts.input, &usage).await?
     } else {
-        world_semantics_and_opts(opts.input, opts.scope, opts.world, &usage).await?
+        world_semantics_and_opts(opts.input, opts.world, &usage).await?
     };
 
-    let text = wit_emit::emit_wit_text(&sem, &emit_opts)
+    let text = wit_emit::emit_wit_text(&sem, &WitEmitOptions { scope }, &world_imports)
         .map_err(|e| CliExit::error(format!("wado wit: {e}")))?;
 
     match opts.output {
@@ -167,10 +168,9 @@ pub async fn run(opts: WitOptions) -> Result<(), CliExit> {
 /// emit options for it.
 async fn world_semantics_and_opts(
     input: Option<String>,
-    scope: WitScope,
     world: Option<String>,
     usage: &str,
-) -> Result<(Semantics, WitEmitOptions), CliExit> {
+) -> Result<(Semantics, Vec<String>), CliExit> {
     let input = manifest::resolve_input(input, EntryPointKind::Command, usage)?;
     let path = Path::new(&input);
     let source = fs::read_to_string(path)
@@ -178,22 +178,22 @@ async fn world_semantics_and_opts(
     let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
     let host = FilesystemCompilerHost::new(base_path.clone());
 
-    let sem =
+    let mut sem =
         wado_compiler::semantics_for_world(&source, &host, Some(&input), world.as_deref()).await;
     if !sem.is_complete() {
         return Err(CliExit::silent_failure(1));
     }
 
     let world = world.unwrap_or_else(|| DEFAULT_WORLD.to_string());
+    sem.set_wit_contract(wado_compiler::wit_emit::wit_contract(
+        Some(&world),
+        None,
+        Some(&default_interface_name(&input)),
+    ));
+
     let import_host = FilesystemCompilerHost::silent(base_path);
     let world_imports = resolve_world_imports(&import_host, &source, &input, &world).await;
-    let emit_opts = WitEmitOptions {
-        scope,
-        world_fq: world,
-        default_interface_name: default_interface_name(&input),
-        world_imports,
-    };
-    Ok((sem, emit_opts))
+    Ok((sem, world_imports))
 }
 
 /// Analyze the `[package].lib` entry and build the emit options for the library
@@ -201,9 +201,8 @@ async fn world_semantics_and_opts(
 /// `namespace:name/name` (see `manifest::LIB_WORLD_NAME`).
 async fn lib_semantics_and_opts(
     input: Option<String>,
-    scope: WitScope,
     usage: &str,
-) -> Result<(Semantics, WitEmitOptions), CliExit> {
+) -> Result<(Semantics, Vec<String>), CliExit> {
     let (project, target) = manifest::resolve_lib_project(input, usage)?;
 
     let entry_str = target.entry.to_string_lossy().into_owned();
@@ -220,10 +219,15 @@ async fn lib_semantics_and_opts(
         Some(&project),
         &base_path,
     );
-    let sem = wado_compiler::semantics_for_world(&source, &host, Some(&entry_str), None).await;
+    let mut sem = wado_compiler::semantics_for_world(&source, &host, Some(&entry_str), None).await;
     if !sem.is_complete() {
         return Err(CliExit::silent_failure(1));
     }
+    sem.set_wit_contract(wado_compiler::wit_emit::wit_contract(
+        None,
+        Some(&target.interface_fq),
+        None,
+    ));
 
     let import_host = attach_manifest_deps(
         FilesystemCompilerHost::silent(base_path.clone()),
@@ -232,13 +236,7 @@ async fn lib_semantics_and_opts(
     );
     let world_imports =
         resolve_lib_world_imports(&import_host, &source, &entry_str, &target.interface_fq).await;
-    let emit_opts = WitEmitOptions {
-        scope,
-        world_fq: target.world_emit_fq,
-        default_interface_name: target.default_interface,
-        world_imports,
-    };
-    Ok((sem, emit_opts))
+    Ok((sem, world_imports))
 }
 
 /// The faithful import set from a compiled WIR plan, empty when absent.

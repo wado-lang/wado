@@ -38,9 +38,9 @@ use crate::wit_emit::{self, WitEmitError, WitEmitOptions, WitScope};
 pub fn embed_component_type(
     component_bytes: &[u8],
     sem: &Semantics,
-    opts: &WitEmitOptions,
+    world_imports: &[String],
 ) -> Result<Vec<u8>, WitEmitError> {
-    let payload = encode_component_type(sem, opts)?;
+    let payload = encode_component_type(sem, world_imports)?;
 
     let section = wasm_encoder::CustomSection {
         name: "component-type".into(),
@@ -59,15 +59,14 @@ pub fn embed_component_type(
 /// a standalone WIT package.
 pub fn encode_component_type(
     sem: &Semantics,
-    opts: &WitEmitOptions,
+    world_imports: &[String],
 ) -> Result<Vec<u8>, WitEmitError> {
     // Force full scope: the section must be a self-contained WIT package so
     // `metadata::encode` can type the world without an external registry.
     let opts = WitEmitOptions {
         scope: WitScope::Full,
-        ..opts.clone()
     };
-    let text = wit_emit::emit_wit_text(sem, &opts)?;
+    let text = wit_emit::emit_wit_text(sem, &opts, world_imports)?;
 
     let mut resolve = wit_parser::Resolve::new();
     let pkg = resolve
@@ -76,7 +75,7 @@ pub fn encode_component_type(
             description: format!("re-parsing emitted WIT failed: {e}"),
         })?;
 
-    let world_name = wit_emit::world_name(&opts);
+    let world_name = wit_emit::world_name(sem);
     let world = resolve
         .select_world(&[pkg], Some(world_name.as_str()))
         .map_err(|e| WitEmitError::Embed {
