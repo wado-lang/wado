@@ -22,7 +22,7 @@ use {
     grammar_has_at_end_conflict,
 } from "./parser_gen.wado";
 use { gen_node_kinds, gen_alt_enums, gen_string_tree_helper } from "./cst_gen.wado";
-use { action_language_is_emittable } from "./java2wado.wado";
+use { should_emit_actions } from "./java2wado.wado";
 use { gen_highlight } from "./highlight_gen.wado";
 use { GenContext, sets_overlap } from "./gen_context.wado";
 use { CodeWriter, StructSpec, VariantSpec, EnumSpec, Vis } from "./wadopoet.wado";
@@ -110,7 +110,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
     let mut ctx = GenContext::new(&grammar.parser_rules, &lit_tokens);
     ctx.set_trace(options.trace);
-    ctx.set_emit_actions(action_language_is_emittable(grammar));
+    ctx.set_emit_actions(should_emit_actions(grammar));
     ctx.set_action_language(&grammar.action_language);
     let lowered = lower(grammar, &lit_tokens, &mut ctx);
     // Build the ATN up front when the grammar needs the simulator, so parser

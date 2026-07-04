@@ -11,6 +11,7 @@ use { JToken } from "./jlexer.wado";
 use { tokenize_java } from "./jlexer.wado";
 use { parse_java_stmts, parse_java_expr, punct_is, ident_at, JExpr } from "./jparser.wado";
 use { emit_java_stmts, emit_java_expr, map_java_type } from "./jemit.wado";
+use { to_snake_case } from "../ident.wado";
 
 /// One field on the generated recognizer struct, from a `@members` field decl.
 pub struct MemberField {
@@ -102,7 +103,9 @@ fn build_method(
     ret_java: &String,
     body_wado: &String,
 ) -> Result<String, String> {
-    let mut sig = `fn {*name}(&mut self`;
+    // snake_case the name to match the call sites, which snake_case a `this.m()`
+    // member call (`to_snake_case` in jemit).
+    let mut sig = `fn {to_snake_case(name)}(&mut self`;
     for let p of params {
         sig.push_str(&`, {p.0}: {p.1}`);
     }

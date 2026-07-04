@@ -9,7 +9,7 @@
 //! front end around them (`java2wado/`). A body outside the supported subset is
 //! a loud generation diagnostic, never a silent no-op.
 
-use { ParserRule, Grammar, ActionLanguage } from "./ir.wado";
+use { ParserRule, Grammar, ActionLanguage, LexerRule, Alternative, NamedAction } from "./ir.wado";
 use { translate_wado_action, PARSER_HANDLE } from "./action_translate.wado";
 use { translate_java_expr, translate_java_stmts } from "./java2wado/jemit.wado";
 use { translate_java_members, MemberDecls } from "./java2wado/jmembers.wado";
@@ -87,4 +87,45 @@ pub fn grammar_has_superclass(grammar: &Grammar) -> bool {
 pub fn action_language_is_emittable(grammar: &Grammar) -> bool {
     return grammar.action_language matches { Wado }
         || grammar.action_language matches { Java } && !grammar_has_superclass(grammar);
+}
+
+/// Whether the grammar actually carries action content worth emitting: a named
+/// action (`@members` / …), a rule prequel or value channel (`@init`/`@after`,
+/// args/returns/locals), or any per-alt action / predicate (parser or lexer).
+/// Actionless grammars need none of the action machinery.
+fn grammar_has_actions(grammar: &Grammar) -> bool {
+    for let na of &grammar.named_actions {
+        if na.body.text != "" {
+            return true;
+        }
+    }
+    for let r of &grammar.parser_rules {
+        if r.init_action matches { Some(_) } || r.after_action matches { Some(_) } {
+            return true;
+        }
+        if !r.args.is_empty() || !r.returns_decls.is_empty() || !r.locals_decls.is_empty() {
+            return true;
+        }
+        for let alt of &r.alternatives {
+            if !alt.actions.is_empty() {
+                return true;
+            }
+        }
+    }
+    for let lr of &grammar.lexer_rules {
+        for let alt of &lr.body {
+            if !alt.actions.is_empty() {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/// Whether codegen emits the action machinery: the language is emittable AND the
+/// grammar has action content. Gates both `emit_actions` and the ctx-tree token
+/// table, so an actionless grammar (e.g. one that never declares `language =
+/// Wado` and so defaults to Java) stays byte-identical to before Stage C.
+pub fn should_emit_actions(grammar: &Grammar) -> bool {
+    return action_language_is_emittable(grammar) && grammar_has_actions(grammar);
 }

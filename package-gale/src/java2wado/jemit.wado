@@ -5,17 +5,16 @@
 //! shared, language-independent attribute engine (`resolve_attr_ref`); a string
 //! `+` chain becomes a Wado template literal (per the java2wado.md decision).
 //!
-//! Method mapping is snake_case by default: `this.foo()` → `this.foo()`, an
+//! Method mapping is snake_case by default: `this.foo()` → `<handle>.foo()`, an
 //! arbitrary `@members` / superClass method that cannot be tabled. A small set
 //! of semantic redirects that are NOT renames stays explicit — `println`/`print`
 //! → `emit`, `.equals()` → `==`, a `TParser.TOK` constant → `TK_TOK` — plus a
 //! few fixed recognizer methods kept under clean Wado names (`getText` →
-//! `rule_text`, `_input.LA/LT` → `la`/`lt`). The recognizer handle is the
-//! literal `this`, threaded as `this_bind` and shared with the attribute engine
-//! (`resolve_attr_ref`) so `$`-refs read `this.token_text(...)` too. Codegen
-//! binds `this` as a reference to the parser at the splice site (`let this = p;`
-//! in a parse / predicate body, `let this = self;` in a `@members` method); Wado
-//! method calls auto-deref, so the reference needs no explicit `*`.
+//! `rule_text`, `_input.LA/LT` → `la`/`lt`). The recognizer handle (`this_bind`)
+//! is threaded through emit and shared with the attribute engine
+//! (`resolve_attr_ref`) so `$`-refs read `<handle>.token_text(...)` too; codegen
+//! passes the in-scope handle — `p` in a parse / predicate body (the parse-fn
+//! parameter), `self` in a `@members` method body (the receiver).
 
 use { ParserRule } from "../ir.wado";
 use { resolve_attr_ref, rule_binding_for, rule_is_left_recursive, LR_ACC_LOCAL } from "../action_translate.wado";
@@ -25,8 +24,8 @@ use { tokenize_java } from "./jlexer.wado";
 use { parse_java_expr, parse_java_stmts } from "./jparser.wado";
 
 /// Translate a Java expression body to a Wado expression. `this_bind` is the
-/// recognizer handle to emit for `this` and the context API (always `this`;
-/// codegen binds it as a reference at the splice site). Ties tokenize → parse →
+/// recognizer handle to emit for `this` and the context API (`p` in a parse /
+/// predicate body, `self` in a `@members` method body). Ties tokenize → parse →
 /// emit.
 pub fn translate_java_expr(
     rule: &ParserRule,
@@ -347,13 +346,14 @@ fn emit_member_call(
         return Result::Ok(`{*this_bind}.lt({*args_w})`);
     }
     if meth == "equals" {
+        if raw_args.is_empty() {
+            return Result::Err("java2wado: .equals() with no argument");
+        }
         let r = emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, this_bind)?;
-        let a = if raw_args.is_empty() {
-            String::from("");
-        } else {
-            emit_expr(rule, rules, &raw_args[0], vals_in_scope, bindings, this_bind)?;
-        };
-        return Result::Ok(`{r} == {a}`);
+        let a = emit_expr(rule, rules, &raw_args[0], vals_in_scope, bindings, this_bind)?;
+        // Parenthesized: a tighter enclosing operator (e.g. `!x.equals(y)`) must
+        // not regroup the synthesized `==`.
+        return Result::Ok(`({r} == {a})`);
     }
     let recv_w = if name_is(&m.recv, &"this") {
         *this_bind;

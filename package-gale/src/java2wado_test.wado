@@ -34,12 +34,24 @@ test "java predicate: input lookahead vs token constant" {
 
 test "java predicate: token text equals" {
     let out = java_pred(&"_input.LT(1).getText().equals(\"x\")", &"a : ID ;", false);
-    assert out == "p.token_text(p.lt(1)) == \"x\"", `out: '{out}'`;
+    assert out == "(p.token_text(p.lt(1)) == \"x\")", `out: '{out}'`;
 }
 
 test "java predicate: member method call snake-cases" {
     let out = java_pred(&"this.pred($i == 99)", &"a[i32 i] : ID ;", true);
     assert out == "p.pred(vals.i == 99)", `out: '{out}'`;
+}
+
+test "java predicate: negated equals is parenthesized" {
+    let out = java_pred(&"!getText().equals(\"+\")", &"a : ID ;", false);
+    assert out == "!(p.rule_text() == \"+\")", `out: '{out}'`;
+}
+
+test "java members: method name is snake_cased at definition to match calls" {
+    let lang = ActionLanguage::Java;
+    let m = translate_members(&lang, &"boolean isKeyword() { return true; }").unwrap();
+    assert m.methods.len() == 1, `methods: {m.methods.len()}`;
+    assert m.methods[0] == "fn is_keyword(&mut self) -> bool { return true; }", `method: '{m.methods[0]}'`;
 }
 
 test "java predicate: boolean literal" {

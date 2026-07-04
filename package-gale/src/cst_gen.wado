@@ -11,7 +11,7 @@ use { LitToken } from "./lexer_gen.wado";
 use { Rule } from "./gir.wado";
 use { CodeWriter } from "./wadopoet.wado";
 use { to_pascal_case, escape_ident, rule_alts_labeled } from "./gen_util.wado";
-use { action_language_is_emittable } from "./java2wado.wado";
+use { should_emit_actions } from "./java2wado.wado";
 
 /// Number of distinct token kinds: one per non-fragment lexer rule, the two
 /// synthetic kinds (`Eof`, `Error`), and one per collected literal — matching
@@ -160,7 +160,7 @@ pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens:
     // The parser's own `$ctx.toStringTree()` (emitted under `emit_actions`) needs
     // the token-name table; build it once into a module global rather than
     // rebuilding it on every call.
-    if action_language_is_emittable(grammar) {
+    if should_emit_actions(grammar) {
         w.begin(&"fn _ctx_token_names() -> List<String>");
         w.line(&`let mut v: List<String> = List::with_capacity({n});`);
         w.begin(&`for let mut k = 0; k < {n}; k += 1`);

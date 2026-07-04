@@ -3851,7 +3851,7 @@ fn join_gate_conds(conds: &List<String>) -> String {
 /// `UnsupportedAction` diagnostic rather than invalid `$x`.
 fn gen_action_body(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext) {
     ctx.mark_action_seen(src.action_id);
-    if let Some(code) = translate_action_or_warn(src, ctx) {
+    if let Some(code) = translate_action_or_warn(src, false, ctx) {
         emit_action_stmt(w, &code);
     }
 }
@@ -3859,7 +3859,11 @@ fn gen_action_body(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext)
 /// Translate an action / predicate body's `$`-references, or warn (loud) and
 /// return `null` if a reference cannot be emitted. A ref-free body passes
 /// through verbatim (the identity translator on Wado host text).
-fn translate_action_or_warn(src: &ActionSource, ctx: &mut GenContext) -> Option<String> {
+/// Translate an action (`is_predicate = false`, a statement list) or a
+/// predicate condition (`is_predicate = true`, an expression) to Wado, warning
+/// on failure. The predicate/action distinction is invisible under the identity
+/// translator but real for java2wado (expression vs statement front end).
+fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut GenContext) -> Option<String> {
     if ctx.action_language() matches { Wado } && find_attr_refs(&src.text).len() == 0 {
         return Option::Some(src.text);
     }
@@ -3874,14 +3878,26 @@ fn translate_action_or_warn(src: &ActionSource, ctx: &mut GenContext) -> Option<
     }
     let vals_in_scope = rule_emits_vals(ctx, &ctx.parser_rules()[ridx]);
     let lang = ctx.action_language();
-    return match translate_action(
-        &lang,
-        &ctx.parser_rules()[ridx],
-        ctx.parser_rules(),
-        &src.text,
-        vals_in_scope,
-        ctx.alt_bindings(),
-    ) {
+    let translated = if is_predicate {
+        translate_predicate(
+            &lang,
+            &ctx.parser_rules()[ridx],
+            ctx.parser_rules(),
+            &src.text,
+            vals_in_scope,
+            ctx.alt_bindings(),
+        );
+    } else {
+        translate_action(
+            &lang,
+            &ctx.parser_rules()[ridx],
+            ctx.parser_rules(),
+            &src.text,
+            vals_in_scope,
+            ctx.alt_bindings(),
+        );
+    };
+    return match translated {
         Ok(code) => Option::Some(code),
         Err(msg) => {
             ctx.warn(&`action {src.action_id}`, DiagnosticKind::UnsupportedAction, msg);
@@ -3916,7 +3932,7 @@ fn emit_span_capture(w: &mut CodeWriter, rule: &ParserRule, ctx: &GenContext) {
 /// gates, where a false predicate is a parse failure at that point.
 fn gen_predicate_guard(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext) {
     ctx.mark_action_seen(src.action_id);
-    let cond = match translate_action_or_warn(src, ctx) {
+    let cond = match translate_action_or_warn(src, true, ctx) {
         Some(c) => c,
         None => {
             return;
