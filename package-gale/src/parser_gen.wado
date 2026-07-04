@@ -238,7 +238,16 @@ fn translate_caller_arg(expr: &String, ctx: &GenContext) -> Option<String> {
     let rule = &ctx.parser_rules()[ridx];
     let vals_in_scope = rule_emits_vals(ctx, rule);
     let lang = ctx.action_language();
-    return match translate_predicate(&lang, rule, ctx.parser_rules(), expr, vals_in_scope, ctx.alt_bindings()) {
+    return match translate_predicate(
+        &lang,
+        rule,
+        ctx.parser_rules(),
+        expr,
+        vals_in_scope,
+        ctx.alt_bindings(),
+        ctx.grammar_name(),
+        ctx.action_member_methods(),
+    ) {
         Ok(c) => Option::Some(c),
         Err(_) => null,
     };
@@ -584,7 +593,7 @@ fn collect_parser_members(grammar: &Grammar, ctx: &mut GenContext) -> MemberDecl
         if !is_parser {
             continue;
         }
-        match translate_members(&lang, &act.body.text) {
+        match translate_members(&lang, &act.body.text, &grammar.name) {
             Ok(m) => {
                 for let f of &m.fields {
                     fields.push(*f);
@@ -3614,7 +3623,16 @@ fn gate_condition_for(a: &AltAction, ctx: &GenContext) -> Option<String> {
     let rule = &ctx.parser_rules()[ridx];
     let vals_in_scope = rule_emits_vals(ctx, rule);
     let lang = ctx.action_language();
-    return match translate_predicate(&lang, rule, ctx.parser_rules(), &a.source.text, vals_in_scope, ctx.alt_bindings()) {
+    return match translate_predicate(
+        &lang,
+        rule,
+        ctx.parser_rules(),
+        &a.source.text,
+        vals_in_scope,
+        ctx.alt_bindings(),
+        ctx.grammar_name(),
+        ctx.action_member_methods(),
+    ) {
         Ok(code) => Option::Some(code),
         Err(_) => null,
     };
@@ -3882,6 +3900,8 @@ fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut Ge
             &src.text,
             vals_in_scope,
             ctx.alt_bindings(),
+            ctx.grammar_name(),
+            ctx.action_member_methods(),
         );
     } else {
         translate_action(
@@ -3891,6 +3911,8 @@ fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut Ge
             &src.text,
             vals_in_scope,
             ctx.alt_bindings(),
+            ctx.grammar_name(),
+            ctx.action_member_methods(),
         );
     };
     return match translated {

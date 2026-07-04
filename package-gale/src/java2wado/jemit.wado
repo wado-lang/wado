@@ -1,8 +1,8 @@
 //! Emit Wado from a parsed java2wado `JExpr` / `JStmt`. Operators pass through,
 //! `$`-refs route through `resolve_attr_ref`, a string `+` chain becomes a
-//! template literal, and method mapping is snake_case with a few fixed
-//! recognizer names (see `java2wado.md`). `this_bind` is the recognizer handle:
-//! `p` in a parse / predicate body, `self` in a `@members` method body.
+//! template literal, and method mapping is snake_case over the grammar's own
+//! `@members` methods (see `java2wado.md`). A method call or constant that
+//! resolves to nothing real is a loud error, not a silently broken emit.
 
 use { ParserRule } from "../ir.wado";
 use { resolve_attr_ref, rule_binding_for, rule_is_left_recursive, LR_ACC_LOCAL } from "../action_translate.wado";
@@ -11,17 +11,27 @@ use { JExpr, JMember, JCall, JCast, JStmt, JLocal, JAssign } from "./jparser.wad
 use { tokenize_java } from "./jlexer.wado";
 use { parse_java_expr, parse_java_stmts } from "./jparser.wado";
 
+/// Emit environment: the recognizer handle (`p` in a parse / predicate body,
+/// `self` in a `@members` method body), the grammar name (for the
+/// `<Name>Parser` / `<Name>Lexer` token-constant qualifier), and the snake_cased
+/// `@members` method names a call may resolve to.
+pub struct JEnv {
+    pub this_bind: String,
+    pub grammar: String,
+    pub methods: List<String>,
+}
+
 pub fn translate_java_expr(
     rule: &ParserRule,
     rules: &List<ParserRule>,
     body: &String,
     vals_in_scope: bool,
     bindings: &List<[bool, String, String]>,
-    this_bind: &String,
+    env: &JEnv,
 ) -> Result<String, String> {
     let tokens = tokenize_java(body)?;
     let expr = parse_java_expr(&tokens)?;
-    return emit_expr(rule, rules, &expr, vals_in_scope, bindings, this_bind);
+    return emit_expr(rule, rules, &expr, vals_in_scope, bindings, env);
 }
 
 pub fn translate_java_stmts(
@@ -30,11 +40,11 @@ pub fn translate_java_stmts(
     body: &String,
     vals_in_scope: bool,
     bindings: &List<[bool, String, String]>,
-    this_bind: &String,
+    env: &JEnv,
 ) -> Result<String, String> {
     let tokens = tokenize_java(body)?;
     let stmts = parse_java_stmts(&tokens)?;
-    return emit_java_stmts(rule, rules, &stmts, vals_in_scope, bindings, this_bind);
+    return emit_java_stmts(rule, rules, &stmts, vals_in_scope, bindings, env);
 }
 
 /// Space-joined statements (each already carries its `;`).
@@ -44,14 +54,14 @@ pub fn emit_java_stmts(
     stmts: &List<JStmt>,
     vals_in_scope: bool,
     bindings: &List<[bool, String, String]>,
-    this_bind: &String,
+    env: &JEnv,
 ) -> Result<String, String> {
     let mut out = String::from("");
     for let mut i = 0; i < stmts.len(); i += 1 {
         if i > 0 {
             out.push_str(&" ");
         }
-        out.push_str(&emit_stmt(rule, rules, &stmts[i], vals_in_scope, bindings, this_bind)?);
+        out.push_str(&emit_stmt(rule, rules, &stmts[i], vals_in_scope, bindings, env)?);
     }
     return Result::Ok(out);
 }
@@ -62,22 +72,22 @@ fn emit_stmt(
     s: &JStmt,
     vals_in_scope: bool,
     bindings: &List<[bool, String, String]>,
-    this_bind: &String,
+    env: &JEnv,
 ) -> Result<String, String> {
     return match s {
         Expr(e) => {
-            let w = emit_expr(rule, rules, e, vals_in_scope, bindings, this_bind)?;
+            let w = emit_expr(rule, rules, e, vals_in_scope, bindings, env)?;
             Result::Ok(`{w};`);
         },
-        Local(l) => emit_local(rule, rules, l, vals_in_scope, bindings, this_bind),
+        Local(l) => emit_local(rule, rules, l, vals_in_scope, bindings, env),
         Assign(a) => {
-            let target = emit_expr(rule, rules, &a.target, vals_in_scope, bindings, this_bind)?;
-            let value = emit_expr(rule, rules, &a.value, vals_in_scope, bindings, this_bind)?;
+            let target = emit_expr(rule, rules, &a.target, vals_in_scope, bindings, env)?;
+            let value = emit_expr(rule, rules, &a.value, vals_in_scope, bindings, env)?;
             Result::Ok(`{target} {a.op} {value};`);
         },
         Return(v) => match v {
             Some(e) => {
-                let w = emit_expr(rule, rules, e, vals_in_scope, bindings, this_bind)?;
+                let w = emit_expr(rule, rules, e, vals_in_scope, bindings, env)?;
                 Result::Ok(`return {w};`);
             },
             None => Result::Ok("return;"),
@@ -91,7 +101,7 @@ fn emit_local(
     l: &JLocal,
     vals_in_scope: bool,
     bindings: &List<[bool, String, String]>,
-    this_bind: &String,
+    env: &JEnv,
 ) -> Result<String, String> {
     let ty = match map_java_type(&l.ty) {
         Some(t) => t,
@@ -100,7 +110,7 @@ fn emit_local(
         },
     };
     let init = match &l.init {
-        Some(e) => emit_expr(rule, rules, e, vals_in_scope, bindings, this_bind)?,
+        Some(e) => emit_expr(rule, rules, e, vals_in_scope, bindings, env)?,
         None => {
             return Result::Err(`java2wado: local '{l.name}' needs an initializer`);
         },
@@ -116,18 +126,18 @@ fn emit_print(
     args: &List<JExpr>,
     vals_in_scope: bool,
     bindings: &List<[bool, String, String]>,
-    this_bind: &String,
+    env: &JEnv,
     newline: bool,
 ) -> Result<String, String> {
     let mut tmpl = String::from("`");
     if !args.is_empty() {
-        append_parts(rule, rules, &args[0], vals_in_scope, bindings, this_bind, &mut tmpl)?;
+        append_parts(rule, rules, &args[0], vals_in_scope, bindings, env, &mut tmpl)?;
     }
     if newline {
         tmpl.push_str(&"\\n");
     }
     tmpl.push('`');
-    return Result::Ok(`{*this_bind}.emit({tmpl})`);
+    return Result::Ok(`{env.this_bind}.emit({tmpl})`);
 }
 
 /// Java primitive / `String` type text to its Wado type, or `None` if outside
@@ -158,31 +168,31 @@ pub fn emit_expr(
     e: &JExpr,
     vals_in_scope: bool,
     bindings: &List<[bool, String, String]>,
-    this_bind: &String,
+    env: &JEnv,
 ) -> Result<String, String> {
     return match e {
         Int(v) => Result::Ok(*v),
         Bool(b) => Result::Ok(if *b { String::from("true") } else { String::from("false") }),
         Str(c) => Result::Ok(`"{*c}"`),
-        Attr(text) => resolve_attr_ref(rule, rules, text, vals_in_scope, bindings, this_bind),
-        Name(n) => Result::Ok(if *n == "this" { *this_bind } else { *n }),
-        Member(m) => emit_member(rule, rules, m, vals_in_scope, bindings, this_bind),
-        Call(c) => emit_call(rule, rules, c, vals_in_scope, bindings, this_bind),
-        Cast(c) => emit_expr(rule, rules, &c.operand, vals_in_scope, bindings, this_bind),
+        Attr(text) => resolve_attr_ref(rule, rules, text, vals_in_scope, bindings, &env.this_bind),
+        Name(n) => Result::Ok(if *n == "this" { env.this_bind } else { *n }),
+        Member(m) => emit_member(rule, rules, m, vals_in_scope, bindings, env),
+        Call(c) => emit_call(rule, rules, c, vals_in_scope, bindings, env),
+        Cast(c) => emit_expr(rule, rules, &c.operand, vals_in_scope, bindings, env),
         Unary(u) => {
-            let operand = emit_expr(rule, rules, &u.operand, vals_in_scope, bindings, this_bind)?;
+            let operand = emit_expr(rule, rules, &u.operand, vals_in_scope, bindings, env)?;
             Result::Ok(`{u.op}{operand}`);
         },
         Paren(p) => {
-            let inner = emit_expr(rule, rules, &p.inner, vals_in_scope, bindings, this_bind)?;
+            let inner = emit_expr(rule, rules, &p.inner, vals_in_scope, bindings, env)?;
             Result::Ok(`({inner})`);
         },
         Binary(b) => {
             if b.op == "+" && is_string_concat(e) {
-                emit_template(rule, rules, e, vals_in_scope, bindings, this_bind);
+                emit_template(rule, rules, e, vals_in_scope, bindings, env);
             } else {
-                let l = emit_expr(rule, rules, &b.lhs, vals_in_scope, bindings, this_bind)?;
-                let r = emit_expr(rule, rules, &b.rhs, vals_in_scope, bindings, this_bind)?;
+                let l = emit_expr(rule, rules, &b.lhs, vals_in_scope, bindings, env)?;
+                let r = emit_expr(rule, rules, &b.rhs, vals_in_scope, bindings, env)?;
                 Result::Ok(`{l} {b.op} {r}`);
             }
         },
@@ -195,15 +205,18 @@ fn emit_member(
     m: &JMember,
     vals_in_scope: bool,
     bindings: &List<[bool, String, String]>,
-    this_bind: &String,
+    env: &JEnv,
 ) -> Result<String, String> {
     if name_is(&m.recv, &"this") {
-        return Result::Ok(`{*this_bind}.{m.name}`);
+        return Result::Ok(`{env.this_bind}.{m.name}`);
     }
     if is_upper_ident(&m.name) && is_name(&m.recv) {
-        return Result::Ok(`TK_{m.name}`);
+        if recv_is_grammar_class(env, &m.recv) {
+            return Result::Ok(`TK_{m.name}`);
+        }
+        return Result::Err(`java2wado: unknown constant '{name_text(&m.recv)}.{m.name}'`);
     }
-    let r = emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, this_bind)?;
+    let r = emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, env)?;
     return Result::Ok(`{r}.{m.name}`);
 }
 
@@ -213,21 +226,23 @@ fn emit_call(
     c: &JCall,
     vals_in_scope: bool,
     bindings: &List<[bool, String, String]>,
-    this_bind: &String,
+    env: &JEnv,
 ) -> Result<String, String> {
     if let Member(m) = &c.callee {
         if is_ctx_expr(&m.recv) {
             return emit_ctx_child(rule, m, &c.args, bindings);
         }
     }
-    let args_w = emit_args(rule, rules, &c.args, vals_in_scope, bindings, this_bind)?;
+    let args_w = emit_args(rule, rules, &c.args, vals_in_scope, bindings, env)?;
     return match &c.callee {
-        Member(m) => emit_member_call(rule, rules, m, &c.args, &args_w, vals_in_scope, bindings, this_bind),
+        Member(m) => emit_member_call(rule, rules, m, &c.args, &args_w, vals_in_scope, bindings, env),
         Name(n) => {
             if *n == "getText" {
-                Result::Ok(`{*this_bind}.rule_text()`);
+                Result::Ok(`{env.this_bind}.rule_text()`);
+            } else if method_declared(env, n) {
+                Result::Ok(`{env.this_bind}.{to_snake_case(n)}({args_w})`);
             } else {
-                Result::Ok(`{*this_bind}.{to_snake_case(n)}({args_w})`);
+                Result::Err(unknown_method_err(n));
             }
         },
         _ => Result::Err("java2wado: unsupported call target"),
@@ -283,40 +298,75 @@ fn emit_member_call(
     args_w: &String,
     vals_in_scope: bool,
     bindings: &List<[bool, String, String]>,
-    this_bind: &String,
+    env: &JEnv,
 ) -> Result<String, String> {
     let meth = m.name;
     if (meth == "println" || meth == "print") && is_system_out(&m.recv) {
         let newline = meth == "println";
-        return emit_print(rule, rules, raw_args, vals_in_scope, bindings, this_bind, newline);
+        return emit_print(rule, rules, raw_args, vals_in_scope, bindings, env, newline);
     }
     if meth == "getText" {
         if name_is(&m.recv, &"_input") {
-            return Result::Ok(`{*this_bind}.input_text()`);
+            return Result::Ok(`{env.this_bind}.input_text()`);
         }
-        let r = emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, this_bind)?;
-        return Result::Ok(`{*this_bind}.token_text({r})`);
+        let r = emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, env)?;
+        return Result::Ok(`{env.this_bind}.token_text({r})`);
     }
     if meth == "LA" && name_is(&m.recv, &"_input") {
-        return Result::Ok(`{*this_bind}.la({*args_w})`);
+        return Result::Ok(`{env.this_bind}.la({*args_w})`);
     }
     if meth == "LT" && name_is(&m.recv, &"_input") {
-        return Result::Ok(`{*this_bind}.lt({*args_w})`);
+        return Result::Ok(`{env.this_bind}.lt({*args_w})`);
     }
     if meth == "equals" {
         if raw_args.is_empty() {
             return Result::Err("java2wado: .equals() with no argument");
         }
-        let r = emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, this_bind)?;
-        let a = emit_expr(rule, rules, &raw_args[0], vals_in_scope, bindings, this_bind)?;
+        let r = emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, env)?;
+        let a = emit_expr(rule, rules, &raw_args[0], vals_in_scope, bindings, env)?;
         return Result::Ok(`({r} == {a})`);
     }
+    if !method_declared(env, &meth) {
+        return Result::Err(unknown_method_err(&meth));
+    }
     let recv_w = if name_is(&m.recv, &"this") {
-        *this_bind;
+        env.this_bind;
     } else {
-        emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, this_bind)?;
+        emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, env)?;
     };
     return Result::Ok(`{recv_w}.{to_snake_case(&meth)}({*args_w})`);
+}
+
+/// Whether `name` resolves to a declared `@members` method (compared
+/// snake_cased, matching the call-site rewrite and the method definition).
+fn method_declared(env: &JEnv, name: &String) -> bool {
+    let snake = to_snake_case(name);
+    for let m of &env.methods {
+        if *m == snake {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn unknown_method_err(name: &String) -> String {
+    return `java2wado: unsupported method '{*name}': not a @members method or a recognizer API method`;
+}
+
+/// Whether `e` names the grammar's own parser / lexer class (`<Name>Parser` /
+/// `<Name>Lexer`), the qualifier of a token constant `TParser.ELSE`.
+fn recv_is_grammar_class(env: &JEnv, e: &JExpr) -> bool {
+    return match e {
+        Name(q) => *q == `{env.grammar}Parser` || *q == `{env.grammar}Lexer`,
+        _ => false,
+    };
+}
+
+fn name_text(e: &JExpr) -> String {
+    return match e {
+        Name(n) => *n,
+        _ => "",
+    };
 }
 
 fn emit_args(
@@ -325,14 +375,14 @@ fn emit_args(
     args: &List<JExpr>,
     vals_in_scope: bool,
     bindings: &List<[bool, String, String]>,
-    this_bind: &String,
+    env: &JEnv,
 ) -> Result<String, String> {
     let mut out = String::from("");
     for let mut i = 0; i < args.len(); i += 1 {
         if i > 0 {
             out.push_str(&", ");
         }
-        out.push_str(&emit_expr(rule, rules, &args[i], vals_in_scope, bindings, this_bind)?);
+        out.push_str(&emit_expr(rule, rules, &args[i], vals_in_scope, bindings, env)?);
     }
     return Result::Ok(out);
 }
@@ -386,10 +436,10 @@ fn emit_template(
     e: &JExpr,
     vals_in_scope: bool,
     bindings: &List<[bool, String, String]>,
-    this_bind: &String,
+    env: &JEnv,
 ) -> Result<String, String> {
     let mut out = String::from("`");
-    append_parts(rule, rules, e, vals_in_scope, bindings, this_bind, &mut out)?;
+    append_parts(rule, rules, e, vals_in_scope, bindings, env, &mut out)?;
     out.push('`');
     return Result::Ok(out);
 }
@@ -400,7 +450,7 @@ fn append_parts(
     e: &JExpr,
     vals_in_scope: bool,
     bindings: &List<[bool, String, String]>,
-    this_bind: &String,
+    env: &JEnv,
     out: &mut String,
 ) -> Result<(), String> {
     return match e {
@@ -410,21 +460,21 @@ fn append_parts(
         },
         Binary(b) => {
             if b.op == "+" && is_string_concat(e) {
-                append_parts(rule, rules, &b.lhs, vals_in_scope, bindings, this_bind, out)?;
-                append_parts(rule, rules, &b.rhs, vals_in_scope, bindings, this_bind, out)?;
+                append_parts(rule, rules, &b.lhs, vals_in_scope, bindings, env, out)?;
+                append_parts(rule, rules, &b.rhs, vals_in_scope, bindings, env, out)?;
                 Result::Ok(());
             } else {
-                append_interp(rule, rules, e, vals_in_scope, bindings, this_bind, out);
+                append_interp(rule, rules, e, vals_in_scope, bindings, env, out);
             }
         },
         Paren(p) => {
             if is_string_concat(&p.inner) {
-                append_parts(rule, rules, &p.inner, vals_in_scope, bindings, this_bind, out);
+                append_parts(rule, rules, &p.inner, vals_in_scope, bindings, env, out);
             } else {
-                append_interp(rule, rules, e, vals_in_scope, bindings, this_bind, out);
+                append_interp(rule, rules, e, vals_in_scope, bindings, env, out);
             }
         },
-        _ => append_interp(rule, rules, e, vals_in_scope, bindings, this_bind, out),
+        _ => append_interp(rule, rules, e, vals_in_scope, bindings, env, out),
     };
 }
 
@@ -434,10 +484,10 @@ fn append_interp(
     e: &JExpr,
     vals_in_scope: bool,
     bindings: &List<[bool, String, String]>,
-    this_bind: &String,
+    env: &JEnv,
     out: &mut String,
 ) -> Result<(), String> {
-    let expr = emit_expr(rule, rules, e, vals_in_scope, bindings, this_bind)?;
+    let expr = emit_expr(rule, rules, e, vals_in_scope, bindings, env)?;
     out.push('{');
     out.push_str(&expr);
     out.push('}');

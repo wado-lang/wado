@@ -153,6 +153,11 @@ pub struct GenContext {
     /// action / predicate splice sites route to the right translator front
     /// end (identity for Wado, java2wado for Java). Set once at codegen entry.
     action_language: ActionLanguage,
+    /// The grammar name and its `@members` method names, so the java2wado front
+    /// end resolves `T.CONST` token constants and `this.m()` / `m()` calls
+    /// against real declarations. Set once at codegen entry.
+    grammar_name: String,
+    action_member_methods: List<String>,
     /// `action_id`s codegen has handled (emitted, or already raised a loud
     /// diagnostic for). A post-emit sweep warns for any stamped parser action
     /// left unhandled, so an action on a not-yet-supported code path (nested
@@ -204,6 +209,8 @@ impl GenContext {
             trace: false,
             emit_actions: false,
             action_language: ActionLanguage::Wado,
+            grammar_name: "",
+            action_member_methods: [],
             action_seen: [],
             predicate_gated: [],
             rule_follow_kinds: TreeMap::new(),
@@ -414,6 +421,19 @@ impl GenContext {
 
     pub fn action_language(&self) -> ActionLanguage {
         return self.action_language;
+    }
+
+    pub fn set_action_grammar(&mut self, name: &String, member_methods: List<String>) {
+        self.grammar_name = *name;
+        self.action_member_methods = member_methods;
+    }
+
+    pub fn grammar_name(&self) -> &String {
+        return &self.grammar_name;
+    }
+
+    pub fn action_member_methods(&self) -> &List<String> {
+        return &self.action_member_methods;
     }
 
     /// Record that codegen handled this action id (emitted or diagnosed).

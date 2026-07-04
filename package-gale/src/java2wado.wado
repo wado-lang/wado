@@ -6,11 +6,12 @@
 
 use { ParserRule, Grammar, ActionLanguage, LexerRule, Alternative, NamedAction } from "./ir.wado";
 use { translate_wado_action, PARSER_HANDLE } from "./action_translate.wado";
-use { translate_java_expr, translate_java_stmts } from "./java2wado/jemit.wado";
-use { translate_java_members, MemberDecls } from "./java2wado/jmembers.wado";
+use { translate_java_expr, translate_java_stmts, JEnv } from "./java2wado/jemit.wado";
+use { translate_java_members, java_member_method_names, MemberDecls } from "./java2wado/jmembers.wado";
 
 /// Translate an action body to Wado: `Wado` routes to the identity translator,
-/// `Java` to java2wado, any other language is a loud error.
+/// `Java` to java2wado, any other language is a loud error. `grammar_name` and
+/// `member_methods` let the Java front end resolve method calls / token constants.
 pub fn translate_action(
     lang: &ActionLanguage,
     rule: &ParserRule,
@@ -18,10 +19,15 @@ pub fn translate_action(
     body: &String,
     vals_in_scope: bool,
     bindings: &List<[bool, String, String]>,
+    grammar_name: &String,
+    member_methods: &List<String>,
 ) -> Result<String, String> {
     return match lang {
         Wado => translate_wado_action(rule, rules, body, vals_in_scope, bindings),
-        Java => translate_java_stmts(rule, rules, body, vals_in_scope, bindings, &PARSER_HANDLE),
+        Java => {
+            let env = JEnv { this_bind: PARSER_HANDLE, grammar: *grammar_name, methods: *member_methods };
+            translate_java_stmts(rule, rules, body, vals_in_scope, bindings, &env);
+        },
         Other(name) => Result::Err(`unsupported action language '{*name}' for action '{*body}'`),
     };
 }
@@ -35,22 +41,50 @@ pub fn translate_predicate(
     body: &String,
     vals_in_scope: bool,
     bindings: &List<[bool, String, String]>,
+    grammar_name: &String,
+    member_methods: &List<String>,
 ) -> Result<String, String> {
     return match lang {
         Wado => translate_wado_action(rule, rules, body, vals_in_scope, bindings),
-        Java => translate_java_expr(rule, rules, body, vals_in_scope, bindings, &PARSER_HANDLE),
+        Java => {
+            let env = JEnv { this_bind: PARSER_HANDLE, grammar: *grammar_name, methods: *member_methods };
+            translate_java_expr(rule, rules, body, vals_in_scope, bindings, &env);
+        },
         Other(name) => Result::Err(`unsupported action language '{*name}' for predicate '{*body}'`),
     };
 }
 
 /// Translate a `@members` block to Wado struct fields + methods. `Java` parses
 /// the class body; Wado members are a later item.
-pub fn translate_members(lang: &ActionLanguage, body: &String) -> Result<MemberDecls, String> {
+pub fn translate_members(lang: &ActionLanguage, body: &String, grammar_name: &String) -> Result<MemberDecls, String> {
     return match lang {
-        Java => translate_java_members(body),
+        Java => translate_java_members(body, grammar_name),
         Wado => Result::Err("java2wado: Wado @members translation is not yet implemented"),
         Other(name) => Result::Err(`unsupported action language '{*name}' for @members`),
     };
+}
+
+/// The snake_cased method names the grammar's `@parser::members` / `@members`
+/// blocks declare, so action / predicate bodies can resolve `this.m()` and bare
+/// `m()` calls against real methods rather than snake_casing anything.
+pub fn collect_member_method_names(grammar: &Grammar) -> List<String> {
+    let mut names: List<String> = [];
+    for let act of &grammar.named_actions {
+        if act.name != "members" {
+            continue;
+        }
+        let is_parser = match &act.scope {
+            Some(s) => *s == "parser",
+            None => true,
+        };
+        if !is_parser {
+            continue;
+        }
+        for let n of &java_member_method_names(&act.body.text) {
+            names.push(*n);
+        }
+    }
+    return names;
 }
 
 /// Whether the grammar declares `options { superClass = ... }`. Its actions call
