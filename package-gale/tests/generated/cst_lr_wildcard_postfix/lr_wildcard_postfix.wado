@@ -2316,6 +2316,10 @@ fn atn_all_at_end(sim: &AtnSim, configs: &List<AtnConfig>) -> bool {
 /// ANTLR4's rule-order tie-break; non-greedy repeats order their exit edge
 /// first so this yields the exit).
 #[allow(dead_code)]
+/// The empty disabled-alternative set — the default when a decision has no
+/// semantic-predicate exclusions (every current generated call site).
+pub global ATN_NO_DISABLED: List<i32> = [];
+
 pub fn atn_predict_with_stack(
     sim: &AtnSim,
     decision: i32,
@@ -2324,6 +2328,7 @@ pub fn atn_predict_with_stack(
     start_pos: i32,
     eof: i32,
     min_prec: i32 = 0,
+    disabled_alts: &List<i32> = &ATN_NO_DISABLED,
 ) -> i32 {
     let dstate = sim.decision_state[decision];
     let start = sim.state_tr_start[dstate];
@@ -2339,6 +2344,14 @@ pub fn atn_predict_with_stack(
         // Prune a precedence-guarded enter edge whose alt precedence is below
         // the current context (the predicate `{prec_i >= min_prec}?` is false).
         if sim.tr_kind[start + j] == ATN_TR_PRECEDENCE && sim.tr_prec[start + j] < min_prec {
+            continue;
+        }
+        // Exclude an alternative whose context-free semantic predicate the
+        // caller evaluated to false (`{cond}?` at the decision, `pred_<id>(p)`).
+        // The alt index is the seed's `alt` (== the grammar alt index the
+        // dispatch maps back), so a false predicate makes that alt unseedable —
+        // it can never win the prediction.
+        if disabled_alts.contains(&j) {
             continue;
         }
         seeds.push(AtnConfig { state: sim.tr_target[start + j], alt: j, pctx: CTX_EMPTY, rs: rs_init, pr: min_prec });
