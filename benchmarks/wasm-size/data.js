@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783113751976,
+  "lastUpdate": 1783128299140,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -37765,6 +37765,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f6baaad94c2d8eeb28055c4b60b5a37db1ab2dda"
         },
         "date": 1783113751294,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17049,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287029,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "645026388e14dc109c7a7a8b909faf2e79d65b29",
+          "message": "Merge pull request #1508 from wado-lang/claude/struct-functional-update-syntax-e1lp85\n\nfeat(compiler): literal spread (`..base`) for struct, key-value, and anonymous literals",
+          "timestamp": "2026-07-04T10:16:19+09:00",
+          "tree_id": "981b4a2288b61a21256b9ff05c1babf7b6b84dda",
+          "url": "https://github.com/wado-lang/wado/commit/645026388e14dc109c7a7a8b909faf2e79d65b29"
+        },
+        "date": 1783128298563,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
