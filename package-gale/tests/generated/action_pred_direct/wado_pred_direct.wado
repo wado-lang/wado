@@ -1816,7 +1816,7 @@ fn _parse_ok__inner(p: &mut Parser) -> () {
         }
         return;
     }
-    if kind == TK_NUM && (true) {
+    if kind == TK_NUM && (pred_1(p)) {
         let num = p.expect(TK_NUM, &EMPTY_SYNC);
         if !p.speculating {
              p.emit("num"); 
@@ -1852,7 +1852,7 @@ fn _parse_bad__inner(p: &mut Parser) -> () {
         }
         return;
     }
-    if kind == TK_NUM && (false) {
+    if kind == TK_NUM && (pred_4(p)) {
         let num = p.expect(TK_NUM, &EMPTY_SYNC);
         if !p.speculating {
              p.emit("num"); 
@@ -1876,6 +1876,14 @@ fn _parse_bad(p: &mut Parser) -> () {
     if p.recovering {
         p.push_rule_stack("bad");
     }
+}
+
+fn pred_1(p: &Parser) -> bool {
+    return true;
+}
+
+fn pred_4(p: &Parser) -> bool {
+    return false;
 }
 
 fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {

@@ -1,4 +1,4 @@
-#![generated(by = "gale", sources = ["tests/grammars/wado_pred_select.g4"])]
+#![generated(by = "gale", sources = ["tests/grammars/wado_pred_la.g4"])]
 
 // Grammar metadata from source .g4 prequels:
 //   option language = Wado
@@ -1322,22 +1322,18 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
     return [lo + 1, pos - line_starts[lo]];
 }
 pub enum TokenKind {
-    A,
-    B,
-    C,
-    D,
+    ID,
+    NUM,
     WS,
     Eof,
     Error,
 }
 
-pub global TK_A: i32 = 0;
-pub global TK_B: i32 = 1;
-pub global TK_C: i32 = 2;
-pub global TK_D: i32 = 3;
-pub global TK_WS: i32 = 4;
-pub global TK_EOF: i32 = 5;
-pub global TK_ERROR: i32 = 6;
+pub global TK_ID: i32 = 0;
+pub global TK_NUM: i32 = 1;
+pub global TK_WS: i32 = 2;
+pub global TK_EOF: i32 = 3;
+pub global TK_ERROR: i32 = 4;
 
 struct Lexer {
     chars: List<char>,
@@ -1358,31 +1354,41 @@ impl Lexer {
     }
 }
 
-fn try_A(chars: &List<char>, start: i32) -> i32 {
+fn try_ID(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
+    if pos >= chars.len() { return -1; }
+    if !((chars[pos] matches { 'a'..='z' })) { return -1; }
     pos += 1;
+    loop {
+        let rep_saved_0 = pos;
+        rep_0: {
+            if pos >= chars.len() { break rep_0; }
+            if !((chars[pos] matches { 'a'..='z' })) { break rep_0; }
+            pos += 1;
+            continue;
+        }
+        pos = rep_saved_0;
+        break;
+    }
     return pos;
 }
 
-fn try_B(chars: &List<char>, start: i32) -> i32 {
+fn try_NUM(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'b' { return -1; }
+    if pos >= chars.len() { return -1; }
+    if !((chars[pos] matches { '0'..='9' })) { return -1; }
     pos += 1;
-    return pos;
-}
-
-fn try_C(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'c' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_D(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'd' { return -1; }
-    pos += 1;
+    loop {
+        let rep_saved_1 = pos;
+        rep_1: {
+            if pos >= chars.len() { break rep_1; }
+            if !((chars[pos] matches { '0'..='9' })) { break rep_1; }
+            pos += 1;
+            continue;
+        }
+        pos = rep_saved_1;
+        break;
+    }
     return pos;
 }
 
@@ -1406,18 +1412,17 @@ pub fn tokenize(input: &String) -> TokenStream {
         if first_char == ' ' {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char == 'a' {
-            end = try_A(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_A; }
-        } else if first_char == 'b' {
-            end = try_B(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_B; }
-        } else if first_char == 'c' {
-            end = try_C(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_C; }
-        } else if first_char == 'd' {
-            end = try_D(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_D; }
+        } else if 'a' <= first_char <= 'z' {
+            end = try_ID(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_ID; }
+        } else if '0' <= first_char <= '9' {
+            end = try_NUM(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_NUM; }
+        } else {
+            end = try_ID(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_ID; }
+            end = try_NUM(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_NUM; }
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
@@ -1441,10 +1446,8 @@ pub fn tokenize(input: &String) -> TokenStream {
 
 pub fn token_kind_name(kind: i32) -> String {
     return match kind {
-        TK_A => "A",
-        TK_B => "B",
-        TK_C => "C",
-        TK_D => "D",
+        TK_ID => "ID",
+        TK_NUM => "NUM",
         TK_WS => "WS",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
@@ -1452,10 +1455,10 @@ pub fn token_kind_name(kind: i32) -> String {
     };
 }
 
-pub global RK_ITEM: NodeKind = 0;
-pub global RK_FALLBACK: NodeKind = 1;
+pub global RK_TAKES: NodeKind = 0;
+pub global RK_REJECTS: NodeKind = 1;
 
-global RULE_NAMES: List<String> = ["item", "fallback"];
+global RULE_NAMES: List<String> = ["takes", "rejects"];
 
 impl Display for NodeKind {
     fn fmt(&self, f: &mut Formatter) {
@@ -1789,198 +1792,98 @@ impl Parser {
     }
 }
 
-fn scan_item(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
-    let start = pos;
-    let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_A {
-            let mut best: i32 = -1;
-            pos = start;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_A { break try_0; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_B { break try_0; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
-            pos = start;
-            try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_A { break try_1; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_B { break try_1; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
-            if best >= 0 { pos = best; break scan_alts; }
-            return -1;
-        } else if alt_kind == TK_C {
-            pos = start;
-            try_2: {
-                if pos >= tokens.len() || tokens[pos] != TK_C { break try_2; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_D { break try_2; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
-        } else {
-            return -1;
-        }
+fn scan_takes(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+    if pos < tokens.len() && _kind_set_0(tokens[pos]) {
+        return pos + 1;
     }
-    return pos;
+    return -1;
 }
 
-fn scan_fallback(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
-    let start = pos;
-    let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_A {
-            let mut best: i32 = -1;
-            pos = start;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_A { break try_0; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_B { break try_0; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
-            pos = start;
-            try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_A { break try_1; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_B { break try_1; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
-            if best >= 0 { pos = best; break scan_alts; }
-            return -1;
-        } else {
-            return -1;
-        }
+fn scan_rejects(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+    if pos < tokens.len() && _kind_set_0(tokens[pos]) {
+        return pos + 1;
     }
-    return pos;
+    return -1;
 }
 
-fn _parse_item__inner_alt_0(p: &mut Parser) -> () {
-    let start = p.peek_start();
-    let a = p.expect(TK_A, &SYNC_0);
-    let b = p.expect(TK_B, &EMPTY_SYNC);
-    if !p.speculating {
-         p.emit("alt0"); 
-    }
-    return;
-}
-
-fn _parse_item__inner_alt_1(p: &mut Parser) -> () {
-    let start = p.peek_start();
-    let a = p.expect(TK_A, &SYNC_0);
-    let b = p.expect(TK_B, &EMPTY_SYNC);
-    if !p.speculating {
-         p.emit("alt1"); 
-    }
-    return;
-}
-
-fn _parse_item__inner(p: &mut Parser) -> () {
+fn _parse_takes__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
-    if kind == TK_A {
-        if (pred_0(p)) {
-            return _parse_item__inner_alt_0(p);
-        } else if (pred_2(p)) {
-            return _parse_item__inner_alt_1(p);
-        } else {
-            p.no_viable("no viable alternative", p.peek_span(), []);
-            return;
-        }
-    }
-    if kind == TK_C {
-        let c = p.expect(TK_C, &SYNC_1);
-        let d = p.expect(TK_D, &EMPTY_SYNC);
+    if kind == TK_ID {
+        let id = p.expect(TK_ID, &EMPTY_SYNC);
         if !p.speculating {
-             p.emit("alt2"); 
+             p.emit("id"); 
+        }
+        return;
+    }
+    if kind == TK_NUM && (pred_1(p)) {
+        let num = p.expect(TK_NUM, &EMPTY_SYNC);
+        if !p.speculating {
+             p.emit("num"); 
         }
         return;
     }
     p.no_viable(
-        "expected item",
+        "expected takes",
         p.peek_span(),
-        ["TK_A", "TK_C"],
+        ["TK_ID", "TK_NUM"],
     );
     return;
 }
 
-fn _parse_item(p: &mut Parser) -> () {
+fn _parse_takes(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_ITEM, _start);
-    _parse_item__inner(p);
+    p.b.start_node(RK_TAKES, _start);
+    _parse_takes__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
-        p.push_rule_stack("item");
+        p.push_rule_stack("takes");
     }
 }
 
-fn _parse_fallback__inner_alt_0(p: &mut Parser) -> () {
+fn _parse_rejects__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
-    let a = p.expect(TK_A, &SYNC_0);
-    let b = p.expect(TK_B, &EMPTY_SYNC);
-    if !p.speculating {
-         p.emit("fb0"); 
-    }
-    return;
-}
-
-fn _parse_fallback__inner_alt_1(p: &mut Parser) -> () {
-    let start = p.peek_start();
-    let a = p.expect(TK_A, &SYNC_0);
-    let b = p.expect(TK_B, &EMPTY_SYNC);
-    if !p.speculating {
-         p.emit("fb1"); 
-    }
-    return;
-}
-
-fn _parse_fallback__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
-    if kind == TK_A {
-        if (pred_5(p)) {
-            return _parse_fallback__inner_alt_0(p);
-        } else {
-            return _parse_fallback__inner_alt_1(p);
+    if kind == TK_ID {
+        let id = p.expect(TK_ID, &EMPTY_SYNC);
+        if !p.speculating {
+             p.emit("id"); 
         }
+        return;
+    }
+    if kind == TK_NUM && (pred_4(p)) {
+        let num = p.expect(TK_NUM, &EMPTY_SYNC);
+        if !p.speculating {
+             p.emit("num"); 
+        }
+        return;
     }
     p.no_viable(
-        "expected fallback",
+        "expected rejects",
         p.peek_span(),
-        ["TK_A"],
+        ["TK_ID", "TK_NUM"],
     );
     return;
 }
 
-fn _parse_fallback(p: &mut Parser) -> () {
+fn _parse_rejects(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_FALLBACK, _start);
-    _parse_fallback__inner(p);
+    p.b.start_node(RK_REJECTS, _start);
+    _parse_rejects__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
-        p.push_rule_stack("fallback");
+        p.push_rule_stack("rejects");
     }
 }
 
-fn pred_0(p: &Parser) -> bool {
-    return false;
+fn pred_1(p: &Parser) -> bool {
+    return  p.la(1) == TK_NUM ;
 }
 
-fn pred_2(p: &Parser) -> bool {
-    return true;
-}
-
-fn pred_5(p: &Parser) -> bool {
-    return false;
+fn pred_4(p: &Parser) -> bool {
+    return  p.la(1) == TK_ID ;
 }
 
 fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
@@ -2001,20 +1904,20 @@ fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> 
 }
 
 pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return parse_item(input, max_errors);
+    return parse_takes(input, max_errors);
 }
 
-pub fn parse_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_item(p));
+pub fn parse_takes(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_takes(p));
 }
 
-pub fn parse_fallback(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_fallback(p));
+pub fn parse_rejects(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_rejects(p));
 }
 
 fn _ctx_token_names() -> List<String> {
-    let mut v: List<String> = List::with_capacity(7);
-    for let mut k = 0; k < 7; k += 1 {
+    let mut v: List<String> = List::with_capacity(5);
+    for let mut k = 0; k < 5; k += 1 {
         v.push(token_kind_name(k));
     }
     return v;
@@ -2023,16 +1926,16 @@ fn _ctx_token_names() -> List<String> {
 global CTX_TOKEN_NAMES: List<String> = _ctx_token_names();
 
 pub fn to_string_tree(result: &ParseResult) -> String {
-    let mut token_names: List<String> = List::with_capacity(7);
-    for let mut k = 0; k < 7; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(5);
+    for let mut k = 0; k < 5; k += 1 {
         token_names.push(token_kind_name(k));
     }
     return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &token_names);
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
-    let mut token_names: List<String> = List::with_capacity(7);
-    for let mut k = 0; k < 7; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(5);
+    for let mut k = 0; k < 5; k += 1 {
         token_names.push(token_kind_name(k));
     }
     let mut _kind: i32 = -1;
@@ -2049,7 +1952,9 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
     return String::new();
 }
 
+fn _kind_set_0(k: i32) -> bool {
+    return k matches { TK_ID | TK_NUM };
+}
+
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_B];
-global SYNC_1: List<i32> = [TK_D];
 

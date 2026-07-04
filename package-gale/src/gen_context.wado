@@ -167,6 +167,11 @@ pub struct GenContext {
     /// `action_id`s of alt-initial predicates resolved at the dispatch by
     /// prediction-time gating; their in-body emit is suppressed.
     predicate_gated: List<i32>,
+    /// Context-free gated predicates extracted to standalone `pred_<id>(p)`
+    /// fns: `[action_id, body]`. The dispatch calls `pred_<id>(p)` instead of
+    /// inlining the condition, so the same fn is callable from every decision
+    /// path (dispatch today, the ATN callback next).
+    predicate_fns: List<[i32, String]>,
     rule_follow_kinds: TreeMap<String, List<String>>,
     rule_follow_exact: bool,
     /// Actual post-dedup bindings for the alternative currently being emitted:
@@ -213,6 +218,7 @@ impl GenContext {
             action_member_methods: [],
             action_seen: [],
             predicate_gated: [],
+            predicate_fns: [],
             rule_follow_kinds: TreeMap::new(),
             rule_follow_exact: false,
             alt_bindings: [],
@@ -453,6 +459,22 @@ impl GenContext {
 
     pub fn mark_predicate_gated(&mut self, id: i32) {
         self.predicate_gated.push(id);
+    }
+
+    /// Register a context-free gated predicate's body for a standalone
+    /// `pred_<id>(p)` fn. Deduped by `id` (a predicate is marked once, but stay
+    /// idempotent).
+    pub fn register_predicate_fn(&mut self, id: i32, body: &String) {
+        for let e of &self.predicate_fns {
+            if e.0 == id {
+                return;
+            }
+        }
+        self.predicate_fns.push([id, *body]);
+    }
+
+    pub fn predicate_fns(&self) -> &List<[i32, String]> {
+        return &self.predicate_fns;
     }
 
     /// Set the actual bindings for the alternative whose actions are about to be
