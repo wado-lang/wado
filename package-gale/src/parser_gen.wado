@@ -46,6 +46,7 @@ use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec, str_lit } from "./wad
 use { TreeSet } from "core:collections";
 use {
     PredictionNode,
+    AmbiguousNode,
     AmbiguityReason,
     build_group_prediction_tree,
     prediction_collect_all_indices,
@@ -3669,6 +3670,42 @@ fn predicate_body_is_context_free(text: &String, ctx: &GenContext) -> bool {
     return ctx.action_language() matches { Wado } && find_attr_refs(text).len() == 0;
 }
 
+/// Emit the `disabled_alts` seed for an ATN-routed decision: for each group alt
+/// carrying a context-free alt-initial predicate, add its index to
+/// `_atn_disabled` when `pred_<id>(p)` is false, so the simulator never seeds
+/// it. Returns the `, &_atn_disabled` call-argument suffix, or `""` when the
+/// group has no such predicate (keeping the ATN call byte-identical). Only
+/// context-free predicates are pruned this way; a context-dependent gate at an
+/// ATN decision falls to the inline guard.
+fn emit_atn_disabled_seed(
+    w: &mut CodeWriter,
+    amb_alts: &List<i32>,
+    alts: &List<Alternative>,
+    ctx: &GenContext,
+) -> String {
+    if !ctx.emit_actions() {
+        return String::new();
+    }
+    let mut gates: List<[i32, String]> = [];
+    for let idx of amb_alts {
+        for let a of &alts[*idx].actions {
+            if a.before_index == 0
+                && a.kind matches { Predicate }
+                && predicate_body_is_context_free(&a.source.text, ctx) {
+                gates.push([*idx, `{pred_fn_name(a.source.action_id)}(p)`]);
+            }
+        }
+    }
+    if gates.is_empty() {
+        return String::new();
+    }
+    w.line(&"let mut _atn_disabled: List<i32> = [];");
+    for let g of &gates {
+        w.line(&`if !({g.1}) \{ _atn_disabled.push({g.0}); \}`);
+    }
+    return String::from(", &_atn_disabled");
+}
+
 /// An alt's gateable alt-initial predicate conditions, translated, in grammar
 /// order.
 fn alt_initial_gate_conditions(alt: &Alternative, ctx: &GenContext) -> List<String> {
@@ -3725,25 +3762,49 @@ fn ambiguous_group_predicate_gated(amb_alts: &List<i32>, alts: &List<Alternative
 
 /// Collect the alts of every predicate-gated `Ambiguous` node in the tree.
 /// Walks the whole tree, not just its root, to stay symmetric with emit (which
-/// gates a node nested under a `Dispatch` too).
-fn collect_gated_ambiguous_alts(node: &PredictionNode, alts: &List<Alternative>, ctx: &GenContext, out: &mut List<i32>) {
+/// gates a node nested under a `Dispatch` too). A node is gated when it either
+/// dispatches by the grammar-order predicate chain (interchangeable), or routes
+/// through the runtime ATN — where a gate's alts are excluded from the seed set
+/// (`disabled_alts`) instead.
+fn collect_gated_ambiguous_alts(
+    node: &PredictionNode,
+    alts: &List<Alternative>,
+    rule: &ParserRule,
+    ctx: &GenContext,
+    out: &mut List<i32>,
+) {
     match *node {
         Leaf(_) => {
         },
-        Consume(c) => collect_gated_ambiguous_alts(&c.child, alts, ctx, out),
+        Consume(c) => collect_gated_ambiguous_alts(&c.child, alts, rule, ctx, out),
         Dispatch(d) => {
             for let branch of &d.branches {
-                collect_gated_ambiguous_alts(&branch.child, alts, ctx, out);
+                collect_gated_ambiguous_alts(&branch.child, alts, rule, ctx, out);
             }
         },
         Ambiguous(a) => {
-            if ambiguous_group_predicate_gated(&a.alts, alts, ctx) {
+            if ambiguous_group_predicate_gated(&a.alts, alts, ctx)
+                || ambiguous_group_atn_predicate_gated(&a, alts, rule, ctx) {
                 for let idx of &a.alts {
                     out.push(*idx);
                 }
             }
         },
     }
+}
+
+/// Whether an `Ambiguous` node routes through the runtime ATN *and* carries a
+/// gateable predicate — so its gate alts feed the simulator's `disabled_alts`
+/// prune rather than an inline dispatch chain.
+fn ambiguous_group_atn_predicate_gated(
+    a: &AmbiguousNode,
+    alts: &List<Alternative>,
+    rule: &ParserRule,
+    ctx: &GenContext,
+) -> bool {
+    return a.reason matches { AtEndConflict }
+        && ambiguous_group_has_gate(&a.alts, alts, ctx)
+        && ctx.emits_at_end_conflict_via_atn(ctx.current_rule_index(), &rule.name, &a.branch_tokens);
 }
 
 /// Record every alt-initial predicate a dispatch site will gate, so
@@ -3773,7 +3834,7 @@ fn mark_gated_predicates(
         } else {
             let tree = build_group_prediction_tree(&rule.alternatives, group, first_sets, non_lr_indices, ctx);
             let mut gated: List<i32> = [];
-            collect_gated_ambiguous_alts(&tree, &rule.alternatives, ctx, &mut gated);
+            collect_gated_ambiguous_alts(&tree, &rule.alternatives, rule, ctx, &mut gated);
             for let idx of &gated {
                 mark_alt_gate_predicates(&rule.alternatives[*idx], ctx);
             }
@@ -7388,8 +7449,9 @@ fn gen_prediction_code_inner(
             };
             if route_via_atn {
                 let dec = ctx.atn_rule_body_decision(amb_rule);
+                let disabled_arg = emit_atn_disabled_seed(w, &a.alts, alts, ctx);
                 w.line(
-                    &`let _atn_alt = atn_predict_with_stack(&ATN_SIM, {dec}, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0);`,
+                    &`let _atn_alt = atn_predict_with_stack(&ATN_SIM, {dec}, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0{disabled_arg});`,
                 );
                 emit_index_pick_dispatch(w, &"_atn_alt", &sorted_indices, fn_name, rule_display, ctx);
                 return;

@@ -1,0 +1,28 @@
+//! Stage C predicate on an ATN-routed decision: `xt` / `xr` have the
+//! `AtEndConflict` shape (`'a' 'b'` prefixes `'a' 'b' 'c'`), routed through the
+//! runtime ATN. An alt-initial `{true}?` / `{false}?` on the longer alt is
+//! honoured by excluding it from the prediction seed set (`disabled_alts`). For
+//! `abcc` the full-context ATN otherwise picks the longer alt (its action emits
+//! `abc`); `{false}?` excludes it, so the shorter alt runs instead (emits `ab`).
+
+use ap from "./grammars/wado_atn_pred.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_atn_pred",
+        },
+    };
+
+test "a true predicate leaves the ATN-selected longer alt" {
+    let r = ap::parse_takes(&"abcc");
+    assert r.ok(), "clean parse";
+    assert r.output == "abc", `expected the longer alt to run: '{r.output}'`;
+}
+
+test "a false predicate excludes the ATN alt" {
+    let r = ap::parse_rejects(&"abcc");
+    // Same input, same ATN decision — but `{false}?` on the longer alt excludes
+    // it from the seed set, so the shorter alt is chosen instead.
+    assert r.output == "ab", `expected the shorter alt to run: '{r.output}'`;
+}
