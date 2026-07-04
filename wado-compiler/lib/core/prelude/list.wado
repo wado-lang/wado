@@ -136,15 +136,6 @@ impl List<T> {
         return Option::Some(builtin::array_get(&self.repr, index));
     }
 
-    /// Reads the element at `index` with no bounds check and no `Option`
-    /// wrapper. Reads a single element straight off the backing array, so it
-    /// never materializes a copy of that array the way `internal_raw_data`
-    /// would. Caller must ensure `0 <= index < len()`; an out-of-range index is
-    /// caught by the Wasm array bounds check (a trap), not silent corruption.
-    pub fn get_unchecked(&self, index: i32) -> T {
-        return builtin::array_get(&self.repr, index);
-    }
-
     /// Copy the live `0..len()` elements into a fresh fixed `Array<T>` of exactly
     /// `len()`. Hand a finished, no-longer-growing buffer to code that only
     /// indexes it: `Array`'s `[]` is bounds-checked by Wasm (traps on OOB)
