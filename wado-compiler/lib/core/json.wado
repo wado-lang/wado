@@ -905,6 +905,24 @@ impl JsonDeserializer {
         return DeserializeError::malformed("invalid UTF-8 in string", start as i64);
     }
 
+    /// Copy the already-scanned run `input[start..end)` into an owned `String`.
+    ///
+    /// The caller's scan touched every byte of the run to find the closing `"`
+    /// or an escape; `all_ascii` records whether any byte had the high bit set.
+    /// A pure-ASCII run is valid UTF-8 by construction, so validation is skipped
+    /// and only the copy is paid — the `decode_utf8_scalar` pass runs only when
+    /// the run actually contains multi-byte sequences.
+    fn take_scanned_run(&self, start: i32, end: i32, all_ascii: bool) -> Result<String, DeserializeError> {
+        let slice = self.input.slice(start, end);
+        if all_ascii {
+            return Result::Ok(String::internal_from_utf8_raw(slice.to_array(), end - start));
+        }
+        return match String::from_utf8_slice(slice) {
+            Ok(s) => Result::Ok(s),
+            Err(_) => Result::Err(self.invalid_utf8_string(start)),
+        };
+    }
+
     pub fn read_json_string(&mut self) -> Result<String, DeserializeError> {
         self.skip_whitespace();
         let input_len = self.input.len();
@@ -922,26 +940,25 @@ impl JsonDeserializer {
         self.pos += 1;
 
         // Scan ahead to the end of the escape-free prefix so it can be built
-        // in one exactly-sized allocation.
+        // in one exactly-sized allocation. `high_bits` accumulates every content
+        // byte; if it stays below 0x80 the run is pure ASCII and needs no UTF-8
+        // validation on copy-out.
         let prefix_start = self.pos;
         let mut scan_pos = self.pos;
+        let mut high_bits = 0;
         while scan_pos < input_len {
             let sb = self.input.get_unchecked(scan_pos) as i32;
             if sb == '"' as i32 || sb == '\\' as i32 {
                 break;
             }
+            high_bits |= sb;
             scan_pos += 1;
         }
 
         // Fast path: no escapes. The token is `input[prefix_start..scan_pos)`;
         // only string *content* can be multi-byte — JSON structure is ASCII.
         if scan_pos < input_len && self.input.get_unchecked(scan_pos) as i32 == '"' as i32 {
-            let result = match String::from_utf8_slice(self.input.slice(prefix_start, scan_pos)) {
-                Ok(s) => s,
-                Err(_) => {
-                    return Result::Err(self.invalid_utf8_string(prefix_start));
-                },
-            };
+            let result = self.take_scanned_run(prefix_start, scan_pos, high_bits < 0x80)?;
             self.pos = scan_pos + 1;
             return Result::Ok(result);
         }
@@ -952,34 +969,28 @@ impl JsonDeserializer {
         // likely-taken and lets the engine lay this path out of line. Build the
         // escape-free prefix, then handle escapes.
         builtin::cold_path();
-        let mut result = match String::from_utf8_slice(self.input.slice(prefix_start, scan_pos)) {
-            Ok(s) => s,
-            Err(_) => {
-                return Result::Err(self.invalid_utf8_string(prefix_start));
-            },
-        };
+        let mut result = self.take_scanned_run(prefix_start, scan_pos, high_bits < 0x80)?;
         self.pos = scan_pos;
 
         loop {
             // Scan to the next terminator or escape. The bytes between escapes
             // form one contiguous run that is validated and copied in a single
             // pass below (the `"` / `\` delimiters are ASCII, so a multi-byte
-            // sequence never straddles a chunk boundary).
+            // sequence never straddles a chunk boundary). Escapes in twitter-shaped
+            // data are ASCII `\/` runs, so the ASCII check usually elides UTF-8
+            // validation here too.
             let chunk_start = self.pos;
+            let mut chunk_high = 0;
             while self.pos < self.input.len() {
                 let b = self.input.get_unchecked(self.pos) as i32;
                 if b == '"' as i32 || b == '\\' as i32 {
                     break;
                 }
+                chunk_high |= b;
                 self.pos += 1;
             }
             if self.pos > chunk_start {
-                let chunk = match String::from_utf8_slice(self.input.slice(chunk_start, self.pos)) {
-                    Ok(s) => s,
-                    Err(_) => {
-                        return Result::Err(self.invalid_utf8_string(chunk_start));
-                    },
-                };
+                let chunk = self.take_scanned_run(chunk_start, self.pos, chunk_high < 0x80)?;
                 result.push_str(&chunk);
             }
 

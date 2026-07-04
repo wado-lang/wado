@@ -342,6 +342,16 @@ test "deserialize string with escapes" {
     assert r matches { Ok(v) && v == "line1\nline2" };
 }
 
+test "deserialize raw multibyte string value" {
+    // Non-ASCII content forces the UTF-8 validation branch (the ASCII fast
+    // path is skipped), both for an escape-free run and one split by a `\/`.
+    let r: Result<String, DeserializeError> = from_string(`"café 日本 🦀"`);
+    assert r matches { Ok(v) && v == "café 日本 🦀" };
+
+    let split: Result<String, DeserializeError> = from_string(`"日本\/語"`);
+    assert split matches { Ok(v) && v == "日本/語" };
+}
+
 test "deserialize string with unicode" {
     let r: Result<String, DeserializeError> = from_string(`"\\u0041"`);
     assert r matches { Ok(v) && v == "A" };
