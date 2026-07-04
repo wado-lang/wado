@@ -104,7 +104,6 @@ use {
 } from "./gir.wado";
 use { find_attr_refs } from "./attr_scan.wado";
 use {
-    translate_wado_action,
     rule_returns_vals,
     vals_struct_name,
     wado_type_default,
@@ -113,6 +112,7 @@ use {
     rule_threads_args,
     RULE_START_TOK_LOCAL,
 } from "./action_translate.wado";
+use { translate_action, translate_predicate } from "./java2wado.wado";
 use { unwrap_label } from "./lr_util.wado";
 use { escape_ident } from "./ident.wado";
 use { compute_shapes_for_alt, shape_lookahead_signature_for_alt, rebind_op_field } from "./lower.wado";
@@ -236,7 +236,8 @@ fn translate_caller_arg(expr: &String, ctx: &GenContext) -> Option<String> {
     }
     let rule = &ctx.parser_rules()[ridx];
     let vals_in_scope = rule_emits_vals(ctx, rule);
-    return match translate_wado_action(rule, ctx.parser_rules(), expr, vals_in_scope, ctx.alt_bindings()) {
+    let lang = ctx.action_language();
+    return match translate_predicate(&lang, rule, ctx.parser_rules(), expr, vals_in_scope, ctx.alt_bindings()) {
         Ok(c) => Option::Some(c),
         Err(_) => null,
     };
@@ -3553,7 +3554,8 @@ fn gate_condition_for(a: &AltAction, ctx: &GenContext) -> Option<String> {
     }
     let rule = &ctx.parser_rules()[ridx];
     let vals_in_scope = rule_emits_vals(ctx, rule);
-    return match translate_wado_action(rule, ctx.parser_rules(), &a.source.text, vals_in_scope, ctx.alt_bindings()) {
+    let lang = ctx.action_language();
+    return match translate_predicate(&lang, rule, ctx.parser_rules(), &a.source.text, vals_in_scope, ctx.alt_bindings()) {
         Ok(code) => Option::Some(code),
         Err(_) => null,
     };
@@ -3812,7 +3814,9 @@ fn translate_action_or_warn(src: &ActionSource, ctx: &mut GenContext) -> Option<
         return null;
     }
     let vals_in_scope = rule_emits_vals(ctx, &ctx.parser_rules()[ridx]);
-    return match translate_wado_action(
+    let lang = ctx.action_language();
+    return match translate_action(
+        &lang,
         &ctx.parser_rules()[ridx],
         ctx.parser_rules(),
         &src.text,

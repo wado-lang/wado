@@ -1,4 +1,4 @@
-use { ParserRule, Alternative, Element, RepeatElement, LabelElement, RepeatKind } from "./ir.wado";
+use { ParserRule, Alternative, Element, RepeatElement, LabelElement, RepeatKind, ActionLanguage } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
 use {
     literal_const_name,
@@ -149,6 +149,10 @@ pub struct GenContext {
     /// currently emit (`language = Wado`). Actionless / other-language
     /// grammars stay byte-identical.
     emit_actions: bool,
+    /// The grammar's action language (`options { language = X }`), so the
+    /// action / predicate splice sites route to the right translator front
+    /// end (identity for Wado, java2wado for Java). Set once at codegen entry.
+    action_language: ActionLanguage,
     /// `action_id`s codegen has handled (emitted, or already raised a loud
     /// diagnostic for). A post-emit sweep warns for any stamped parser action
     /// left unhandled, so an action on a not-yet-supported code path (nested
@@ -199,6 +203,7 @@ impl GenContext {
             atn_rule_body_decisions: [],
             trace: false,
             emit_actions: false,
+            action_language: ActionLanguage::Wado,
             action_seen: [],
             predicate_gated: [],
             rule_follow_kinds: TreeMap::new(),
@@ -401,6 +406,14 @@ impl GenContext {
     /// Whether retained actions should be executed rather than discarded.
     pub fn emit_actions(&self) -> bool {
         return self.emit_actions;
+    }
+
+    pub fn set_action_language(&mut self, lang: &ActionLanguage) {
+        self.action_language = *lang;
+    }
+
+    pub fn action_language(&self) -> ActionLanguage {
+        return self.action_language;
     }
 
     /// Record that codegen handled this action id (emitted or diagnosed).
