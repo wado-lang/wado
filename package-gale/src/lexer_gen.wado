@@ -471,7 +471,7 @@ fn gen_lexer_match_fn(
     if rule.body.len() == 1 {
         // Alt-initial semantic predicate (`{cond}? ...`): gate before matching.
         gen_lexer_rule_predicates(w, &rule.body[0].actions, 0, ea, &"return -1");
-        gen_lexer_alt_seq(w, &rule.body[0], all_rules, &"return -1", ci);
+        gen_lexer_alt_seq(w, &rule.body[0], all_rules, &"return -1", ci, ea);
         // Trailing predicate (`... {cond}?`): gate the completed match, so a
         // false predicate rejects the rule and the tokenizer tries the next.
         gen_lexer_rule_predicates(w, &rule.body[0].actions, rule.body[0].elements.len(), ea, &"return -1");
@@ -530,7 +530,7 @@ fn gen_lexer_alts(
         w.begin(&`{label}:`);
         w.line(&`pos = alts_saved_{id};`);
         gen_lexer_rule_predicates(w, &alts[i].actions, 0, ea, &`break {label}`);
-        gen_lexer_alt_seq(w, &alts[i], all_rules, &`break {label}`, ci);
+        gen_lexer_alt_seq(w, &alts[i], all_rules, &`break {label}`, ci, ea);
         gen_lexer_rule_predicates(w, &alts[i].actions, alts[i].elements.len(), ea, &`break {label}`);
         w.line(&`alts_ok_{id} = true;`);
         w.end();
@@ -547,6 +547,7 @@ fn gen_lexer_alt_seq(
     all_rules: &List<LexerRule>,
     fail_action: &String,
     ci: bool,
+    ea: bool,
 ) {
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         let elem = &alt.elements[i];
@@ -558,7 +559,7 @@ fn gen_lexer_alt_seq(
                     rest_elems.push(alt.elements[j]);
                 }
                 let rest_alt = LexerAlternative { elements: rest_elems };
-                gen_lexer_non_greedy_repeat(w, rep, &rest_alt, all_rules, fail_action, ci);
+                gen_lexer_non_greedy_repeat(w, rep, &rest_alt, all_rules, fail_action, ci, ea);
                 return;
             }
             // Greedy Plus / Star whose inner is a single-char-consuming
@@ -592,12 +593,12 @@ fn gen_lexer_alt_seq(
                     suffix_elems.push(alt.elements[j]);
                 }
                 if lexer_suffix_is_peekable(&suffix_elems) {
-                    gen_lexer_repeat_lookahead_aware(w, rep, &suffix_elems, all_rules, fail_action, ci);
+                    gen_lexer_repeat_lookahead_aware(w, rep, &suffix_elems, all_rules, fail_action, ci, ea);
                     return;
                 }
             }
         }
-        gen_lexer_elem(w, elem, all_rules, fail_action, ci);
+        gen_lexer_elem(w, elem, all_rules, fail_action, ci, ea);
     }
 }
 
@@ -680,6 +681,7 @@ fn gen_lexer_repeat_lookahead_aware(
     all_rules: &List<LexerRule>,
     fail_action: &String,
     ci: bool,
+    ea: bool,
 ) {
     let id = w.next_id();
     let accept_var = `accept_{id}`;
@@ -691,13 +693,13 @@ fn gen_lexer_repeat_lookahead_aware(
     // legally start at the current position even before any inner
     // consumption.
     if let Star = rep.kind {
-        gen_lexer_suffix_peek(w, suffix, all_rules, &accept_var, ci);
+        gen_lexer_suffix_peek(w, suffix, all_rules, &accept_var, ci, ea);
     }
 
     // Plus: the first iteration is mandatory and may not be skipped.
     if let Plus = rep.kind {
-        gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci);
-        gen_lexer_suffix_peek(w, suffix, all_rules, &accept_var, ci);
+        gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea);
+        gen_lexer_suffix_peek(w, suffix, all_rules, &accept_var, ci, ea);
     }
 
     // Forward scan: each iteration of the inner advances pos and
@@ -707,8 +709,8 @@ fn gen_lexer_repeat_lookahead_aware(
     w.begin(&"loop");
     w.line(&`let la_saved_{id} = pos;`);
     w.begin(&`{loop_label}:`);
-    gen_lexer_elem(w, &rep.element, all_rules, &`break {loop_label}`, ci);
-    gen_lexer_suffix_peek(w, suffix, all_rules, &accept_var, ci);
+    gen_lexer_elem(w, &rep.element, all_rules, &`break {loop_label}`, ci, ea);
+    gen_lexer_suffix_peek(w, suffix, all_rules, &accept_var, ci, ea);
     w.line(&"continue;");
     w.end();
     w.line(&`pos = la_saved_{id};`);
@@ -731,7 +733,7 @@ fn gen_lexer_repeat_lookahead_aware(
     let assert_msg = `lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)`;
     let assert_fail = `panic("{assert_msg}")`;
     for let elem of suffix {
-        gen_lexer_elem(w, elem, all_rules, &assert_fail, ci);
+        gen_lexer_elem(w, elem, all_rules, &assert_fail, ci, ea);
     }
 }
 
@@ -745,6 +747,7 @@ fn gen_lexer_suffix_peek(
     all_rules: &List<LexerRule>,
     accept_var: &String,
     ci: bool,
+    ea: bool,
 ) {
     let id = w.next_id();
     let save_var = `peek_save_{id}`;
@@ -754,7 +757,7 @@ fn gen_lexer_suffix_peek(
     w.line(&`let mut {matched_var} = false;`);
     w.begin(&`{label}:`);
     for let elem of suffix {
-        gen_lexer_elem(w, elem, all_rules, &`break {label}`, ci);
+        gen_lexer_elem(w, elem, all_rules, &`break {label}`, ci, ea);
     }
     w.line(&`{matched_var} = true;`);
     w.end();
@@ -764,7 +767,14 @@ fn gen_lexer_suffix_peek(
     w.end();
 }
 
-fn gen_lexer_elem(w: &mut CodeWriter, elem: &LexerElement, all_rules: &List<LexerRule>, fail_action: &String, ci: bool) {
+fn gen_lexer_elem(
+    w: &mut CodeWriter,
+    elem: &LexerElement,
+    all_rules: &List<LexerRule>,
+    fail_action: &String,
+    ci: bool,
+    ea: bool,
+) {
     match *elem {
         Literal(text) => {
             let chars: List<char> = text.chars().collect();
@@ -809,9 +819,9 @@ fn gen_lexer_elem(w: &mut CodeWriter, elem: &LexerElement, all_rules: &List<Lexe
                         w.line(&`pos = {fn_name}(chars, pos);`);
                         w.line(&`if pos < 0 \{ {fail_action}; \}`);
                     } else if f.body.len() == 1 {
-                        gen_lexer_alt_seq(w, &f.body[0], all_rules, fail_action, ci);
+                        gen_lexer_alt_seq(w, &f.body[0], all_rules, fail_action, ci, ea);
                     } else {
-                        gen_lexer_alts(w, &f.body, all_rules, fail_action, ci, false);
+                        gen_lexer_alts(w, &f.body, all_rules, fail_action, ci, ea);
                     }
                 } else {
                     let fn_name = lexer_try_fn_name(&name);
@@ -822,13 +832,13 @@ fn gen_lexer_elem(w: &mut CodeWriter, elem: &LexerElement, all_rules: &List<Lexe
         },
         Group(alts) => {
             if alts.len() == 1 {
-                gen_lexer_alt_seq(w, &alts[0], all_rules, fail_action, ci);
+                gen_lexer_alt_seq(w, &alts[0], all_rules, fail_action, ci, ea);
             } else {
-                gen_lexer_alts(w, &alts, all_rules, fail_action, ci, false);
+                gen_lexer_alts(w, &alts, all_rules, fail_action, ci, ea);
             }
         },
-        Repeat(rep) => gen_lexer_repeat(w, &rep, all_rules, fail_action, ci),
-        Not(not_elem) => gen_lexer_not(w, &not_elem, all_rules, fail_action, ci),
+        Repeat(rep) => gen_lexer_repeat(w, &rep, all_rules, fail_action, ci, ea),
+        Not(not_elem) => gen_lexer_not(w, &not_elem, all_rules, fail_action, ci, ea),
     }
 }
 
@@ -876,6 +886,7 @@ fn gen_lexer_repeat(
     all_rules: &List<LexerRule>,
     fail_action: &String,
     ci: bool,
+    ea: bool,
 ) {
     let id = w.next_id();
     let label = `rep_{id}`;
@@ -883,7 +894,7 @@ fn gen_lexer_repeat(
         w.begin(&"loop");
         w.line(&`let rep_saved_{id} = pos;`);
         w.begin(&`{label}:`);
-        gen_lexer_elem(w, &rep.element, all_rules, &`break {label}`, ci);
+        gen_lexer_elem(w, &rep.element, all_rules, &`break {label}`, ci, ea);
         w.line(&"continue;");
         w.end();
         w.line(&`pos = rep_saved_{id};`);
@@ -891,11 +902,11 @@ fn gen_lexer_repeat(
         w.end();
     }
     if let Plus = rep.kind {
-        gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci);
+        gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea);
         w.begin(&"loop");
         w.line(&`let rep_saved_{id} = pos;`);
         w.begin(&`{label}:`);
-        gen_lexer_elem(w, &rep.element, all_rules, &`break {label}`, ci);
+        gen_lexer_elem(w, &rep.element, all_rules, &`break {label}`, ci, ea);
         w.line(&"continue;");
         w.end();
         w.line(&`pos = rep_saved_{id};`);
@@ -906,7 +917,7 @@ fn gen_lexer_repeat(
         w.line(&`let opt_saved_{id} = pos;`);
         w.line(&`let mut opt_ok_{id} = false;`);
         w.begin(&`{label}:`);
-        gen_lexer_elem(w, &rep.element, all_rules, &`break {label}`, ci);
+        gen_lexer_elem(w, &rep.element, all_rules, &`break {label}`, ci, ea);
         w.line(&`opt_ok_{id} = true;`);
         w.end();
         w.line(&`if !opt_ok_{id} \{ pos = opt_saved_{id}; \}`);
@@ -920,12 +931,13 @@ fn gen_lexer_non_greedy_repeat(
     all_rules: &List<LexerRule>,
     fail_action: &String,
     ci: bool,
+    ea: bool,
 ) {
     let id = w.next_id();
     let label = `ng_{id}`;
     // For Plus, match at least one element first
     if let Plus = rep.kind {
-        gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci);
+        gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea);
     }
     // Loop: try matching the rest first (non-greedy), otherwise consume one more
     w.begin(&"loop");
@@ -933,7 +945,7 @@ fn gen_lexer_non_greedy_repeat(
     w.line(&`let ng_saved_{id} = pos;`);
     w.line(&`let mut ng_exit_{id} = false;`);
     w.begin(&`{label}:`);
-    gen_lexer_alt_seq(w, rest, all_rules, &`break {label}`, ci);
+    gen_lexer_alt_seq(w, rest, all_rules, &`break {label}`, ci, ea);
     w.line(&`ng_exit_{id} = true;`);
     w.end();
     w.begin(&`if ng_exit_{id}`);
@@ -941,7 +953,7 @@ fn gen_lexer_non_greedy_repeat(
     w.end();
     // Exit failed, restore pos and consume one element
     w.line(&`pos = ng_saved_{id};`);
-    gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci);
+    gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea);
     w.end();
 }
 
@@ -951,6 +963,7 @@ fn gen_lexer_not(
     all_rules: &List<LexerRule>,
     fail_action: &String,
     ci: bool,
+    ea: bool,
 ) {
     if let CharClass(cc) = not_elem.element {
         let expanded = if ci { expand_char_class_ci(&cc) } else { cc };
@@ -967,7 +980,7 @@ fn gen_lexer_not(
     w.line(&`let not_saved_{id} = pos;`);
     w.line(&`let mut not_matched_{id} = false;`);
     w.begin(&`{label}:`);
-    gen_lexer_elem(w, &not_elem.element, all_rules, &`break {label}`, ci);
+    gen_lexer_elem(w, &not_elem.element, all_rules, &`break {label}`, ci, ea);
     w.line(&`not_matched_{id} = true;`);
     w.end();
     w.line(&`pos = not_saved_{id};`);
