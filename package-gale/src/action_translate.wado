@@ -71,7 +71,9 @@ fn swallow_trailing_call(chars: &List<char>, end: i32) -> i32 {
     let mut depth = 0;
     for let mut k = j; k < n; k += 1 {
         match chars[k] {
-            '$' => return end,
+            '$' => {
+                return end;
+            },
             '(' => depth += 1,
             ')' => {
                 depth -= 1;
@@ -79,7 +81,8 @@ fn swallow_trailing_call(chars: &List<char>, end: i32) -> i32 {
                     return k + 1;
                 }
             },
-            _ => {},
+            _ => {
+            },
         }
     }
     return end;
@@ -198,7 +201,7 @@ fn parser_special_expr(r: &ResolvedAttr, is_lr: bool) -> Result<String, String> 
         // already folded shut, so it reads the just-finished node instead.
         "ctx" && r.member matches { Some("toStringTree") } => {
             let method = if is_lr { "rule_string_tree_final" } else { "rule_string_tree" };
-            Result::Ok(`p.{method}()`)
+            Result::Ok(`p.{method}()`);
         },
         _ => Result::Err(`${r.name}: this parser special is not yet emitted`),
     };

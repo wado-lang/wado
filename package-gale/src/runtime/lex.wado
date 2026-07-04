@@ -243,7 +243,15 @@ impl TokenStream {
 
     /// Append a token carrying recovery `flags`, returning its index. The
     /// real lockstep writer; `push_token` is the `flags = 0` common case.
-    pub fn push_token_flagged(&mut self, kind: i32, start: i32, end: i32, triv_lo: i32, triv_hi: i32, flags: TokenFlags) -> i32 {
+    pub fn push_token_flagged(
+        &mut self,
+        kind: i32,
+        start: i32,
+        end: i32,
+        triv_lo: i32,
+        triv_hi: i32,
+        flags: TokenFlags,
+    ) -> i32 {
         let idx = self.kinds.len();
         self.kinds.push(kind);
         self.starts.push(start);

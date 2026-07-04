@@ -25,7 +25,8 @@ test "translate rewrites a cross-rule $a.v to a child binding" {
 r : a=e { print($a.v); } ;
 e returns [i32 v] : ID ;
 ").unwrap();
-    let out = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" print($a.v); ", false, &NO_BINDINGS).unwrap();
+    let out = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" print($a.v); ", false, &NO_BINDINGS).unwrap(
+    );
     assert out == " print(a.v); ", `out: '{out}'`;
 }
 
@@ -33,7 +34,8 @@ test "translate rewrites a token label member to the context API" {
     let g = parse("grammar T;
 r : x=ID { print($x.text); } ;
 ").unwrap();
-    let out = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" print($x.text); ", false, &NO_BINDINGS).unwrap();
+    let out = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" print($x.text); ", false, &NO_BINDINGS).unwrap(
+    );
     assert out == " print(p.token_text(x)); ", `out: '{out}'`;
 }
 
@@ -80,7 +82,8 @@ test "translate camelCase label uses the snake_case binding" {
 r : myTok=ID { print($myTok.text); } ;
 ID : [a-z]+ ;
 ").unwrap();
-    let out = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" print($myTok.text); ", false, &NO_BINDINGS).unwrap();
+    let out = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" print($myTok.text); ", false, &NO_BINDINGS).unwrap(
+    );
     assert out == " print(p.token_text(my_tok)); ", `out: '{out}'`;
 }
 
@@ -155,16 +158,20 @@ e : ID ;
 ").unwrap();
     let rule = &g.parser_rules[0];
     // Empty parens.
-    let a = translate_wado_action(rule, &g.parser_rules, &" p.emit($ctx.toStringTree()); ", false, &NO_BINDINGS).unwrap();
+    let a = translate_wado_action(rule, &g.parser_rules, &" p.emit($ctx.toStringTree()); ", false, &NO_BINDINGS).unwrap(
+    );
     assert a == " p.emit(p.rule_string_tree()); ", `a: '{a}'`;
     // ANTLR / java2wado idiom `toStringTree(this)` — the `(this)` argument is absorbed.
-    let b = translate_wado_action(rule, &g.parser_rules, &" p.emit($ctx.toStringTree(this)); ", false, &NO_BINDINGS).unwrap();
+    let b = translate_wado_action(rule, &g.parser_rules, &" p.emit($ctx.toStringTree(this)); ", false, &NO_BINDINGS).unwrap(
+    );
     assert b == " p.emit(p.rule_string_tree()); ", `b: '{b}'`;
     // Bare reference (no parens) still emits a complete call.
-    let c = translate_wado_action(rule, &g.parser_rules, &" let t = $ctx.toStringTree; print(t); ", false, &NO_BINDINGS).unwrap();
+    let c = translate_wado_action(rule, &g.parser_rules, &" let t = $ctx.toStringTree; print(t); ", false, &NO_BINDINGS).unwrap(
+    );
     assert c == " let t = p.rule_string_tree(); print(t); ", `c: '{c}'`;
     // Any ASCII whitespace (incl. a newline) before the call is absorbed.
-    let d = translate_wado_action(rule, &g.parser_rules, &" p.emit($ctx.toStringTree\n  (this)); ", false, &NO_BINDINGS).unwrap();
+    let d = translate_wado_action(rule, &g.parser_rules, &" p.emit($ctx.toStringTree\n  (this)); ", false, &NO_BINDINGS).unwrap(
+    );
     assert d == " p.emit(p.rule_string_tree()); ", `d: '{d}'`;
 }
 
@@ -172,7 +179,13 @@ test "translate maps $ctx.toStringTree in a left-recursive rule to the final-nod
     let g = parse("grammar T;
 e @after { p.emit($ctx.toStringTree()); } : e '+' e | INT ;
 ").unwrap();
-    let out = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" p.emit($ctx.toStringTree()); ", false, &NO_BINDINGS).unwrap();
+    let out = translate_wado_action(
+        &g.parser_rules[0],
+        &g.parser_rules,
+        &" p.emit($ctx.toStringTree()); ",
+        false,
+        &NO_BINDINGS,
+    ).unwrap();
     assert out == " p.emit(p.rule_string_tree_final()); ", `out: '{out}'`;
 }
 

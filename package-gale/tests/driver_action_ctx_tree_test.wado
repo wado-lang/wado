@@ -15,7 +15,9 @@ test "$ctx.toStringTree renders the open rule node" {
     let result = ct::parse(&"a b c");
     assert result.ok(), "clean parse of a b c";
     assert result.output == "(s (e a b c))", `output: '{result.output}'`;
-    assert result.output == ct::to_string_tree(&result), `render mismatch: '{result.output}' vs '{ct::to_string_tree(&result)}'`;
+    assert result.output == ct::to_string_tree(&result), `render mismatch: '{result.output}' vs '{ct::to_string_tree(
+        &result,
+    )}'`;
 }
 
 test "$ctx.toStringTree matches the finalized render on a recovered tree" {
@@ -25,5 +27,7 @@ test "$ctx.toStringTree matches the finalized render on a recovered tree" {
     let result = ct::parse(&"a c");
     assert !result.ok(), "missing 'b' is a recovered parse";
     assert result.output.contains("missing"), `expected a missing marker: '{result.output}'`;
-    assert result.output == ct::to_string_tree(&result), `render mismatch: '{result.output}' vs '{ct::to_string_tree(&result)}'`;
+    assert result.output == ct::to_string_tree(&result), `render mismatch: '{result.output}' vs '{ct::to_string_tree(
+        &result,
+    )}'`;
 }

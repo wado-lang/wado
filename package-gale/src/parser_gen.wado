@@ -3019,7 +3019,9 @@ fn gen_parse_fn_named(
     // construction instead of an N-way `if kind == TK_X` cascade. The scan
     // side already collapses these (`gen_scan_function_named`); the result is
     // far smaller and no slower than the cascade.
-    if all_alts_are_single_token(&rule.alternatives) && !rule_has_emittable_actions(rule, ctx) && !rule_emits_vals(ctx, rule) {
+    if all_alts_are_single_token(&rule.alternatives)
+        && !rule_has_emittable_actions(rule, ctx)
+        && !rule_emits_vals(ctx, rule) {
         gen_parse_fn_single_token(w, rule, ctx, fn_name);
         return;
     }
@@ -3810,7 +3812,13 @@ fn translate_action_or_warn(src: &ActionSource, ctx: &mut GenContext) -> Option<
         return null;
     }
     let vals_in_scope = rule_emits_vals(ctx, &ctx.parser_rules()[ridx]);
-    return match translate_wado_action(&ctx.parser_rules()[ridx], ctx.parser_rules(), &src.text, vals_in_scope, ctx.alt_bindings()) {
+    return match translate_wado_action(
+        &ctx.parser_rules()[ridx],
+        ctx.parser_rules(),
+        &src.text,
+        vals_in_scope,
+        ctx.alt_bindings(),
+    ) {
         Ok(code) => Option::Some(code),
         Err(msg) => {
             ctx.warn(&`action {src.action_id}`, DiagnosticKind::UnsupportedAction, msg);
@@ -7336,7 +7344,9 @@ fn gen_prediction_code_inner(
                                 if ctx.is_trace() {
                                     w.line(&`trace_pick(p, &{str_lit(*rule_display)}, {idx});`);
                                 }
-                                w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())}{alt_vals_arg(ctx)});`);
+                                w.line(
+                                    &`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())}{alt_vals_arg(ctx)});`,
+                                );
                                 w.end();
                             } else if has_scan {
                                 // Partial scan: try parse, fall through on failure.
