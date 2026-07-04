@@ -346,6 +346,19 @@ syntax which is not yet supported.
 
 #### `fn from_iter(iter: Self::Iter) -> Self`
 
+### `pub trait PushDisplay`
+
+Writes a `Display` value into a `String` in place, skipping the temporary
+`String` that a `` `{value}` `` template allocates before copying it in. The
+alloc-free counterpart to `buf.push_str(&`{value}`)` for a single value with
+no format spec — the hot path in the serde numeric encoders.
+
+A trait (not an inherent `impl String`, which the coherence rules forbid on a
+foreign type) and placed here, not in string.wado, so `String` stays a leaf
+that `Formatter` depends on — mirroring `impl Display for String` above.
+
+#### `fn push_display<T: Display>(&mut self, value: &T)`
+
 ### `pub trait Eq`
 
 Trait for equality comparisons.
@@ -3866,6 +3879,14 @@ Returns the total number of elements the list can hold without reallocating.
 #### `pub fn push(&mut self, value: T) with stores[value]`
 
 Appends a single element to the end.
+
+#### `pub fn push_within_capacity(&mut self, value: T) with stores[value]`
+
+Appends a single element assuming the capacity was already reserved
+(see `reserve`). Skips the grow check `push` performs on every call, so
+a burst of appends after one `reserve` pays a single capacity check
+instead of one per element. The Wasm array bounds check still guards the
+store, so an under-reserved call traps rather than corrupting memory.
 
 #### `pub fn pop(&mut self) -> Option<T>`
 
