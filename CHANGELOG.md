@@ -1,5 +1,60 @@
 # Changelog
 
+## [v0.0.9](https://github.com/wado-lang/wado/compare/v0.0.8...v0.0.9) - 2026-07-04
+
+- Rename kebab-case .wado files to snake_case by @gfx in https://github.com/wado-lang/wado/pull/1454
+- feat: registry dependency resolution and an OCI component example by @gfx in https://github.com/wado-lang/wado/pull/1457
+- refactor(optimize): consolidate NIR optimizer passes &amp; tree-walks; fix HFS destructure miscompile by @gfx in https://github.com/wado-lang/wado/pull/1458
+- feat(cm-catalog): async future/stream coverage + float future codegen by @gfx in https://github.com/wado-lang/wado/pull/1459
+- fix(type-checker): coerce compound/generic literal comparison operands by @gfx in https://github.com/wado-lang/wado/pull/1460
+- perf(gale): lower char-class lexer matches to br_table by @gfx in https://github.com/wado-lang/wado/pull/1461
+- chore(deps): WASI P3 0.3.0 is officially released 🎉 bump wasmtime to 46.0.1 by @gfx in https://github.com/wado-lang/wado/pull/1462
+- chore(cm-catalog): set up OCI publishing under the wado-lang namespace by @gfx in https://github.com/wado-lang/wado/pull/1463
+- feat: implement symbol visibility (internal / pub / export) by @gfx in https://github.com/wado-lang/wado/pull/1464
+- feat(compiler): implement internal visibility for struct fields by @gfx in https://github.com/wado-lang/wado/pull/1465
+- feat(manifest): human-facing package metadata, OCI publishing, and workspace lockstep by @gfx in https://github.com/wado-lang/wado/pull/1466
+- feat(cli): embed package metadata into compiled components by @gfx in https://github.com/wado-lang/wado/pull/1467
+- feat(cli): implement `wado publish` to build and push components via wkg by @gfx in https://github.com/wado-lang/wado/pull/1468
+- perf(compiler): canonical FuncId function identity; up to ~2× faster heavy compiles by @gfx in https://github.com/wado-lang/wado/pull/1469
+- feat(cm): future/stream record payloads and canonical-op synthesis migration by @gfx in https://github.com/wado-lang/wado/pull/1470
+- perf(optimize): multi-value POD returns, constant-index BCE, and fpfmt digit-count reuse by @gfx in https://github.com/wado-lang/wado/pull/1471
+- perf(optimizer): debox nested Result<Option<scalar>> return slots by @gfx in https://github.com/wado-lang/wado/pull/1476
+- feat: ATN-class grammar routing in Gale, plus `b"..."` byte-string literals by @gfx in https://github.com/wado-lang/wado/pull/1475
+- feat(manifest): publish to OCI and embed license-file text by @gfx in https://github.com/wado-lang/wado/pull/1479
+- perf(compiler): speed up -O3 NIR-engine passes on large functions by @gfx in https://github.com/wado-lang/wado/pull/1480
+- feat(cli): redesign wado test's output format by @gfx in https://github.com/wado-lang/wado/pull/1481
+- chore: cargo update by @gfx in https://github.com/wado-lang/wado/pull/1482
+- feat(traits): bound-driven Serialize/Deserialize/Eq/Ord synthesis by @gfx in https://github.com/wado-lang/wado/pull/1483
+- fix(compiler): treat `pub` as a liveness root, like `export` by @gfx in https://github.com/wado-lang/wado/pull/1484
+- perf(gale): column-oriented, width-matched ATN wire format by @gfx in https://github.com/wado-lang/wado/pull/1485
+- perf(optimizer): loop-versioned bounds-check elimination with array.fill idiom by @gfx in https://github.com/wado-lang/wado/pull/1487
+- fix: generic effect-handler impls, default type params, and anonymous-struct log fields by @gfx in https://github.com/wado-lang/wado/pull/1489
+- feat(compiler): bound-driven trait derivation — marker conformance checks and generic serde by @gfx in https://github.com/wado-lang/wado/pull/1488
+- feat(gale): retain grammar actions and predicates in the IR (Phase 1a) by @gfx in https://github.com/wado-lang/wado/pull/1491
+- chore: cargo update by @gfx in https://github.com/wado-lang/wado/pull/1493
+- docs: tighten comment and docs guidelines in AGENTS.md by @gfx in https://github.com/wado-lang/wado/pull/1494
+- perf(gale): route only context-dependent at-end conflicts through the ATN by @gfx in https://github.com/wado-lang/wado/pull/1492
+- refactor(nir): make value-graph CSE order-independent and drop the dormant e-graph machinery by @gfx in https://github.com/wado-lang/wado/pull/1495
+- chore(deps): drop unused wasmtime default features by @gfx in https://github.com/wado-lang/wado/pull/1496
+- feat(benchmark): restructure into four sections with JSON/CBOR ser/de by @gfx in https://github.com/wado-lang/wado/pull/1497
+- feat(traits): move Default and the format traits onto the on_bound derivation policy by @gfx in https://github.com/wado-lang/wado/pull/1499
+- feat(gale): Stage C — execute .g4 actions and semantic predicates (opt-in) by @gfx in https://github.com/wado-lang/wado/pull/1500
+- perf(optimizer): elide adjacent-use Box<T> payload-binding locals in WIR by @gfx in https://github.com/wado-lang/wado/pull/1498
+- feat(kiln)!: revise the generator options protocol (CBOR, optional Options) by @gfx in https://github.com/wado-lang/wado/pull/1502
+- perf(gale)!: flat event-stream CST (SSOT) by @gfx in https://github.com/wado-lang/wado/pull/1501
+- feat(gale): prediction-time gating of alt-initial semantic predicates by @gfx in https://github.com/wado-lang/wado/pull/1503
+- perf(cbor): non-allocating decode + generalize labeled-block fusion to `?` by @gfx in https://github.com/wado-lang/wado/pull/1504
+- feat(prelude): include the underlying value in Result unwrap/expect panics by @gfx in https://github.com/wado-lang/wado/pull/1505
+- fix(benchmark): order runtime graphs by latest run, retire legacy json/* series by @gfx in https://github.com/wado-lang/wado/pull/1506
+- feat(compiler): literal spread (`..base`) for struct, key-value, and anonymous literals by @gfx in https://github.com/wado-lang/wado/pull/1508
+- feat(gale): execute Wado actions and predicates by @gfx in https://github.com/wado-lang/wado/pull/1509
+- perf: faster serde serialization and fresh-match value-copy elision by @gfx in https://github.com/wado-lang/wado/pull/1510
+- docs(skill): replace profiling-wado with wado-performance by @gfx in https://github.com/wado-lang/wado/pull/1511
+- chore(release): publish Wado packages to GHCR on release by @gfx in https://github.com/wado-lang/wado/pull/1513
+- feat(gale): java2wado — execute Java action bodies by translating them to Wado by @gfx in https://github.com/wado-lang/wado/pull/1512
+- perf(json): speed up core:json serialize/deserialize on string-heavy data by @gfx in https://github.com/wado-lang/wado/pull/1514
+- feat(wit): emit the library world via `wado wit --lib` by @gfx in https://github.com/wado-lang/wado/pull/1515
+
 ## [v0.0.8](https://github.com/wado-lang/wado/compare/v0.0.7...v0.0.8) - 2026-06-27
 
 - feat(unused-diagnostics): suppress dead-code lint via #[allow(dead_code)] by @gfx in https://github.com/wado-lang/wado/pull/1336
