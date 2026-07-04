@@ -145,12 +145,6 @@ fn test_compile_file_arg_does_not_embed_metadata() {
 
 #[test]
 fn test_compile_lib_embeds_component_type_without_interface_collision() {
-    // A library whose exports reference a user-defined type groups them into a
-    // default interface named after the package. The library world is the
-    // component's anonymous root (emitted as `root`), so it must not share the
-    // package's `ns:name/name` slot with that interface — otherwise the WIT
-    // re-parse for the `component-type` embed fails and the section is silently
-    // dropped (regression for cm-catalog: `duplicate item named 'cm-catalog'`).
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path();
     std::fs::write(

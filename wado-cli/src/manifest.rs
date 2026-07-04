@@ -223,23 +223,11 @@ impl EntryPointKind {
     }
 }
 
-/// The reserved local name for a library's world in emitted WIT. A library
-/// component's top-level world is the component's *anonymous* root (a component
-/// type carries no world name; see `Binary.md` — `componenttype ::= 0x41
-/// vec(componentdecl)`). WIT text nonetheless requires a world name, so it is
-/// rendered as `root`, matching what `wasm-tools` synthesizes when decoding a
-/// component. Keeping it distinct from the default interface (named after
-/// `[package].name`) avoids the two sharing one `namespace:package/name` slot.
+/// The emitted name of a library's world — the component's anonymous root.
 pub const LIB_WORLD_NAME: &str = "root";
 
-/// A library FQ `namespace:name/<segment>@version` for `pkg`. Both the
-/// default-interface identity and the world-emit name derive from this, so the
-/// namespace requirement and the reserved-name guard live in one place.
-///
-/// The reserved-name guard compares case-insensitively: WIT kebab-cases both
-/// the world (`root`) and the default interface (`to_kebab([package].name)`),
-/// and kebab-casing lowercases, so `Root`/`ROOT` would collide with the world
-/// exactly as `root` does. Any name equal to `root` ignoring case is rejected.
+/// A library FQ `namespace:name/<segment>@version`, rejecting a package name
+/// that (case-insensitively) equals the reserved [`LIB_WORLD_NAME`].
 fn lib_fq(pkg: &wado_manifest::Package, segment: &str) -> Result<String, CliExit> {
     let namespace = pkg
         .namespace
@@ -265,10 +253,8 @@ pub fn lib_world_fq(pkg: &wado_manifest::Package) -> Result<String, CliExit> {
     lib_fq(pkg, &pkg.name)
 }
 
-/// The FQ used only to *name the world* when emitting a library's WIT: the
-/// package coordinate with the reserved [`LIB_WORLD_NAME`] world segment.
-/// Distinct from [`lib_world_fq`] (the default-interface identity) so the
-/// emitted `world root` and `interface <name>` never collide.
+/// The FQ that names the world when emitting a library's WIT, using the
+/// reserved [`LIB_WORLD_NAME`] segment instead of the default-interface name.
 pub fn lib_emit_world_fq(pkg: &wado_manifest::Package) -> Result<String, CliExit> {
     lib_fq(pkg, LIB_WORLD_NAME)
 }
@@ -621,8 +607,6 @@ lib = "src/lib.wado"
 "#;
         let m = toml.parse::<Manifest>().unwrap();
         let pkg = m.package.as_ref().unwrap();
-        // The world (emit) FQ and the default-interface FQ must differ, or the
-        // emitted `world` and `interface` collide in the same package slot.
         let world = lib_emit_world_fq(pkg).unwrap();
         let iface = lib_world_fq(pkg).unwrap();
         assert_eq!(world, "wado:cm-catalog-min/root@0.1.0");
@@ -632,9 +616,6 @@ lib = "src/lib.wado"
 
     #[test]
     fn lib_fq_rejects_reserved_root_package_name_any_case() {
-        // Both helpers reject a name that kebab-cases to the reserved world
-        // `root` — case-insensitively, since kebab-casing lowercases (`Root`
-        // and `root` both collide with `world root`).
         for name in ["root", "Root", "ROOT"] {
             let toml = format!(
                 "[package]\nnamespace = \"wado\"\nname = \"{name}\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n"
