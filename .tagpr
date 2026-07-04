@@ -31,17 +31,22 @@
 	#                  flipping draft=false).
 	release = draft
 
-	# tagpr has no native Cargo.toml handler but its generic version-file
-	# regex is line-anchored, matching `version = "..."` only at the start
-	# of a line. Both files carry exactly one such line — the
-	# [workspace.package].version:
-	#   - Cargo.toml: member crates inherit via `version = { workspace = true }`,
-	#     and the `version = "..."` entries in [workspace.dependencies] inline
-	#     tables are not line-anchored.
-	#   - wado.toml: only [workspace.package] has a line-anchored version;
-	#     [registries] and member entries have none.
-	# Both are listed so the CLI crate and the published Wado packages
+	# Both files are listed so the CLI crate and the published Wado packages
 	# (which read their version from wado.toml) always bump in lockstep.
+	#
+	# How tagpr bumps multiple files (see Songmu/tagpr versionfile.go): it reads
+	# the *current* version from the FIRST file only (Cargo.toml), then in each
+	# listed file replaces that literal version string's first occurrence with
+	# the next version. It does not rewrite `version = "..."` lines by position,
+	# so the invariant is: both files must already hold the same version, and it
+	# must be each file's first `MAJOR.MINOR.PATCH` occurrence. That holds here —
+	#   - Cargo.toml: [workspace.package].version is first; member crates inherit
+	#     via `version = { workspace = true }`, and [workspace.dependencies] pins
+	#     (`=0.133.1`, `=46.0.1`) never equal the workspace version.
+	#   - wado.toml: [workspace.package].version is the only semver; [registries]
+	#     and member entries have none.
+	# tagpr writes the same next version to both, so once aligned they cannot
+	# drift under normal operation.
 	versionFile = Cargo.toml,wado.toml
 
 	# After tagpr writes the new version, sync Cargo.lock so the release PR
