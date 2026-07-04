@@ -3751,35 +3751,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let all_map = base_info.iter().all(|(m, _)| *m);
         let expected_is_map = expected_type
             .is_some_and(|t| self.type_implements_trait(&self.annotate_ctx, t, "KeyValueLiteral"));
-        // A pure key-value merge with a map-typed target is the one valid spread
-        // that is not a composition. A base that already errored is skipped to
-        // avoid a cascading diagnostic.
+        // A pure key-value merge with a map-typed target is the only valid
+        // non-composition spread.
         let is_kv_merge = has_spread && all_map && expected_is_map;
+        // A single spread with no other members deep-copies `base` (a multi-spread
+        // composition of distinct bases does not).
+        let is_copy = struct_lit.spreads.len() == 1 && struct_lit.fields.is_empty();
+        // A base that already errored is skipped, to avoid a cascading diagnostic.
         let base_errored = spread_base_types
             .iter()
             .any(|&t| t == TypeTable::ERROR || t == TypeTable::UNKNOWN);
 
-        // A single spread with no other members is a deep copy of `base` (a
-        // multi-spread composition of distinct bases is not, so only reject one);
-        // otherwise the only valid non-composition spread is a key-value merge.
-        // Skip both when a base already errored, to avoid a cascading diagnostic.
-        let is_copy = struct_lit.spreads.len() == 1 && struct_lit.fields.is_empty();
-        if base_errored {
-        } else if is_copy {
-            let _ = self.logger.error(TypeError::InvalidLiteral {
-                message: "`{ ..base }` with no other members just copies `base`; \
-                          use `base` directly"
-                    .to_string(),
-                span: struct_lit.spreads[0].span,
-            });
-        } else if has_spread && !compose_union && !is_kv_merge {
-            let _ = self.logger.error(TypeError::InvalidLiteral {
-                message: "a `..base` spread must be a struct value (composition) or a \
-                          key-value map with a map-typed target; a non-struct base or a \
-                          mix of struct and map spreads is not allowed"
-                    .to_string(),
-                span: struct_lit.spreads[0].span,
-            });
+        if !base_errored {
+            if is_copy {
+                let _ = self.logger.error(TypeError::InvalidLiteral {
+                    message: "`{ ..base }` with no other members just copies `base`; \
+                              use `base` directly"
+                        .to_string(),
+                    span: struct_lit.spreads[0].span,
+                });
+            } else if has_spread && !compose_union && !is_kv_merge {
+                let _ = self.logger.error(TypeError::InvalidLiteral {
+                    message: "a `..base` spread must be a struct value (composition) or a \
+                              key-value map with a map-typed target; a non-struct base or a \
+                              mix of struct and map spreads is not allowed"
+                        .to_string(),
+                    span: struct_lit.spreads[0].span,
+                });
+            }
         }
 
         let mut resolved_fields: Vec<TirStructField> = Vec::new();

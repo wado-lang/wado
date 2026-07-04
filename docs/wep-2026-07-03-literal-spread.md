@@ -57,46 +57,6 @@ explicit member. In an anonymous literal, spreads may differ and drive the union
 Field reads via a spread obey the same read-reachability as `base.f`, so `..base`
 cannot pull a private field across a module boundary.
 
-## Implementation
-
-Named and anonymous struct literals and key-value literals share the
-`StructLiteralExpr` AST node; the elaborator already dispatches between them, so
-the syntax and AST change once.
-
-- `ast.rs` / `parser.rs` — accept `..expr` members in the literal; record them on
-  `StructLiteralExpr`.
-- `elaborator` — apply the dead-write check; for nominal literals resolve/typecheck
-  each `..base` against the literal type and fill shadowed-complement fields from
-  it; for anonymous literals synthesize the union struct type from the spread
-  sources' field sets; evaluate `base` once (temporary when non-trivial).
-- `reify` — struct path emits a plain `StructLiteral` (fields filled from
-  `base.f`); key-value path emits the existing builder block plus a new
-  `insert_all(base)` per spread. `KeyValueLiteralBuilder` gains
-  `fn insert_all(&mut self, base: Self::Output)`, implemented for `TreeMap`.
-- `unparse.rs` / `syntax.rs` — format and highlight `..base`; regenerate the VS
-  Code grammar and formatter fixtures.
-
-Downstream (monomorphize → codegen) is unchanged: both paths lower to shapes the
-compiler already produces.
-
-Phasing: named-struct FRU and key-value merge land first; anonymous composition
-(union synthesis) is additive under the same rule and can follow, without
-changing the semantics of the first two.
-
-- [x] Named-struct FRU (`S { ..base, overrides… }`): leading-single spread,
-      field projection, once-evaluated base, generic inference from base, and the
-      cross-module read-reachability guard.
-- [x] Key-value merge (`{ ..base, "k": v }`): `KeyValueLiteralBuilder::insert_all`
-      seeds the builder with each spread before the following inserts, so later
-      members override. Any position and multiple spreads are allowed.
-- [x] Anonymous composition (`{ ..a, ..b, field: v }`): the anonymous struct type
-      is the union of the spread bases' and explicit fields (source order,
-      last-wins on collision), synthesized and auto-`Serialize`d like any
-      anonymous struct. The parser accepts spreads in any position / multiple; the
-      dead-write rule and named-struct leading-single restriction are applied
-      semantically. Generic-instance bases are supported (field types are
-      substituted with the instance's type arguments).
-
 ## Consequences
 
 - One rule (last-wins + dead-write) covers structs, anonymous composition, and
@@ -105,5 +65,4 @@ changing the semantics of the first two.
   clobbered" footgun becomes a compile error where it is decidable.
 - Anonymous `{ ..a, ..b }` gives typed structural composition — a Wado-specific
   capability enabled by anonymous structs plus bound-driven derivation.
-- Diverges from Rust FRU (position and precedence differ); the key-value path
-  costs one library method; no IR or codegen changes.
+- Diverges from Rust FRU: position and precedence differ.
