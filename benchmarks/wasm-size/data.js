@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783144345114,
+  "lastUpdate": 1783148918984,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -37897,6 +37897,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/118285d0457c22c8f6c1e11a337ac2ed201d5d68"
         },
         "date": 1783144344693,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8446,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17049,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 284954,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f29d49297d1095b6f2bcd215029454f5f8189341",
+          "message": "Merge pull request #1511 from wado-lang/claude/wado-performance-skill\n\ndocs(skill): replace profiling-wado with wado-performance",
+          "timestamp": "2026-07-04T15:59:57+09:00",
+          "tree_id": "50edc4d55a433524031f50915376199f1419f7a5",
+          "url": "https://github.com/wado-lang/wado/commit/f29d49297d1095b6f2bcd215029454f5f8189341"
+        },
+        "date": 1783148918287,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
