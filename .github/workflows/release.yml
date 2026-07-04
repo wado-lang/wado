@@ -42,8 +42,6 @@ jobs:
         shell: bash
         run: |
           version="${{ steps.v.outputs.version }}"
-          # tagpr bumps [workspace.package].version in both files in lockstep
-          # (see .tagpr); each has exactly one line-anchored `version = "..."`.
           file_version() {
             grep -m1 -E '^version[[:space:]]*=' "$1" \
               | sed -E 's/^version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/'
@@ -177,15 +175,12 @@ jobs:
             dist/wado-*.zip
             dist/SHA256SUMS.txt
 
-  # Publish the workspace's Wado packages (cm-catalog, gale) to GHCR as OCI
-  # artifacts at the tagged version. Gated on `build` so packages ship only
-  # when the release binaries are sound.
   publish:
     needs: [validate, build]
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write   # push OCI artifacts to ghcr.io/wado-lang
+      packages: write
     steps:
       - uses: actions/checkout@v6
         with:
@@ -198,14 +193,10 @@ jobs:
         with:
           key: release-publish
 
-      # wkg (wasm-pkg-tools) is the OCI push backend `wado publish` shells out
-      # to. cargo-binstall fetches its prebuilt binary instead of compiling it.
       - uses: cargo-bins/cargo-binstall@main
       - name: Install wkg
         run: cargo binstall --no-confirm wkg
 
-      # `wado publish` authenticates through the ambient OCI credential store;
-      # docker/login-action writes the GITHUB_TOKEN into it for ghcr.io.
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
