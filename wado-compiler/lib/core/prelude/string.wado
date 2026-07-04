@@ -315,7 +315,7 @@ impl String {
     /// - `0 <= start <= end <= s.len()`.
     /// - `start` and `end` must lie on UTF-8 character boundaries of `s`.
     /// - The resulting byte sequence must remain valid UTF-8.
-    pub fn push_str_range_unchecked(&mut self, s: String, start: i32, end: i32) {
+    pub fn push_str_range_unchecked(&mut self, s: &String, start: i32, end: i32) {
         let n = end - start;
         if n <= 0 {
             return;
@@ -326,6 +326,24 @@ impl String {
             self.grow(new_used);
         }
         builtin::array_copy(&mut self.repr, self.used, &s.internal_raw_bytes(), start, n);
+        self.used = new_used;
+    }
+
+    /// Append the bytes of `bytes` to this string in one bulk `array_copy`.
+    ///
+    /// # Safety (caller-side preconditions)
+    /// - The resulting byte sequence must remain valid UTF-8.
+    pub fn push_byte_slice_unchecked(&mut self, bytes: ByteSlice) {
+        let n = bytes.len();
+        if n == 0 {
+            return;
+        }
+        let new_used = self.used + n;
+        if new_used > builtin::array_len(&self.repr) {
+            builtin::cold_path();
+            self.grow(new_used);
+        }
+        builtin::array_copy(&mut self.repr, self.used, bytes.internal_repr(), bytes.internal_start(), n);
         self.used = new_used;
     }
 }
@@ -1220,17 +1238,29 @@ impl String {
     /// codepoint-by-codepoint rebuild whenever the bytes already live in one
     /// buffer (e.g. a JSON string token sliced out of the borrowed input).
     pub fn from_utf8_slice(bytes: ByteSlice) -> Result<String, String> {
+        if !String::is_valid_utf8(bytes) {
+            builtin::cold_path();
+            return Result::Err("invalid UTF-8");
+        }
+        return Result::Ok(String::internal_from_utf8_raw(bytes.to_array(), bytes.len()));
+    }
+
+    /// Whether `bytes` is well-formed UTF-8, in one forward `decode_utf8_scalar`
+    /// pass. Splits validation from the copy so callers that already own a
+    /// buffer can validate in place (e.g. the JSON deserializer appending a
+    /// scanned run straight into its result).
+    pub fn is_valid_utf8(bytes: ByteSlice) -> bool {
         let len = bytes.len();
         let mut i = 0;
         while i < len {
             let scalar = decode_utf8_scalar(bytes, i, len);
             if !scalar.valid {
                 builtin::cold_path();
-                return Result::Err("invalid UTF-8");
+                return false;
             }
             i += scalar.advance;
         }
-        return Result::Ok(String::internal_from_utf8_raw(bytes.to_array(), len));
+        return true;
     }
 
     /// Build a String from any iterable of bytes, replacing invalid UTF-8 sequences with U+FFFD.

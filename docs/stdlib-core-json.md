@@ -23,6 +23,9 @@ indented and the deterministic (sorted-key) forms.
 
 Writes a JSON-escaped string (with surrounding quotes) into buf.
 
+Only `"`, `\`, and controls (< 0x20) are escaped — all ASCII — so unescaped
+runs (including any multi-byte UTF-8) bulk-copy instead of re-encoding.
+
 ### `pub fn to_string<T: Serialize>(value: &T) -> Result<String, SerializeError>`
 
 Serializes a value to a JSON string. Convenience over `to_bytes` for text

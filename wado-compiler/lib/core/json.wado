@@ -57,25 +57,33 @@ fn write_base64_string(buf: &mut String, v: ByteSlice) {
 }
 
 /// Writes a JSON-escaped string (with surrounding quotes) into buf.
+///
+/// Only `"`, `\`, and controls (< 0x20) are escaped — all ASCII — so unescaped
+/// runs (including any multi-byte UTF-8) bulk-copy instead of re-encoding.
 pub fn write_escaped_string(buf: &mut String, s: &String) {
     buf.push('"');
-    for let c of s.chars() {
-        match c {
-            '"' => buf.push_str(&"\\\""),
-            '\\' => buf.push_str(&"\\\\"),
-            '\n' => buf.push_str(&"\\n"),
-            '\r' => buf.push_str(&"\\r"),
-            '\t' => buf.push_str(&"\\t"),
+    let n = s.len();
+    let mut run_start = 0;
+    for let mut i = 0; i < n; i += 1 {
+        let b = s.get_byte_unchecked(i);
+        if b >= 0x20 && b != 0x22 && b != 0x5C {
+            continue;
+        }
+        buf.push_str_range_unchecked(s, run_start, i);
+        match b {
+            0x22 => buf.push_str(&"\\\""),
+            0x5C => buf.push_str(&"\\\\"),
+            0x0A => buf.push_str(&"\\n"),
+            0x0D => buf.push_str(&"\\r"),
+            0x09 => buf.push_str(&"\\t"),
             _ => {
-                if c as u32 >= 0x20 {
-                    buf.push(c);
-                } else {
-                    let code = c as i32;
-                    buf.push_str(&`\\u{code:04x}`);
-                }
+                let code = b as i32;
+                buf.push_str(&`\\u{code:04x}`);
             },
         }
+        run_start = i + 1;
     }
+    buf.push_str_range_unchecked(s, run_start, n);
     buf.push('"');
 }
 
@@ -826,6 +834,15 @@ fn parse_u64_from(raw: &String, start: i64) -> Result<u64, DeserializeError> {
     };
 }
 
+/// Result of scanning a JSON string run up to the next `"` or `\`. `high_bits`
+/// ORs every byte of `[from, end)`, so `high_bits < 0x80` proves the run is pure
+/// ASCII; `at_escape` is true when the stop was a `\` (rather than `"` or EOF).
+struct StringRunScan {
+    end: i32,
+    high_bits: i32,
+    at_escape: bool,
+}
+
 impl JsonDeserializer {
     pub fn peek(&self) -> i32 {
         if self.pos >= self.input.len() {
@@ -891,6 +908,50 @@ impl JsonDeserializer {
         return DeserializeError::malformed("invalid UTF-8 in string", start as i64);
     }
 
+    /// Scan `input` from `from` up to the next `"` or `\` (or EOF), OR-ing every
+    /// byte into `high_bits`. Does not move `self.pos`; the caller advances.
+    fn scan_string_run(&self, from: i32) -> StringRunScan {
+        let len = self.input.len();
+        let mut pos = from;
+        let mut high_bits = 0;
+        while pos < len {
+            let b = self.input.get_unchecked(pos) as i32;
+            if b == '"' as i32 || b == '\\' as i32 {
+                break;
+            }
+            high_bits |= b;
+            pos += 1;
+        }
+        let at_escape = pos < len && self.input.get_unchecked(pos) as i32 == '\\' as i32;
+        return StringRunScan { end: pos, high_bits, at_escape };
+    }
+
+    /// Append `input[start..end)` to `dst` in a single copy, validating UTF-8
+    /// unless `all_ascii`. Invariant: `all_ascii` holds only when every byte in
+    /// the range is `< 0x80` (valid UTF-8 by construction); a malformed sequence
+    /// always has a byte `>= 0x80`, so it never bypasses validation.
+    fn append_scanned_run(
+        &self,
+        dst: &mut String,
+        start: i32,
+        end: i32,
+        all_ascii: bool,
+    ) -> Result<(), DeserializeError> {
+        let slice = self.input.slice(start, end);
+        if !all_ascii && !String::is_valid_utf8(slice) {
+            return Result::Err(self.invalid_utf8_string(start));
+        }
+        dst.push_byte_slice_unchecked(slice);
+        return Result::Ok(());
+    }
+
+    /// `append_scanned_run` into a fresh, exactly-sized `String`.
+    fn take_scanned_run(&self, start: i32, end: i32, all_ascii: bool) -> Result<String, DeserializeError> {
+        let mut s = String::with_capacity(end - start);
+        self.append_scanned_run(&mut s, start, end, all_ascii)?;
+        return Result::Ok(s);
+    }
+
     pub fn read_json_string(&mut self) -> Result<String, DeserializeError> {
         self.skip_whitespace();
         let input_len = self.input.len();
@@ -907,28 +968,14 @@ impl JsonDeserializer {
         }
         self.pos += 1;
 
-        // Scan ahead to the end of the escape-free prefix so it can be built
-        // in one exactly-sized allocation.
         let prefix_start = self.pos;
-        let mut scan_pos = self.pos;
-        while scan_pos < input_len {
-            let sb = self.input.get_unchecked(scan_pos) as i32;
-            if sb == '"' as i32 || sb == '\\' as i32 {
-                break;
-            }
-            scan_pos += 1;
-        }
+        let prefix = self.scan_string_run(prefix_start);
 
-        // Fast path: no escapes. The token is `input[prefix_start..scan_pos)`;
+        // Fast path: no escapes. The token is `input[prefix_start..prefix.end)`;
         // only string *content* can be multi-byte — JSON structure is ASCII.
-        if scan_pos < input_len && self.input.get_unchecked(scan_pos) as i32 == '"' as i32 {
-            let result = match String::from_utf8_slice(self.input.slice(prefix_start, scan_pos)) {
-                Ok(s) => s,
-                Err(_) => {
-                    return Result::Err(self.invalid_utf8_string(prefix_start));
-                },
-            };
-            self.pos = scan_pos + 1;
+        if prefix.end < input_len && !prefix.at_escape {
+            let result = self.take_scanned_run(prefix_start, prefix.end, prefix.high_bits < 0x80)?;
+            self.pos = prefix.end + 1;
             return Result::Ok(result);
         }
 
@@ -938,36 +985,17 @@ impl JsonDeserializer {
         // likely-taken and lets the engine lay this path out of line. Build the
         // escape-free prefix, then handle escapes.
         builtin::cold_path();
-        let mut result = match String::from_utf8_slice(self.input.slice(prefix_start, scan_pos)) {
-            Ok(s) => s,
-            Err(_) => {
-                return Result::Err(self.invalid_utf8_string(prefix_start));
-            },
-        };
-        self.pos = scan_pos;
+        let mut result = self.take_scanned_run(prefix_start, prefix.end, prefix.high_bits < 0x80)?;
+        self.pos = prefix.end;
 
         loop {
-            // Scan to the next terminator or escape. The bytes between escapes
-            // form one contiguous run that is validated and copied in a single
-            // pass below (the `"` / `\` delimiters are ASCII, so a multi-byte
-            // sequence never straddles a chunk boundary).
+            // Each run between escapes is appended in a single copy; the `"` / `\`
+            // delimiters are ASCII, so a multi-byte sequence never straddles a
+            // chunk boundary.
             let chunk_start = self.pos;
-            while self.pos < self.input.len() {
-                let b = self.input.get_unchecked(self.pos) as i32;
-                if b == '"' as i32 || b == '\\' as i32 {
-                    break;
-                }
-                self.pos += 1;
-            }
-            if self.pos > chunk_start {
-                let chunk = match String::from_utf8_slice(self.input.slice(chunk_start, self.pos)) {
-                    Ok(s) => s,
-                    Err(_) => {
-                        return Result::Err(self.invalid_utf8_string(chunk_start));
-                    },
-                };
-                result.push_str(&chunk);
-            }
+            let chunk = self.scan_string_run(chunk_start);
+            self.pos = chunk.end;
+            self.append_scanned_run(&mut result, chunk_start, chunk.end, chunk.high_bits < 0x80)?;
 
             if self.pos >= self.input.len() {
                 builtin::cold_path();
@@ -1105,13 +1133,8 @@ impl JsonDeserializer {
         }
         self.skip_number();
         // A number token is ASCII (digits, sign, '.', 'e'/'E'), so it is valid
-        // UTF-8 by construction. Build it in one bulk copy and skip the UTF-8
-        // validation that `from_utf8_slice` would do — number-heavy input makes
-        // that validation a measurable cost.
-        return Result::Ok(String::internal_from_utf8_raw(
-            self.input.slice(start, self.pos).to_array(),
-            self.pos - start,
-        ));
+        // UTF-8 by construction — copy it in one pass, no validation.
+        return self.take_scanned_run(start, self.pos, true);
     }
 
     /// Advances past a JSON number in `self.input` without allocating a String.
@@ -1691,20 +1714,10 @@ impl DeserializeStruct for JsonStructAccess {
         }
         self.de.pos += 1;
         let key_start = self.de.pos;
-        let mut has_escape = false;
-        while self.de.pos < self.de.input.len() {
-            let b = self.de.input.get_unchecked(self.de.pos) as i32;
-            if b == '"' as i32 {
-                break;
-            }
-            if b == '\\' as i32 {
-                has_escape = true;
-                break;
-            }
-            self.de.pos += 1;
-        }
+        let scan = self.de.scan_string_run(key_start);
+        self.de.pos = scan.end;
 
-        if !has_escape {
+        if !scan.at_escape {
             // Fast path: key has no escapes, compare directly from input buffer
             let key_end = self.de.pos;
             self.de.pos += 1;  // skip closing '"'
