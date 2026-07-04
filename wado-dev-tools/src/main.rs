@@ -1,4 +1,3 @@
-mod bump_version;
 mod compiler_host;
 mod data_section;
 mod format_md;
@@ -14,15 +13,14 @@ fn main() {
         Some(Value(v)) => v.to_string_lossy().into_owned(),
         Some(other) => panic!(
             "expected subcommand as first argument, got {other:?} \
-             (commands: golden-dump, wasm2wat, format-md, bump-version)"
+             (commands: golden-dump, wasm2wat, format-md)"
         ),
-        None => panic!("command is required (golden-dump, wasm2wat, format-md, bump-version)"),
+        None => panic!("command is required (golden-dump, wasm2wat, format-md)"),
     };
     match cmd.as_str() {
         "golden-dump" => golden_dump(parser),
         "wasm2wat" => wasm2wat(parser),
         "format-md" => format_md::run(parser),
-        "bump-version" => bump_version::run(parser),
         other => panic!("unknown command: {other}"),
     }
 }

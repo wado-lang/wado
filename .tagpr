@@ -33,12 +33,16 @@
 
 	# tagpr has no native Cargo.toml handler but its generic version-file
 	# regex is line-anchored, matching `version = "..."` only at the start
-	# of a line. Our root Cargo.toml has exactly one such line — the
-	# [workspace.package].version — because every member crate inherits its
-	# version from the workspace via `version = { workspace = true }`. The
-	# `version = "..."` entries inside [workspace.dependencies] inline tables
-	# are not at the start of a line, so the bump is unambiguous.
-	versionFile = Cargo.toml
+	# of a line. Both files carry exactly one such line — the
+	# [workspace.package].version:
+	#   - Cargo.toml: member crates inherit via `version = { workspace = true }`,
+	#     and the `version = "..."` entries in [workspace.dependencies] inline
+	#     tables are not line-anchored.
+	#   - wado.toml: only [workspace.package] has a line-anchored version;
+	#     [registries] and member entries have none.
+	# Both are listed so the CLI crate and the published Wado packages
+	# (which read their version from wado.toml) always bump in lockstep.
+	versionFile = Cargo.toml,wado.toml
 
 	# After tagpr writes the new version, sync Cargo.lock so the release PR
 	# is in a buildable state. Must be `postVersionCommand`, not `command`:

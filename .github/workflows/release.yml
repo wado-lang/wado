@@ -30,9 +30,6 @@ jobs:
           # source, not main.
           ref: ${{ inputs.tag || github.ref }}
 
-      - name: Check out the vendored wasmtime fork (path dependency)
-        run: git submodule update --init --depth 1 vendor/wasmtime
-
       - name: Determine version from tag
         id: v
         shell: bash
@@ -41,10 +38,22 @@ jobs:
           echo "tag=$tag"         >> "$GITHUB_OUTPUT"
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Verify Cargo.toml version matches tag
+      - name: Verify Cargo.toml and wado.toml versions match the tag
+        shell: bash
         run: |
-          cargo run --quiet --bin wado-dev-tools -- \
-            bump-version --check "${{ steps.v.outputs.version }}"
+          version="${{ steps.v.outputs.version }}"
+          # tagpr bumps [workspace.package].version in both files in lockstep
+          # (see .tagpr); each has exactly one line-anchored `version = "..."`.
+          file_version() {
+            grep -m1 -E '^version[[:space:]]*=' "$1" \
+              | sed -E 's/^version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/'
+          }
+          cargo_v="$(file_version Cargo.toml)"
+          wado_v="$(file_version wado.toml)"
+          fail=0
+          [ "$cargo_v" = "$version" ] || { echo "::error::Cargo.toml version $cargo_v != tag $version"; fail=1; }
+          [ "$wado_v"  = "$version" ] || { echo "::error::wado.toml version $wado_v != tag $version"; fail=1; }
+          exit $fail
 
   build:
     needs: validate
@@ -167,3 +176,42 @@ jobs:
             dist/wado-*.tar.gz
             dist/wado-*.zip
             dist/SHA256SUMS.txt
+
+  # Publish the workspace's Wado packages (cm-catalog, gale) to GHCR as OCI
+  # artifacts at the tagged version. Gated on `build` so packages ship only
+  # when the release binaries are sound.
+  publish:
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # push OCI artifacts to ghcr.io/wado-lang
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+
+      - name: Check out the vendored wasmtime fork (path dependency)
+        run: git submodule update --init --depth 1 vendor/wasmtime
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-publish
+
+      # wkg (wasm-pkg-tools) is the OCI push backend `wado publish` shells out
+      # to. cargo-binstall fetches its prebuilt binary instead of compiling it.
+      - uses: cargo-bins/cargo-binstall@main
+      - name: Install wkg
+        run: cargo binstall --no-confirm wkg
+
+      # `wado publish` authenticates through the ambient OCI credential store;
+      # docker/login-action writes the GITHUB_TOKEN into it for ghcr.io.
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish Wado packages
+        run: cargo run --locked -p wado-cli -- publish
