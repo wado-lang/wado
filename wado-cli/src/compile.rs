@@ -1029,7 +1029,7 @@ async fn embed_wit_section(
         return Ok(wasm);
     };
 
-    let world = if opts.lib_world.is_some() {
+    let (world, default_interface) = if opts.lib_world.is_some() {
         let Some(pkg) = project.and_then(|p| p.manifest.package.as_ref()) else {
             let msg = "--lib build has no resolvable [package] to name the library world";
             if explicit {
@@ -1038,9 +1038,12 @@ async fn embed_wit_section(
             eprintln!("warning: skipped embedding WIT component-type section: {msg}");
             return Ok(wasm);
         };
-        crate::manifest::lib_emit_world_fq(pkg)?
+        crate::manifest::lib_emit_target(pkg)?
     } else {
-        opts.target_world_fq().to_string()
+        (
+            opts.target_world_fq().to_string(),
+            crate::wit::default_interface_name(input),
+        )
     };
 
     let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
@@ -1071,7 +1074,7 @@ async fn embed_wit_section(
     let emit_opts = WitEmitOptions {
         scope: WitScope::Full,
         world_fq: world,
-        default_interface_name: crate::wit::default_interface_name(input),
+        default_interface_name: default_interface,
         world_imports,
     };
 

@@ -259,7 +259,28 @@ pub fn lib_emit_world_fq(pkg: &wado_manifest::Package) -> Result<String, CliExit
     lib_fq(pkg, LIB_WORLD_NAME)
 }
 
-/// Resolve the `--lib` package: its `ProjectManifest` and entry-point path.
+/// The `(world-emit FQ, default-interface name)` pair for emitting a library's
+/// WIT — the single source both `wado wit --lib` and the `wado compile --lib`
+/// embed path derive their `WitEmitOptions` from, so the text and the embedded
+/// `component-type` cannot disagree.
+pub fn lib_emit_target(pkg: &wado_manifest::Package) -> Result<(String, String), CliExit> {
+    Ok((lib_emit_world_fq(pkg)?, pkg.name.clone()))
+}
+
+/// A resolved `--lib` package: everything needed to build and emit its world.
+pub struct LibTarget {
+    /// Entry-point source path (`[package].lib`).
+    pub entry: PathBuf,
+    /// Default-interface FQ `namespace:name/name@version` — the codegen key and
+    /// the identity consumers import.
+    pub interface_fq: String,
+    /// The emitted world-name FQ `namespace:name/root@version`.
+    pub world_emit_fq: String,
+    /// Default interface name (`[package].name`).
+    pub default_interface: String,
+}
+
+/// Resolve the `--lib` package: its `ProjectManifest` and [`LibTarget`].
 ///
 /// `--lib` requires a manifest (directory input or a `wado.toml` discovered
 /// from the cwd); a bare `.wado` file argument is rejected because the package
@@ -268,7 +289,7 @@ pub fn lib_emit_world_fq(pkg: &wado_manifest::Package) -> Result<String, CliExit
 pub fn resolve_lib_project(
     explicit_input: Option<String>,
     usage: &str,
-) -> Result<(ProjectManifest, PathBuf), CliExit> {
+) -> Result<(ProjectManifest, LibTarget), CliExit> {
     let project = if let Some(input) = explicit_input {
         let path = Path::new(&input);
         if !path.is_dir() {
@@ -299,33 +320,38 @@ pub fn resolve_lib_project(
     };
     emit_manifest_warnings(&project);
 
-    let lib_rel = project
-        .manifest
-        .package
-        .as_ref()
-        .ok_or_else(|| CliExit::error("`--lib` requires a `[package]` section in wado.toml"))?
-        .lib
-        .as_deref()
-        .ok_or_else(|| CliExit::error("`--lib` requires `[package].lib` in wado.toml"))?;
-    let entry = project.root.join(lib_rel);
-    Ok((project, entry))
-}
-
-/// Resolve the `--lib` entry point and default-interface FQ.
-///
-/// Returns `(entry_path, world_fq)`.
-pub fn resolve_lib_input(
-    explicit_input: Option<String>,
-    usage: &str,
-) -> Result<(String, String), CliExit> {
-    let (project, entry) = resolve_lib_project(explicit_input, usage)?;
     let pkg = project
         .manifest
         .package
         .as_ref()
-        .expect("resolve_lib_project guarantees a [package]");
-    let world_fq = lib_world_fq(pkg)?;
-    Ok((entry.to_string_lossy().into_owned(), world_fq))
+        .ok_or_else(|| CliExit::error("`--lib` requires a `[package]` section in wado.toml"))?;
+    let (world_emit_fq, default_interface) = lib_emit_target(pkg)?;
+    let interface_fq = lib_world_fq(pkg)?;
+    let lib_rel = pkg
+        .lib
+        .as_deref()
+        .ok_or_else(|| CliExit::error("`--lib` requires `[package].lib` in wado.toml"))?;
+    let target = LibTarget {
+        entry: project.root.join(lib_rel),
+        interface_fq,
+        world_emit_fq,
+        default_interface,
+    };
+    Ok((project, target))
+}
+
+/// Resolve the `--lib` entry point and default-interface FQ.
+///
+/// Returns `(entry_path, interface_fq)`.
+pub fn resolve_lib_input(
+    explicit_input: Option<String>,
+    usage: &str,
+) -> Result<(String, String), CliExit> {
+    let (_, target) = resolve_lib_project(explicit_input, usage)?;
+    Ok((
+        target.entry.to_string_lossy().into_owned(),
+        target.interface_fq,
+    ))
 }
 
 /// Resolve an entry point path from a manifest.
