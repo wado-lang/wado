@@ -57,24 +57,38 @@ fn write_base64_string(buf: &mut String, v: ByteSlice) {
 }
 
 /// Writes a JSON-escaped string (with surrounding quotes) into buf.
+///
+/// Bytes that need no escaping — everything `>= 0x20` except `"` and `\`, which
+/// includes every UTF-8 continuation/lead byte — are copied in bulk runs via a
+/// single `array_copy` per run, so multi-byte characters and long unescaped
+/// spans never pay a per-`char` decode/re-encode.
 pub fn write_escaped_string(buf: &mut String, s: &String) {
     buf.push('"');
-    for let c of s.chars() {
-        match c {
-            '"' => buf.push_str(&"\\\""),
-            '\\' => buf.push_str(&"\\\\"),
-            '\n' => buf.push_str(&"\\n"),
-            '\r' => buf.push_str(&"\\r"),
-            '\t' => buf.push_str(&"\\t"),
+    let n = s.len();
+    let mut run_start = 0;
+    for let mut i = 0; i < n; i += 1 {
+        let b = s.get_byte_unchecked(i);
+        if b >= 0x20 && b != 0x22 && b != 0x5C {
+            continue;
+        }
+        if i > run_start {
+            buf.push_str_range_unchecked(s, run_start, i);
+        }
+        match b {
+            0x22 => buf.push_str(&"\\\""),
+            0x5C => buf.push_str(&"\\\\"),
+            0x0A => buf.push_str(&"\\n"),
+            0x0D => buf.push_str(&"\\r"),
+            0x09 => buf.push_str(&"\\t"),
             _ => {
-                if c as u32 >= 0x20 {
-                    buf.push(c);
-                } else {
-                    let code = c as i32;
-                    buf.push_str(&`\\u{code:04x}`);
-                }
+                let code = b as i32;
+                buf.push_str(&`\\u{code:04x}`);
             },
         }
+        run_start = i + 1;
+    }
+    if n > run_start {
+        buf.push_str_range_unchecked(s, run_start, n);
     }
     buf.push('"');
 }

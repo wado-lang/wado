@@ -270,6 +270,21 @@ test "write_escaped_string helper" {
     buf = "";
     write_escaped_string(&mut buf, &"a\"b");
     assert buf == `"a\\"b"`;
+
+    // Control chars below 0x20 (other than \n\r\t) use the \u00xx form.
+    buf = "";
+    write_escaped_string(&mut buf, &"a\u{01}b\u{1f}c");
+    assert buf == `"a\\u0001b\\u001fc"`;
+
+    // Multibyte UTF-8 passes through the bulk-copy path untouched.
+    buf = "";
+    write_escaped_string(&mut buf, &"a日本b");
+    assert buf == `"a日本b"`;
+
+    // Escapes interleaved with runs on both sides.
+    buf = "";
+    write_escaped_string(&mut buf, &"pre\tmid\\end");
+    assert buf == `"pre\\tmid\\\\end"`;
 }
 
 test "deserialize i32" {
