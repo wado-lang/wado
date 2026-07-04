@@ -41,6 +41,19 @@ pub fn translate_java_expr(
     return emit_expr(rule, rules, &expr, vals_in_scope, bindings, this_bind);
 }
 
+/// Emit a parsed expression AST to Wado — shared with the `@members` field-init
+/// translation, which parses tokens directly rather than from a string.
+pub fn emit_java_expr(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    e: &JExpr,
+    vals_in_scope: bool,
+    bindings: &List<[bool, String, String]>,
+    this_bind: &String,
+) -> Result<String, String> {
+    return emit_expr(rule, rules, e, vals_in_scope, bindings, this_bind);
+}
+
 /// Translate a Java statement-list body (an action block) to Wado statements.
 /// `this_bind` is the recognizer handle (see `translate_java_expr`). Statements
 /// are space-joined; each already carries its trailing `;`.
@@ -54,6 +67,19 @@ pub fn translate_java_stmts(
 ) -> Result<String, String> {
     let tokens = tokenize_java(body)?;
     let stmts = parse_java_stmts(&tokens)?;
+    return emit_java_stmts(rule, rules, &stmts, vals_in_scope, bindings, this_bind);
+}
+
+/// Emit a parsed statement list to Wado, space-joined (each carries its `;`).
+/// Shared by the action path and the `@members` method-body translation.
+pub fn emit_java_stmts(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    stmts: &List<JStmt>,
+    vals_in_scope: bool,
+    bindings: &List<[bool, String, String]>,
+    this_bind: &String,
+) -> Result<String, String> {
     let mut out = String::from("");
     for let mut i = 0; i < stmts.len(); i += 1 {
         if i > 0 {
@@ -82,6 +108,13 @@ fn emit_stmt(
             let target = emit_expr(rule, rules, &a.target, vals_in_scope, bindings, this_bind)?;
             let value = emit_expr(rule, rules, &a.value, vals_in_scope, bindings, this_bind)?;
             Result::Ok(`{target} {a.op} {value};`);
+        },
+        Return(v) => match v {
+            Some(e) => {
+                let w = emit_expr(rule, rules, e, vals_in_scope, bindings, this_bind)?;
+                Result::Ok(`return {w};`);
+            },
+            None => Result::Ok("return;"),
         },
     };
 }
@@ -135,7 +168,7 @@ fn emit_print(
 
 /// Java primitive / `String` type text to its Wado type, or `None` if outside
 /// the subset (a loud error — the subset grows on demand).
-fn map_java_type(ty: &String) -> Option<String> {
+pub fn map_java_type(ty: &String) -> Option<String> {
     let t = ty.trim();
     if t == "int" || t == "short" || t == "byte" {
         return Option::Some("i32");

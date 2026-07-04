@@ -1,4 +1,4 @@
-use { translate_action, translate_predicate, grammar_has_superclass } from "./java2wado.wado";
+use { translate_action, translate_predicate, translate_members, grammar_has_superclass } from "./java2wado.wado";
 use { parse } from "./g4/parser.wado";
 use { ActionLanguage } from "./ir.wado";
 
@@ -183,6 +183,33 @@ r returns [i32 v] : INT ;
         &NO_BINDINGS,
     );
     assert res.is_err(), "$ctx child access outside an LR rule must be a loud error";
+}
+
+test "java members: field declarations become struct fields" {
+    let lang = ActionLanguage::Java;
+    let m = translate_members(&lang, &"boolean enumKeyword = true; int i = 0;").unwrap();
+    assert m.fields.len() == 2, `fields: {m.fields.len()}`;
+    assert m.fields[0].name == "enumKeyword" && m.fields[0].ty == "bool" && m.fields[0].init == "true", `f0: {m.fields[0].name}:{m.fields[0].ty}={m.fields[0].init}`;
+    assert m.fields[1].name == "i" && m.fields[1].ty == "i32" && m.fields[1].init == "0", `f1: {m.fields[1].name}:{m.fields[1].ty}={m.fields[1].init}`;
+    assert m.methods.is_empty(), "no methods expected";
+}
+
+test "java members: method with a param, print, and return" {
+    let lang = ActionLanguage::Java;
+    let m = translate_members(
+        &lang,
+        &"boolean pred(boolean v) { System.out.println(\"eval=\" + v); return v; }",
+    ).unwrap();
+    assert m.fields.is_empty(), "no fields expected";
+    assert m.methods.len() == 1, `methods: {m.methods.len()}`;
+    assert m.methods[0] == "fn pred(&mut self, v: bool) -> bool { self.emit(`eval={v}\\n`); return v; }", `method: '{m.methods[0]}'`;
+}
+
+test "java members: void method, no params" {
+    let lang = ActionLanguage::Java;
+    let m = translate_members(&lang, &"public void foo() { System.out.println(\"foo\"); }").unwrap();
+    assert m.methods.len() == 1, `methods: {m.methods.len()}`;
+    assert m.methods[0] == "fn foo(&mut self) { self.emit(`foo\\n`); }", `method: '{m.methods[0]}'`;
 }
 
 test "grammar_has_superclass keys the Phase 4 carve-out" {

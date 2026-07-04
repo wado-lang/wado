@@ -69,6 +69,8 @@ pub variant JStmt {
     Local(JLocal),
     /// Assignment, incl. compound (`$v = e;`, `this.i += 1;`).
     Assign(JAssign),
+    /// `return e;` / `return;` (in `@members` method bodies).
+    Return(Option<JExpr>),
 }
 
 pub struct JLocal {
@@ -94,6 +96,15 @@ pub fn parse_java_stmts(tokens: &List<JToken>) -> Result<List<JStmt>, String> {
 }
 
 fn parse_stmt(tokens: &List<JToken>, pos: &mut i32) -> Result<JStmt, String> {
+    if ident_at(tokens, *pos) matches { Some("return") } {
+        *pos += 1;
+        let mut val: Option<JExpr> = null;
+        if !punct_is(tokens, *pos, &";") {
+            val = Option::Some(parse_or(tokens, pos)?);
+        }
+        expect_semi(tokens, pos)?;
+        return Result::Ok(JStmt::Return(val));
+    }
     if is_local_decl(tokens, *pos) {
         let ty = ident_at(tokens, *pos).unwrap();
         let name = ident_at(tokens, *pos + 1).unwrap();
@@ -367,7 +378,7 @@ fn parse_args(tokens: &List<JToken>, pos: &mut i32) -> Result<List<JExpr>, Strin
     }
 }
 
-fn punct_is(tokens: &List<JToken>, pos: i32, s: &String) -> bool {
+pub fn punct_is(tokens: &List<JToken>, pos: i32, s: &String) -> bool {
     if pos < 0 || pos >= tokens.len() {
         return false;
     }
@@ -384,7 +395,7 @@ fn punct_at(tokens: &List<JToken>, pos: i32) -> String {
     };
 }
 
-fn ident_at(tokens: &List<JToken>, pos: i32) -> Option<String> {
+pub fn ident_at(tokens: &List<JToken>, pos: i32) -> Option<String> {
     if pos < 0 || pos >= tokens.len() {
         return null;
     }
