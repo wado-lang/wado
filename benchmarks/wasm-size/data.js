@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783171572277,
+  "lastUpdate": 1783174712148,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -38029,6 +38029,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d6dc54b1e792b14f08ebdee1110be961151678ed"
         },
         "date": 1783171571914,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8446,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17049,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 284954,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f612f04a24485093e0961cf17ac39a4bd0ec250f",
+          "message": "Merge pull request #1514 from wado-lang/claude/wado-perf-benchmark-analysis-rj6jdj\n\nperf(json): speed up core:json serialize/deserialize on string-heavy data",
+          "timestamp": "2026-07-04T23:09:24+09:00",
+          "tree_id": "4ff501f9bea73a92ac722cd55c7277ed61cc4edb",
+          "url": "https://github.com/wado-lang/wado/commit/f612f04a24485093e0961cf17ac39a4bd0ec250f"
+        },
+        "date": 1783174711423,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
