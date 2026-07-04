@@ -142,9 +142,20 @@ impl Formatter {
     /// Apply width/alignment padding to content already written at `start_pos`.
     /// Content bytes in `buf[start_pos..]` are shifted in-place if padding is needed.
     /// The fill character must be ASCII (single byte); non-ASCII fill is not supported.
+    #[inline]
     pub fn apply_padding(&mut self, start_pos: i32) {
+        // Fast path: no width set (the default, and every JSON/CBOR/plain
+        // `{x}` value) pays only this field read + compare, inlined into the
+        // caller. Padding is requested rarely, so its logic is a cold call.
+        if self.width > 0 {
+            builtin::cold_path();
+            self.apply_padding_slow(start_pos);
+        }
+    }
+
+    fn apply_padding_slow(&mut self, start_pos: i32) {
         let content_len = self.buf.len() - start_pos;
-        if self.width <= 0 || content_len >= self.width {
+        if content_len >= self.width {
             return;
         }
         let padding = self.width - content_len;

@@ -53,7 +53,7 @@ Sieve of Eratosthenes up to 10M (array operations).
 | Implementation   | Throughput     | ms/iter    | vs best |
 | ---------------- | -------------- | ---------- | ------- |
 | Rust (core::fmt) | 13.56 M conv/s | 73.770 ms  | 1.00x   |
-| **Wado** (fpfmt) | 9.25 M conv/s  | 108.071 ms | 1.46x   |
+| **Wado** (fpfmt) | 9.82 M conv/s  | 101.841 ms | 1.38x   |
 | C (printf)       | 7.68 M conv/s  | 130.162 ms | 1.76x   |
 
 ## Serialization & Compression
