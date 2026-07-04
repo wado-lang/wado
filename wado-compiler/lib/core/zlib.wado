@@ -2481,9 +2481,18 @@ pub fn deflate_with_level(input: &List<u8>, level: i32, strategy: i32) -> List<u
             }
         }
     } else {
-        // Z_DEFAULT_STRATEGY or Z_FILTERED: full LZ77 matching
-        let mut head: List<i32> = List::filled(32768, -1);
-        let mut prev: List<i32> = List::filled(32768, -1);
+        // Z_DEFAULT_STRATEGY or Z_FILTERED: full LZ77 matching.
+        //
+        // The hash head/prev tables live in linear memory, not GC arrays: the
+        // chain-walk inner loop follows `prev` once per probe, and a WasmGC
+        // array.get is bounds-checked with no unchecked variant, whereas a
+        // linear-memory i32.load rides wasmtime's guard pages with no check.
+        // memory.fill with 0xFF sets every i32 slot to -1 (empty).
+        let hash_bytes = 32768 * 4;
+        let head_ptr = builtin::realloc(0, 0, 4, hash_bytes);
+        let prev_ptr = builtin::realloc(0, 0, 4, hash_bytes);
+        builtin::memory_fill(head_ptr, 0xFF as u8, hash_bytes);
+        builtin::memory_fill(prev_ptr, 0xFF as u8, hash_bytes);
         // Mirror input into linear memory to enable 16-byte SIMD compares
         // in the LZ77 match-extension inner loops. GC arrays only support
         // byte-level access; linear memory lets us load 16 bytes in a single
@@ -2494,7 +2503,7 @@ pub fn deflate_with_level(input: &List<u8>, level: i32, strategy: i32) -> List<u
         for let mut i = 0; i < input_len; i += 1 {
             builtin::i32_store8(scratch + i, input[i]);
         }
-        for let mut i = 0; i < 8; i += 1 {
+        for let mut i = 0; i < 16; i += 1 {
             builtin::i32_store8(scratch + input_len + i, 0 as u8);
         }
 
@@ -2515,7 +2524,7 @@ pub fn deflate_with_level(input: &List<u8>, level: i32, strategy: i32) -> List<u
                         builtin::i32_load8_u(scratch + pos + 1),
                         builtin::i32_load8_u(scratch + pos + 2),
                     );
-                    let mut chain = head.get_unchecked(h);
+                    let mut chain = builtin::i32_load(head_ptr + h * 4);
                     let mut chain_count = 0;
                     let max_chain = if match_available && prev_match_len >= config.good_length {
                         config.max_chain >> 2;
@@ -2536,7 +2545,7 @@ pub fn deflate_with_level(input: &List<u8>, level: i32, strategy: i32) -> List<u
                             && builtin::i32_load8_u(scratch + chain + best_len) != builtin::i32_load8_u(
                             scratch + pos + best_len,
                         ) {
-                            chain = prev.get_unchecked(chain & 32767);
+                            chain = builtin::i32_load(prev_ptr + (chain & 32767) * 4);
                             chain_count += 1;
                             continue;
                         }
@@ -2576,12 +2585,12 @@ pub fn deflate_with_level(input: &List<u8>, level: i32, strategy: i32) -> List<u
                             }
                         }
 
-                        chain = prev.get_unchecked(chain & 32767);
+                        chain = builtin::i32_load(prev_ptr + (chain & 32767) * 4);
                         chain_count += 1;
                     }
 
-                    prev[pos & 32767] = head.get_unchecked(h);
-                    head[h] = pos;
+                    builtin::i32_store(prev_ptr + (pos & 32767) * 4, builtin::i32_load(head_ptr + h * 4));
+                    builtin::i32_store(head_ptr + h * 4, pos);
                 }
 
                 if match_available {
@@ -2603,8 +2612,8 @@ pub fn deflate_with_level(input: &List<u8>, level: i32, strategy: i32) -> List<u
                                 let mh = hash3(builtin::i32_load8_u(scratch + pos + i), builtin::i32_load8_u(
                                     scratch + pos + i + 1,
                                 ), builtin::i32_load8_u(scratch + pos + i + 2));
-                                prev[pos + i & 32767] = head[mh];
-                                head[mh] = pos + i;
+                                builtin::i32_store(prev_ptr + ((pos + i) & 32767) * 4, builtin::i32_load(head_ptr + mh * 4));
+                                builtin::i32_store(head_ptr + mh * 4, pos + i);
                             }
                         }
                         pos += skip;
@@ -2628,8 +2637,8 @@ pub fn deflate_with_level(input: &List<u8>, level: i32, strategy: i32) -> List<u
                                 let mh = hash3(builtin::i32_load8_u(scratch + pos + i), builtin::i32_load8_u(
                                     scratch + pos + i + 1,
                                 ), builtin::i32_load8_u(scratch + pos + i + 2));
-                                prev[pos + i & 32767] = head[mh];
-                                head[mh] = pos + i;
+                                builtin::i32_store(prev_ptr + ((pos + i) & 32767) * 4, builtin::i32_load(head_ptr + mh * 4));
+                                builtin::i32_store(head_ptr + mh * 4, pos + i);
                             }
                         }
                         pos += best_len;
@@ -2661,7 +2670,7 @@ pub fn deflate_with_level(input: &List<u8>, level: i32, strategy: i32) -> List<u
                         builtin::i32_load8_u(scratch + pos + 1),
                         builtin::i32_load8_u(scratch + pos + 2),
                     );
-                    let mut chain = head.get_unchecked(h);
+                    let mut chain = builtin::i32_load(head_ptr + h * 4);
                     let mut chain_count = 0;
 
                     let max_len = if input_len - pos < 258 { input_len - pos } else { 258 };
@@ -2677,7 +2686,7 @@ pub fn deflate_with_level(input: &List<u8>, level: i32, strategy: i32) -> List<u
                             && builtin::i32_load8_u(scratch + chain + best_len) != builtin::i32_load8_u(
                             scratch + pos + best_len,
                         ) {
-                            chain = prev.get_unchecked(chain & 32767);
+                            chain = builtin::i32_load(prev_ptr + (chain & 32767) * 4);
                             chain_count += 1;
                             continue;
                         }
@@ -2715,12 +2724,12 @@ pub fn deflate_with_level(input: &List<u8>, level: i32, strategy: i32) -> List<u
                             }
                         }
 
-                        chain = prev.get_unchecked(chain & 32767);
+                        chain = builtin::i32_load(prev_ptr + (chain & 32767) * 4);
                         chain_count += 1;
                     }
 
-                    prev[pos & 32767] = head.get_unchecked(h);
-                    head[h] = pos;
+                    builtin::i32_store(prev_ptr + (pos & 32767) * 4, builtin::i32_load(head_ptr + h * 4));
+                    builtin::i32_store(head_ptr + h * 4, pos);
                 }
 
                 if best_len >= 3 {
@@ -2731,8 +2740,8 @@ pub fn deflate_with_level(input: &List<u8>, level: i32, strategy: i32) -> List<u
                             let mh = hash3(builtin::i32_load8_u(scratch + pos + i), builtin::i32_load8_u(
                                 scratch + pos + i + 1,
                             ), builtin::i32_load8_u(scratch + pos + i + 2));
-                            prev[pos + i & 32767] = head[mh];
-                            head[mh] = pos + i;
+                            builtin::i32_store(prev_ptr + ((pos + i) & 32767) * 4, builtin::i32_load(head_ptr + mh * 4));
+                            builtin::i32_store(head_ptr + mh * 4, pos + i);
                         }
                     }
                     pos += best_len;
@@ -2744,6 +2753,8 @@ pub fn deflate_with_level(input: &List<u8>, level: i32, strategy: i32) -> List<u
             }
         }
         builtin::realloc(scratch, scratch_size, 16, 0);
+        builtin::realloc(head_ptr, hash_bytes, 4, 0);
+        builtin::realloc(prev_ptr, hash_bytes, 4, 0);
     }
 
     let sym_count = symbols.len();
