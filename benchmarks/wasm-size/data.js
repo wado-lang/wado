@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783174712148,
+  "lastUpdate": 1783194044277,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -38073,6 +38073,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f612f04a24485093e0961cf17ac39a4bd0ec250f"
         },
         "date": 1783174711423,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8446,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17049,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 284954,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d7c5ace5d557c2909278d12b6b9f85e3140ce24b",
+          "message": "Merge pull request #1515 from wado-lang/claude/wado-publish-release-workflow-6kgy7u\n\nfeat(wit): emit the library world via `wado wit --lib`",
+          "timestamp": "2026-07-05T04:31:56+09:00",
+          "tree_id": "d3eb0b4c43dd3ff2c263a211a012ea616eb9f57e",
+          "url": "https://github.com/wado-lang/wado/commit/d7c5ace5d557c2909278d12b6b9f85e3140ce24b"
+        },
+        "date": 1783194043584,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
