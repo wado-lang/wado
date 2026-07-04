@@ -112,7 +112,8 @@ use {
     rule_threads_args,
     RULE_START_TOK_LOCAL,
 } from "./action_translate.wado";
-use { translate_action, translate_predicate } from "./java2wado.wado";
+use { translate_action, translate_predicate, translate_members } from "./java2wado.wado";
+use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
 use { unwrap_label } from "./lr_util.wado";
 use { escape_ident } from "./ident.wado";
 use { compute_shapes_for_alt, shape_lookahead_signature_for_alt, rebind_op_field } from "./lower.wado";
@@ -306,7 +307,9 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // `LoweredGrammar` is threaded through so we can dispatch on
     // `Rule::Simple` / `MultiAlt` / `LeftRecursive` instead of
     // recomputing the classification at every emit site.
-    gen_parser_struct(w, ctx.is_trace(), ctx.needs_atn(), ctx.emit_actions());
+    let members = collect_parser_members(grammar, ctx);
+    gen_parser_struct(w, ctx.is_trace(), ctx.needs_atn(), ctx.emit_actions(), &members);
+    gen_member_methods(w, &members);
     if ctx.emit_actions() {
         gen_vals_structs(w, grammar);
     }
@@ -560,7 +563,59 @@ fn gen_vals_fields(w: &mut CodeWriter, decls: &List<AttrDecl>) {
     }
 }
 
-fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_actions: bool) {
+/// Translate the grammar's `@parser::members` (and bare `@members`) blocks to
+/// `Parser` struct fields + methods. Only when actions are emittable; an
+/// untranslatable block is a loud diagnostic, not a silent drop.
+fn collect_parser_members(grammar: &Grammar, ctx: &mut GenContext) -> MemberDecls {
+    let mut fields: List<MemberField> = [];
+    let mut methods: List<String> = [];
+    if !ctx.emit_actions() {
+        return MemberDecls { fields, methods };
+    }
+    let lang = ctx.action_language();
+    for let act of &grammar.named_actions {
+        if act.name != "members" {
+            continue;
+        }
+        let is_parser = match &act.scope {
+            Some(s) => *s == "parser",
+            None => true,
+        };
+        if !is_parser {
+            continue;
+        }
+        match translate_members(&lang, &act.body.text) {
+            Ok(m) => {
+                for let f of &m.fields {
+                    fields.push(*f);
+                }
+                for let mm of &m.methods {
+                    methods.push(*mm);
+                }
+            },
+            Err(msg) => {
+                ctx.warn(&"@members", DiagnosticKind::UnsupportedAction, msg);
+            },
+        }
+    }
+    return MemberDecls { fields, methods };
+}
+
+/// Emit `@members` method declarations as a separate `impl Parser` block. Each
+/// method source is a ready-to-splice `fn ... { ... }` from `translate_members`.
+fn gen_member_methods(w: &mut CodeWriter, members: &MemberDecls) {
+    if members.methods.is_empty() {
+        return;
+    }
+    ImplSpec::new("Parser").emit_begin(w);
+    for let m of &members.methods {
+        w.line(m);
+    }
+    w.end();
+    w.blank();
+}
+
+fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_actions: bool, members: &MemberDecls) {
     let mut s = StructSpec::new("Parser");
     s.add_field(&"tokens", &"TokenStream");
     // Token kinds as a bare `Array<i32>` — the hot scan/peek read. A flat
@@ -623,6 +678,10 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_acti
     s.add_field(&"diagnostics", &"List<Diagnostic>");
     if emit_actions {
         s.add_field(&"output", &"String");
+    }
+    // `@members` fields: defaulted so `Parser::new`'s literal can omit them.
+    for let mf of &members.fields {
+        s.add_field_default(&mf.name, &mf.ty, &mf.init);
     }
     s.emit(w);
     w.blank();
