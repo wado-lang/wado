@@ -141,7 +141,7 @@ impl List<T> {
     /// `index` reads past the buffer or traps. For hot index loops that have
     /// already range-checked `index` (e.g. mask-bounded table lookups).
     pub fn get_unchecked(&self, index: i32) -> T {
-        return builtin::array_get(&self.repr, index);
+        return self.repr[index];
     }
 
     /// Copy the live `0..len()` elements into a fresh fixed `Array<T>` of exactly
