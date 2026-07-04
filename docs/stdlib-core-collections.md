@@ -74,6 +74,8 @@ Removes all key-value pairs from the map.
 
 ##### `fn insert_literal(&mut self, key: String, value: Self::Value) with stores[value]`
 
+##### `fn insert_all(&mut self, base: TreeMap<String, V>)`
+
 ##### `fn build(&self) -> TreeMap<String, V>`
 
 #### `impl Serialize for TreeMap<String, V>`
