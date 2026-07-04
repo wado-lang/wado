@@ -126,7 +126,7 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/types.wado/Result<i32,()>^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,()>>", ref "core:prelude/format.wado//Formatter");  // TypeId(46)
 
-type "functype//wado-compiler/tests/fixtures/effect_op_variant_arg_infer.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/effect_op_variant_arg_infer.wado//__Closure_2", ref "core:prelude/types.wado//Result<i32,()>") -> i32;  // TypeId(47)
+type "functype//wado-compiler/tests/fixtures/effect_op_variant_arg_infer.wado/__Closure_2::__call" = fn(ref "core:prelude/types.wado//Result<i32,()>") -> i32;  // TypeId(47)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(48)
 
@@ -584,7 +584,7 @@ fn "core:prelude/types.wado/Result<i32,()>^Inspect::inspect"(self, f) {
     }
 }
 
-fn "wado-compiler/tests/fixtures/effect_op_variant_arg_infer.wado/__Closure_2::__call"(self, v) {
+fn "wado-compiler/tests/fixtures/effect_op_variant_arg_infer.wado/__Closure_2::__call"(v) {
     let n: i32;
     return __inline_H_Sink__put_0: block -> i32 {
         if ref.test "core:prelude/types.wado//Result<i32,()>::Ok"(v) {
@@ -598,9 +598,7 @@ fn "wado-compiler/tests/fixtures/effect_op_variant_arg_infer.wado/__Closure_2::_
 }
 
 fn "closure/wado-compiler/tests/fixtures/effect_op_variant_arg_infer.wado/__closure_wrapper_0"(__env, __p0) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/effect_op_variant_arg_infer.wado//__Closure_2";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/effect_op_variant_arg_infer.wado//__Closure_2"(__env);
-    return "wado-compiler/tests/fixtures/effect_op_variant_arg_infer.wado/__Closure_2::__call"(__typed_env, __p0);
+    return "wado-compiler/tests/fixtures/effect_op_variant_arg_infer.wado/__Closure_2::__call"(__p0);
 }
 
 export fn "wado-compiler/tests/fixtures/effect_op_variant_arg_infer.wado/__cm_export____test_0_no_turbofish_variant_argument_to_an_effect_operation" as "__test_0_no_turbofish_variant_argument_to_an_effect_operation"

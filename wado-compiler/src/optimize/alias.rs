@@ -120,7 +120,13 @@ pub(super) fn build_alias_info(
         if let Some(r) = extra_aliased(body, node) {
             aliased.insert(r);
         }
-        collect_ref_arg_escapes(body, node, call_immutability, &mut aliased, &mut syntactic_mut);
+        collect_ref_arg_escapes(
+            body,
+            node,
+            call_immutability,
+            &mut aliased,
+            &mut syntactic_mut,
+        );
         collect_alias_edges_node(body, node, type_table, &mut edges);
         collect_mut_escaped_node(
             body,
