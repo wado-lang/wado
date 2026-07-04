@@ -1,0 +1,47 @@
+//! java2wado — translate the Java subset that appears in ANTLR action bodies
+//! to Wado, so `language = Java` grammars execute their actions. Facade over
+//! the `ActionLanguage` dispatcher; the Java front end (lexer / parser / emit)
+//! lands in `java2wado/` per the staging in `java2wado.md`.
+//!
+//! The identity translator (`action_translate.wado`, `language = Wado`) already
+//! resolves `$`-attributes and substitutes them over the value channel; Java
+//! translation reuses that engine for the `$`-leaves and adds a Java host-code
+//! front end around them. Until that front end lands, `language = Java` is a
+//! loud error, never a silent no-op.
+
+use { ParserRule, Grammar, ActionLanguage } from "./ir.wado";
+use { translate_wado_action } from "./action_translate.wado";
+
+/// Translate an action / predicate body to Wado under the grammar's action
+/// language. `language = Wado` routes to the identity translator (verbatim host
+/// text, `$`-refs substituted); `language = Java` routes to java2wado; any other
+/// language is unsupported. A failure names the offending body — codegen turns
+/// it into a diagnostic rather than emitting invalid code.
+pub fn translate_action(
+    lang: &ActionLanguage,
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    body: &String,
+    vals_in_scope: bool,
+    bindings: &List<[bool, String, String]>,
+) -> Result<String, String> {
+    return match lang {
+        Wado => translate_wado_action(rule, rules, body, vals_in_scope, bindings),
+        Java => Result::Err(`java2wado: Java action translation is not yet implemented for '{*body}'`),
+        Other(name) => Result::Err(`unsupported action language '{*name}' for action '{*body}'`),
+    };
+}
+
+/// Whether the grammar declares `options { superClass = ... }`. Such a grammar's
+/// actions call a hand-written base class living outside the `.g4`, which Gale
+/// cannot see — translating them is Phase 4 (the SuperClass trait), not
+/// java2wado's subset. The Java emit-actions rollout carves these out. See
+/// `java2wado.md`.
+pub fn grammar_has_superclass(grammar: &Grammar) -> bool {
+    for let o of &grammar.options {
+        if o.name == "superClass" {
+            return true;
+        }
+    }
+    return false;
+}

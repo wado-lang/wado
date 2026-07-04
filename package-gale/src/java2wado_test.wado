@@ -1,0 +1,36 @@
+use { translate_action, grammar_has_superclass } from "./java2wado.wado";
+use { parse } from "./g4/parser.wado";
+use { ActionLanguage } from "./ir.wado";
+
+global NO_BINDINGS: List<[bool, String, String]> = [];
+
+test "dispatcher routes language = Wado through the identity translator" {
+    let g = parse("grammar T;
+r returns [i32 v] : ID { $v = 1; } ;
+").unwrap();
+    let lang = ActionLanguage::Wado;
+    let out = translate_action(&lang, &g.parser_rules[0], &g.parser_rules, &" $v = 1; ", true, &NO_BINDINGS).unwrap();
+    assert out == " vals.v = 1; ", `out: '{out}'`;
+}
+
+test "dispatcher reports language = Java as not yet implemented" {
+    let g = parse("grammar T;
+r : ID ;
+").unwrap();
+    let lang = ActionLanguage::Java;
+    let res = translate_action(&lang, &g.parser_rules[0], &g.parser_rules, &" $v = 1; ", true, &NO_BINDINGS);
+    assert res.is_err(), "Java translation is a loud error until java2wado lands";
+}
+
+test "grammar_has_superclass keys the Phase 4 carve-out" {
+    let with_super = parse("grammar T;
+options { superClass = TBase; }
+a : A ;
+").unwrap();
+    assert grammar_has_superclass(&with_super), "superClass grammar must be detected";
+
+    let plain = parse("grammar T;
+a : A ;
+").unwrap();
+    assert !grammar_has_superclass(&plain), "grammar without superClass must not be detected";
+}
