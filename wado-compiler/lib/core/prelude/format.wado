@@ -143,8 +143,20 @@ impl Formatter {
     /// Content bytes in `buf[start_pos..]` are shifted in-place if padding is needed.
     /// The fill character must be ASCII (single byte); non-ASCII fill is not supported.
     pub fn apply_padding(&mut self, start_pos: i32) {
+        // No width set is the default and covers every JSON/CBOR/plain `{x}`
+        // value, so this wrapper stays tiny and inlines to one field compare.
+        // When a width IS set the slow path runs every time — it is not a cold
+        // branch — so the padding logic is merely kept out-of-line via
+        // `#[inline(never)]` rather than hinted cold.
+        if self.width > 0 {
+            self.apply_padding_slow(start_pos);
+        }
+    }
+
+    #[inline(never)]
+    fn apply_padding_slow(&mut self, start_pos: i32) {
         let content_len = self.buf.len() - start_pos;
-        if self.width <= 0 || content_len >= self.width {
+        if content_len >= self.width {
             return;
         }
         let padding = self.width - content_len;
@@ -317,6 +329,25 @@ impl Display for String {
         } else {
             f.pad(*self);
         }
+    }
+}
+
+/// Writes a `Display` value into a `String` in place, skipping the temporary
+/// `String` that a `` `{value}` `` template allocates before copying it in. The
+/// alloc-free counterpart to `buf.push_str(&`{value}`)` for a single value with
+/// no format spec — the hot path in the serde numeric encoders.
+///
+/// A trait (not an inherent `impl String`, which the coherence rules forbid on a
+/// foreign type) and placed here, not in string.wado, so `String` stays a leaf
+/// that `Formatter` depends on — mirroring `impl Display for String` above.
+pub trait PushDisplay {
+    fn push_display<T: Display>(&mut self, value: &T);
+}
+
+impl PushDisplay for String {
+    fn push_display<T: Display>(&mut self, value: &T) {
+        let mut f = Formatter::new(self);
+        value.fmt(&mut f);
     }
 }
 

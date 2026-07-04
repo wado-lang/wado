@@ -95,6 +95,17 @@ impl List<T> {
         self.used = used + 1;
     }
 
+    /// Appends a single element assuming the capacity was already reserved
+    /// (see `reserve`). Skips the grow check `push` performs on every call, so
+    /// a burst of appends after one `reserve` pays a single capacity check
+    /// instead of one per element. The Wasm array bounds check still guards the
+    /// store, so an under-reserved call traps rather than corrupting memory.
+    pub fn push_within_capacity(&mut self, value: T) with stores[value] {
+        let used = self.used;
+        builtin::array_set(&mut self.repr, used, value);
+        self.used = used + 1;
+    }
+
     pub fn pop(&mut self) -> Option<T> {
         if self.used == 0 {
             return null;

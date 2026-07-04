@@ -123,9 +123,10 @@ fn write_head(buf: &mut List<u8>, major: u8, arg: u64) {
 
 /// Append the low `nbytes` of `value` in big-endian (network) order.
 fn push_be(buf: &mut List<u8>, value: u64, nbytes: i32) {
+    buf.reserve(nbytes);
     let mut i = nbytes - 1;
     while i >= 0 {
-        buf.push((value >> (i * 8) as u64) as u8);
+        buf.push_within_capacity((value >> (i * 8) as u64) as u8);
         i -= 1;
     }
 }
