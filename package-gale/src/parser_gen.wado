@@ -253,19 +253,22 @@ fn split_top_level_commas(text: &String) -> List<String> {
     let mut i = 0;
     while i < chars.len() {
         let c = chars[i];
-        if c == '(' || c == '[' || c == '{' || c == '<' {
-            depth += 1;
-            cur.push(c);
-        } else if c == ')' || c == ']' || c == '}' || c == '>' {
-            if depth > 0 {
-                depth -= 1;
-            }
-            cur.push(c);
-        } else if c == ',' && depth == 0 {
-            out.push(cur.trim());
-            cur = String::new();
-        } else {
-            cur.push(c);
+        match c {
+            '(' | '[' | '{' | '<' => {
+                depth += 1;
+                cur.push(c);
+            },
+            ')' | ']' | '}' | '>' => {
+                if depth > 0 {
+                    depth -= 1;
+                }
+                cur.push(c);
+            },
+            ',' && depth == 0 => {
+                out.push(cur.trim());
+                cur = String::new();
+            },
+            _ => cur.push(c),
         }
         i += 1;
     }
