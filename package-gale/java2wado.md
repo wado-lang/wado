@@ -12,7 +12,7 @@ The identity translator (`src/action_translate.wado`, `language = Wado`) already
 - **Value channel**: `$v` / `$local` / `$arg` → `vals.<name>`, cross-rule `$a.v` → `a.v`, token members → `p.token_*`, rule-span specials → `p.text_span` / `p.rule_string_tree`.
 - **Substitution engine** (`attr_substitute::splice_attrs`): rewrites the resolved `$`-spans in place.
 
-For `language = Wado` the surrounding host text is already Wado, so splice-in-place is the whole job. **java2wado is exactly that, plus a translation of the surrounding Java host code** — the `$`-spans resolve to the *same* Wado expressions over the *same* runtime API / value channel. Nothing in the attribute/value-channel layer changes; java2wado is a new front end that parses Java and re-emits Wado, using the existing attribute resolver to fill the `$`-leaves.
+For `language = Wado` the surrounding host text is already Wado, so splice-in-place is the whole job. **java2wado is exactly that, plus a translation of the surrounding Java host code** — the `$`-spans resolve to the _same_ Wado expressions over the _same_ runtime API / value channel. Nothing in the attribute/value-channel layer changes; java2wado is a new front end that parses Java and re-emits Wado, using the existing attribute resolver to fill the `$`-leaves.
 
 Single wiring lever: `action_language_is_emittable` (`codegen.wado:208`) currently returns `grammar.action_language matches { Wado }`. Making Java emittable flows `emit_actions = true` through lowering / parser_gen / lexer_gen exactly as Wado does today.
 
@@ -50,19 +50,19 @@ Surveyed from `tests/antlr4-compat/grammars/`. This is the concrete target — t
 
 Method mapping is **snake_case by default** — an arbitrary `@members` / superClass method (`this.NextGT()` → `this.next_gt()`) cannot be tabled, so the machine rule is `to_snake_case`. Only a small set of **semantic redirects** (not renames) plus a few **fixed recognizer methods** kept under clean Wado names stay explicit:
 
-| Java                              | Wado                                       | kind              |
-| --------------------------------- | ------------------------------------------ | ----------------- |
-| `this.foo(args)` / bare `foo()`   | `this.foo(args)` (`to_snake_case`)         | default rule      |
-| `System.out.println(x)` / `print` | `this.emit(...)` (`println` appends `\n`)  | semantic redirect |
-| `x.equals(y)`                     | `x == y`                                    | semantic redirect |
-| `TParser.<TOKEN>`                 | `TK_<TOKEN>`                                | semantic redirect |
-| `getText()`                       | `this.rule_text()`                          | fixed rename      |
-| `_input.LA(k)` / `_input.LT(k)`   | `this.la(k)` / `this.lt(k)`                  | fixed rename      |
-| `_input.getText()`                | `this.input_text()`                         | fixed rename      |
-| `X.getText()` (a token / LT)      | `this.token_text(X)`                        | fixed rename      |
-| `$ctx.toStringTree(this)`         | `this.rule_string_tree()` (via attr engine) | fixed rename      |
-| `int` / `boolean` / `String` / `void` | `i32` / `bool` / `String` / `()`       | type map          |
-| `List<String>`                    | `List<String>`                             | type map          |
+| Java                                  | Wado                                        | kind              |
+| ------------------------------------- | ------------------------------------------- | ----------------- |
+| `this.foo(args)` / bare `foo()`       | `this.foo(args)` (`to_snake_case`)          | default rule      |
+| `System.out.println(x)` / `print`     | `this.emit(...)` (`println` appends `\n`)   | semantic redirect |
+| `x.equals(y)`                         | `x == y`                                    | semantic redirect |
+| `TParser.<TOKEN>`                     | `TK_<TOKEN>`                                | semantic redirect |
+| `getText()`                           | `this.rule_text()`                          | fixed rename      |
+| `_input.LA(k)` / `_input.LT(k)`       | `this.la(k)` / `this.lt(k)`                 | fixed rename      |
+| `_input.getText()`                    | `this.input_text()`                         | fixed rename      |
+| `X.getText()` (a token / LT)          | `this.token_text(X)`                        | fixed rename      |
+| `$ctx.toStringTree(this)`             | `this.rule_string_tree()` (via attr engine) | fixed rename      |
+| `int` / `boolean` / `String` / `void` | `i32` / `bool` / `String` / `()`            | type map          |
+| `List<String>`                        | `List<String>`                              | type map          |
 
 Lexer-side recognizer methods (`getCharPositionInLine` → `column()`, `_tokenStartCharPositionInLine` → `token_start_column()`, `setType`/`setChannel`/…) land with the lexer actions in Phase 4.
 
@@ -109,7 +109,7 @@ action_language_is_emittable(g)
 
 This is one boolean, not fragment-scanning machinery; it is principled (superClass = external base = Phase 4) and permanent (Phase 4 turns it into "emit via the trait"), not throwaway scaffolding. Non-superClass Java grammars — the entire descriptor corpus — flip unconditionally; any untranslatable fragment there is a loud error and gets fixed on the spot.
 
-Distinct from a miscompile: a discarded action under the superClass carve-out is the current *documented* behavior; an untranslatable ref *inside* an emitting grammar stays a loud generation error.
+Distinct from a miscompile: a discarded action under the superClass carve-out is the current _documented_ behavior; an untranslatable ref _inside_ an emitting grammar stays a loud generation error.
 
 ## Staged, TDD
 

@@ -247,7 +247,15 @@ impl TokenStream {
 
     /// Append a token carrying recovery `flags`, returning its index. The
     /// real lockstep writer; `push_token` is the `flags = 0` common case.
-    pub fn push_token_flagged(&mut self, kind: i32, start: i32, end: i32, triv_lo: i32, triv_hi: i32, flags: TokenFlags) -> i32 {
+    pub fn push_token_flagged(
+        &mut self,
+        kind: i32,
+        start: i32,
+        end: i32,
+        triv_lo: i32,
+        triv_hi: i32,
+        flags: TokenFlags,
+    ) -> i32 {
         let idx = self.kinds.len();
         self.kinds.push(kind);
         self.starts.push(start);
@@ -833,7 +841,7 @@ fn bubble_to_parent(stack: &List<i32>, end: &mut List<i32>, flags: &mut List<Nod
         if end[child] > end[parent] {
             end[parent] = end[child];
         }
-        flags[parent] = flags[parent] | (flags[child] & NodeFlags::Error);
+        flags[parent] = flags[parent] | flags[child] & NodeFlags::Error;
     }
 }
 
@@ -1016,7 +1024,8 @@ impl TreeBuilder {
                     next[oi] = r + 1;
                     bubble_to_parent(&stack, &mut end, &mut flags, oi);
                 },
-                Tok => {},
+                Tok => {
+                },
             }
         }
         while stack.len() > 0 {
@@ -1043,14 +1052,25 @@ impl TreeBuilder {
     /// Render the most recently closed node. Backs `$ctx.toStringTree()` in a
     /// left-recursive rule's `@after`, where the level's node is already folded
     /// shut (see `last_finished`).
-    pub fn render_last_finished(&self, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
+    pub fn render_last_finished(
+        &self,
+        toks: &TokenStream,
+        rule_names: &List<String>,
+        token_names: &List<String>,
+    ) -> String {
         if self.last_finished < 0 {
             return String::new();
         }
         return self.render_from(self.last_finished, toks, rule_names, token_names);
     }
 
-    fn render_from(&self, root: i32, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
+    fn render_from(
+        &self,
+        root: i32,
+        toks: &TokenStream,
+        rule_names: &List<String>,
+        token_names: &List<String>,
+    ) -> String {
         let mut out = String::with_capacity(128);
         let _ = render_builder_node(&mut out, &self.tag, &self.a, root, toks, rule_names, token_names);
         return out;
