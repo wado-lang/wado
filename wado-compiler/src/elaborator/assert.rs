@@ -313,10 +313,14 @@ impl CaptureScanner {
                 self.add(unparse_expr_simple(expr), ast_id);
             }
             Expr::TemplateString(_) => {
-                // Capture the rendered string whole. Interpolations are not
-                // recursed into: each already carries its own `Display`
-                // formatting, and extracting them would lose the template's
-                // formatting context.
+                // Capture the rendered string whole; do NOT recurse into the
+                // interpolations. The whole-template capture already evaluates
+                // each interpolation once; also capturing them individually
+                // would double-evaluate any side-effecting interpolation (it
+                // runs once for the per-slot `let __vK = <interp>` and again
+                // when the template itself is rendered). Capturing only the
+                // rendered value keeps a single evaluation and still surfaces
+                // the meaningful sub-value of the condition.
                 self.add(unparse_expr_simple(expr), ast_id);
             }
             // Every other `Expr` variant is treated as an opaque leaf:
