@@ -225,6 +225,18 @@ pub fn mark_unreachable_defined_functions(module: &mut WirPackage) {
             seed(fid.index(), &mut reachable, &mut queue);
         }
     }
+    // Eager global initializers: a `ref.func` in a promoted const global
+    // (e.g. a closure stored in a user-immutable global, whose vtable
+    // wrappers `promote_const_global_inits` bakes into the global's `init`)
+    // roots the referenced function. The codegen-time `(elem declare)` that
+    // would otherwise cover it does not exist yet at DCE time.
+    for global in &module.globals {
+        let mut refs: IndexSet<u32> = IndexSet::default();
+        collect_func_refs_recursive(&global.init, &mut refs);
+        for r in refs {
+            seed(r, &mut reachable, &mut queue);
+        }
+    }
 
     while let Some(idx) = queue.pop_front() {
         if let Some(callees) = callees_of.get(idx as usize) {
@@ -512,6 +524,12 @@ fn compact_funcs(module: &mut WirPackage) {
                 *fid = WirFuncId::new(new_id, Rc::from(fid.fq()));
             }
         }
+    }
+
+    // Remap `ref.func` in eager global initializers (see the global-root
+    // seeding in `mark_unreachable_defined_functions`).
+    for global in &mut module.globals {
+        remap_func_ids(&mut global.init, &remap);
     }
 }
 

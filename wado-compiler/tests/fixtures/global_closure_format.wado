@@ -1,0 +1,31 @@
+// Formatting closures stored in globals, covering both closure IR shapes.
+//
+// `ADD100` is a non-capturing closure literal in a user-immutable global: at
+// -O2 `wir/promote_const_global_inits` bakes its (empty-env) canonical value —
+// including the `ref.func` vtable wrappers — into the global's eager `init`.
+// WIR DCE must root and remap those `ref.func`s from the global initializer,
+// otherwise the wrappers are pruned and codegen emits a dangling function
+// index (invalid Wasm).
+//
+// `ADD_N` is a capturing closure (non-empty env, a different IR shape) that
+// reaches its global through a non-const initializer, so it stays a lazy
+// `__initialize_module` assignment — it must format correctly too.
+
+use { println, Stdout } from "core:cli";
+
+global ADD100: fn(i32) -> i32 = |z: i32| z + 100;
+
+fn make_adder(n: i32) -> fn(i32) -> i32 {
+    return |z: i32| z + n;
+}
+global ADD_N: fn(i32) -> i32 = make_adder(42);
+
+export fn run() with Stdout {
+    println(`{ADD100:?}`);
+    println(`{ADD100:#?}`);
+    println(`{ADD_N:?}`);
+    println(`{ADD_N:#?}`);
+}
+
+__DATA__
+{"stdout": "|i32| -> i32\n|z: i32| (z + 100)\n|i32| -> i32\n|z: i32| captures[n] (z + n)\n"}
