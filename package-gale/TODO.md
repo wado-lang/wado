@@ -66,7 +66,7 @@ All of these call `this.<method>()` against a hand-written `superClass` base tha
 
 Stage C is a hard prerequisite for treating Gale as a drop-in ANTLR4 replacement, for any lexer-level optimization (a fast tokenizer is meaningless if it tokenizes incorrectly), and for `Grammar.options.superClass` / `tokenVocab`. It also unblocks composite-descriptor `[output]` comparison and parser descriptors whose `[output]` is purely action-print stdout.
 
-Design lives in [`action.md`](./action.md) (draft). Original sketch:
+Design lives in [`action.md`](./action.md) (draft); the java2wado translation plan is [`java2wado.md`](./java2wado.md). Original sketch:
 
 - Extend the IR so `OptionValue::Action` and per-alt action / predicate elements carry a language-tagged source fragment instead of a placeholder string.
 - Add a pluggable "action translator" interface; ship at minimum an identity translator for Wado-written action bodies.
