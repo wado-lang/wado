@@ -673,17 +673,16 @@ impl ClosureLowerer {
                 canonical_return: return_type,
             });
 
-            // Synthesize per-functor Inspect / InspectAlt impls so trait
-            // dispatch on the specialised `&__Closure_N` value writes the
-            // per-literal signature / TIR-unparsed source. Template
-            // expansion routes `{f:?}` / `{f:#?}` for fn-typed receivers
-            // through the same `Fn<N, Ret>^Inspect[Alt]::inspect[_alt]`
-            // call shape that user-written `f.inspect(&mut formatter)`
-            // produces, so these impls are reachable through three
-            // routes: explicit user calls, the `ClosureCallSiteLowerer`
-            // redirect added below (specialised path), and the
-            // canonical-vtable inspect slots (indirect path). Standard
-            // DCE removes them when none of these reach.
+            // Synthesize per-functor Inspect / InspectAlt / Display /
+            // DisplayAlt impls so trait dispatch on the specialised
+            // `&__Closure_N` value writes the per-literal signature /
+            // TIR-unparsed source. Template expansion routes `{f}` / `{f:?}`
+            // / `{f:#}` / `{f:#?}` for fn-typed receivers through the
+            // `Fn<N, Ret>^<Trait>::<method>` call shape; `ClosureCallSiteLowerer`
+            // retargets each to the matching impl here. These are reachable
+            // through three routes: explicit user calls, the redirect
+            // (specialised path), and the canonical-vtable inspect slots
+            // (indirect path). Standard DCE removes them when none reach.
             let signature = format_closure_signature(&collected.params, return_type, type_table);
             // Recover the per-literal source body (`|x: i32| x + 1`)
             // by unparsing the captured TIR closure form. The TIR is
@@ -709,15 +708,14 @@ impl ClosureLowerer {
         }
     }
 
-    /// Synthesize `__Closure_N^Inspect::inspect` and
-    /// `__Closure_N^InspectAlt::inspect_alt` for a single functor.
+    /// Synthesize the per-functor format impls (`Inspect`, `InspectAlt`,
+    /// `Display`, `DisplayAlt`) for a single functor.
     ///
-    /// Both methods take `(&self: &__Closure_N, f: &mut Formatter)` and
-    /// emit a single `f.write_str(<constant>)` body. The signature string
-    /// (`"|i32, i32| -> i32"`) and the source body string
-    /// (`"|x: i32, y: i32| x + y"`) are computed by the caller from
-    /// `CollectedClosure` so this helper stays focused on TIR
-    /// construction.
+    /// Each method takes `(&self: &__Closure_N, f: &mut Formatter)` and
+    /// emits a single `f.write_str(<constant>)` body. `InspectAlt` writes the
+    /// source body string (`"|x: i32, y: i32| x + y"`); the other three write
+    /// the signature string (`"|i32, i32| -> i32"`), since `Display` /
+    /// `DisplayAlt` follow the delegation chain down to `Inspect`.
     fn generate_functor_format_methods(
         &mut self,
         struct_name: &str,
@@ -727,31 +725,44 @@ impl ClosureLowerer {
         type_table: &mut TypeTable,
         span: Span,
     ) {
-        // Resolve Formatter / Inspect / InspectAlt through the
-        // `CompilerItem` registry. The struct name flows into the inner
-        // `Formatter::write_str` call below, so capture it once instead
-        // of looking it up per method. Method names come from the
-        // single-method trait's `trait_method_name` so a rename of
-        // `Inspect::inspect` → `Inspect::dump` (or similar) is picked
-        // up here without touching this site.
-        let (formatter_name, inspect_trait, inspect_method, inspect_alt_trait, inspect_alt_method) = {
+        // Per-functor format impls. `Inspect` writes the signature, `InspectAlt`
+        // the source. `Display` / `DisplayAlt` follow the delegation chain
+        // (`Display → Inspect`, `DisplayAlt → Display`), which for a closure
+        // bottoms out at the signature — so `{f}` and `{f:#}` show the
+        // signature while `{f:#?}` shows the source, consistent with every
+        // other type. `ClosureCallSiteLowerer` retargets the Fn-keyed template
+        // call to the matching impl here; standard DCE drops the unreferenced.
+        // Trait/method names flow through the `CompilerItem` registry so a
+        // stdlib rename is picked up without touching this site.
+        use crate::compiler_item::CompilerItem;
+        let (formatter_name, format_methods) = {
             let items = type_table.compiler_items();
+            let n = |item| items.trait_name(item).to_string();
+            let m = |item| items.trait_method_name(item).to_string();
             (
-                items
-                    .struct_name(crate::compiler_item::CompilerItem::Formatter)
-                    .to_string(),
-                items
-                    .trait_name(crate::compiler_item::CompilerItem::Inspect)
-                    .to_string(),
-                items
-                    .trait_method_name(crate::compiler_item::CompilerItem::Inspect)
-                    .to_string(),
-                items
-                    .trait_name(crate::compiler_item::CompilerItem::InspectAlt)
-                    .to_string(),
-                items
-                    .trait_method_name(crate::compiler_item::CompilerItem::InspectAlt)
-                    .to_string(),
+                items.struct_name(CompilerItem::Formatter).to_string(),
+                [
+                    (
+                        n(CompilerItem::Inspect),
+                        m(CompilerItem::Inspect),
+                        signature,
+                    ),
+                    (
+                        n(CompilerItem::InspectAlt),
+                        m(CompilerItem::InspectAlt),
+                        source,
+                    ),
+                    (
+                        n(CompilerItem::Display),
+                        m(CompilerItem::Display),
+                        signature,
+                    ),
+                    (
+                        n(CompilerItem::DisplayAlt),
+                        m(CompilerItem::DisplayAlt),
+                        signature,
+                    ),
+                ],
             )
         };
         let formatter_type = type_table.make_struct(formatter_name.clone(), ModuleSource::format());
@@ -759,14 +770,9 @@ impl ClosureLowerer {
         let string_type =
             type_table.make_compiler_struct(crate::compiler_item::CompilerItem::String);
 
-        for (trait_name, method_name, payload) in [
-            (inspect_trait.as_str(), inspect_method.as_str(), signature),
-            (
-                inspect_alt_trait.as_str(),
-                inspect_alt_method.as_str(),
-                source,
-            ),
-        ] {
+        for (trait_name, method_name, payload) in &format_methods {
+            let (trait_name, method_name, payload) =
+                (trait_name.as_str(), method_name.as_str(), *payload);
             let func = self.build_functor_format_method(
                 struct_name,
                 trait_name,
@@ -1551,31 +1557,34 @@ impl ClosureCallSiteLowerer<'_> {
         if info.base_struct_name != crate::name::CLOSURE_FN_TRAIT {
             return;
         }
-        let Some(base_trait) = info.base_trait_name.as_deref() else {
+        let Some(base_trait) = info.base_trait_name.clone() else {
             return;
         };
-        // Map each formatting trait to the per-functor impl that
-        // produces the right output. `Display`/`DisplayAlt` fall back
-        // to `Inspect`/`InspectAlt` so the redirect targets are the
-        // same per-functor method either way. All four trait names
-        // flow through the `CompilerItem` registry so a stdlib rename
-        // of any of them does not silently bypass this redirect.
-        let items = self.type_table.compiler_items();
-        let inspect = items.trait_name(crate::compiler_item::CompilerItem::Inspect);
-        let inspect_method = items.trait_method_name(crate::compiler_item::CompilerItem::Inspect);
-        let inspect_alt = items.trait_name(crate::compiler_item::CompilerItem::InspectAlt);
-        let inspect_alt_method =
-            items.trait_method_name(crate::compiler_item::CompilerItem::InspectAlt);
-        let display = items.trait_name(crate::compiler_item::CompilerItem::Display);
-        let display_alt = items.trait_name(crate::compiler_item::CompilerItem::DisplayAlt);
-        let (target_trait, target_method): (String, String) =
-            if base_trait == inspect || base_trait == display {
-                (inspect.to_string(), inspect_method.to_string())
-            } else if base_trait == inspect_alt || base_trait == display_alt {
-                (inspect_alt.to_string(), inspect_alt_method.to_string())
-            } else {
-                return;
-            };
+        let method_name = info.method_name.clone();
+        // Retarget any format-trait call on a directly-known closure literal to
+        // the matching per-functor impl (`__Closure_N^<Trait>::<method>`), which
+        // takes `&__Closure_N` directly. This redirect is trait-agnostic: it
+        // keeps the same trait/method, so the delegation (`Display → Inspect`,
+        // `DisplayAlt → Display`) lives in the functor impls like every other
+        // type. Without it the Fn-keyed dispatch stub would `ref.cast` the
+        // devirtualised `&__Closure_N` receiver to the canonical inspectable
+        // base and trap. Trait names come from the `CompilerItem` registry so a
+        // stdlib rename cannot silently bypass it.
+        use crate::compiler_item::CompilerItem;
+        let is_format_trait = {
+            let items = self.type_table.compiler_items();
+            [
+                CompilerItem::Inspect,
+                CompilerItem::InspectAlt,
+                CompilerItem::Display,
+                CompilerItem::DisplayAlt,
+            ]
+            .iter()
+            .any(|it| items.trait_name(*it) == base_trait)
+        };
+        if !is_format_trait {
+            return;
+        }
 
         let local_idx = match peel_ref_to_local(receiver) {
             Some(idx) => idx,
@@ -1600,11 +1609,8 @@ impl ClosureCallSiteLowerer<'_> {
             _ => "self".to_string(),
         };
 
-        let new_method_info = LocalMethodName::new(
-            functor.struct_name.clone(),
-            Some(target_trait),
-            target_method,
-        );
+        let new_method_info =
+            LocalMethodName::new(functor.struct_name.clone(), Some(base_trait), method_name);
         let new_name = new_method_info.to_mangled_name();
 
         let span = receiver.span;
