@@ -1,0 +1,28 @@
+// Regression: a mutable local passed by `&mut` to a *free* function (not a
+// method receiver) must not keep its pre-call field value. `&mut i32` lowers to
+// a by-value `Box<i32>` whose `is_mut` arg flag is false, so store→load
+// forwarding must recognise the box argument as a mutable escape from its type,
+// or it forwards the initial `pos = 0` across `step`/`bump` and `run` returns 0.
+
+fn bump(pos: &mut i32) {
+    *pos += 1;
+}
+
+fn step(xs: &List<i32>, pos: &mut i32) {
+    bump(pos);
+    while *pos < xs.len() && xs[*pos] == 0 {
+        bump(pos);
+    }
+}
+
+export fn run() {
+    let xs: List<i32> = [5, 0, 7];
+    let mut pos = 0;
+    step(&xs, &mut pos);
+    assert pos == 2;
+}
+
+__DATA__
+{
+    "stdout": ""
+}

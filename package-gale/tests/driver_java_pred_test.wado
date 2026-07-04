@@ -1,0 +1,20 @@
+//! Stage C / java2wado: context-independent member-field predicates gate two
+//! single-token alts (the `SemPredEvalParser/Simple` shape), and the chosen
+//! alt's action mutates the member so the next decision flips. Proves the
+//! predicate path end-to-end: `{this.mode == 1}?` -> `p.mode == 1` folded into
+//! the parse-side dispatch, actions on the committed path.
+
+use jp from "./grammars/java_pred.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/java_pred",
+        },
+    };
+
+test "member-field predicates select alternatives; actions mutate the member" {
+    let result = jp::parse(&"x y");
+    assert result.ok(), `unexpected diagnostics: {result.output}`;
+    assert result.output == "one two ", `output: '{result.output}'`;
+}

@@ -256,6 +256,9 @@ pub struct FieldSpec {
     pub name: String,
     pub type_str: String,
     pub is_pub: bool,
+    /// Optional field default (`field: T = default`), so a struct literal can
+    /// omit the field.
+    pub default: Option<String> = null,
 }
 
 impl FieldSpec {
@@ -289,6 +292,16 @@ impl StructSpec {
         return self;
     }
 
+    pub fn add_field_default(
+        &mut self,
+        name: &String,
+        type_str: &String,
+        default: &String,
+    ) -> &mut StructSpec with stores[self] {
+        self.fields.push(FieldSpec { name: *name, type_str: *type_str, is_pub: false, default: Option::Some(*default) });
+        return self;
+    }
+
     pub fn add_field_spec(&mut self, field: FieldSpec) -> &mut StructSpec with stores[self] {
         self.fields.push(field);
         return self;
@@ -298,7 +311,10 @@ impl StructSpec {
         w.begin(&`{self.visibility.prefix()}struct {self.name}`);
         for let field of &self.fields {
             let vis = if field.is_pub { "pub " } else { "" };
-            w.line(&`{vis}{field.name}: {field.type_str},`);
+            match &field.default {
+                Some(d) => w.line(&`{vis}{field.name}: {field.type_str} = {*d},`),
+                None => w.line(&`{vis}{field.name}: {field.type_str},`),
+            }
         }
         w.end();
     }
