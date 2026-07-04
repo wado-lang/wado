@@ -67,11 +67,11 @@ pub fn write_escaped_string(buf: &mut String, s: &String) {
             '\r' => buf.push_str(&"\\r"),
             '\t' => buf.push_str(&"\\t"),
             _ => {
-                if (c as u32) < 0x20 {
+                if (c as u32) >= 0x20 {
+                    buf.push(c);
+                } else {
                     let code = c as i32;
                     buf.push_str(&`\\u{code:04x}`);
-                } else {
-                    buf.push(c);
                 }
             },
         }
@@ -91,12 +91,12 @@ fn write_json_i64(buf: &mut String, v: i64) -> Result<(), SerializeError> {
     // Values outside the f64 safe-integer range are serialized as strings
     // so JS consumers don't lose precision. The decimal form of an integer
     // needs no JSON escaping, so the digits are quoted verbatim.
-    if !(f64::MIN_SAFE_INTEGER as i64 <= v <= f64::MAX_SAFE_INTEGER as i64) {
-        buf.push('"');
+    if f64::MIN_SAFE_INTEGER as i64 <= v <= f64::MAX_SAFE_INTEGER as i64 {
         buf.push_display(&v);
-        buf.push('"');
     } else {
+        buf.push('"');
         buf.push_display(&v);
+        buf.push('"');
     }
     return Result::Ok(());
 }
@@ -110,12 +110,12 @@ fn write_json_u64(buf: &mut String, v: u64) -> Result<(), SerializeError> {
     // Values above the f64 safe-integer range are serialized as strings
     // so JS consumers don't lose precision. The decimal form of an integer
     // needs no JSON escaping, so the digits are quoted verbatim.
-    if v > f64::MAX_SAFE_INTEGER as u64 {
-        buf.push('"');
+    if v <= f64::MAX_SAFE_INTEGER as u64 {
         buf.push_display(&v);
-        buf.push('"');
     } else {
+        buf.push('"');
         buf.push_display(&v);
+        buf.push('"');
     }
     return Result::Ok(());
 }
