@@ -3397,7 +3397,7 @@ Append all bytes of `bytes` to this string (bulk-copy, single `array_copy`).
 
 - The resulting byte sequence (existing bytes + new bytes) must be valid UTF-8.
 
-#### `pub fn push_str_range_unchecked(&mut self, s: String, start: i32, end: i32)`
+#### `pub fn push_str_range_unchecked(&mut self, s: &String, start: i32, end: i32)`
 
 Append the byte range `[start, end)` of `s` to this string
 (bulk-copy, single `array_copy`).
@@ -3406,6 +3406,14 @@ Append the byte range `[start, end)` of `s` to this string
 
 - `0 <= start <= end <= s.len()`.
 - `start` and `end` must lie on UTF-8 character boundaries of `s`.
+- The resulting byte sequence must remain valid UTF-8.
+
+#### `pub fn push_byte_slice_unchecked(&mut self, bytes: ByteSlice)`
+
+Append the bytes of `bytes` to this string in one bulk `array_copy`.
+
+# Safety (caller-side preconditions)
+
 - The resulting byte sequence must remain valid UTF-8.
 
 #### `pub fn bytes(&self) -> StrUtf8ByteIter`
@@ -3644,6 +3652,13 @@ through: one forward pass over `decode_utf8_scalar`, then one `to_array`
 copy wrapped via `internal_from_utf8_raw`. Cheaper than `from_utf8`'s old
 codepoint-by-codepoint rebuild whenever the bytes already live in one
 buffer (e.g. a JSON string token sliced out of the borrowed input).
+
+#### `pub fn is_valid_utf8(bytes: ByteSlice) -> bool`
+
+Whether `bytes` is well-formed UTF-8, in one forward `decode_utf8_scalar`
+pass. Splits validation from the copy so callers that already own a
+buffer can validate in place (e.g. the JSON deserializer appending a
+scanned run straight into its result).
 
 #### `pub fn from_utf8_lossy<I: IntoIterator<Item = u8>>(bytes: I) -> String`
 

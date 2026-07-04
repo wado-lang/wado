@@ -369,37 +369,39 @@ type "functype//core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect" = fn
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(88)
 
-type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(89)
+type "functype//core:prelude/string.wado/String::is_valid_utf8" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> bool;  // TypeId(89)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(90)
+type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(90)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(91)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(91)
 
-type "functype//core:prelude/slice.wado/ArraySlice<u8>::to_array" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref Array<u8>;  // TypeId(92)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(92)
 
-type "functype//core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(93)
+type "functype//core:prelude/slice.wado/ArraySlice<u8>::to_array" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref Array<u8>;  // TypeId(93)
 
-type "functype//core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(94)
+type "functype//core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(94)
 
-type "functype//core:prelude/slice.wado/ArrayIter<u8>::collect" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> ref "core:prelude//List<u8>";  // TypeId(95)
+type "functype//core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(95)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(96)
+type "functype//core:prelude/slice.wado/ArrayIter<u8>::collect" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> ref "core:prelude//List<u8>";  // TypeId(96)
 
-type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(97)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(97)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(98)
+type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(98)
 
-type "functype//wasi/resource-drop:fields" = fn(i32);  // TypeId(99)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(99)
 
-type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(100)
+type "functype//wasi/resource-drop:fields" = fn(i32);  // TypeId(100)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(101)
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(101)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(102)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(102)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(103)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(103)
 
-type "functype//core:prelude/string.wado/String::from_utf8_slice" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> [i32, ref null "core:prelude/string.wado//String"];  // TypeId(104)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(104)
+
+type "functype//core:prelude/string.wado/String::from_utf8_slice" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> [i32, ref null "core:prelude/string.wado//String"];  // TypeId(105)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -1539,27 +1541,36 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 }
 
 fn "core:prelude/string.wado/String::from_utf8_slice"(bytes) {
-    let len_1: i32;
+    let bytes_2: ref Array<u8>;
+    let len: i32;
+    if @unlikely("core:prelude/string.wado/String::is_valid_utf8"(bytes) == 0) {
+        cold_path;
+        return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8"), used: 13 };
+    }
+    return 0, ref.as_non_null(bytes_2 = "core:prelude/slice.wado/ArraySlice<u8>::to_array"(bytes); len = bytes.end - bytes.start; struct.new "core:prelude/string.wado//String" { repr: bytes_2, used: len });
+}
+
+fn "core:prelude/string.wado/String::is_valid_utf8"(bytes) {
+    let len: i32;
     let i: i32;
-    let bytes_5: ref Array<u8>;
-    len_1 = bytes.end - bytes.start;
+    len = bytes.end - bytes.start;
     i = 0;
-    b137: block {
-        l138: loop {
-            break_if b137 i >= len_1;
+    b138: block {
+        l139: loop {
+            break_if b138 i >= len;
             let scalar_mv_code: u32;
             let scalar_mv_advance: i32;
             let scalar_mv_valid: bool;
-            multivalue_bind [scalar_mv_code, scalar_mv_advance, scalar_mv_valid] = "core:prelude/string.wado/decode_utf8_scalar"(bytes, i, len_1);
+            multivalue_bind [scalar_mv_code, scalar_mv_advance, scalar_mv_valid] = "core:prelude/string.wado/decode_utf8_scalar"(bytes, i, len);
             if @unlikely(scalar_mv_valid == 0) {
                 cold_path;
-                return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8"), used: 13 };
+                return 0;
             }
             i = i + scalar_mv_advance;
-            continue l138;
+            continue l139;
         };
     };
-    return 0, ref.as_non_null(bytes_5 = "core:prelude/slice.wado/ArraySlice<u8>::to_array"(bytes); struct.new "core:prelude/string.wado//String" { repr: bytes_5, used: len_1 });
+    return 1;
 }
 
 fn "core:prelude/format.wado/Formatter::new"(buf) {
@@ -1571,12 +1582,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b140: block {
-        l141: loop {
-            break_if b140 i >= n;
+    b141: block {
+        l142: loop {
+            break_if b141 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l141;
+            continue l142;
         };
     };
 }
