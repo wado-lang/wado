@@ -82,12 +82,6 @@ pub fn write_escaped_string(buf: &mut String, s: &String) {
 // Scalar JSON encoding shared by the compact, pretty, and canonical
 // serializers — only their container handling differs.
 
-fn write_json_quoted_display<T: Display>(buf: &mut String, v: &T) {
-    buf.push('"');
-    buf.push_display(v);
-    buf.push('"');
-}
-
 fn write_json_i32(buf: &mut String, v: i32) -> Result<(), SerializeError> {
     buf.push_display(&v);
     return Result::Ok(());
@@ -95,9 +89,12 @@ fn write_json_i32(buf: &mut String, v: i32) -> Result<(), SerializeError> {
 
 fn write_json_i64(buf: &mut String, v: i64) -> Result<(), SerializeError> {
     // Values outside the f64 safe-integer range are serialized as strings
-    // so JS consumers don't lose precision.
+    // so JS consumers don't lose precision. The decimal form of an integer
+    // needs no JSON escaping, so the digits are quoted verbatim.
     if !(f64::MIN_SAFE_INTEGER as i64 <= v <= f64::MAX_SAFE_INTEGER as i64) {
-        write_json_quoted_display(buf, &v);
+        buf.push('"');
+        buf.push_display(&v);
+        buf.push('"');
     } else {
         buf.push_display(&v);
     }
@@ -111,9 +108,12 @@ fn write_json_u32(buf: &mut String, v: u32) -> Result<(), SerializeError> {
 
 fn write_json_u64(buf: &mut String, v: u64) -> Result<(), SerializeError> {
     // Values above the f64 safe-integer range are serialized as strings
-    // so JS consumers don't lose precision.
+    // so JS consumers don't lose precision. The decimal form of an integer
+    // needs no JSON escaping, so the digits are quoted verbatim.
     if v > f64::MAX_SAFE_INTEGER as u64 {
-        write_json_quoted_display(buf, &v);
+        buf.push('"');
+        buf.push_display(&v);
+        buf.push('"');
     } else {
         buf.push_display(&v);
     }
@@ -122,12 +122,16 @@ fn write_json_u64(buf: &mut String, v: u64) -> Result<(), SerializeError> {
 
 fn write_json_i128(buf: &mut String, v: i128) -> Result<(), SerializeError> {
     // 128-bit values always exceed the f64 safe-integer range: always a string.
-    write_json_quoted_display(buf, &v);
+    buf.push('"');
+    buf.push_display(&v);
+    buf.push('"');
     return Result::Ok(());
 }
 
 fn write_json_u128(buf: &mut String, v: u128) -> Result<(), SerializeError> {
-    write_json_quoted_display(buf, &v);
+    buf.push('"');
+    buf.push_display(&v);
+    buf.push('"');
     return Result::Ok(());
 }
 

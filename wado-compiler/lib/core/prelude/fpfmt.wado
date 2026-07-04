@@ -586,15 +586,14 @@ global DIGIT_PAIRS: List<u8> = [
 // buf must already have space (pre-filled with '0' chars).
 fn write_digits_at(buf: &mut String, offset: i32, val: u64, nd: i32) {
     let mut raw = buf.internal_raw_bytes();
-    let pairs = DIGIT_PAIRS.internal_raw_data();
     let mut v = val;
     let mut idx = offset + nd;
     while idx - offset >= 2 {
         let pair = (v % 100) as i32 * 2;
         v = v / 100;
         idx -= 2;
-        builtin::array_set_u8(&mut raw, idx, builtin::array_get_u8(&pairs, pair));
-        builtin::array_set_u8(&mut raw, idx + 1, builtin::array_get_u8(&pairs, pair + 1));
+        builtin::array_set_u8(&mut raw, idx, DIGIT_PAIRS.get_unchecked(pair));
+        builtin::array_set_u8(&mut raw, idx + 1, DIGIT_PAIRS.get_unchecked(pair + 1));
     }
     if idx > offset {
         builtin::array_set_u8(&mut raw, offset, ('0' as u32 + (v % 10) as u32) as u8);
