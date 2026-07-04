@@ -2484,13 +2484,13 @@ pub fn deflate_with_level(input: &List<u8>, level: i32, strategy: i32) -> List<u
         // Z_DEFAULT_STRATEGY or Z_FILTERED: full LZ77 matching
         let mut head: List<i32> = List::filled(32768, -1);
         let mut prev: List<i32> = List::filled(32768, -1);
-        // Mirror input into linear memory to enable 8-byte word compares
+        // Mirror input into linear memory to enable 16-byte SIMD compares
         // in the LZ77 match-extension inner loops. GC arrays only support
-        // byte-level access; linear memory lets us load 8 bytes in a single
-        // i64.load. The extra 8 bytes of padding make i64 reads past the end
-        // well-defined (the final 7 positions don't contribute real matches).
-        let scratch_size = input_len + 8;
-        let scratch = builtin::realloc(0, 0, 8, scratch_size);
+        // byte-level access; linear memory lets us load 16 bytes in a single
+        // v128.load. The extra 16 bytes of padding keep v128 reads near the
+        // end well-defined.
+        let scratch_size = input_len + 16;
+        let scratch = builtin::realloc(0, 0, 16, scratch_size);
         for let mut i = 0; i < input_len; i += 1 {
             builtin::i32_store8(scratch + i, input[i]);
         }
@@ -2541,19 +2541,18 @@ pub fn deflate_with_level(input: &List<u8>, level: i32, strategy: i32) -> List<u
                             continue;
                         }
 
-                        // Word-wise match extension. 8-byte XOR + CTZ finds the
-                        // first differing byte in one step. The scratch buffer
-                        // is padded by 8, so i64_load past input end reads zeros.
+                        // SIMD match extension. 16-byte compare + bitmask + CTZ
+                        // finds the first differing byte per step.
                         let mut match_len = 0;
-                        let word_limit = max_len - 7;
+                        let word_limit = max_len - 15;
                         while match_len < word_limit {
-                            let diff: i64 = builtin::i64_load(scratch + chain + match_len) ^ builtin::i64_load(
-                                scratch + pos + match_len,
-                            );
-                            if diff == 0 {
-                                match_len += 8;
+                            let eq = builtin::i8x16_bitmask(builtin::i8x16_eq(builtin::v128_load(
+                                scratch + chain + match_len,
+                            ), builtin::v128_load(scratch + pos + match_len)));
+                            if eq == 0xFFFF {
+                                match_len += 16;
                             } else {
-                                match_len += (builtin::i64_ctz(diff) >> 3) as i32;
+                                match_len += builtin::i32_ctz(eq ^ 0xFFFF);
                                 break;
                             }
                         }
@@ -2684,15 +2683,15 @@ pub fn deflate_with_level(input: &List<u8>, level: i32, strategy: i32) -> List<u
                         }
 
                         let mut match_len = 0;
-                        let word_limit = max_len - 7;
+                        let word_limit = max_len - 15;
                         while match_len < word_limit {
-                            let diff: i64 = builtin::i64_load(scratch + chain + match_len) ^ builtin::i64_load(
-                                scratch + pos + match_len,
-                            );
-                            if diff == 0 {
-                                match_len += 8;
+                            let eq = builtin::i8x16_bitmask(builtin::i8x16_eq(builtin::v128_load(
+                                scratch + chain + match_len,
+                            ), builtin::v128_load(scratch + pos + match_len)));
+                            if eq == 0xFFFF {
+                                match_len += 16;
                             } else {
-                                match_len += (builtin::i64_ctz(diff) >> 3) as i32;
+                                match_len += builtin::i32_ctz(eq ^ 0xFFFF);
                                 break;
                             }
                         }
@@ -2744,7 +2743,7 @@ pub fn deflate_with_level(input: &List<u8>, level: i32, strategy: i32) -> List<u
                 }
             }
         }
-        builtin::realloc(scratch, scratch_size, 8, 0);
+        builtin::realloc(scratch, scratch_size, 16, 0);
     }
 
     let sym_count = symbols.len();
