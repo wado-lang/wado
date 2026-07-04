@@ -1,0 +1,155 @@
+//! Java tokenizer for the java2wado expression subset.
+//!
+//! Tokenizes an ANTLR action / predicate body's Java host code into `JToken`s.
+//! ANTLR `$name(.member)?` attribute references are lexed as one opaque `Attr`
+//! token carrying the full reference text — resolving it to a Wado expression
+//! is the language-independent attribute engine's job (`action_translate`), not
+//! the Java lexer's. String literals keep their raw inner text (escapes intact).
+
+use { is_id_start_char, is_id_continue_char, scan_string } from "../g4/scan.wado";
+
+/// A Java token over an action / predicate body.
+pub variant JToken {
+    /// Identifier or keyword (`this`, `true`, `false`, a method name, ...).
+    Ident(String),
+    /// Full `$name` / `$name.member` attribute reference text, delimiters kept.
+    Attr(String),
+    /// Decimal integer literal text.
+    Int(String),
+    /// Double-quoted string literal, inner text with escapes preserved.
+    Str(String),
+    /// Operator or punctuation (`==`, `%`, `+`, `.`, `(`, `;`, `=`, ...).
+    Punct(String),
+}
+
+/// Tokenize a Java body into `JToken`s, skipping whitespace. Returns a loud
+/// error on an unexpected character so codegen surfaces a diagnostic rather
+/// than emitting invalid code.
+pub fn tokenize_java(body: &String) -> Result<List<JToken>, String> {
+    let chars: List<char> = body.chars().collect();
+    let n = chars.len();
+    let mut out: List<JToken> = [];
+    let mut i = 0;
+    while i < n {
+        let c = chars[i];
+        if c.is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+        if c == '"' {
+            let e = scan_string(&chars, i);
+            out.push(JToken::Str(slice(&chars, i + 1, e - 1)));
+            i = e;
+            continue;
+        }
+        if c == '$' && i + 1 < n && is_id_start_char(chars[i + 1]) {
+            let e = scan_attr_ref(&chars, i, n);
+            out.push(JToken::Attr(slice(&chars, i, e)));
+            i = e;
+            continue;
+        }
+        if is_id_start_char(c) {
+            let mut j = i + 1;
+            while j < n && is_id_continue_char(chars[j]) {
+                j += 1;
+            }
+            out.push(JToken::Ident(slice(&chars, i, j)));
+            i = j;
+            continue;
+        }
+        if c >= '0' && c <= '9' {
+            let mut j = i + 1;
+            while j < n && chars[j] >= '0' && chars[j] <= '9' {
+                j += 1;
+            }
+            out.push(JToken::Int(slice(&chars, i, j)));
+            i = j;
+            continue;
+        }
+        match scan_punct(&chars, i, n) {
+            Some(p) => {
+                i += p.chars().count();
+                out.push(JToken::Punct(p));
+            },
+            None => {
+                return Result::Err(`java2wado: unexpected character '{c}' in action body`);
+            },
+        }
+    }
+    return Result::Ok(out);
+}
+
+/// Span of a `$name(.member)?` reference: `pos` at the `$`; returns one past the
+/// last char. Mirrors `attr_scan`'s single-`.member` capture.
+fn scan_attr_ref(chars: &List<char>, pos: i32, n: i32) -> i32 {
+    let mut j = pos + 1;
+    while j < n && is_id_continue_char(chars[j]) {
+        j += 1;
+    }
+    if j + 1 < n && chars[j] == '.' && is_id_start_char(chars[j + 1]) {
+        let mut k = j + 1;
+        while k < n && is_id_continue_char(chars[k]) {
+            k += 1;
+        }
+        return k;
+    }
+    return j;
+}
+
+/// The longest operator / punctuation token starting at `pos`, or `None`. Two-
+/// char operators are matched before their one-char prefixes.
+fn scan_punct(chars: &List<char>, pos: i32, n: i32) -> Option<String> {
+    if pos + 1 < n {
+        let two = slice(chars, pos, pos + 2);
+        if is_two_char_op(&two) {
+            return Option::Some(two);
+        }
+    }
+    let c = chars[pos];
+    if is_one_char_punct(c) {
+        let mut s = String::with_capacity(1);
+        s.push(c);
+        return Option::Some(s);
+    }
+    return null;
+}
+
+fn is_two_char_op(s: &String) -> bool {
+    return *s == "=="
+        || *s == "!="
+        || *s == ">="
+        || *s == "<="
+        || *s == "&&"
+        || *s == "||"
+        || *s == "+="
+        || *s == "-="
+        || *s == "*="
+        || *s == "/=";
+}
+
+fn is_one_char_punct(c: char) -> bool {
+    return c == '+'
+        || c == '-'
+        || c == '*'
+        || c == '/'
+        || c == '%'
+        || c == '<'
+        || c == '>'
+        || c == '!'
+        || c == '='
+        || c == '.'
+        || c == ','
+        || c == ';'
+        || c == '('
+        || c == ')'
+        || c == '{'
+        || c == '}';
+}
+
+fn slice(chars: &List<char>, start: i32, end: i32) -> String {
+    let mut s = String::with_capacity(end - start);
+    for let mut i = start; i < end; i += 1 {
+        s.push(chars[i]);
+    }
+    return s;
+}

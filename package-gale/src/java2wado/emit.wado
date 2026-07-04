@@ -1,0 +1,148 @@
+//! Emit Wado from a parsed java2wado `JExpr`.
+//!
+//! Operators pass through (Java and Wado share C-family precedence, so the
+//! parsed AST re-emits without extra parens); `$`-references route through the
+//! shared, language-independent attribute engine (`resolve_attr_ref`); a string
+//! `+` chain becomes a Wado template literal (per the java2wado.md decision),
+//! with literal parts as template text and non-literals as `{...}` interpolations.
+
+use { ParserRule } from "../ir.wado";
+use { resolve_attr_ref } from "../action_translate.wado";
+use { JExpr } from "./parser.wado";
+use { tokenize_java } from "./lexer.wado";
+use { parse_java_expr } from "./parser.wado";
+
+/// Translate a Java expression body (a predicate condition, or a sub-expression
+/// of an action) to a Wado expression. Ties tokenize → parse → emit.
+pub fn translate_java_expr(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    body: &String,
+    vals_in_scope: bool,
+    bindings: &List<[bool, String, String]>,
+) -> Result<String, String> {
+    let tokens = tokenize_java(body)?;
+    let expr = parse_java_expr(&tokens)?;
+    return emit_expr(rule, rules, &expr, vals_in_scope, bindings);
+}
+
+fn emit_expr(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    e: &JExpr,
+    vals_in_scope: bool,
+    bindings: &List<[bool, String, String]>,
+) -> Result<String, String> {
+    return match e {
+        Int(v) => Result::Ok(*v),
+        Bool(b) => Result::Ok(if *b { String::from("true") } else { String::from("false") }),
+        Str(c) => Result::Ok(`"{*c}"`),
+        Attr(text) => resolve_attr_ref(rule, rules, text, vals_in_scope, bindings),
+        ThisField(f) => Result::Ok(`self.{*f}`),
+        Unary(u) => {
+            let operand = emit_expr(rule, rules, &u.operand, vals_in_scope, bindings)?;
+            Result::Ok(`{u.op}{operand}`);
+        },
+        Paren(p) => {
+            let inner = emit_expr(rule, rules, &p.inner, vals_in_scope, bindings)?;
+            Result::Ok(`({inner})`);
+        },
+        Binary(b) => {
+            if b.op == "+" && is_string_concat(e) {
+                emit_template(rule, rules, e, vals_in_scope, bindings);
+            } else {
+                let l = emit_expr(rule, rules, &b.lhs, vals_in_scope, bindings)?;
+                let r = emit_expr(rule, rules, &b.rhs, vals_in_scope, bindings)?;
+                Result::Ok(`{l} {b.op} {r}`);
+            }
+        },
+    };
+}
+
+/// Whether a `+` expression is string concatenation: some leaf in the `+` chain
+/// is a string literal. Corpus concat chains always carry a literal (`"(" + a +
+/// ")"`), so this classifies without host-language type inference.
+fn is_string_concat(e: &JExpr) -> bool {
+    return match e {
+        Str(_) => true,
+        Binary(b) => b.op == "+" && (is_string_concat(&b.lhs) || is_string_concat(&b.rhs)),
+        Paren(p) => is_string_concat(&p.inner),
+        _ => false,
+    };
+}
+
+/// Emit a string `+` chain as a Wado template literal.
+fn emit_template(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    e: &JExpr,
+    vals_in_scope: bool,
+    bindings: &List<[bool, String, String]>,
+) -> Result<String, String> {
+    let mut out = String::from("`");
+    append_parts(rule, rules, e, vals_in_scope, bindings, &mut out)?;
+    out.push('`');
+    return Result::Ok(out);
+}
+
+fn append_parts(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    e: &JExpr,
+    vals_in_scope: bool,
+    bindings: &List<[bool, String, String]>,
+    out: &mut String,
+) -> Result<(), String> {
+    return match e {
+        Str(c) => {
+            out.push_str(&escape_template(c));
+            Result::Ok(());
+        },
+        Binary(b) => {
+            if b.op == "+" && is_string_concat(e) {
+                append_parts(rule, rules, &b.lhs, vals_in_scope, bindings, out)?;
+                append_parts(rule, rules, &b.rhs, vals_in_scope, bindings, out)?;
+                Result::Ok(());
+            } else {
+                append_interp(rule, rules, e, vals_in_scope, bindings, out);
+            }
+        },
+        Paren(p) => {
+            if is_string_concat(&p.inner) {
+                append_parts(rule, rules, &p.inner, vals_in_scope, bindings, out);
+            } else {
+                append_interp(rule, rules, e, vals_in_scope, bindings, out);
+            }
+        },
+        _ => append_interp(rule, rules, e, vals_in_scope, bindings, out),
+    };
+}
+
+fn append_interp(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    e: &JExpr,
+    vals_in_scope: bool,
+    bindings: &List<[bool, String, String]>,
+    out: &mut String,
+) -> Result<(), String> {
+    let expr = emit_expr(rule, rules, e, vals_in_scope, bindings)?;
+    out.push('{');
+    out.push_str(&expr);
+    out.push('}');
+    return Result::Ok(());
+}
+
+/// Escape a string-literal part for insertion as Wado template text: the braces
+/// and backtick that carry template meaning. Java `\`-escapes (`\n`, `\"`, `\\`)
+/// already read correctly as Wado template text and pass through.
+fn escape_template(content: &String) -> String {
+    let mut out = String::with_capacity(content.chars().count());
+    for let c of content.chars() {
+        if c == '{' || c == '}' || c == '`' {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    return out;
+}

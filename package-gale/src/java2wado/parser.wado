@@ -1,0 +1,211 @@
+//! Recursive-descent parser for the java2wado expression subset.
+//!
+//! Consumes `JToken`s into a `JExpr` AST with C-family operator precedence
+//! (`||` < `&&` < equality < relational < additive < multiplicative < unary <
+//! primary). The AST — not span rewriting — is what lets the emitter turn a
+//! string `+` chain into a Wado template literal soundly. Bare identifiers and
+//! method calls are out of this slice's scope (a loud error); they arrive with
+//! the mapped-call work.
+
+use { JToken } from "./lexer.wado";
+
+/// A Java expression in the java2wado subset.
+pub variant JExpr {
+    Int(String),
+    Str(String),
+    Bool(bool),
+    /// `$name(.member)?` — resolved to Wado by the shared attribute engine.
+    Attr(String),
+    /// `this.field`.
+    ThisField(String),
+    Unary(JUnary),
+    Binary(JBinary),
+    Paren(JParen),
+}
+
+pub struct JUnary {
+    pub op: String,
+    pub operand: JExpr,
+}
+
+pub struct JBinary {
+    pub op: String,
+    pub lhs: JExpr,
+    pub rhs: JExpr,
+}
+
+pub struct JParen {
+    pub inner: JExpr,
+}
+
+/// Parse `tokens` as a single expression consuming all of them. A trailing
+/// token or an empty input is a loud error.
+pub fn parse_java_expr(tokens: &List<JToken>) -> Result<JExpr, String> {
+    if tokens.is_empty() {
+        return Result::Err("java2wado: empty expression");
+    }
+    let mut pos = 0;
+    let e = parse_or(tokens, &mut pos)?;
+    if pos != tokens.len() {
+        return Result::Err(`java2wado: unexpected trailing token in expression`);
+    }
+    return Result::Ok(e);
+}
+
+fn parse_or(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
+    let mut lhs = parse_and(tokens, pos)?;
+    while punct_is(tokens, *pos, &"||") {
+        *pos += 1;
+        let rhs = parse_and(tokens, pos)?;
+        lhs = JExpr::Binary(JBinary { op: "||", lhs, rhs });
+    }
+    return Result::Ok(lhs);
+}
+
+fn parse_and(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
+    let mut lhs = parse_eq(tokens, pos)?;
+    while punct_is(tokens, *pos, &"&&") {
+        *pos += 1;
+        let rhs = parse_eq(tokens, pos)?;
+        lhs = JExpr::Binary(JBinary { op: "&&", lhs, rhs });
+    }
+    return Result::Ok(lhs);
+}
+
+fn parse_eq(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
+    let mut lhs = parse_rel(tokens, pos)?;
+    while punct_is(tokens, *pos, &"==") || punct_is(tokens, *pos, &"!=") {
+        let op = punct_at(tokens, *pos);
+        *pos += 1;
+        let rhs = parse_rel(tokens, pos)?;
+        lhs = JExpr::Binary(JBinary { op, lhs, rhs });
+    }
+    return Result::Ok(lhs);
+}
+
+fn parse_rel(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
+    let mut lhs = parse_add(tokens, pos)?;
+    while punct_is(tokens, *pos, &"<")
+        || punct_is(tokens, *pos, &">")
+        || punct_is(tokens, *pos, &"<=")
+        || punct_is(tokens, *pos, &">=") {
+        let op = punct_at(tokens, *pos);
+        *pos += 1;
+        let rhs = parse_add(tokens, pos)?;
+        lhs = JExpr::Binary(JBinary { op, lhs, rhs });
+    }
+    return Result::Ok(lhs);
+}
+
+fn parse_add(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
+    let mut lhs = parse_mul(tokens, pos)?;
+    while punct_is(tokens, *pos, &"+") || punct_is(tokens, *pos, &"-") {
+        let op = punct_at(tokens, *pos);
+        *pos += 1;
+        let rhs = parse_mul(tokens, pos)?;
+        lhs = JExpr::Binary(JBinary { op, lhs, rhs });
+    }
+    return Result::Ok(lhs);
+}
+
+fn parse_mul(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
+    let mut lhs = parse_unary(tokens, pos)?;
+    while punct_is(tokens, *pos, &"*") || punct_is(tokens, *pos, &"/") || punct_is(tokens, *pos, &"%") {
+        let op = punct_at(tokens, *pos);
+        *pos += 1;
+        let rhs = parse_unary(tokens, pos)?;
+        lhs = JExpr::Binary(JBinary { op, lhs, rhs });
+    }
+    return Result::Ok(lhs);
+}
+
+fn parse_unary(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
+    if punct_is(tokens, *pos, &"!") || punct_is(tokens, *pos, &"-") {
+        let op = punct_at(tokens, *pos);
+        *pos += 1;
+        let operand = parse_unary(tokens, pos)?;
+        return Result::Ok(JExpr::Unary(JUnary { op, operand }));
+    }
+    return parse_primary(tokens, pos);
+}
+
+fn parse_primary(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
+    if *pos >= tokens.len() {
+        return Result::Err("java2wado: unexpected end of expression");
+    }
+    return match &tokens[*pos] {
+        Int(v) => {
+            *pos += 1;
+            Result::Ok(JExpr::Int(*v));
+        },
+        Str(v) => {
+            *pos += 1;
+            Result::Ok(JExpr::Str(*v));
+        },
+        Attr(v) => {
+            *pos += 1;
+            Result::Ok(JExpr::Attr(*v));
+        },
+        Ident(name) => parse_ident_primary(tokens, pos, name),
+        Punct(p) => {
+            if *p == "(" {
+                *pos += 1;
+                let inner = parse_or(tokens, pos)?;
+                if !punct_is(tokens, *pos, &")") {
+                    return Result::Err("java2wado: expected ')'");
+                }
+                *pos += 1;
+                Result::Ok(JExpr::Paren(JParen { inner }));
+            } else {
+                Result::Err(`java2wado: unexpected '{*p}' in expression`);
+            }
+        },
+    };
+}
+
+/// `true` / `false` literals and `this.field`. A bare identifier or a method
+/// call is outside this slice (mapped calls arrive later) — a loud error.
+fn parse_ident_primary(tokens: &List<JToken>, pos: &mut i32, name: &String) -> Result<JExpr, String> {
+    if *name == "true" {
+        *pos += 1;
+        return Result::Ok(JExpr::Bool(true));
+    }
+    if *name == "false" {
+        *pos += 1;
+        return Result::Ok(JExpr::Bool(false));
+    }
+    if *name == "this" && punct_is(tokens, *pos + 1, &".") {
+        if let Some(field) = ident_at(tokens, *pos + 2) {
+            *pos += 3;
+            return Result::Ok(JExpr::ThisField(field));
+        }
+    }
+    return Result::Err(`java2wado: identifier '{*name}' is not supported in this slice`);
+}
+
+fn punct_is(tokens: &List<JToken>, pos: i32, s: &String) -> bool {
+    if pos < 0 || pos >= tokens.len() {
+        return false;
+    }
+    return match &tokens[pos] {
+        Punct(p) => *p == *s,
+        _ => false,
+    };
+}
+
+fn punct_at(tokens: &List<JToken>, pos: i32) -> String {
+    return match &tokens[pos] {
+        Punct(p) => *p,
+        _ => "",
+    };
+}
+
+fn ident_at(tokens: &List<JToken>, pos: i32) -> Option<String> {
+    if pos < 0 || pos >= tokens.len() {
+        return null;
+    }
+    return match &tokens[pos] {
+        Ident(name) => Option::Some(*name),
+        _ => null,
+    };
+}

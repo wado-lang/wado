@@ -51,6 +51,21 @@ pub fn translate_wado_action(
     return Result::Ok(splice_attrs(body, &adjusted, &repls));
 }
 
+/// Resolve a single `$name(.member)?` reference to its Wado expression, shared
+/// by the identity translator and java2wado. Attribute resolution is
+/// language-independent (`action.md` layer 2): both front ends map `$`-refs
+/// onto the value channel / context API identically, differing only in the host
+/// code around them. `ref_text` is exactly the reference (`$x`, `$x.v`).
+pub fn resolve_attr_ref(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    ref_text: &String,
+    vals_in_scope: bool,
+    bindings: &List<[bool, String, String]>,
+) -> Result<String, String> {
+    return translate_wado_action(rule, rules, ref_text, vals_in_scope, bindings);
+}
+
 fn is_ctx_to_string_tree(r: &ResolvedAttr) -> bool {
     return r.target matches { ParserSpecial } && r.name == "ctx" && r.member matches { Some("toStringTree") };
 }

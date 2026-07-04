@@ -1,8 +1,62 @@
-use { translate_action, grammar_has_superclass } from "./java2wado.wado";
+use { translate_action, translate_predicate, grammar_has_superclass } from "./java2wado.wado";
 use { parse } from "./g4/parser.wado";
 use { ActionLanguage } from "./ir.wado";
 
 global NO_BINDINGS: List<[bool, String, String]> = [];
+
+fn java_pred(src: &String, rule_src: &String, vals_in_scope: bool) -> String {
+    let g = parse(`grammar T;
+{*rule_src}
+`).unwrap();
+    let lang = ActionLanguage::Java;
+    return translate_predicate(&lang, &g.parser_rules[0], &g.parser_rules, src, vals_in_scope, &NO_BINDINGS).unwrap();
+}
+
+test "java predicate: this.field with arithmetic and comparison" {
+    let out = java_pred(&"this.i % 2 == 0", &"a : ID ;", false);
+    assert out == "self.i % 2 == 0", `out: '{out}'`;
+}
+
+test "java predicate: rule arg reference" {
+    let out = java_pred(&"$i == 1", &"a[i32 i] : ID ;", true);
+    assert out == "vals.i == 1", `out: '{out}'`;
+}
+
+test "java predicate: negation with parens" {
+    let out = java_pred(&"!(this.enumKeyword)", &"a : ID ;", false);
+    assert out == "!(self.enumKeyword)", `out: '{out}'`;
+}
+
+test "java predicate: boolean literal" {
+    let out = java_pred(&"false", &"a : ID ;", false);
+    assert out == "false", `out: '{out}'`;
+}
+
+test "java expr: numeric plus is not string concat" {
+    let g = parse("grammar T;
+r : x=e ;
+e returns [i32 v] : ID ;
+").unwrap();
+    let lang = ActionLanguage::Java;
+    let out = translate_predicate(&lang, &g.parser_rules[0], &g.parser_rules, &"$x.v + 1", false, &NO_BINDINGS).unwrap();
+    assert out == "x.v + 1", `out: '{out}'`;
+}
+
+test "java expr: string concat becomes a template literal" {
+    let g = parse("grammar T;
+r : ID ;
+").unwrap();
+    let lang = ActionLanguage::Java;
+    let out = translate_predicate(
+        &lang,
+        &g.parser_rules[0],
+        &g.parser_rules,
+        &"\"ID \" + $ID.text",
+        false,
+        &NO_BINDINGS,
+    ).unwrap();
+    assert out == "`ID {p.token_text(id)}`", `out: '{out}'`;
+}
 
 test "dispatcher routes language = Wado through the identity translator" {
     let g = parse("grammar T;
