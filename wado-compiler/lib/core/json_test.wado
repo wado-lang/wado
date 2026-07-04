@@ -592,6 +592,20 @@ test "from_bytes rejects invalid UTF-8" {
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
 }
 
+test "from_bytes rejects invalid UTF-8 after ASCII prefix" {
+    // A bad byte trailing valid ASCII must still be rejected: the ASCII-skip
+    // fast path keys off `high_bits`, which ORs every scanned byte, so 0xff
+    // forces the validating path even though "ab" is ASCII.
+    let bytes: ByteList = [0x22, 0x61, 0x62, 0xff, 0x22];  // "ab<0xff>"
+    let r: Result<String, DeserializeError> = from_bytes(bytes);
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+
+    // Truncated multi-byte lead (0xC3 with no continuation) after ASCII, too.
+    let bytes2: ByteList = [0x22, 0x78, 0xc3, 0x22];  // "x<0xc3>"
+    let r2: Result<String, DeserializeError> = from_bytes(bytes2);
+    assert r2 matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+}
+
 test "to_bytes_canonical sorts map keys" {
     let mut m: TreeMap<String, i32> = TreeMap::new();
     m["banana"] = 2;
