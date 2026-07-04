@@ -163,6 +163,9 @@ e : ID ;
     // Bare reference (no parens) still emits a complete call.
     let c = translate_wado_action(rule, &g.parser_rules, &" let t = $ctx.toStringTree; print(t); ", false, &NO_BINDINGS).unwrap();
     assert c == " let t = p.rule_string_tree(); print(t); ", `c: '{c}'`;
+    // Any ASCII whitespace (incl. a newline) before the call is absorbed.
+    let d = translate_wado_action(rule, &g.parser_rules, &" p.emit($ctx.toStringTree\n  (this)); ", false, &NO_BINDINGS).unwrap();
+    assert d == " p.emit(p.rule_string_tree()); ", `d: '{d}'`;
 }
 
 test "translate maps $ctx.toStringTree in a left-recursive rule to the final-node render" {

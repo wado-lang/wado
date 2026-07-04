@@ -62,7 +62,7 @@ fn is_ctx_to_string_tree(r: &ResolvedAttr) -> bool {
 fn swallow_trailing_call(chars: &List<char>, end: i32) -> i32 {
     let n = chars.len();
     let mut j = end;
-    while j < n && chars[j] matches { ' ' | '\t' } {
+    while j < n && chars[j].is_ascii_whitespace() {
         j += 1;
     }
     if j >= n || chars[j] != '(' {
@@ -231,28 +231,16 @@ fn token_member_of(idx: &String, member: &Option<String>) -> Result<String, Stri
             return Result::Ok(*idx);
         },
     };
-    if m == "text" {
-        return Result::Ok(`p.token_text({*idx})`);
-    }
-    if m == "int" {
-        return Result::Ok(`p.token_int({*idx})`);
-    }
-    if m == "type" {
-        return Result::Ok(`p.token_kind({*idx})`);
-    }
-    if m == "line" {
-        return Result::Ok(`p.token_line({*idx})`);
-    }
-    if m == "pos" {
-        return Result::Ok(`p.token_col({*idx})`);
-    }
-    if m == "index" {
-        return Result::Ok(*idx);
-    }
-    if m == "channel" {
-        return Result::Ok(String::from("0"));
-    }
-    return Result::Err(`.{m}: unknown token member`);
+    return match m {
+        "text" => Result::Ok(`p.token_text({*idx})`),
+        "int" => Result::Ok(`p.token_int({*idx})`),
+        "type" => Result::Ok(`p.token_kind({*idx})`),
+        "line" => Result::Ok(`p.token_line({*idx})`),
+        "pos" => Result::Ok(`p.token_col({*idx})`),
+        "index" => Result::Ok(*idx),
+        "channel" => Result::Ok(String::from("0")),
+        _ => Result::Err(`.{m}: unknown token member`),
+    };
 }
 
 fn rule_member_expr(
