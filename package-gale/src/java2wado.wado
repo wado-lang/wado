@@ -11,7 +11,7 @@
 
 use { ParserRule, Grammar, ActionLanguage } from "./ir.wado";
 use { translate_wado_action } from "./action_translate.wado";
-use { translate_java_expr } from "./java2wado/emit.wado";
+use { translate_java_expr, translate_java_stmts } from "./java2wado/emit.wado";
 
 /// Translate an action / predicate body to Wado under the grammar's action
 /// language. `language = Wado` routes to the identity translator (verbatim host
@@ -28,7 +28,7 @@ pub fn translate_action(
 ) -> Result<String, String> {
     return match lang {
         Wado => translate_wado_action(rule, rules, body, vals_in_scope, bindings),
-        Java => Result::Err(`java2wado: Java action translation is not yet implemented for '{*body}'`),
+        Java => translate_java_stmts(rule, rules, body, vals_in_scope, bindings, &"p"),
         Other(name) => Result::Err(`unsupported action language '{*name}' for action '{*body}'`),
     };
 }
@@ -47,7 +47,7 @@ pub fn translate_predicate(
 ) -> Result<String, String> {
     return match lang {
         Wado => translate_wado_action(rule, rules, body, vals_in_scope, bindings),
-        Java => translate_java_expr(rule, rules, body, vals_in_scope, bindings),
+        Java => translate_java_expr(rule, rules, body, vals_in_scope, bindings, &"p"),
         Other(name) => Result::Err(`unsupported action language '{*name}' for predicate '{*body}'`),
     };
 }

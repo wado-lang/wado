@@ -3,9 +3,10 @@
 //! Consumes `JToken`s into a `JExpr` AST with C-family operator precedence
 //! (`||` < `&&` < equality < relational < additive < multiplicative < unary <
 //! primary). The AST — not span rewriting — is what lets the emitter turn a
-//! string `+` chain into a Wado template literal soundly. Bare identifiers and
-//! method calls are out of this slice's scope (a loud error); they arrive with
-//! the mapped-call work.
+//! string `+` chain into a Wado template literal soundly. A primary is an atom
+//! (`literal`, `$ref`, identifier, `( expr )`) followed by any run of `.member`
+//! / `(args)` postfixes, so `_input.LA(1)`, `this.foo()`, `System.out.println(x)`
+//! all parse; mapping those calls to Wado is the emitter's job.
 
 use { JToken } from "./lexer.wado";
 
@@ -16,11 +17,25 @@ pub variant JExpr {
     Bool(bool),
     /// `$name(.member)?` — resolved to Wado by the shared attribute engine.
     Attr(String),
-    /// `this.field`.
-    ThisField(String),
+    /// Bare identifier or qualifier: `this`, `getText`, `_input`, `TParser`, ...
+    Name(String),
+    /// Member access `recv.name` (`this.i`, `TParser.NL`, `System.out`).
+    Member(JMember),
+    /// Call `callee(args)` (`getText()`, `_input.LA(1)`, `this.foo()`).
+    Call(JCall),
     Unary(JUnary),
     Binary(JBinary),
     Paren(JParen),
+}
+
+pub struct JMember {
+    pub recv: JExpr,
+    pub name: String,
+}
+
+pub struct JCall {
+    pub callee: JExpr,
+    pub args: List<JExpr>,
 }
 
 pub struct JUnary {
@@ -36,6 +51,101 @@ pub struct JBinary {
 
 pub struct JParen {
     pub inner: JExpr,
+}
+
+/// A Java statement in the java2wado subset.
+pub variant JStmt {
+    /// Expression statement (`System.out.println(x);`).
+    Expr(JExpr),
+    /// Local declaration (`int x = 0;`). `ty` is the opaque Java type text.
+    Local(JLocal),
+    /// Assignment, incl. compound (`$v = e;`, `this.i += 1;`).
+    Assign(JAssign),
+}
+
+pub struct JLocal {
+    pub ty: String,
+    pub name: String,
+    pub init: Option<JExpr>,
+}
+
+pub struct JAssign {
+    pub target: JExpr,
+    pub op: String,
+    pub value: JExpr,
+}
+
+/// Parse `tokens` as a `;`-separated statement list, consuming all of them.
+pub fn parse_java_stmts(tokens: &List<JToken>) -> Result<List<JStmt>, String> {
+    let mut pos = 0;
+    let mut out: List<JStmt> = [];
+    while pos < tokens.len() {
+        out.push(parse_stmt(tokens, &mut pos)?);
+    }
+    return Result::Ok(out);
+}
+
+fn parse_stmt(tokens: &List<JToken>, pos: &mut i32) -> Result<JStmt, String> {
+    if is_local_decl(tokens, *pos) {
+        let ty = ident_at(tokens, *pos).unwrap();
+        let name = ident_at(tokens, *pos + 1).unwrap();
+        *pos += 2;
+        let mut init: Option<JExpr> = null;
+        if punct_is(tokens, *pos, &"=") {
+            *pos += 1;
+            init = Option::Some(parse_or(tokens, pos)?);
+        }
+        expect_semi(tokens, pos)?;
+        return Result::Ok(JStmt::Local(JLocal { ty, name, init }));
+    }
+    let e = parse_or(tokens, pos)?;
+    if is_assign_op(tokens, *pos) {
+        let op = punct_at(tokens, *pos);
+        *pos += 1;
+        let value = parse_or(tokens, pos)?;
+        expect_semi(tokens, pos)?;
+        return Result::Ok(JStmt::Assign(JAssign { target: e, op, value }));
+    }
+    expect_semi(tokens, pos)?;
+    return Result::Ok(JStmt::Expr(e));
+}
+
+/// A `type ident` prefix: a known Java type keyword followed by an identifier
+/// (the variable name). The corpus's action-body locals are `int` / `boolean`.
+fn is_local_decl(tokens: &List<JToken>, pos: i32) -> bool {
+    return match ident_at(tokens, pos) {
+        Some(name) => is_type_keyword(&name) && ident_at(tokens, pos + 1) matches { Some(_) },
+        None => false,
+    };
+}
+
+fn is_type_keyword(name: &String) -> bool {
+    return *name == "int"
+        || *name == "boolean"
+        || *name == "String"
+        || *name == "long"
+        || *name == "short"
+        || *name == "byte"
+        || *name == "char"
+        || *name == "double"
+        || *name == "float"
+        || *name == "void";
+}
+
+fn is_assign_op(tokens: &List<JToken>, pos: i32) -> bool {
+    return punct_is(tokens, pos, &"=")
+        || punct_is(tokens, pos, &"+=")
+        || punct_is(tokens, pos, &"-=")
+        || punct_is(tokens, pos, &"*=")
+        || punct_is(tokens, pos, &"/=");
+}
+
+fn expect_semi(tokens: &List<JToken>, pos: &mut i32) -> Result<(), String> {
+    if !punct_is(tokens, *pos, &";") {
+        return Result::Err("java2wado: expected ';'");
+    }
+    *pos += 1;
+    return Result::Ok(());
 }
 
 /// Parse `tokens` as a single expression consuming all of them. A trailing
@@ -129,7 +239,31 @@ fn parse_unary(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
     return parse_primary(tokens, pos);
 }
 
+/// A primary: an atom followed by any run of `.member` / `(args)` postfixes,
+/// so `_input.LA(1)`, `this.foo()`, `System.out.println(x)` all parse.
 fn parse_primary(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
+    let mut atom = parse_atom(tokens, pos)?;
+    loop {
+        if punct_is(tokens, *pos, &".") {
+            match ident_at(tokens, *pos + 1) {
+                Some(name) => {
+                    *pos += 2;
+                    atom = JExpr::Member(JMember { recv: atom, name });
+                },
+                None => {
+                    return Result::Err("java2wado: expected identifier after '.'");
+                },
+            }
+        } else if punct_is(tokens, *pos, &"(") {
+            let args = parse_args(tokens, pos)?;
+            atom = JExpr::Call(JCall { callee: atom, args });
+        } else {
+            return Result::Ok(atom);
+        }
+    }
+}
+
+fn parse_atom(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
     if *pos >= tokens.len() {
         return Result::Err("java2wado: unexpected end of expression");
     }
@@ -146,7 +280,16 @@ fn parse_primary(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> 
             *pos += 1;
             Result::Ok(JExpr::Attr(*v));
         },
-        Ident(name) => parse_ident_primary(tokens, pos, name),
+        Ident(name) => {
+            *pos += 1;
+            if *name == "true" {
+                Result::Ok(JExpr::Bool(true));
+            } else if *name == "false" {
+                Result::Ok(JExpr::Bool(false));
+            } else {
+                Result::Ok(JExpr::Name(*name));
+            }
+        },
         Punct(p) => {
             if *p == "(" {
                 *pos += 1;
@@ -163,24 +306,26 @@ fn parse_primary(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> 
     };
 }
 
-/// `true` / `false` literals and `this.field`. A bare identifier or a method
-/// call is outside this slice (mapped calls arrive later) — a loud error.
-fn parse_ident_primary(tokens: &List<JToken>, pos: &mut i32, name: &String) -> Result<JExpr, String> {
-    if *name == "true" {
+/// Parse `( expr (, expr)* )` — `pos` at the `(`; returns the arguments.
+fn parse_args(tokens: &List<JToken>, pos: &mut i32) -> Result<List<JExpr>, String> {
+    *pos += 1;
+    let mut args: List<JExpr> = [];
+    if punct_is(tokens, *pos, &")") {
         *pos += 1;
-        return Result::Ok(JExpr::Bool(true));
+        return Result::Ok(args);
     }
-    if *name == "false" {
-        *pos += 1;
-        return Result::Ok(JExpr::Bool(false));
-    }
-    if *name == "this" && punct_is(tokens, *pos + 1, &".") {
-        if let Some(field) = ident_at(tokens, *pos + 2) {
-            *pos += 3;
-            return Result::Ok(JExpr::ThisField(field));
+    loop {
+        args.push(parse_or(tokens, pos)?);
+        if punct_is(tokens, *pos, &",") {
+            *pos += 1;
+            continue;
         }
+        if punct_is(tokens, *pos, &")") {
+            *pos += 1;
+            return Result::Ok(args);
+        }
+        return Result::Err("java2wado: expected ',' or ')' in argument list");
     }
-    return Result::Err(`java2wado: identifier '{*name}' is not supported in this slice`);
 }
 
 fn punct_is(tokens: &List<JToken>, pos: i32, s: &String) -> bool {
