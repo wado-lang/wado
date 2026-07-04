@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783148918984,
+  "lastUpdate": 1783159288742,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -37941,6 +37941,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f29d49297d1095b6f2bcd215029454f5f8189341"
         },
         "date": 1783148918287,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8446,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17049,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 284954,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0115579af80b0678ea5763897c99828d2c528f9d",
+          "message": "Merge pull request #1513 from wado-lang/claude/wado-publish-release-workflow-6kgy7u\n\nchore(release): publish Wado packages to GHCR on release",
+          "timestamp": "2026-07-04T18:52:56+09:00",
+          "tree_id": "98c36634d3a350c9c21cc5908edade75dec980c2",
+          "url": "https://github.com/wado-lang/wado/commit/0115579af80b0678ea5763897c99828d2c528f9d"
+        },
+        "date": 1783159288026,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
