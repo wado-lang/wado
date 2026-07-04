@@ -67,11 +67,14 @@ Anything outside the subset is a **loud generation diagnostic** carrying the fra
 
 Rationale: string concatenation (`"a" + $x + "b"`), operator precedence, and `this.`-rewriting cannot be done soundly by span substitution alone (the identity translator's model). java2wado parses Java into a small AST and re-emits Wado. `$`-references are lexed as an opaque primary token whose text is resolved through the existing `attr_resolve` + value-channel logic, so the two translators share one attribute engine.
 
-New module `src/java2wado.wado` (+ `_test.wado`):
+Module layout mirrors `src/g4/` (lexer / parser split):
 
-1. **Lexer** — Java tokens over the fragment: identifiers, `$ident`, int/string/bool literals, operators, `.`/`,`/`;`/`()`/`{}`, casts. Reuse the string/comment-skipping discipline already in `action_strip` / `attr_scan`.
-2. **Parser** — recursive descent producing `JExpr` / `JStmt` (variants) for the subset above. `$`-refs and unknown method calls become `JExpr::Attr(span)` / a mapped-call node.
-3. **Emitter** — `JStmt`/`JExpr` → Wado string. Leaves that are `$`-refs call into `action_translate`'s attribute resolution (refactored so java2wado and the identity path share `action_attr_expr`); mapped calls consult the API table; `TParser.X` consults the token-kind table.
+- `src/java2wado.wado` — facade + the `ActionLanguage` dispatcher (`translate_action` / `translate_predicate` / `translate_members`).
+- `src/java2wado/lexer.wado` — Java tokens over the fragment: identifiers, `$ident` (opaque primary), int/string/bool literals, operators, `.`/`,`/`;`/`()`/`{}`, casts. Reuse the string/comment-skipping discipline in `action_strip` / `attr_scan`.
+- `src/java2wado/parser.wado` — recursive descent producing `JExpr` / `JStmt` (variants) for the subset above. `$`-refs and unknown method calls become `JExpr::Attr(span)` / a mapped-call node.
+- `src/java2wado/emit.wado` — `JStmt`/`JExpr` → Wado string. Leaves that are `$`-refs call into `action_translate`'s attribute resolution (refactored so java2wado and the identity path share `action_attr_expr`); mapped calls consult the API table; `TParser.X` consults the token-kind table.
+
+Each with a sibling `_test.wado`.
 
 The public surface mirrors `action.md`'s `ActionTranslator` sketch but dispatches by `ActionLanguage` (no dynamic dispatch in Wado yet):
 
@@ -83,36 +86,38 @@ translate_members(lang, body) -> Result<MemberDecls, String>
 
 `lang == Wado` routes to today's `translate_wado_action`; `lang == Java` routes to java2wado. Callers in `parser_gen` / `lexer_gen` / `cst_gen` switch from calling `translate_wado_action` directly to the dispatcher, passing `grammar.action_language`.
 
-## The `emit_actions` rollout — the one real risk
+## The `emit_actions` rollout — cover-then-flip, one carve-out
 
-Today a Java grammar has `emit_actions = false`: actions are discarded and the generated parser is **byte-identical to actionless**, so the whole descriptor corpus passes on tree-shape alone. Flipping `action_language_is_emittable` to accept Java unconditionally would make **every** action in **every** loaded Java grammar a hard translation requirement at once — including the real-world `superClass` grammars (Rust `{this.NextGT()}?`, TypeScript) that need Phase 4's SuperClass trait, not Phase 3. That is a corpus-wide big-bang regression.
+Today a Java grammar has `emit_actions = false`: actions are discarded and the generated parser is **byte-identical to actionless**, so the whole descriptor corpus passes on tree-shape alone. The rollout: **cover the corpus subset first, then flip Java emittable in one step, then fix the fallout** — the fallout is small and quick to fix because the corpus Java surface is small and regular (survey above). No general per-grammar "does everything translate" gate is built; an untranslatable action stays a **loud error**, which is what forces coverage rather than hiding gaps.
 
-**Recommended gate:** emit Java actions per-grammar only when the whole grammar is translatable under the current subset — `action_language_is_emittable(g) = Wado, or (Java and every action/predicate/member translates)`. A grammar with one untranslatable fragment keeps today's discard behavior (byte-identical, with a warning naming the unsupported fragment). This:
+**One principled carve-out, not a gate.** Blast-radius survey of what codegen actually runs (driver tests + descriptor tests): the whole descriptor corpus is coverable in Phase 3 (its `this.pred(...)` etc. are `@members`-defined, so members translation reaches them). The single exception is grammars declaring `superClass` — `RustLexer.g4` / `TypeScriptLexer.g4` are in driver tests, and their actions (`{this.SOF()}?`, `{this.ProcessOpenBrace();}`) call a hand-written base class that lives **outside** the `.g4`. Gale cannot see that body, so translating it is not a java2wado coverage gap — it is Phase 4's SuperClass-trait job by definition. Carve it out with one semantic check:
 
-- keeps every currently-passing tree-shape test green while the subset grows,
-- lights grammars up incrementally as coverage lands (each becomes `[output]`-comparable the moment its whole action set translates),
-- defers `superClass` grammars to Phase 4 cleanly (they simply don't pass the gate yet),
-- preserves "no silent *wrong* output": a discarded action is the current *documented* behavior, not a miscompile — distinct from an untranslatable ref *inside* an already-emitting grammar, which stays a loud error.
+```
+action_language_is_emittable(g)
+    = g.action_language matches { Wado }
+   || (g.action_language matches { Java } && !grammar_has_superclass(g))
+```
 
-Trade-off vs. `action.md`'s "Java is emittable, untranslatable = loud error": the gate makes that endpoint incremental instead of all-at-once. This is the main decision to confirm before Phase 3.i.
+This is one boolean, not fragment-scanning machinery; it is principled (superClass = external base = Phase 4) and permanent (Phase 4 turns it into "emit via the trait"), not throwaway scaffolding. Non-superClass Java grammars — the entire descriptor corpus — flip unconditionally; any untranslatable fragment there is a loud error and gets fixed on the spot.
+
+Distinct from a miscompile: a discarded action under the superClass carve-out is the current *documented* behavior; an untranslatable ref *inside* an emitting grammar stays a loud generation error.
 
 ## Staged, TDD
 
 Each step is red/green: a failing `java2wado_test.wado` case (or a driver `[output]` fixture) first, then the code.
 
-- **3.i — scaffold + dispatcher.** New `src/java2wado.wado`; `translate_action`/`_predicate` dispatcher on `ActionLanguage`; the per-grammar translatability gate in `action_language_is_emittable`. Java grammars with only already-supported-shape actions (none yet) still discard. No behavior change to Wado grammars. Unit test: dispatcher routes Wado unchanged.
+- **3.i — scaffold + dispatcher + carve-out.** New `src/java2wado.wado` facade; `translate_action`/`_predicate`/`_members` dispatcher on `ActionLanguage`; add the `superClass` carve-out to `action_language_is_emittable` (`!grammar_has_superclass(g)`). Java stays **non-emittable** until 3.vii flips it, so no behavior change yet — this step only proves the dispatcher routes Wado unchanged and the carve-out predicate is correct (RustLexer/TypeScriptLexer excluded, a plain-Java grammar included).
 - **3.ii — expression core.** Java lexer + expression parser + emitter for literals, arithmetic/comparison/logical/`%`, string concatenation, `$`-leaves via shared `action_attr_expr`. Covers `{$i == 1}?`, `{this.i % 2 == 0}?` (needs `this.field`), `$v = $x.v+1;`. Fixtures per operator class.
 - **3.iii — statements.** Expression statements, local declarations, assignments incl. compound. `System.out.println/print` → `p.emit`. `getText()` → `p.rule_text()`. Unblocks the print-`[output]` descriptor family (`{System.out.println($e.v);}`, `{System.out.print($a.text);}`).
 - **3.iv — mapped calls + qualified constants.** `_input.LA/LT`, `getCharPositionInLine`, `_tokenStartCharPositionInLine`, `x.equals(y)`, `TParser.X` → `TK_X`. Unblocks `{_input.LA(1) != TParser.ELSE}?`, `{getCharPositionInLine() < 2}?`, `{getText().equals("enum")}?`.
 - **3.v — ctx-cast LR-binary.** Strip `((BinaryContext)$ctx).e(0).v` down to the LR vals locals the value channel already exposes. Fixture mirrors the corpus LR-binary grammar.
 - **3.vi — members.** `translate_members`: field decls → struct fields (translated initializers), method decls → methods (`this.` → `self.`). Wire into the generated `Parser` / `Lexer` struct emit. Unblocks `@parser::members {boolean enumKeyword = true;}` and `{int i = 0;}`, i.e. the `SemPredEvalParser` member-backed predicates.
-- **3.vii — corpus sweep + acceptance.** Re-triage the descriptor corpus: print-`[output]` and `SemPredEval*` descriptors whose whole action set now translates lose their auto-`#[TODO]` and compare `result.output`. Record residual gaps (superClass grammars → Phase 4). Update `action.md` staging, `TODO.md` §Stage C, `antlr4-compatibility.md`.
+- **3.vii — flip + corpus sweep + acceptance.** Flip `action_language_is_emittable` to accept non-superClass Java (the cover-then-flip step). Re-triage the descriptor corpus: print-`[output]` and `SemPredEval*` descriptors lose their auto-`#[TODO]` and compare `result.output`; fix any fragment that errors (small, by construction). Confirm RustLexer/TypeScriptLexer driver tests stay byte-identical (carve-out holds). Update `action.md` staging, `TODO.md` §Stage C, `antlr4-compatibility.md`.
 
 Out of scope for Phase 3 (tracked elsewhere): `superClass` trait + real-world Rust/TypeScript grammars (Phase 4); lexer actions / position-sensitive lexer predicates beyond what Phase 2 emits (Phase 4); `catch`/`finally` (parked, no Wado exceptions); `$_p` in Java predicates (open item, maps to `min_prec`); `@header` Java imports (warn-and-drop).
 
 ## Open questions
 
-- Confirm the per-grammar translatability gate vs. the unconditional-emittable + loud-error endpoint (the rollout decision above).
 - Java string concatenation target: `+` over Wado `String` — does the value channel expose `String` `+`, or must java2wado emit a template literal? Decide when 3.ii lands the first `"a" + $x` fixture.
 - Method-decl bodies in `@members` recurse into the same statement translator — scope: only the subset, or a loud error on anything richer? (`DelegatorAccessesDelegateMembers` `public void foo()` is trivial; keep the parser minimal.)
 - Whether a Kiln generator option may force `action_language` (already open in `action.md`).
