@@ -349,6 +349,12 @@ impl KeyValueLiteralBuilder for TreeMap<String, V> {
         self.insert(key, value);
     }
 
+    fn insert_all(&mut self, base: TreeMap<String, V>) {
+        for let [k, v] of base.entries() {
+            self.insert(k, v);
+        }
+    }
+
     fn build(&self) -> TreeMap<String, V> {
         return *self;
     }

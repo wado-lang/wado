@@ -39,6 +39,106 @@ enum FuncRefInference {
 
 use super::util::placeholder;
 
+/// Per spread base in an anonymous literal: whether it is a key-value map, and
+/// (for a plain struct base) its defining module plus field list
+/// `(name, concrete type, declared index, visibility)`.
+type BaseSpreadInfo = (
+    bool,
+    Option<(
+        ModuleSource,
+        Vec<(String, TypeId, u32, crate::ast::Visibility)>,
+    )>,
+);
+
+/// One field of an anonymous composition's union, and where its value comes from.
+pub(super) struct UnionField {
+    pub(super) name: String,
+    pub(super) type_id: TypeId,
+    pub(super) source: UnionSource,
+}
+
+/// Where a composed union field's value is read from.
+#[derive(Clone, Copy)]
+pub(super) enum UnionSource {
+    /// An explicit `name: value` field, by index into `struct_lit.fields`.
+    Explicit(usize),
+    /// A spread base's field: `spread_base_types[base_idx].field_index`.
+    Base { base_idx: usize, field_index: u32 },
+}
+
+/// Peel references off `type_id` and, if it names a struct, return its
+/// `(name, defining module, type arguments)`. Shared by the resolve and reify
+/// spread-field projections so both classify a base identically.
+pub(super) fn peel_to_struct(
+    tt: &TypeTable,
+    type_id: TypeId,
+) -> Option<(String, ModuleSource, Vec<TypeId>)> {
+    let peeled = tt.peel_refs(type_id);
+    match tt.get(peeled) {
+        ResolvedType::Struct {
+            name,
+            module_source,
+            ..
+        } => Some((name.clone(), module_source.clone(), Vec::new())),
+        ResolvedType::GenericInstance {
+            name,
+            module_source,
+            type_args,
+            ..
+        } => Some((name.clone(), module_source.clone(), type_args.clone())),
+        _ => None,
+    }
+}
+
+/// The union field plan for anonymous composition `{ ..a, field: v, ..b }`:
+/// members in source order, last contributor winning a name collision but
+/// keeping the first-occurrence position. Shared by resolve and reify so both
+/// agree on the shape. `base_field_lists[i]` is `(name, type, declared index)`.
+pub(super) fn compose_union_plan(
+    struct_lit: &ast::StructLiteralExpr,
+    base_field_lists: &[Vec<(String, TypeId, u32)>],
+    explicit_field_types: &[TypeId],
+) -> Vec<UnionField> {
+    // `IndexMap::insert` keeps an existing key's position and updates its value,
+    // giving first-occurrence order with last-contributor value/source.
+    let mut merged: IndexMap<String, UnionField> = IndexMap::default();
+    let mut apply = |name: String, type_id: TypeId, source: UnionSource| {
+        merged.insert(
+            name.clone(),
+            UnionField {
+                name,
+                type_id,
+                source,
+            },
+        );
+    };
+
+    for member in struct_lit.members() {
+        match member {
+            ast::LiteralMember::Spread(si, _) => {
+                for (fname, fty, fidx) in &base_field_lists[si] {
+                    apply(
+                        fname.clone(),
+                        *fty,
+                        UnionSource::Base {
+                            base_idx: si,
+                            field_index: *fidx,
+                        },
+                    );
+                }
+            }
+            ast::LiteralMember::Field(pos, field) => {
+                apply(
+                    field.name.clone(),
+                    explicit_field_types[pos],
+                    UnionSource::Explicit(pos),
+                );
+            }
+        }
+    }
+    merged.into_values().collect()
+}
+
 /// Shape projection of a match-arm pattern, used solely for exhaustiveness /
 /// overlap analysis on the AST. It captures exactly the pattern shape the
 /// checks read, mirroring the `TirPattern` the combined walk used to build:
@@ -947,6 +1047,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 type_args: type_args.to_vec(),
                 instance_type,
                 mangled_name: None,
+                is_union: false,
             },
         );
     }
@@ -3028,7 +3129,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         // Handle implicit struct literals (name is None) — anonymous struct inference
         let Some(raw_name) = &struct_lit.name else {
-            return self.resolve_anonymous_struct_literal(struct_lit, ctx);
+            return self.resolve_anonymous_struct_literal(struct_lit, ctx, expected_type);
         };
         // `ns::Struct` canonicalizes to its `ns$Struct` alias for the registry
         // lookups below (struct_fields, symbols, …).
@@ -3104,6 +3205,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect()
             })
             .unwrap_or_default();
+
+        // A named struct base is a complete `S`, so any field before the spread
+        // (or a second spread) is fully overwritten and unused.
+        let named_spread = struct_lit.spreads.first();
+        if let Some(second) = struct_lit.spreads.get(1) {
+            let _ = self.logger.error(TypeError::InvalidLiteral {
+                message: "a named struct literal allows at most one `..base` spread".to_string(),
+                span: second.span,
+            });
+        }
+        if let Some(spread) = named_spread
+            && spread.field_pos > 0
+        {
+            let _ = self.logger.error(TypeError::InvalidLiteral {
+                message: "a field before `..base` is overwritten and never used; \
+                          put `..base` first"
+                    .to_string(),
+                span: spread.span,
+            });
+        }
+        // A spread with no other fields is a deep copy of `base`; use `base`.
+        if let Some(spread) = named_spread
+            && struct_lit.fields.is_empty()
+        {
+            let _ = self.logger.error(TypeError::InvalidLiteral {
+                message: "`{ ..base }` with no other fields just copies `base`; \
+                          use `base` directly"
+                    .to_string(),
+                span: spread.span,
+            });
+        }
+        let spread_base_type: Option<TypeId> =
+            named_spread.map(|spread| self.resolve_expr(&spread.expr, ctx, expected_type));
 
         // Record use→def references for each field name, pointing at the
         // field definition's AstId in the struct declaration.
@@ -3256,7 +3390,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // mistaken for an explicitly-provided one (matters for the visibility
         // check further down).
         let provided_names: IndexSet<String> = fields.iter().map(|f| f.name.clone()).collect();
-        if !struct_field_types.is_empty() {
+        if !struct_field_types.is_empty() && struct_lit.spreads.is_empty() {
             for (idx, (expected_name, expected_type_id)) in struct_field_types.iter().enumerate() {
                 if provided_names.contains(expected_name) {
                     continue;
@@ -3311,7 +3445,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let same_package = struct_module_source.same_package(&self.current_module_source);
             for (fname, _, vis) in &struct_info.fields {
-                if !vis.reachable_from(same_package) && provided_names.contains(fname) {
+                // Flagged when explicitly set, or read from `base` via a spread.
+                let set_explicitly = provided_names.contains(fname);
+                let read_via_spread = !struct_lit.spreads.is_empty() && !set_explicitly;
+                if !vis.reachable_from(same_package) && (set_explicitly || read_via_spread) {
                     let _ = self.logger.error(TypeError::PrivateFieldAccess {
                         struct_name: struct_name.clone(),
                         field_name: fname.clone(),
@@ -3341,7 +3478,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &struct_name,
                 &struct_module_source,
                 &fields,
-                expected_type,
+                expected_type.or(spread_base_type),
             );
 
             // Substitute type parameters in field value types.
@@ -3455,6 +3592,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (struct_type, struct_name, fields)
         };
 
+        if let (Some(base_ty), Some(spread)) = (spread_base_type, named_spread) {
+            self.typecheck(base_ty, struct_type, spread.span);
+        }
+
         // Stage 7-B: reify rebuilds the `StructLiteral` (`reify_struct_literal`)
         // from the AST + the recorded `generic_instantiations` mangled name /
         // instance type; the combined walk resolved the fields (and applied any
@@ -3463,14 +3604,183 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_type
     }
 
+    /// Field list of a struct-typed value for spread projection:
+    /// `(field name, concrete type, declared index, visibility)`, plus the
+    /// struct's defining module. `None` when `type_id` is not a struct.
+    pub(super) fn spread_struct_fields(
+        &self,
+        type_id: TypeId,
+    ) -> Option<(
+        ModuleSource,
+        Vec<(String, TypeId, u32, crate::ast::Visibility)>,
+    )> {
+        let (name, module, type_args) = peel_to_struct(&self.tysys.type_table.borrow(), type_id)?;
+        let info = self.lookup_struct_fields_in(&name, &module)?.clone();
+        let subst: IndexMap<u32, TypeId> = (0..type_args.len() as u32)
+            .zip(type_args.iter().copied())
+            .collect();
+        let fields = info
+            .fields
+            .iter()
+            .enumerate()
+            .map(|(i, (fname, fty, vis))| {
+                let concrete = self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .substitute_type_params(*fty, &subst);
+                (fname.clone(), concrete, i as u32, *vis)
+            })
+            .collect();
+        Some((info.module_source, fields))
+    }
+
+    /// Diagnose an anonymous composition: a member whose every field is
+    /// overwritten by a later member is dead, and a spread may not read a field
+    /// unreachable across a module boundary. Called only from the resolve pass.
+    fn check_union_composition(
+        &mut self,
+        struct_lit: &ast::StructLiteralExpr,
+        base_types: &[TypeId],
+        base_info: &[BaseSpreadInfo],
+    ) {
+        let base_names: Vec<Vec<String>> = base_info
+            .iter()
+            .map(|(_, f)| {
+                f.as_ref()
+                    .map(|(_, fs)| fs.iter().map(|(n, ..)| n.clone()).collect())
+                    .unwrap_or_default()
+            })
+            .collect();
+
+        // Dead-write: a member whose every field is contributed by a later member.
+        let members: Vec<(crate::token::Span, Vec<String>)> = struct_lit
+            .members()
+            .iter()
+            .map(|m| match m {
+                ast::LiteralMember::Spread(si, sp) => (sp.span, base_names[*si].clone()),
+                ast::LiteralMember::Field(_, f) => (f.span, vec![f.name.clone()]),
+            })
+            .collect();
+        for i in 0..members.len() {
+            let names = &members[i].1;
+            if names.is_empty() {
+                continue;
+            }
+            let fully_shadowed = names
+                .iter()
+                .all(|n| members[i + 1..].iter().any(|(_, later)| later.contains(n)));
+            if fully_shadowed {
+                let _ = self.logger.error(TypeError::InvalidLiteral {
+                    message: "this member is fully overwritten by a later spread/field \
+                              and has no effect"
+                        .to_string(),
+                    span: members[i].0,
+                });
+            }
+        }
+
+        // A base field is read only where that base is its final contributor;
+        // an overridden field is never read, so it needs no reachability check.
+        let mut final_base_src: IndexMap<String, usize> = IndexMap::default();
+        for m in struct_lit.members() {
+            match m {
+                ast::LiteralMember::Spread(si, _) => {
+                    for name in &base_names[si] {
+                        final_base_src.insert(name.clone(), si);
+                    }
+                }
+                ast::LiteralMember::Field(_, f) => {
+                    final_base_src.shift_remove(&f.name);
+                }
+            }
+        }
+        for (name, &base_idx) in &final_base_src {
+            let Some((module, fields)) = &base_info[base_idx].1 else {
+                continue;
+            };
+            if *module == self.current_module_source {
+                continue;
+            }
+            let same_package = module.same_package(&self.current_module_source);
+            let Some((.., vis)) = fields.iter().find(|(n, ..)| n == name) else {
+                continue;
+            };
+            if !vis.reachable_from(same_package) {
+                let _ = self.logger.error(TypeError::PrivateFieldAccess {
+                    struct_name: self.tysys.type_id_to_string(base_types[base_idx]),
+                    field_name: name.clone(),
+                    visibility: *vis,
+                    span: struct_lit.span,
+                });
+            }
+        }
+    }
+
     /// Resolve an anonymous struct literal `{ x: 1, y: 2 }` by inferring a struct type
     /// from the field names and types.
     fn resolve_anonymous_struct_literal(
         &mut self,
         struct_lit: &ast::StructLiteralExpr,
         ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
     ) -> TypeId {
-        // Resolve all field expressions first
+        // Gather each base's field list once, reused below. A `TreeMap` is a
+        // struct too, so an implemented `KeyValueLiteral` marks it as a map
+        // rather than a composable struct.
+        let spread_base_types: Vec<TypeId> = struct_lit
+            .spreads
+            .iter()
+            .map(|spread| self.resolve_expr(&spread.expr, ctx, None))
+            .collect();
+        let base_info: Vec<BaseSpreadInfo> = spread_base_types
+            .iter()
+            .map(|&t| {
+                let is_map = self.type_implements_trait(&self.annotate_ctx, t, "KeyValueLiteral");
+                let fields = if is_map {
+                    None
+                } else {
+                    self.spread_struct_fields(t)
+                };
+                (is_map, fields)
+            })
+            .collect();
+
+        let has_spread = !struct_lit.spreads.is_empty();
+        let compose_union = has_spread && base_info.iter().all(|(m, f)| !m && f.is_some());
+        let all_map = base_info.iter().all(|(m, _)| *m);
+        let expected_is_map = expected_type
+            .is_some_and(|t| self.type_implements_trait(&self.annotate_ctx, t, "KeyValueLiteral"));
+        // A pure key-value merge with a map-typed target is the only valid
+        // non-composition spread.
+        let is_kv_merge = has_spread && all_map && expected_is_map;
+        // A single spread with no other members deep-copies `base` (a multi-spread
+        // composition of distinct bases does not).
+        let is_copy = struct_lit.spreads.len() == 1 && struct_lit.fields.is_empty();
+        // A base that already errored is skipped, to avoid a cascading diagnostic.
+        let base_errored = spread_base_types
+            .iter()
+            .any(|&t| t == TypeTable::ERROR || t == TypeTable::UNKNOWN);
+
+        if !base_errored {
+            if is_copy {
+                let _ = self.logger.error(TypeError::InvalidLiteral {
+                    message: "`{ ..base }` with no other members just copies `base`; \
+                              use `base` directly"
+                        .to_string(),
+                    span: struct_lit.spreads[0].span,
+                });
+            } else if has_spread && !compose_union && !is_kv_merge {
+                let _ = self.logger.error(TypeError::InvalidLiteral {
+                    message: "a `..base` spread must be a struct value (composition) or a \
+                              key-value map with a map-typed target; a non-struct base or a \
+                              mix of struct and map spreads is not allowed"
+                        .to_string(),
+                    span: struct_lit.spreads[0].span,
+                });
+            }
+        }
+
         let mut resolved_fields: Vec<TirStructField> = Vec::new();
         for (index, field) in struct_lit.fields.iter().enumerate() {
             let value = placeholder(
@@ -3484,12 +3794,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
+        // A composition's shape is the union of its bases and explicit fields;
+        // otherwise just the explicit fields.
+        let effective_fields: Vec<(String, TypeId)> = if compose_union {
+            self.check_union_composition(struct_lit, &spread_base_types, &base_info);
+            let base_field_lists: Vec<Vec<(String, TypeId, u32)>> = base_info
+                .iter()
+                .map(|(_, f)| {
+                    f.as_ref()
+                        .map(|(_, fs)| {
+                            fs.iter()
+                                .map(|(n, ty, i, _)| (n.clone(), *ty, *i))
+                                .collect()
+                        })
+                        .unwrap_or_default()
+                })
+                .collect();
+            let explicit_types: Vec<TypeId> =
+                resolved_fields.iter().map(|f| f.value.type_id).collect();
+            compose_union_plan(struct_lit, &base_field_lists, &explicit_types)
+                .into_iter()
+                .map(|uf| (uf.name, uf.type_id))
+                .collect()
+        } else {
+            resolved_fields
+                .iter()
+                .map(|f| (f.name.clone(), f.value.type_id))
+                .collect()
+        };
+
         // Generate a deterministic name from field names and types
         let anon_name = {
             let mut parts = Vec::new();
-            for f in &resolved_fields {
-                let type_name = self.tysys.type_table.borrow().type_name(f.value.type_id);
-                parts.push(format!("{}:{}", f.name, type_name));
+            for (fname, fty) in &effective_fields {
+                let type_name = self.tysys.type_table.borrow().type_name(*fty);
+                parts.push(format!("{fname}:{type_name}"));
             }
             format!("__anon_{{{}}}", parts.join(","))
         };
@@ -3509,6 +3848,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 existing_type,
                 Some(anon_name),
             );
+            self.mark_generic_instantiation_union(struct_lit.id, compose_union);
             // Stage 7-B: reify rebuilds the anonymous `StructLiteral`
             // (`reify_anonymous_struct_literal`); project only the type.
             return existing_type;
@@ -3525,18 +3865,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let field_info = super::types::StructFieldInfo {
             name: anon_name.clone(),
             module_source,
-            fields: resolved_fields
+            fields: effective_fields
                 .iter()
-                .map(|f| {
-                    (
-                        f.name.clone(),
-                        f.value.type_id,
-                        crate::ast::Visibility::Public,
-                    )
-                })
+                .map(|(fname, fty)| (fname.clone(), *fty, crate::ast::Visibility::Public))
                 .collect(),
             field_ast_ids: Vec::new(),
-            field_defaults: vec![None; resolved_fields.len()],
+            field_defaults: vec![None; effective_fields.len()],
             type_param_bounds: Vec::new(),
             type_param_type_ids: Vec::new(),
         };
@@ -3546,13 +3880,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .insert(anon_name.clone(), field_info);
 
         // Create TirStruct definition for codegen
-        let tir_fields: Vec<TirField> = resolved_fields
+        let tir_fields: Vec<TirField> = effective_fields
             .iter()
             .enumerate()
-            .map(|(i, f)| TirField {
-                name: f.name.clone(),
+            .map(|(i, (fname, fty))| TirField {
+                name: fname.clone(),
                 visibility: crate::ast::Visibility::Public,
-                type_id: f.value.type_id,
+                type_id: *fty,
                 index: i as u32,
                 span: struct_lit.span,
                 is_hidden: false,
@@ -3580,11 +3914,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             struct_type,
             Some(anon_name),
         );
+        self.mark_generic_instantiation_union(struct_lit.id, compose_union);
 
         // Stage 7-B: reify rebuilds the anonymous `StructLiteral`; the combined
         // walk registered the struct type, field info, and pending TirStruct
         // above for their side effects. Project only the type.
         struct_type
+    }
+
+    /// Flag the anonymous instantiation at `ast_id` as a union composition so
+    /// reify projects union fields from the spread bases.
+    fn mark_generic_instantiation_union(&mut self, ast_id: AstId, is_union: bool) {
+        if is_union && let Some(gi) = self.sem.types.generic_instantiations.get_mut(&ast_id) {
+            gi.is_union = true;
+        }
     }
 
     /// Infer type arguments for a generic struct from its field values, with

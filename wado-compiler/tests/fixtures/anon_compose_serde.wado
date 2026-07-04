@@ -1,0 +1,20 @@
+// A composed anonymous struct auto-derives Serialize (bound-driven), so
+// `{ ..ctx, request_id }` serializes like a hand-written anonymous struct —
+// the logger-fields use case.
+use { to_string } from "core:json";
+
+struct LogCtx {
+    user_id: i32,
+    ip: String,
+}
+
+test "composed anonymous struct serializes" {
+    let ctx = LogCtx { user_id: 7, ip: "10.0.0.1" };
+    let payload = { ..ctx, request_id: 42 };
+    let s = to_string(&payload);
+    if let Ok(json) = s {
+        assert json == `\{"user_id":7,"ip":"10.0.0.1","request_id":42\}`;
+    } else {
+        panic("serialize failed");
+    }
+}

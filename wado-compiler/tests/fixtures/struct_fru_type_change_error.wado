@@ -1,0 +1,12 @@
+// A named FRU override may not change a generic type argument: the base must be
+// the same type as the (inferred) result.
+struct TBox<T> { v: T, tag: i32 }
+
+test "type-changing override is rejected" {
+    let b = TBox { v: 7, tag: 1 };
+    let c = TBox { ..b, v: "str" };
+    assert c.tag == 1;
+}
+
+__DATA__
+{"test": {}, "compile_error": "type mismatch"}

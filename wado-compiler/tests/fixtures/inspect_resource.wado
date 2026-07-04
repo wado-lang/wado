@@ -1,0 +1,18 @@
+// Plain resources inspect as `Name#0x<hex>` (WEP: Inspect > Resource).
+internal resource Widget {
+    fn poke(&self);
+}
+
+test "resource inspect renders the handle in hex" {
+    assert `{(255 as Widget):?}` == "Widget#0xff";
+    assert `{(16 as Widget):?}` == "Widget#0x10";
+    assert `{(0 as Widget):?}` == "Widget#0x0";
+}
+
+test "resource flows through Result::unwrap_err inspect" {
+    let r: Result<i32, Widget> = Result::<i32, Widget>::Err(0xab as Widget);
+    assert `{r.unwrap_err():?}` == "Widget#0xab";
+}
+
+__DATA__
+{"test": {}}

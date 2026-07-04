@@ -1,0 +1,12 @@
+// `{ ..base }` with no other members is a deep copy of `base` — no-op under
+// value semantics, so it is rejected (a multi-spread composition is not).
+struct SO2 { x: i32, y: i32 }
+
+test "anonymous spread-only is rejected" {
+    let a = SO2 { x: 1, y: 2 };
+    let c = { ..a };
+    assert c.x == 1;
+}
+
+__DATA__
+{"test": {}, "compile_error": "just copies `base`"}

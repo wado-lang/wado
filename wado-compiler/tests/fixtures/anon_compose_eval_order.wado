@@ -1,0 +1,19 @@
+struct SB { v: i32 }
+global mut ORDER: i32 = 0;
+fn mark_a() -> i32 { ORDER = ORDER * 10 + 1; return 7; }
+fn make_b() -> SB { ORDER = ORDER * 10 + 2; return SB { v: 9 }; }
+
+test "composition evaluates subexpressions in source order" {
+    ORDER = 0;
+    let c = { a: mark_a(), ..make_b() };
+    assert c.a == 7;
+    assert c.v == 9;
+    assert ORDER == 12;
+}
+
+test "base-first composition also matches source order" {
+    ORDER = 0;
+    let c = { ..make_b(), a: mark_a() };
+    assert c.a == 7;
+    assert ORDER == 21;
+}

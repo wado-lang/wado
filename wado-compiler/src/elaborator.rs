@@ -684,6 +684,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 type_args,
                 instance_type,
                 mangled_name,
+                is_union: false,
             },
         );
     }

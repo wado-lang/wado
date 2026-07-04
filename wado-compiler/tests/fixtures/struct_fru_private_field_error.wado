@@ -1,0 +1,11 @@
+// A `..base` spread that reads a non-reachable field across a module boundary
+// is an error: `base.secret` is not a read the caller may perform.
+use { Config, make_config } from "./sub/pub_struct_field_module.wado";
+
+export fn run() {
+    let c = make_config("hello", 42);
+    let c2 = Config { ..c, name: "world" };
+}
+
+__DATA__
+{"compile_error": "field `secret` of struct `Config` is private"}

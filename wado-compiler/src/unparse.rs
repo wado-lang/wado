@@ -159,7 +159,10 @@ fn contains_call(expr: &Expr) -> bool {
         Expr::Unary(e) => contains_call(&e.expr),
         Expr::Cast(e) => contains_call(&e.expr),
         Expr::TupleLiteral(e) => e.elements.iter().any(contains_call),
-        Expr::StructLiteral(e) => e.fields.iter().any(|f| contains_call(&f.value)),
+        Expr::StructLiteral(e) => {
+            e.fields.iter().any(|f| contains_call(&f.value))
+                || e.spreads.iter().any(|s| contains_call(&s.expr))
+        }
         Expr::Index(e) => contains_call(&e.expr) || contains_call(&e.index),
         Expr::FieldAccess(e) => contains_call(&e.expr),
         Expr::TryOp(e) => contains_call(&e.expr),
@@ -174,7 +177,7 @@ fn contains_call(expr: &Expr) -> bool {
 fn expr_is_container(expr: &Expr) -> bool {
     match expr {
         Expr::TupleLiteral(t) => !t.elements.is_empty(),
-        Expr::StructLiteral(s) => !s.fields.is_empty(),
+        Expr::StructLiteral(s) => !s.fields.is_empty() || !s.spreads.is_empty(),
         _ => false,
     }
 }
@@ -2410,7 +2413,7 @@ impl<'a> Unparser<'a> {
             self.output.push(' ');
         }
 
-        if s.fields.is_empty() {
+        if s.fields.is_empty() && s.spreads.is_empty() {
             self.output.push_str("{}");
             return;
         }
@@ -2420,15 +2423,25 @@ impl<'a> Unparser<'a> {
         // container (depth rule), or when more than one field bears a call. A
         // flat, single-call-at-most struct is inline-first and only wraps on
         // width.
+        let member_count = s.fields.len() + s.spreads.len();
         let has_container = s.fields.iter().any(|f| expr_is_container(&f.value));
-        let call_fields = s.fields.iter().filter(|f| contains_call(&f.value)).count();
+        let call_fields = s.fields.iter().filter(|f| contains_call(&f.value)).count()
+            + s.spreads
+                .iter()
+                .filter(|sp| contains_call(&sp.expr))
+                .count();
         if !s.has_trailing_comma && !has_container && call_fields <= 1 {
             let snap = self.snapshot();
             self.output.push_str("{ ");
-            self.comma_sep(&s.fields, Unparser::emit_struct_literal_field);
+            for (i, member) in s.members().into_iter().enumerate() {
+                if i > 0 {
+                    self.output.push_str(", ");
+                }
+                self.emit_literal_member(member);
+            }
             self.output.push_str(" }");
 
-            if s.fields.len() <= 1 || !self.exceeds_width_since(snap) {
+            if member_count <= 1 || !self.exceeds_width_since(snap) {
                 return;
             }
             self.rollback(snap);
@@ -2436,14 +2449,24 @@ impl<'a> Unparser<'a> {
 
         self.output.push_str("{\n");
         self.indent_level += 1;
-        for field in &s.fields {
+        for member in s.members() {
             self.write_indent();
-            self.emit_struct_literal_field(field);
+            self.emit_literal_member(member);
             self.output.push_str(",\n");
         }
         self.indent_level -= 1;
         self.write_indent();
         self.output.push('}');
+    }
+
+    fn emit_literal_member(&mut self, member: crate::ast::LiteralMember<'_>) {
+        match member {
+            crate::ast::LiteralMember::Spread(_, sp) => {
+                self.output.push_str("..");
+                self.unparse_expr(&sp.expr);
+            }
+            crate::ast::LiteralMember::Field(_, f) => self.emit_struct_literal_field(f),
+        }
     }
 
     fn emit_struct_literal_field(&mut self, field: &crate::ast::StructLiteralField) {

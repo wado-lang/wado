@@ -2254,6 +2254,20 @@ let bob: User = { name, age, active: false };
 let user: User = { name: "Alice", age: 30, active: true };
 ```
 
+Functional update (`..base`): a leading `..base` fills every field the literal
+does not list explicitly from the struct value `base` (same type). The listed
+fields override; `base` is evaluated once and left unchanged (value semantics).
+
+```wado
+let u2 = User { ..user, age: 31 };  // every field from `user`, age replaced
+```
+
+The spread is leading and single: a field written before it would be overwritten
+and unused, so `User { age: 31, ..user }`, a second spread, and a bare
+`User { ..user }` (a plain copy) are all errors. A `..base` cannot read a field
+that is not reachable at the use site, so it never exposes a private field across
+a module boundary. See [WEP: Literal Spread](./wep-2026-07-03-literal-spread.md).
+
 **Struct Destructuring:**
 
 ```wado
@@ -3163,7 +3177,15 @@ let opt = map.get("x");          // returns Option<V>
 
 // Keys preserve insertion order
 let keys = map.keys();  // returns List<K> in insertion order
+
+// Functional-update spread: seed from a base map, then override/add keys
+let m2: TreeMap<String, i32> = { ..map, "x": 99, "w": 40 };
 ```
+
+A `{ ..base, "k": v }` key-value literal seeds the builder with every entry of
+`base` (same map type) and then applies the explicit keys, so explicit keys
+override the base. Like the struct form, the spread is leading and single. See
+[WEP: Literal Spread](./wep-2026-07-03-literal-spread.md).
 
 ### Access Methods
 
@@ -3210,6 +3232,19 @@ use { to_string } from "core:json";
 struct Point { x: i32, y: i32 }              // no impl marker needed
 let json = to_string(&Point { x: 1, y: 2 }); // Ok("{\"x\":1,\"y\":2}")
 let anon = to_string(&{ x: 1, y: 2 });        // Ok("{\"x\":1,\"y\":2}") — anonymous struct
+```
+
+An anonymous literal may also compose spread bases: `{ ..a, ..b, field: v }`
+builds an anonymous struct whose fields are the union of the bases' and explicit
+fields, in source order, last contributor winning on a name collision (and its
+type). Each base is a struct value, evaluated once. Unlike a named struct's
+leading-single `..base`, composition allows spreads in any position and more than
+one; a member every one of whose fields is overwritten by a later member is a
+dead-write error. See [WEP: Literal Spread](./wep-2026-07-03-literal-spread.md).
+
+```wado
+let base = { user_id: 1, ip: "10.0.0.1" };
+let event = { ..base, level: "warn" };  // { user_id, ip, level } — auto-Serialize
 ```
 
 The explicit marker `impl Serialize for T;` still works — write it to force the impl with no bound present, or to attach `#[serde(rename_all = "...")]` customization. Unlike `Eq` / `Ord`'s marker (below), it doesn't pre-validate: an ineligible field is a compile error at the bound site, not the marker. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).

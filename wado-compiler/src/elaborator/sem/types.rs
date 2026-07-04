@@ -649,6 +649,8 @@ pub(crate) struct KeyValueCoercionFacts {
     pub(crate) new_mangled_name: String,
     /// `Builder::insert_literal` call's mangled name.
     pub(crate) insert_mangled_name: String,
+    /// `Builder::insert_all` call's mangled name, for a `{ ..base, … }` spread.
+    pub(crate) insert_all_mangled_name: String,
     /// `Builder::build` call's mangled name. `None` under the legacy API
     /// where the block breaks with `__b` directly.
     pub(crate) build_mangled_name: Option<String>,
@@ -707,6 +709,9 @@ pub(crate) struct GenericInstantiation {
     /// class WEP 2026-05-26 §"Stage 7 gap" calls out (`type_name(t)`
     /// drift between annotate and reify) goes away by construction.
     pub(crate) mangled_name: Option<String>,
+    /// True for an anonymous composition (`{ ..a, ..b }`): reify projects the
+    /// union fields from the spread bases instead of the explicit fields alone.
+    pub(crate) is_union: bool,
 }
 
 /// A single mutating outer-binding captured by a closure. The closure

@@ -614,7 +614,10 @@ fn any_in_expr<P: AstTreeProbe>(ctx: CtrlFlowCtx<'_>, expr: &ast::Expr, probe: &
                 || mc.args.iter().any(|a| any_in_expr(ctx, a, probe))
         }
         ast::Expr::StaticMethodCall(sc) => sc.args.iter().any(|a| any_in_expr(ctx, a, probe)),
-        ast::Expr::StructLiteral(s) => s.fields.iter().any(|f| any_in_expr(ctx, &f.value, probe)),
+        ast::Expr::StructLiteral(s) => {
+            s.fields.iter().any(|f| any_in_expr(ctx, &f.value, probe))
+                || s.spreads.iter().any(|sp| any_in_expr(ctx, &sp.expr, probe))
+        }
         ast::Expr::TupleLiteral(t) => t.elements.iter().any(|e| any_in_expr(ctx, e, probe)),
         ast::Expr::Spread(inner, _) => any_in_expr(ctx, inner, probe),
         ast::Expr::Range(r) => any_in_expr(ctx, &r.start, probe) || any_in_expr(ctx, &r.end, probe),

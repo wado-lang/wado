@@ -747,6 +747,9 @@ internal trait KeyValueLiteralBuilder {
     fn new_literal(capacity: i32) -> Self;
     /// Record one field from the literal.
     fn insert_literal(&mut self, key: String, value: Self::Value);
+    /// Seed the builder with every entry of `base`, for a `{ ..base, … }` spread.
+    /// Explicit `insert_literal` calls run after the seed, so they override.
+    fn insert_all(&mut self, base: Self::Output);
     /// Consume the builder and return the finished value.
     fn build(&self) -> Self::Output;
 }
