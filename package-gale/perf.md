@@ -38,14 +38,9 @@ release headline + comparison baselines (Gale vs `tree-sitter` for highlight, vs
 `sqlparser-rs` for parse) come from `mise run syntax-highlight` /
 `mise run sqlite-parse` on a release host; not reproduced here (dev-only).
 
-> **Measurement note (read before trusting percentages).** Profiles are captured
-> with the **dev-profile `wado`** (`cargo run`, per the inner-dev-loop guidance
-> in the root `CLAUDE.md`). `Cargo.toml` raises `opt-level` on
-> `cranelift-codegen`, so JIT-compiled **guest code is near-release quality**,
-> but the wasmtime runtime, GC, and allocator run at dev speed — ~4–5× slower
-> per iter, with the slack in **allocation/GC**. So the profile inflates
-> allocation-bound frames relative to pure-compute ones (`scan_*`, kind-set).
-> Read the percentages as relative.
+> **Measurement note.** These are dev-profile `wado` profiles, which over-weight
+> allocation/GC frames; read the percentages as relative and size any GC win by
+> its release number. Mechanism: the `wado-performance` skill.
 
 Reproduce (guest self-time profile, and the collector split for GC cost):
 
@@ -56,7 +51,7 @@ wado run --collector null   -O2 syntax_highlight/syntax_highlight.wado   # no GC
 wado run --collector copying -O2 syntax_highlight/syntax_highlight.wado   # default
 ```
 
-(`wado` = `cargo run --bin wado --`. Analyze `p.json` with the `profiling-wado`
+(`wado` = `cargo run --bin wado --`. Analyze `p.json` with the `wado-performance`
 skill's script — count **leaf** frames for self-time — or upload to
 profiler.firefox.com. `copying − null` is the collection cost; `drc` is
 pathological here (~234 ms/iter) — never use it. `null` leaks, so use a
@@ -242,10 +237,10 @@ ATN literal is a measured problem.)
 ### Measured non-levers
 
 - **Inlining hot methods / per-method micro-opt.** No wall-time change from
-  forcing inlining of small hot functions — wasmtime + Cranelift handle small
-  Wasm calls cheaply. Confirmed again by the cursor spike, where raising the
-  inline threshold _worsened_ runtime (it bloats hot loops: sharp 14→15 cliff,
-  18 → 55 ms).
+  forcing inlining of small hot functions; the cursor spike went further —
+  raising the inline threshold _worsened_ runtime (bloats hot loops: sharp
+  14→15 cliff, 18 → 55 ms). (Why small-call inlining rarely helps on wasmtime:
+  the `wado-performance` skill.)
 - **Re-sizing `TokenStream::new`'s arrays** (~8.5% self-time). The cost is
   inherent WasmGC `array.new_default` zero-fill across 10 parallel `List<i32>`
   arrays, each pre-sized to `chars/4`. Measured fill for the benchmark input:

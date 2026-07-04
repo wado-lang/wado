@@ -223,19 +223,40 @@ impl EntryPointKind {
     }
 }
 
-/// The library world FQ derived from a `[package]`, in the standard
-/// `namespace:name/name@version` shape. `[package].namespace` is required for
-/// `--lib`; this returns an error message when it is missing.
-pub fn lib_world_fq(pkg: &wado_manifest::Package) -> Result<String, CliExit> {
+/// The emitted name of a library's world — the component's anonymous root.
+pub const LIB_WORLD_NAME: &str = "root";
+
+/// A library FQ `namespace:name/<segment>@version`, rejecting a package name
+/// that (case-insensitively) equals the reserved [`LIB_WORLD_NAME`].
+fn lib_fq(pkg: &wado_manifest::Package, segment: &str) -> Result<String, CliExit> {
     let namespace = pkg
         .namespace
         .as_deref()
         .ok_or_else(|| CliExit::error("`--lib` requires `[package].namespace` in wado.toml"))?;
+    if pkg.name.eq_ignore_ascii_case(LIB_WORLD_NAME) {
+        return Err(CliExit::error(format!(
+            "[package].name {name:?} is reserved: a library's world is named \
+             {LIB_WORLD_NAME:?}, so the default interface cannot share it",
+            name = pkg.name
+        )));
+    }
     Ok(format!(
-        "{namespace}:{name}/{name}@{version}",
+        "{namespace}:{name}/{segment}@{version}",
         name = pkg.name,
         version = pkg.version,
     ))
+}
+
+/// The library's default-interface FQ, in the `namespace:name/name@version`
+/// shape — the identity consumers import.
+pub fn lib_world_fq(pkg: &wado_manifest::Package) -> Result<String, CliExit> {
+    lib_fq(pkg, &pkg.name)
+}
+
+/// The FQ that names the world when emitting a library's WIT, using the
+/// reserved [`LIB_WORLD_NAME`] segment instead of the default-interface name.
+pub fn lib_emit_world_fq(pkg: &wado_manifest::Package) -> Result<String, CliExit> {
+    lib_fq(pkg, LIB_WORLD_NAME)
 }
 
 /// Resolve the `--lib` entry point and library world FQ.
@@ -573,6 +594,47 @@ lib = "src/lib.wado"
         let m = toml.parse::<Manifest>().unwrap();
         let fq = lib_world_fq(m.package.as_ref().unwrap()).unwrap();
         assert_eq!(fq, "wado:cm-catalog-min/cm-catalog-min@0.1.0");
+    }
+
+    #[test]
+    fn lib_emit_world_fq_uses_reserved_root_name() {
+        let toml = r#"
+[package]
+namespace = "wado"
+name = "cm-catalog-min"
+version = "0.1.0"
+lib = "src/lib.wado"
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        let pkg = m.package.as_ref().unwrap();
+        let world = lib_emit_world_fq(pkg).unwrap();
+        let iface = lib_world_fq(pkg).unwrap();
+        assert_eq!(world, "wado:cm-catalog-min/root@0.1.0");
+        assert_eq!(iface, "wado:cm-catalog-min/cm-catalog-min@0.1.0");
+        assert_ne!(world, iface);
+    }
+
+    #[test]
+    fn lib_fq_rejects_reserved_root_package_name_any_case() {
+        for name in ["root", "Root", "ROOT"] {
+            let toml = format!(
+                "[package]\nnamespace = \"wado\"\nname = \"{name}\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n"
+            );
+            let m = toml.parse::<Manifest>().unwrap();
+            let pkg = m.package.as_ref().unwrap();
+            let iface_err = lib_world_fq(pkg).unwrap_err();
+            let world_err = lib_emit_world_fq(pkg).unwrap_err();
+            assert!(
+                iface_err.message.contains("reserved"),
+                "{}",
+                iface_err.message
+            );
+            assert!(
+                world_err.message.contains("reserved"),
+                "{}",
+                world_err.message
+            );
+        }
     }
 
     #[test]

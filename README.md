@@ -306,17 +306,13 @@ Releases are cut manually on a roughly weekly cadence via [tagpr](https://github
 
 How it works:
 
-1. Every push to `main` (re)opens a **Release PR** that bumps `[workspace.package].version` in `Cargo.toml`, regenerates `Cargo.lock`, and updates `CHANGELOG.md` from PRs merged since the previous tag.
-2. Merging the Release PR pushes tag `v<next>`, which triggers `.github/workflows/release.yml` to build pre-built binaries for five targets in parallel — Linux (`x86_64`, `aarch64`), macOS (Apple Silicon), Windows (`x86_64`, `aarch64`) — and publishes them to a [GitHub Release](https://github.com/wado-lang/wado/releases) with `SHA256SUMS.txt`.
+1. Every push to `main` (re)opens a **Release PR** that bumps `[workspace.package].version` in both `Cargo.toml` and `wado.toml` (kept in lockstep so the CLI and the published Wado packages ship one version), regenerates `Cargo.lock`, and updates `CHANGELOG.md` from PRs merged since the previous tag.
+2. Merging the Release PR pushes tag `v<next>`, which triggers `.github/workflows/release.yml` to:
+   - build pre-built binaries for five targets in parallel — Linux (`x86_64`, `aarch64`), macOS (Apple Silicon), Windows (`x86_64`, `aarch64`) — and publish them to a [GitHub Release](https://github.com/wado-lang/wado/releases) with `SHA256SUMS.txt`;
+   - run `wado publish` to push the workspace's Wado packages to [GHCR](https://github.com/orgs/wado-lang/packages) as OCI artifacts.
 3. Default bump is **patch**. Add a `tagpr:minor` or `tagpr:major` label on the Release PR to override.
 
-To bump the workspace version locally without going through tagpr:
-
-```sh
-mise run bump-version 0.2.0           # explicit
-mise run bump-version --bump minor    # patch / minor / major
-mise run bump-version --check 0.2.0   # CI guard: fail unless versions match
-```
+tagpr is the single version manager: the workspace version is bumped only by the Release PR, never by hand. Do not edit `[workspace.package].version` in `Cargo.toml` or `wado.toml` directly — the release job fails if the two files disagree with the tag.
 
 ## Benchmarks
 
