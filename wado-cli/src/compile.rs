@@ -1029,7 +1029,17 @@ async fn embed_wit_section(
         return Ok(wasm);
     };
 
-    let world = opts.target_world_fq().to_string();
+    // A library's world is the component's anonymous root; render it as `root`
+    // (see `manifest::LIB_WORLD_NAME`) so the emitted world does not collide
+    // with the default interface (named after `[package].name`). Codegen keeps
+    // the `namespace:name/name` interface identity — the world name is textual.
+    let world = match (
+        opts.lib_world.as_deref(),
+        project.and_then(|p| p.manifest.package.as_ref()),
+    ) {
+        (Some(_), Some(pkg)) => crate::manifest::lib_emit_world_fq(pkg)?,
+        _ => opts.target_world_fq().to_string(),
+    };
 
     let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
     // Attach the manifest `[dependencies]` so a multi-package project's

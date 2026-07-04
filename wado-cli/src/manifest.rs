@@ -223,16 +223,48 @@ impl EntryPointKind {
     }
 }
 
-/// The library world FQ derived from a `[package]`, in the standard
-/// `namespace:name/name@version` shape. `[package].namespace` is required for
-/// `--lib`; this returns an error message when it is missing.
+/// The reserved local name for a library's world in emitted WIT. A library
+/// component's top-level world is the component's *anonymous* root (a component
+/// type carries no world name; see `Binary.md` — `componenttype ::= 0x41
+/// vec(componentdecl)`). WIT text nonetheless requires a world name, so it is
+/// rendered as `root`, matching what `wasm-tools` synthesizes when decoding a
+/// component. Keeping it distinct from the default interface (named after
+/// `[package].name`) avoids the two sharing one `namespace:package/name` slot.
+pub const LIB_WORLD_NAME: &str = "root";
+
+/// The library's default-interface FQ, in the `namespace:name/name@version`
+/// shape — the identity consumers import. `[package].namespace` is required for
+/// `--lib`; this returns an error message when it is missing, or when the name
+/// collides with the reserved library world name.
 pub fn lib_world_fq(pkg: &wado_manifest::Package) -> Result<String, CliExit> {
     let namespace = pkg
         .namespace
         .as_deref()
         .ok_or_else(|| CliExit::error("`--lib` requires `[package].namespace` in wado.toml"))?;
+    if pkg.name == LIB_WORLD_NAME {
+        return Err(CliExit::error(format!(
+            "[package].name {LIB_WORLD_NAME:?} is reserved: a library's world is \
+             named {LIB_WORLD_NAME:?}, so the default interface cannot share it"
+        )));
+    }
     Ok(format!(
         "{namespace}:{name}/{name}@{version}",
+        name = pkg.name,
+        version = pkg.version,
+    ))
+}
+
+/// The FQ used only to *name the world* when emitting a library's WIT: the
+/// package coordinate with the reserved [`LIB_WORLD_NAME`] world segment.
+/// Distinct from [`lib_world_fq`] (the default-interface identity) so the
+/// emitted `world root` and `interface <name>` never collide.
+pub fn lib_emit_world_fq(pkg: &wado_manifest::Package) -> Result<String, CliExit> {
+    let namespace = pkg
+        .namespace
+        .as_deref()
+        .ok_or_else(|| CliExit::error("`--lib` requires `[package].namespace` in wado.toml"))?;
+    Ok(format!(
+        "{namespace}:{name}/{LIB_WORLD_NAME}@{version}",
         name = pkg.name,
         version = pkg.version,
     ))
@@ -573,6 +605,40 @@ lib = "src/lib.wado"
         let m = toml.parse::<Manifest>().unwrap();
         let fq = lib_world_fq(m.package.as_ref().unwrap()).unwrap();
         assert_eq!(fq, "wado:cm-catalog-min/cm-catalog-min@0.1.0");
+    }
+
+    #[test]
+    fn lib_emit_world_fq_uses_reserved_root_name() {
+        let toml = r#"
+[package]
+namespace = "wado"
+name = "cm-catalog-min"
+version = "0.1.0"
+lib = "src/lib.wado"
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        let pkg = m.package.as_ref().unwrap();
+        // The world (emit) FQ and the default-interface FQ must differ, or the
+        // emitted `world` and `interface` collide in the same package slot.
+        let world = lib_emit_world_fq(pkg).unwrap();
+        let iface = lib_world_fq(pkg).unwrap();
+        assert_eq!(world, "wado:cm-catalog-min/root@0.1.0");
+        assert_eq!(iface, "wado:cm-catalog-min/cm-catalog-min@0.1.0");
+        assert_ne!(world, iface);
+    }
+
+    #[test]
+    fn lib_world_fq_rejects_reserved_root_package_name() {
+        let toml = r#"
+[package]
+namespace = "wado"
+name = "root"
+version = "0.1.0"
+lib = "src/lib.wado"
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        let err = lib_world_fq(m.package.as_ref().unwrap()).unwrap_err();
+        assert!(err.message.contains("reserved"), "{}", err.message);
     }
 
     #[test]
