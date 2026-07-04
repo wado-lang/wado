@@ -959,11 +959,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
-        // Reject &mut on struct field access when the field is a primitive type.
-        // In Wasm GC, struct.get returns a value copy for primitives, so &mut field
-        // creates a disconnected Box — mutations don't propagate back to the struct.
-        // For GC reference types (struct, String, List, etc.), struct.get returns
-        // the shared reference, so &mut field works correctly.
+        // Reject &mut on struct field access when the field is a scalar type.
+        // In Wasm GC, struct.get returns a value copy for scalars (primitives,
+        // enums, flags), so &mut field creates a disconnected Box — mutations
+        // don't propagate back to the struct. For GC reference types (struct,
+        // String, List, etc.), struct.get returns the shared reference, so
+        // &mut field works correctly. Flags reduce to a primitive base, so the
+        // base-type check catches them; enums keep their own base type and need
+        // an explicit match.
         // Detect the field-access shape from the AST: `resolve_field_access`
         // returns a placeholder, so its resolved `kind` is no longer
         // `FieldAccess`; the operand's `type_id` still carries the field type
@@ -981,9 +984,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .get_ultimate_base_type(expr_type),
                 )
                 .clone();
-            if matches!(field_type, ResolvedType::Primitive(_))
-                || matches!(base_type, ResolvedType::Primitive(_))
-            {
+            let is_scalar_field = |ty: &ResolvedType| {
+                matches!(ty, ResolvedType::Primitive(_) | ResolvedType::Enum { .. })
+            };
+            if is_scalar_field(&field_type) || is_scalar_field(&base_type) {
                 let _ = self.logger.error(TypeError::CannotAssign {
                     message: "cannot take mutable reference to primitive struct field; use the struct reference directly".to_string(),
                     span: unary.span,
