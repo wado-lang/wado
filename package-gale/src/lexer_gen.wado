@@ -469,12 +469,10 @@ fn gen_lexer_match_fn(
     }
     w.line(&"let mut pos = start;");
     if rule.body.len() == 1 {
-        // Alt-initial semantic predicate (`{cond}? ...`): gate before matching.
-        gen_lexer_rule_predicates(w, &rule.body[0].actions, 0, ea, &"return -1");
+        // Alt-initial (`{cond}? ...`) and trailing (`... {cond}?`) predicates are
+        // placed inside `gen_lexer_alt_seq`; a false predicate returns -1 so the
+        // tokenizer tries the next rule.
         gen_lexer_alt_seq(w, &rule.body[0], all_rules, &"return -1", ci, ea);
-        // Trailing predicate (`... {cond}?`): gate the completed match, so a
-        // false predicate rejects the rule and the tokenizer tries the next.
-        gen_lexer_rule_predicates(w, &rule.body[0].actions, rule.body[0].elements.len(), ea, &"return -1");
         w.line(&"return pos;");
     } else {
         gen_lexer_alts(w, &rule.body, all_rules, &"return -1", ci, ea);
@@ -490,9 +488,9 @@ fn gen_lexer_match_fn(
 /// lexer `$`-attributes (`$text`) against the match fn's `chars` / `start` /
 /// `pos`; an unresolvable reference is a loud codegen error. `fail_action` is
 /// `return -1` for a single-alt rule and `break <label>` inside a multi-alt
-/// rule (a false predicate falls through to the next alt). Only alt-initial
-/// (`before == 0`) and trailing (`before == elements.len()`) predicates are
-/// placed today; mid-alt lexer predicates are not yet emitted.
+/// rule / group / fragment (a false predicate falls through to the next alt).
+/// `gen_lexer_alt_seq` drives this over every `before_index` (alt-initial, mid,
+/// trailing), so predicates at any position in an alt are placed.
 fn gen_lexer_rule_predicates(w: &mut CodeWriter, actions: &List<AltAction>, before: i32, ea: bool, fail_action: &String) {
     if !ea {
         return;
@@ -529,9 +527,7 @@ fn gen_lexer_alts(
         let label = `alts_{id}_{i}`;
         w.begin(&`{label}:`);
         w.line(&`pos = alts_saved_{id};`);
-        gen_lexer_rule_predicates(w, &alts[i].actions, 0, ea, &`break {label}`);
         gen_lexer_alt_seq(w, &alts[i], all_rules, &`break {label}`, ci, ea);
-        gen_lexer_rule_predicates(w, &alts[i].actions, alts[i].elements.len(), ea, &`break {label}`);
         w.line(&`alts_ok_{id} = true;`);
         w.end();
     }
@@ -550,14 +546,14 @@ fn gen_lexer_alt_seq(
     ea: bool,
 ) {
     for let mut i = 0; i < alt.elements.len(); i += 1 {
-        // Mid-alt predicate (`A {cond}? B`): a `before_index` strictly interior
-        // to the alt gates the match partway through. `before_index == 0`
-        // (alt-initial) and `== elements.len()` (trailing) are placed by the
-        // caller around this sequence, so only the interior positions are
-        // emitted here.
-        if i > 0 {
-            gen_lexer_rule_predicates(w, &alt.actions, i, ea, fail_action);
-        }
+        // Semantic predicate at `before_index == i`: alt-initial (`i == 0`) or
+        // mid-alt (`0 < i < len`), gating the match at this point. The trailing
+        // position (`i == len`) is emitted after the loop. Placing every
+        // position here — rather than the alt-initial / trailing pair in the
+        // caller — is what lets a single-alt inlined group / fragment (reached
+        // straight through this fn, with no `gen_lexer_alts` wrapper) gate on
+        // its boundary predicates.
+        gen_lexer_rule_predicates(w, &alt.actions, i, ea, fail_action);
         let elem = &alt.elements[i];
         if let Repeat(rep) = elem {
             if rep.non_greedy {
@@ -568,7 +564,9 @@ fn gen_lexer_alt_seq(
                 }
                 let rest_alt = LexerAlternative { elements: rest_elems };
                 gen_lexer_non_greedy_repeat(w, rep, &rest_alt, all_rules, fail_action, ci, ea);
-                return;
+                // The suffix (and its trailing predicate) is consumed inside the
+                // non-greedy emit; break to the shared post-loop trailing guard.
+                break;
             }
             // Greedy Plus / Star whose inner is a single-char-consuming
             // shape (Literal of one char / CharRange / CharClass /
@@ -602,12 +600,14 @@ fn gen_lexer_alt_seq(
                 }
                 if lexer_suffix_is_peekable(&suffix_elems) {
                     gen_lexer_repeat_lookahead_aware(w, rep, &suffix_elems, all_rules, fail_action, ci, ea);
-                    return;
+                    break;
                 }
             }
         }
         gen_lexer_elem(w, elem, all_rules, fail_action, ci, ea);
     }
+    // Trailing predicate (`… {cond}?`, `before_index == elements.len()`).
+    gen_lexer_rule_predicates(w, &alt.actions, alt.elements.len(), ea, fail_action);
 }
 
 /// True for lexer elements safe to participate in the lookahead-aware
