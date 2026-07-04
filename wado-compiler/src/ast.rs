@@ -792,6 +792,9 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
                 v.visit_id(field.name_id, field.name_span);
                 v.visit_expr(&field.value);
             }
+            for spread in &s.spreads {
+                v.visit_expr(&spread.expr);
+            }
         }
         Expr::TupleLiteral(t) => {
             for el in &t.elements {
@@ -2291,6 +2294,9 @@ impl Expr {
                 for f in &mut sl.fields {
                     f.value.substitute_idents(subs);
                 }
+                for spread in &mut sl.spreads {
+                    spread.expr.substitute_idents(subs);
+                }
             }
             Expr::Range(r) => {
                 r.start.substitute_idents(subs);
@@ -2342,10 +2348,49 @@ pub struct StructLiteralExpr {
     /// Always `Some` iff `name` is `Some`.
     pub name_span: Option<Span>,
     pub fields: Vec<StructLiteralField>,
+    /// Spread bases (`{ ..a, field: v, ..b }`) in source order, each supplying
+    /// the fields the literal does not list explicitly. See WEP: Literal Spread.
+    pub spreads: Vec<StructLiteralSpread>,
     /// Whether the original source had a trailing comma (for formatting purposes).
     /// Multiline formatting is used when this is true.
     pub has_trailing_comma: bool,
     pub span: Span,
+}
+
+/// A `..base` spread element inside a struct/key-value literal.
+#[derive(Debug, Clone)]
+pub struct StructLiteralSpread {
+    pub expr: Box<Expr>,
+    /// Explicit fields appearing before this spread in source order.
+    pub field_pos: usize,
+    pub span: Span,
+}
+
+/// A struct/key-value literal member in source order, with its index into the
+/// owning `StructLiteralExpr`'s `spreads` / `fields` list.
+pub enum LiteralMember<'a> {
+    Spread(usize, &'a StructLiteralSpread),
+    Field(usize, &'a StructLiteralField),
+}
+
+impl StructLiteralExpr {
+    /// Members in source order (spreads interleaved with fields via `field_pos`).
+    /// Every pass that walks members shares this order so last-wins / insert
+    /// order stay in lockstep.
+    pub fn members(&self) -> Vec<LiteralMember<'_>> {
+        let mut out = Vec::with_capacity(self.fields.len() + self.spreads.len());
+        let mut si = 0;
+        for pos in 0..=self.fields.len() {
+            while si < self.spreads.len() && self.spreads[si].field_pos == pos {
+                out.push(LiteralMember::Spread(si, &self.spreads[si]));
+                si += 1;
+            }
+            if pos < self.fields.len() {
+                out.push(LiteralMember::Field(pos, &self.fields[pos]));
+            }
+        }
+        out
+    }
 }
 
 /// A field in a struct literal: `x: 10` or `x` (shorthand)

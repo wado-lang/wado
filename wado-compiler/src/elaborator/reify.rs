@@ -4463,35 +4463,78 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let provided: crate::hashmap::IndexSet<String> =
             struct_lit.fields.iter().map(|f| f.name.clone()).collect();
-        for (name, field_index, raw_ty, default) in &decl_fields {
-            if provided.contains(name) {
-                continue;
-            }
-            if let Some(default_expr) = default {
-                let expected_field_ty = substitute(self, *raw_ty);
-                // Reify a foreign default under its owning module's
-                // perspective: fact lookups key by the node's own globally-
-                // unique `AstId` (no module qualifier), but the default's
-                // free identifiers and decl lookups still resolve in the
-                // struct module's scope, so the perspective swap remains for
-                // name resolution.
-                let value = if struct_module == self.current_module_source {
-                    self.reify_expr(default_expr, ctx, Some(expected_field_ty))
-                } else {
-                    self.with_const_module_perspective(&struct_module, |this| {
-                        this.reify_expr(default_expr, ctx, Some(expected_field_ty))
-                    })
-                };
+
+        // Fill omitted fields from `base.field` (not defaults), evaluating a
+        // non-trivial `base` once via a `__base_N` temporary.
+        let mut spread_binding: Option<(u32, String, TirExpr)> = None;
+        if let Some(spread) = struct_lit.spreads.first() {
+            let base_expr = self.reify_expr(&spread.expr, ctx, Some(struct_type));
+            let base_type = base_expr.type_id;
+            let base_ref = if matches!(base_expr.kind, TirExprKind::Local { .. }) {
+                base_expr
+            } else {
+                let tmp_name = format!("__base_{}", ctx.next_local);
+                let tmp_idx = ctx.add_local(tmp_name.clone(), base_type, false, None);
+                spread_binding = Some((tmp_idx, tmp_name.clone(), base_expr));
+                TirExpr::new(
+                    TirExprKind::Local {
+                        index: tmp_idx,
+                        name: tmp_name,
+                    },
+                    base_type,
+                    struct_lit.span,
+                )
+            };
+            for (name, field_index, raw_ty, _default) in &decl_fields {
+                if provided.contains(name) {
+                    continue;
+                }
+                let field_ty = substitute(self, *raw_ty);
                 fields.push(TirStructField {
                     name: name.clone(),
-                    value,
+                    value: TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(base_ref.clone()),
+                            field_index: *field_index,
+                            field_name: name.clone(),
+                        },
+                        field_ty,
+                        struct_lit.span,
+                    ),
                     field_index: *field_index,
                 });
+            }
+        } else {
+            for (name, field_index, raw_ty, default) in &decl_fields {
+                if provided.contains(name) {
+                    continue;
+                }
+                if let Some(default_expr) = default {
+                    let expected_field_ty = substitute(self, *raw_ty);
+                    // Reify a foreign default under its owning module's
+                    // perspective: fact lookups key by the node's own globally-
+                    // unique `AstId` (no module qualifier), but the default's
+                    // free identifiers and decl lookups still resolve in the
+                    // struct module's scope, so the perspective swap remains for
+                    // name resolution.
+                    let value = if struct_module == self.current_module_source {
+                        self.reify_expr(default_expr, ctx, Some(expected_field_ty))
+                    } else {
+                        self.with_const_module_perspective(&struct_module, |this| {
+                            this.reify_expr(default_expr, ctx, Some(expected_field_ty))
+                        })
+                    };
+                    fields.push(TirStructField {
+                        name: name.clone(),
+                        value,
+                        field_index: *field_index,
+                    });
+                }
             }
         }
         fields.sort_by_key(|f| f.field_index);
 
-        TirExpr::new(
+        let literal = TirExpr::new(
             TirExprKind::StructLiteral {
                 struct_type,
                 struct_name: mangled_struct_name,
@@ -4499,7 +4542,35 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             },
             struct_type,
             struct_lit.span,
-        )
+        );
+
+        match spread_binding {
+            None => literal,
+            Some((idx, name, value)) => {
+                use crate::tir::{TirBlock, TirStmt, TirStmtKind};
+                let type_id = value.type_id;
+                let stmts = vec![
+                    TirStmt::new(
+                        TirStmtKind::Let {
+                            name,
+                            local_index: idx,
+                            value,
+                            is_mut: false,
+                            is_reactive: false,
+                            type_id,
+                            skip_value_copy: false,
+                        },
+                        struct_lit.span,
+                    ),
+                    TirStmt::new(TirStmtKind::Expr(literal), struct_lit.span),
+                ];
+                TirExpr::new(
+                    TirExprKind::Block(TirBlock::new(stmts, struct_lit.span)),
+                    struct_type,
+                    struct_lit.span,
+                )
+            }
+        }
     }
 
     /// Reify a compound assignment `x += y` / `x -= y` / etc. The
@@ -5928,15 +5999,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         )];
 
-        // --- For each field: __b.insert_literal("name", value) ---
+        // In source order, `insert_all(base)` per spread and `insert_literal` per
+        // field; later inserts override, giving explicit-over-base / last-wins.
         let insert_method_info = LocalMethodName::new(
             facts.builder_base_name.clone(),
             Some(facts.trait_name.clone()),
             "insert_literal".to_string(),
         );
-
-        for field in &struct_lit.fields {
-            let value = self.reify_expr(&field.value, ctx, Some(facts.value_type));
+        let insert_all_method_info = LocalMethodName::new(
+            facts.builder_base_name.clone(),
+            Some(facts.trait_name.clone()),
+            "insert_all".to_string(),
+        );
+        let builder_receiver = |this: &mut Self| {
             let builder_local = TirExpr::new(
                 TirExprKind::Local {
                     index: builder_index,
@@ -5945,32 +6020,59 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 facts.builder_type,
                 span,
             );
-            let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+            super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
                 builder_local,
                 facts.insert_self_kind,
                 false,
                 span,
-                &self.tysys.type_table,
-            );
-            let key_expr = TirExpr::new(
-                TirExprKind::StringLiteral(field.name.clone()),
-                string_type,
-                span,
-            );
-            let insert_call = super::Elaborator::<H>::build_tir_method_call(
-                receiver,
-                FunctionRef {
-                    module_source: facts.impl_module_source.clone(),
-                    name: facts.insert_mangled_name.clone(),
-                    monomorph_info: None,
-                    method_info: Some(insert_method_info.clone()),
-                },
-                vec![],
-                vec![CallArg::new(key_expr, false), CallArg::new(value, false)],
-                TypeTable::UNIT,
-                span,
-            );
-            stmts.push(TirStmt::new(TirStmtKind::Expr(insert_call), span));
+                &this.tysys.type_table,
+            )
+        };
+
+        for member in struct_lit.members() {
+            match member {
+                ast::LiteralMember::Spread(_, sp) => {
+                    let base_expr = self.reify_expr(&sp.expr, ctx, Some(facts.target_type));
+                    let receiver = builder_receiver(self);
+                    let insert_all_call = super::Elaborator::<H>::build_tir_method_call(
+                        receiver,
+                        FunctionRef {
+                            module_source: facts.impl_module_source.clone(),
+                            name: facts.insert_all_mangled_name.clone(),
+                            monomorph_info: None,
+                            method_info: Some(insert_all_method_info.clone()),
+                        },
+                        vec![],
+                        vec![CallArg::new(base_expr, false)],
+                        TypeTable::UNIT,
+                        span,
+                    );
+                    stmts.push(TirStmt::new(TirStmtKind::Expr(insert_all_call), span));
+                }
+                ast::LiteralMember::Field(_, field) => {
+                    let value = self.reify_expr(&field.value, ctx, Some(facts.value_type));
+                    let receiver = builder_receiver(self);
+                    let key_expr = TirExpr::new(
+                        TirExprKind::StringLiteral(field.name.clone()),
+                        string_type,
+                        span,
+                    );
+                    let insert_call = super::Elaborator::<H>::build_tir_method_call(
+                        receiver,
+                        FunctionRef {
+                            module_source: facts.impl_module_source.clone(),
+                            name: facts.insert_mangled_name.clone(),
+                            monomorph_info: None,
+                            method_info: Some(insert_method_info.clone()),
+                        },
+                        vec![],
+                        vec![CallArg::new(key_expr, false), CallArg::new(value, false)],
+                        TypeTable::UNIT,
+                        span,
+                    );
+                    stmts.push(TirStmt::new(TirStmtKind::Expr(insert_call), span));
+                }
+            }
         }
 
         // --- break __kv_lit: __b.build() (new API) or __b (legacy) ---
@@ -6205,6 +6307,40 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
+    /// A struct value's `(name, concrete type, declared index)` fields. Mirrors
+    /// `Elaborator::spread_struct_fields` so reify's union plan matches resolve's.
+    fn spread_base_field_list(&self, type_id: TypeId) -> Vec<(String, TypeId, u32)> {
+        let Some((name, module, type_args)) =
+            super::expr::peel_to_struct(&self.tysys.type_table.borrow(), type_id)
+        else {
+            return Vec::new();
+        };
+        let raw: Vec<(String, TypeId, u32)> = {
+            let lookup = self.type_lookup();
+            let Some(info) = lookup.struct_fields_in(&name, &module) else {
+                return Vec::new();
+            };
+            info.fields
+                .iter()
+                .enumerate()
+                .map(|(i, (fname, fty, _vis))| (fname.clone(), *fty, i as u32))
+                .collect()
+        };
+        let subst: crate::hashmap::IndexMap<u32, TypeId> = (0..type_args.len() as u32)
+            .zip(type_args.iter().copied())
+            .collect();
+        raw.into_iter()
+            .map(|(fname, fty, i)| {
+                let concrete = self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .substitute_type_params(fty, &subst);
+                (fname, concrete, i)
+            })
+            .collect()
+    }
+
     /// Reify an anonymous struct literal `{ x: 1, y: 2 }`. Annotate
     /// synthesises the struct from the field shape, gives it a
     /// deterministic `__anon_{x:i32,y:i32}`-style name, and registers
@@ -6219,47 +6355,155 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
-        use crate::tir::{TirExprKind, TirStructField};
+        use super::expr::UnionSource;
+        use crate::tir::{TirBlock, TirExprKind, TirStmt, TirStmtKind, TirStructField};
 
-        let resolved_fields: Vec<TirStructField> = struct_lit
-            .fields
+        // `resolve_anonymous_struct_literal` records the synthesised `__anon_{…}`
+        // name (and the union flag) on the `GenericInstantiation` slot.
+        let struct_type = recorded_type;
+        let (struct_name, is_union) = self
+            .ann_generic_instantiations(struct_lit.id)
+            .and_then(|gi| gi.mangled_name.map(|name| (name, gi.is_union)))
+            .expect("every anonymous struct literal records its synthesised name");
+
+        // Only a composition projects from spread bases; otherwise the explicit
+        // fields are the shape.
+        if !is_union {
+            let fields: Vec<TirStructField> = struct_lit
+                .fields
+                .iter()
+                .enumerate()
+                .map(|(index, field)| TirStructField {
+                    name: field.name.clone(),
+                    value: self.reify_expr(&field.value, ctx, None),
+                    field_index: index as u32,
+                })
+                .collect();
+            return TirExpr::new(
+                TirExprKind::StructLiteral {
+                    struct_type,
+                    struct_name,
+                    fields,
+                },
+                struct_type,
+                struct_lit.span,
+            );
+        }
+
+        // Evaluate each member once in source order, hoisting non-trivial ones to
+        // temporaries so effects fire in source order regardless of the union's
+        // field layout, then assemble the union from the last contributor.
+        let mut stmts: Vec<TirStmt> = Vec::new();
+        let mut base_refs: Vec<Option<TirExpr>> = vec![None; struct_lit.spreads.len()];
+        let mut base_types: Vec<TypeId> =
+            vec![crate::tir::TypeTable::UNKNOWN; struct_lit.spreads.len()];
+        let mut explicit_refs: Vec<Option<TirExpr>> = vec![None; struct_lit.fields.len()];
+        let mut explicit_types: Vec<TypeId> =
+            vec![crate::tir::TypeTable::UNKNOWN; struct_lit.fields.len()];
+        for member in struct_lit.members() {
+            match member {
+                ast::LiteralMember::Spread(si, sp) => {
+                    let expr = self.reify_expr(&sp.expr, ctx, None);
+                    base_types[si] = expr.type_id;
+                    base_refs[si] = Some(self.hoist_once(ctx, expr, "__base", &mut stmts));
+                }
+                ast::LiteralMember::Field(pos, f) => {
+                    let expr = self.reify_expr(&f.value, ctx, None);
+                    explicit_types[pos] = expr.type_id;
+                    explicit_refs[pos] = Some(self.hoist_once(ctx, expr, "__fld", &mut stmts));
+                }
+            }
+        }
+
+        let base_field_lists: Vec<Vec<(String, TypeId, u32)>> = base_types
+            .iter()
+            .map(|&t| self.spread_base_field_list(t))
+            .collect();
+        let plan = super::expr::compose_union_plan(struct_lit, &base_field_lists, &explicit_types);
+        let fields: Vec<TirStructField> = plan
             .iter()
             .enumerate()
-            .map(|(index, field)| {
-                let value = self.reify_expr(&field.value, ctx, None);
+            .map(|(i, uf)| {
+                let value = match uf.source {
+                    UnionSource::Explicit(idx) => explicit_refs[idx]
+                        .clone()
+                        .expect("every explicit field is reified above"),
+                    UnionSource::Base {
+                        base_idx,
+                        field_index,
+                    } => TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(
+                                base_refs[base_idx]
+                                    .clone()
+                                    .expect("every spread base is reified above"),
+                            ),
+                            field_index,
+                            field_name: uf.name.clone(),
+                        },
+                        uf.type_id,
+                        struct_lit.span,
+                    ),
+                };
                 TirStructField {
-                    name: field.name.clone(),
+                    name: uf.name.clone(),
                     value,
-                    field_index: index as u32,
+                    field_index: i as u32,
                 }
             })
             .collect();
 
-        // Read the registered type back from `expression_types` — the
-        // deterministic name derived from reified field types can
-        // diverge from annotate's (evaporated coercion wrappers).
-        // Production registers it in expr.rs:3603+.
-        let struct_type = recorded_type;
-        // Single source of truth: `resolve_anonymous_struct_literal`
-        // records the synthesised `__anon_{…}` name on the
-        // `GenericInstantiation` slot for every anonymous struct literal.
-        let struct_name = self
-            .ann_generic_instantiations(struct_lit.id)
-            .and_then(|gi| gi.mangled_name)
-            .expect(
-                "resolve_anonymous_struct_literal records the synthesised name on \
-                 generic_instantiations for every anonymous struct literal",
-            );
-
-        TirExpr::new(
+        let literal = TirExpr::new(
             TirExprKind::StructLiteral {
                 struct_type,
                 struct_name,
-                fields: resolved_fields,
+                fields,
             },
             struct_type,
             struct_lit.span,
+        );
+
+        if stmts.is_empty() {
+            return literal;
+        }
+        stmts.push(TirStmt::new(TirStmtKind::Expr(literal), struct_lit.span));
+        TirExpr::new(
+            TirExprKind::Block(TirBlock::new(stmts, struct_lit.span)),
+            struct_type,
+            struct_lit.span,
         )
+    }
+
+    /// Bind `expr` to a fresh `{prefix}_N` temporary (pushed onto `stmts`) so it
+    /// evaluates once in place, unless it is already a local. Returns a reference.
+    fn hoist_once(
+        &mut self,
+        ctx: &mut FunctionContext,
+        expr: TirExpr,
+        prefix: &str,
+        stmts: &mut Vec<crate::tir::TirStmt>,
+    ) -> TirExpr {
+        use crate::tir::{TirExprKind, TirStmt, TirStmtKind};
+        if matches!(expr.kind, TirExprKind::Local { .. }) {
+            return expr;
+        }
+        let span = expr.span;
+        let type_id = expr.type_id;
+        let name = format!("{prefix}_{}", ctx.next_local);
+        let index = ctx.add_local(name.clone(), type_id, false, None);
+        stmts.push(TirStmt::new(
+            TirStmtKind::Let {
+                name: name.clone(),
+                local_index: index,
+                value: expr,
+                is_mut: false,
+                is_reactive: false,
+                type_id,
+                skip_value_copy: false,
+            },
+            span,
+        ));
+        TirExpr::new(TirExprKind::Local { index, name }, type_id, span)
     }
 
     /// Reify a `MatchExpr`. The scrutinee is walked; each arm enters

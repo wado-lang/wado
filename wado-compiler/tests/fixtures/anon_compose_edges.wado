@@ -1,0 +1,56 @@
+struct EA {
+    x: i32,
+    y: i32,
+}
+
+struct EBox<T> {
+    v: T,
+    tag: i32,
+}
+
+struct EP {
+    id: i32,
+    keep: i32,
+}
+
+struct EQ {
+    id: String,
+}
+
+struct ECfg {
+    a: i32,
+    b: i32,
+}
+
+global E_BASE: ECfg = ECfg { a: 1, b: 2 };
+global E_DERIVED: ECfg = ECfg { ..E_BASE, a: 10 };
+
+test "global initializer spread" {
+    assert E_DERIVED.a == 10;
+    assert E_DERIVED.b == 2;
+    assert E_BASE.a == 1;
+}
+
+test "generic-instance base in composition substitutes type args" {
+    let b = EBox { v: 7, tag: 1 };
+    let c = { ..b, extra: 9 };
+    assert c.v == 7;
+    assert c.tag == 1;
+    assert c.extra == 9;
+}
+
+test "field-name collision takes the last contributor's type" {
+    let p = EP { id: 5, keep: 8 };
+    let q = EQ { id: "hi" };
+    let c = { ..p, ..q };
+    assert c.id == "hi";
+    assert c.keep == 8;
+}
+
+test "nested composition" {
+    let a = EA { x: 1, y: 2 };
+    let c = { ..{ ..a, x: 10 }, z: 3 };
+    assert c.x == 10;
+    assert c.y == 2;
+    assert c.z == 3;
+}

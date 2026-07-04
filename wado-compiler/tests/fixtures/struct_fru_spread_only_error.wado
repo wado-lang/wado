@@ -1,0 +1,12 @@
+// `S { ..base }` with no other fields is a deep copy of `base` — no-op under
+// value semantics, so it is rejected.
+struct SO { x: i32, y: i32 }
+
+test "named spread-only is rejected" {
+    let a = SO { x: 1, y: 2 };
+    let b = SO { ..a };
+    assert b.x == 1;
+}
+
+__DATA__
+{"test": {}, "compile_error": "just copies `base`"}

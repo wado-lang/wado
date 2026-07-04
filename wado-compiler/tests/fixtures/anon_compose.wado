@@ -1,0 +1,55 @@
+struct CA {
+    x: i32,
+    y: i32,
+}
+
+struct CB {
+    y: i32,
+    z: i32,
+}
+
+global mut COMPOSE_CALLS: i32 = 0;
+
+fn make_a() -> CA {
+    COMPOSE_CALLS = COMPOSE_CALLS + 1;
+    return CA { x: 1, y: 2 };
+}
+
+test "union of two structs, last wins on overlap" {
+    let a = CA { x: 1, y: 2 };
+    let b = CB { y: 20, z: 30 };
+    let c = { ..a, ..b };
+    assert c.x == 1;
+    assert c.y == 20;
+    assert c.z == 30;
+}
+
+test "explicit field overrides base" {
+    let a = CA { x: 1, y: 2 };
+    let c = { ..a, y: 99 };
+    assert c.x == 1;
+    assert c.y == 99;
+}
+
+test "explicit field with a new name extends the shape" {
+    let a = CA { x: 1, y: 2 };
+    let c = { ..a, w: 7 };
+    assert c.x == 1;
+    assert c.y == 2;
+    assert c.w == 7;
+}
+
+test "base evaluated once" {
+    COMPOSE_CALLS = 0;
+    let c = { ..make_a(), y: 5 };
+    assert c.x == 1;
+    assert c.y == 5;
+    assert COMPOSE_CALLS == 1;
+}
+
+test "base value not mutated" {
+    let a = CA { x: 1, y: 2 };
+    let c = { ..a, x: 100 };
+    assert c.x == 100;
+    assert a.x == 1;
+}

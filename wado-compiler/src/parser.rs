@@ -13,10 +13,10 @@ use crate::ast::{
     MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype,
     Param, PathSegment, Pattern, RangeExpr, RangeKind, ResourceDecl, ReturnStmt, SelfKind,
     StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
-    StructLiteralField, StructPatternField, TaskReturnStmt, TemplatePart, TemplateStringExpr,
-    TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
-    UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WorldDecl,
-    WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
+    StructLiteralField, StructLiteralSpread, StructPatternField, TaskReturnStmt, TemplatePart,
+    TemplateStringExpr, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type,
+    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility,
+    WhileStmt, WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
 };
 use crate::compiler_host::{Code, DiagnosticSpan, Severity};
 use crate::token::{Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
@@ -327,6 +327,11 @@ impl Parser {
 
         // Empty struct: `Name { }`
         if matches!(after_brace, TokenKind::RBrace) {
+            return true;
+        }
+
+        // Leading spread: `Name { ..base }`
+        if matches!(after_brace, TokenKind::DotDot) {
             return true;
         }
 
@@ -3929,6 +3934,11 @@ impl Parser {
             return self.parse_struct_literal(None, start_span);
         }
 
+        // Leading spread: `{ ..base, "k": v }`
+        if self.check(&TokenKind::DotDot) {
+            return self.parse_struct_literal(None, start_span);
+        }
+
         Err(ParseError {
             message: "implicit struct literal requires field syntax: { field: value }".into(),
             span: start_span,
@@ -5791,10 +5801,38 @@ impl Parser {
         }
 
         let mut fields = Vec::new();
+        let mut spreads: Vec<StructLiteralSpread> = Vec::new();
         let mut has_trailing_comma = false;
 
         if !self.check(&TokenKind::RBrace) {
             loop {
+                // `..base` is accepted in any position; the elaborator applies
+                // the position/dead-write rule per literal kind.
+                if self.check(&TokenKind::DotDotDot) {
+                    return Err(self
+                        .error_at_span(self.peek().span, "unexpected `...`; did you mean `..`?"));
+                }
+                if self.check(&TokenKind::DotDot) {
+                    let dotdot_span = self.peek().span;
+                    self.advance();
+                    let base = self.parse_expr()?;
+                    let spread_span = dotdot_span.merge(&base.span());
+                    spreads.push(StructLiteralSpread {
+                        expr: Box::new(base),
+                        field_pos: fields.len(),
+                        span: spread_span,
+                    });
+                    if !self.check(&TokenKind::Comma) {
+                        break;
+                    }
+                    self.advance(); // consume comma
+                    if self.check(&TokenKind::RBrace) {
+                        has_trailing_comma = true;
+                        break;
+                    }
+                    continue;
+                }
+
                 let field_name_span = self.peek().span;
                 // Allow string literals as field names for JSON compatibility
                 let field_name = if let TokenKind::StringLit(s) = self.peek_kind().clone() {
@@ -5860,6 +5898,7 @@ impl Parser {
             name_id,
             name_span,
             fields,
+            spreads,
             has_trailing_comma,
             span: start_span.merge(&end_span),
         })))

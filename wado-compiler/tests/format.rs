@@ -449,6 +449,32 @@ fn test_format_nested_struct_breaks_outer() {
     assert_eq!(formatted, formatted2, "idempotent");
 }
 
+/// A functional-update spread (`..base`) leads the literal and round-trips
+/// inline when it fits, one-per-line when the source asked (trailing comma).
+#[test]
+fn test_format_struct_spread_roundtrips() {
+    let inline = "fn run() {\n    let q = Point { ..p, x: 1 };\n}\n";
+    let formatted = wado_compiler::format(inline).expect("format failed");
+    assert_eq!(formatted, inline);
+
+    let multiline_src = "fn run() {\n    let q = Point { ..p, x: 1, };\n}\n";
+    let expected = "fn run() {\n    let q = Point {\n        ..p,\n        x: 1,\n    };\n}\n";
+    let formatted = wado_compiler::format(multiline_src).expect("format failed");
+    assert_eq!(formatted, expected);
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "idempotent");
+}
+
+/// Anonymous composition round-trips with spreads interleaved by position.
+#[test]
+fn test_format_anon_composition_roundtrips() {
+    let inline = "fn run() {\n    let c = { ..a, x: 1, ..b };\n}\n";
+    let formatted = wado_compiler::format(inline).expect("format failed");
+    assert_eq!(formatted, inline);
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "idempotent");
+}
+
 /// A flat struct literal that fits stays inline.
 #[test]
 fn test_format_flat_struct_stays_inline() {
