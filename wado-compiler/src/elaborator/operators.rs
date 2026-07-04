@@ -922,11 +922,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        // For `&x` / `&mut x`, peel one layer of the expected type so the
-        // operand sees the underlying expected shape. This lets a generic
-        // function reference taken by `&identity` (expected `&fn(i32) -> i32`)
-        // pin its type arguments from the inner `fn(i32) -> i32` the same
-        // way a bare `identity` to a `fn(...)` parameter would.
         let inner_expected = if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef) {
             expected_type.and_then(|expected| {
                 let table = self.tysys.type_table.borrow();
@@ -940,14 +935,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let expr_type = self.resolve_expr(&unary.expr, ctx, inner_expected);
 
-        // Address-taken-local tracking for `&x` / `&mut x` is owned by reify
-        // (`reify.rs` unary arm), which marks `TirFunction::address_taken_locals`
-        // on the TIR it actually emits; the combined walk's marking was dead.
-        // The `&mut`-on-immutable-local diagnostic stays here (annotate emits
-        // diagnostics once) and reads the target off the AST now that
-        // `resolve_ident` returns a placeholder: `&mut x` is an immutable-local
-        // error only when `x` is a function-frame local (a `Local` `kind`
-        // before 7-B), so classify it via a read-only `ctx.lookup`.
         if unary.op == UnaryOp::MutRef
             && let ast::Expr::Ident(id) = &unary.expr
             && let Some(local) = ctx.lookup(&id.name)
@@ -959,15 +946,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
-        // Reject &mut on struct field access when the field is a primitive type.
-        // In Wasm GC, struct.get returns a value copy for primitives, so &mut field
-        // creates a disconnected Box — mutations don't propagate back to the struct.
-        // For GC reference types (struct, String, List, etc.), struct.get returns
-        // the shared reference, so &mut field works correctly.
-        // Detect the field-access shape from the AST: `resolve_field_access`
-        // returns a placeholder, so its resolved `kind` is no longer
-        // `FieldAccess`; the operand's `type_id` still carries the field type
-        // via the placeholder.
         if unary.op == UnaryOp::MutRef && matches!(&unary.expr, ast::Expr::FieldAccess(_)) {
             let field_type = self.tysys.type_table.borrow().get(expr_type).clone();
             let base_type = self
@@ -981,9 +959,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .get_ultimate_base_type(expr_type),
                 )
                 .clone();
-            if matches!(field_type, ResolvedType::Primitive(_))
-                || matches!(base_type, ResolvedType::Primitive(_))
-            {
+            let is_scalar_field = |ty: &ResolvedType| {
+                matches!(ty, ResolvedType::Primitive(_) | ResolvedType::Enum { .. })
+            };
+            if is_scalar_field(&field_type) || is_scalar_field(&base_type) {
                 let _ = self.logger.error(TypeError::CannotAssign {
                     message: "cannot take mutable reference to primitive struct field; use the struct reference directly".to_string(),
                     span: unary.span,
