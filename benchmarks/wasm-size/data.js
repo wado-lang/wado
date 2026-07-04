@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783159288742,
+  "lastUpdate": 1783171572277,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -37985,6 +37985,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0115579af80b0678ea5763897c99828d2c528f9d"
         },
         "date": 1783159288026,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8446,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17049,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 284954,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d6dc54b1e792b14f08ebdee1110be961151678ed",
+          "message": "Merge pull request #1512 from wado-lang/claude/java2wado-planning-kps72p\n\nfeat(gale): java2wado — execute Java action bodies by translating them to Wado",
+          "timestamp": "2026-07-04T22:17:23+09:00",
+          "tree_id": "4563e1e42b7182d5a62d5df1e34cd1d52756a32f",
+          "url": "https://github.com/wado-lang/wado/commit/d6dc54b1e792b14f08ebdee1110be961151678ed"
+        },
+        "date": 1783171571914,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
