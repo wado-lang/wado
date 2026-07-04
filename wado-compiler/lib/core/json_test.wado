@@ -342,9 +342,8 @@ test "deserialize string with escapes" {
     assert r matches { Ok(v) && v == "line1\nline2" };
 }
 
+// Non-ASCII content takes the UTF-8 validation branch, escape-free and split by `\/`.
 test "deserialize raw multibyte string value" {
-    // Non-ASCII content forces the UTF-8 validation branch (the ASCII fast
-    // path is skipped), both for an escape-free run and one split by a `\/`.
     let r: Result<String, DeserializeError> = from_string(`"café 日本 🦀"`);
     assert r matches { Ok(v) && v == "café 日本 🦀" };
 
@@ -592,16 +591,14 @@ test "from_bytes rejects invalid UTF-8" {
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
 }
 
+// A bad byte after an ASCII prefix must still be rejected: the ASCII-skip path
+// ORs every scanned byte, so the high bit is never missed.
 test "from_bytes rejects invalid UTF-8 after ASCII prefix" {
-    // A bad byte trailing valid ASCII must still be rejected: the ASCII-skip
-    // fast path keys off `high_bits`, which ORs every scanned byte, so 0xff
-    // forces the validating path even though "ab" is ASCII.
     let bytes: ByteList = [0x22, 0x61, 0x62, 0xff, 0x22];  // "ab<0xff>"
     let r: Result<String, DeserializeError> = from_bytes(bytes);
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
 
-    // Truncated multi-byte lead (0xC3 with no continuation) after ASCII, too.
-    let bytes2: ByteList = [0x22, 0x78, 0xc3, 0x22];  // "x<0xc3>"
+    let bytes2: ByteList = [0x22, 0x78, 0xc3, 0x22];  // "x<0xc3>" truncated lead
     let r2: Result<String, DeserializeError> = from_bytes(bytes2);
     assert r2 matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
 }

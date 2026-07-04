@@ -58,10 +58,8 @@ fn write_base64_string(buf: &mut String, v: ByteSlice) {
 
 /// Writes a JSON-escaped string (with surrounding quotes) into buf.
 ///
-/// Bytes that need no escaping — everything `>= 0x20` except `"` and `\`, which
-/// includes every UTF-8 continuation/lead byte — are copied in bulk runs via a
-/// single `array_copy` per run, so multi-byte characters and long unescaped
-/// spans never pay a per-`char` decode/re-encode.
+/// Only `"`, `\`, and controls (< 0x20) are escaped — all ASCII — so unescaped
+/// runs (including any multi-byte UTF-8) bulk-copy instead of re-encoding.
 pub fn write_escaped_string(buf: &mut String, s: &String) {
     buf.push('"');
     let n = s.len();
@@ -905,20 +903,10 @@ impl JsonDeserializer {
         return DeserializeError::malformed("invalid UTF-8 in string", start as i64);
     }
 
-    /// Copy the already-scanned run `input[start..end)` into an owned `String`,
-    /// validating UTF-8 only when the run is not pure ASCII.
-    ///
-    /// Why skipping validation is safe: every byte `< 0x80` is a complete
-    /// one-byte UTF-8 scalar, so a run of them is valid UTF-8 unconditionally —
-    /// no overlong, surrogate, or truncated sequence is expressible without a
-    /// byte `>= 0x80`. Conversely every *invalid* sequence contains such a byte.
-    /// So an ASCII run is always safe to wrap unchecked, and any malformed input
-    /// necessarily has the high bit set somewhere and takes the validating path.
-    ///
-    /// Safety contract: `all_ascii` must be `true` only if every byte in
-    /// `[start, end)` — exactly the bytes copied here — is `< 0x80`. Callers
-    /// compute it by OR-ing each scanned byte (`high_bits < 0x80`); the ORed set
-    /// and the copied range must coincide, or a high byte could be missed.
+    /// Copy `input[start..end)` into an owned `String`, validating UTF-8 unless
+    /// `all_ascii`. Invariant: `all_ascii` holds only when every byte in the
+    /// range is `< 0x80` (valid UTF-8 by construction); a malformed sequence
+    /// always has a byte `>= 0x80`, so it never bypasses validation.
     fn take_scanned_run(&self, start: i32, end: i32, all_ascii: bool) -> Result<String, DeserializeError> {
         let slice = self.input.slice(start, end);
         if all_ascii {
@@ -946,11 +934,9 @@ impl JsonDeserializer {
         }
         self.pos += 1;
 
-        // Scan ahead to the end of the escape-free prefix so it can be built
-        // in one exactly-sized allocation. `high_bits` ORs every byte of the
-        // prefix — exactly the range copied out below — so `high_bits < 0x80`
-        // proves the run is pure ASCII and lets `take_scanned_run` skip UTF-8
-        // validation (see its safety contract).
+        // Scan ahead to the end of the escape-free prefix so it can be built in
+        // one exactly-sized allocation, OR-ing each byte into `high_bits` to
+        // detect a pure-ASCII run (see `take_scanned_run`).
         let prefix_start = self.pos;
         let mut scan_pos = self.pos;
         let mut high_bits = 0;
@@ -982,11 +968,9 @@ impl JsonDeserializer {
 
         loop {
             // Scan to the next terminator or escape. The bytes between escapes
-            // form one contiguous run that is validated and copied in a single
-            // pass below (the `"` / `\` delimiters are ASCII, so a multi-byte
-            // sequence never straddles a chunk boundary). Escapes in twitter-shaped
-            // data are ASCII `\/` runs, so the ASCII check usually elides UTF-8
-            // validation here too.
+            // form one contiguous run that is copied in a single pass below (the
+            // `"` / `\` delimiters are ASCII, so a multi-byte sequence never
+            // straddles a chunk boundary).
             let chunk_start = self.pos;
             let mut chunk_high = 0;
             while self.pos < self.input.len() {
