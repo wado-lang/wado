@@ -1,0 +1,151 @@
+//! java2wado — translate the Java subset in ANTLR action bodies to Wado, so
+//! `language = Java` grammars execute their actions. Facade over the
+//! `ActionLanguage` dispatcher; the Java front end lives in `java2wado/`. It
+//! reuses the identity translator (`action_translate.wado`) for `$`-leaves. A
+//! body outside the supported subset is a loud diagnostic, never a silent no-op.
+
+use { ParserRule, Grammar, ActionLanguage, LexerRule, Alternative, NamedAction } from "./ir.wado";
+use { translate_wado_action, PARSER_HANDLE } from "./action_translate.wado";
+use { translate_java_expr, translate_java_stmts, JEnv } from "./java2wado/jemit.wado";
+use { translate_java_members, java_member_method_names, MemberDecls } from "./java2wado/jmembers.wado";
+
+/// Translate an action body to Wado: `Wado` routes to the identity translator,
+/// `Java` to java2wado, any other language is a loud error. `grammar_name` and
+/// `member_methods` let the Java front end resolve method calls / token constants.
+pub fn translate_action(
+    lang: &ActionLanguage,
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    body: &String,
+    vals_in_scope: bool,
+    bindings: &List<[bool, String, String]>,
+    grammar_name: &String,
+    member_methods: &List<String>,
+) -> Result<String, String> {
+    return match lang {
+        Wado => translate_wado_action(rule, rules, body, vals_in_scope, bindings),
+        Java => {
+            let env = JEnv { this_bind: PARSER_HANDLE, grammar: *grammar_name, methods: *member_methods };
+            translate_java_stmts(rule, rules, body, vals_in_scope, bindings, &env);
+        },
+        Other(name) => Result::Err(`unsupported action language '{*name}' for action '{*body}'`),
+    };
+}
+
+/// Translate a semantic-predicate body (`{ cond }?`) to a Wado boolean
+/// expression, dispatching on the action language as `translate_action` does.
+pub fn translate_predicate(
+    lang: &ActionLanguage,
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    body: &String,
+    vals_in_scope: bool,
+    bindings: &List<[bool, String, String]>,
+    grammar_name: &String,
+    member_methods: &List<String>,
+) -> Result<String, String> {
+    return match lang {
+        Wado => translate_wado_action(rule, rules, body, vals_in_scope, bindings),
+        Java => {
+            let env = JEnv { this_bind: PARSER_HANDLE, grammar: *grammar_name, methods: *member_methods };
+            translate_java_expr(rule, rules, body, vals_in_scope, bindings, &env);
+        },
+        Other(name) => Result::Err(`unsupported action language '{*name}' for predicate '{*body}'`),
+    };
+}
+
+/// Translate a `@members` block to Wado struct fields + methods. `Java` parses
+/// the class body; Wado members are a later item.
+pub fn translate_members(lang: &ActionLanguage, body: &String, grammar_name: &String) -> Result<MemberDecls, String> {
+    return match lang {
+        Java => translate_java_members(body, grammar_name),
+        Wado => Result::Err("java2wado: Wado @members translation is not yet implemented"),
+        Other(name) => Result::Err(`unsupported action language '{*name}' for @members`),
+    };
+}
+
+/// Whether a named action is a parser-scoped `@members` block (`@parser::members`
+/// or bare `@members`) — the source of the generated `Parser`'s fields + methods.
+pub fn is_parser_members(act: &NamedAction) -> bool {
+    if act.name != "members" {
+        return false;
+    }
+    return match &act.scope {
+        Some(s) => *s == "parser",
+        None => true,
+    };
+}
+
+/// The snake_cased method names the grammar's `@members` blocks declare, so
+/// action / predicate bodies can resolve `this.m()` and bare `m()` calls against
+/// real methods rather than snake_casing anything.
+pub fn collect_member_method_names(grammar: &Grammar) -> List<String> {
+    let mut names: List<String> = [];
+    for let act of &grammar.named_actions {
+        if !is_parser_members(act) {
+            continue;
+        }
+        for let n of &java_member_method_names(&act.body.text) {
+            names.push(*n);
+        }
+    }
+    return names;
+}
+
+/// Whether the grammar declares `options { superClass = ... }`. Its actions call
+/// a hand-written base class outside the `.g4` that Gale cannot see — Phase 4,
+/// carved out of the Java emit-actions rollout. See `java2wado.md`.
+pub fn grammar_has_superclass(grammar: &Grammar) -> bool {
+    for let o of &grammar.options {
+        if o.name == "superClass" {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Whether Gale can emit the grammar's action bodies: `Wado` always, `Java`
+/// unless the grammar declares `superClass` (Phase 4). Other languages stay
+/// discarded.
+pub fn action_language_is_emittable(grammar: &Grammar) -> bool {
+    return grammar.action_language matches { Wado }
+        || grammar.action_language matches { Java } && !grammar_has_superclass(grammar);
+}
+
+/// Whether the grammar carries any action content: a named action, a rule
+/// prequel or value channel (args/returns/locals), or a per-alt action.
+fn grammar_has_actions(grammar: &Grammar) -> bool {
+    for let na of &grammar.named_actions {
+        if na.body.text != "" {
+            return true;
+        }
+    }
+    for let r of &grammar.parser_rules {
+        if r.init_action matches { Some(_) } || r.after_action matches { Some(_) } {
+            return true;
+        }
+        if !r.args.is_empty() || !r.returns_decls.is_empty() || !r.locals_decls.is_empty() {
+            return true;
+        }
+        for let alt of &r.alternatives {
+            if !alt.actions.is_empty() {
+                return true;
+            }
+        }
+    }
+    for let lr of &grammar.lexer_rules {
+        for let alt of &lr.body {
+            if !alt.actions.is_empty() {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/// Whether codegen emits the action machinery: the language is emittable AND the
+/// grammar has action content. Gates `emit_actions` and the ctx-tree token table
+/// so an actionless grammar stays byte-identical to before Stage C.
+pub fn should_emit_actions(grammar: &Grammar) -> bool {
+    return action_language_is_emittable(grammar) && grammar_has_actions(grammar);
+}

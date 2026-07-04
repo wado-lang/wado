@@ -1,0 +1,283 @@
+//! Translate a Java `@members` class body to Wado struct fields + methods.
+//! Method bodies reuse the statement translator with the recognizer handle bound
+//! to `self`; a synthetic empty rule stands in for the absent value channel.
+
+use { ParserRule, Visibility } from "../ir.wado";
+use { JToken } from "./jlexer.wado";
+use { tokenize_java } from "./jlexer.wado";
+use { parse_java_stmts, parse_java_expr, punct_is, ident_at, JExpr } from "./jparser.wado";
+use { emit_java_stmts, emit_expr, map_java_type, JEnv } from "./jemit.wado";
+use { to_snake_case } from "../ident.wado";
+
+/// One field on the generated recognizer struct, from a `@members` field decl.
+pub struct MemberField {
+    pub name: String,
+    pub ty: String,
+    pub init: String,
+}
+
+/// The struct fields and methods a `@members` block contributes. `methods` are
+/// ready-to-splice `fn ... { ... }` sources.
+pub struct MemberDecls {
+    pub fields: List<MemberField>,
+    pub methods: List<String>,
+}
+
+/// Translate a `@members` block body to fields + methods. `grammar_name` keys the
+/// `<Name>Parser` token-constant qualifier; a call inside a method body resolves
+/// against the block's own method names.
+pub fn translate_java_members(body: &String, grammar_name: &String) -> Result<MemberDecls, String> {
+    let tokens = tokenize_java(body)?;
+    let env = JEnv { this_bind: "self", grammar: *grammar_name, methods: scan_method_names(&tokens) };
+    let mut fields: List<MemberField> = [];
+    let mut methods: List<String> = [];
+    let mut pos = 0;
+    while pos < tokens.len() {
+        skip_modifiers(&tokens, &mut pos);
+        if pos >= tokens.len() {
+            break;
+        }
+        let ty = member_ident(&tokens, pos, &"type")?;
+        pos += 1;
+        let name = member_ident(&tokens, pos, &"name")?;
+        pos += 1;
+        if punct_is(&tokens, pos, &"(") {
+            methods.push(parse_method(&tokens, &mut pos, &name, &ty, &env)?);
+        } else {
+            fields.push(parse_field(&tokens, &mut pos, &name, &ty, &env)?);
+        }
+    }
+    return Result::Ok(MemberDecls { fields, methods });
+}
+
+/// The snake_cased method names a `@members` block declares, for resolving method
+/// calls in other action bodies. Best-effort: a malformed block yields the names
+/// it can, and the real translation reports the error.
+pub fn java_member_method_names(body: &String) -> List<String> {
+    return match tokenize_java(body) {
+        Ok(tokens) => scan_method_names(&tokens),
+        Err(_) => [],
+    };
+}
+
+fn scan_method_names(tokens: &List<JToken>) -> List<String> {
+    let mut names: List<String> = [];
+    let mut pos = 0;
+    while pos < tokens.len() {
+        skip_modifiers(tokens, &mut pos);
+        if pos + 1 >= tokens.len() {
+            break;
+        }
+        if ident_at(tokens, pos) matches { None } {
+            break;
+        }
+        let name_opt = ident_at(tokens, pos + 1);
+        if name_opt matches { None } {
+            break;
+        }
+        pos += 2;
+        if punct_is(tokens, pos, &"(") {
+            names.push(to_snake_case(&name_opt.unwrap()));
+            pos = skip_parens(tokens, pos);
+            if !punct_is(tokens, pos, &"{") {
+                break;
+            }
+            let close = find_braced_end(tokens, pos);
+            if close matches { Err(_) } {
+                break;
+            }
+            pos = close.unwrap() + 1;
+        } else {
+            while pos < tokens.len() && !punct_is(tokens, pos, &";") {
+                pos += 1;
+            }
+            if pos < tokens.len() {
+                pos += 1;
+            }
+        }
+    }
+    return names;
+}
+
+fn skip_parens(tokens: &List<JToken>, open: i32) -> i32 {
+    let mut depth = 0;
+    for let mut i = open; i < tokens.len(); i += 1 {
+        if punct_is(tokens, i, &"(") {
+            depth += 1;
+        } else if punct_is(tokens, i, &")") {
+            depth -= 1;
+            if depth == 0 {
+                return i + 1;
+            }
+        }
+    }
+    return tokens.len();
+}
+
+fn parse_field(
+    tokens: &List<JToken>,
+    pos: &mut i32,
+    name: &String,
+    ty_java: &String,
+    env: &JEnv,
+) -> Result<MemberField, String> {
+    let ty = match map_java_type(ty_java) {
+        Some(t) => t,
+        None => {
+            return Result::Err(`java2wado: @members: unsupported field type '{*ty_java}'`);
+        },
+    };
+    let init = if punct_is(tokens, *pos, &"=") {
+        *pos += 1;
+        let slice = collect_until_semi(tokens, pos);
+        let e = parse_java_expr(&slice)?;
+        emit_member_expr(&e, env)?;
+    } else {
+        return Result::Err(`java2wado: @members: field '{*name}' needs an initializer`);
+    };
+    if !punct_is(tokens, *pos, &";") {
+        return Result::Err(`java2wado: @members: expected ';' after field '{*name}'`);
+    }
+    *pos += 1;
+    return Result::Ok(MemberField { name: *name, ty, init });
+}
+
+fn parse_method(
+    tokens: &List<JToken>,
+    pos: &mut i32,
+    name: &String,
+    ret_java: &String,
+    env: &JEnv,
+) -> Result<String, String> {
+    let params = parse_params(tokens, pos)?;
+    if !punct_is(tokens, *pos, &"{") {
+        return Result::Err(`java2wado: @members: expected '\{' for method '{*name}'`);
+    }
+    let close = find_braced_end(tokens, *pos)?;
+    let body_tokens = slice_tokens(tokens, *pos + 1, close);
+    *pos = close + 1;
+    let stmts = parse_java_stmts(&body_tokens)?;
+    let dummy = ParserRule::new("", Visibility::Default, [], []);
+    let no_rules: List<ParserRule> = [];
+    let no_bindings: List<[bool, String, String]> = [];
+    let body_wado = emit_java_stmts(&dummy, &no_rules, &stmts, false, &no_bindings, env)?;
+    return build_method(name, &params, ret_java, &body_wado);
+}
+
+/// Emit a field initializer, which has no rule / value-channel context.
+fn emit_member_expr(e: &JExpr, env: &JEnv) -> Result<String, String> {
+    let dummy = ParserRule::new("", Visibility::Default, [], []);
+    let no_rules: List<ParserRule> = [];
+    let no_bindings: List<[bool, String, String]> = [];
+    return emit_expr(&dummy, &no_rules, e, false, &no_bindings, env);
+}
+
+fn build_method(
+    name: &String,
+    params: &List<[String, String]>,
+    ret_java: &String,
+    body_wado: &String,
+) -> Result<String, String> {
+    let mut sig = `fn {to_snake_case(name)}(&mut self`;
+    for let p of params {
+        sig.push_str(&`, {p.0}: {p.1}`);
+    }
+    sig.push(')');
+    if *ret_java != "void" {
+        let rty = match map_java_type(ret_java) {
+            Some(t) => t,
+            None => {
+                return Result::Err(`java2wado: @members: unsupported return type '{*ret_java}'`);
+            },
+        };
+        sig.push_str(&` -> {rty}`);
+    }
+    return Result::Ok(`{sig} \{ {*body_wado} \}`);
+}
+
+/// Parse a Java parameter list `( Type name (, Type name)* )`; `pos` at `(`,
+/// left just past `)`. Each param is `[name, wado_type]`.
+fn parse_params(tokens: &List<JToken>, pos: &mut i32) -> Result<List<[String, String]>, String> {
+    *pos += 1;
+    let mut ps: List<[String, String]> = [];
+    if punct_is(tokens, *pos, &")") {
+        *pos += 1;
+        return Result::Ok(ps);
+    }
+    loop {
+        let ty = member_ident(tokens, *pos, &"parameter type")?;
+        *pos += 1;
+        let nm = member_ident(tokens, *pos, &"parameter name")?;
+        *pos += 1;
+        let wty = match map_java_type(&ty) {
+            Some(t) => t,
+            None => {
+                return Result::Err(`java2wado: @members: unsupported parameter type '{ty}'`);
+            },
+        };
+        ps.push([nm, wty]);
+        if punct_is(tokens, *pos, &",") {
+            *pos += 1;
+            continue;
+        }
+        if punct_is(tokens, *pos, &")") {
+            *pos += 1;
+            return Result::Ok(ps);
+        }
+        return Result::Err("java2wado: @members: expected ',' or ')' in parameter list");
+    }
+}
+
+fn skip_modifiers(tokens: &List<JToken>, pos: &mut i32) {
+    while is_modifier(tokens, *pos) {
+        *pos += 1;
+    }
+}
+
+fn is_modifier(tokens: &List<JToken>, pos: i32) -> bool {
+    return match ident_at(tokens, pos) {
+        Some(n) => n == "public" || n == "private" || n == "protected" || n == "static" || n == "final",
+        None => false,
+    };
+}
+
+fn member_ident(tokens: &List<JToken>, pos: i32, what: &String) -> Result<String, String> {
+    return match ident_at(tokens, pos) {
+        Some(n) => Result::Ok(n),
+        None => Result::Err(`java2wado: @members: expected {*what} identifier`),
+    };
+}
+
+/// Collect tokens from `pos` up to (not including) the next top-level `;`;
+/// leaves `pos` at the `;`. Field initializers carry no nested `;`.
+fn collect_until_semi(tokens: &List<JToken>, pos: &mut i32) -> List<JToken> {
+    let start = *pos;
+    while *pos < tokens.len() && !punct_is(tokens, *pos, &";") {
+        *pos += 1;
+    }
+    return slice_tokens(tokens, start, *pos);
+}
+
+/// Index of the `}` matching the `{` at `open`, tracking brace depth.
+fn find_braced_end(tokens: &List<JToken>, open: i32) -> Result<i32, String> {
+    let mut depth = 0;
+    for let mut i = open; i < tokens.len(); i += 1 {
+        if punct_is(tokens, i, &"{") {
+            depth += 1;
+        } else if punct_is(tokens, i, &"}") {
+            depth -= 1;
+            if depth == 0 {
+                return Result::Ok(i);
+            }
+        }
+    }
+    return Result::Err("java2wado: @members: unterminated method body");
+}
+
+fn slice_tokens(tokens: &List<JToken>, start: i32, end: i32) -> List<JToken> {
+    let mut out: List<JToken> = [];
+    for let mut i = start; i < end; i += 1 {
+        out.push(tokens[i]);
+    }
+    return out;
+}

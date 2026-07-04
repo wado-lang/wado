@@ -1,0 +1,19 @@
+//! Stage C / java2wado: a `@parser::members` block's field + method are carried
+//! on the generated `Parser` and an action calls into them. Proves the members
+//! codegen (3.vii.d): field -> struct field with default, method -> `impl Parser`
+//! block (`this` -> `self`), action calls -> `p.<method>()` / `p.<field>`.
+
+use jm from "./grammars/java_members.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/java_members",
+        },
+    };
+
+test "java @members field + method execute during the parse" {
+    let result = jm::parse(&"abc");
+    assert result.ok(), "clean parse";
+    assert result.output == "1\n", `output: '{result.output}'`;
+}

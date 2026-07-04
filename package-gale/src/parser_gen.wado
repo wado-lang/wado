@@ -104,7 +104,6 @@ use {
 } from "./gir.wado";
 use { find_attr_refs } from "./attr_scan.wado";
 use {
-    translate_wado_action,
     rule_returns_vals,
     vals_struct_name,
     wado_type_default,
@@ -113,6 +112,8 @@ use {
     rule_threads_args,
     RULE_START_TOK_LOCAL,
 } from "./action_translate.wado";
+use { translate_action, translate_predicate, translate_members, is_parser_members } from "./java2wado.wado";
+use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
 use { unwrap_label } from "./lr_util.wado";
 use { escape_ident } from "./ident.wado";
 use { compute_shapes_for_alt, shape_lookahead_signature_for_alt, rebind_op_field } from "./lower.wado";
@@ -227,7 +228,7 @@ fn call_arg_suffix(rc: &RuleCallOp, ctx: &mut GenContext) -> String {
 /// ref-free expression passes through; an untranslatable one is returned raw
 /// (a later type error is clearer than a silent drop).
 fn translate_caller_arg(expr: &String, ctx: &GenContext) -> Option<String> {
-    if find_attr_refs(expr).len() == 0 {
+    if ctx.action_language() matches { Wado } && find_attr_refs(expr).len() == 0 {
         return Option::Some(*expr);
     }
     let ridx = ctx.current_rule_index();
@@ -236,7 +237,17 @@ fn translate_caller_arg(expr: &String, ctx: &GenContext) -> Option<String> {
     }
     let rule = &ctx.parser_rules()[ridx];
     let vals_in_scope = rule_emits_vals(ctx, rule);
-    return match translate_wado_action(rule, ctx.parser_rules(), expr, vals_in_scope, ctx.alt_bindings()) {
+    let lang = ctx.action_language();
+    return match translate_predicate(
+        &lang,
+        rule,
+        ctx.parser_rules(),
+        expr,
+        vals_in_scope,
+        ctx.alt_bindings(),
+        ctx.grammar_name(),
+        ctx.action_member_methods(),
+    ) {
         Ok(c) => Option::Some(c),
         Err(_) => null,
     };
@@ -305,7 +316,9 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // `LoweredGrammar` is threaded through so we can dispatch on
     // `Rule::Simple` / `MultiAlt` / `LeftRecursive` instead of
     // recomputing the classification at every emit site.
-    gen_parser_struct(w, ctx.is_trace(), ctx.needs_atn(), ctx.emit_actions());
+    let members = collect_parser_members(grammar, ctx);
+    gen_parser_struct(w, ctx.is_trace(), ctx.needs_atn(), ctx.emit_actions(), &members);
+    gen_member_methods(w, &members);
     if ctx.emit_actions() {
         gen_vals_structs(w, grammar);
     }
@@ -559,7 +572,52 @@ fn gen_vals_fields(w: &mut CodeWriter, decls: &List<AttrDecl>) {
     }
 }
 
-fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_actions: bool) {
+/// Translate the grammar's `@parser::members` (and bare `@members`) blocks to
+/// `Parser` struct fields + methods. Only when actions are emittable; an
+/// untranslatable block is a loud diagnostic, not a silent drop.
+fn collect_parser_members(grammar: &Grammar, ctx: &mut GenContext) -> MemberDecls {
+    let mut fields: List<MemberField> = [];
+    let mut methods: List<String> = [];
+    if !ctx.emit_actions() {
+        return MemberDecls { fields, methods };
+    }
+    let lang = ctx.action_language();
+    for let act of &grammar.named_actions {
+        if !is_parser_members(act) {
+            continue;
+        }
+        match translate_members(&lang, &act.body.text, &grammar.name) {
+            Ok(m) => {
+                for let f of &m.fields {
+                    fields.push(*f);
+                }
+                for let mm of &m.methods {
+                    methods.push(*mm);
+                }
+            },
+            Err(msg) => {
+                ctx.warn(&"@members", DiagnosticKind::UnsupportedAction, msg);
+            },
+        }
+    }
+    return MemberDecls { fields, methods };
+}
+
+/// Emit `@members` method declarations as a separate `impl Parser` block. Each
+/// method source is a ready-to-splice `fn ... { ... }` from `translate_members`.
+fn gen_member_methods(w: &mut CodeWriter, members: &MemberDecls) {
+    if members.methods.is_empty() {
+        return;
+    }
+    ImplSpec::new("Parser").emit_begin(w);
+    for let m of &members.methods {
+        w.line(m);
+    }
+    w.end();
+    w.blank();
+}
+
+fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_actions: bool, members: &MemberDecls) {
     let mut s = StructSpec::new("Parser");
     s.add_field(&"tokens", &"TokenStream");
     // Token kinds as a bare `Array<i32>` — the hot scan/peek read. A flat
@@ -622,6 +680,10 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_acti
     s.add_field(&"diagnostics", &"List<Diagnostic>");
     if emit_actions {
         s.add_field(&"output", &"String");
+    }
+    // `@members` fields: defaulted so `Parser::new`'s literal can omit them.
+    for let mf of &members.fields {
+        s.add_field_default(&mf.name, &mf.ty, &mf.init);
     }
     s.emit(w);
     w.blank();
@@ -3544,7 +3606,7 @@ fn gate_condition_for(a: &AltAction, ctx: &GenContext) -> Option<String> {
     if a.kind matches { Action } {
         return null;
     }
-    if find_attr_refs(&a.source.text).len() == 0 {
+    if ctx.action_language() matches { Wado } && find_attr_refs(&a.source.text).len() == 0 {
         return Option::Some(a.source.text);
     }
     let ridx = ctx.current_rule_index();
@@ -3553,7 +3615,17 @@ fn gate_condition_for(a: &AltAction, ctx: &GenContext) -> Option<String> {
     }
     let rule = &ctx.parser_rules()[ridx];
     let vals_in_scope = rule_emits_vals(ctx, rule);
-    return match translate_wado_action(rule, ctx.parser_rules(), &a.source.text, vals_in_scope, ctx.alt_bindings()) {
+    let lang = ctx.action_language();
+    return match translate_predicate(
+        &lang,
+        rule,
+        ctx.parser_rules(),
+        &a.source.text,
+        vals_in_scope,
+        ctx.alt_bindings(),
+        ctx.grammar_name(),
+        ctx.action_member_methods(),
+    ) {
         Ok(code) => Option::Some(code),
         Err(_) => null,
     };
@@ -3790,16 +3862,16 @@ fn join_gate_conds(conds: &List<String>) -> String {
 /// `UnsupportedAction` diagnostic rather than invalid `$x`.
 fn gen_action_body(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext) {
     ctx.mark_action_seen(src.action_id);
-    if let Some(code) = translate_action_or_warn(src, ctx) {
+    if let Some(code) = translate_action_or_warn(src, false, ctx) {
         emit_action_stmt(w, &code);
     }
 }
 
-/// Translate an action / predicate body's `$`-references, or warn (loud) and
-/// return `null` if a reference cannot be emitted. A ref-free body passes
-/// through verbatim (the identity translator on Wado host text).
-fn translate_action_or_warn(src: &ActionSource, ctx: &mut GenContext) -> Option<String> {
-    if find_attr_refs(&src.text).len() == 0 {
+/// Translate an action (`is_predicate = false`, a statement list) or a predicate
+/// condition (`is_predicate = true`, an expression) to Wado, warning (loud) and
+/// returning `null` on failure. A ref-free Wado body passes through verbatim.
+fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut GenContext) -> Option<String> {
+    if ctx.action_language() matches { Wado } && find_attr_refs(&src.text).len() == 0 {
         return Option::Some(src.text);
     }
     let ridx = ctx.current_rule_index();
@@ -3812,13 +3884,31 @@ fn translate_action_or_warn(src: &ActionSource, ctx: &mut GenContext) -> Option<
         return null;
     }
     let vals_in_scope = rule_emits_vals(ctx, &ctx.parser_rules()[ridx]);
-    return match translate_wado_action(
-        &ctx.parser_rules()[ridx],
-        ctx.parser_rules(),
-        &src.text,
-        vals_in_scope,
-        ctx.alt_bindings(),
-    ) {
+    let lang = ctx.action_language();
+    let translated = if is_predicate {
+        translate_predicate(
+            &lang,
+            &ctx.parser_rules()[ridx],
+            ctx.parser_rules(),
+            &src.text,
+            vals_in_scope,
+            ctx.alt_bindings(),
+            ctx.grammar_name(),
+            ctx.action_member_methods(),
+        );
+    } else {
+        translate_action(
+            &lang,
+            &ctx.parser_rules()[ridx],
+            ctx.parser_rules(),
+            &src.text,
+            vals_in_scope,
+            ctx.alt_bindings(),
+            ctx.grammar_name(),
+            ctx.action_member_methods(),
+        );
+    };
+    return match translated {
         Ok(code) => Option::Some(code),
         Err(msg) => {
             ctx.warn(&`action {src.action_id}`, DiagnosticKind::UnsupportedAction, msg);
@@ -3853,7 +3943,7 @@ fn emit_span_capture(w: &mut CodeWriter, rule: &ParserRule, ctx: &GenContext) {
 /// gates, where a false predicate is a parse failure at that point.
 fn gen_predicate_guard(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext) {
     ctx.mark_action_seen(src.action_id);
-    let cond = match translate_action_or_warn(src, ctx) {
+    let cond = match translate_action_or_warn(src, true, ctx) {
         Some(c) => c,
         None => {
             return;
