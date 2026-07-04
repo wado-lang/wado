@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783134402127,
+  "lastUpdate": 1783144345114,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -37863,6 +37863,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "pi_approx",
             "value": 8413,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17049,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 284954,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "118285d0457c22c8f6c1e11a337ac2ed201d5d68",
+          "message": "Merge pull request #1510 from wado-lang/claude/canada-ser-benchmark-debug-rn9rm0\n\nperf: faster serde serialization and fresh-match value-copy elision",
+          "timestamp": "2026-07-04T14:43:54+09:00",
+          "tree_id": "e7d63f90ca474bf5f3076ea4ab6ad594ce770eb3",
+          "url": "https://github.com/wado-lang/wado/commit/118285d0457c22c8f6c1e11a337ac2ed201d5d68"
+        },
+        "date": 1783144344693,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8446,
             "unit": "bytes"
           },
           {
