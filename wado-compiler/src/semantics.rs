@@ -138,6 +138,10 @@ pub struct Semantics {
     /// Batch compilation refuses to continue when this is false; LSP queries
     /// proceed with whatever partial state the phases managed to produce.
     pub(crate) is_complete: bool,
+    /// Compiler-owned WIT emit facts (target world + default interface). Set by
+    /// the CLI before WIT emission so `wado wit` and the `wado compile` embed
+    /// path derive them identically. `None` until set.
+    pub(crate) wit_contract: Option<crate::wit_emit::WitContract>,
 }
 
 /// A definition location, assembled from a symbol.
@@ -182,6 +186,17 @@ impl Semantics {
     #[must_use]
     pub fn is_complete(&self) -> bool {
         self.is_complete
+    }
+
+    /// The compiler-owned WIT emit contract, if set by the CLI.
+    #[must_use]
+    pub fn wit_contract(&self) -> Option<&crate::wit_emit::WitContract> {
+        self.wit_contract.as_ref()
+    }
+
+    /// Set the WIT emit contract (target world + default interface).
+    pub fn set_wit_contract(&mut self, c: crate::wit_emit::WitContract) {
+        self.wit_contract = Some(c);
     }
 
     /// Component Model world registry produced during annotate.
@@ -266,6 +281,7 @@ impl Semantics {
             tir_modules,
             liveness: crate::elaborator::liveness::Liveness::default(),
             is_complete: false,
+            wit_contract: None,
         }
     }
 
@@ -1315,6 +1331,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         tir_modules,
         liveness,
         is_complete: lower_ok && no_syntax_errors,
+        wit_contract: None,
     }
 }
 

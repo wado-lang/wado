@@ -224,7 +224,8 @@ impl EntryPointKind {
 }
 
 /// The emitted name of a library's world — the component's anonymous root.
-pub const LIB_WORLD_NAME: &str = "root";
+/// Re-exported from [`wado_compiler::wit_emit`], the single source of truth.
+pub const LIB_WORLD_NAME: &str = wado_compiler::wit_emit::LIB_WORLD_NAME;
 
 /// A library FQ `namespace:name/<segment>@version`, rejecting a package name
 /// that (case-insensitively) equals the reserved [`LIB_WORLD_NAME`].
@@ -253,24 +254,25 @@ pub fn lib_world_fq(pkg: &wado_manifest::Package) -> Result<String, CliExit> {
     lib_fq(pkg, &pkg.name)
 }
 
-/// The FQ that names the world when emitting a library's WIT, using the
-/// reserved [`LIB_WORLD_NAME`] segment instead of the default-interface name.
-pub fn lib_emit_world_fq(pkg: &wado_manifest::Package) -> Result<String, CliExit> {
-    lib_fq(pkg, LIB_WORLD_NAME)
+/// A resolved `--lib` package: everything needed to build and emit its world.
+pub struct LibTarget {
+    /// Entry-point source path (`[package].lib`).
+    pub entry: PathBuf,
+    /// Default-interface FQ `namespace:name/name@version` — the codegen key and
+    /// the identity consumers import.
+    pub interface_fq: String,
 }
 
-/// Resolve the `--lib` entry point and library world FQ.
+/// Resolve the `--lib` package: its `ProjectManifest` and [`LibTarget`].
 ///
 /// `--lib` requires a manifest (directory input or a `wado.toml` discovered
 /// from the cwd); a bare `.wado` file argument is rejected because the package
 /// namespace — required to form the world FQ — lives only in `[package]`. The
 /// entry comes from `[package].lib`, not the `[world]` table.
-///
-/// Returns `(entry_path, world_fq)`.
-pub fn resolve_lib_input(
+pub fn resolve_lib_project(
     explicit_input: Option<String>,
     usage: &str,
-) -> Result<(String, String), CliExit> {
+) -> Result<(ProjectManifest, LibTarget), CliExit> {
     let project = if let Some(input) = explicit_input {
         let path = Path::new(&input);
         if !path.is_dir() {
@@ -306,13 +308,30 @@ pub fn resolve_lib_input(
         .package
         .as_ref()
         .ok_or_else(|| CliExit::error("`--lib` requires a `[package]` section in wado.toml"))?;
-    let world_fq = lib_world_fq(pkg)?;
+    let interface_fq = lib_world_fq(pkg)?;
     let lib_rel = pkg
         .lib
         .as_deref()
         .ok_or_else(|| CliExit::error("`--lib` requires `[package].lib` in wado.toml"))?;
-    let entry = project.root.join(lib_rel);
-    Ok((entry.to_string_lossy().into_owned(), world_fq))
+    let target = LibTarget {
+        entry: project.root.join(lib_rel),
+        interface_fq,
+    };
+    Ok((project, target))
+}
+
+/// Resolve the `--lib` entry point and default-interface FQ.
+///
+/// Returns `(entry_path, interface_fq)`.
+pub fn resolve_lib_input(
+    explicit_input: Option<String>,
+    usage: &str,
+) -> Result<(String, String), CliExit> {
+    let (_, target) = resolve_lib_project(explicit_input, usage)?;
+    Ok((
+        target.entry.to_string_lossy().into_owned(),
+        target.interface_fq,
+    ))
 }
 
 /// Resolve an entry point path from a manifest.
@@ -597,24 +616,6 @@ lib = "src/lib.wado"
     }
 
     #[test]
-    fn lib_emit_world_fq_uses_reserved_root_name() {
-        let toml = r#"
-[package]
-namespace = "wado"
-name = "cm-catalog-min"
-version = "0.1.0"
-lib = "src/lib.wado"
-"#;
-        let m = toml.parse::<Manifest>().unwrap();
-        let pkg = m.package.as_ref().unwrap();
-        let world = lib_emit_world_fq(pkg).unwrap();
-        let iface = lib_world_fq(pkg).unwrap();
-        assert_eq!(world, "wado:cm-catalog-min/root@0.1.0");
-        assert_eq!(iface, "wado:cm-catalog-min/cm-catalog-min@0.1.0");
-        assert_ne!(world, iface);
-    }
-
-    #[test]
     fn lib_fq_rejects_reserved_root_package_name_any_case() {
         for name in ["root", "Root", "ROOT"] {
             let toml = format!(
@@ -623,16 +624,10 @@ lib = "src/lib.wado"
             let m = toml.parse::<Manifest>().unwrap();
             let pkg = m.package.as_ref().unwrap();
             let iface_err = lib_world_fq(pkg).unwrap_err();
-            let world_err = lib_emit_world_fq(pkg).unwrap_err();
             assert!(
                 iface_err.message.contains("reserved"),
                 "{}",
                 iface_err.message
-            );
-            assert!(
-                world_err.message.contains("reserved"),
-                "{}",
-                world_err.message
             );
         }
     }
