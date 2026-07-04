@@ -18,6 +18,7 @@ use {
     AltAction,
 } from "./ir.wado";
 use { literal_const_name, gen_visibility_comment } from "./gen_util.wado";
+use { translate_lexer_predicate } from "./action_translate.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec, Vis, char_lit, char_range_pat } from "./wadopoet.wado";
 use { TreeMap } from "core:collections";
 
@@ -484,13 +485,13 @@ fn gen_lexer_match_fn(
 }
 
 /// Emit each semantic predicate at position `before` as a `pos`-rejecting guard
-/// (`if !(cond) { return -1; }`) in a lexer rule's match fn. The condition is
-/// Wado (identity translator) with `chars` / `start` / `pos` in scope. Only
-/// alt-initial (`before == 0`) and trailing (`before == elements.len()`)
-/// predicates on single-alt rules are placed today; mid-alt and multi-alt
-/// lexer predicates are not yet emitted. A `$`-referencing condition is left
-/// verbatim (surfacing loudly in the generated module) pending lexer attribute
-/// resolution.
+/// (`if !(cond) { return -1; }`) in a lexer rule's match fn. The condition runs
+/// through the identity translator (`translate_lexer_predicate`), resolving
+/// lexer `$`-attributes (`$text`) against the match fn's `chars` / `start` /
+/// `pos`; an unresolvable reference is a loud codegen error. Only alt-initial
+/// (`before == 0`) and trailing (`before == elements.len()`) predicates on
+/// single-alt rules are placed today; mid-alt and multi-alt lexer predicates
+/// are not yet emitted.
 fn gen_lexer_rule_predicates(w: &mut CodeWriter, actions: &List<AltAction>, before: i32, ea: bool) {
     if !ea {
         return;
@@ -500,7 +501,11 @@ fn gen_lexer_rule_predicates(w: &mut CodeWriter, actions: &List<AltAction>, befo
             continue;
         }
         if a.kind matches { Predicate } {
-            w.line(&`if !({a.source.text}) \{ return -1; \}`);
+            let cond = match translate_lexer_predicate(&a.source.text) {
+                Ok(c) => c,
+                Err(e) => panic(`lexer predicate: {e}`),
+            };
+            w.line(&`if !({cond}) \{ return -1; \}`);
         }
     }
 }

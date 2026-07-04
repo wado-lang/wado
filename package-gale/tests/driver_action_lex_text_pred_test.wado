@@ -1,0 +1,23 @@
+//! Stage C lexer `$text` predicate: `ENUM : [a-z]+ { $text == "enum" }?` reads
+//! the matched slice, so a letter run lexes as `ENUM` only when it spells
+//! `enum` and otherwise falls through to `ID` (the Wado analog of ANTLR's
+//! `SemPredEvalLexer/EnumNotID`).
+
+use lp from "./grammars/wado_lex_text_pred.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_lex_text_pred",
+        },
+    };
+
+test "a lexer $text predicate decides the winning rule" {
+    let hit = lp::parse(&"enum");
+    assert hit.ok(), "clean parse of 'enum'";
+    assert hit.output == "enum", `output: '{hit.output}'`;
+
+    let miss = lp::parse(&"enema");
+    assert miss.ok(), "clean parse of 'enema'";
+    assert miss.output == "id", `output: '{miss.output}'`;
+}

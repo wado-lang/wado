@@ -1,5 +1,6 @@
 use {
     translate_wado_action,
+    translate_lexer_predicate,
     rule_value_channel_ready,
     rule_returns_vals,
     rule_is_left_recursive,
@@ -201,6 +202,21 @@ e @after { p.emit($ctx.toStringTree()); } : e '+' e | INT ;
         &NO_BINDINGS,
     ).unwrap();
     assert out == " p.emit(p.rule_string_tree_final()); ", `out: '{out}'`;
+}
+
+test "translate_lexer_predicate maps $text to the matched slice" {
+    let out = translate_lexer_predicate(&" $text == \"enum\" ").unwrap();
+    assert out == " LexerSlice::new(chars, start, pos).to_string() == \"enum\" ", `out: '{out}'`;
+}
+
+test "translate_lexer_predicate leaves a $-free body verbatim" {
+    let out = translate_lexer_predicate(&" pos - start == 4 ").unwrap();
+    assert out == " pos - start == 4 ", `out: '{out}'`;
+}
+
+test "translate_lexer_predicate rejects an unsupported lexer attribute" {
+    let res = translate_lexer_predicate(&" $type == 1 ");
+    assert res.is_err(), "$type is not yet emitted for lexer predicates";
 }
 
 test "wado_type_default covers the corpus surface" {
