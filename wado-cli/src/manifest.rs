@@ -259,18 +259,16 @@ pub fn lib_emit_world_fq(pkg: &wado_manifest::Package) -> Result<String, CliExit
     lib_fq(pkg, LIB_WORLD_NAME)
 }
 
-/// Resolve the `--lib` entry point and library world FQ.
+/// Resolve the `--lib` package: its `ProjectManifest` and entry-point path.
 ///
 /// `--lib` requires a manifest (directory input or a `wado.toml` discovered
 /// from the cwd); a bare `.wado` file argument is rejected because the package
 /// namespace — required to form the world FQ — lives only in `[package]`. The
 /// entry comes from `[package].lib`, not the `[world]` table.
-///
-/// Returns `(entry_path, world_fq)`.
-pub fn resolve_lib_input(
+pub fn resolve_lib_project(
     explicit_input: Option<String>,
     usage: &str,
-) -> Result<(String, String), CliExit> {
+) -> Result<(ProjectManifest, PathBuf), CliExit> {
     let project = if let Some(input) = explicit_input {
         let path = Path::new(&input);
         if !path.is_dir() {
@@ -301,17 +299,32 @@ pub fn resolve_lib_input(
     };
     emit_manifest_warnings(&project);
 
-    let pkg = project
+    let lib_rel = project
         .manifest
         .package
         .as_ref()
-        .ok_or_else(|| CliExit::error("`--lib` requires a `[package]` section in wado.toml"))?;
-    let world_fq = lib_world_fq(pkg)?;
-    let lib_rel = pkg
+        .ok_or_else(|| CliExit::error("`--lib` requires a `[package]` section in wado.toml"))?
         .lib
         .as_deref()
         .ok_or_else(|| CliExit::error("`--lib` requires `[package].lib` in wado.toml"))?;
     let entry = project.root.join(lib_rel);
+    Ok((project, entry))
+}
+
+/// Resolve the `--lib` entry point and default-interface FQ.
+///
+/// Returns `(entry_path, world_fq)`.
+pub fn resolve_lib_input(
+    explicit_input: Option<String>,
+    usage: &str,
+) -> Result<(String, String), CliExit> {
+    let (project, entry) = resolve_lib_project(explicit_input, usage)?;
+    let pkg = project
+        .manifest
+        .package
+        .as_ref()
+        .expect("resolve_lib_project guarantees a [package]");
+    let world_fq = lib_world_fq(pkg)?;
     Ok((entry.to_string_lossy().into_owned(), world_fq))
 }
 

@@ -176,6 +176,44 @@ fn test_compile_lib_embeds_component_type_without_interface_collision() {
 }
 
 #[test]
+fn test_wit_lib_emits_root_world() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\nnamespace = \"acme\"\nname = \"shapes\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src").join("lib.wado"),
+        "pub struct Point { x: f64, y: f64 }\nexport fn identity(p: Point) -> Point { return p; }\n",
+    )
+    .unwrap();
+
+    wado_in(dir)
+        .arg("wit")
+        .arg("--lib")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("world root {"))
+        .stdout(predicate::str::contains("interface shapes {"))
+        .stdout(predicate::str::contains("world shapes").not());
+}
+
+#[test]
+fn test_wit_lib_conflicts_with_world() {
+    wado()
+        .arg("wit")
+        .arg("--lib")
+        .arg("--world")
+        .arg("wasi:cli/command")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("mutually exclusive"));
+}
+
+#[test]
 fn test_compile_os_skips_metadata() {
     // -Os strips symbols for minimal frontend delivery; package metadata is
     // dropped too, matching the WIT section.

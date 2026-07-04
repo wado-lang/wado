@@ -663,6 +663,9 @@ splits two previously-conflated values: the world's emit name (`root`, textual
 only) and the default-interface FQ (`ns:name/name`, the codegen identity and
 the component's real export). The anonymous component binary is unaffected.
 
+`wado wit --lib` renders this same shape (`world root` exporting the default
+interface), so the human-readable text and the embedded `component-type` agree.
+
 Export grouping follows the same A/B rule the WIT producer applies
 (`wit_emit`, mirroring WEP: WIT and Wado Mapping → "Default Interface"):
 

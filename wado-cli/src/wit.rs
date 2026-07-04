@@ -8,6 +8,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use lexopt::Arg::Value;
+use wado_compiler::semantics::Semantics;
 use wado_compiler::wit_emit::{self, WitEmitOptions, WitScope};
 
 use crate::args::{self, CliExit, OptSpec};
@@ -20,6 +21,7 @@ pub struct WitOptions {
     pub input: Option<String>,
     pub scope: WitScope,
     pub world: Option<String>,
+    pub lib: bool,
     pub output: Option<String>,
 }
 
@@ -27,12 +29,19 @@ pub struct WitOptions {
 enum Opt {
     Scope,
     World,
+    Lib,
     Output,
     Help,
 }
 
 impl Opt {
-    const ALL: &[Self] = &[Self::Scope, Self::World, Self::Output, Self::Help];
+    const ALL: &[Self] = &[
+        Self::Scope,
+        Self::World,
+        Self::Lib,
+        Self::Output,
+        Self::Help,
+    ];
 
     const fn spec(self) -> OptSpec {
         match self {
@@ -43,6 +52,12 @@ impl Opt {
                 desc: "Inlining scope for referenced interfaces (default: full)",
             },
             Self::World => args::WORLD_SPEC,
+            Self::Lib => OptSpec {
+                long: Some("lib"),
+                short: None,
+                value: None,
+                desc: "Emit the library world (from [package].lib); excludes --world",
+            },
             Self::Output => OptSpec {
                 long: Some("output"),
                 short: Some('o'),
@@ -73,6 +88,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<WitOptions, CliExit> {
     let mut inputs: Vec<String> = Vec::new();
     let mut scope = WitScope::Full;
     let mut world: Option<String> = None;
+    let mut lib = false;
     let mut output: Option<String> = None;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
@@ -91,6 +107,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<WitOptions, CliExit> {
                     };
                 }
                 Opt::World => world = Some(args::require_string(&mut parser)?),
+                Opt::Lib => lib = true,
                 Opt::Output => output = Some(args::require_string(&mut parser)?),
                 Opt::Help => return Err(CliExit::help(usage)),
             }
@@ -101,6 +118,12 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<WitOptions, CliExit> {
         }
     }
 
+    if lib && world.is_some() {
+        return Err(CliExit::error_with_usage(
+            "`--lib` and `--world` are mutually exclusive",
+            &usage,
+        ));
+    }
     if inputs.len() > 1 {
         return Err(CliExit::error_with_usage(
             "wado wit takes a single file or directory",
@@ -112,41 +135,17 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<WitOptions, CliExit> {
         input: inputs.into_iter().next(),
         scope,
         world,
+        lib,
         output,
     })
 }
 
 pub async fn run(opts: WitOptions) -> Result<(), CliExit> {
     let usage = format_usage();
-    let input = manifest::resolve_input(opts.input, EntryPointKind::Command, &usage)?;
-    let path = Path::new(&input);
-
-    let source = fs::read_to_string(path)
-        .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
-
-    let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
-    let host = FilesystemCompilerHost::new(base_path);
-
-    let sem =
-        wado_compiler::semantics_for_world(&source, &host, Some(&input), opts.world.as_deref())
-            .await;
-    if !sem.is_complete() {
-        // Diagnostics are already emitted by the host; signal silently.
-        return Err(CliExit::silent_failure(1));
-    }
-
-    let world = opts.world.unwrap_or_else(|| DEFAULT_WORLD.to_string());
-
-    // The faithful world import set is the WIR-level plan, available only after
-    // DCE — so compile through optimize to read it. Diagnostics were already
-    // surfaced by the `semantics` pass above; a quiet host avoids duplicates.
-    let world_imports = resolve_world_imports(&source, &input, &world).await;
-
-    let emit_opts = WitEmitOptions {
-        scope: opts.scope,
-        world_fq: world,
-        default_interface_name: default_interface_name(&input),
-        world_imports,
+    let (sem, emit_opts) = if opts.lib {
+        lib_semantics_and_opts(opts.input, opts.scope, &usage).await?
+    } else {
+        world_semantics_and_opts(opts.input, opts.scope, opts.world, &usage).await?
     };
 
     let text = wit_emit::emit_wit_text(&sem, &emit_opts)
@@ -161,6 +160,77 @@ pub async fn run(opts: WitOptions) -> Result<(), CliExit> {
         None => print!("{text}"),
     }
     Ok(())
+}
+
+/// Analyze `input` against a fixed WASI world (or the default) and build the
+/// emit options for it.
+async fn world_semantics_and_opts(
+    input: Option<String>,
+    scope: WitScope,
+    world: Option<String>,
+    usage: &str,
+) -> Result<(Semantics, WitEmitOptions), CliExit> {
+    let input = manifest::resolve_input(input, EntryPointKind::Command, usage)?;
+    let path = Path::new(&input);
+    let source = fs::read_to_string(path)
+        .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
+    let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
+    let host = FilesystemCompilerHost::new(base_path);
+
+    let sem =
+        wado_compiler::semantics_for_world(&source, &host, Some(&input), world.as_deref()).await;
+    if !sem.is_complete() {
+        return Err(CliExit::silent_failure(1));
+    }
+
+    let world = world.unwrap_or_else(|| DEFAULT_WORLD.to_string());
+    let world_imports = resolve_world_imports(&source, &input, &world).await;
+    let emit_opts = WitEmitOptions {
+        scope,
+        world_fq: world,
+        default_interface_name: default_interface_name(&input),
+        world_imports,
+    };
+    Ok((sem, emit_opts))
+}
+
+/// Analyze the `[package].lib` entry and build the emit options for the library
+/// world — emitted as the anonymous `root`, exporting the default interface
+/// `namespace:name/name` (see `manifest::LIB_WORLD_NAME`).
+async fn lib_semantics_and_opts(
+    input: Option<String>,
+    scope: WitScope,
+    usage: &str,
+) -> Result<(Semantics, WitEmitOptions), CliExit> {
+    let (project, entry) = manifest::resolve_lib_project(input, usage)?;
+    let pkg = project
+        .manifest
+        .package
+        .as_ref()
+        .expect("resolve_lib_project guarantees a [package]");
+    let world_fq = manifest::lib_emit_world_fq(pkg)?;
+    let interface_world = manifest::lib_world_fq(pkg)?;
+    let default_interface = pkg.name.clone();
+
+    let entry_str = entry.to_string_lossy().into_owned();
+    let source = fs::read_to_string(&entry)
+        .map_err(|e| CliExit::error(format!("reading '{}': {e}", entry.display())))?;
+    let base_path = entry.parent().map(Path::to_path_buf).unwrap_or_default();
+    let host = FilesystemCompilerHost::new(base_path);
+
+    let sem = wado_compiler::semantics_for_world(&source, &host, Some(&entry_str), None).await;
+    if !sem.is_complete() {
+        return Err(CliExit::silent_failure(1));
+    }
+
+    let world_imports = resolve_lib_world_imports(&source, &entry_str, &interface_world).await;
+    let emit_opts = WitEmitOptions {
+        scope,
+        world_fq,
+        default_interface_name: default_interface,
+        world_imports,
+    };
+    Ok((sem, emit_opts))
 }
 
 /// Compile `source` through optimize (on a silent host, so diagnostics are not
@@ -187,6 +257,33 @@ async fn resolve_world_imports(source: &str, input: &str, world: &str) -> Vec<St
     )
     .await
     {
+        Ok(result) => result
+            .wir_package
+            .map(|pkg| pkg.imported_cm_interfaces)
+            .unwrap_or_default(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// Compile the library entry with its synthesized world (via `lib_world`) and
+/// read the faithful import set from the retained WIR plan. `lib_world` is the
+/// default-interface FQ the codegen keys on (`namespace:name/name`), not the
+/// emitted `root` world name. Returns empty on any failure; the caller has
+/// already validated the program with `semantics`.
+async fn resolve_lib_world_imports(source: &str, input: &str, lib_world: &str) -> Vec<String> {
+    let base_path = Path::new(input)
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_default();
+    let host = FilesystemCompilerHost::silent(base_path);
+    let options = wado_compiler::CompilerOptions {
+        opt_level: wado_compiler::OptLevel::O2,
+        lib_world: Some(lib_world.to_string()),
+        retain_wir: true,
+        log_level: Some(wado_compiler::LogLevel::Error),
+        ..Default::default()
+    };
+    match wado_compiler::compile_with_options(source, &host, Some(input), options).await {
         Ok(result) => result
             .wir_package
             .map(|pkg| pkg.imported_cm_interfaces)
