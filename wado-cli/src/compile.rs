@@ -1029,7 +1029,19 @@ async fn embed_wit_section(
         return Ok(wasm);
     };
 
-    let world = opts.target_world_fq().to_string();
+    let world = if opts.lib_world.is_some() {
+        let Some(pkg) = project.and_then(|p| p.manifest.package.as_ref()) else {
+            let msg = "--lib build has no resolvable [package] to name the library world";
+            if explicit {
+                return Err(CliExit::error(format!("--embed-wit: {msg}")));
+            }
+            eprintln!("warning: skipped embedding WIT component-type section: {msg}");
+            return Ok(wasm);
+        };
+        crate::manifest::lib_emit_world_fq(pkg)?
+    } else {
+        opts.target_world_fq().to_string()
+    };
 
     let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
     // Attach the manifest `[dependencies]` so a multi-package project's

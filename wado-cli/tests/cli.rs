@@ -144,6 +144,38 @@ fn test_compile_file_arg_does_not_embed_metadata() {
 }
 
 #[test]
+fn test_compile_lib_embeds_component_type_without_interface_collision() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\nnamespace = \"acme\"\nname = \"shapes\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src").join("lib.wado"),
+        "pub struct Point { x: f64, y: f64 }\nexport fn identity(p: Point) -> Point { return p; }\n",
+    )
+    .unwrap();
+    let out = dir.join("out.wasm");
+
+    wado_in(dir)
+        .arg("compile")
+        .arg("--lib")
+        .arg("-o")
+        .arg(&out)
+        .assert()
+        .success();
+
+    let sections = custom_sections(&out);
+    assert!(
+        sections.iter().any(|(n, _)| n == "component-type"),
+        "library build must embed the component-type section, got {sections:?}"
+    );
+}
+
+#[test]
 fn test_compile_os_skips_metadata() {
     // -Os strips symbols for minimal frontend delivery; package metadata is
     // dropped too, matching the WIT section.

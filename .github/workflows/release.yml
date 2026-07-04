@@ -30,9 +30,6 @@ jobs:
           # source, not main.
           ref: ${{ inputs.tag || github.ref }}
 
-      - name: Check out the vendored wasmtime fork (path dependency)
-        run: git submodule update --init --depth 1 vendor/wasmtime
-
       - name: Determine version from tag
         id: v
         shell: bash
@@ -41,10 +38,32 @@ jobs:
           echo "tag=$tag"         >> "$GITHUB_OUTPUT"
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Verify Cargo.toml version matches tag
+      - name: Verify Cargo.toml and wado.toml versions match the tag
+        shell: bash
         run: |
-          cargo run --quiet --bin wado-dev-tools -- \
-            bump-version --check "${{ steps.v.outputs.version }}"
+          version="${{ steps.v.outputs.version }}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::tag version '$version' is not a MAJOR.MINOR.PATCH release"
+            exit 1
+          fi
+          workspace_version() {
+            awk '
+              /^\[/ { in_wp = ($0 == "[workspace.package]"); next }
+              in_wp && /^version[[:space:]]*=/ {
+                v = $0
+                sub(/^version[[:space:]]*=[[:space:]]*"/, "", v)
+                sub(/".*/, "", v)
+                print v
+                exit
+              }
+            ' "$1"
+          }
+          cargo_v="$(workspace_version Cargo.toml)"
+          wado_v="$(workspace_version wado.toml)"
+          fail=0
+          [ "$cargo_v" = "$version" ] || { echo "::error::Cargo.toml [workspace.package].version '$cargo_v' != tag '$version'"; fail=1; }
+          [ "$wado_v"  = "$version" ] || { echo "::error::wado.toml [workspace.package].version '$wado_v' != tag '$version'"; fail=1; }
+          exit $fail
 
   build:
     needs: validate
@@ -167,3 +186,39 @@ jobs:
             dist/wado-*.tar.gz
             dist/wado-*.zip
             dist/SHA256SUMS.txt
+
+  publish:
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+
+      - name: Download the release binary built by the build job
+        uses: actions/download-artifact@v8
+        with:
+          name: dist-x86_64-unknown-linux-gnu
+          path: dist
+
+      - name: Unpack wado onto PATH
+        run: |
+          tar xzf dist/wado-linux-x86_64.tar.gz -C dist
+          echo "$PWD/dist/wado-linux-x86_64" >> "$GITHUB_PATH"
+
+      - uses: cargo-bins/cargo-binstall@main
+      - name: Install wkg
+        run: cargo binstall --no-confirm wkg
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish Wado packages
+        run: wado publish
