@@ -26,28 +26,14 @@ wado run --profile guest,profile.json,1 prog.wado
 is one-shot (a file read, one parse), loop it N times in a scratch program so it
 dominates the fixed setup.
 
-Report **both self (leaf) and inclusive** — self is the code burning cycles,
-inclusive is the caller tree:
+Aggregate it with the bundled script, which reports **both self (leaf) and
+inclusive** — self is the code burning cycles, inclusive is the caller tree:
 
 ```sh
-python3 -c "
-import json,sys; from collections import Counter
-t=json.load(open(sys.argv[1]))['threads'][0]
-S=t['stringArray']; sm=t['samples']; st=t['stackTable']; ft=t['frameTable']; fn=t['funcTable']
-inc=Counter(); slf=Counter()
-def name(k): return S[fn['name'][ft['func'][st['frame'][k]]]]
-for k in sm['stack']:
-    if k is None: continue
-    slf[name(k)]+=1; seen=set(); c=k
-    while c is not None:
-        nm=name(c)
-        if nm not in seen: inc[nm]+=1; seen.add(nm)
-        c=st['prefix'][c]
-tot=sm['length']; print('total',tot)
-print('--- SELF ---');      [print(f'{c:6d} {100*c/tot:5.1f}%  {n}') for n,c in slf.most_common(20)]
-print('--- INCLUSIVE ---'); [print(f'{c:6d} {100*c/tot:5.1f}%  {n}') for n,c in inc.most_common(15)]
-" profile.json
+node .claude/skills/wado-performance/scripts/analyze_guest_profile.ts profile.json [--top N]
 ```
+
+(The `.ts` runs directly on Node ≥ 23.6 via type stripping — no build step.)
 
 Symbol names carry monomorphization detail
 (`List<f64>^Serialize::serialize<core:json/JsonSerializer>`), so you see exactly
