@@ -3625,9 +3625,8 @@ fn gate_condition_for(a: &AltAction, ctx: &GenContext) -> Option<String> {
         return null;
     }
     if predicate_body_is_context_free(&a.source.text, ctx) {
-        // Extracted to a standalone `pred_<id>(p)` fn (emitted by
-        // `gen_predicate_fns`, registered in `mark_alt_gate_predicates`), so the
-        // dispatch calls it rather than inlining the condition.
+        // Extracted to a standalone `pred_<id>(p)` fn (`gen_predicate_fns`), so
+        // the dispatch calls it rather than inlining the condition.
         return Option::Some(`{pred_fn_name(a.source.action_id)}(p)`);
     }
     let ridx = ctx.current_rule_index();
@@ -3670,14 +3669,11 @@ fn predicate_body_is_context_free(text: &String, ctx: &GenContext) -> bool {
     return ctx.action_language() matches { Wado } && find_attr_refs(text).len() == 0;
 }
 
-/// Emit the `disabled_alts` seed for an ATN-routed decision: for each group alt
-/// carrying a gateable alt-initial predicate, add its index to `_atn_disabled`
-/// when the predicate is false, so the simulator never seeds it. The condition
-/// is `gate_condition_for` — `pred_<id>(p)` for a context-free body, `vals.<v>`
-/// for a context-dependent one — both evaluable here since `p` and the seeded
-/// `vals` are in scope at the decision. Returns the `, &_atn_disabled`
-/// call-argument suffix, or `""` when no alt is gated (keeping the ATN call
-/// byte-identical).
+/// Emit the `disabled_alts` seed for an ATN-routed decision: each gated alt is
+/// pushed to `_atn_disabled` when its `gate_condition_for` condition is false,
+/// so the simulator never seeds it (both `p` and the seeded `vals` the
+/// condition may read are in scope here). Returns the `, &_atn_disabled`
+/// argument suffix, or `""` when no alt is gated.
 fn emit_atn_disabled_seed(
     w: &mut CodeWriter,
     amb_alts: &List<i32>,
@@ -7455,9 +7451,8 @@ fn gen_prediction_code_inner(
                 w.line(
                     &`let _atn_alt = atn_predict_with_stack(&ATN_SIM, {dec}, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0{disabled_arg});`,
                 );
-                // A predicate seed can exclude every alt (`_atn_alt == -1`); the
-                // index dispatch would otherwise fall through to the last alt
-                // whose own predicate rejected it, so guard no-viable first.
+                // A seed can exclude every alt (`_atn_alt == -1`), which the
+                // index dispatch would otherwise route to its last alt.
                 if !disabled_arg.is_empty() {
                     w.begin(&"if _atn_alt < 0");
                     w.line(&`p.no_viable("no viable alternative", p.peek_span(), []);`);

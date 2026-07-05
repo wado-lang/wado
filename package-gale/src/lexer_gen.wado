@@ -469,9 +469,8 @@ fn gen_lexer_match_fn(
     }
     w.line(&"let mut pos = start;");
     if rule.body.len() == 1 {
-        // Alt-initial (`{cond}? ...`) and trailing (`... {cond}?`) predicates are
-        // placed inside `gen_lexer_alt_seq`; a false predicate returns -1 so the
-        // tokenizer tries the next rule.
+        // gen_lexer_alt_seq places the alt's predicates; a false one returns -1
+        // so the tokenizer tries the next rule.
         gen_lexer_alt_seq(w, &rule.body[0], all_rules, &"return -1", ci, ea);
         w.line(&"return pos;");
     } else {
@@ -557,25 +556,18 @@ fn gen_lexer_alt_seq(
     ea: bool,
 ) {
     for let mut i = 0; i < alt.elements.len(); i += 1 {
-        // Semantic predicate at `before_index == i`: alt-initial (`i == 0`) or
-        // mid-alt (`0 < i < len`), gating the match at this point. The trailing
-        // position (`i == len`) is emitted after the loop. Placing every
-        // position here — rather than the alt-initial / trailing pair in the
-        // caller — is what lets a single-alt inlined group / fragment (reached
-        // straight through this fn, with no `gen_lexer_alts` wrapper) gate on
-        // its boundary predicates. A predicate positioned after a repeat that
-        // consumes its own suffix (non-greedy / lookahead-aware) is handled at
-        // that repeat, not here.
+        // Every `before_index == i` predicate (alt-initial and mid-alt); the
+        // trailing one is emitted post-loop. Emitting here rather than in the
+        // caller lets a single-alt inlined group / fragment gate its boundary
+        // predicates. A predicate after a suffix-consuming repeat is placed there.
         gen_lexer_rule_predicates(w, &alt.actions, i, ea, fail_action);
         let elem = &alt.elements[i];
         if let Repeat(rep) = elem {
             if rep.non_greedy {
-                // Build a sub-alt from the remaining elements, re-basing the
-                // suffix's predicates onto it (`before_index - (i + 1)`), so a
-                // predicate positioned after the non-greedy repeat is still
-                // emitted — inside the synthesized suffix, which the non-greedy
-                // emit consumes. `return` (not `break`): the rest alt already
-                // covers every position from `i + 1` through the trailing one.
+                // Re-base the suffix's predicates onto the rest alt
+                // (`before_index - (i + 1)`) so one after the repeat is still
+                // emitted, inside the suffix the non-greedy emit consumes.
+                // `return`: the rest alt covers `i + 1` through the trailing one.
                 let mut rest_elems: List<LexerElement> = [];
                 for let mut j = i + 1; j < alt.elements.len(); j += 1 {
                     rest_elems.push(alt.elements[j]);
@@ -623,10 +615,9 @@ fn gen_lexer_alt_seq(
                     suffix_elems.push(alt.elements[j]);
                 }
                 if lexer_suffix_is_peekable(&suffix_elems) {
-                    // The peek/commit emitter replays the suffix elements but
-                    // carries no actions, so a predicate strictly after the
-                    // repeat cannot be placed here. Fail loudly rather than drop
-                    // it (the trailing predicate is still emitted post-loop).
+                    // The peek/commit emitter carries no actions, so a predicate
+                    // strictly after the repeat cannot be placed — fail loudly
+                    // rather than drop it (the trailing one is still post-loop).
                     if lexer_alt_has_predicate_after(alt, i) {
                         panic(
                             `lexer predicate after a lookahead-aware greedy repeat is not yet supported (rule alt element {i})`,
@@ -639,7 +630,6 @@ fn gen_lexer_alt_seq(
         }
         gen_lexer_elem(w, elem, all_rules, fail_action, ci, ea);
     }
-    // Trailing predicate (`… {cond}?`, `before_index == elements.len()`).
     gen_lexer_rule_predicates(w, &alt.actions, alt.elements.len(), ea, fail_action);
 }
 
