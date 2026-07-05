@@ -367,6 +367,15 @@ impl WorldRegistry {
         self.worlds.contains_key(fq_name)
     }
 
+    /// Whether `world` is registered and imports `interface_name`. The single
+    /// predicate behind kiln-generator detection (`imports_interface("KilnHost")`),
+    /// so the frontend, `cm_binding`, and codegen all agree on what counts as a
+    /// generator world instead of some string-matching `core:kiln/generator`.
+    pub fn world_imports_interface(&self, world: &str, interface_name: &str) -> bool {
+        self.get(world)
+            .is_some_and(|w| w.imports_interface(interface_name))
+    }
+
     /// Get the number of registered worlds
     pub fn len(&self) -> usize {
         self.worlds.len()

@@ -702,7 +702,12 @@ mod tests {
     fn kiln_generator_wit_is_embedded() {
         assert!(KILN_GENERATOR_WIT.contains("package core:kiln"));
         assert!(KILN_GENERATOR_WIT.contains("world generator"));
-        assert!(KILN_GENERATOR_WIT.contains("export generate"));
+        // v0.3: the world is import-only (each generator synthesizes its own
+        // world with a per-generator typed `generate`), so it carries the
+        // `kiln-host` import and no fixed `generate` export / `raw-request`.
+        assert!(KILN_GENERATOR_WIT.contains("import kiln-host"));
+        assert!(!KILN_GENERATOR_WIT.contains("export generate"));
+        assert!(!KILN_GENERATOR_WIT.contains("raw-request"));
     }
 
     #[test]

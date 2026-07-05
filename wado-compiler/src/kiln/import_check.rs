@@ -31,6 +31,12 @@ pub const KILN_GENERATOR_WORLD: &str = "core:kiln/generator";
 /// The shared CM interface FQ that carries `InputFile` / `Response` / `Error`.
 pub const KILN_TYPES_INTERFACE: &str = "core:kiln/types@0.1.0";
 
+/// The `core:kiln/types` record/variant names shared across every generator's
+/// `generate` signature. Single source of truth: a `generate` param or return
+/// type naming one of these must be stamped with [`KILN_TYPES_INTERFACE`], or
+/// the CM lift/lower falls back to an i32 handle. Add a new shared type here.
+pub const KILN_SHARED_TYPE_NAMES: &[&str] = &["InputFile", "OutputFile", "Response", "Error"];
+
 /// Run the Kiln generator import-refusal check against every loaded
 /// module. Returns the count of rejected `use` sites; zero means the
 /// generator passed.

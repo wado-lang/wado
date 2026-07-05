@@ -62,7 +62,11 @@ pub fn namespace_member_alias(namespace: &str, member: &str) -> String {
 
 /// Convert a Wado identifier (`snake_case` / `PascalCase` / `camelCase`) to
 /// Component Model kebab-case (`my-api`, `http-server`, `error-code`).
-pub(crate) fn to_kebab(name: &str) -> String {
+///
+/// Public so out-of-crate boundary code (e.g. the CLI host materializing a
+/// generator's options from canonical CBOR) can map raw Wado identifiers to the
+/// CM names a component exposes, instead of re-deriving the format.
+pub fn to_kebab(name: &str) -> String {
     let chars: Vec<char> = name.chars().collect();
     let mut out = String::with_capacity(name.len() + 4);
     let mut prev_lower_or_digit = false;

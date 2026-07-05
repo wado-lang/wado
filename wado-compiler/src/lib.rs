@@ -676,8 +676,16 @@ fn compile_after_load<H: CompilerHost>(
     // through the host without bailing: a malformed descriptor does not
     // fail the whole compile, so the driver's provisional fallback still
     // produces a valid cache key.
-    let kiln_options_descriptor = if options.target_world.as_deref() == Some("core:kiln/generator")
-    {
+    // A kiln generator is any target world that imports `KilnHost` — the same
+    // structural signal cm_binding and codegen use, so all three agree (a
+    // string match on `core:kiln/generator` would miss a future generator
+    // world with a different FQ).
+    let is_kiln_generator = match (options.target_world.as_deref(), sem.world_registry()) {
+        (Some(tw), Some(reg)) => reg.world_imports_interface(tw, "KilnHost"),
+        _ => false,
+    };
+
+    let kiln_options_descriptor = if is_kiln_generator {
         match kiln::extract_options_descriptor(&sem, &sem.entry_module_source) {
             Ok(d) => Some(d),
             Err(diags) => {
@@ -692,11 +700,9 @@ fn compile_after_load<H: CompilerHost>(
     };
 
     // Synthesize a world from the entry module's `export fn` signatures — for
-    // `--lib`, and for a `core:kiln/generator` target (Kiln WEP v0.3), whose
+    // `--lib`, and for a kiln generator target (Kiln WEP v0.3), whose
     // `generate` carries its typed options via the same raw-Wado-type path.
     // Done before `sem.modules` is dropped by the destructure below.
-    let is_kiln_generator =
-        options.target_world.as_deref() == Some(kiln::import_check::KILN_GENERATOR_WORLD);
     let synth_world_fq: Option<String> = options
         .lib_world
         .clone()
@@ -713,10 +719,17 @@ fn compile_after_load<H: CompilerHost>(
     if is_kiln_generator
         && let Some(world) = lib_world_info.as_mut()
     {
-        let kiln_shared: crate::hashmap::IndexSet<String> = ["OutputFile", "Response", "Error"]
-            .iter()
-            .map(|s| (*s).to_string())
-            .collect();
+        // Only `generate` is the generator world's contract. A generator may
+        // declare helper `export fn`s beside it (used internally by
+        // `generate`); those are not world exports and must not be force-routed
+        // through the async task-return binding below, which would emit an
+        // invalid component.
+        world.exports.retain(|e| e.name == "generate");
+        let kiln_shared: crate::hashmap::IndexSet<String> =
+            kiln::import_check::KILN_SHARED_TYPE_NAMES
+                .iter()
+                .map(|s| (*s).to_string())
+                .collect();
         for export in &mut world.exports {
             for (_, ty) in &mut export.params {
                 annotate_lib_local_sources(ty, kiln::import_check::KILN_TYPES_INTERFACE, &kiln_shared);

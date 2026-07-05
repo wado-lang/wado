@@ -164,6 +164,52 @@ fn typed_options_generator_compiles_to_valid_component() {
     assert!(result.wasm.starts_with(b"\0asm"), "not component-shaped");
 }
 
+/// A generator may declare helper `export fn`s beside `generate`. Only
+/// `generate` is the world contract, so a non-`generate` export (here a plain
+/// `u32`-returning function) must not be force-routed through the async
+/// task-return result binding, which would emit an invalid component.
+const MULTI_EXPORT_GENERATOR: &str = r#"
+use { Request, Response, Error } from "core:kiln";
+
+export fn helper() -> u32 {
+    return 7;
+}
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    let _ = req.primary.path;
+    let _ = helper();
+    return Result::Ok(Response { files: [] });
+}
+"#;
+
+#[test]
+fn generator_with_extra_export_compiles_to_valid_component() {
+    let host = MapHost::new(&[]);
+    let options = CompilerOptions {
+        log_level: Some(LogLevel::Warn),
+        target_world: Some("core:kiln/generator".to_string()),
+        ..CompilerOptions::default()
+    };
+    let result = block_on(compile_with_options(
+        MULTI_EXPORT_GENERATOR,
+        &host,
+        Some("generator.wado"),
+        options,
+    ));
+    let Ok(result) = result else {
+        let diags = host.diagnostics();
+        panic!(
+            "multi-export generator failed to compile:\n{}",
+            diags
+                .iter()
+                .map(|d| format!("  {d}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+    };
+    assert!(result.wasm.starts_with(b"\0asm"), "not component-shaped");
+}
+
 const FORBIDDEN_IMPORT_GENERATOR: &str = r#"
 use { Request, Response, Error } from "core:kiln";
 use { now } from "wasi:clocks";

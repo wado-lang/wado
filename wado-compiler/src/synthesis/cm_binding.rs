@@ -439,8 +439,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
     // `core:kiln/generator` world, which declares `generate` async).
     let is_kiln_generator = project
         .world_registry
-        .get(&project.target_world)
-        .is_some_and(|w| w.imports_interface("KilnHost"));
+        .world_imports_interface(&project.target_world, "KilnHost");
     if let Some(world_info) = world_info {
         let entry_type_table = project
             .tir_modules

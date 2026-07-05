@@ -95,27 +95,37 @@ fn lift_diagnostic(d: kiln_host::Diagnostic) -> GeneratorDiagnostic {
     }
 }
 
-/// The generator's default interface — where `generate` lives, since its
-/// signature references named `core:kiln/types` records and so cannot be a
-/// bare world export. Mirrors the compiler's `KILN_GENERATOR_IMPL_FQ`.
-const GENERATOR_INTERFACE_FQ: &str = "kiln:generator/generator@0.1.0";
-
-/// Locate the generator's `generate` export. Prefer the default interface;
-/// fall back to a bare world export for a hypothetical primitive-only
-/// generator whose signature carries no named types.
+/// Locate the generator's `generate` export without hardcoding the interface
+/// FQ: a generator whose `generate` references named `core:kiln/types` records
+/// exports it inside its synthesized default interface (whose FQ the compiler
+/// owns and may make package-specific), while a primitive-only generator could
+/// expose it as a bare world export. Try the bare export, then scan the
+/// component's exported interfaces for one that contains `generate`.
 fn find_generate<T>(
+    component: &Component,
+    engine: &Engine,
     instance: &Instance,
     store: &mut Store<T>,
 ) -> Result<Func, GeneratorRunnerError> {
-    if let Some(iface) = instance.get_export_index(&mut *store, None, GENERATOR_INTERFACE_FQ)
-        && let Some(idx) = instance.get_export_index(&mut *store, Some(&iface), "generate")
-        && let Some(func) = instance.get_func(&mut *store, idx)
-    {
+    if let Some(func) = instance.get_func(&mut *store, "generate") {
         return Ok(func);
     }
-    instance
-        .get_func(&mut *store, "generate")
-        .ok_or_else(|| GeneratorRunnerError::Host("generator exports no `generate`".to_string()))
+    let interface_names: Vec<String> = component
+        .component_type()
+        .exports(engine)
+        .map(|(name, _)| name.to_string())
+        .collect();
+    for name in interface_names {
+        if let Some(iface) = instance.get_export_index(&mut *store, None, &name)
+            && let Some(idx) = instance.get_export_index(&mut *store, Some(&iface), "generate")
+            && let Some(func) = instance.get_func(&mut *store, idx)
+        {
+            return Ok(func);
+        }
+    }
+    Err(GeneratorRunnerError::Host(
+        "generator exports no `generate`".to_string(),
+    ))
 }
 
 /// Build an `input-file` record `Val` (`{ path, content }`).
@@ -164,14 +174,26 @@ fn lift_error_val(payload: Option<&Val>) -> Result<GeneratorError, GeneratorRunn
             "error payload is not a variant: {payload:?}"
         )));
     };
+    // Every `core:kiln/types::error` case carries a string message; an
+    // unexpected payload shape or case name is a host/component contract
+    // violation, surfaced rather than coerced to a dummy message or `Other`.
     let msg = match inner.as_deref() {
         Some(Val::String(s)) => s.clone(),
-        _ => String::new(),
+        other => {
+            return Err(GeneratorRunnerError::Host(format!(
+                "error variant `{case}` payload is not a string: {other:?}"
+            )));
+        }
     };
     Ok(match case.as_str() {
         "invalid-schema" => GeneratorError::InvalidSchema(msg),
         "unsupported" => GeneratorError::Unsupported(msg),
-        _ => GeneratorError::Other(msg),
+        "other" => GeneratorError::Other(msg),
+        _ => {
+            return Err(GeneratorRunnerError::Host(format!(
+                "unknown error variant case `{case}`"
+            )));
+        }
     })
 }
 
@@ -217,10 +239,15 @@ fn cbor_to_val(dec: &mut minicbor::Decoder<'_>, ty: &Type) -> Result<Val, String
         Type::U32 => Val::U32(dec.u32().map_err(e)?),
         Type::S64 => Val::S64(dec.i64().map_err(e)?),
         Type::U64 => Val::U64(dec.u64().map_err(e)?),
-        Type::Float32 => Val::Float32(dec.f32().map_err(e)?),
+        // The canonical encoder collapses every float to an f64 (its
+        // `CanonicalValue` has no f32 variant), so an `f32` field arrives as a
+        // CBOR double and is narrowed here.
+        Type::Float32 => Val::Float32(dec.f64().map_err(e)? as f32),
         Type::Float64 => Val::Float64(dec.f64().map_err(e)?),
         Type::String => Val::String(dec.str().map_err(e)?.to_string()),
-        Type::Enum(_) => Val::Enum(dec.str().map_err(e)?.to_string()),
+        // Enum cases cross the wire as raw Wado names; the component enum type
+        // uses CM kebab-case case names, so normalize before building the Val.
+        Type::Enum(_) => Val::Enum(wado_compiler::name::to_kebab(dec.str().map_err(e)?)),
         // `Some(x)` is encoded transparently as `x` and `None` fields are
         // omitted from their enclosing map, so reaching a value here is `Some`.
         Type::Option(o) => Val::Option(Some(Box::new(cbor_to_val(dec, &o.ty())?))),
@@ -239,7 +266,9 @@ fn cbor_to_val(dec: &mut minicbor::Decoder<'_>, ty: &Type) -> Result<Val, String
             let n = dec.map().map_err(e)?.ok_or("indefinite-length map")?;
             let mut got: indexmap::IndexMap<String, Val> = indexmap::IndexMap::new();
             for _ in 0..n {
-                let key = dec.str().map_err(e)?.to_string();
+                // The CBOR key is the raw Wado field name; the component record
+                // field is CM kebab-case, so normalize before matching.
+                let key = wado_compiler::name::to_kebab(dec.str().map_err(e)?);
                 let field_ty = fields
                     .iter()
                     .find(|(name, _)| *name == key)
@@ -339,7 +368,7 @@ pub async fn run_generator<H: CompilerHost + 'static>(
             .await
             .map_err(|e| GeneratorRunnerError::Host(format!("instantiate: {e}")))?;
 
-        let generate = find_generate(&instance, &mut store)?;
+        let generate = find_generate(component, engine, &instance, &mut store)?;
 
         // `generate(primary: input-file, inputs: list<input-file>[, options:
         // <Options>])`. The options parameter is present only for a generator
@@ -553,5 +582,96 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
         );
         assert!(response.files[0].is_entry);
         assert_eq!(response.files[0].content, "pub fn x() {}");
+    }
+
+    /// The canonical options CBOR carries raw Wado field/case names and encodes
+    /// every float as an f64, while the component type the host introspects
+    /// uses CM kebab-case names and `float32`. This exercises all three: a
+    /// `snake_case` field (`max_depth`), an `f32` field (`ratio`), and an enum
+    /// with a multi-word case (`Mode::HighContrast`). The generator only emits
+    /// `ok.wado` when it sees all three option values decoded correctly.
+    #[test]
+    fn typed_options_round_trip_covers_kebab_and_float_widths() {
+        use std::sync::Arc;
+        use wado_compiler::kiln::{
+            CanonicalOptions, CanonicalValue, OptionsDescriptor, encode_options_canonical,
+        };
+        use wado_compiler::{CompilerOptions, LogLevel, compile_with_options};
+
+        const SRC: &str = r#"
+use { Request, Response, Error, OutputFile } from "core:kiln";
+
+pub enum Mode {
+    Fast,
+    HighContrast,
+}
+
+pub struct Options {
+    pub max_depth: i32,
+    pub ratio: f32,
+    pub mode: Mode,
+}
+
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
+    let ok = req.options.max_depth == 3
+        && req.options.ratio > 0.4
+        && req.options.mode matches { Mode::HighContrast };
+    let name = if ok { "ok.wado" } else { "bad.wado" };
+    return Result::Ok(Response {
+        files: [OutputFile { path: name, content: "pub fn x() {}", is_entry: true }],
+    });
+}
+"#;
+
+        let options = CompilerOptions {
+            log_level: Some(LogLevel::Warn),
+            target_world: Some("core:kiln/generator".to_string()),
+            ..CompilerOptions::default()
+        };
+        let compiled = runtime()
+            .block_on(compile_with_options(
+                SRC,
+                &NoopHost,
+                Some("generator.wado"),
+                options,
+            ))
+            .expect("generator compiles to a component");
+
+        // Build the wire form exactly as the driver does — raw Wado names,
+        // f64-encoded float, enum by raw case name.
+        let options_cbor = encode_options_canonical(&CanonicalOptions {
+            descriptor: OptionsDescriptor { fields: vec![] },
+            values: vec![
+                ("max_depth".to_string(), CanonicalValue::I64(3)),
+                ("ratio".to_string(), CanonicalValue::F64(0.5)),
+                ("mode".to_string(), CanonicalValue::Enum("HighContrast".to_string())),
+            ],
+        });
+
+        let engine = create_kiln_engine(wasmtime::OptLevel::Speed).expect("engine");
+        let component = compile_component(&engine, &compiled.wasm).expect("component");
+        let request = GeneratorRequest {
+            primary: GeneratorInputFile {
+                path: "schema.txt".to_string(),
+                content: "hello".to_string(),
+            },
+            inputs: vec![],
+            options: options_cbor,
+        };
+
+        let (outcome, _diags) = runtime().block_on(run_generator(
+            &engine,
+            Arc::new(NoopHost),
+            &component,
+            request,
+            KilnRunPolicy::default(),
+        ));
+
+        let response = outcome.expect("generator runs and returns Ok");
+        assert_eq!(response.files.len(), 1);
+        assert_eq!(
+            response.files[0].path, "ok.wado",
+            "all three option values (snake_case i32, f32, multi-word enum case) must decode"
+        );
     }
 }
