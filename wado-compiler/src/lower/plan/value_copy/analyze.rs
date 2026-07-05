@@ -101,9 +101,20 @@ impl TirRefVisitor for SeedWalker<'_> {
                 }
             }
             TirExprKind::Assign { target, value } => {
-                // Field / index writes mutate an existing slot, no
-                // defensive copy needed.
-                if matches!(&target.kind, TirExprKind::Local { .. }) {
+                // A whole-local rebind (`x = v`) and a whole-value deref-assign
+                // (`*ref = v`, lowered by `try_expand_deref_aggregate_assign`)
+                // both replace the value, so the RHS needs a defensive copy.
+                // Field / index writes mutate an existing slot in place and
+                // don't.
+                let replaces_whole_value = matches!(
+                    &target.kind,
+                    TirExprKind::Local { .. }
+                        | TirExprKind::Unary {
+                            op: TirUnaryOp::Deref,
+                            ..
+                        }
+                );
+                if replaces_whole_value {
                     self.record_if_wrap(value);
                 }
             }

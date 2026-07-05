@@ -197,17 +197,19 @@ fix to conform; none should be preserved.
       (`*xs = []` was a no-op). Fixed by decomposing `List<T>` through its
       canonical `SeqField` `{repr, used}` layout and a tuple through its positional
       fields, both with concrete element types.
-- [ ] D8 — `*ref = v` does not deep-copy the RHS. The write-back decomposition in
-      `try_expand_deref_aggregate_assign` moves the RHS's fields into the shared
+- [x] D8 — `*ref = v` did not deep-copy the RHS. The write-back decomposition in
+      `try_expand_deref_aggregate_assign` moved the RHS's fields into the shared
       handle without a value copy, because deref-expansion `Let`s are synthesized
-      after `value_copy::insert`'s walk and `wrap_value_copy_operand` finds no
-      registered helper for the referent type at that site. So `*r = v` aliases
-      `v`'s interior — e.g. `*list_ref = other_list; other_list[0] = 9` also
-      mutates the referent's element. Pre-existing for the `Struct` arm (a struct
-      with a mutable field); newly observable for `List` now that D7 makes the
-      write happen. Fresh RHS values (`[]`, literals) are unaffected. Fix: have the
-      value-copy plan register a copy for the deref-assign RHS so the explicit
-      `wrap_value_copy_operand` at the expansion site takes effect.
+      after `value_copy::insert`'s walk and `wrap_value_copy_operand` found no
+      registered helper for the referent type at that site. So `*r = v` aliased
+      `v`'s interior — e.g. `*list_ref = other; other[0] = 9` also mutated the
+      referent's element. Fixed by seeding a copy helper for the deref-target RHS
+      type in the `analyze` walker and re-requesting the copy explicitly at the
+      expansion site (`skip_value_copy = false` lets `value_copy_elide` drop it
+      again when the source is unmutated, so `*xs = []`/literal cases stay free).
+      Note: a *separate* pre-existing gap remains — a tuple literal does not copy
+      its element variables (`a = [inner, 1]; inner[0] = 9` mutates `a.0`), which
+      is tuple-literal construction, not deref-assign, and is out of scope here.
 
 ## Consequences
 

@@ -721,7 +721,12 @@ impl FunctionTranslator<'_, '_> {
         let ref_nir = self.convert_expr(ref_expr);
         // The RHS is an operand position: a literal (e.g. `*s = "goodbye"`)
         // is interned as `Operand::Value`, never a skeleton `ExprId`.
-        let val_nir = self.convert_operand(value);
+        // This `Let` is synthesized after `value_copy::insert`'s walk, so the
+        // defensive copy is requested explicitly here; otherwise the per-field
+        // write-back would alias the RHS's storage (e.g. a `List`'s backing
+        // array). The `analyze` seed walker registers a helper for the
+        // deref-target RHS type so this wrap resolves.
+        let val_nir = self.wrap_value_copy_operand(self.convert_operand(value), inner_type_id);
 
         let mut out: Vec<StmtId> = Vec::with_capacity(2 + fields.len());
         out.push(self.alloc_stmt(
@@ -747,7 +752,9 @@ impl FunctionTranslator<'_, '_> {
                 is_reactive: false,
                 type_id: inner_type_id,
                 value: val_nir,
-                skip_value_copy: true,
+                // The copy is applied above; `false` lets `value_copy_elide`
+                // drop it again when the RHS source is provably unmutated.
+                skip_value_copy: false,
             },
             span,
         ));
