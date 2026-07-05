@@ -754,17 +754,13 @@ mod tests {
         std::fs::create_dir_all(&tmp).unwrap();
 
         let generator_src = "\
-use { RawRequest, Response, Error, bind_request } from \"core:kiln\";\n\
+use { Request, Response, Error } from \"core:kiln\";\n\
 \n\
 pub struct Options {\n\
     pub verbose: bool,\n\
 }\n\
 \n\
-export fn generate(raw: RawRequest) -> Result<Response, Error> {\n\
-    let req = match bind_request::<Options>(raw) {\n\
-        Ok(r) => r,\n\
-        Err(e) => return Result::Err(e),\n\
-    };\n\
+export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
     let _ = req.options.verbose;\n\
     return Result::Ok(Response { files: [] });\n\
 }\n";
@@ -875,18 +871,14 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {\n\
         std::fs::create_dir_all(&tmp).unwrap();
 
         let generator_src = "\
-use { RawRequest, Response, Error, bind_request } from \"core:kiln\";\n\
+use { Request, Response, Error } from \"core:kiln\";\n\
 \n\
 pub struct Options {\n\
     pub highlight: bool,\n\
     pub depth: i32,\n\
 }\n\
 \n\
-export fn generate(raw: RawRequest) -> Result<Response, Error> {\n\
-    let req = match bind_request::<Options>(raw) {\n\
-        Ok(r) => r,\n\
-        Err(e) => return Result::Err(e),\n\
-    };\n\
+export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
     let _ = req.options.highlight;\n\
     let _ = req.options.depth;\n\
     return Result::Ok(Response { files: [] });\n\

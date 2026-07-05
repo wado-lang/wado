@@ -455,8 +455,8 @@ pub struct DependencyIndex {
 
 /// Request handed to a Kiln generator by the compiler.
 ///
-/// Mirrors `core:kiln/types::raw-request` 1:1 but does not depend on
-/// wasmtime; hosts lift/lower at their own boundary.
+/// Carries the `generate(primary, inputs, options)` arguments in a
+/// wasmtime-independent form; the host lifts/lowers at its own boundary.
 #[derive(Debug, Clone)]
 pub struct GeneratorRequest {
     /// The schema file named by `from` in the invocation.
@@ -464,9 +464,11 @@ pub struct GeneratorRequest {
     /// Supplementary schema files.
     pub inputs: Vec<GeneratorInputFile>,
     /// Deterministic CBOR encoding of the user's `options = { ... }`
-    /// (see `crate::kiln::cache::encode_options_canonical`). The
-    /// generator-side `bind_request` decodes this into the typed
-    /// `Options` struct via `core:cbor::from_bytes` before user code runs.
+    /// (see `crate::kiln::cache::encode_options_canonical`). In the v0.3
+    /// protocol the host materializes this into a typed `Options` value,
+    /// shaped by the generator component's own introspected `generate`
+    /// options parameter, and passes it as a typed argument — the generator
+    /// receives `Options` directly, never the CBOR.
     pub options: Vec<u8>,
 }
 

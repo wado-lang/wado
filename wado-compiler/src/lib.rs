@@ -432,7 +432,7 @@ fn synthesize_lib_world_info(
     // entry module's *own* declarations are tagged — a kiln generator's
     // `generate` also references shared `core:kiln/types` records that must keep
     // resolving to their own interface, not the generator's.
-    let local_type_names: std::collections::HashSet<String> = entry_module
+    let local_type_names: crate::hashmap::IndexSet<String> = entry_module
         .map(|module| {
             module
                 .items
@@ -472,7 +472,7 @@ fn synthesize_lib_world_info(
 fn annotate_lib_local_sources(
     ty: &mut ast::Type,
     fq: &str,
-    local_type_names: &std::collections::HashSet<String>,
+    local_type_names: &crate::hashmap::IndexSet<String>,
 ) {
     use crate::ast::Type;
     match ty {
@@ -713,7 +713,7 @@ fn compile_after_load<H: CompilerHost>(
     if is_kiln_generator
         && let Some(world) = lib_world_info.as_mut()
     {
-        let kiln_shared: std::collections::HashSet<String> = ["OutputFile", "Response", "Error"]
+        let kiln_shared: crate::hashmap::IndexSet<String> = ["OutputFile", "Response", "Error"]
             .iter()
             .map(|s| (*s).to_string())
             .collect();

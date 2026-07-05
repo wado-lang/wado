@@ -634,15 +634,15 @@ pub(super) fn synthesize_lift_list(
     // element type.
     let (elem_type_id, array_type_id, list_struct_name) = {
         let mut tt = ctx.type_table.borrow_mut();
-        let (list_tid, elem_tid) =
-            match override_list_ty.and_then(|lt| tt.as_list(lt).map(|elem| (lt, elem))) {
-                Some(pair) => pair,
-                None => {
-                    let elem = ctx.cm_type_id(elem_ty, &mut tt);
-                    let lt = tt.make_list(elem);
-                    (lt, elem)
-                }
-            };
+        let (list_tid, elem_tid) = if let Some(pair) =
+            override_list_ty.and_then(|lt| tt.as_list(lt).map(|elem| (lt, elem)))
+        {
+            pair
+        } else {
+            let elem = ctx.cm_type_id(elem_ty, &mut tt);
+            let lt = tt.make_list(elem);
+            (lt, elem)
+        };
         let list_name = tt
             .compiler_struct_name(crate::compiler_item::CompilerItem::List)
             .to_string();
