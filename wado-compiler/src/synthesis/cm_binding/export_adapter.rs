@@ -40,7 +40,7 @@ use crate::synthesis::common::{
 };
 
 use super::import_adapter::make_binding_function;
-use super::lift::synthesize_lift;
+use super::lift::synthesize_lift_list;
 use super::lower::synthesize_lower_wasi_type_to_memory;
 use super::types::{
     LiftContext, binary_add, binary_ne, cm_val_type_to_type_id, cm_zero, coerce_flat_lift,
@@ -857,9 +857,14 @@ pub(super) fn synthesize_lift_from_flat_params(
                     ],
                     TypeTable::UNIT,
                 )));
-                let lifted = synthesize_lift(
-                    ty,
+                // Lift into the user function's exact `List<T>` type
+                // (`target_type_id`), not a rebuilt one, so a shared stdlib
+                // element type (e.g. `InputFile`) does not resolve to a second
+                // GC `TypeId` and mismatch the parameter.
+                let lifted = synthesize_lift_list(
+                    &generic.args[0],
                     local_ref(tmp_ptr_local, "__lift_tmp", TypeTable::I32),
+                    Some(target_type_id),
                     next_local,
                     stmts,
                     locals,

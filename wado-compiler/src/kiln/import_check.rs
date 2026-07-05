@@ -28,6 +28,9 @@ use crate::token::Span;
 
 pub const KILN_GENERATOR_WORLD: &str = "core:kiln/generator";
 
+/// The shared CM interface FQ that carries `InputFile` / `Response` / `Error`.
+pub const KILN_TYPES_INTERFACE: &str = "core:kiln/types@0.1.0";
+
 /// Run the Kiln generator import-refusal check against every loaded
 /// module. Returns the count of rejected `use` sites; zero means the
 /// generator passed.
@@ -116,12 +119,14 @@ pub fn inject_kiln_request_adapter(
         }
     };
 
+    // Stamp `InputFile` with its shared `core:kiln/types` source so downstream
+    // CM resolution (and the world-synthesis local-type annotation) treats it as
+    // that interface's type, not a generator-local one — otherwise it falls back
+    // to an i32 handle when lifted as a `List<InputFile>` element.
     let input_file_ty = |module: &mut Module| {
-        Type::Named(NamedType::new(
-            module.alloc_ast_id(),
-            "InputFile".to_string(),
-            span,
-        ))
+        let mut named = NamedType::new(module.alloc_ast_id(), "InputFile".to_string(), span);
+        named.source_interface = Some(KILN_TYPES_INTERFACE.to_string());
+        Type::Named(named)
     };
     let param = |module: &mut Module, name: &str, ty: Type| Param {
         id: module.alloc_ast_id(),

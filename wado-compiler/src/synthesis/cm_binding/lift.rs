@@ -220,7 +220,7 @@ fn synthesize_lift_inner(
         Type::Generic(g) => {
             let gname = g.name.as_str();
             if gname == list_name && g.args.len() == 1 {
-                synthesize_lift_list(&g.args[0], addr, next_local, stmts, locals, ctx)
+                synthesize_lift_list(&g.args[0], addr, None, next_local, stmts, locals, ctx)
             } else if gname == option_name && g.args.len() == 1 {
                 synthesize_lift_option_inner(&g.args[0], addr, next_local, stmts, locals, ctx)
             } else if gname == result_name && g.args.len() == 2 {
@@ -604,9 +604,10 @@ fn synthesize_lift_wasi_enum(
 /// named WASI types (records / variants / enums / flags) walk the buffer
 /// at their true canonical-ABI size and align rather than the i32-handle
 /// fallback baked into `cm_abi::cm_size` / `cm_abi::cm_align`.
-fn synthesize_lift_list(
+pub(super) fn synthesize_lift_list(
     elem_ty: &Type,
     addr: TirExpr,
+    override_list_ty: Option<TypeId>,
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
@@ -623,15 +624,25 @@ fn synthesize_lift_list(
         Some(ctx.cm_package),
     );
 
-    // Resolve TypeIds for the element type and List<ElemType>.
-    // These are needed by the monomorphizer to instantiate List::with_capacity and .push().
+    // Resolve TypeIds for `List<ElemType>` and its element, needed to
+    // instantiate `List::with_capacity` / `.push()`. When the caller knows the
+    // exact target list type (an export param's `List<T>` from the user
+    // signature), use it directly so the lifted list shares the GC type the
+    // user function expects — `cm_type_id` can otherwise resolve the element to
+    // a second `TypeId` for shared stdlib records, producing a mismatched
+    // `List<T>`. Otherwise (nested lists) fall back to rebuilding from the
+    // element type.
     let (elem_type_id, array_type_id, list_struct_name) = {
         let mut tt = ctx.type_table.borrow_mut();
-        // `cm_type_id` resolves a lib-local record/variant element to its
-        // registered GC TypeId (not the i32 fallback), so the monomorphized
-        // `List<ElemType>::push` accepts the lifted ref.
-        let elem_tid = ctx.cm_type_id(elem_ty, &mut tt);
-        let list_tid = tt.make_list(elem_tid);
+        let (list_tid, elem_tid) =
+            match override_list_ty.and_then(|lt| tt.as_list(lt).map(|elem| (lt, elem))) {
+                Some(pair) => pair,
+                None => {
+                    let elem = ctx.cm_type_id(elem_ty, &mut tt);
+                    let lt = tt.make_list(elem);
+                    (lt, elem)
+                }
+            };
         let list_name = tt
             .compiler_struct_name(crate::compiler_item::CompilerItem::List)
             .to_string();
