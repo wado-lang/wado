@@ -541,7 +541,7 @@ fn gen_lexer_alts(
 /// the trailing position (`after < before_index < elements.len()`).
 fn lexer_alt_has_predicate_after(alt: &LexerAlternative, after: i32) -> bool {
     for let a of &alt.actions {
-        if a.kind matches { Predicate } && a.before_index > after && a.before_index < alt.elements.len() {
+        if a.kind matches { Predicate } && after < a.before_index < alt.elements.len() {
             return true;
         }
     }
