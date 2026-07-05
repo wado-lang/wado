@@ -6903,6 +6903,35 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Reify a `CallExpr`. Stage 5 covers the common shapes: bare-ident
     /// callees that resolve to a current-module or imported free
     /// function (`TirExprKind::Call`), and qualified-ident
+    /// If `name` is a *global* (current-module or imported) of `fn(...)`
+    /// type, return its `GlobalVarGet` `(module_source, global_name)` and its
+    /// type — the reify-side mirror of `Elaborator::global_fn_signature`. Lets
+    /// a bare call on a global closure reify as an indirect call whose callee
+    /// is built directly with the global's type (annotate records no type for
+    /// the callee, mirroring the local-variable path).
+    fn global_fn_callee(&self, name: &str) -> Option<(ModuleSource, String, TypeId)> {
+        let (module_source, global_name, ty) = self
+            .sem
+            .decls
+            .current_module_globals
+            .get(name)
+            .map(|&(t, _)| (self.current_module_source.clone(), name.to_string(), t))
+            .or_else(|| {
+                self.sem
+                    .decls
+                    .imported_globals
+                    .get(name)
+                    .map(|(src, orig, t, _)| (src.clone(), orig.clone(), *t))
+            })?;
+        let table = self.tysys.type_table.borrow();
+        let base = table.get_ultimate_base_type(table.peel_refs(ty));
+        matches!(table.get(base), crate::tir::ResolvedType::Function { .. }).then_some((
+            module_source,
+            global_name,
+            ty,
+        ))
+    }
+
     /// variant-constructor calls (`Some(x)`, `Result::Ok(v)`)
     /// emitted as `TirExprKind::VariantConstruct` with a payload.
     /// Closure-call, indirect-callee, static-method, qualified-enum,
@@ -7193,6 +7222,45 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // Auto-deref a `&fn` / `&mut fn` callee down to the function
             // value, exactly as `build_indirect_call`'s final
             // `deref_to_value` does in the production path.
+            let callee_expr = super::Elaborator::<H>::deref_to_value_static(
+                callee_expr,
+                ident.span,
+                &self.tysys.type_table,
+            );
+            let arg_exprs: Vec<TirExpr> = call
+                .args
+                .iter()
+                .map(|a| self.reify_expr(a, ctx, None))
+                .collect();
+            return TirExpr::new(
+                TirExprKind::IndirectCall {
+                    callee: Box::new(callee_expr),
+                    args: arg_exprs,
+                },
+                recorded_type,
+                span,
+            );
+        }
+
+        // Global closure call: a bare-ident callee that is not a local but
+        // names a *global* (current-module or imported) of `fn(...)` type.
+        // Mirrors `resolve_call`'s global path. Annotate records no type for
+        // the callee (like the local-variable path), so build the global read
+        // directly with the global's type rather than via `reify_expr`.
+        if let ast::Expr::Ident(ident) = &call.callee
+            && !ident.name.contains("::")
+            && ctx.lookup(&ident.name).is_none()
+            && let Some((module_source, global_name, callee_ty)) =
+                self.global_fn_callee(&ident.name)
+        {
+            let callee_expr = TirExpr::new(
+                TirExprKind::GlobalVarGet {
+                    module_source,
+                    name: global_name,
+                },
+                callee_ty,
+                ident.span,
+            );
             let callee_expr = super::Elaborator::<H>::deref_to_value_static(
                 callee_expr,
                 ident.span,
