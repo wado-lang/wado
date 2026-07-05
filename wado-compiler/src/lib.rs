@@ -371,6 +371,14 @@ fn emit_unused_diagnostics<H: CompilerHost>(
 /// Milestone 2 is functions-only and primitives-only, so each export is a
 /// direct world function (`from_interface_fq = None`). Parameter and return
 /// types are taken straight from the AST signature.
+/// The interface FQ a `core:kiln/generator` component's synthesized world uses
+/// for `generate` and its options record (Kiln WEP v0.3). A generator's
+/// `generate` is grouped into this interface (it references the local `Options`
+/// record), and the record type is registered under this FQ.
+// TODO(v0.3): derive from the generator package's own namespace/name so the
+// published component's WIT carries a package-specific identity.
+const KILN_GENERATOR_IMPL_FQ: &str = "kiln:generator/generator@0.1.0";
+
 fn synthesize_lib_world_info(
     fq: &str,
     entry_module: Option<&ast::Module>,
@@ -446,7 +454,14 @@ fn annotate_lib_local_sources(ty: &mut ast::Type, fq: &str) {
     use crate::ast::Type;
     match ty {
         Type::Named(named) => {
+            // Only mark a type local when it has not already resolved to an
+            // interface. A pure `--lib` export references only the package's own
+            // types (all `None` here), but a kiln generator's `generate` also
+            // takes shared `core:kiln/types` (`InputFile` / `Response` / `Error`),
+            // whose source is already set — leave those pointing at their
+            // interface so the CM machinery resolves them there, not locally.
             if named.name != "()"
+                && named.source_interface.is_none()
                 && crate::component_model::wado_primitive_name_to_cm(&named.name).is_none()
             {
                 named.source_interface = Some(fq.to_string());
@@ -656,20 +671,23 @@ fn compile_after_load<H: CompilerHost>(
         None
     };
 
-    // Synthesize the library world (`--lib`) from the entry module's
-    // `export fn` signatures before `sem.modules` is dropped by the
-    // destructure below. Each `export fn` becomes one direct world export
-    // (functions-only, primitives — milestone 2).
-    let lib_world_info = options
+    // Synthesize a world from the entry module's `export fn` signatures — for
+    // `--lib`, and for a `core:kiln/generator` target (Kiln WEP v0.3), whose
+    // `generate` carries its typed options via the same raw-Wado-type path.
+    // Done before `sem.modules` is dropped by the destructure below.
+    let is_kiln_generator =
+        options.target_world.as_deref() == Some(kiln::import_check::KILN_GENERATOR_WORLD);
+    let synth_world_fq: Option<String> = options
         .lib_world
+        .clone()
+        .or_else(|| is_kiln_generator.then(|| KILN_GENERATOR_IMPL_FQ.to_string()));
+    let lib_world_info = synth_world_fq
         .as_ref()
         .map(|fq| synthesize_lib_world_info(fq, sem.modules.get(&sem.entry_module_source)));
 
-    // For `--lib`, capture the entry module so its own named types can be
-    // registered into the CM interface registry (cloned before `sem` is
-    // destructured below).
-    let lib_entry_module = options
-        .lib_world
+    // Capture the entry module so its own named types can be registered into
+    // the CM interface registry (cloned before `sem` is destructured below).
+    let lib_entry_module = synth_world_fq
         .as_ref()
         .and_then(|_| sem.modules.get(&sem.entry_module_source).cloned());
 
@@ -702,7 +720,7 @@ fn compile_after_load<H: CompilerHost>(
     // named types. `Arc::make_mut` copies-on-write — the stdlib snapshot still
     // holds a reference — so the shared copy is never mutated; only this
     // compilation's registry gains the local types.
-    if let (Some(fq), Some(entry)) = (options.lib_world.as_ref(), lib_entry_module.as_ref()) {
+    if let (Some(fq), Some(entry)) = (synth_world_fq.as_ref(), lib_entry_module.as_ref()) {
         std::sync::Arc::make_mut(&mut tysys.cm_interface_registry).register_lib_local_decls(
             entry,
             fq,
@@ -746,10 +764,16 @@ fn compile_after_load<H: CompilerHost>(
     if let Some(world) = options.target_world {
         package.target_world = world;
     }
-    // The library world (`--lib`) overrides the target world FQ and is carried
-    // owned on the package (the static registry cannot hold it).
+    // The synthesized world is carried owned on the package (the static
+    // registry cannot hold a per-package world). `--lib` also overrides the
+    // target world FQ; a kiln generator keeps `core:kiln/generator` as its
+    // target (the import-refusal check, provider, and descriptor extraction
+    // all key on it) while still routing `generate` through the lib
+    // param-types path via `is_lib_world()`.
     if let Some(lib_world) = lib_world_info {
-        package.target_world.clone_from(&lib_world.fq_name);
+        if !is_kiln_generator {
+            package.target_world.clone_from(&lib_world.fq_name);
+        }
         package.lib_world_info = Some(lib_world);
     }
     package.skip_validation = options.skip_validation;

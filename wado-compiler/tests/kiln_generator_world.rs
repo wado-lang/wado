@@ -129,6 +129,53 @@ fn noop_generator_compiles_to_component_bytes() {
     );
 }
 
+const TYPED_OPTIONS_GENERATOR: &str = r#"
+use { Request, Response, Error } from "core:kiln";
+
+pub struct Options {
+    pub highlight: bool,
+    pub trace: bool,
+}
+
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
+    let _ = req.primary.path;
+    let _ = req.options.highlight;
+    let _ = req.options.trace;
+    return Result::Ok(Response { files: [] });
+}
+"#;
+
+#[test]
+fn typed_options_generator_compiles_to_valid_component() {
+    let host = MapHost::new(&[]);
+    // No `skip_validation`: the v0.3 typed-options `generate(primary, inputs,
+    // options)` shape must produce a valid component (unlike the old
+    // `raw-request` GC-reference mismatch).
+    let options = CompilerOptions {
+        log_level: Some(LogLevel::Warn),
+        target_world: Some("core:kiln/generator".to_string()),
+        ..CompilerOptions::default()
+    };
+    let result = block_on(compile_with_options(
+        TYPED_OPTIONS_GENERATOR,
+        &host,
+        Some("generator.wado"),
+        options,
+    ));
+    let Ok(result) = result else {
+        let diags = host.diagnostics();
+        panic!(
+            "typed-options generator failed to compile:\n{}",
+            diags
+                .iter()
+                .map(|d| format!("  {d}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+    };
+    assert!(result.wasm.starts_with(b"\0asm"), "not component-shaped");
+}
+
 const FORBIDDEN_IMPORT_GENERATOR: &str = r#"
 use { RawRequest, Response, Error, bind_request } from "core:kiln";
 use { now } from "wasi:clocks";
