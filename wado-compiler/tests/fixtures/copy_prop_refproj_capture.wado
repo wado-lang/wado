@@ -1,0 +1,25 @@
+// A `let r = &place` reference captures its object at binding time (GC keeps it
+// alive). copy_prop's RefProjection must NOT re-materialize `&place` at a later
+// use when the place's root is reassigned in between — that would re-read the
+// new object. The callee is recursive so it is not inlined, isolating the
+// place-ref call-argument path.
+use { println, Stdout } from "core:cli";
+
+struct Box { xs: List<i32> }
+
+fn first_rec(xs: &List<i32>, depth: i32) -> i32 {
+    if depth > 0 {
+        return first_rec(xs, depth - 1);
+    }
+    return xs[0];
+}
+
+export fn run() with Stdout {
+    let mut b = Box { xs: [10] };
+    let r = &b.xs;
+    b.xs = [20];
+    println(`{first_rec(r, 0)}`);
+}
+
+__DATA__
+{ "stdout": "10\n" }

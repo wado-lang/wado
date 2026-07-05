@@ -51,6 +51,7 @@ impl CopySource {
             CopySource::Local { index, .. }
             | CopySource::Ref { index, .. }
             | CopySource::MutRef { index, .. } => Some(*index),
+            CopySource::RefProjection { root_local, .. } => Some(*root_local),
             CopySource::Promoted(_) => None,
         }
     }
@@ -76,6 +77,18 @@ enum CopySource {
     /// forward to `Operand::Value(v)` directly; the pooled value is immutable so
     /// the copy is unconditionally stable.
     Promoted(crate::nir_value_graph::ValueId),
+    /// `let x = &place` / `&mut place` where `place` is a pure field-access chain
+    /// rooted at `root_local` (`&recv.data.repr`). Propagated to `x`'s single use
+    /// by re-materializing the borrow (cloning `projection` under a fresh
+    /// `Unary { op }`). `root_local` drives scope-stability and source-conflict
+    /// checks; single-use + source-scope-stable preserves capture-at-binding
+    /// semantics — a root reassigned between binding and use blocks it. Gives the
+    /// place-normal-form structural recognisers (BCE, fill, globalization) need.
+    RefProjection {
+        root_local: u32,
+        op: NirUnaryOp,
+        projection: ExprId,
+    },
 }
 
 #[derive(Debug, Default)]
@@ -102,6 +115,17 @@ fn unwrap_copy_value(body: &Body, expr: ExprId, copy_value_id: Option<FuncId>) -
         return args[0].expr.as_expr().unwrap_or(expr);
     }
     expr
+}
+
+/// The root local of a pure field-access chain (`local.f.g`), else `None`.
+/// Restricted to `FieldAccess` links so re-materializing the projection is a
+/// side-effect-free re-read naming the same place given a stable root.
+fn field_chain_root(body: &Body, e: ExprId) -> Option<u32> {
+    match &body.exprs[e].kind {
+        ExprKind::Local { index, .. } => Some(*index),
+        ExprKind::FieldAccess { expr: inner, .. } => field_chain_root(body, inner.as_expr()?),
+        _ => None,
+    }
 }
 
 fn analyze_copy_binding(
@@ -146,11 +170,10 @@ fn analyze_copy_binding(
         ExprKind::Unary { op, expr: inner }
             if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef) =>
         {
-            let inner = *inner;
+            let op = *op;
             let is_ref = matches!(op, NirUnaryOp::Ref);
-            if let Some(ie) = inner.as_expr()
-                && let ExprKind::Local { index, name } = &body.exprs[ie].kind
-            {
+            let ie = inner.as_expr()?;
+            if let ExprKind::Local { index, name } = &body.exprs[ie].kind {
                 let inner_type_id = body.exprs[ie].type_id;
                 if is_ref {
                     CopySource::Ref {
@@ -164,6 +187,12 @@ fn analyze_copy_binding(
                         name: name.clone(),
                         inner_type_id,
                     }
+                }
+            } else if let Some(root_local) = field_chain_root(body, ie) {
+                CopySource::RefProjection {
+                    root_local,
+                    op,
+                    projection: ie,
                 }
             } else {
                 return None;
@@ -580,6 +609,13 @@ fn can_propagate_copy(
             }
             true
         }
+        // `&recv.f` re-materialized at the single use. Single-use avoids
+        // duplicating the projection (and splitting a `&mut` borrow); source-
+        // scope-stability rejects a root reassigned between binding and use,
+        // preserving capture-at-binding reference semantics.
+        CopySource::RefProjection { .. } => {
+            target_usage.read_count == 1 && binding.source_scope_stable
+        }
         // A pooled value is immutable, so forwarding it to every read is always
         // sound; the read becomes `Operand::Value(v)`, re-emitted by the extractor.
         CopySource::Promoted(_) => true,
@@ -657,6 +693,12 @@ fn apply_in_expr(
                 name,
                 inner_type_id,
             } => emit_ref(engine, id, NirUnaryOp::MutRef, index, name, inner_type_id),
+            CopySource::RefProjection { op, projection, .. } => {
+                // Re-materialize `&place`: clone the projection under a fresh
+                // `Unary { op }`; `replace_expr_kind` keeps `id`'s ref type/span.
+                let cloned = engine.clone_expr(projection);
+                engine.replace_expr_kind(id, ExprKind::Unary { op, expr: cloned.into() });
+            }
             CopySource::Promoted(v) => {
                 engine.redirect_expr(id, Operand::Value(v));
             }
@@ -727,6 +769,7 @@ fn propagate_at_root(
                 CopySource::Local { index, .. }
                 | CopySource::Ref { index, .. }
                 | CopySource::MutRef { index, .. } => target_set.contains(index),
+                CopySource::RefProjection { root_local, .. } => target_set.contains(root_local),
                 // A promoted value has no source local to conflict.
                 CopySource::Promoted(_) => false,
             };

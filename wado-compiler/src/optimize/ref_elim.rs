@@ -42,16 +42,8 @@ struct RefInfo {
     /// inherited referent of a transitive `let r = s` shadow). Resolved
     /// lazily during the transform.
     referent_e: ExprId,
-    /// True until a non-eliminable use is found. Eliminable uses are `r.field`
-    /// and — when `is_place` — `r` passed as a call argument.
+    /// True until a non-field-access use is found.
     eliminable: bool,
-    /// The borrow operator (`&` / `&mut`) of `let r = &E`, re-materialized when
-    /// `r` is substituted into a call-argument position.
-    ref_op: NirUnaryOp,
-    /// True when the referent is a pure place chain (`Local` / `FieldAccess`),
-    /// so `r` may be substituted as `&place` into a call argument. False for an
-    /// inline-aggregate referent, which is only foldable at an `r.field` use.
-    is_place: bool,
 }
 
 /// Reference elimination as a rule on the unified post-inline peephole session
@@ -163,34 +155,6 @@ impl Rule for RefElimRule {
                 // keeping the deref expr's type_id / span.
                 let kind = std::mem::replace(&mut engine.body.exprs[source_e].kind, ExprKind::Dead);
                 engine.replace_expr_kind(id, kind);
-                true
-            }
-            // `f(r, …)` where `r` is an eliminable place-ref argument →
-            // re-materialize the borrow as `&place` at the argument, restoring the
-            // direct `builtin::array_get(&recv.repr, i)` shape the `[]`/`.len()`
-            // desugar had before `Array::index_value` was interposed. Argument
-            // positions of a `Call` or `MethodCall` only — a `MethodCall` receiver
-            // is left to the field-access / non-eliminable paths. Each `resolved`
-            // is a fresh subtree, so it parents cleanly under the new `Unary` node.
-            ExprKind::Call { args, .. } | ExprKind::MethodCall { args, .. } => {
-                let mut targets: Vec<(ExprId, ExprId, NirUnaryOp)> = Vec::new();
-                for arg in args {
-                    if let Some(ae) = arg.expr.as_expr()
-                        && let ExprKind::Local { index, .. } = &engine.body.exprs[ae].kind
-                        && let Some(info) = self.refs.get(index)
-                        && info.eliminable
-                        && info.is_place
-                    {
-                        targets.push((ae, info.referent_e, info.ref_op));
-                    }
-                }
-                if targets.is_empty() {
-                    return false;
-                }
-                for (ae, referent_e, op) in targets {
-                    let resolved = resolve_via_engine(engine, referent_e, &self.refs);
-                    engine.replace_expr_kind(ae, ExprKind::Unary { op, expr: resolved.into() });
-                }
                 true
             }
             _ => false,
@@ -345,14 +309,11 @@ fn register_let_binding(
         && (is_valid_referent(body, referent_e)
             || (matches!(op, NirUnaryOp::Ref) && is_inline_pure_aggregate(body, referent_e)))
     {
-        let is_place = is_valid_referent(body, referent_e);
         refs.insert(
             local_index,
             RefInfo {
                 referent_e,
                 eliminable: true,
-                ref_op: *op,
-                is_place,
             },
         );
         return;
@@ -364,8 +325,6 @@ fn register_let_binding(
         let inherited = RefInfo {
             referent_e: info.referent_e,
             eliminable: info.eliminable,
-            ref_op: info.ref_op,
-            is_place: info.is_place,
         };
         refs.insert(local_index, inherited);
     }
@@ -403,25 +362,6 @@ fn analyze_expr_operand(
     }
 }
 
-/// Classify each call argument: a bare tracked place-ref is an acceptable
-/// (re-materializable) use, so skip it; everything else recurses normally.
-fn classify_call_args(
-    body: &Body,
-    args: &[crate::nir_arena::ArenaCallArg],
-    rebound: &IndexSet<u32>,
-    refs: &mut IndexMap<u32, RefInfo>,
-) {
-    for arg in args {
-        if let Some(ae) = arg.expr.as_expr()
-            && let ExprKind::Local { index, .. } = &body.exprs[ae].kind
-            && refs.get(index).is_some_and(|i| i.is_place)
-        {
-            continue;
-        }
-        analyze_expr_operand(body, arg.expr, rebound, refs);
-    }
-}
-
 fn analyze_expr(
     body: &Body,
     id: ExprId,
@@ -442,20 +382,6 @@ fn analyze_expr(
                 return;
             }
             analyze_expr_operand(body, inner, rebound, refs);
-        }
-        // Call/MethodCall argument: a tracked place-ref passed by reference is
-        // acceptable — it will be re-materialized as `&place` at the argument.
-        // This is the `[]` / `.len()` shape, where `Array::index_value(&recv.repr,
-        // i)` etc. inline to `let r = &recv.repr; builtin::array_get(r, i)`. Only
-        // the exact argument-operand use is exempt; nested uses in other args (and
-        // aggregate-referent refs) still classify normally. A `MethodCall`
-        // receiver is classified as an ordinary use (it is not substituted here).
-        ExprKind::Call { args, .. } => {
-            classify_call_args(body, args, rebound, refs);
-        }
-        ExprKind::MethodCall { receiver, args, .. } => {
-            analyze_expr_operand(body, *receiver, rebound, refs);
-            classify_call_args(body, args, rebound, refs);
         }
         // Direct (non-field-access) use of a tracked ref local: non-eliminable.
         ExprKind::Local { index, .. } => {
