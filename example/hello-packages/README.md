@@ -1,12 +1,21 @@
 # hello-packages
 
-A hello-world for package dependencies: imports the
-[`wado-lang:cm-catalog`](../../package-cm-catalog) Component Model component from
-an OCI registry and round-trips values through its identity functions (the full
-value-type ABI surface).
+A hello-world for package dependencies. `src/main.wado` uses two kinds of
+dependency:
 
-`wado.toml` declares the component as an OCI registry dependency; `src/main.wado`
-imports the fetched `.wasm` component directly and calls `CmCatalog::id_*`.
+- [`wado-lang:cm-catalog`](../../package-cm-catalog) — a Component Model
+  **library** pulled from an OCI registry by `wado fetch`, imported as a local
+  wasm asset and exercised through its `CmCatalog::id_*` identity functions.
+- [`gale`](../../package-gale) — a Kiln **generator** that turns `src/Calc.g4`
+  into a calculator parser at compile time; `main.wado` parses `1 + 2 * 3`
+  through it.
+
+## Registry vs local, today
+
+cm-catalog is consumed from the registry (`[dependencies]` + `wado fetch`). gale
+is referenced by **local path** (`module: "../../../package-gale"`) because
+consuming a _published_ Kiln generator from the registry is not wired yet — see
+[Consuming a registry generator](#consuming-a-registry-generator-not-yet).
 
 ## Run
 
@@ -52,3 +61,38 @@ Make the package public (GitHub → wado-lang → Packages → cm-catalog) for
 unauthenticated pulls. After publishing, `wado update` resolves
 `wado-lang:cm-catalog` against the OCI registry and `wado fetch` downloads the
 component into `build/`.
+
+## Consuming a registry generator (not yet)
+
+gale is already published as a Kiln generator at
+`ghcr.io/wado-lang/gale/core-kiln-generator` (the `core:kiln/generator` world of
+the `wado-lang:gale` package). The goal is to consume it from the registry the
+same way cm-catalog is:
+
+```toml
+# wado.toml — not wired yet
+[build-dependencies]
+"wado-lang:gale" = { version = "^0.1.0" }
+```
+
+```wado
+use calc from "./Calc.g4" with { generator: { module: "wado-lang:gale" } };
+```
+
+Three gaps block this today (tracked in
+[the dependency-management plan](../../docs/dependency-management-implementation-plan.md)):
+
+1. Fetch the generator at its world sub-path. `wado fetch` pulls the bare
+   repository (`<ns>/<pkg>`); a generator lives at `<ns>/<pkg>/core-kiln-generator`.
+2. Run a _prebuilt_ generator component. The Kiln pipeline compiles a generator
+   from source (`GeneratorModule::LocalPath`); a fetched component would need a
+   "run these component bytes" path, and `GeneratorModule::Spec("ns:name@ver")`
+   is currently deferred.
+3. Recover the generator's options descriptor from the component. Kiln encodes
+   `options: { … }` against a schema extracted from the generator source; a
+   prebuilt component must carry (or omit) that descriptor.
+
+A related rough edge: a bare `[build-dependencies]` key (`"gale"`) is the only
+form the `module: "gale"` build-dep lookup resolves, yet the manifest validator
+deprecates bare keys in favor of coordinates / `lib:` nicknames — which the
+lookup does not accept. Reconciling the two is part of closing gap 2.

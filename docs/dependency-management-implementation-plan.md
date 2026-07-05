@@ -220,6 +220,26 @@ conflict errors, once real registries make multi-constraint graphs common.
 - [ ] Workspace publish/resolve edge cases beyond what `publish` covers.
 - [ ] `wado.lock` integrity extensibility (algorithm prefix already in schema).
 
+#### Registry Kiln generators
+
+A Kiln generator can be published (gale is, at
+`ghcr.io/wado-lang/gale/core-kiln-generator`), but a project can only consume
+one from a **local path** today (`example/hello-packages` uses
+`module: "../../../package-gale"`). Consuming a _published_ generator
+(`module: "wado-lang:gale"`, a `[build-dependencies]` registry entry) needs:
+
+- [ ] Fetch a dependency's generator at its world sub-path (`<ns>/<pkg>/core-kiln-generator`),
+      not just the bare repository — extend `wado fetch` / the provider.
+- [ ] Run a prebuilt generator component. The Kiln pipeline compiles
+      `GeneratorModule::LocalPath` from source; add a "run these component bytes"
+      path and implement the deferred `GeneratorModule::Spec("ns:name@ver")`.
+- [ ] Recover the generator's `OptionsDescriptor` from a prebuilt component
+      (embedded section, or an empty-options fast path), since Kiln currently
+      extracts it from generator source.
+- [ ] Reconcile the `[build-dependencies]` bare-key deprecation: `module: "gale"`
+      resolves only a bare `"gale"` key, but the manifest validator deprecates
+      bare keys in favor of coordinates / `lib:` nicknames the lookup rejects.
+
 ## Milestones
 
 - M1 (Phases 0–4): after the `compile`/`build` split, a published registry

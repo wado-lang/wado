@@ -1,10 +1,23 @@
-// Imports the wado-lang:cm-catalog CM component (fetched into ./build by
-// `wado update`; see README.md) and round-trips values through it.
+// A tour of package dependencies:
+//   - wado-lang:cm-catalog — a library component fetched from an OCI registry
+//     by `wado fetch` and imported here as a local wasm asset.
+//   - gale — a Kiln generator that turns `Calc.g4` into a parser at compile
+//     time. Referenced by local path (`../../../package-gale`) for now;
+//     consuming the *published* gale generator from the registry is not wired
+//     yet (see README).
 
 use { println, Stdout } from "core:cli";
 use { CmCatalog } from "../build/cm-catalog.wasm" with { type: "wasm" };
+use calc from "./Calc.g4"
+    with {
+        generator: {
+            module: "../../../package-gale",
+            options: { highlight: false },
+        },
+    };
 
 export fn run() with Stdout, CmCatalog {
+    // 1. Round-trip values through the cm-catalog registry component.
     let n = CmCatalog::id_u32(42);
     let s = CmCatalog::id_string("hello");
     let bytes: List<u8> = [1, 2, 3];
@@ -18,4 +31,9 @@ export fn run() with Stdout, CmCatalog {
     assert s == "hello";
     assert back.len() == 3;
     println("round-trip OK");
+
+    // 2. Parse an expression with the gale-generated calculator parser.
+    let parsed = calc::parse("1 + 2 * 3");
+    assert parsed.ok();
+    println("gale parsed \"1 + 2 * 3\" OK");
 }
