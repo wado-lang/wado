@@ -306,11 +306,9 @@ fn build_world_export_plans(
                 result_type,
                 // A non-`async` export uses the synchronous lift; the canon
                 // lift's async-ness must match the export's function type
-                // (`.async_(is_async)`). This covers non-async `--lib` exports
-                // and sync exports in an otherwise-async world (the kiln
-                // generator's `describe-options`). `async` exports (WASI CLI /
-                // HTTP, kiln `generate`, async lib exports) keep the
-                // `task.return` lift.
+                // (`.async_(is_async)`). This covers non-async `--lib` exports.
+                // `async` exports (WASI CLI / HTTP, the kiln generator's
+                // `generate`, async lib exports) keep the `task.return` lift.
                 sync_lift: !export.is_async,
                 is_lib: is_lib_world,
             }
@@ -374,7 +372,7 @@ fn resolve_cm_export_type(
     }
     if let Type::Named(named) = ty {
         // World bodies (`lib/wasi/**/worlds.wado`, `lib/core/kiln/worlds.wado`)
-        // reference type names like `Request` / `RawRequest` directly without
+        // reference type names like `Response` / `OutputFile` directly without
         // a `use { ... } from "..."` import, so `populate_named_type_sources`
         // leaves `source_interface = None`. `CmInterfaceRegistry::resolve_cm_source_for`
         // already chains the `wasi:*` and `core:kiln/*` by-name lookups for
@@ -629,9 +627,10 @@ mod tests {
         use resolver_helpers::*;
         let (registry, _) = crate::component_model::CmInterfaceRegistry::build_from_stdlib();
 
-        // `RawRequest` is a struct declared in `core:kiln/types` — exercises
-        // the `find_kiln_*` half of `resolve_cm_source_for`.
-        match resolve_cm_export_type(&named("RawRequest"), &registry, None) {
+        // `OutputFile` is a struct declared in `core:kiln/types` (and, unlike
+        // `Response`, collides with no WASI type) — exercises the `find_kiln_*`
+        // half of `resolve_cm_source_for`.
+        match resolve_cm_export_type(&named("OutputFile"), &registry, None) {
             CmExportType::Named {
                 interface_fq,
                 cm_name,
@@ -639,13 +638,13 @@ mod tests {
             } => {
                 assert!(
                     !is_resource,
-                    "RawRequest is a record (struct), not a resource"
+                    "OutputFile is a record (struct), not a resource"
                 );
                 assert!(
                     interface_fq.starts_with("core:kiln/types"),
                     "expected core:kiln/types prefix, got `{interface_fq}`",
                 );
-                assert_eq!(cm_name, "raw-request");
+                assert_eq!(cm_name, "output-file");
             }
             other => panic!("expected Named, got {other:?}"),
         }

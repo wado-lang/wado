@@ -1913,9 +1913,8 @@ pub(super) fn synthesize_void_export_binding(
     binding
 }
 
-/// Synthesize a **synchronous** export binding for a sync world export (a
-/// `--lib` export, or a sync export in an otherwise-async world such as the
-/// kiln generator's `describe-options`).
+/// Synthesize a **synchronous** export binding for a non-`async` `--lib`
+/// world export.
 ///
 /// The synchronous canon lift returns the lowered value directly rather than
 /// via an async `task.return`: a single-core-value result is returned verbatim

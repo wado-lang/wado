@@ -703,9 +703,9 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                 )
                             } else {
                                 // Sync export returning a plain value (not a
-                                // `Result`), e.g. the synthesized kiln
-                                // `describe-options: func() -> list<u8>`. It uses
-                                // the synchronous canon lift — the core function
+                                // `Result`), e.g. a `--lib` export like
+                                // `fn count() -> u32`. It uses the
+                                // synchronous canon lift — the core function
                                 // returns the flattened result directly (an
                                 // out-pointer for multi-value results like a
                                 // list). It must NOT go through task-return: the

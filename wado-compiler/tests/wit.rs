@@ -88,9 +88,10 @@ fn check(source: &str, expected: &str) {
 /// generator world. Otherwise the `generate` export exposes the generic
 /// `Request<Options>`, which is not representable in WIT, and the whole
 /// component-type section is dropped. `semantics_for_world` runs the adapter,
-/// leaving the representable `generate(req: raw-request)` signature.
+/// leaving the representable v0.3 `generate(primary, inputs, options)`
+/// signature with `options` typed to the generator's own `Options` record.
 #[test]
-fn kiln_generator_world_emits_raw_request_not_generic_request() {
+fn kiln_generator_world_emits_typed_params_not_generic_request() {
     const GENERATOR: &str = r#"
 use { Request, Response, Error } from "core:kiln";
 
@@ -125,12 +126,16 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
     )
     .expect("emit_wit_text must succeed for the generator world (issue #1478)");
     assert!(
-        text.contains("req: raw-request"),
-        "generate must export the representable raw-request param:\n{text}"
+        text.contains(
+            "generate: func(primary: input-file, inputs: list<input-file>, options: options)"
+        ),
+        "generate must export the representable v0.3 typed params:\n{text}"
     );
     assert!(
-        !text.contains("Request<") && !text.contains("request<options"),
-        "the generic Request must not leak into WIT:\n{text}"
+        !text.contains("Request<")
+            && !text.contains("request<options")
+            && !text.contains("raw-request"),
+        "neither the generic Request nor the retired raw-request may leak into WIT:\n{text}"
     );
 }
 

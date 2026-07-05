@@ -46,16 +46,15 @@ pub fn build_component(
         enc.defined_type().result(None, None);
     }
 
-    // Kiln world types: defined inline at the component level (not
-    // inside an imported instance) because `core:kiln/types` enters the
-    // world scope via `use types.{...}`, not as an interface import.
-    // The generator's single export `generate(raw: raw-request) ->
-    // result<response, error>` plus its task-return canon need these
-    // types defined before `emit_canonical_intrinsics` and
-    // `emit_world_exports` run. Gate on the world's `import KilnHost`
-    // declaration so any kiln-generator-shaped world picks this path up
-    // — the previous form matched `target_world == "core:kiln/generator"`
-    // by string and missed future generator worlds.
+    // Kiln shared types (`input-file`, `output-file`, `response`, `error`):
+    // emitted as an imported `core:kiln/types` instance so the generator's
+    // `generate(primary, inputs, options) -> result<response, error>` export
+    // signature and its task-return canon can reference them before
+    // `emit_canonical_intrinsics` and `emit_world_exports` run. Gate on the
+    // world's `import KilnHost` declaration so any kiln-generator-shaped world
+    // picks this path up — the previous form matched
+    // `target_world == "core:kiln/generator"` by string and missed future
+    // generator worlds.
     if project.world_imports_interface("KilnHost") {
         emit_kiln_world_types(&mut builder, &mut ctx);
     }
@@ -1071,7 +1070,7 @@ fn emit_kiln_world_types(builder: &mut ComponentBuilder, ctx: &mut ComponentMode
         &mut next_idx,
         &[("path", string_vt), ("content", string_vt)],
     );
-    let input_file_export = emit_export(
+    emit_export(
         &mut instance_type,
         &mut next_idx,
         "input-file",
@@ -1124,33 +1123,6 @@ fn emit_kiln_world_types(builder: &mut ComponentBuilder, ctx: &mut ComponentMode
         ],
     );
     emit_export(&mut instance_type, &mut next_idx, "error", error_local);
-
-    // list<input-file> + list<u8> (options blob) + raw-request record
-    let list_input_local = emit_list(
-        &mut instance_type,
-        &mut next_idx,
-        ComponentValType::Type(input_file_export),
-    );
-    let list_u8_local = emit_list(
-        &mut instance_type,
-        &mut next_idx,
-        ComponentValType::Primitive(PrimitiveValType::U8),
-    );
-    let raw_request_local = emit_record(
-        &mut instance_type,
-        &mut next_idx,
-        &[
-            ("primary", ComponentValType::Type(input_file_export)),
-            ("inputs", ComponentValType::Type(list_input_local)),
-            ("options", ComponentValType::Type(list_u8_local)),
-        ],
-    );
-    // The raw-request export advances the encoder counter once more,
-    // but we never reference that slot again so we drop the result.
-    instance_type.export(
-        "raw-request",
-        wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(raw_request_local)),
-    );
     let _ = next_idx;
 
     // Register the instance type at the component level.
@@ -1176,7 +1148,6 @@ fn emit_kiln_world_types(builder: &mut ComponentBuilder, ctx: &mut ComponentMode
         ("output-file", "kiln-output-file"),
         ("response", "kiln-response"),
         ("error", "kiln-error"),
-        ("raw-request", "kiln-raw-request"),
     ] {
         builder.alias_export(
             ctx.instance_idx("kiln-types"),

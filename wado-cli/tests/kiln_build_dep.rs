@@ -32,14 +32,14 @@ version = "0.1.0"
     .unwrap();
     fs::write(
         gen_pkg.join("src/generator.wado"),
-        r#"use { RawRequest, Response, OutputFile, Error } from "core:kiln";
+        r#"use { Request, Response, OutputFile, Error } from "core:kiln";
 
 pub struct Options {
     pub verbose: bool,
 }
 
-export fn generate(raw: RawRequest) -> Result<Response, Error> {
-    let _ = raw;
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
+    let _ = req.options.verbose;
     return Result::Ok(Response {
         files: [OutputFile {
             path: "greeting.wado",

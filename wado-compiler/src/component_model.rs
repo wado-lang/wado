@@ -1811,7 +1811,7 @@ impl CmInterfaceRegistry {
     /// Find the source interface of a struct declared in `core:kiln/*` by its
     /// Wado name, when exactly one kiln interface registers the name. Used by
     /// the CM lift/lower paths so records from `core:kiln/types` (e.g.
-    /// `RawRequest`) can be resolved without leaking into the bare-name WASI
+    /// `OutputFile`) can be resolved without leaking into the bare-name WASI
     /// lookups — those stay strictly scoped to `wasi:*` to preserve the
     /// `wasi:http/types::Response` vs. `core:kiln/types::Response`
     /// disambiguation.
@@ -1935,7 +1935,7 @@ impl CmInterfaceRegistry {
     ///
     /// Used by the flat-param lift path when the binding is for a
     /// `core:kiln/generator` world export and the parameter happens to be a
-    /// `core:kiln/types` record such as `RawRequest`.
+    /// `core:kiln/types` record such as `OutputFile`.
     pub fn resolve_cm_source_for<'a>(
         &'a self,
         named: &'a crate::ast::NamedType,

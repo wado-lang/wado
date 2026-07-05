@@ -473,18 +473,21 @@ mod tests {
             world_registry.has_world("core:kiln/generator"),
             "core:kiln/generator world should be registered"
         );
-        let generate = world_registry
-            .get_export("core:kiln/generator", "generate")
-            .expect("generate export not found");
-        assert_eq!(generate.params.len(), 1, "generate takes one parameter");
+        // v0.3: the static world is an import-only template — each generator
+        // synthesizes its own world with a typed `generate` (its `options`
+        // shape is per-generator), so the static world carries no `generate`
+        // export. It exists to hold the `KilnHost` import and anchor the
+        // `core:kiln/generator` identity that detection keys on.
+        let world = world_registry
+            .get("core:kiln/generator")
+            .expect("world registered");
         assert!(
-            generate.is_async,
-            "generate is declared `async func` — the CM lift uses task.return \
-             and the wasmtime runtime drives the call through Accessor"
+            world.imports_interface("KilnHost"),
+            "the generator world imports KilnHost"
         );
         assert!(
-            generate.from_interface_fq.is_none(),
-            "kiln generate is a freestanding world export, not from an interface"
+            world.exports.is_empty(),
+            "the static generator world declares no exports"
         );
     }
 

@@ -245,8 +245,8 @@ enum RequestOptions {
 }
 
 /// Classify a `generate` first-parameter type for the adapter rewrite.
-/// Returns `None` for anything that is not a `Request` (e.g. the explicit
-/// `RawRequest` form), which the pass leaves untouched.
+/// Returns `None` for anything that is not a `Request<T>` or a bare `Request`,
+/// which the pass leaves untouched.
 fn request_options_type(ty: &Type) -> Option<RequestOptions> {
     match ty {
         Type::Generic(g) if g.name == "Request" && g.args.len() == 1 => {

@@ -26,28 +26,23 @@ mod common;
 use common::runtime;
 
 const MINIMAL_GENERATOR: &str = r#"
-use { RawRequest, Response, Error, bind_request } from "core:kiln";
+use { Request, Response, Error } from "core:kiln";
 
 pub struct Options {
     pub verbose: bool,
 }
 
-export fn generate(raw: RawRequest) -> Result<Response, Error> {
-    let req = match bind_request::<Options>(raw) {
-        Ok(r) => r,
-        Err(e) => return Result::Err(e),
-    };
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
     let _ = req.options.verbose;
     return Result::Ok(Response { files: [] });
 }
 "#;
 
-/// v2-ergonomic form: author writes `fn generate(req: Request<Options>)`
-/// directly and the compiler's
-/// `kiln::import_check::inject_kiln_request_adapter` phase rewrites it
-/// to the internal `RawRequest + bind_request?` shape before analyze
-/// runs. Note we don't import `bind_request` or `RawRequest` — the
-/// phase extends the existing `use` automatically.
+/// Ergonomic form: the author writes `fn generate(req: Request<Options>)`
+/// and the compiler's `kiln::import_check::inject_kiln_request_adapter`
+/// phase rewrites it into the flat typed parameters
+/// `(primary, inputs, options)` of the generator's synthesized world before
+/// analyze runs.
 const ADAPTER_GENERATOR: &str = r#"
 use { Request, Response, Error } from "core:kiln";
 
@@ -314,18 +309,14 @@ fn transitive_dep_edit_invalidates_cache() {
     )
     .unwrap();
     let entry_src = r#"
-use { RawRequest, Response, Error, bind_request } from "core:kiln";
+use { Request, Response, Error } from "core:kiln";
 use { answer } from "./helper.wado";
 
 pub struct Options {
     pub verbose: bool,
 }
 
-export fn generate(raw: RawRequest) -> Result<Response, Error> {
-    let req = match bind_request::<Options>(raw) {
-        Ok(r) => r,
-        Err(e) => return Result::Err(e),
-    };
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
     let _ = req.options.verbose;
     let _ = answer();
     return Result::Ok(Response { files: [] });
@@ -401,18 +392,14 @@ fn fresh_recompile_produces_identical_source_hash() {
     std::fs::write(&helper_path, helper_src).unwrap();
 
     let entry_src = r#"
-use { RawRequest, Response, Error, bind_request } from "core:kiln";
+use { Request, Response, Error } from "core:kiln";
 use { answer } from "./helper.wado";
 
 pub struct Options {
     pub verbose: bool,
 }
 
-export fn generate(raw: RawRequest) -> Result<Response, Error> {
-    let req = match bind_request::<Options>(raw) {
-        Ok(r) => r,
-        Err(e) => return Result::Err(e),
-    };
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
     let _ = req.options.verbose;
     let _ = answer();
     return Result::Ok(Response { files: [] });
@@ -475,18 +462,14 @@ fn docstring_only_edit_preserves_source_hash() {
     .unwrap();
 
     let entry_src = r#"
-use { RawRequest, Response, Error, bind_request } from "core:kiln";
+use { Request, Response, Error } from "core:kiln";
 use { answer } from "./helper.wado";
 
 pub struct Options {
     pub verbose: bool,
 }
 
-export fn generate(raw: RawRequest) -> Result<Response, Error> {
-    let req = match bind_request::<Options>(raw) {
-        Ok(r) => r,
-        Err(e) => return Result::Err(e),
-    };
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
     let _ = req.options.verbose;
     let _ = answer();
     return Result::Ok(Response { files: [] });
@@ -565,18 +548,14 @@ fn transitive_edit_then_revert_restores_source_hash() {
     std::fs::write(&helper_path, helper_original).unwrap();
 
     let entry_src = r#"
-use { RawRequest, Response, Error, bind_request } from "core:kiln";
+use { Request, Response, Error } from "core:kiln";
 use { answer } from "./helper.wado";
 
 pub struct Options {
     pub verbose: bool,
 }
 
-export fn generate(raw: RawRequest) -> Result<Response, Error> {
-    let req = match bind_request::<Options>(raw) {
-        Ok(r) => r,
-        Err(e) => return Result::Err(e),
-    };
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
     let _ = req.options.verbose;
     let _ = answer();
     return Result::Ok(Response { files: [] });
