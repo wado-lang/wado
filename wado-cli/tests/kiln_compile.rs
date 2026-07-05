@@ -269,6 +269,69 @@ fn no_options_generator_compiles_and_runs() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+const GALE_STYLE_GENERATOR: &str = r#"
+use { RawRequest, Response, Error, bind_request } from "core:kiln";
+
+pub struct Options {
+    pub highlight: bool,
+    pub trace: bool = false,
+}
+
+export fn generate(raw: RawRequest) -> Result<Response, Error> {
+    let req = match bind_request::<Options>(raw) {
+        Ok(r) => r,
+        Err(e) => return Result::Err(e),
+    };
+    let _ = req.options.highlight;
+    let _ = req.options.trace;
+    return Result::Ok(Response { files: [] });
+}
+"#;
+
+/// The self-describing loop: a compiled generator's `describe-options` export
+/// carries its options schema, and decoding that schema reconstructs the same
+/// `OptionsDescriptor` the compiler extracted from source — the mechanism a
+/// prebuilt (registry) generator relies on.
+#[test]
+fn describe_options_roundtrips_the_source_descriptor() {
+    let tmp = unique_tmp("kiln-describe-options");
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).unwrap();
+    std::fs::write(tmp.join("gale_style.wado"), GALE_STYLE_GENERATOR).unwrap();
+
+    let provider = CliGeneratorProvider::new(tmp.clone());
+    let module = GeneratorModule::LocalPath(InvocationPath::normalize("./gale_style.wado"));
+    let resolved = runtime()
+        .block_on(async { provider.resolve(&module).await })
+        .expect("generator compiles");
+    let source_descriptor = resolved.descriptor.clone().expect("has Options descriptor");
+
+    let host = FilesystemCompilerHost::with_log_level(tmp.clone(), LogLevel::Off);
+    let cbor = runtime()
+        .block_on(async { host.run_describe_options(&resolved.wasm).await })
+        .expect("describe-options runs");
+    let decoded = wado_compiler::kiln::decode_options_schema(&cbor).expect("schema decodes");
+
+    // Compare field-by-field, order-independent (the schema stores properties
+    // in canonical key order).
+    let field = |d: &wado_compiler::kiln::OptionsDescriptor, name: &str| {
+        d.fields.iter().find(|f| f.name == name).cloned()
+    };
+    assert_eq!(decoded.fields.len(), source_descriptor.fields.len());
+    for f in &source_descriptor.fields {
+        let g = field(&decoded, &f.name).unwrap_or_else(|| panic!("missing field {}", f.name));
+        assert_eq!(g.ty, f.ty, "type of {}", f.name);
+        assert_eq!(
+            g.default.is_some(),
+            f.default.is_some(),
+            "default presence of {}",
+            f.name
+        );
+    }
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 #[test]
 fn missing_local_path_surfaces_internal() {
     let provider = CliGeneratorProvider::new(PathBuf::from("/nonexistent-wado-kiln-root"));

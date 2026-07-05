@@ -161,6 +161,19 @@ impl FilesystemCompilerHost {
         self.kiln_cache.compile_count()
     }
 
+    /// Invoke a prebuilt generator component's `describe-options` export and
+    /// return its CBOR-encoded options schema. Used to recover a prebuilt
+    /// (registry) generator's `OptionsDescriptor` (decode via
+    /// [`wado_compiler::kiln::decode_options_schema`]) when the source is
+    /// unavailable. Shares the AOT component cache with `run_generator`.
+    pub async fn run_describe_options(
+        &self,
+        component_wasm: &[u8],
+    ) -> Result<Vec<u8>, GeneratorRunnerError> {
+        let (engine, component) = self.kiln_cache.get_or_compile(component_wasm)?;
+        kiln_runtime::run_describe_options(&engine, self.inner.clone(), &component).await
+    }
+
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         self.inner.diagnostics()
     }
