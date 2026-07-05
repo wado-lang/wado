@@ -13,6 +13,10 @@ fn replace(buf: &mut List<i32>) {
     *buf = v;
 }
 
+fn replace_strings(buf: &mut List<String>) {
+    *buf = ["x", "y"];
+}
+
 test "deref-assign of an empty list writes back" {
     let mut xs: List<i32> = [1, 2, 3];
     reset_empty(&mut xs);
@@ -25,6 +29,14 @@ test "deref-assign of a list value writes back" {
     assert xs.len() == 2;
     assert xs[0] == 9;
     assert xs[1] == 9;
+}
+
+test "deref-assign of a list with a reference-typed backing array writes back" {
+    let mut xs: List<String> = ["a"];
+    replace_strings(&mut xs);
+    assert xs.len() == 2;
+    assert xs[0] == "x";
+    assert xs[1] == "y";
 }
 
 __DATA__

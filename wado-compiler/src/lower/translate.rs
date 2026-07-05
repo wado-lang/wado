@@ -657,11 +657,15 @@ impl FunctionTranslator<'_, '_> {
         // The referent must be an in-place aggregate, so `*ref = v` writes each
         // field of the shared handle. Replace-on-assign referents (variant /
         // enum / fn) are boxed and were filtered by the `box_type_ids` check
-        // above. Two in-place shapes reach here:
-        //   - a plain `struct` (`String`): fields from `struct_fields_map`.
-        //   - `List<T>`: an in-place `GenericInstance` that is never
-        //     monomorphized into its own struct, so its canonical `{repr, used}`
-        //     layout comes from `SeqField` with the concrete element type.
+        // above. Three in-place shapes reach here:
+        //   - a plain `struct` (`String`, monomorphized generics): fields from
+        //     `struct_fields_map`.
+        //   - `List<T>`: an in-place `GenericInstance` never monomorphized into
+        //     its own struct, so its canonical `{repr, used}` layout comes from
+        //     `SeqField` with the concrete element type.
+        //   - a tuple (`[A, B, …]`): also an in-place `GenericInstance`, with
+        //     positional fields `0..n` typed by the tuple's element types.
+        // Any other type falls through to the default single-statement lowering.
         // `(field_name, field_index, field_type)` for each write-back.
         let inner_resolved = self.base.type_table.borrow().get(inner_type_id).clone();
         let fields: Vec<(String, u32, tir::TypeId)> = match inner_resolved {
@@ -677,20 +681,33 @@ impl FunctionTranslator<'_, '_> {
                 .map(|f| (f.name.clone(), f.index, f.type_id))
                 .collect(),
             _ => {
-                let elem = self.base.type_table.borrow().as_list(inner_type_id)?;
-                let repr_ty = self.base.type_table.borrow_mut().make_builtin_array(elem);
-                vec![
-                    (
-                        SeqField::Backing.field_name().to_string(),
-                        SeqField::Backing.index(),
-                        repr_ty,
-                    ),
-                    (
-                        SeqField::Len.field_name().to_string(),
-                        SeqField::Len.index(),
-                        crate::tir::TypeTable::I32,
-                    ),
-                ]
+                let (list_elem, tuple_elems) = {
+                    let tt = self.base.type_table.borrow();
+                    (tt.as_list(inner_type_id), tt.as_tuple(inner_type_id))
+                };
+                if let Some(elem) = list_elem {
+                    let repr_ty = self.base.type_table.borrow_mut().make_builtin_array(elem);
+                    vec![
+                        (
+                            SeqField::Backing.field_name().to_string(),
+                            SeqField::Backing.index(),
+                            repr_ty,
+                        ),
+                        (
+                            SeqField::Len.field_name().to_string(),
+                            SeqField::Len.index(),
+                            crate::tir::TypeTable::I32,
+                        ),
+                    ]
+                } else if let Some(elems) = tuple_elems {
+                    elems
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, ty)| (i.to_string(), i as u32, ty))
+                        .collect()
+                } else {
+                    return None;
+                }
             }
         };
         if fields.is_empty() {

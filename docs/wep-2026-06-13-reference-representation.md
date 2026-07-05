@@ -187,15 +187,27 @@ fix to conform; none should be preserved.
       box resource handles like other replace types, or explicitly reject `&mut`
       of a resource. (`&mut resource` is currently unverified / effectively
       unsupported.)
-- [x] D7 — whole-value `*ref = v` write-back for `List<T>`. An in-place `&mut T`
-      makes `*r = v` a field-wise write-back onto the shared handle, lowered by
-      `try_expand_deref_struct_assign`. That expansion only recognised
-      `ResolvedType::Struct` (`String`, and monomorphized generics like
-      `TreeMap<K,V>`), so `List<T>` — an in-place `GenericInstance` that is never
-      monomorphized into its own struct — fell through and the assignment was
-      silently dropped at every opt level (`*xs = []` was a no-op). Fixed by
-      decomposing `List<T>` through its canonical `SeqField` `{repr, used}` layout
-      with the concrete element type.
+- [x] D7 — whole-value `*ref = v` write-back for `List<T>` and tuples. An in-place
+      `&mut T` makes `*r = v` a field-wise write-back onto the shared handle,
+      lowered by `try_expand_deref_aggregate_assign`. That expansion only
+      recognised `ResolvedType::Struct` (`String`, and monomorphized generics like
+      `TreeMap<K,V>`), so `List<T>` and tuples (`[A, B]`) — in-place
+      `GenericInstance`s that are never monomorphized into their own struct — fell
+      through and the assignment was silently dropped at every opt level
+      (`*xs = []` was a no-op). Fixed by decomposing `List<T>` through its
+      canonical `SeqField` `{repr, used}` layout and a tuple through its positional
+      fields, both with concrete element types.
+- [ ] D8 — `*ref = v` does not deep-copy the RHS. The write-back decomposition in
+      `try_expand_deref_aggregate_assign` moves the RHS's fields into the shared
+      handle without a value copy, because deref-expansion `Let`s are synthesized
+      after `value_copy::insert`'s walk and `wrap_value_copy_operand` finds no
+      registered helper for the referent type at that site. So `*r = v` aliases
+      `v`'s interior — e.g. `*list_ref = other_list; other_list[0] = 9` also
+      mutates the referent's element. Pre-existing for the `Struct` arm (a struct
+      with a mutable field); newly observable for `List` now that D7 makes the
+      write happen. Fresh RHS values (`[]`, literals) are unaffected. Fix: have the
+      value-copy plan register a copy for the deref-assign RHS so the explicit
+      `wrap_value_copy_operand` at the expansion site takes effect.
 
 ## Consequences
 

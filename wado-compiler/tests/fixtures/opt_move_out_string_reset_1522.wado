@@ -10,11 +10,32 @@ fn take(buf: &mut String) -> String {
     return text;
 }
 
+struct Pair {
+    a: String,
+    b: String,
+}
+
+// `(*p).a` reads through a `Deref` (a `FieldAccess` of a deref), the same
+// unsafe source `reads_through_deref` must reject.
+fn take_field(p: &mut Pair) -> String {
+    let text = (*p).a;
+    (*p).a = String::new();
+    return text;
+}
+
 test "moved-out string keeps its value across a reset (#1522)" {
     let mut s = "hello";
     let taken = take(&mut s);
     assert taken == "hello";
     assert s == "";
+}
+
+test "moved-out field keeps its value across a field reset (#1522)" {
+    let mut p = Pair { a: "keep", b: "other" };
+    let taken = take_field(&mut p);
+    assert taken == "keep";
+    assert p.a == "";
+    assert p.b == "other";
 }
 
 __DATA__

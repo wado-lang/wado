@@ -1,0 +1,30 @@
+// Regression: assigning a whole value through a `&mut tuple` (`*t = v`) must
+// write back to the shared handle. Tuples are in-place `GenericInstance` values
+// that are never monomorphized into a struct, so — like `List<T>` — they were
+// dropped by the struct-only write-back decomposition. The fix decomposes a
+// tuple through its positional fields.
+
+fn reset(t: &mut [i32, i64]) {
+    *t = [9, 9];
+}
+
+fn swap_in(t: &mut [String, i32], s: String) {
+    *t = [s, 42];
+}
+
+test "deref-assign of a tuple literal writes back" {
+    let mut p: [i32, i64] = [1, 2];
+    reset(&mut p);
+    assert p.0 == 9;
+    assert p.1 == 9;
+}
+
+test "deref-assign of a tuple with a string element writes back" {
+    let mut p: [String, i32] = ["old", 1];
+    swap_in(&mut p, "new");
+    assert p.0 == "new";
+    assert p.1 == 42;
+}
+
+__DATA__
+{"test": {}}
