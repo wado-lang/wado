@@ -2604,7 +2604,9 @@ pub fn deflate_with_level(input: &List<u8>, level: i32, strategy: i32) -> List<u
                                 let mh = hash3(builtin::i32_load8_u(scratch + pos + i), builtin::i32_load8_u(
                                     scratch + pos + i + 1,
                                 ), builtin::i32_load8_u(scratch + pos + i + 2));
-                                builtin::i32_store(prev_ptr + ((pos + i) & 32767) * 4, builtin::i32_load(head_ptr + mh * 4));
+                                builtin::i32_store(prev_ptr + (pos + i & 32767) * 4, builtin::i32_load(
+                                    head_ptr + mh * 4,
+                                ));
                                 builtin::i32_store(head_ptr + mh * 4, pos + i);
                             }
                         }
@@ -2629,7 +2631,9 @@ pub fn deflate_with_level(input: &List<u8>, level: i32, strategy: i32) -> List<u
                                 let mh = hash3(builtin::i32_load8_u(scratch + pos + i), builtin::i32_load8_u(
                                     scratch + pos + i + 1,
                                 ), builtin::i32_load8_u(scratch + pos + i + 2));
-                                builtin::i32_store(prev_ptr + ((pos + i) & 32767) * 4, builtin::i32_load(head_ptr + mh * 4));
+                                builtin::i32_store(prev_ptr + (pos + i & 32767) * 4, builtin::i32_load(
+                                    head_ptr + mh * 4,
+                                ));
                                 builtin::i32_store(head_ptr + mh * 4, pos + i);
                             }
                         }
@@ -2709,7 +2713,7 @@ pub fn deflate_with_level(input: &List<u8>, level: i32, strategy: i32) -> List<u
                             let mh = hash3(builtin::i32_load8_u(scratch + pos + i), builtin::i32_load8_u(
                                 scratch + pos + i + 1,
                             ), builtin::i32_load8_u(scratch + pos + i + 2));
-                            builtin::i32_store(prev_ptr + ((pos + i) & 32767) * 4, builtin::i32_load(head_ptr + mh * 4));
+                            builtin::i32_store(prev_ptr + (pos + i & 32767) * 4, builtin::i32_load(head_ptr + mh * 4));
                             builtin::i32_store(head_ptr + mh * 4, pos + i);
                         }
                     }

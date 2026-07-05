@@ -637,9 +637,9 @@ fn "core:prelude/fpfmt.wado/parse_text_range"(s, start, end) {
     let exp_start: i32;
     let eff_p: i32;
     let val: f64;
-    let _licm_repr_63: ref Array<u8>;
-    let _licm_repr_64: ref Array<u8>;
-    let _licm_repr_65: ref Array<u8>;
+    let _licm_repr_67: ref Array<u8>;
+    let _licm_repr_68: ref Array<u8>;
+    let _licm_repr_69: ref Array<u8>;
     if (if (if start < 0 -> i32 {
         1;
     } else {
@@ -653,7 +653,7 @@ fn "core:prelude/fpfmt.wado/parse_text_range"(s, start, end) {
     }
     sign = 1;
     i = start;
-    first = builtin::array_get_u8(s.repr, start);
+    first = builtin::array_get<u8>(s.repr, start);
     if first == 45 {
         sign = -1;
         i = start + 1;
@@ -664,7 +664,7 @@ fn "core:prelude/fpfmt.wado/parse_text_range"(s, start, end) {
         return 1, 0;
     }
     remaining = end - i;
-    c0 = builtin::array_get_u8(s.repr, i);
+    c0 = builtin::array_get<u8>(s.repr, i);
     if @unlikely((if (if c0 == 105 -> i32 {
         1;
     } else {
@@ -774,26 +774,26 @@ fn "core:prelude/fpfmt.wado/parse_text_range"(s, start, end) {
     d = 0_i64;
     frac = 0;
     digit_start = i;
-    _licm_repr_63 = s.repr;
+    _licm_repr_67 = s.repr;
     b110: block {
         l111: loop {
             break_if b110 (if (if i < end -> i32 {
-                builtin::array_get_u8(_licm_repr_63, i) >=u 48;
+                builtin::array_get<u8>(_licm_repr_67, i) >=u 48;
             } else {
                 0;
             }) -> i32 {
-                builtin::array_get_u8(_licm_repr_63, i) <=u 57;
+                builtin::array_get<u8>(_licm_repr_67, i) <=u 57;
             } else {
                 0;
             }) == 0;
-            d = (d * 10_i64) + builtin::i64_extend_i32_u((builtin::array_get_u8(_licm_repr_63, i) - 48) & 255);
+            d = (d * 10_i64) + builtin::i64_extend_i32_u((builtin::array_get<u8>(_licm_repr_67, i) - 48) & 255);
             i = i + 1;
             continue l111;
         };
     };
     int_digits = i - digit_start;
     if (if i < end -> i32 {
-        builtin::array_get_u8(s.repr, i) == 46;
+        builtin::array_get<u8>(s.repr, i) == 46;
     } else {
         0;
     }) {
@@ -801,19 +801,19 @@ fn "core:prelude/fpfmt.wado/parse_text_range"(s, start, end) {
             return 1, 0;
         }
         frac_start = local.tee i(i + 1);
-        _licm_repr_64 = s.repr;
+        _licm_repr_68 = s.repr;
         b117: block {
             l118: loop {
                 break_if b117 (if (if i < end -> i32 {
-                    builtin::array_get_u8(_licm_repr_64, i) >=u 48;
+                    builtin::array_get<u8>(_licm_repr_68, i) >=u 48;
                 } else {
                     0;
                 }) -> i32 {
-                    builtin::array_get_u8(_licm_repr_64, i) <=u 57;
+                    builtin::array_get<u8>(_licm_repr_68, i) <=u 57;
                 } else {
                     0;
                 }) == 0;
-                d = (d * 10_i64) + builtin::i64_extend_i32_u((builtin::array_get_u8(_licm_repr_64, i) - 48) & 255);
+                d = (d * 10_i64) + builtin::i64_extend_i32_u((builtin::array_get<u8>(_licm_repr_68, i) - 48) & 255);
                 frac = frac + 1;
                 i = i + 1;
                 continue l118;
@@ -833,10 +833,10 @@ fn "core:prelude/fpfmt.wado/parse_text_range"(s, start, end) {
     }
     p = 0;
     if (if i < end -> i32 {
-        if builtin::array_get_u8(s.repr, i) == 101 -> i32 {
+        if builtin::array_get<u8>(s.repr, i) == 101 -> i32 {
             1;
         } else {
-            builtin::array_get_u8(s.repr, i) == 69;
+            builtin::array_get<u8>(s.repr, i) == 69;
         }
     } else {
         0;
@@ -844,11 +844,11 @@ fn "core:prelude/fpfmt.wado/parse_text_range"(s, start, end) {
         i = i + 1;
         exp_sign = 1;
         if i < end {
-            if builtin::array_get_u8(s.repr, i) == 45 {
+            if builtin::array_get<u8>(s.repr, i) == 45 {
                 exp_sign = -1;
                 i = i + 1;
             } else {
-                i = i + (builtin::array_get_u8(s.repr, i) == 43);
+                i = i + (builtin::array_get<u8>(s.repr, i) == 43);
             }
         }
         exp_start = i;
@@ -859,19 +859,19 @@ fn "core:prelude/fpfmt.wado/parse_text_range"(s, start, end) {
         }) {
             return 1, 0;
         }
-        _licm_repr_65 = s.repr;
+        _licm_repr_69 = s.repr;
         b131: block {
             l132: loop {
                 break_if b131 (if (if i < end -> i32 {
-                    builtin::array_get_u8(_licm_repr_65, i) >=u 48;
+                    builtin::array_get<u8>(_licm_repr_69, i) >=u 48;
                 } else {
                     0;
                 }) -> i32 {
-                    builtin::array_get_u8(_licm_repr_65, i) <=u 57;
+                    builtin::array_get<u8>(_licm_repr_69, i) <=u 57;
                 } else {
                     0;
                 }) == 0;
-                p = (p * 10) + ((builtin::array_get_u8(_licm_repr_65, i) - 48) & 255);
+                p = (p * 10) + ((builtin::array_get<u8>(_licm_repr_69, i) - 48) & 255);
                 i = i + 1;
                 continue l132;
             };
@@ -1125,20 +1125,20 @@ fn "core:prelude/string.wado/String::with_capacity"(capacity) {
 }
 
 fn "core:prelude/string.wado/String::get_byte_unchecked"(self, index) {
-    return builtin::array_get_u8(self.repr, index);
+    return builtin::array_get<u8>(self.repr, index);
 }
 
 fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
-    let a_5: i32;
-    let a_7: i32;
+    let a_6: i32;
+    let a_8: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_8 = capacity * 2; a_6 = select i32(a_8 > min_capacity, a_8, min_capacity); select i32(a_6 > 8, a_6, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -1173,27 +1173,87 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
+    let self_4: ref Array<u8>;
+    let index_5: i32;
+    let value_6: u8;
+    let self_7: ref Array<u8>;
+    let index_8: i32;
+    let value_9: u8;
+    let self_10: ref Array<u8>;
+    let index_11: i32;
+    let value_12: u8;
+    let self_13: ref Array<u8>;
+    let index_14: i32;
+    let value_15: u8;
+    let self_16: ref Array<u8>;
+    let index_17: i32;
+    let value_18: u8;
+    let self_19: ref Array<u8>;
+    let index_20: i32;
+    let value_21: u8;
+    let self_22: ref Array<u8>;
+    let index_23: i32;
+    let value_24: u8;
+    let self_25: ref Array<u8>;
+    let index_26: i32;
+    let value_27: u8;
+    let self_28: ref Array<u8>;
+    let index_29: i32;
+    let value_30: u8;
+    let self_31: ref Array<u8>;
+    let index_32: i32;
+    let value_33: u8;
     if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if c <u 128 {
-        builtin::array_set_u8(self.repr, self.used, c & 255);
+        self_4 = self.repr;
+        index_5 = self.used;
+        value_6 = c & 255;
+        builtin::array_set_u8(self_4, index_5, value_6);
         self.used = self.used + 1;
     } else if c <u 2048 {
-        builtin::array_set_u8(self.repr, self.used, (192 | (c >>u 6)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | (c & 63)) & 255);
+        self_7 = self.repr;
+        index_8 = self.used;
+        value_9 = (192 | (c >>u 6)) & 255;
+        builtin::array_set_u8(self_7, index_8, value_9);
+        self_10 = self.repr;
+        index_11 = self.used + 1;
+        value_12 = (128 | (c & 63)) & 255;
+        builtin::array_set_u8(self_10, index_11, value_12);
         self.used = self.used + 2;
     } else if c <u 65536 {
-        builtin::array_set_u8(self.repr, self.used, (224 | (c >>u 12)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | (c & 63)) & 255);
+        self_13 = self.repr;
+        index_14 = self.used;
+        value_15 = (224 | (c >>u 12)) & 255;
+        builtin::array_set_u8(self_13, index_14, value_15);
+        self_16 = self.repr;
+        index_17 = self.used + 1;
+        value_18 = (128 | ((c >>u 6) & 63)) & 255;
+        builtin::array_set_u8(self_16, index_17, value_18);
+        self_19 = self.repr;
+        index_20 = self.used + 2;
+        value_21 = (128 | (c & 63)) & 255;
+        builtin::array_set_u8(self_19, index_20, value_21);
         self.used = self.used + 3;
     } else {
-        builtin::array_set_u8(self.repr, self.used, (240 | (c >>u 18)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 12) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((c >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 3, (128 | (c & 63)) & 255);
+        self_22 = self.repr;
+        index_23 = self.used;
+        value_24 = (240 | (c >>u 18)) & 255;
+        builtin::array_set_u8(self_22, index_23, value_24);
+        self_25 = self.repr;
+        index_26 = self.used + 1;
+        value_27 = (128 | ((c >>u 12) & 63)) & 255;
+        builtin::array_set_u8(self_25, index_26, value_27);
+        self_28 = self.repr;
+        index_29 = self.used + 2;
+        value_30 = (128 | ((c >>u 6) & 63)) & 255;
+        builtin::array_set_u8(self_28, index_29, value_30);
+        self_31 = self.repr;
+        index_32 = self.used + 3;
+        value_33 = (128 | (c & 63)) & 255;
+        builtin::array_set_u8(self_31, index_32, value_33);
         self.used = self.used + 4;
     }
 }

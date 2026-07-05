@@ -3913,6 +3913,11 @@ Returns the first element, or None if empty.
 
 #### `pub fn get(&self, index: i32) -> Option<T>`
 
+#### `pub fn get_unchecked(&self, index: i32) -> T`
+
+Element at `index` without the `[]` power-assert. The caller must
+guarantee `0 <= index < len()`; out of range reads a stale slot or traps.
+
 #### `pub fn to_array(&self) -> Array<T>`
 
 Copy the live `0..len()` elements into a fresh fixed `Array<T>` of exactly

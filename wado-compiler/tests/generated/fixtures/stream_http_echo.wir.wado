@@ -479,7 +479,6 @@ fn "wado-compiler/tests/fixtures/stream_http_echo.wado/handle"(request) {
     let packed_184: i64;
     let rx_185: i32;
     let tx_186: i32;
-    let repr: ref "Array<core:prelude/list.wado/List<u8>>";
     let end: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
@@ -797,9 +796,8 @@ fn "wado-compiler/tests/fixtures/stream_http_echo.wado/handle"(request) {
         }
         "wasi/task-return:handle"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
-    repr = __b.repr;
     end = __b.used;
-    __iter_15 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/list.wado/List<u8>>" { repr: repr, index: 0, end: end };
+    __iter_15 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/list.wado/List<u8>>" { repr: __b.repr, index: 0, end: end };
     b63: block {
         l64: loop {
             __match_173 = "core:prelude/slice.wado/ArrayIter<core:prelude/list.wado/List<u8>>^Iterator::next"(__iter_15);
@@ -1005,12 +1003,14 @@ fn "core:prelude/slice.wado/ArrayIter<core:prelude/list.wado/List<u8>>^Iterator:
 
 fn "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::push"(self, value) {
     let used: i32;
+    let self_4: ref "Array<core:prelude/list.wado/List<u8>>";
     used = self.used;
     if @unlikely(used >= builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow"(self);
     }
-    builtin::array_set<ref "core:prelude//List<u8>">(self.repr, used, value);
+    self_4 = self.repr;
+    builtin::array_set<ref "core:prelude//List<u8>">(self_4, used, value);
     self.used = used + 1;
 }
 

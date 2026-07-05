@@ -208,10 +208,8 @@ fn "wado-compiler/tests/fixtures/for_of_2.wado/for_of_generic_tuple"() with Stdo
     let __b: ref "core:prelude//List<[core:prelude/string.wado/String,i32]>";
     let __iter_1: ref "core:prelude/slice.wado//ArrayIter<[core:prelude/string.wado/String,i32]>";
     let __match_3: ref null "tuple//[core:prelude/string.wado/String, i32]";
-    let repr: ref "Array<[core:prelude/string.wado/String,i32]>";
     __b = struct.new "core:prelude//List<[core:prelude/string.wado/String,i32]>" { repr: array.new_fixed<ref "tuple//[core:prelude/string.wado/String, i32]">(struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, 1: 1 }, struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }, 1: 2 }), used: 2 };
-    repr = __b.repr;
-    __iter_1 = struct.new "core:prelude/slice.wado//ArrayIter<[core:prelude/string.wado/String,i32]>" { repr: repr, index: 0, end: 2 };
+    __iter_1 = struct.new "core:prelude/slice.wado//ArrayIter<[core:prelude/string.wado/String,i32]>" { repr: __b.repr, index: 0, end: 2 };
     b0: block {
         l1: loop {
             __match_3 = "core:prelude/slice.wado/ArrayIter<[core:prelude/string.wado/String,i32]>^Iterator::next"(__iter_1);
@@ -232,10 +230,8 @@ fn "wado-compiler/tests/fixtures/for_of_2.wado/for_of_mut"() with Stdout {
     let n: i32;
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
-    let repr: ref Array<i32>;
     __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
-    repr = __b.repr;
-    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr, index: 0, end: 3 };
+    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: __b.repr, index: 0, end: 3 };
     b3: block {
         l4: loop {
             let __sroa___match_6_discriminant: i32;
@@ -259,22 +255,20 @@ fn "wado-compiler/tests/fixtures/for_of_2.wado/for_of_nested"() with Stdout {
     let __iter_6: ref "core:prelude/slice.wado//ArrayIter<i32>";
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
-    let repr_29: ref Array<i32>;
     let f_39: ref "core:prelude/format.wado//Formatter";
     let f_44: ref "core:prelude/format.wado//Formatter";
-    let _licm_repr_47: ref Array<i32>;
+    let _licm_repr_48: ref Array<i32>;
     __b_0 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
-    repr_29 = __b_0.repr;
-    __iter_4 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr_29, index: 0, end: 3 };
-    _licm_repr_47 = global:__const_obj_0.repr;
+    __iter_4 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: __b_0.repr, index: 0, end: 3 };
     drop(global:__const_obj_0.used);
+    _licm_repr_48 = global:__const_obj_0.repr;
     b6: block {
         l7: loop {
             let __sroa___match_10_discriminant: i32;
             let __sroa___match_10_payload_0: i32;
             multivalue_bind [__sroa___match_10_discriminant, __sroa___match_10_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(__iter_4);
             if __sroa___match_10_discriminant == 0 {
-                __iter_6 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: _licm_repr_47, index: 0, end: 2 };
+                __iter_6 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: _licm_repr_48, index: 0, end: 2 };
                 b9: block {
                     l10: loop {
                         let __sroa___local_11_discriminant: i32;
@@ -300,12 +294,10 @@ fn "wado-compiler/tests/fixtures/for_of_2.wado/for_of_side_effect"() with Stdout
     let __iter_0: ref "core:prelude/slice.wado//ArrayIter<i32>";
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
-    let repr: ref Array<i32>;
     let __b: ref "core:prelude//List<i32>";
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("getting numbers"), used: 15 });
     __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
-    repr = __b.repr;
-    __iter_0 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr, index: 0, end: 3 };
+    __iter_0 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: __b.repr, index: 0, end: 3 };
     b12: block {
         l13: loop {
             let __sroa___match_4_discriminant: i32;
@@ -328,10 +320,8 @@ fn "wado-compiler/tests/fixtures/for_of_2.wado/for_of_strings"() with Stdout {
     let name: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/string.wado//String";
     let __match_5: ref null "core:prelude/string.wado//String";
-    let repr: ref "Array<core:prelude/string.wado/String>";
     __b = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(66, 111, 98), used: 3 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Charlie"), used: 7 }), used: 3 };
-    repr = __b.repr;
-    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/string.wado/String>" { repr: repr, index: 0, end: 3 };
+    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/string.wado/String>" { repr: __b.repr, index: 0, end: 3 };
     b15: block {
         l16: loop {
             __match_5 = "core:prelude/slice.wado/ArrayIter<core:prelude/string.wado/String>^Iterator::next"(__iter_2);
@@ -355,7 +345,6 @@ fn "wado-compiler/tests/fixtures/for_of_2.wado/for_of_structs"() with Stdout {
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let __match_8: ref null "wado-compiler/tests/fixtures/for_of_2.wado//Point";
-    let repr: ref "Array<wado-compiler/tests/fixtures/for_of_2.wado/Point>";
     let f_23: ref "core:prelude/format.wado//Formatter";
     let self_24: i32;
     let f_28: ref "core:prelude/format.wado//Formatter";
@@ -363,8 +352,7 @@ fn "wado-compiler/tests/fixtures/for_of_2.wado/for_of_structs"() with Stdout {
     p1 = struct.new "wado-compiler/tests/fixtures/for_of_2.wado//Point" { x: 1, y: 2 };
     p2 = struct.new "wado-compiler/tests/fixtures/for_of_2.wado//Point" { x: 3, y: 4 };
     __b = struct.new "core:prelude//List<wado-compiler/tests/fixtures/for_of_2.wado/Point>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/for_of_2.wado//Point">(p1, p2), used: 2 };
-    repr = __b.repr;
-    __iter_4 = struct.new "core:prelude/slice.wado//ArrayIter<wado-compiler/tests/fixtures/for_of_2.wado/Point>" { repr: repr, index: 0, end: 2 };
+    __iter_4 = struct.new "core:prelude/slice.wado//ArrayIter<wado-compiler/tests/fixtures/for_of_2.wado/Point>" { repr: __b.repr, index: 0, end: 2 };
     b18: block {
         l19: loop {
             __match_8 = "core:prelude/slice.wado/ArrayIter<wado-compiler/tests/fixtures/for_of_2.wado/Point>^Iterator::next"(__iter_4);
@@ -384,10 +372,8 @@ fn "wado-compiler/tests/fixtures/for_of_2.wado/for_of_tuple_array"() with Stdout
     let __iter_2: ref "core:prelude/slice.wado//ArrayIter<[core:prelude/string.wado/String,i32]>";
     let pair: ref "tuple//[core:prelude/string.wado/String, i32]";
     let __match_4: ref null "tuple//[core:prelude/string.wado/String, i32]";
-    let repr: ref "Array<[core:prelude/string.wado/String,i32]>";
     __b = struct.new "core:prelude//List<[core:prelude/string.wado/String,i32]>" { repr: array.new_fixed<ref "tuple//[core:prelude/string.wado/String, i32]">(struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, 1: 1 }, struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }, 1: 2 }), used: 2 };
-    repr = __b.repr;
-    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<[core:prelude/string.wado/String,i32]>" { repr: repr, index: 0, end: 2 };
+    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<[core:prelude/string.wado/String,i32]>" { repr: __b.repr, index: 0, end: 2 };
     b21: block {
         l22: loop {
             __match_4 = "core:prelude/slice.wado/ArrayIter<[core:prelude/string.wado/String,i32]>^Iterator::next"(__iter_2);
@@ -412,7 +398,6 @@ fn "wado-compiler/tests/fixtures/for_of_2.wado/for_of_tuples"() with Stdout {
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let __match_8: ref null "tuple//[i32, i32]";
-    let repr: ref Array<[i32,i32]>;
     let f_23: ref "core:prelude/format.wado//Formatter";
     let self_24: i32;
     let f_28: ref "core:prelude/format.wado//Formatter";
@@ -420,8 +405,7 @@ fn "wado-compiler/tests/fixtures/for_of_2.wado/for_of_tuples"() with Stdout {
     t1 = struct.new "tuple//[i32, i32]" { 0: 1, 1: 2 };
     t2 = struct.new "tuple//[i32, i32]" { 0: 3, 1: 4 };
     __b = struct.new "core:prelude//List<[i32,i32]>" { repr: array.new_fixed<ref "tuple//[i32, i32]">(t1, t2), used: 2 };
-    repr = __b.repr;
-    __iter_4 = struct.new "core:prelude/slice.wado//ArrayIter<[i32,i32]>" { repr: repr, index: 0, end: 2 };
+    __iter_4 = struct.new "core:prelude/slice.wado//ArrayIter<[i32,i32]>" { repr: __b.repr, index: 0, end: 2 };
     b24: block {
         l25: loop {
             __match_8 = "core:prelude/slice.wado/ArrayIter<[i32,i32]>^Iterator::next"(__iter_4);
@@ -617,13 +601,13 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
-    let a_5: i32;
-    let a_7: i32;
+    let a_6: i32;
+    let a_8: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_8 = capacity * 2; a_6 = select i32(a_8 > min_capacity, a_8, min_capacity); select i32(a_6 > 8, a_6, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -658,27 +642,87 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
+    let self_4: ref Array<u8>;
+    let index_5: i32;
+    let value_6: u8;
+    let self_7: ref Array<u8>;
+    let index_8: i32;
+    let value_9: u8;
+    let self_10: ref Array<u8>;
+    let index_11: i32;
+    let value_12: u8;
+    let self_13: ref Array<u8>;
+    let index_14: i32;
+    let value_15: u8;
+    let self_16: ref Array<u8>;
+    let index_17: i32;
+    let value_18: u8;
+    let self_19: ref Array<u8>;
+    let index_20: i32;
+    let value_21: u8;
+    let self_22: ref Array<u8>;
+    let index_23: i32;
+    let value_24: u8;
+    let self_25: ref Array<u8>;
+    let index_26: i32;
+    let value_27: u8;
+    let self_28: ref Array<u8>;
+    let index_29: i32;
+    let value_30: u8;
+    let self_31: ref Array<u8>;
+    let index_32: i32;
+    let value_33: u8;
     if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if c <u 128 {
-        builtin::array_set_u8(self.repr, self.used, c & 255);
+        self_4 = self.repr;
+        index_5 = self.used;
+        value_6 = c & 255;
+        builtin::array_set_u8(self_4, index_5, value_6);
         self.used = self.used + 1;
     } else if c <u 2048 {
-        builtin::array_set_u8(self.repr, self.used, (192 | (c >>u 6)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | (c & 63)) & 255);
+        self_7 = self.repr;
+        index_8 = self.used;
+        value_9 = (192 | (c >>u 6)) & 255;
+        builtin::array_set_u8(self_7, index_8, value_9);
+        self_10 = self.repr;
+        index_11 = self.used + 1;
+        value_12 = (128 | (c & 63)) & 255;
+        builtin::array_set_u8(self_10, index_11, value_12);
         self.used = self.used + 2;
     } else if c <u 65536 {
-        builtin::array_set_u8(self.repr, self.used, (224 | (c >>u 12)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | (c & 63)) & 255);
+        self_13 = self.repr;
+        index_14 = self.used;
+        value_15 = (224 | (c >>u 12)) & 255;
+        builtin::array_set_u8(self_13, index_14, value_15);
+        self_16 = self.repr;
+        index_17 = self.used + 1;
+        value_18 = (128 | ((c >>u 6) & 63)) & 255;
+        builtin::array_set_u8(self_16, index_17, value_18);
+        self_19 = self.repr;
+        index_20 = self.used + 2;
+        value_21 = (128 | (c & 63)) & 255;
+        builtin::array_set_u8(self_19, index_20, value_21);
         self.used = self.used + 3;
     } else {
-        builtin::array_set_u8(self.repr, self.used, (240 | (c >>u 18)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 12) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((c >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 3, (128 | (c & 63)) & 255);
+        self_22 = self.repr;
+        index_23 = self.used;
+        value_24 = (240 | (c >>u 18)) & 255;
+        builtin::array_set_u8(self_22, index_23, value_24);
+        self_25 = self.repr;
+        index_26 = self.used + 1;
+        value_27 = (128 | ((c >>u 12) & 63)) & 255;
+        builtin::array_set_u8(self_25, index_26, value_27);
+        self_28 = self.repr;
+        index_29 = self.used + 2;
+        value_30 = (128 | ((c >>u 6) & 63)) & 255;
+        builtin::array_set_u8(self_28, index_29, value_30);
+        self_31 = self.repr;
+        index_32 = self.used + 3;
+        value_33 = (128 | (c & 63)) & 255;
+        builtin::array_set_u8(self_31, index_32, value_33);
         self.used = self.used + 4;
     }
 }

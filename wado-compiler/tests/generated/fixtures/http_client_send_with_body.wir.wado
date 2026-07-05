@@ -1477,21 +1477,23 @@ fn "core:prelude/fpfmt.wado/__initialize_module"() {
 fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
     let __b: ref "core:prelude//List<u8>";
     let byte: u8;
-    let _licm_used_10: i32;
-    let _licm_repr_11: ref Array<u8>;
-    let __hfs_index_12: i32;
+    let index: i32;
+    let _licm_used_12: i32;
+    let _licm_repr_13: ref Array<u8>;
+    let __hfs_index_14: i32;
     __b = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
-    _licm_used_10 = self.used;
-    _licm_repr_11 = self.repr;
-    __hfs_index_12 = self.index;
+    _licm_used_12 = self.used;
+    _licm_repr_13 = self.repr;
+    __hfs_index_14 = self.index;
     b147: block {
         l148: loop {
-            if __hfs_index_12 >= _licm_used_10 {
-                self.index = __hfs_index_12;
+            if __hfs_index_14 >= _licm_used_12 {
+                self.index = __hfs_index_14;
                 break b147;
             }
-            byte = builtin::array_get_u8(_licm_repr_11, __hfs_index_12);
-            __hfs_index_12 = __hfs_index_12 + 1;
+            index = __hfs_index_14;
+            byte = builtin::array_get<u8>(_licm_repr_13, index);
+            __hfs_index_14 = __hfs_index_14 + 1;
             "core:prelude/list.wado/List<u8>::push"(__b, byte);
             continue l148;
         };
@@ -1531,12 +1533,14 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/t
 
 fn "core:prelude/list.wado/List<u8>::push"(self, value) {
     let used: i32;
+    let self_4: ref Array<u8>;
     used = self.used;
     if @unlikely(used >= builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/list.wado/List<u8>::grow"(self);
     }
-    builtin::array_set_u8(self.repr, used, value);
+    self_4 = self.repr;
+    builtin::array_set_u8(self_4, used, value);
     self.used = used + 1;
 }
 

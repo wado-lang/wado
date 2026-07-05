@@ -610,9 +610,7 @@ fn "wado-compiler/tests/fixtures/http_client_send_body_read.wado/handle"(request
     let packed_194: i64;
     let rx_195: i32;
     let tx_196: i32;
-    let repr_199: ref Array<u8>;
     let end_201: i32;
-    let repr_203: ref Array<u8>;
     let end_205: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
@@ -661,8 +659,8 @@ fn "wado-compiler/tests/fixtures/http_client_send_body_read.wado/handle"(request
             break_if b2 chunk.used == 0;
             let __sroa___match_scrut_1_discriminant: i32;
             let __sroa___match_scrut_1_payload_0: ref null "core:prelude/string.wado//String";
-            collected = "core:prelude/slice.wado/ArrayIter<u8>::collect"(repr_199 = chunk.repr; end_201 = chunk.used; struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: repr_199, index: 0, end: end_201 });
-            multivalue_bind [__sroa___match_scrut_1_discriminant, __sroa___match_scrut_1_payload_0] = "core:prelude/string.wado/String::from_utf8_slice"(repr_203 = collected.repr; end_205 = collected.used; struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: repr_203, start: 0, end: end_205 });
+            collected = "core:prelude/slice.wado/ArrayIter<u8>::collect"(end_201 = chunk.used; struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: chunk.repr, index: 0, end: end_201 });
+            multivalue_bind [__sroa___match_scrut_1_discriminant, __sroa___match_scrut_1_payload_0] = "core:prelude/string.wado/String::from_utf8_slice"(end_205 = collected.used; struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: collected.repr, start: 0, end: end_205 });
             text = (if @likely(__sroa___match_scrut_1_discriminant == 0) -> ref "core:prelude/string.wado//String" {
                 s = ref.as_non_null(__sroa___match_scrut_1_payload_0);
                 s;
@@ -1796,13 +1794,13 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
-    let a_5: i32;
-    let a_7: i32;
+    let a_6: i32;
+    let a_8: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_8 = capacity * 2; a_6 = select i32(a_8 > min_capacity, a_8, min_capacity); select i32(a_6 > 8, a_6, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -1835,21 +1833,23 @@ fn "core:prelude/string.wado/String^Add::add"(self, other) {
 fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
     let __b: ref "core:prelude//List<u8>";
     let byte: u8;
-    let _licm_used_10: i32;
-    let _licm_repr_11: ref Array<u8>;
-    let __hfs_index_12: i32;
+    let index: i32;
+    let _licm_used_12: i32;
+    let _licm_repr_13: ref Array<u8>;
+    let __hfs_index_14: i32;
     __b = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
-    _licm_used_10 = self.used;
-    _licm_repr_11 = self.repr;
-    __hfs_index_12 = self.index;
+    _licm_used_12 = self.used;
+    _licm_repr_13 = self.repr;
+    __hfs_index_14 = self.index;
     b183: block {
         l184: loop {
-            if __hfs_index_12 >= _licm_used_10 {
-                self.index = __hfs_index_12;
+            if __hfs_index_14 >= _licm_used_12 {
+                self.index = __hfs_index_14;
                 break b183;
             }
-            byte = builtin::array_get_u8(_licm_repr_11, __hfs_index_12);
-            __hfs_index_12 = __hfs_index_12 + 1;
+            index = __hfs_index_14;
+            byte = builtin::array_get<u8>(_licm_repr_13, index);
+            __hfs_index_14 = __hfs_index_14 + 1;
             "core:prelude/list.wado/List<u8>::push"(__b, byte);
             continue l184;
         };
@@ -1933,12 +1933,14 @@ fn "core:prelude/slice.wado/ArraySlice<u8>::to_array"(self) {
 
 fn "core:prelude/list.wado/List<u8>::push"(self, value) {
     let used: i32;
+    let self_4: ref Array<u8>;
     used = self.used;
     if @unlikely(used >= builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/list.wado/List<u8>::grow"(self);
     }
-    builtin::array_set_u8(self.repr, used, value);
+    self_4 = self.repr;
+    builtin::array_set_u8(self_4, used, value);
     self.used = used + 1;
 }
 

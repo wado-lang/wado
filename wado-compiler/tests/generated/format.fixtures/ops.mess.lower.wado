@@ -6475,7 +6475,7 @@ pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::
 }
 
 pub fn "List<u8>::get_byte_unchecked"(self: &List<u8>, index: i32) -> u8 {
-    return "core::builtin::core/builtin/array_get<u8>"(&self.repr, index);
+    return self.repr."Array<u8>^IndexValue<i32>::index_value"(index);
 }
 
 pub fn "List<u8>::to_hex"(self: &List<u8>) -> String {
@@ -6486,7 +6486,7 @@ pub fn "List<u8>::to_hex"(self: &List<u8>) -> String {
             break;
         }
         __for_0_body: {
-            let byte: u8 = "core::builtin::core/builtin/array_get<u8>"(&self.repr, i);
+            let byte: u8 = self.repr."Array<u8>^IndexValue<i32>::index_value"(i);
             s.String::push_str(&__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(16);
                 let mut __f: Formatter = Formatter { fill: '0', align: Alignment::Right, sign_plus: false, zero_pad: true, width: 2, precision: -2, indent: 0, buf: &mut __r };
@@ -10306,7 +10306,7 @@ pub fn String::is_empty(self: &String) -> bool {
 }
 
 pub fn String::get_byte_unchecked(self: &String, index: i32) -> u8 {
-    return core::builtin::array_get_u8(&self.repr, index);
+    return self.repr."Array<u8>^IndexValue<i32>::index_value"(index);
 }
 
 pub fn String::as_bytes(self: &String) -> ArraySlice<u8> with stores[self] {
@@ -10314,7 +10314,7 @@ pub fn String::as_bytes(self: &String) -> ArraySlice<u8> with stores[self] {
 }
 
 pub fn String::set_byte_unchecked(self: &mut String, index: i32, value: u8) {
-    core::builtin::array_set_u8(&mut self.repr, index, value);
+    self.repr."Array<u8>^IndexAssign<i32>::index_assign"(index, value);
 }
 
 pub fn String::internal_raw_bytes(self: &String) -> Array<u8> {
@@ -10326,7 +10326,7 @@ pub fn String::internal_from_utf8_raw(bytes: Array<u8>, len: i32) -> String {
 }
 
 pub fn String::grow(self: &mut String, min_capacity: i32) {
-    let capacity: i32 = core::builtin::array_len(&self.repr);
+    let capacity: i32 = self.repr."Array<u8>::len"();
     if (min_capacity <= capacity) {
         return;
     }
@@ -10341,7 +10341,7 @@ pub fn String::internal_append_from_memory(self: &mut String, ptr: i32, len: i32
         return;
     }
     let new_used: i32 = (self.used + len);
-    if (new_used > core::builtin::array_len(&self.repr)) {
+    if (new_used > self.repr."Array<u8>::len"()) {
         core::builtin::cold_path();
         self.String::grow(new_used);
     }
@@ -10351,7 +10351,7 @@ pub fn String::internal_append_from_memory(self: &mut String, ptr: i32, len: i32
             break;
         }
         __for_0_body: {
-            core::builtin::array_set_u8(&mut self.repr, (self.used + i), core::builtin::i32_load8_u((ptr + i)));
+            self.repr."Array<u8>^IndexAssign<i32>::index_assign"((self.used + i), core::builtin::i32_load8_u((ptr + i)));
         }
         i = (i + 1);
     }
@@ -10360,7 +10360,7 @@ pub fn String::internal_append_from_memory(self: &mut String, ptr: i32, len: i32
 
 pub fn String::internal_reserve_uninit(self: &mut String, n: i32) -> i32 {
     let new_used: i32 = (self.used + n);
-    if (new_used > core::builtin::array_len(&self.repr)) {
+    if (new_used > self.repr."Array<u8>::len"()) {
         core::builtin::cold_path();
         self.String::grow(new_used);
     }
@@ -10374,7 +10374,7 @@ pub fn String::append_byte_filled(self: &mut String, byte: u8, n: i32) {
         return;
     }
     let new_used: i32 = (self.used + n);
-    if (new_used > core::builtin::array_len(&self.repr)) {
+    if (new_used > self.repr."Array<u8>::len"()) {
         core::builtin::cold_path();
         self.String::grow(new_used);
     }
@@ -10388,7 +10388,7 @@ pub fn String::push_str(self: &mut String, other: &String) {
         return;
     }
     let new_used: i32 = (self.used + other_len);
-    if (new_used > core::builtin::array_len(&self.repr)) {
+    if (new_used > self.repr."Array<u8>::len"()) {
         core::builtin::cold_path();
         self.String::grow(new_used);
     }
@@ -10402,7 +10402,7 @@ pub fn String::push_bytes_unchecked(self: &mut String, bytes: List<u8>) {
         return;
     }
     let new_used: i32 = (self.used + n);
-    if (new_used > core::builtin::array_len(&self.repr)) {
+    if (new_used > self.repr."Array<u8>::len"()) {
         core::builtin::cold_path();
         self.String::grow(new_used);
     }
@@ -10416,7 +10416,7 @@ pub fn String::push_str_range_unchecked(self: &mut String, s: &String, start: i3
         return;
     }
     let new_used: i32 = (self.used + n);
-    if (new_used > core::builtin::array_len(&self.repr)) {
+    if (new_used > self.repr."Array<u8>::len"()) {
         core::builtin::cold_path();
         self.String::grow(new_used);
     }
@@ -10430,7 +10430,7 @@ pub fn String::push_byte_slice_unchecked(self: &mut String, bytes: ArraySlice<u8
         return;
     }
     let new_used: i32 = (self.used + n);
-    if (new_used > core::builtin::array_len(&self.repr)) {
+    if (new_used > self.repr."Array<u8>::len"()) {
         core::builtin::cold_path();
         self.String::grow(new_used);
     }
@@ -10460,7 +10460,7 @@ fn "String^Eq::eq_bytes"(a: &Array<u8>, b: &Array<u8>, len: i32) -> bool {
             break;
         }
         __for_0_body: {
-            if (core::builtin::array_get_u8(a, i) != core::builtin::array_get_u8(b, i)) {
+            if (a."Array<u8>^IndexValue<i32>::index_value"(i) != b."Array<u8>^IndexValue<i32>::index_value"(i)) {
                 return false;
             }
         }
@@ -10485,8 +10485,8 @@ pub fn "String^Ord::cmp"(self: &String, other: &String) -> Ordering {
             break;
         }
         __for_0_body: {
-            let a_byte: u8 = core::builtin::array_get_u8(&a_repr, i);
-            let b_byte: u8 = core::builtin::array_get_u8(&b_repr, i);
+            let a_byte: u8 = a_repr."Array<u8>^IndexValue<i32>::index_value"(i);
+            let b_byte: u8 = b_repr."Array<u8>^IndexValue<i32>::index_value"(i);
             if (a_byte < b_byte) {
                 return Ordering::Less;
             }
@@ -10510,7 +10510,7 @@ pub fn "StrUtf8ByteIter^Iterator::next"(self: &mut StrUtf8ByteIter) -> Option<u8
     if (self.index >= self.used) {
         return %0;
     }
-    let byte: u8 = core::builtin::array_get_u8(&self.repr, self.index);
+    let byte: u8 = self.repr."Array<u8>^IndexValue<i32>::index_value"(self.index);
     self.index = (self.index + 1);
     return Option<u8>::Some(byte);
 }
@@ -10712,27 +10712,27 @@ pub fn "StrCharIter^Iterator::next"(self: &mut StrCharIter) -> Option<char> {
     if (self.byte_index >= self.used) {
         return %0;
     }
-    let b0: u8 = core::builtin::array_get_u8(&self.repr, self.byte_index);
+    let b0: u8 = self.repr."Array<u8>^IndexValue<i32>::index_value"(self.byte_index);
     self.byte_index = (self.byte_index + 1);
     if (b0 < 128) {
         return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(b0 as u32));
     }
     if (b0 < 224) {
-        let b1: u32 = core::builtin::array_get_u8(&self.repr, self.byte_index) as u32;
+        let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"(self.byte_index) as u32;
         self.byte_index = (self.byte_index + 1);
         let code: u32 = (((b0 as u32 & 31) << 6) | (b1 & 63));
         return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(code));
     }
     if (b0 < 240) {
-        let b1: u32 = core::builtin::array_get_u8(&self.repr, self.byte_index) as u32;
-        let b2: u32 = core::builtin::array_get_u8(&self.repr, (self.byte_index + 1)) as u32;
+        let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"(self.byte_index) as u32;
+        let b2: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((self.byte_index + 1)) as u32;
         self.byte_index = (self.byte_index + 2);
         let code: u32 = ((((b0 as u32 & 15) << 12) | ((b1 & 63) << 6)) | (b2 & 63));
         return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(code));
     }
-    let b1: u32 = core::builtin::array_get_u8(&self.repr, self.byte_index) as u32;
-    let b2: u32 = core::builtin::array_get_u8(&self.repr, (self.byte_index + 1)) as u32;
-    let b3: u32 = core::builtin::array_get_u8(&self.repr, (self.byte_index + 2)) as u32;
+    let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"(self.byte_index) as u32;
+    let b2: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((self.byte_index + 1)) as u32;
+    let b3: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((self.byte_index + 2)) as u32;
     self.byte_index = (self.byte_index + 3);
     let code: u32 = (((((b0 as u32 & 7) << 18) | ((b1 & 63) << 12)) | ((b2 & 63) << 6)) | (b3 & 63));
     return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(code));
@@ -10959,7 +10959,7 @@ pub fn String::char_at_byte(self: &String, byte_index: i32) -> Option<char> {
     if (byte_index >= self.used) {
         return %0;
     }
-    let b0: u8 = core::builtin::array_get_u8(&self.repr, byte_index);
+    let b0: u8 = self.repr."Array<u8>^IndexValue<i32>::index_value"(byte_index);
     let needed: i32 = if (b0 < 128) {
         1;
     } else {
@@ -10980,53 +10980,53 @@ pub fn String::char_at_byte(self: &String, byte_index: i32) -> Option<char> {
 }
 
 pub fn String::char_at_byte_unchecked(self: &String, byte_index: i32) -> char {
-    let b0: u8 = core::builtin::array_get_u8(&self.repr, byte_index);
+    let b0: u8 = self.repr."Array<u8>^IndexValue<i32>::index_value"(byte_index);
     if (b0 < 128) {
         return "core::prelude/primitive.wado::char::from_u32_unchecked"(b0 as u32);
     }
     if (b0 < 224) {
-        let b1: u32 = core::builtin::array_get_u8(&self.repr, (byte_index + 1)) as u32;
+        let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((byte_index + 1)) as u32;
         let code: u32 = (((b0 as u32 & 31) << 6) | (b1 & 63));
         return "core::prelude/primitive.wado::char::from_u32_unchecked"(code);
     }
     if (b0 < 240) {
-        let b1: u32 = core::builtin::array_get_u8(&self.repr, (byte_index + 1)) as u32;
-        let b2: u32 = core::builtin::array_get_u8(&self.repr, (byte_index + 2)) as u32;
+        let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((byte_index + 1)) as u32;
+        let b2: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((byte_index + 2)) as u32;
         let code: u32 = ((((b0 as u32 & 15) << 12) | ((b1 & 63) << 6)) | (b2 & 63));
         return "core::prelude/primitive.wado::char::from_u32_unchecked"(code);
     }
-    let b1: u32 = core::builtin::array_get_u8(&self.repr, (byte_index + 1)) as u32;
-    let b2: u32 = core::builtin::array_get_u8(&self.repr, (byte_index + 2)) as u32;
-    let b3: u32 = core::builtin::array_get_u8(&self.repr, (byte_index + 3)) as u32;
+    let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((byte_index + 1)) as u32;
+    let b2: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((byte_index + 2)) as u32;
+    let b3: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((byte_index + 3)) as u32;
     let code: u32 = (((((b0 as u32 & 7) << 18) | ((b1 & 63) << 12)) | ((b2 & 63) << 6)) | (b3 & 63));
     return "core::prelude/primitive.wado::char::from_u32_unchecked"(code);
 }
 
 pub fn String::push(self: &mut String, c: char) {
     let code: u32 = c as u32;
-    if ((self.used + 4) > core::builtin::array_len(&self.repr)) {
+    if ((self.used + 4) > self.repr."Array<u8>::len"()) {
         core::builtin::cold_path();
         self.String::grow((self.used + 4));
     }
     if (code < 128) {
-        core::builtin::array_set_u8(&mut self.repr, self.used, code as u8);
+        self.repr."Array<u8>^IndexAssign<i32>::index_assign"(self.used, code as u8);
         self.used = (self.used + 1);
     } else {
         if (code < 2048) {
-            core::builtin::array_set_u8(&mut self.repr, self.used, (192 | (code >> 6)) as u8);
-            core::builtin::array_set_u8(&mut self.repr, (self.used + 1), (128 | (code & 63)) as u8);
+            self.repr."Array<u8>^IndexAssign<i32>::index_assign"(self.used, (192 | (code >> 6)) as u8);
+            self.repr."Array<u8>^IndexAssign<i32>::index_assign"((self.used + 1), (128 | (code & 63)) as u8);
             self.used = (self.used + 2);
         } else {
             if (code < 65536) {
-                core::builtin::array_set_u8(&mut self.repr, self.used, (224 | (code >> 12)) as u8);
-                core::builtin::array_set_u8(&mut self.repr, (self.used + 1), (128 | ((code >> 6) & 63)) as u8);
-                core::builtin::array_set_u8(&mut self.repr, (self.used + 2), (128 | (code & 63)) as u8);
+                self.repr."Array<u8>^IndexAssign<i32>::index_assign"(self.used, (224 | (code >> 12)) as u8);
+                self.repr."Array<u8>^IndexAssign<i32>::index_assign"((self.used + 1), (128 | ((code >> 6) & 63)) as u8);
+                self.repr."Array<u8>^IndexAssign<i32>::index_assign"((self.used + 2), (128 | (code & 63)) as u8);
                 self.used = (self.used + 3);
             } else {
-                core::builtin::array_set_u8(&mut self.repr, self.used, (240 | (code >> 18)) as u8);
-                core::builtin::array_set_u8(&mut self.repr, (self.used + 1), (128 | ((code >> 12) & 63)) as u8);
-                core::builtin::array_set_u8(&mut self.repr, (self.used + 2), (128 | ((code >> 6) & 63)) as u8);
-                core::builtin::array_set_u8(&mut self.repr, (self.used + 3), (128 | (code & 63)) as u8);
+                self.repr."Array<u8>^IndexAssign<i32>::index_assign"(self.used, (240 | (code >> 18)) as u8);
+                self.repr."Array<u8>^IndexAssign<i32>::index_assign"((self.used + 1), (128 | ((code >> 12) & 63)) as u8);
+                self.repr."Array<u8>^IndexAssign<i32>::index_assign"((self.used + 2), (128 | ((code >> 6) & 63)) as u8);
+                self.repr."Array<u8>^IndexAssign<i32>::index_assign"((self.used + 3), (128 | (code & 63)) as u8);
                 self.used = (self.used + 4);
             }
         }
@@ -11101,7 +11101,7 @@ pub fn String::truncate_chars(self: &mut String, char_count: i32) {
         if !((byte_pos < self.used) && (chars_seen < char_count)) {
             break;
         }
-        let b: u8 = core::builtin::array_get_u8(&self.repr, byte_pos);
+        let b: u8 = self.repr."Array<u8>^IndexValue<i32>::index_value"(byte_pos);
         if (b < 128) {
             byte_pos = (byte_pos + 1);
         } else {
@@ -11127,7 +11127,7 @@ pub fn String::is_char_boundary(self: &String, byte_index: i32) -> bool {
     if ((byte_index < 0) || (byte_index > self.used)) {
         return false;
     }
-    let b: u8 = core::builtin::array_get_u8(&self.repr, byte_index);
+    let b: u8 = self.repr."Array<u8>^IndexValue<i32>::index_value"(byte_index);
     return ((b < 128) || (b >= 192));
 }
 
@@ -11140,29 +11140,29 @@ pub fn String::pop(self: &mut String) -> Option<char> {
         if !(pos > 0) {
             break;
         }
-        let b: u8 = core::builtin::array_get_u8(&self.repr, pos);
+        let b: u8 = self.repr."Array<u8>^IndexValue<i32>::index_value"(pos);
         if ((b >= 128) && (b < 192)) {
             pos = (pos - 1);
         } else {
             break;
         }
     }
-    let b0: u32 = core::builtin::array_get_u8(&self.repr, pos) as u32;
+    let b0: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"(pos) as u32;
     let code: u32 = if (b0 < 128) {
         b0;
     } else {
         if (b0 < 224) {
-            let b1: u32 = core::builtin::array_get_u8(&self.repr, (pos + 1)) as u32;
+            let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + 1)) as u32;
             (((b0 & 31) << 6) | (b1 & 63));
         } else {
             if (b0 < 240) {
-                let b1: u32 = core::builtin::array_get_u8(&self.repr, (pos + 1)) as u32;
-                let b2: u32 = core::builtin::array_get_u8(&self.repr, (pos + 2)) as u32;
+                let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + 1)) as u32;
+                let b2: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + 2)) as u32;
                 ((((b0 & 15) << 12) | ((b1 & 63) << 6)) | (b2 & 63));
             } else {
-                let b1: u32 = core::builtin::array_get_u8(&self.repr, (pos + 1)) as u32;
-                let b2: u32 = core::builtin::array_get_u8(&self.repr, (pos + 2)) as u32;
-                let b3: u32 = core::builtin::array_get_u8(&self.repr, (pos + 3)) as u32;
+                let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + 1)) as u32;
+                let b2: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + 2)) as u32;
+                let b3: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + 3)) as u32;
                 (((((b0 & 7) << 18) | ((b1 & 63) << 12)) | ((b2 & 63) << 6)) | (b3 & 63));
             };
         };
@@ -11176,18 +11176,18 @@ pub fn String::clear(self: &mut String) {
 }
 
 pub fn String::capacity(self: &String) -> i32 {
-    return core::builtin::array_len(&self.repr);
+    return self.repr."Array<u8>::len"();
 }
 
 pub fn String::reserve(self: &mut String, additional: i32) {
     let required: i32 = (self.used + additional);
-    if (required > core::builtin::array_len(&self.repr)) {
+    if (required > self.repr."Array<u8>::len"()) {
         self.String::grow(required);
     }
 }
 
 pub fn String::shrink_to_fit(self: &mut String) {
-    let capacity: i32 = core::builtin::array_len(&self.repr);
+    let capacity: i32 = self.repr."Array<u8>::len"();
     if (capacity > self.used) {
         let mut new_repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(self.used);
         "core::builtin::core/builtin/array_copy<u8>"(&mut new_repr, 0, &self.repr, 0, self.used);
@@ -11201,7 +11201,7 @@ pub fn String::trim_ascii_start(self: &String) -> String {
         if !(start < self.used) {
             break;
         }
-        if "core::prelude/string.wado::is_ascii_whitespace_byte"(core::builtin::array_get_u8(&self.repr, start)) {
+        if "core::prelude/string.wado::is_ascii_whitespace_byte"(self.repr."Array<u8>^IndexValue<i32>::index_value"(start)) {
             start = (start + 1);
         } else {
             break;
@@ -11216,7 +11216,7 @@ pub fn String::trim_ascii_end(self: &String) -> String {
         if !(end > 0) {
             break;
         }
-        if "core::prelude/string.wado::is_ascii_whitespace_byte"(core::builtin::array_get_u8(&self.repr, (end - 1))) {
+        if "core::prelude/string.wado::is_ascii_whitespace_byte"(self.repr."Array<u8>^IndexValue<i32>::index_value"((end - 1))) {
             end = (end - 1);
         } else {
             break;
@@ -11261,29 +11261,29 @@ pub fn String::trim_end(self: &String) -> String {
             if !(pos > 0) {
                 break;
             }
-            let b: u8 = core::builtin::array_get_u8(&self.repr, pos);
+            let b: u8 = self.repr."Array<u8>^IndexValue<i32>::index_value"(pos);
             if ((b >= 128) && (b < 192)) {
                 pos = (pos - 1);
             } else {
                 break;
             }
         }
-        let b0: u32 = core::builtin::array_get_u8(&self.repr, pos) as u32;
+        let b0: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"(pos) as u32;
         let code: u32 = if (b0 < 128) {
             b0;
         } else {
             if (b0 < 224) {
-                let b1: u32 = core::builtin::array_get_u8(&self.repr, (pos + 1)) as u32;
+                let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + 1)) as u32;
                 (((b0 & 31) << 6) | (b1 & 63));
             } else {
                 if (b0 < 240) {
-                    let b1: u32 = core::builtin::array_get_u8(&self.repr, (pos + 1)) as u32;
-                    let b2: u32 = core::builtin::array_get_u8(&self.repr, (pos + 2)) as u32;
+                    let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + 1)) as u32;
+                    let b2: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + 2)) as u32;
                     ((((b0 & 15) << 12) | ((b1 & 63) << 6)) | (b2 & 63));
                 } else {
-                    let b1: u32 = core::builtin::array_get_u8(&self.repr, (pos + 1)) as u32;
-                    let b2: u32 = core::builtin::array_get_u8(&self.repr, (pos + 2)) as u32;
-                    let b3: u32 = core::builtin::array_get_u8(&self.repr, (pos + 3)) as u32;
+                    let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + 1)) as u32;
+                    let b2: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + 2)) as u32;
+                    let b3: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + 3)) as u32;
                     (((((b0 & 7) << 18) | ((b1 & 63) << 12)) | ((b2 & 63) << 6)) | (b3 & 63));
                 };
             };
@@ -11323,8 +11323,8 @@ pub fn String::eq_ignore_ascii_case(self: &String, other: String) -> bool {
             break;
         }
         __for_0_body: {
-            let ab: u8 = core::builtin::array_get_u8(&a, i);
-            let bb: u8 = core::builtin::array_get_u8(&b, i);
+            let ab: u8 = a."Array<u8>^IndexValue<i32>::index_value"(i);
+            let bb: u8 = b."Array<u8>^IndexValue<i32>::index_value"(i);
             if ("core::prelude/string.wado::byte_to_ascii_lowercase"(ab) != "core::prelude/string.wado::byte_to_ascii_lowercase"(bb)) {
                 return false;
             }
@@ -11462,7 +11462,7 @@ pub fn String::starts_with(self: &String, pat: String) -> bool {
             break;
         }
         __for_0_body: {
-            if (core::builtin::array_get_u8(&self.repr, i) != core::builtin::array_get_u8(&pat_repr, i)) {
+            if (self.repr."Array<u8>^IndexValue<i32>::index_value"(i) != pat_repr."Array<u8>^IndexValue<i32>::index_value"(i)) {
                 return false;
             }
         }
@@ -11484,7 +11484,7 @@ pub fn String::ends_with(self: &String, pat: String) -> bool {
             break;
         }
         __for_0_body: {
-            if (core::builtin::array_get_u8(&self.repr, (offset + i)) != core::builtin::array_get_u8(&pat_repr, i)) {
+            if (self.repr."Array<u8>^IndexValue<i32>::index_value"((offset + i)) != pat_repr."Array<u8>^IndexValue<i32>::index_value"(i)) {
                 return false;
             }
         }
@@ -11516,7 +11516,7 @@ pub fn String::find(self: &String, pat: String) -> Option<i32> {
                     break;
                 }
                 __for_1_body: {
-                    if (core::builtin::array_get_u8(&self.repr, (i + j)) != core::builtin::array_get_u8(&pat_repr, j)) {
+                    if (self.repr."Array<u8>^IndexValue<i32>::index_value"((i + j)) != pat_repr."Array<u8>^IndexValue<i32>::index_value"(j)) {
                         matched = false;
                         break;
                     }
@@ -11550,7 +11550,7 @@ pub fn String::rfind(self: &String, pat: String) -> Option<i32> {
                 break;
             }
             __for_0_body: {
-                if (core::builtin::array_get_u8(&self.repr, (i + j)) != core::builtin::array_get_u8(&pat_repr, j)) {
+                if (self.repr."Array<u8>^IndexValue<i32>::index_value"((i + j)) != pat_repr."Array<u8>^IndexValue<i32>::index_value"(j)) {
                     matched = false;
                     break;
                 }
@@ -11643,26 +11643,26 @@ pub fn String::insert_unchecked(self: &mut String, byte_index: i32, ch: char) {
     let code: u32 = ch as u32;
     let char_len: i32 = Box<char> { value: ch }.char::len_utf8();
     let new_used: i32 = (self.used + char_len);
-    if (new_used > core::builtin::array_len(&self.repr)) {
+    if (new_used > self.repr."Array<u8>::len"()) {
         self.String::grow(new_used);
     }
     "core::builtin::core/builtin/array_copy<u8>"(&mut self.repr, (byte_index + char_len), &self.repr, byte_index, (self.used - byte_index));
     if (code < 128) {
-        core::builtin::array_set_u8(&mut self.repr, byte_index, code as u8);
+        self.repr."Array<u8>^IndexAssign<i32>::index_assign"(byte_index, code as u8);
     } else {
         if (code < 2048) {
-            core::builtin::array_set_u8(&mut self.repr, byte_index, (192 | (code >> 6)) as u8);
-            core::builtin::array_set_u8(&mut self.repr, (byte_index + 1), (128 | (code & 63)) as u8);
+            self.repr."Array<u8>^IndexAssign<i32>::index_assign"(byte_index, (192 | (code >> 6)) as u8);
+            self.repr."Array<u8>^IndexAssign<i32>::index_assign"((byte_index + 1), (128 | (code & 63)) as u8);
         } else {
             if (code < 65536) {
-                core::builtin::array_set_u8(&mut self.repr, byte_index, (224 | (code >> 12)) as u8);
-                core::builtin::array_set_u8(&mut self.repr, (byte_index + 1), (128 | ((code >> 6) & 63)) as u8);
-                core::builtin::array_set_u8(&mut self.repr, (byte_index + 2), (128 | (code & 63)) as u8);
+                self.repr."Array<u8>^IndexAssign<i32>::index_assign"(byte_index, (224 | (code >> 12)) as u8);
+                self.repr."Array<u8>^IndexAssign<i32>::index_assign"((byte_index + 1), (128 | ((code >> 6) & 63)) as u8);
+                self.repr."Array<u8>^IndexAssign<i32>::index_assign"((byte_index + 2), (128 | (code & 63)) as u8);
             } else {
-                core::builtin::array_set_u8(&mut self.repr, byte_index, (240 | (code >> 18)) as u8);
-                core::builtin::array_set_u8(&mut self.repr, (byte_index + 1), (128 | ((code >> 12) & 63)) as u8);
-                core::builtin::array_set_u8(&mut self.repr, (byte_index + 2), (128 | ((code >> 6) & 63)) as u8);
-                core::builtin::array_set_u8(&mut self.repr, (byte_index + 3), (128 | (code & 63)) as u8);
+                self.repr."Array<u8>^IndexAssign<i32>::index_assign"(byte_index, (240 | (code >> 18)) as u8);
+                self.repr."Array<u8>^IndexAssign<i32>::index_assign"((byte_index + 1), (128 | ((code >> 12) & 63)) as u8);
+                self.repr."Array<u8>^IndexAssign<i32>::index_assign"((byte_index + 2), (128 | ((code >> 6) & 63)) as u8);
+                self.repr."Array<u8>^IndexAssign<i32>::index_assign"((byte_index + 3), (128 | (code & 63)) as u8);
             }
         }
     }
@@ -11704,7 +11704,7 @@ pub fn String::insert_str_unchecked(self: &mut String, byte_index: i32, s: Strin
         return;
     }
     let new_used: i32 = (self.used + s_len);
-    if (new_used > core::builtin::array_len(&self.repr)) {
+    if (new_used > self.repr."Array<u8>::len"()) {
         self.String::grow(new_used);
     }
     "core::builtin::core/builtin/array_copy<u8>"(&mut self.repr, (byte_index + s_len), &self.repr, byte_index, (self.used - byte_index));
@@ -11787,7 +11787,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
 }
 
 pub fn String::remove_unchecked(self: &mut String, byte_index: i32) -> char {
-    let b0: u32 = core::builtin::array_get_u8(&self.repr, byte_index) as u32;
+    let b0: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"(byte_index) as u32;
     let char_len: i32 = if (b0 < 128) {
         1;
     } else {
@@ -11805,17 +11805,17 @@ pub fn String::remove_unchecked(self: &mut String, byte_index: i32) -> char {
         b0;
     } else {
         if (b0 < 224) {
-            let b1: u32 = core::builtin::array_get_u8(&self.repr, (byte_index + 1)) as u32;
+            let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((byte_index + 1)) as u32;
             (((b0 & 31) << 6) | (b1 & 63));
         } else {
             if (b0 < 240) {
-                let b1: u32 = core::builtin::array_get_u8(&self.repr, (byte_index + 1)) as u32;
-                let b2: u32 = core::builtin::array_get_u8(&self.repr, (byte_index + 2)) as u32;
+                let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((byte_index + 1)) as u32;
+                let b2: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((byte_index + 2)) as u32;
                 ((((b0 & 15) << 12) | ((b1 & 63) << 6)) | (b2 & 63));
             } else {
-                let b1: u32 = core::builtin::array_get_u8(&self.repr, (byte_index + 1)) as u32;
-                let b2: u32 = core::builtin::array_get_u8(&self.repr, (byte_index + 2)) as u32;
-                let b3: u32 = core::builtin::array_get_u8(&self.repr, (byte_index + 3)) as u32;
+                let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((byte_index + 1)) as u32;
+                let b2: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((byte_index + 2)) as u32;
+                let b3: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((byte_index + 3)) as u32;
                 (((((b0 & 7) << 18) | ((b1 & 63) << 12)) | ((b2 & 63) << 6)) | (b3 & 63));
             };
         };
@@ -11874,7 +11874,7 @@ pub fn String::replacen(self: &String, from: String, to: String, count: i32) -> 
                 break;
             }
             __for_0_body: {
-                if (core::builtin::array_get_u8(&self.repr, (pos + j)) != core::builtin::array_get_u8(&from_repr, j)) {
+                if (self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + j)) != from_repr."Array<u8>^IndexValue<i32>::index_value"(j)) {
                     matched = false;
                     break;
                 }
@@ -11884,7 +11884,7 @@ pub fn String::replacen(self: &String, from: String, to: String, count: i32) -> 
         if matched {
             if (to_len > 0) {
                 let new_used: i32 = (result.used + to_len);
-                if (new_used > core::builtin::array_len(&result.repr)) {
+                if (new_used > result.repr."Array<u8>::len"()) {
                     result.String::grow(new_used);
                 }
                 "core::builtin::core/builtin/array_copy<u8>"(&mut result.repr, result.used, &to_repr, 0, to_len);
@@ -11893,10 +11893,10 @@ pub fn String::replacen(self: &String, from: String, to: String, count: i32) -> 
             pos = (pos + from_len);
             replacements = (replacements + 1);
         } else {
-            if (result.used >= core::builtin::array_len(&result.repr)) {
+            if (result.used >= result.repr."Array<u8>::len"()) {
                 result.String::grow((result.used + 1));
             }
-            core::builtin::array_set_u8(&mut result.repr, result.used, core::builtin::array_get_u8(&self.repr, pos));
+            result.repr."Array<u8>^IndexAssign<i32>::index_assign"(result.used, self.repr."Array<u8>^IndexValue<i32>::index_value"(pos));
             result.used = (result.used + 1);
             pos = (pos + 1);
         }
@@ -11905,10 +11905,10 @@ pub fn String::replacen(self: &String, from: String, to: String, count: i32) -> 
         if !(pos < self.used) {
             break;
         }
-        if (result.used >= core::builtin::array_len(&result.repr)) {
+        if (result.used >= result.repr."Array<u8>::len"()) {
             result.String::grow((result.used + 1));
         }
-        core::builtin::array_set_u8(&mut result.repr, result.used, core::builtin::array_get_u8(&self.repr, pos));
+        result.repr."Array<u8>^IndexAssign<i32>::index_assign"(result.used, self.repr."Array<u8>^IndexValue<i32>::index_value"(pos));
         result.used = (result.used + 1);
         pos = (pos + 1);
     }
@@ -11967,7 +11967,7 @@ pub fn "StrSplitIter^Iterator::next"(self: &mut StrSplitIter) -> Option<String> 
                 break;
             }
             __for_0_body: {
-                if (core::builtin::array_get_u8(&self.repr, (i + j)) != core::builtin::array_get_u8(&self.sep_repr, j)) {
+                if (self.repr."Array<u8>^IndexValue<i32>::index_value"((i + j)) != self.sep_repr."Array<u8>^IndexValue<i32>::index_value"(j)) {
                     matched = false;
                     break;
                 }
@@ -12207,7 +12207,7 @@ pub fn "StrSplitNIter^Iterator::next"(self: &mut StrSplitNIter) -> Option<String
                 break;
             }
             __for_0_body: {
-                if (core::builtin::array_get_u8(&self.repr, (i + j)) != core::builtin::array_get_u8(&self.sep_repr, j)) {
+                if (self.repr."Array<u8>^IndexValue<i32>::index_value"((i + j)) != self.sep_repr."Array<u8>^IndexValue<i32>::index_value"(j)) {
                     matched = false;
                     break;
                 }
@@ -12430,7 +12430,7 @@ fn is_ascii_whitespace_byte(b: u8) -> bool {
 
 pub fn "StrSplitWhitespaceIter^Iterator::next"(self: &mut StrSplitWhitespaceIter) -> Option<String> {
     loop {
-        if !((self.pos < self.used) && "core::prelude/string.wado::is_ascii_whitespace_byte"(core::builtin::array_get_u8(&self.repr, self.pos))) {
+        if !((self.pos < self.used) && "core::prelude/string.wado::is_ascii_whitespace_byte"(self.repr."Array<u8>^IndexValue<i32>::index_value"(self.pos))) {
             break;
         }
         self.pos = (self.pos + 1);
@@ -12440,7 +12440,7 @@ pub fn "StrSplitWhitespaceIter^Iterator::next"(self: &mut StrSplitWhitespaceIter
     }
     let start: i32 = self.pos;
     loop {
-        if !((self.pos < self.used) && !"core::prelude/string.wado::is_ascii_whitespace_byte"(core::builtin::array_get_u8(&self.repr, self.pos))) {
+        if !((self.pos < self.used) && !"core::prelude/string.wado::is_ascii_whitespace_byte"(self.repr."Array<u8>^IndexValue<i32>::index_value"(self.pos))) {
             break;
         }
         self.pos = (self.pos + 1);
@@ -12657,7 +12657,7 @@ pub fn "StrLinesIter^Iterator::next"(self: &mut StrLinesIter) -> Option<String> 
         if !(self.pos < self.used) {
             break;
         }
-        let b: u8 = core::builtin::array_get_u8(&self.repr, self.pos);
+        let b: u8 = self.repr."Array<u8>^IndexValue<i32>::index_value"(self.pos);
         if (b == 10) {
             let len: i32 = (self.pos - start);
             let mut part: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
@@ -12670,7 +12670,7 @@ pub fn "StrLinesIter^Iterator::next"(self: &mut StrLinesIter) -> Option<String> 
             let mut part: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
             "core::builtin::core/builtin/array_copy<u8>"(&mut part, 0, &self.repr, start, len);
             self.pos = (self.pos + 1);
-            if ((self.pos < self.used) && (core::builtin::array_get_u8(&self.repr, self.pos) == 10)) {
+            if ((self.pos < self.used) && (self.repr."Array<u8>^IndexValue<i32>::index_value"(self.pos) == 10)) {
                 self.pos = (self.pos + 1);
             }
             return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
@@ -12886,27 +12886,27 @@ pub fn "StrCharIndicesIter^Iterator::next"(self: &mut StrCharIndicesIter) -> Opt
         return %0;
     }
     let idx: i32 = self.byte_index;
-    let b0: u8 = core::builtin::array_get_u8(&self.repr, self.byte_index);
+    let b0: u8 = self.repr."Array<u8>^IndexValue<i32>::index_value"(self.byte_index);
     self.byte_index = (self.byte_index + 1);
     if (b0 < 128) {
         return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(b0 as u32)]);
     }
     if (b0 < 224) {
-        let b1: u32 = core::builtin::array_get_u8(&self.repr, self.byte_index) as u32;
+        let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"(self.byte_index) as u32;
         self.byte_index = (self.byte_index + 1);
         let code: u32 = (((b0 as u32 & 31) << 6) | (b1 & 63));
         return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(code)]);
     }
     if (b0 < 240) {
-        let b1: u32 = core::builtin::array_get_u8(&self.repr, self.byte_index) as u32;
-        let b2: u32 = core::builtin::array_get_u8(&self.repr, (self.byte_index + 1)) as u32;
+        let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"(self.byte_index) as u32;
+        let b2: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((self.byte_index + 1)) as u32;
         self.byte_index = (self.byte_index + 2);
         let code: u32 = ((((b0 as u32 & 15) << 12) | ((b1 & 63) << 6)) | (b2 & 63));
         return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(code)]);
     }
-    let b1: u32 = core::builtin::array_get_u8(&self.repr, self.byte_index) as u32;
-    let b2: u32 = core::builtin::array_get_u8(&self.repr, (self.byte_index + 1)) as u32;
-    let b3: u32 = core::builtin::array_get_u8(&self.repr, (self.byte_index + 2)) as u32;
+    let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"(self.byte_index) as u32;
+    let b2: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((self.byte_index + 1)) as u32;
+    let b3: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((self.byte_index + 2)) as u32;
     self.byte_index = (self.byte_index + 3);
     let code: u32 = (((((b0 as u32 & 7) << 18) | ((b1 & 63) << 12)) | ((b2 & 63) << 6)) | (b3 & 63));
     return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(code)]);
@@ -17386,11 +17386,11 @@ fn "core/rt/cm_stream_pair<u8>"(packed: i64) -> [Stream<u8>, StreamWritable<u8>]
 
 pub fn "List<[i32,char]>::push"(self: &mut List<[i32, char]>, value: [i32, char]) with stores[value] {
     let used: i32 = self.used;
-    if (used >= core::builtin::array_len(&self.repr)) {
+    if (used >= self.repr."Array<[i32,char]>::len"()) {
         core::builtin::cold_path();
         self."List<[i32,char]>::grow"();
     }
-    core::builtin::array_set::<[i32, char]>(&mut self.repr, used, value);
+    self.repr."Array<[i32,char]>^IndexAssign<i32>::index_assign"(used, value);
     self.used = (used + 1);
 }
 
@@ -17404,11 +17404,11 @@ fn "List<[i32,char]>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> List
 
 pub fn "List<core:prelude/string.wado/String>::push"(self: &mut List<String>, value: String) with stores[value] {
     let used: i32 = self.used;
-    if (used >= core::builtin::array_len(&self.repr)) {
+    if (used >= self.repr."Array<core:prelude/string.wado/String>::len"()) {
         core::builtin::cold_path();
         self."List<core:prelude/string.wado/String>::grow"();
     }
-    core::builtin::array_set::<String>(&mut self.repr, used, value);
+    self.repr."Array<core:prelude/string.wado/String>^IndexAssign<i32>::index_assign"(used, value);
     self.used = (used + 1);
 }
 
@@ -17462,11 +17462,11 @@ pub fn "List<char>::with_capacity"(capacity: i32) -> List<char> {
 
 pub fn "List<char>::push"(self: &mut List<char>, value: char) with stores[value] {
     let used: i32 = self.used;
-    if (used >= core::builtin::array_len(&self.repr)) {
+    if (used >= self.repr."Array<char>::len"()) {
         core::builtin::cold_path();
         self."List<char>::grow"();
     }
-    core::builtin::array_set::<char>(&mut self.repr, used, value);
+    self.repr."Array<char>^IndexAssign<i32>::index_assign"(used, value);
     self.used = (used + 1);
 }
 
@@ -17500,12 +17500,16 @@ pub fn "List<u8>::len"(self: &List<u8>) -> i32 {
 
 fn "core/builtin/array_fill<u8>"(arr: &mut Array<u8>, offset: i32, value: u8, len: i32);
 
+fn "Array<u8>^IndexAssign<i32>::index_assign"(self: &mut Array<u8>, index: i32, value: u8) with stores[value] {
+    core::builtin::array_set::<u8>(self, index, value);
+}
+
 pub fn "ArraySlice<u8>::internal_new"(repr: &Array<u8>, start: i32, end: i32) -> ArraySlice<u8> with stores[repr] {
     return ArraySlice<u8> { repr: repr, start: start, end: end };
 }
 
 pub fn "ArraySlice<u8>::get_unchecked"(self: &ArraySlice<u8>, index: i32) -> u8 {
-    return "core::builtin::core/builtin/array_get<u8>"(self.repr, (self.start + index));
+    return core::builtin::array_get::<u8>(self.repr, (self.start + index));
 }
 
 fn "core/builtin/select<u64>"(cond: bool, if_true: u64, if_false: u64) -> u64;
@@ -17526,11 +17530,11 @@ fn "core/builtin/select<i8>"(cond: bool, if_true: i8, if_false: i8) -> i8;
 
 pub fn "List<u8>::push"(self: &mut List<u8>, value: u8) with stores[value] {
     let used: i32 = self.used;
-    if (used >= core::builtin::array_len(&self.repr)) {
+    if (used >= self.repr."Array<u8>::len"()) {
         core::builtin::cold_path();
         self."List<u8>::grow"();
     }
-    core::builtin::array_set::<u8>(&mut self.repr, used, value);
+    self.repr."Array<u8>^IndexAssign<i32>::index_assign"(used, value);
     self.used = (used + 1);
 }
 
@@ -17552,7 +17556,9 @@ fn "List<u8>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> List<u8> {
 
 fn "core/builtin/array_new<u8>"(len: i32) -> Array<u8>;
 
-fn "core/builtin/array_get<u8>"(arr: &Array<u8>, idx: i32) -> u8;
+fn "Array<u8>^IndexValue<i32>::index_value"(self: &Array<u8>, index: i32) -> u8 {
+    return core::builtin::array_get::<u8>(self, index);
+}
 
 pub fn "Result<i32,core:prelude/intparse.wado/IntErrorKind>::unwrap"(self: Box<core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/IntErrorKind>>) -> i32 {
     return match self.value {
@@ -17578,7 +17584,7 @@ fn "List<u64>^IndexValue<i32>::index_value"(self: &List<u64>, index: i32) -> u64
                 __r.String::push_str(&String { repr: packed"core:prelude/list.wado", used: 22 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 327 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 333 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"index out of bounds", used: 19 });
                 __r.String::push_str(&String { repr: packed"\ncondition: index < self.used\n", used: 30 });
@@ -17594,7 +17600,7 @@ fn "List<u64>^IndexValue<i32>::index_value"(self: &List<u64>, index: i32) -> u64
             });
         }
     }
-    return core::builtin::array_get::<u64>(&self.repr, index);
+    return self.repr."Array<u64>^IndexValue<i32>::index_value"(index);
 }
 
 pub fn "ArraySlice<u8>^InspectAlt::inspect_alt"(self: &ArraySlice<u8>, f: &mut Formatter) {
@@ -17734,6 +17740,10 @@ pub fn "&Array<u8>^InspectAlt::inspect_alt"(self: &&Array<u8>, f: &mut Formatter
     *inner."Array<u8>^InspectAlt::inspect_alt"(f);
 }
 
+fn "Array<u64>^IndexValue<i32>::index_value"(self: &Array<u64>, index: i32) -> u64 {
+    return core::builtin::array_get::<u64>(self, index);
+}
+
 #[inline(never)]
 fn "core/prelude/types.wado/unwrap_failed<core:prelude/intparse.wado/IntErrorKind>"(msg: String, value: IntErrorKind) -> ! {
     core::rt::panic(__tmpl: {
@@ -17747,19 +17757,27 @@ fn "core/prelude/types.wado/unwrap_failed<core:prelude/intparse.wado/IntErrorKin
 }
 
 pub fn "List<u8>::grow"(self: &mut List<u8>) {
-    let capacity: i32 = core::builtin::array_len(&self.repr);
+    let capacity: i32 = self.repr."Array<u8>::len"();
     let new_capacity: i32 = core::rt::i32_max((capacity * 2), 4);
     let mut new_repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(new_capacity);
     "core::builtin::core/builtin/array_copy<u8>"(&mut new_repr, 0, &self.repr, 0, self.used);
     self.repr = new_repr;
 }
 
+fn "Array<char>^IndexAssign<i32>::index_assign"(self: &mut Array<char>, index: i32, value: char) with stores[value] {
+    core::builtin::array_set::<char>(self, index, value);
+}
+
 pub fn "List<char>::grow"(self: &mut List<char>) {
-    let capacity: i32 = core::builtin::array_len(&self.repr);
+    let capacity: i32 = self.repr."Array<char>::len"();
     let new_capacity: i32 = core::rt::i32_max((capacity * 2), 4);
     let mut new_repr: Array<char> = core::builtin::array_new::<char>(new_capacity);
     core::builtin::array_copy::<char>(&mut new_repr, 0, &self.repr, 0, self.used);
     self.repr = new_repr;
+}
+
+pub fn "Array<char>::len"(self: &Array<char>) -> i32 {
+    return core::builtin::array_len(self);
 }
 
 fn "IterMap<core:prelude/string.wado/StrCharIter,char>^Iterator::next"(self: &mut IterMap<core:prelude/string.wado/StrCharIter,char>) -> Option<char> {
@@ -17781,24 +17799,40 @@ pub fn "List<core:prelude/string.wado/String>::with_capacity"(capacity: i32) -> 
     return List<core:prelude/string.wado/String> { repr: core::builtin::array_new::<String>(capacity), used: 0 };
 }
 
+fn "Array<core:prelude/string.wado/String>^IndexAssign<i32>::index_assign"(self: &mut Array<String>, index: i32, value: String) with stores[value] {
+    core::builtin::array_set::<String>(self, index, value);
+}
+
 pub fn "List<core:prelude/string.wado/String>::grow"(self: &mut List<String>) {
-    let capacity: i32 = core::builtin::array_len(&self.repr);
+    let capacity: i32 = self.repr."Array<core:prelude/string.wado/String>::len"();
     let new_capacity: i32 = core::rt::i32_max((capacity * 2), 4);
     let mut new_repr: Array<String> = core::builtin::array_new::<String>(new_capacity);
     core::builtin::array_copy::<String>(&mut new_repr, 0, &self.repr, 0, self.used);
     self.repr = new_repr;
 }
 
+pub fn "Array<core:prelude/string.wado/String>::len"(self: &Array<String>) -> i32 {
+    return core::builtin::array_len(self);
+}
+
 pub fn "List<[i32,char]>::with_capacity"(capacity: i32) -> List<[i32, char]> {
     return List<[i32,char]> { repr: core::builtin::array_new::<[i32, char]>(capacity), used: 0 };
 }
 
+fn "Array<[i32,char]>^IndexAssign<i32>::index_assign"(self: &mut Array<[i32, char]>, index: i32, value: [i32, char]) with stores[value] {
+    core::builtin::array_set::<[i32, char]>(self, index, value);
+}
+
 pub fn "List<[i32,char]>::grow"(self: &mut List<[i32, char]>) {
-    let capacity: i32 = core::builtin::array_len(&self.repr);
+    let capacity: i32 = self.repr."Array<[i32,char]>::len"();
     let new_capacity: i32 = core::rt::i32_max((capacity * 2), 4);
     let mut new_repr: Array<[i32, char]> = core::builtin::array_new::<[i32, char]>(new_capacity);
     core::builtin::array_copy::<[i32, char]>(&mut new_repr, 0, &self.repr, 0, self.used);
     self.repr = new_repr;
+}
+
+pub fn "Array<[i32,char]>::len"(self: &Array<[i32, char]>) -> i32 {
+    return core::builtin::array_len(self);
 }
 
 pub fn "List<u64>::with_capacity"(capacity: i32) -> List<u64> {
@@ -17807,24 +17841,28 @@ pub fn "List<u64>::with_capacity"(capacity: i32) -> List<u64> {
 
 pub fn "List<u64>::push"(self: &mut List<u64>, value: u64) with stores[value] {
     let used: i32 = self.used;
-    if (used >= core::builtin::array_len(&self.repr)) {
+    if (used >= self.repr."Array<u64>::len"()) {
         core::builtin::cold_path();
         self."List<u64>::grow"();
     }
-    core::builtin::array_set::<u64>(&mut self.repr, used, value);
+    self.repr."Array<u64>^IndexAssign<i32>::index_assign"(used, value);
     self.used = (used + 1);
 }
 
+fn "Array<u64>^IndexAssign<i32>::index_assign"(self: &mut Array<u64>, index: i32, value: u64) with stores[value] {
+    core::builtin::array_set::<u64>(self, index, value);
+}
+
 pub fn "List<u64>::grow"(self: &mut List<u64>) {
-    let capacity: i32 = core::builtin::array_len(&self.repr);
+    let capacity: i32 = self.repr."Array<u64>::len"();
     let new_capacity: i32 = core::rt::i32_max((capacity * 2), 4);
     let mut new_repr: Array<u64> = core::builtin::array_new::<u64>(new_capacity);
     core::builtin::array_copy::<u64>(&mut new_repr, 0, &self.repr, 0, self.used);
     self.repr = new_repr;
 }
 
-fn "Array<u8>^IndexValue<i32>::index_value"(self: &Array<u8>, index: i32) -> u8 {
-    return "core::builtin::core/builtin/array_get<u8>"(self, index);
+pub fn "Array<u64>::len"(self: &Array<u64>) -> i32 {
+    return core::builtin::array_len(self);
 }
 
 pub fn __initialize_module() {
@@ -17903,9 +17941,9 @@ fn "$value_copy$T50"(v: u128) -> u128 {
     return u128 { low: v.low, high: v.high };
 }
 
-fn array_set();
-
 fn array_new();
+
+fn array_set();
 
 fn array_get();
 

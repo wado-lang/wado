@@ -1293,7 +1293,7 @@ fn "core:json/write_escaped_string"(buf, s) {
         l131: loop {
             break_if b130 i >= n;
             __for_0_body: block {
-                b = builtin::array_get_u8(s.repr, i);
+                b = builtin::array_get<u8>(s.repr, i);
                 break_if __for_0_body (if (if b >=u 32 -> i32 {
                     b != 34;
                 } else {
@@ -1411,9 +1411,8 @@ fn "core:json/core/json/from_bytes<wado-compiler/tests/fixtures/serde_json_many_
     let __qm_v: ref "wado-compiler/tests/fixtures/serde_json_many_fields.wado//Wide";
     let __qm_e: ref "core:serde//DeserializeError";
     let v: ref "wado-compiler/tests/fixtures/serde_json_many_fields.wado//Wide";
-    let repr: ref Array<u8>;
     let end: i32;
-    de = struct.new "core:json//JsonDeserializer" { input: ref.as_non_null(repr = input.repr; end = input.used; struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: repr, start: 0, end: end }), pos: 0 };
+    de = struct.new "core:json//JsonDeserializer" { input: ref.as_non_null(end = input.used; struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: end }), pos: 0 };
     let __sroa___match_scrut_0_discriminant: i32;
     let __sroa___match_scrut_0_case0_payload_0: ref null "wado-compiler/tests/fixtures/serde_json_many_fields.wado//Wide";
     let __sroa___match_scrut_0_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -1585,22 +1584,21 @@ fn "core:prelude/string.wado/String::with_capacity"(capacity) {
 }
 
 fn "core:prelude/string.wado/String::as_bytes"(self) {
-    let repr: ref Array<u8>;
     let end: i32;
-    return repr = self.repr, end = self.used, struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: repr, start: 0, end: end };
+    return end = self.used, struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: self.repr, start: 0, end: end };
 }
 
 fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
-    let a_5: i32;
-    let a_7: i32;
+    let a_6: i32;
+    let a_8: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_8 = capacity * 2; a_6 = select i32(a_8 > min_capacity, a_8, min_capacity); select i32(a_6 > 8, a_6, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -1677,57 +1675,131 @@ fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
     let b2_8: u32;
     let b3: u32;
     let code_10: u32;
+    let index_12: i32;
+    let index_15: i32;
+    let index_18: i32;
+    let index_20: i32;
+    let index_23: i32;
+    let index_25: i32;
+    let index_27: i32;
     if self.byte_index >= self.used {
         return 1, 0;
     }
-    b0 = builtin::array_get_u8(self.repr, self.byte_index);
+    index_12 = self.byte_index;
+    b0 = builtin::array_get<u8>(self.repr, index_12);
     self.byte_index = self.byte_index + 1;
     if b0 <u 128 {
         return 0, b0;
     }
     if b0 <u 224 {
-        b1_2 = builtin::array_get_u8(self.repr, self.byte_index);
+        index_15 = self.byte_index;
+        b1_2 = builtin::array_get<u8>(self.repr, index_15);
         self.byte_index = self.byte_index + 1;
         code_3 = ((b0 & 31) << 6) | (b1_2 & 63);
         return 0, code_3;
     }
     if b0 <u 240 {
-        b1_4 = builtin::array_get_u8(self.repr, self.byte_index);
-        b2_5 = builtin::array_get_u8(self.repr, self.byte_index + 1);
+        index_18 = self.byte_index;
+        b1_4 = builtin::array_get<u8>(self.repr, index_18);
+        index_20 = self.byte_index + 1;
+        b2_5 = builtin::array_get<u8>(self.repr, index_20);
         self.byte_index = self.byte_index + 2;
         code_6 = (((b0 & 15) << 12) | ((b1_4 & 63) << 6)) | (b2_5 & 63);
         return 0, code_6;
     }
-    b1_7 = builtin::array_get_u8(self.repr, self.byte_index);
-    b2_8 = builtin::array_get_u8(self.repr, self.byte_index + 1);
-    b3 = builtin::array_get_u8(self.repr, self.byte_index + 2);
+    index_23 = self.byte_index;
+    b1_7 = builtin::array_get<u8>(self.repr, index_23);
+    index_25 = self.byte_index + 1;
+    b2_8 = builtin::array_get<u8>(self.repr, index_25);
+    index_27 = self.byte_index + 2;
+    b3 = builtin::array_get<u8>(self.repr, index_27);
     self.byte_index = self.byte_index + 3;
     code_10 = ((((b0 & 7) << 18) | ((b1_7 & 63) << 12)) | ((b2_8 & 63) << 6)) | (b3 & 63);
     return 0, code_10;
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
+    let self_4: ref Array<u8>;
+    let index_5: i32;
+    let value_6: u8;
+    let self_7: ref Array<u8>;
+    let index_8: i32;
+    let value_9: u8;
+    let self_10: ref Array<u8>;
+    let index_11: i32;
+    let value_12: u8;
+    let self_13: ref Array<u8>;
+    let index_14: i32;
+    let value_15: u8;
+    let self_16: ref Array<u8>;
+    let index_17: i32;
+    let value_18: u8;
+    let self_19: ref Array<u8>;
+    let index_20: i32;
+    let value_21: u8;
+    let self_22: ref Array<u8>;
+    let index_23: i32;
+    let value_24: u8;
+    let self_25: ref Array<u8>;
+    let index_26: i32;
+    let value_27: u8;
+    let self_28: ref Array<u8>;
+    let index_29: i32;
+    let value_30: u8;
+    let self_31: ref Array<u8>;
+    let index_32: i32;
+    let value_33: u8;
     if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if c <u 128 {
-        builtin::array_set_u8(self.repr, self.used, c & 255);
+        self_4 = self.repr;
+        index_5 = self.used;
+        value_6 = c & 255;
+        builtin::array_set_u8(self_4, index_5, value_6);
         self.used = self.used + 1;
     } else if c <u 2048 {
-        builtin::array_set_u8(self.repr, self.used, (192 | (c >>u 6)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | (c & 63)) & 255);
+        self_7 = self.repr;
+        index_8 = self.used;
+        value_9 = (192 | (c >>u 6)) & 255;
+        builtin::array_set_u8(self_7, index_8, value_9);
+        self_10 = self.repr;
+        index_11 = self.used + 1;
+        value_12 = (128 | (c & 63)) & 255;
+        builtin::array_set_u8(self_10, index_11, value_12);
         self.used = self.used + 2;
     } else if c <u 65536 {
-        builtin::array_set_u8(self.repr, self.used, (224 | (c >>u 12)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | (c & 63)) & 255);
+        self_13 = self.repr;
+        index_14 = self.used;
+        value_15 = (224 | (c >>u 12)) & 255;
+        builtin::array_set_u8(self_13, index_14, value_15);
+        self_16 = self.repr;
+        index_17 = self.used + 1;
+        value_18 = (128 | ((c >>u 6) & 63)) & 255;
+        builtin::array_set_u8(self_16, index_17, value_18);
+        self_19 = self.repr;
+        index_20 = self.used + 2;
+        value_21 = (128 | (c & 63)) & 255;
+        builtin::array_set_u8(self_19, index_20, value_21);
         self.used = self.used + 3;
     } else {
-        builtin::array_set_u8(self.repr, self.used, (240 | (c >>u 18)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 12) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((c >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 3, (128 | (c & 63)) & 255);
+        self_22 = self.repr;
+        index_23 = self.used;
+        value_24 = (240 | (c >>u 18)) & 255;
+        builtin::array_set_u8(self_22, index_23, value_24);
+        self_25 = self.repr;
+        index_26 = self.used + 1;
+        value_27 = (128 | ((c >>u 12) & 63)) & 255;
+        builtin::array_set_u8(self_25, index_26, value_27);
+        self_28 = self.repr;
+        index_29 = self.used + 2;
+        value_30 = (128 | ((c >>u 6) & 63)) & 255;
+        builtin::array_set_u8(self_28, index_29, value_30);
+        self_31 = self.repr;
+        index_32 = self.used + 3;
+        value_33 = (128 | (c & 63)) & 255;
+        builtin::array_set_u8(self_31, index_32, value_33);
         self.used = self.used + 4;
     }
 }
@@ -3868,40 +3940,6 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
     let __local_144: ref "core:serde//DeserializeError";
     let __qm_e: ref "core:serde//DeserializeError";
     let __local_5_150: ref null "core:serde//DeserializeError";
-    let d_152: ref "core:json//JsonDeserializer";
-    let d_154: ref "core:json//JsonDeserializer";
-    let d_156: ref "core:json//JsonDeserializer";
-    let d_158: ref "core:json//JsonDeserializer";
-    let d_160: ref "core:json//JsonDeserializer";
-    let d_162: ref "core:json//JsonDeserializer";
-    let d_164: ref "core:json//JsonDeserializer";
-    let d_166: ref "core:json//JsonDeserializer";
-    let d_168: ref "core:json//JsonDeserializer";
-    let d_170: ref "core:json//JsonDeserializer";
-    let d_172: ref "core:json//JsonDeserializer";
-    let d_174: ref "core:json//JsonDeserializer";
-    let d_176: ref "core:json//JsonDeserializer";
-    let d_178: ref "core:json//JsonDeserializer";
-    let d_180: ref "core:json//JsonDeserializer";
-    let d_182: ref "core:json//JsonDeserializer";
-    let d_184: ref "core:json//JsonDeserializer";
-    let d_186: ref "core:json//JsonDeserializer";
-    let d_188: ref "core:json//JsonDeserializer";
-    let d_190: ref "core:json//JsonDeserializer";
-    let d_192: ref "core:json//JsonDeserializer";
-    let d_194: ref "core:json//JsonDeserializer";
-    let d_196: ref "core:json//JsonDeserializer";
-    let d_198: ref "core:json//JsonDeserializer";
-    let d_200: ref "core:json//JsonDeserializer";
-    let d_202: ref "core:json//JsonDeserializer";
-    let d_204: ref "core:json//JsonDeserializer";
-    let d_206: ref "core:json//JsonDeserializer";
-    let d_208: ref "core:json//JsonDeserializer";
-    let d_210: ref "core:json//JsonDeserializer";
-    let d_212: ref "core:json//JsonDeserializer";
-    let d_214: ref "core:json//JsonDeserializer";
-    let d_216: ref "core:json//JsonDeserializer";
-    let d_218: ref "core:json//JsonDeserializer";
     __result = __inline_JsonDeserializer_Deserializer__begin_struct_0: block -> ref "core:prelude/types.wado//Result<core:json/JsonStructAccess,core:serde/DeserializeError>" {
         __local_5_150 = "core:json/JsonDeserializer::expect_char"(d, 123);
         if @likely(ref.is_null(__local_5_150)) {
@@ -4007,8 +4045,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                                                                                                                                 let __sroa___local_73_discriminant: i32;
                                                                                                                                                                 let __sroa___local_73_case0_payload_0: i32;
                                                                                                                                                                 let __sroa___local_73_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                                                                                                                                d_152 = __local_2.de;
-                                                                                                                                                                multivalue_bind [__sroa___local_73_discriminant, __sroa___local_73_case0_payload_0, __sroa___local_73_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_152);
+                                                                                                                                                                multivalue_bind [__sroa___local_73_discriminant, __sroa___local_73_case0_payload_0, __sroa___local_73_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                                                                                                                                 if __sroa___local_73_discriminant == 0 {
                                                                                                                                                                     __local_3 = __sroa___local_73_case0_payload_0;
                                                                                                                                                                     __local_37 = 1;
@@ -4020,8 +4057,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                                                                                                                             let __sroa___local_75_discriminant: i32;
                                                                                                                                                             let __sroa___local_75_case0_payload_0: i32;
                                                                                                                                                             let __sroa___local_75_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                                                                                                                            d_154 = __local_2.de;
-                                                                                                                                                            multivalue_bind [__sroa___local_75_discriminant, __sroa___local_75_case0_payload_0, __sroa___local_75_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_154);
+                                                                                                                                                            multivalue_bind [__sroa___local_75_discriminant, __sroa___local_75_case0_payload_0, __sroa___local_75_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                                                                                                                             if __sroa___local_75_discriminant == 0 {
                                                                                                                                                                 __local_4 = __sroa___local_75_case0_payload_0;
                                                                                                                                                                 __local_38 = 1;
@@ -4033,8 +4069,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                                                                                                                         let __sroa___local_77_discriminant: i32;
                                                                                                                                                         let __sroa___local_77_case0_payload_0: i32;
                                                                                                                                                         let __sroa___local_77_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                                                                                                                        d_156 = __local_2.de;
-                                                                                                                                                        multivalue_bind [__sroa___local_77_discriminant, __sroa___local_77_case0_payload_0, __sroa___local_77_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_156);
+                                                                                                                                                        multivalue_bind [__sroa___local_77_discriminant, __sroa___local_77_case0_payload_0, __sroa___local_77_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                                                                                                                         if __sroa___local_77_discriminant == 0 {
                                                                                                                                                             __local_5_5 = __sroa___local_77_case0_payload_0;
                                                                                                                                                             __local_39 = 1;
@@ -4046,8 +4081,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                                                                                                                     let __sroa___local_79_discriminant: i32;
                                                                                                                                                     let __sroa___local_79_case0_payload_0: i32;
                                                                                                                                                     let __sroa___local_79_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                                                                                                                    d_158 = __local_2.de;
-                                                                                                                                                    multivalue_bind [__sroa___local_79_discriminant, __sroa___local_79_case0_payload_0, __sroa___local_79_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_158);
+                                                                                                                                                    multivalue_bind [__sroa___local_79_discriminant, __sroa___local_79_case0_payload_0, __sroa___local_79_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                                                                                                                     if __sroa___local_79_discriminant == 0 {
                                                                                                                                                         __local_6 = __sroa___local_79_case0_payload_0;
                                                                                                                                                         __local_40 = 1;
@@ -4059,8 +4093,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                                                                                                                 let __sroa___local_81_discriminant: i32;
                                                                                                                                                 let __sroa___local_81_case0_payload_0: i32;
                                                                                                                                                 let __sroa___local_81_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                                                                                                                d_160 = __local_2.de;
-                                                                                                                                                multivalue_bind [__sroa___local_81_discriminant, __sroa___local_81_case0_payload_0, __sroa___local_81_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_160);
+                                                                                                                                                multivalue_bind [__sroa___local_81_discriminant, __sroa___local_81_case0_payload_0, __sroa___local_81_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                                                                                                                 if __sroa___local_81_discriminant == 0 {
                                                                                                                                                     __local_7 = __sroa___local_81_case0_payload_0;
                                                                                                                                                     __local_41 = 1;
@@ -4072,8 +4105,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                                                                                                             let __sroa___local_83_discriminant: i32;
                                                                                                                                             let __sroa___local_83_case0_payload_0: i32;
                                                                                                                                             let __sroa___local_83_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                                                                                                            d_162 = __local_2.de;
-                                                                                                                                            multivalue_bind [__sroa___local_83_discriminant, __sroa___local_83_case0_payload_0, __sroa___local_83_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_162);
+                                                                                                                                            multivalue_bind [__sroa___local_83_discriminant, __sroa___local_83_case0_payload_0, __sroa___local_83_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                                                                                                             if __sroa___local_83_discriminant == 0 {
                                                                                                                                                 __local_8 = __sroa___local_83_case0_payload_0;
                                                                                                                                                 __local_42 = 1;
@@ -4085,8 +4117,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                                                                                                         let __sroa___local_85_discriminant: i32;
                                                                                                                                         let __sroa___local_85_case0_payload_0: i32;
                                                                                                                                         let __sroa___local_85_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                                                                                                        d_164 = __local_2.de;
-                                                                                                                                        multivalue_bind [__sroa___local_85_discriminant, __sroa___local_85_case0_payload_0, __sroa___local_85_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_164);
+                                                                                                                                        multivalue_bind [__sroa___local_85_discriminant, __sroa___local_85_case0_payload_0, __sroa___local_85_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                                                                                                         if __sroa___local_85_discriminant == 0 {
                                                                                                                                             __local_9 = __sroa___local_85_case0_payload_0;
                                                                                                                                             __local_43 = 1;
@@ -4098,8 +4129,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                                                                                                     let __sroa___local_87_discriminant: i32;
                                                                                                                                     let __sroa___local_87_case0_payload_0: i32;
                                                                                                                                     let __sroa___local_87_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                                                                                                    d_166 = __local_2.de;
-                                                                                                                                    multivalue_bind [__sroa___local_87_discriminant, __sroa___local_87_case0_payload_0, __sroa___local_87_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_166);
+                                                                                                                                    multivalue_bind [__sroa___local_87_discriminant, __sroa___local_87_case0_payload_0, __sroa___local_87_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                                                                                                     if __sroa___local_87_discriminant == 0 {
                                                                                                                                         __local_10 = __sroa___local_87_case0_payload_0;
                                                                                                                                         __local_44 = 1;
@@ -4111,8 +4141,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                                                                                                 let __sroa___local_89_discriminant: i32;
                                                                                                                                 let __sroa___local_89_case0_payload_0: i32;
                                                                                                                                 let __sroa___local_89_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                                                                                                d_168 = __local_2.de;
-                                                                                                                                multivalue_bind [__sroa___local_89_discriminant, __sroa___local_89_case0_payload_0, __sroa___local_89_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_168);
+                                                                                                                                multivalue_bind [__sroa___local_89_discriminant, __sroa___local_89_case0_payload_0, __sroa___local_89_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                                                                                                 if __sroa___local_89_discriminant == 0 {
                                                                                                                                     __local_11 = __sroa___local_89_case0_payload_0;
                                                                                                                                     __local_45 = 1;
@@ -4124,8 +4153,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                                                                                             let __sroa___local_91_discriminant: i32;
                                                                                                                             let __sroa___local_91_case0_payload_0: i32;
                                                                                                                             let __sroa___local_91_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                                                                                            d_170 = __local_2.de;
-                                                                                                                            multivalue_bind [__sroa___local_91_discriminant, __sroa___local_91_case0_payload_0, __sroa___local_91_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_170);
+                                                                                                                            multivalue_bind [__sroa___local_91_discriminant, __sroa___local_91_case0_payload_0, __sroa___local_91_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                                                                                             if __sroa___local_91_discriminant == 0 {
                                                                                                                                 __local_12 = __sroa___local_91_case0_payload_0;
                                                                                                                                 __local_46 = 1;
@@ -4137,8 +4165,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                                                                                         let __sroa___local_93_discriminant: i32;
                                                                                                                         let __sroa___local_93_case0_payload_0: i32;
                                                                                                                         let __sroa___local_93_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                                                                                        d_172 = __local_2.de;
-                                                                                                                        multivalue_bind [__sroa___local_93_discriminant, __sroa___local_93_case0_payload_0, __sroa___local_93_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_172);
+                                                                                                                        multivalue_bind [__sroa___local_93_discriminant, __sroa___local_93_case0_payload_0, __sroa___local_93_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                                                                                         if __sroa___local_93_discriminant == 0 {
                                                                                                                             __local_13 = __sroa___local_93_case0_payload_0;
                                                                                                                             __local_47 = 1;
@@ -4150,8 +4177,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                                                                                     let __sroa___local_95_discriminant: i32;
                                                                                                                     let __sroa___local_95_case0_payload_0: i32;
                                                                                                                     let __sroa___local_95_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                                                                                    d_174 = __local_2.de;
-                                                                                                                    multivalue_bind [__sroa___local_95_discriminant, __sroa___local_95_case0_payload_0, __sroa___local_95_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_174);
+                                                                                                                    multivalue_bind [__sroa___local_95_discriminant, __sroa___local_95_case0_payload_0, __sroa___local_95_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                                                                                     if __sroa___local_95_discriminant == 0 {
                                                                                                                         __local_14 = __sroa___local_95_case0_payload_0;
                                                                                                                         __local_48 = 1;
@@ -4163,8 +4189,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                                                                                 let __sroa___local_97_discriminant: i32;
                                                                                                                 let __sroa___local_97_case0_payload_0: i32;
                                                                                                                 let __sroa___local_97_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                                                                                d_176 = __local_2.de;
-                                                                                                                multivalue_bind [__sroa___local_97_discriminant, __sroa___local_97_case0_payload_0, __sroa___local_97_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_176);
+                                                                                                                multivalue_bind [__sroa___local_97_discriminant, __sroa___local_97_case0_payload_0, __sroa___local_97_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                                                                                 if __sroa___local_97_discriminant == 0 {
                                                                                                                     __local_15 = __sroa___local_97_case0_payload_0;
                                                                                                                     __local_49 = 1;
@@ -4176,8 +4201,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                                                                             let __sroa___local_99_discriminant: i32;
                                                                                                             let __sroa___local_99_case0_payload_0: i32;
                                                                                                             let __sroa___local_99_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                                                                            d_178 = __local_2.de;
-                                                                                                            multivalue_bind [__sroa___local_99_discriminant, __sroa___local_99_case0_payload_0, __sroa___local_99_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_178);
+                                                                                                            multivalue_bind [__sroa___local_99_discriminant, __sroa___local_99_case0_payload_0, __sroa___local_99_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                                                                             if __sroa___local_99_discriminant == 0 {
                                                                                                                 __local_16 = __sroa___local_99_case0_payload_0;
                                                                                                                 __local_50 = 1;
@@ -4189,8 +4213,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                                                                         let __sroa___local_101_discriminant: i32;
                                                                                                         let __sroa___local_101_case0_payload_0: i32;
                                                                                                         let __sroa___local_101_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                                                                        d_180 = __local_2.de;
-                                                                                                        multivalue_bind [__sroa___local_101_discriminant, __sroa___local_101_case0_payload_0, __sroa___local_101_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_180);
+                                                                                                        multivalue_bind [__sroa___local_101_discriminant, __sroa___local_101_case0_payload_0, __sroa___local_101_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                                                                         if __sroa___local_101_discriminant == 0 {
                                                                                                             __local_17 = __sroa___local_101_case0_payload_0;
                                                                                                             __local_51 = 1;
@@ -4202,8 +4225,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                                                                     let __sroa___local_103_discriminant: i32;
                                                                                                     let __sroa___local_103_case0_payload_0: i32;
                                                                                                     let __sroa___local_103_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                                                                    d_182 = __local_2.de;
-                                                                                                    multivalue_bind [__sroa___local_103_discriminant, __sroa___local_103_case0_payload_0, __sroa___local_103_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_182);
+                                                                                                    multivalue_bind [__sroa___local_103_discriminant, __sroa___local_103_case0_payload_0, __sroa___local_103_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                                                                     if __sroa___local_103_discriminant == 0 {
                                                                                                         __local_18 = __sroa___local_103_case0_payload_0;
                                                                                                         __local_52 = 1;
@@ -4215,8 +4237,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                                                                 let __sroa___local_105_discriminant: i32;
                                                                                                 let __sroa___local_105_case0_payload_0: i32;
                                                                                                 let __sroa___local_105_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                                                                d_184 = __local_2.de;
-                                                                                                multivalue_bind [__sroa___local_105_discriminant, __sroa___local_105_case0_payload_0, __sroa___local_105_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_184);
+                                                                                                multivalue_bind [__sroa___local_105_discriminant, __sroa___local_105_case0_payload_0, __sroa___local_105_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                                                                 if __sroa___local_105_discriminant == 0 {
                                                                                                     __local_19 = __sroa___local_105_case0_payload_0;
                                                                                                     __local_53 = 1;
@@ -4228,8 +4249,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                                                             let __sroa___local_107_discriminant: i32;
                                                                                             let __sroa___local_107_case0_payload_0: i32;
                                                                                             let __sroa___local_107_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                                                            d_186 = __local_2.de;
-                                                                                            multivalue_bind [__sroa___local_107_discriminant, __sroa___local_107_case0_payload_0, __sroa___local_107_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_186);
+                                                                                            multivalue_bind [__sroa___local_107_discriminant, __sroa___local_107_case0_payload_0, __sroa___local_107_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                                                             if __sroa___local_107_discriminant == 0 {
                                                                                                 __local_20 = __sroa___local_107_case0_payload_0;
                                                                                                 __local_54 = 1;
@@ -4241,8 +4261,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                                                         let __sroa___local_109_discriminant: i32;
                                                                                         let __sroa___local_109_case0_payload_0: i32;
                                                                                         let __sroa___local_109_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                                                        d_188 = __local_2.de;
-                                                                                        multivalue_bind [__sroa___local_109_discriminant, __sroa___local_109_case0_payload_0, __sroa___local_109_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_188);
+                                                                                        multivalue_bind [__sroa___local_109_discriminant, __sroa___local_109_case0_payload_0, __sroa___local_109_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                                                         if __sroa___local_109_discriminant == 0 {
                                                                                             __local_21 = __sroa___local_109_case0_payload_0;
                                                                                             __local_55 = 1;
@@ -4254,8 +4273,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                                                     let __sroa___local_111_discriminant: i32;
                                                                                     let __sroa___local_111_case0_payload_0: i32;
                                                                                     let __sroa___local_111_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                                                    d_190 = __local_2.de;
-                                                                                    multivalue_bind [__sroa___local_111_discriminant, __sroa___local_111_case0_payload_0, __sroa___local_111_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_190);
+                                                                                    multivalue_bind [__sroa___local_111_discriminant, __sroa___local_111_case0_payload_0, __sroa___local_111_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                                                     if __sroa___local_111_discriminant == 0 {
                                                                                         __local_22 = __sroa___local_111_case0_payload_0;
                                                                                         __local_56 = 1;
@@ -4267,8 +4285,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                                                 let __sroa___local_113_discriminant: i32;
                                                                                 let __sroa___local_113_case0_payload_0: i32;
                                                                                 let __sroa___local_113_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                                                d_192 = __local_2.de;
-                                                                                multivalue_bind [__sroa___local_113_discriminant, __sroa___local_113_case0_payload_0, __sroa___local_113_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_192);
+                                                                                multivalue_bind [__sroa___local_113_discriminant, __sroa___local_113_case0_payload_0, __sroa___local_113_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                                                 if __sroa___local_113_discriminant == 0 {
                                                                                     __local_23 = __sroa___local_113_case0_payload_0;
                                                                                     __local_57 = 1;
@@ -4280,8 +4297,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                                             let __sroa___local_115_discriminant: i32;
                                                                             let __sroa___local_115_case0_payload_0: i32;
                                                                             let __sroa___local_115_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                                            d_194 = __local_2.de;
-                                                                            multivalue_bind [__sroa___local_115_discriminant, __sroa___local_115_case0_payload_0, __sroa___local_115_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_194);
+                                                                            multivalue_bind [__sroa___local_115_discriminant, __sroa___local_115_case0_payload_0, __sroa___local_115_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                                             if __sroa___local_115_discriminant == 0 {
                                                                                 __local_24 = __sroa___local_115_case0_payload_0;
                                                                                 __local_58 = 1;
@@ -4293,8 +4309,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                                         let __sroa___local_117_discriminant: i32;
                                                                         let __sroa___local_117_case0_payload_0: i32;
                                                                         let __sroa___local_117_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                                        d_196 = __local_2.de;
-                                                                        multivalue_bind [__sroa___local_117_discriminant, __sroa___local_117_case0_payload_0, __sroa___local_117_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_196);
+                                                                        multivalue_bind [__sroa___local_117_discriminant, __sroa___local_117_case0_payload_0, __sroa___local_117_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                                         if __sroa___local_117_discriminant == 0 {
                                                                             __local_25 = __sroa___local_117_case0_payload_0;
                                                                             __local_59 = 1;
@@ -4306,8 +4321,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                                     let __sroa___local_119_discriminant: i32;
                                                                     let __sroa___local_119_case0_payload_0: i32;
                                                                     let __sroa___local_119_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                                    d_198 = __local_2.de;
-                                                                    multivalue_bind [__sroa___local_119_discriminant, __sroa___local_119_case0_payload_0, __sroa___local_119_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_198);
+                                                                    multivalue_bind [__sroa___local_119_discriminant, __sroa___local_119_case0_payload_0, __sroa___local_119_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                                     if __sroa___local_119_discriminant == 0 {
                                                                         __local_26 = __sroa___local_119_case0_payload_0;
                                                                         __local_60 = 1;
@@ -4319,8 +4333,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                                 let __sroa___local_121_discriminant: i32;
                                                                 let __sroa___local_121_case0_payload_0: i32;
                                                                 let __sroa___local_121_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                                d_200 = __local_2.de;
-                                                                multivalue_bind [__sroa___local_121_discriminant, __sroa___local_121_case0_payload_0, __sroa___local_121_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_200);
+                                                                multivalue_bind [__sroa___local_121_discriminant, __sroa___local_121_case0_payload_0, __sroa___local_121_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                                 if __sroa___local_121_discriminant == 0 {
                                                                     __local_27 = __sroa___local_121_case0_payload_0;
                                                                     __local_61 = 1;
@@ -4332,8 +4345,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                             let __sroa___local_123_discriminant: i32;
                                                             let __sroa___local_123_case0_payload_0: i32;
                                                             let __sroa___local_123_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                            d_202 = __local_2.de;
-                                                            multivalue_bind [__sroa___local_123_discriminant, __sroa___local_123_case0_payload_0, __sroa___local_123_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_202);
+                                                            multivalue_bind [__sroa___local_123_discriminant, __sroa___local_123_case0_payload_0, __sroa___local_123_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                             if __sroa___local_123_discriminant == 0 {
                                                                 __local_28 = __sroa___local_123_case0_payload_0;
                                                                 __local_62 = 1;
@@ -4345,8 +4357,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                         let __sroa___local_125_discriminant: i32;
                                                         let __sroa___local_125_case0_payload_0: i32;
                                                         let __sroa___local_125_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                        d_204 = __local_2.de;
-                                                        multivalue_bind [__sroa___local_125_discriminant, __sroa___local_125_case0_payload_0, __sroa___local_125_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_204);
+                                                        multivalue_bind [__sroa___local_125_discriminant, __sroa___local_125_case0_payload_0, __sroa___local_125_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                         if __sroa___local_125_discriminant == 0 {
                                                             __local_29 = __sroa___local_125_case0_payload_0;
                                                             __local_63 = 1;
@@ -4358,8 +4369,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                     let __sroa___local_127_discriminant: i32;
                                                     let __sroa___local_127_case0_payload_0: i32;
                                                     let __sroa___local_127_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                    d_206 = __local_2.de;
-                                                    multivalue_bind [__sroa___local_127_discriminant, __sroa___local_127_case0_payload_0, __sroa___local_127_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_206);
+                                                    multivalue_bind [__sroa___local_127_discriminant, __sroa___local_127_case0_payload_0, __sroa___local_127_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                     if __sroa___local_127_discriminant == 0 {
                                                         __local_30 = __sroa___local_127_case0_payload_0;
                                                         __local_64 = 1;
@@ -4371,8 +4381,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                                 let __sroa___local_129_discriminant: i32;
                                                 let __sroa___local_129_case0_payload_0: i32;
                                                 let __sroa___local_129_case1_payload_0: ref null "core:serde//DeserializeError";
-                                                d_208 = __local_2.de;
-                                                multivalue_bind [__sroa___local_129_discriminant, __sroa___local_129_case0_payload_0, __sroa___local_129_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_208);
+                                                multivalue_bind [__sroa___local_129_discriminant, __sroa___local_129_case0_payload_0, __sroa___local_129_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                                 if __sroa___local_129_discriminant == 0 {
                                                     __local_31 = __sroa___local_129_case0_payload_0;
                                                     __local_65 = 1;
@@ -4384,8 +4393,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                             let __sroa___local_131_discriminant: i32;
                                             let __sroa___local_131_case0_payload_0: i32;
                                             let __sroa___local_131_case1_payload_0: ref null "core:serde//DeserializeError";
-                                            d_210 = __local_2.de;
-                                            multivalue_bind [__sroa___local_131_discriminant, __sroa___local_131_case0_payload_0, __sroa___local_131_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_210);
+                                            multivalue_bind [__sroa___local_131_discriminant, __sroa___local_131_case0_payload_0, __sroa___local_131_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                             if __sroa___local_131_discriminant == 0 {
                                                 __local_32 = __sroa___local_131_case0_payload_0;
                                                 __local_66 = 1;
@@ -4397,8 +4405,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                         let __sroa___local_133_discriminant: i32;
                                         let __sroa___local_133_case0_payload_0: i32;
                                         let __sroa___local_133_case1_payload_0: ref null "core:serde//DeserializeError";
-                                        d_212 = __local_2.de;
-                                        multivalue_bind [__sroa___local_133_discriminant, __sroa___local_133_case0_payload_0, __sroa___local_133_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_212);
+                                        multivalue_bind [__sroa___local_133_discriminant, __sroa___local_133_case0_payload_0, __sroa___local_133_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                         if __sroa___local_133_discriminant == 0 {
                                             __local_33 = __sroa___local_133_case0_payload_0;
                                             __local_67 = 1;
@@ -4410,8 +4417,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                     let __sroa___local_135_discriminant: i32;
                                     let __sroa___local_135_case0_payload_0: i32;
                                     let __sroa___local_135_case1_payload_0: ref null "core:serde//DeserializeError";
-                                    d_214 = __local_2.de;
-                                    multivalue_bind [__sroa___local_135_discriminant, __sroa___local_135_case0_payload_0, __sroa___local_135_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_214);
+                                    multivalue_bind [__sroa___local_135_discriminant, __sroa___local_135_case0_payload_0, __sroa___local_135_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                     if __sroa___local_135_discriminant == 0 {
                                         __local_34 = __sroa___local_135_case0_payload_0;
                                         __local_68 = 1;
@@ -4423,8 +4429,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                                 let __sroa___local_137_discriminant: i32;
                                 let __sroa___local_137_case0_payload_0: i32;
                                 let __sroa___local_137_case1_payload_0: ref null "core:serde//DeserializeError";
-                                d_216 = __local_2.de;
-                                multivalue_bind [__sroa___local_137_discriminant, __sroa___local_137_case0_payload_0, __sroa___local_137_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_216);
+                                multivalue_bind [__sroa___local_137_discriminant, __sroa___local_137_case0_payload_0, __sroa___local_137_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                                 if __sroa___local_137_discriminant == 0 {
                                     __local_35 = __sroa___local_137_case0_payload_0;
                                     __local_69 = 1;
@@ -4436,8 +4441,7 @@ fn "wado-compiler/tests/fixtures/serde_json_many_fields.wado/Wide^Deserialize::d
                             let __sroa___local_139_discriminant: i32;
                             let __sroa___local_139_case0_payload_0: i32;
                             let __sroa___local_139_case1_payload_0: ref null "core:serde//DeserializeError";
-                            d_218 = __local_2.de;
-                            multivalue_bind [__sroa___local_139_discriminant, __sroa___local_139_case0_payload_0, __sroa___local_139_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_218);
+                            multivalue_bind [__sroa___local_139_discriminant, __sroa___local_139_case0_payload_0, __sroa___local_139_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_2.de);
                             if __sroa___local_139_discriminant == 0 {
                                 __local_36 = local.tee __local_140(__sroa___local_139_case0_payload_0);
                             } else {
