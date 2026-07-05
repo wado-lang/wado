@@ -34,7 +34,8 @@ fn render_blocks(lines: &List<String>, start: i32, end: i32) -> String {
                 i = render_fenced_code(lines, i, end, ch, fence_len, &info, &mut out);
                 continue;
             },
-            None => {},
+            None => {
+            },
         }
         let level = heading_level(&line);
         if level > 0 {
@@ -491,7 +492,8 @@ fn render_list(lines: &List<String>, start: i32, end: i32, out: &mut List<String
                     content_col = cc;
                 }
             },
-            None => {},
+            None => {
+            },
         }
         if content_col < 0 {
             break;
@@ -514,11 +516,7 @@ fn render_list(lines: &List<String>, start: i32, end: i32, out: &mut List<String
         }
     }
 
-    let tag = if is_ordered {
-        "ol"
-    } else {
-        "ul"
-    };
+    let tag = if is_ordered { "ol" } else { "ul" };
     let joined = items.join("\n");
     out.push(`<{tag}>\n{joined}\n</{tag}>`);
     return k;

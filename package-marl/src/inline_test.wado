@@ -25,18 +25,15 @@ test "render_inline matches code span by backtick run length" {
 }
 
 test "render_inline renders links with escaped href" {
-    assert render_inline(&"[home](http://example.com)")
-        == "<a href=\"http://example.com\">home</a>";
+    assert render_inline(&"[home](http://example.com)") == "<a href=\"http://example.com\">home</a>";
 }
 
 test "render_inline renders images" {
-    assert render_inline(&"![a cat](cat.png)")
-        == "<img src=\"cat.png\" alt=\"a cat\" />";
+    assert render_inline(&"![a cat](cat.png)") == "<img src=\"cat.png\" alt=\"a cat\" />";
 }
 
 test "render_inline renders inline markup inside link text" {
-    assert render_inline(&"[**bold**](/x)")
-        == "<a href=\"/x\"><strong>bold</strong></a>";
+    assert render_inline(&"[**bold**](/x)") == "<a href=\"/x\"><strong>bold</strong></a>";
 }
 
 test "render_inline honors backslash escapes" {
@@ -54,13 +51,11 @@ test "render_inline escapes plain angle brackets" {
 }
 
 test "render_inline autolinks bare http urls" {
-    assert render_inline(&"see https://wado.example/docs here")
-        == "see <a href=\"https://wado.example/docs\">https://wado.example/docs</a> here";
+    assert render_inline(&"see https://wado.example/docs here") == "see <a href=\"https://wado.example/docs\">https://wado.example/docs</a> here";
 }
 
 test "render_inline trims trailing punctuation from autolinks" {
-    assert render_inline(&"visit http://a.example.")
-        == "visit <a href=\"http://a.example\">http://a.example</a>.";
+    assert render_inline(&"visit http://a.example.") == "visit <a href=\"http://a.example\">http://a.example</a>.";
 }
 
 test "render_inline makes a hard break on two trailing spaces" {

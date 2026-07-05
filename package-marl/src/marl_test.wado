@@ -52,13 +52,11 @@ test "render emits a fenced code block" {
 }
 
 test "render tags a fenced code block with its language" {
-    assert render(&"```wado\nlet x = 1;\n```")
-        == "<pre><code class=\"language-wado\">let x = 1;\n</code></pre>";
+    assert render(&"```wado\nlet x = 1;\n```") == "<pre><code class=\"language-wado\">let x = 1;\n</code></pre>";
 }
 
 test "render escapes html inside a code fence but not markdown" {
-    assert render(&"```\na < b & *c*\n```")
-        == "<pre><code>a &lt; b &amp; *c*\n</code></pre>";
+    assert render(&"```\na < b & *c*\n```") == "<pre><code>a &lt; b &amp; *c*\n</code></pre>";
 }
 
 test "render accepts tilde fences" {
@@ -66,8 +64,7 @@ test "render accepts tilde fences" {
 }
 
 test "render wraps shorter fences inside a longer fence" {
-    assert render(&"````\n```\ninner\n```\n````")
-        == "<pre><code>```\ninner\n```\n</code></pre>";
+    assert render(&"````\n```\ninner\n```\n````") == "<pre><code>```\ninner\n```\n</code></pre>";
 }
 
 test "render closes an unterminated fence at end of input" {
@@ -87,28 +84,23 @@ test "render renders block structure inside a blockquote" {
 }
 
 test "render emits an unordered list" {
-    assert render(&"- a\n- b\n- c")
-        == "<ul>\n<li>a</li>\n<li>b</li>\n<li>c</li>\n</ul>";
+    assert render(&"- a\n- b\n- c") == "<ul>\n<li>a</li>\n<li>b</li>\n<li>c</li>\n</ul>";
 }
 
 test "render emits an ordered list" {
-    assert render(&"1. one\n2. two")
-        == "<ol>\n<li>one</li>\n<li>two</li>\n</ol>";
+    assert render(&"1. one\n2. two") == "<ol>\n<li>one</li>\n<li>two</li>\n</ol>";
 }
 
 test "render renders inline markup in list items" {
-    assert render(&"- **bold** item")
-        == "<ul>\n<li><strong>bold</strong> item</li>\n</ul>";
+    assert render(&"- **bold** item") == "<ul>\n<li><strong>bold</strong> item</li>\n</ul>";
 }
 
 test "render ends a list at a blank line" {
-    assert render(&"- a\n\ntext")
-        == "<ul>\n<li>a</li>\n</ul>\n<p>text</p>";
+    assert render(&"- a\n\ntext") == "<ul>\n<li>a</li>\n</ul>\n<p>text</p>";
 }
 
 test "render nests a list under an item" {
-    assert render(&"- parent\n  - child")
-        == "<ul>\n<li>\n<p>parent</p>\n<ul>\n<li>child</li>\n</ul>\n</li>\n</ul>";
+    assert render(&"- parent\n  - child") == "<ul>\n<li>\n<p>parent</p>\n<ul>\n<li>child</li>\n</ul>\n</li>\n</ul>";
 }
 
 test "render emits a GFM table" {
