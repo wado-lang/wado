@@ -24,6 +24,44 @@ wado list [filter]                 # list cached packages
 wado exec <dep-name> [args...]     # run dependency's command entry point
 ```
 
+### Command Tiers: `compile` vs `build`
+
+The CLI splits into a file-scoped compiler primitive and a manifest-aware
+project orchestrator. This is where dependency resolution, locking, caching, and
+metadata embedding belong — the primitive stays free of all of it.
+
+```
+compile   file.wado → wasm/wat    pure, manifest-free, syscall-light   ← primitive
+   ↑
+build     project → build/<world>.wasm    resolve deps · lock · embed metadata · multi-world   ← orchestrator
+   ↑
+run / serve / test / publish      build, then execute / serve / test / push    ← drivers
+```
+
+- `wado compile <file>` is a pure compiler primitive: no `wado.toml`, no
+  dependencies, no metadata embedding. It is the deterministic path used by
+  tests, the LSP, `--wat-to-stdout`, `--no-validate`, and debugging, and it
+  keeps the compiler agnostic to package management. Precedent: `rustc` vs
+  `cargo build`, `go tool compile` vs `go build`, `zig build-exe` vs `zig build`.
+- `wado build` owns the project tier: read the manifest, resolve/lock
+  dependencies, compile each declared world through the `compile` primitive,
+  embed `[package]` metadata, and write `build/<world>.wasm`. All dependency,
+  lock, and cache machinery lives here — one home.
+- `run` / `serve` / `test` / `publish` share the `build` core in project mode.
+  A bare-file argument (`wado run file.wado`) routes straight through the
+  standalone `compile` primitive instead.
+
+| Tier                  | Commands                                                             | Reads manifest/deps |
+| --------------------- | -------------------------------------------------------------------- | ------------------- |
+| Compiler primitives   | `compile` `check` `dump` `query` `format` `doc` `wit` `syntax` `lsp` | No                  |
+| Project build & run   | `build` `run` `serve` `test` `publish`                               | Yes                 |
+| Dependency management | `add` `remove` `update` `fetch` `list` `exec`                        | Yes                 |
+| Scaffolding           | `init`                                                               | Writes it           |
+
+This supersedes the earlier model where a bare `wado compile` (no argument or a
+directory) performed the manifest-driven project build. That behavior moves to
+`wado build`; `wado compile` now always compiles a single explicit target.
+
 ### `wado init`
 
 Create a new `wado.toml` interactively.
@@ -162,7 +200,7 @@ COPY wado.toml wado.lock ./
 RUN wado fetch                     # cached layer: dependencies only
 
 COPY src/ ./src/
-RUN wado compile -o app.wasm       # rebuilds only when source changes
+RUN wado build                     # rebuilds only when source changes
 ```
 
 If `wado.lock` exists, `wado fetch` downloads the exact versions recorded in the lock file. If `wado.lock` does not exist, it runs resolution first (generates `wado.lock`), then downloads.
@@ -253,7 +291,8 @@ wado list --path | xargs -I{} ls {}/wado.toml
 
 ### Entry Point and CLI Commands
 
-When `wado.toml` is present, the existing CLI commands use the entry point fields:
+When `wado.toml` is present, the project-tier commands use the entry point
+fields (see [Command Tiers](#command-tiers-compile-vs-build)):
 
 ```sh
 # Without wado.toml (single-file mode, unchanged)
@@ -261,33 +300,35 @@ wado run file.wado
 wado serve file.wado
 
 # With wado.toml (entry point auto-discovered)
+wado build                         # builds every declared world → build/<world>.wasm
 wado run                           # uses [package].command
 wado serve                         # uses [package].service
-wado compile -o out.wasm           # compiles the command entry point
 ```
 
-When a file argument is provided, it overrides the entry point from `wado.toml`.
+`wado compile` no longer reads `wado.toml`; project builds go through
+`wado build`. When a file argument is provided to a project-tier command, it
+overrides the entry point from `wado.toml` (routing that one target through the
+standalone `compile` path).
 
 #### Default output path
 
-Without `-o`, a manifest-driven build (no argument or a directory argument)
-writes `<manifest_root>/build/<world>.wasm`, keeping artifacts out of the source
-tree and giving each world its own file (mirroring kiln's `build/` layout).
-`<world>` is the target Component Model world FQ sanitized to a path segment
-(`@version` dropped, `:`/`/` → `-`), e.g. `build/wasi-cli-command.wasm`;
-`--lib` writes `build/lib.wasm`. A standalone file argument keeps the old
-`<input>.wasm` beside the source.
+Without `-o`, `wado build` writes `<manifest_root>/build/<world>.wasm`, keeping
+artifacts out of the source tree and giving each world its own file (mirroring
+kiln's `build/` layout). `<world>` is the target Component Model world FQ
+sanitized to a path segment (`@version` dropped, `:`/`/` → `-`), e.g.
+`build/wasi-cli-command.wasm`; `--lib` writes `build/lib.wasm`. A standalone
+`wado compile <file>` keeps the old `<input>.wasm` beside the source.
 
 #### `--lib` — pending
 
-`wado compile --lib` (compile the `[package].lib` entry as a library) is
-abolished pending a world model that fits libraries. A library has no command
-entry point, so it does not map onto `wasi:cli/command`; the previous
-implementation compiled the lib into that world and stubbed the absent `run`,
-which never surfaced the library's `export` API as component exports. The
-`[package].lib` manifest field and `EntryPointKind::Lib` resolution are retained
-as the data model; the CLI flag and its compile path return once a proper
-library/component-export world is designed.
+`wado build --lib` (build the `[package].lib` entry as a library) is abolished
+pending a world model that fits libraries. A library has no command entry point,
+so it does not map onto `wasi:cli/command`; the previous implementation compiled
+the lib into that world and stubbed the absent `run`, which never surfaced the
+library's `export` API as component exports. The `[package].lib` manifest field
+and `EntryPointKind::Lib` resolution are retained as the data model; the CLI
+flag and its build path return once a proper library/component-export world is
+designed.
 
 ### `wado exec`
 
@@ -314,6 +355,7 @@ The lock file's `command` field for the dependency determines which source file 
 - Version operator preservation means upgrading never silently changes the compatibility contract
 - Structured cache layout makes dependencies browsable with standard filesystem tools — no special commands needed to inspect cached source
 - `wado list` enables quick discovery and integrates naturally with Unix pipelines (`fzf`, `xargs`, etc.)
+- The `compile`/`build` split gives dependency, lock, cache, and metadata logic one home (`build`) and keeps `compile` a pure, deterministic primitive for tests, the LSP, and debugging
 
 ### Negative
 
@@ -324,6 +366,7 @@ The lock file's `command` field for the dependency determines which source file 
 
 - **`--pin` over `--sync-toml`**: `--pin` is shorter and conveys intent ("pin to what I resolved"). `--sync-toml` is more descriptive but verbose.
 - **`--breaking` as a flag, not a separate command**: keeps the update family unified. A separate `wado upgrade` command (like cargo-edit) would fragment the mental model.
-- **No `--locked` here**: `--locked` is a build-time flag (`wado compile --locked`, `wado run --locked`) that rejects stale lock files. It belongs on build commands, not on `wado update` which always writes the lock file.
+- **No `--locked` here**: `--locked` is a build-time flag (`wado build --locked`, `wado run --locked`) that rejects stale lock files. It belongs on the project-tier commands, not on `wado update` which always writes the lock file.
+- **`build` as a new command over overloading `compile`**: a bare `wado compile` used to mean "project build". Splitting it into a pure `compile` primitive and a `build` orchestrator removes the argument-shape-dependent behavior and the conditional metadata embedding, at the cost of one more command name. The layered `rustc`/`cargo build` precedent makes the two roles familiar.
 - **ghq-style cache over content-addressed store**: Cargo uses a content-addressed store (`~/.cargo/registry/cache/` with `.crate` archives + `src/` extraction). The ghq-style `host/owner/name/version/` layout trades deduplication for direct browsability — `cd` into any package without extraction or special tooling. For a Wasm ecosystem where packages are typically small, the storage overhead is negligible.
 - **`~/wado/` over `~/.wado/`**: ghq uses `~/ghq/` — visible, not hidden. Dependencies are source code you depend on; hiding them behind a dot prefix makes them feel opaque. A visible directory signals that the cache is a transparent, browsable workspace.

@@ -122,16 +122,18 @@ Neither OCI nor git addresses a repository subdirectory, so `repository` stays a
 
 #### Metadata embedding and the publish backend
 
-`wado compile` embeds the metadata into the component in the `wasm-metadata`
-custom-section format. Embedding happens only in manifest-driven mode — `wado
-compile` with no argument (the cwd `wado.toml`) or a directory argument
-(`<dir>/wado.toml`); an explicit `.wado` file argument compiles that file as a
-standalone target and embeds nothing. `--no-embed-metadata` opts out, and `-Os`
-(strip symbols for minimal frontend delivery) drops the metadata too, matching
-the WIT section; `--embed-metadata` forces it back on under `-Os` (mirroring
-`--embed-wit`).
+`wado build` embeds the metadata into the component in the `wasm-metadata`
+custom-section format. Embedding is a project-tier concern — it happens in
+`wado build` (which reads the cwd or `<dir>/wado.toml`), never in the
+manifest-free `wado compile <file>` primitive, which compiles a standalone
+target and embeds nothing (see the [CLI-subcommands WEP][cli-subcommands]
+Command Tiers). `--no-embed-metadata` opts out, and `-Os` (strip symbols for
+minimal frontend delivery) drops the metadata too, matching the WIT section;
+`--embed-metadata` forces it back on under `-Os` (mirroring `--embed-wit`).
 
-`wado publish` builds each publishable world through the same compile path and
+[cli-subcommands]: ./wep-2026-02-22-cli-subcommands.md
+
+`wado publish` builds each publishable world through the same build path and
 shells out to `wkg` (wasm-pkg-tools), which derives the OCI annotations. There is no `wkg.toml` —
 `wado.toml` is the only source of truth, and `wkg` is an implementation detail
 (a missing `wkg` errors with install guidance). Authentication is delegated to
@@ -608,9 +610,13 @@ When `wado.toml` changes (dependency added, removed, or version constraint chang
 
 ```sh
 wado run                               # auto re-resolves if wado.toml changed
-wado compile -o out.wasm               # auto re-resolves if wado.toml changed
-wado compile --locked -o out.wasm      # ERROR if lock file is stale
+wado build                             # auto re-resolves if wado.toml changed
+wado build --locked                    # ERROR if lock file is stale
 ```
+
+(Project builds go through `wado build`; `wado compile` is a manifest-free
+primitive — see the [CLI-subcommands WEP](./wep-2026-02-22-cli-subcommands.md)
+Command Tiers.)
 
 `--locked` is intended for CI environments where reproducibility is critical. When `--locked` is specified, the build fails with an error if `wado.toml` has changed since the last `wado update`, rather than silently re-resolving.
 

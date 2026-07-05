@@ -51,57 +51,16 @@ Closing that loop is the goal.
 - Provider-agnostic fetching: `DependencyProvider` is the source seam. `fetch`
   is the only user-facing acquisition verb; OCI-pull / git-clone / path are
   provider details behind it. No source-specific `wado pull`.
-- Thin, layered subcommands (see [Subcommand Architecture](#subcommand-architecture)):
-  file-scoped compiler primitives vs manifest-aware project orchestrators. The
-  dependency machinery lives entirely in the project tier.
+- Thin, layered subcommands: a pure file-scoped `compile` primitive vs a
+  manifest-aware `build` orchestrator, with `run` / `serve` / `test` / `publish`
+  layered on `build`. The dependency machinery lives entirely in the project
+  tier. This taxonomy is specified in the [CLI-subcommands WEP][cli-wep]
+  (Command Tiers); Phase 0 lands it before any dependency wiring so lock / cache
+  / resolve attach to `build`, never to `compile`.
 - The narrowest end-to-end slice that makes a registry dependency compile is the
   first target; UX commands and advanced resolution follow.
 
-## Subcommand Architecture
-
-The CLI-subcommands WEP is not binding; this plan revises the taxonomy for
-long-term DX and toolchain maintainability. Today `wado compile` is overloaded:
-a bare `.wado` argument means a pure standalone compile, while no argument (or a
-directory) means a manifest-driven project build with dependency resolution and
-metadata embedding. That double duty — and its conditional metadata behavior —
-is exactly where the dependency machinery would otherwise accrete in the wrong
-place.
-
-Split the surface into a primitive and an orchestrator, and layer the drivers on
-top:
-
-```
-compile   file.wado → wasm/wat    pure, manifest-free, syscall-light   ← primitive
-   ↑
-build     project → build/<world>.wasm    resolve deps · lock · embed metadata · multi-world   ← orchestrator
-   ↑
-run / serve / test / publish      build, then execute / serve / test / push    ← drivers
-```
-
-- `wado compile <file>` becomes a pure compiler primitive: no `wado.toml`, no
-  dependencies, no metadata embedding. Ideal for tests, LSP, `--wat-to-stdout`,
-  `--no-validate`, and deterministic debugging. Matches the compiler-agnostic
-  principle. Precedent: `rustc` vs `cargo build`, `go tool compile` vs
-  `go build`, `zig build-exe` vs `zig build`.
-- `wado build` (new) owns the project tier: read the manifest, resolve/lock
-  dependencies, compile each world through the `compile` primitive, embed
-  `[package]` metadata, write `build/<world>.wasm`. All dependency, lock, and
-  cache machinery lands here — one home.
-- `run` / `serve` / `test` / `publish` share the `build` core in project mode; a
-  bare-file argument (`wado run file.wado`) routes straight through the standalone
-  `compile` primitive.
-
-Full command taxonomy:
-
-| Group                 | Commands                                                             | Reads manifest/deps |
-| --------------------- | -------------------------------------------------------------------- | ------------------- |
-| Compiler primitives   | `compile` `check` `dump` `query` `format` `doc` `wit` `syntax` `lsp` | No                  |
-| Project build & run   | `build` (new) `run` `serve` `test` `publish`                         | Yes                 |
-| Dependency management | `add` `remove` `update` `fetch` `list` `exec`                        | Yes                 |
-| Scaffolding           | `init`                                                               | Writes it           |
-
-This split precedes the dependency wiring (Phase 0) so the lock/cache/resolve
-work attaches to `build` from the start, never to `compile`.
+[cli-wep]: ./wep-2026-02-22-cli-subcommands.md
 
 ## Phases
 
@@ -121,8 +80,8 @@ Establish the primitive/orchestrator boundary before wiring dependencies.
       `--no-validate`, `--world`, `--allocator`, `-O*`.
 - [ ] Route `run` / `serve` / `test` / `publish` project mode through the shared
       `build` core; a bare-file argument stays on the standalone `compile` path.
-- [ ] Update the CLI-subcommands and manifest WEPs where they attribute
-      project builds and default output paths to `wado compile` (now `wado build`).
+- [x] Specify the split in the [CLI-subcommands WEP][cli-wep] (Command Tiers)
+      and fix the `wado compile` project-build references in the manifest WEP.
 - [ ] Migrate existing tests and any docs/examples that call `wado compile`
       for a project build.
 
