@@ -53,20 +53,40 @@ written explicitly as `*x`.
   already produced by today's `ArrayRefIter`.
 - Synthesized sequences keep `Item = T` unchanged.
 
-### Read-context auto-deref (the enabling decision)
+### Primitive ergonomics
 
-To keep primitive iteration ergonomic, extend the existing `&T` auto-deref
-(already applied at field access and method calls) to read positions in
-operators and comparisons, so `&i32` reads as `i32`:
+Struct iteration needs no special handling: field access on `&T` already yields
+the field by value, so `x.field == target` and `x.field + 1` type-check under
+`&T` iteration today. The only rough edge is a primitive element used _directly_
+in an operator (`for let x of nums { sum += x }`, `x: &i32`), which needs `*x`.
+
+Provide a `copied()` adaptor mapping `Iterator<Item = &T>` to
+`Iterator<Item = T>`, so a caller opts into value iteration explicitly:
 
 ```wado
-for let x of nums { sum += x; }   // x: &i32, reads as i32
+for let x of nums.copied() { sum += x; }             // x: i32
+let hit = nums.copied().any(|x: i32| x == target);
 ```
 
-Without this, reference iteration would sprinkle `*x` through every numeric
-loop. Auto-deref applies to reads only; a write target (`x = …`) still requires
-an explicit `*x`. This is safe absent a borrow checker and reduces `*` noise
-language-wide.
+`copied()` makes the copy visible at the call site, keeps the cheap path (`&T`)
+the default, and needs no change to operator semantics. Explicit `*x` stays
+available for a one-off read.
+
+### Rejected: operator auto-deref
+
+An earlier draft proposed auto-dereferencing `&T` in operator/comparison read
+positions so primitives read as values. Measurement rejects it: `==` / `!=` on
+`&T` today compare _reference identity_, not value — `&a == &b` is `false` for
+two distinct variables both holding `5`, and `true` only for two references to
+the same variable. Auto-deref would silently reinterpret every existing
+`&T == &T` as a value comparison and remove the only way to test reference
+identity with `==`. It would also entangle operator-overload resolution (a
+reference's own `impl` vs the deref'd `impl`) and hide potentially expensive deep
+comparisons behind an invisible `*`. Reference value-vs-identity is its own
+proposal with its own migration, never a rider on iteration. (Arithmetic on `&T`
+is a plain type error today, so it has no semantics to preserve, but bundling it
+with the `==` change is what makes auto-deref a single unsafe lever — so the
+whole lever is out of scope here.)
 
 ### Public surface
 
@@ -86,13 +106,16 @@ as the internal `for-of` desugar target.
   (`into_iter` / `next`) is retargeted, not restructured.
 - Match ergonomics already handle `&T` scrutinees, so `for let { x, y } of pts`
   keeps working.
+- Operator semantics are untouched: `==` on `&T` stays reference identity, and
+  the primitive escape hatch is the explicit `copied()` adaptor, not a global
+  auto-deref.
 
 ## TODO
 
 - [ ] Confirm `&mut T` iteration composes with the reference write-back model
       (`next() -> Option<&mut T>`), or scope `iter_mut` to a later step.
-- [ ] Pin the exact read-context auto-deref rule (which operator/comparison
-      positions; interaction with reference identity) before implementation.
+- [ ] Add the `copied()` adaptor (`Iterator<Item = &T>` to
+      `Iterator<Item = T>`); confirm `String`/deep-copy element ergonomics.
 - [ ] Decide whether `into_iter` stays a nameable method or becomes
       desugar-only.
 - [ ] Migrate stdlib and `package-gale` call sites; drop the value `ArrayIter`
