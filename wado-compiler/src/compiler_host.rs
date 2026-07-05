@@ -463,13 +463,12 @@ pub struct GeneratorRequest {
     pub primary: GeneratorInputFile,
     /// Supplementary schema files.
     pub inputs: Vec<GeneratorInputFile>,
-    /// Deterministic CBOR encoding of the user's `options = { ... }`
-    /// (see `crate::kiln::cache::encode_options_canonical`). In the v0.3
-    /// protocol the host materializes this into a typed `Options` value,
-    /// shaped by the generator component's own introspected `generate`
-    /// options parameter, and passes it as a typed argument — the generator
-    /// receives `Options` directly, never the CBOR.
-    pub options: Vec<u8>,
+    /// The validated, typed options for this invocation. The host builds a
+    /// Component-Model value from it — shaped by the generator component's own
+    /// introspected `generate` options parameter — and passes it as a typed
+    /// argument, so the generator receives its `Options` directly. Empty when
+    /// the generator takes no options.
+    pub options: crate::kiln::options_check::CanonicalOptions,
 }
 
 /// One schema file passed to a Kiln generator.
@@ -691,7 +690,7 @@ mod tests {
                         content: "syntax = \"proto3\";".to_string(),
                     },
                     inputs: vec![],
-                    options: Vec::new(),
+                    options: crate::kiln::options_check::CanonicalOptions::default(),
                 };
                 let result = host.run_generator(b"\0asm", req).await;
                 assert!(matches!(result, Err(GeneratorRunnerError::Unsupported)));

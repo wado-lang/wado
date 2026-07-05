@@ -255,7 +255,7 @@ fn no_options_generator_compiles_and_runs() {
             content: "syntax = \"proto3\";".to_string(),
         },
         inputs: vec![],
-        options: vec![0xa0], // empty CBOR map
+        options: wado_compiler::kiln::CanonicalOptions::default(),
     };
     runtime()
         .block_on(async { host.run_generator(&resolved.wasm, request).await })
@@ -656,8 +656,10 @@ fn host_caches_compiled_component_across_run_generator_calls() {
             content: "syntax = \"proto3\";".to_string(),
         },
         inputs: vec![],
-        // CBOR for `{ verbose: false }`.
-        options: vec![0xa1, 0x67, b'v', b'e', b'r', b'b', b'o', b's', b'e', 0xf4],
+        options: wado_compiler::kiln::CanonicalOptions {
+            descriptor: wado_compiler::kiln::OptionsDescriptor::default(),
+            values: vec![("verbose".to_string(), wado_compiler::kiln::CanonicalValue::Bool(false))],
+        },
     };
 
     // First call: cranelift AOT runs, count goes to 1.
@@ -725,8 +727,10 @@ fn shared_kiln_cache_compiles_generator_once_across_hosts() {
             content: "syntax = \"proto3\";".to_string(),
         },
         inputs: vec![],
-        // CBOR for `{ verbose: false }`.
-        options: vec![0xa1, 0x67, b'v', b'e', b'r', b'b', b'o', b's', b'e', 0xf4],
+        options: wado_compiler::kiln::CanonicalOptions {
+            descriptor: wado_compiler::kiln::OptionsDescriptor::default(),
+            values: vec![("verbose".to_string(), wado_compiler::kiln::CanonicalValue::Bool(false))],
+        },
     };
 
     let cache = std::sync::Arc::new(KilnComponentCache::new());

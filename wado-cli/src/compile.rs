@@ -1316,7 +1316,7 @@ mod kiln_dir_module_tests {
             source: InvocationPath::normalize("./grammar.g4"),
             inputs: Vec::new(),
             output_dir: InvocationPath::normalize("build"),
-            options_canonical: Vec::new(),
+            options: wado_compiler::kiln::CanonicalOptions::default(),
             raw_options: None,
         }
     }

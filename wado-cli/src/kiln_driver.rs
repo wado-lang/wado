@@ -35,8 +35,8 @@ use wado_compiler::compiler_host::{
 use wado_compiler::kiln::DeclSite;
 use wado_compiler::kiln::{
     FileHash, GeneratedHeader, GeneratorModule, Invocation, InvocationPath, OptionsDescriptor,
-    Plan, PlanError, content_hash, empty_options_canonical, encode_options_canonical, file_hash,
-    generator_identity, has_generated_marker, hex_digest, validate_options,
+    Plan, PlanError, content_hash, file_hash, generator_identity, has_generated_marker, hex_digest,
+    validate_options,
 };
 use wado_compiler::{Code, Diagnostic, Severity};
 use wado_manifest::Manifest;
@@ -236,7 +236,7 @@ pub async fn execute_with_mode<H: CompilerHost>(
     let request = GeneratorRequest {
         primary,
         inputs,
-        options: invocation.options_canonical.clone(),
+        options: invocation.options.clone(),
     };
 
     let response = host
@@ -958,7 +958,7 @@ where
         };
 
         let options_hash =
-            wado_compiler::kiln::hash_options_canonical(&invocation.options_canonical);
+            wado_compiler::kiln::hash_options_canonical(&invocation.options_canonical());
 
         let component_result: Result<Arc<ResolvedGenerator>, ProviderError> =
             lookup_resolved(&resolved, &invocation.module);
@@ -1364,9 +1364,6 @@ fn typed_encode_options<H: CompilerHost>(
 ) {
     let _ = manifest;
     for inv in invocations.iter_mut() {
-        if inv.options_canonical.is_empty() {
-            inv.options_canonical = empty_options_canonical();
-        }
         let descriptor = match lookup_resolved(resolved, &inv.module) {
             Ok(arc) => match &arc.descriptor {
                 Some(d) => d.clone(),
@@ -1381,7 +1378,7 @@ fn typed_encode_options<H: CompilerHost>(
         };
         match validate_options(&descriptor, supplied) {
             Ok(canonical) => {
-                inv.options_canonical = encode_options_canonical(&canonical);
+                inv.options = canonical;
             }
             Err(diagnostics) => {
                 for d in diagnostics {
@@ -1511,7 +1508,7 @@ mod tests {
                 source: InvocationPath::normalize("./schema.proto"),
                 inputs: vec![InvocationPath::normalize("dep.proto")],
                 output_dir: InvocationPath::normalize("build/kiln/proto"),
-                options_canonical: vec![],
+                options: wado_compiler::kiln::CanonicalOptions::default(),
                 raw_options: None,
             }
         }
@@ -1665,7 +1662,7 @@ mod tests {
         }
 
         #[test]
-        fn options_canonical_bytes_are_forwarded_to_request() {
+        fn options_are_forwarded_to_request() {
             let tmp = tempfile::tempdir().unwrap();
             let response = GeneratorResponse {
                 files: vec![],
@@ -1673,14 +1670,21 @@ mod tests {
             };
             let host = MockHost::new(&[("schema.proto", b"x"), ("dep.proto", b"y")], Ok(response));
             let mut inv = sample_invocation();
-            inv.options_canonical = vec![0xa1, 0x61, b'k', 0x61, b'v'];
+            let options = wado_compiler::kiln::CanonicalOptions {
+                descriptor: OptionsDescriptor::default(),
+                values: vec![(
+                    "k".to_string(),
+                    wado_compiler::kiln::CanonicalValue::String("v".to_string()),
+                )],
+            };
+            inv.options = options.clone();
 
             runtime()
                 .block_on(async { execute(&inv, b"wasm", tmp.path(), &host).await })
                 .unwrap();
             let reqs = host.requests.lock().unwrap();
             assert_eq!(reqs.len(), 1);
-            assert_eq!(reqs[0].options, vec![0xa1, 0x61, b'k', 0x61, b'v']);
+            assert_eq!(reqs[0].options, options);
             assert_eq!(reqs[0].primary.path, "schema.proto");
             assert_eq!(reqs[0].inputs.len(), 1);
             assert_eq!(reqs[0].inputs[0].path, "dep.proto");
@@ -1759,7 +1763,7 @@ mod tests {
                 source: InvocationPath::normalize("./schema.proto"),
                 inputs: vec![InvocationPath::normalize("dep.proto")],
                 output_dir: InvocationPath::normalize("build/kiln/proto"),
-                options_canonical: vec![],
+                options: wado_compiler::kiln::CanonicalOptions::default(),
                 raw_options: None,
             }
         }

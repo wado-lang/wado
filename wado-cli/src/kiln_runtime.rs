@@ -7,8 +7,9 @@
 //!
 //! v0.3: each generator has its own synthesized world (the `options` shape is
 //! per-generator), so `generate` is invoked dynamically as typed `Val`s rather
-//! than through a shared static binding. The options CBOR is materialized into
-//! a typed value shaped by the component's own introspected parameter type.
+//! than through a shared static binding. The invocation's validated options are
+//! materialized into a typed value shaped by the component's own introspected
+//! parameter type.
 //!
 //! See WEP 2026-04-12 (Kiln) §"Host-delegated execution".
 
@@ -19,6 +20,7 @@ use wasmtime::component::types::Type;
 use wasmtime::component::{Component, Func, HasSelf, Instance, Linker, Val};
 use wasmtime::{Engine, Store};
 
+use wado_compiler::kiln::{CanonicalOptions, CanonicalValue};
 use wado_compiler::{
     CompilerHost, GeneratorDiagnostic, GeneratorDiagnosticLevel, GeneratorError,
     GeneratorInputFile, GeneratorOutputFile, GeneratorReadRecord, GeneratorRequest,
@@ -217,81 +219,100 @@ fn record_string(fields: &[(String, Val)], name: &str) -> Result<String, Generat
     }
 }
 
-/// Materialize the canonical CBOR options blob
-/// ([`wado_compiler::kiln::encode_options_canonical`]) into a typed [`Val`],
-/// shaped by the component's own introspected options parameter type. The
-/// component type is the single source of truth for widths, enum-vs-string,
-/// and field order — no separate descriptor is threaded to the host.
-fn decode_options_val(cbor: &[u8], ty: &Type) -> Result<Val, String> {
-    let mut dec = minicbor::Decoder::new(cbor);
-    cbor_to_val(&mut dec, ty)
+/// Materialize the invocation's validated options into a typed [`Val`], shaped
+/// by the component's own introspected options parameter type — the single
+/// source of truth for widths, enum-vs-string, and field order. The option
+/// values carry raw Wado identifiers, mapped to the component's CM kebab-case
+/// names here.
+fn options_to_val(options: &CanonicalOptions, ty: &Type) -> Result<Val, String> {
+    canonical_to_val(&CanonicalValue::Struct(options.values.clone()), ty)
 }
 
-fn cbor_to_val(dec: &mut minicbor::Decoder<'_>, ty: &Type) -> Result<Val, String> {
-    let e = |err: minicbor::decode::Error| format!("cbor: {err}");
+fn canonical_to_val(v: &CanonicalValue, ty: &Type) -> Result<Val, String> {
+    let mismatch = || format!("options value {v:?} does not fit component type {ty:?}");
     Ok(match ty {
-        Type::Bool => Val::Bool(dec.bool().map_err(e)?),
-        Type::S8 => Val::S8(dec.i8().map_err(e)?),
-        Type::U8 => Val::U8(dec.u8().map_err(e)?),
-        Type::S16 => Val::S16(dec.i16().map_err(e)?),
-        Type::U16 => Val::U16(dec.u16().map_err(e)?),
-        Type::S32 => Val::S32(dec.i32().map_err(e)?),
-        Type::U32 => Val::U32(dec.u32().map_err(e)?),
-        Type::S64 => Val::S64(dec.i64().map_err(e)?),
-        Type::U64 => Val::U64(dec.u64().map_err(e)?),
-        // The canonical encoder collapses every float to an f64 (its
-        // `CanonicalValue` has no f32 variant), so an `f32` field arrives as a
-        // CBOR double and is narrowed here.
-        Type::Float32 => Val::Float32(dec.f64().map_err(e)? as f32),
-        Type::Float64 => Val::Float64(dec.f64().map_err(e)?),
-        Type::String => Val::String(dec.str().map_err(e)?.to_string()),
-        // Enum cases cross the wire as raw Wado names; the component enum type
-        // uses CM kebab-case case names, so normalize before building the Val.
-        Type::Enum(_) => Val::Enum(wado_compiler::name::to_kebab(dec.str().map_err(e)?)),
-        // `Some(x)` is encoded transparently as `x` and `None` fields are
-        // omitted from their enclosing map, so reaching a value here is `Some`.
-        Type::Option(o) => Val::Option(Some(Box::new(cbor_to_val(dec, &o.ty())?))),
-        Type::List(l) => {
-            let n = dec.array().map_err(e)?.ok_or("indefinite-length array")?;
-            let elem = l.ty();
-            let mut items = Vec::with_capacity(n as usize);
-            for _ in 0..n {
-                items.push(cbor_to_val(dec, &elem)?);
+        Type::Bool => match v {
+            CanonicalValue::Bool(b) => Val::Bool(*b),
+            _ => return Err(mismatch()),
+        },
+        Type::S8 => Val::S8(as_i64(v).ok_or_else(mismatch)? as i8),
+        Type::U8 => Val::U8(as_u64(v).ok_or_else(mismatch)? as u8),
+        Type::S16 => Val::S16(as_i64(v).ok_or_else(mismatch)? as i16),
+        Type::U16 => Val::U16(as_u64(v).ok_or_else(mismatch)? as u16),
+        Type::S32 => Val::S32(as_i64(v).ok_or_else(mismatch)? as i32),
+        Type::U32 => Val::U32(as_u64(v).ok_or_else(mismatch)? as u32),
+        Type::S64 => Val::S64(as_i64(v).ok_or_else(mismatch)?),
+        Type::U64 => Val::U64(as_u64(v).ok_or_else(mismatch)?),
+        // Options collapse every float to an f64 (`CanonicalValue` has no f32
+        // variant), so an `f32` field is narrowed here.
+        Type::Float32 => match v {
+            CanonicalValue::F64(f) => Val::Float32(*f as f32),
+            _ => return Err(mismatch()),
+        },
+        Type::Float64 => match v {
+            CanonicalValue::F64(f) => Val::Float64(*f),
+            _ => return Err(mismatch()),
+        },
+        Type::String => match v {
+            CanonicalValue::String(s) => Val::String(s.clone()),
+            _ => return Err(mismatch()),
+        },
+        // Enum cases carry raw Wado names; the component enum uses CM
+        // kebab-case case names, so normalize before building the Val.
+        Type::Enum(_) => match v {
+            CanonicalValue::Enum(s) => Val::Enum(wado_compiler::name::to_kebab(s)),
+            _ => return Err(mismatch()),
+        },
+        Type::Option(o) => match v {
+            CanonicalValue::None => Val::Option(None),
+            CanonicalValue::Some(inner) => {
+                Val::Option(Some(Box::new(canonical_to_val(inner, &o.ty())?)))
             }
-            Val::List(items)
-        }
+            // A present, non-wrapped value against an Option type is `Some`.
+            other => Val::Option(Some(Box::new(canonical_to_val(other, &o.ty())?))),
+        },
         Type::Record(r) => {
-            let fields: Vec<(String, Type)> =
-                r.fields().map(|f| (f.name.to_string(), f.ty)).collect();
-            let n = dec.map().map_err(e)?.ok_or("indefinite-length map")?;
-            let mut got: indexmap::IndexMap<String, Val> = indexmap::IndexMap::new();
-            for _ in 0..n {
-                // The CBOR key is the raw Wado field name; the component record
-                // field is CM kebab-case, so normalize before matching.
-                let key = wado_compiler::name::to_kebab(dec.str().map_err(e)?);
-                let field_ty = fields
+            let CanonicalValue::Struct(entries) = v else {
+                return Err(mismatch());
+            };
+            let mut out = Vec::new();
+            for f in r.fields() {
+                // Option values carry raw Wado field names; the component record
+                // field is CM kebab-case.
+                let matched = entries
                     .iter()
-                    .find(|(name, _)| *name == key)
-                    .map(|(_, t)| t)
-                    .ok_or_else(|| format!("unknown options field `{key}`"))?;
-                let val = cbor_to_val(dec, field_ty)?;
-                got.insert(key, val);
-            }
-            // Re-assemble in the record's declared field order; an omitted
-            // `Option` field is `none`, anything else omitted is a bug.
-            let mut out = Vec::with_capacity(fields.len());
-            for (name, field_ty) in &fields {
-                let val = match got.swap_remove(name) {
-                    Some(v) => v,
-                    None if matches!(field_ty, Type::Option(_)) => Val::Option(None),
-                    None => return Err(format!("missing required options field `{name}`")),
+                    .find(|(name, _)| wado_compiler::name::to_kebab(name) == f.name);
+                let val = match matched {
+                    Some((_, cv)) => canonical_to_val(cv, &f.ty)?,
+                    None if matches!(f.ty, Type::Option(_)) => Val::Option(None),
+                    None => {
+                        return Err(format!("missing required options field `{}`", f.name));
+                    }
                 };
-                out.push((name.clone(), val));
+                out.push((f.name.to_string(), val));
             }
             Val::Record(out)
         }
         other => return Err(format!("unsupported options type: {other:?}")),
     })
+}
+
+/// Read a signed integer from an options value (validation stores signed
+/// fields as `I64`, unsigned as `U64`; accept either when it fits).
+fn as_i64(v: &CanonicalValue) -> Option<i64> {
+    match v {
+        CanonicalValue::I64(n) => Some(*n),
+        CanonicalValue::U64(n) => i64::try_from(*n).ok(),
+        _ => None,
+    }
+}
+
+fn as_u64(v: &CanonicalValue) -> Option<u64> {
+    match v {
+        CanonicalValue::U64(n) => Some(*n),
+        CanonicalValue::I64(n) => u64::try_from(*n).ok(),
+        _ => None,
+    }
 }
 
 /// Build a wasmtime [`Component`] from raw bytes. Cranelift-AOT
@@ -381,8 +402,8 @@ pub async fn run_generator<H: CompilerHost + 'static>(
             request.inputs.iter().map(input_file_val).collect(),
         ));
         if let Some(ty) = &options_ty {
-            let val = decode_options_val(&request.options, ty)
-                .map_err(|e| GeneratorRunnerError::Host(format!("options decode: {e}")))?;
+            let val = options_to_val(&request.options, ty)
+                .map_err(|e| GeneratorRunnerError::Host(format!("options: {e}")))?;
             args.push(val);
         }
 
@@ -490,7 +511,7 @@ mod tests {
     }
 
     /// End-to-end: a v0.3 typed-options generator drives through the dynamic
-    /// `Val` invocation — options CBOR decoded against the introspected param
+    /// `Val` invocation — options materialized against the introspected param
     /// type, `generate` called dynamically, and the `Result<Response, Error>`
     /// lifted back. The emitted file name depends on `options.verbose`, so a
     /// correct round-trip proves the option value crossed the boundary.
@@ -545,14 +566,9 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
             ))
             .expect("generator compiles to a component");
 
-        // Canonical CBOR for `{ verbose: true }` — one-entry map, exactly what
-        // `encode_options_canonical` produces for this options table.
-        let options_cbor = {
-            let mut enc = minicbor::Encoder::new(Vec::new());
-            enc.map(1).unwrap();
-            enc.str("verbose").unwrap();
-            enc.bool(true).unwrap();
-            enc.into_writer()
+        let options = CanonicalOptions {
+            descriptor: wado_compiler::kiln::OptionsDescriptor::default(),
+            values: vec![("verbose".to_string(), CanonicalValue::Bool(true))],
         };
 
         let engine = create_kiln_engine(wasmtime::OptLevel::Speed).expect("engine");
@@ -563,7 +579,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
                 content: "hello".to_string(),
             },
             inputs: vec![],
-            options: options_cbor,
+            options,
         };
 
         let (outcome, _diags) = runtime().block_on(run_generator(
@@ -584,18 +600,15 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
         assert_eq!(response.files[0].content, "pub fn x() {}");
     }
 
-    /// The canonical options CBOR carries raw Wado field/case names and encodes
-    /// every float as an f64, while the component type the host introspects
-    /// uses CM kebab-case names and `float32`. This exercises all three: a
+    /// The validated options carry raw Wado field/case names and store every
+    /// float as an f64, while the component type the host maps them onto uses
+    /// CM kebab-case names and `float32`. This exercises all three: a
     /// `snake_case` field (`max_depth`), an `f32` field (`ratio`), and an enum
     /// with a multi-word case (`Mode::HighContrast`). The generator only emits
-    /// `ok.wado` when it sees all three option values decoded correctly.
+    /// `ok.wado` when it sees all three option values materialized correctly.
     #[test]
     fn typed_options_round_trip_covers_kebab_and_float_widths() {
         use std::sync::Arc;
-        use wado_compiler::kiln::{
-            CanonicalOptions, CanonicalValue, OptionsDescriptor, encode_options_canonical,
-        };
         use wado_compiler::{CompilerOptions, LogLevel, compile_with_options};
 
         const SRC: &str = r#"
@@ -637,16 +650,16 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
             ))
             .expect("generator compiles to a component");
 
-        // Build the wire form exactly as the driver does — raw Wado names,
-        // f64-encoded float, enum by raw case name.
-        let options_cbor = encode_options_canonical(&CanonicalOptions {
-            descriptor: OptionsDescriptor { fields: vec![] },
+        // Exactly what the driver's validation produces — raw Wado names, an
+        // f64 for the f32 field, the enum by its raw case name.
+        let options = CanonicalOptions {
+            descriptor: wado_compiler::kiln::OptionsDescriptor::default(),
             values: vec![
                 ("max_depth".to_string(), CanonicalValue::I64(3)),
                 ("ratio".to_string(), CanonicalValue::F64(0.5)),
                 ("mode".to_string(), CanonicalValue::Enum("HighContrast".to_string())),
             ],
-        });
+        };
 
         let engine = create_kiln_engine(wasmtime::OptLevel::Speed).expect("engine");
         let component = compile_component(&engine, &compiled.wasm).expect("component");
@@ -656,7 +669,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
                 content: "hello".to_string(),
             },
             inputs: vec![],
-            options: options_cbor,
+            options,
         };
 
         let (outcome, _diags) = runtime().block_on(run_generator(
