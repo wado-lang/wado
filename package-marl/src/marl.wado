@@ -7,6 +7,7 @@
 
 use { render_inline } from "./inline.wado";
 use { escape_attr } from "./html.wado";
+use { chars_of } from "./str_cursor.wado";
 
 pub fn render(source: &String) -> String {
     let normalized = source.replace("\r\n", "\n");
@@ -165,7 +166,7 @@ fn heading_content(line: &String, level: i32) -> String {
 }
 
 fn strip_atx_closing(s: &String) -> String {
-    let chars = to_chars(s);
+    let chars = chars_of(s);
     let len = chars.len();
     let mut e = len;
     while e > 0 && chars[e - 1] == '#' {
@@ -211,7 +212,7 @@ fn is_thematic_break(line: &String) -> bool {
 }
 
 fn fence_marker(line: &String) -> Option<[char, i32, String]> {
-    let chars = to_chars(line);
+    let chars = chars_of(line);
     let len = chars.len();
     let mut p = 0;
     while p < len && p < 3 && is_indent(chars[p]) {
@@ -240,7 +241,7 @@ fn fence_marker(line: &String) -> Option<[char, i32, String]> {
 }
 
 fn is_code_fence_close(line: &String, ch: char, fence_len: i32) -> bool {
-    let chars = to_chars(line);
+    let chars = chars_of(line);
     let len = chars.len();
     let mut p = 0;
     while p < len && p < 3 && is_indent(chars[p]) {
@@ -264,7 +265,7 @@ fn is_code_fence_close(line: &String, ch: char, fence_len: i32) -> bool {
 }
 
 fn is_blockquote(line: &String) -> bool {
-    let chars = to_chars(line);
+    let chars = chars_of(line);
     let len = chars.len();
     let mut p = 0;
     while p < len && p < 3 && is_indent(chars[p]) {
@@ -274,7 +275,7 @@ fn is_blockquote(line: &String) -> bool {
 }
 
 fn strip_blockquote_marker(line: &String) -> String {
-    let chars = to_chars(line);
+    let chars = chars_of(line);
     let len = chars.len();
     let mut p = 0;
     while p < len && p < 3 && is_indent(chars[p]) {
@@ -307,7 +308,7 @@ fn is_delimiter_row(line: &String) -> bool {
 }
 
 fn is_delim_cell(cell: &String) -> bool {
-    let chars = to_chars(cell);
+    let chars = chars_of(cell);
     let len = chars.len();
     if len == 0 {
         return false;
@@ -342,7 +343,7 @@ fn alignment(cell: &String) -> String {
 }
 
 fn split_row(line: &String) -> List<String> {
-    let chars = to_chars(line);
+    let chars = chars_of(line);
     let len = chars.len();
     let mut s = 0;
     let mut e = len;
@@ -449,7 +450,7 @@ struct ListMarker {
 }
 
 fn parse_list_marker(line: &String) -> Option<ListMarker> {
-    let chars = to_chars(line);
+    let chars = chars_of(line);
     let len = chars.len();
     let mut p = 0;
     let mut indent = 0;
@@ -559,7 +560,7 @@ fn render_list(lines: &List<String>, start: i32, end: i32, out: &mut List<String
 
 fn tighten(html: &String) -> String {
     if html.starts_with("<p>") && html.ends_with("</p>") {
-        let chars = to_chars(html);
+        let chars = chars_of(html);
         let inner = substr(&chars, 3, chars.len() - 4);
         if !inner.contains("<p>") {
             return inner;
@@ -569,12 +570,12 @@ fn tighten(html: &String) -> String {
 }
 
 fn cut_prefix(line: &String, n: i32) -> String {
-    let chars = to_chars(line);
+    let chars = chars_of(line);
     return substr(&chars, n, chars.len());
 }
 
 fn dedent(line: &String, n: i32) -> String {
-    let chars = to_chars(line);
+    let chars = chars_of(line);
     let len = chars.len();
     let mut p = 0;
     while p < len && p < n && is_indent(chars[p]) {
@@ -604,14 +605,6 @@ fn is_digit(c: char) -> bool {
 /// same as a space (no tab-stop expansion) — an intentional simplification.
 fn is_indent(c: char) -> bool {
     return c == ' ' || c == '\t';
-}
-
-fn to_chars(line: &String) -> List<char> {
-    let mut chars: List<char> = [];
-    for let c of line.chars() {
-        chars.push(c);
-    }
-    return chars;
 }
 
 fn substr(chars: &List<char>, s: i32, e: i32) -> String {
