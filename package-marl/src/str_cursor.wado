@@ -1,6 +1,6 @@
 //! A peekable cursor over a materialized `List<char>`.
 //!
-//! It offers stream-style reading (`peek`/`bump`/`eof`) plus the random access
+//! It offers stream-style reading (`bump`/`eof`) plus the random access
 //! Markdown parsing needs — look-behind for emphasis flanking, unbounded
 //! look-ahead with backtracking for code spans and links, slicing, and cheap
 //! sub-ranges that share the same buffer. The buffer is materialized once; a
@@ -18,11 +18,18 @@ pub struct StrCursor {
 }
 
 pub fn chars_of(text: &String) -> List<char> {
-    let mut chars: List<char> = [];
-    for let c of text.chars() {
-        chars.push(c);
+    return text.chars().collect();
+}
+
+/// The substring over the absolute range `[s, e)` of a char buffer.
+pub fn slice_chars(chars: &List<char>, s: i32, e: i32) -> String {
+    let mut out = String::new();
+    let mut k = s;
+    while k < e {
+        out.push(chars[k]);
+        k += 1;
     }
-    return chars;
+    return out;
 }
 
 impl StrCursor {
@@ -42,14 +49,6 @@ impl StrCursor {
 
     pub fn is_at(&self, idx: i32, c: char) -> bool {
         return self.at(idx) matches { Some(x) && x == c };
-    }
-
-    pub fn peek(&self) -> Option<char> {
-        return self.at(self.pos);
-    }
-
-    pub fn peek_at(&self, offset: i32) -> Option<char> {
-        return self.at(self.pos + offset);
     }
 
     pub fn bump(&mut self) {
@@ -76,13 +75,7 @@ impl StrCursor {
 
     /// The substring over the absolute range `[s, e)`.
     pub fn slice(&self, s: i32, e: i32) -> String {
-        let mut out = String::new();
-        let mut k = s;
-        while k < e {
-            out.push(self.chars[k]);
-            k += 1;
-        }
-        return out;
+        return slice_chars(self.chars, s, e);
     }
 
     /// A sub-cursor over `[s, e)` sharing the same buffer, positioned at `s`.

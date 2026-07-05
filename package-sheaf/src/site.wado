@@ -12,9 +12,8 @@ pub struct SiteFile {
 /// they remain reachable by URL) plus the index page (published posts only).
 pub fn build_site(posts: &List<Post>) -> List<SiteFile> {
     let mut files: List<SiteFile> = [];
-    for let mut i = 0; i < posts.len(); i += 1 {
-        let p = posts[i];
-        files.push(SiteFile { path: `{p.slug}.html`, content: render_page(&p) });
+    for let p of posts {
+        files.push(SiteFile { path: `{p.slug}.html`, content: render_page(p) });
     }
     files.push(SiteFile { path: "index.html", content: render_index(posts) });
     return files;

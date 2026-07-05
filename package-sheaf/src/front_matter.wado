@@ -12,16 +12,13 @@ pub struct FrontMatter {
 
 impl Deserialize for FrontMatter;
 
-/// Split a document into `[front_matter_json, body]`, or `None` when it does
-/// not open with a `---json` fence.
-pub fn split(source: &String) -> Option<[String, String]> {
+/// Split a document into `[front_matter_json, body]`, distinguishing a missing
+/// opening fence from an unterminated one.
+pub fn split(source: &String) -> Result<[String, String], String> {
     let normalized = source.replace("\r\n", "\n");
-    let mut lines: List<String> = [];
-    for let line of normalized.split("\n") {
-        lines.push(line);
-    }
+    let lines: List<String> = normalized.split("\n").collect();
     if lines.is_empty() || lines[0].trim() != "---json" {
-        return null;
+        return Result::Err("missing ---json front matter");
     }
     let mut close = -1;
     let mut i = 1;
@@ -33,11 +30,11 @@ pub fn split(source: &String) -> Option<[String, String]> {
         i += 1;
     }
     if close < 0 {
-        return null;
+        return Result::Err("unterminated ---json fence");
     }
     let json = join_range(&lines, 1, close);
     let body = join_range(&lines, close + 1, lines.len());
-    return Option::Some([json, body]);
+    return Result::Ok([json, body]);
 }
 
 fn join_range(lines: &List<String>, s: i32, e: i32) -> String {
@@ -52,19 +49,13 @@ fn join_range(lines: &List<String>, s: i32, e: i32) -> String {
 
 /// Parse a document into its `FrontMatter` and body text.
 pub fn parse(source: &String) -> Result<[FrontMatter, String], String> {
-    match split(source) {
-        Some([json, body]) => {
-            match from_string::<FrontMatter>(json) {
-                Ok(fm) => {
-                    return Result::Ok([fm, body]);
-                },
-                Err(e) => {
-                    return Result::Err(`invalid front matter: {e:?}`);
-                },
-            }
+    let [json, body] = split(source)?;
+    match from_string::<FrontMatter>(json) {
+        Ok(fm) => {
+            return Result::Ok([fm, body]);
         },
-        None => {
-            return Result::Err("missing ---json front matter");
+        Err(e) => {
+            return Result::Err(`invalid front matter: {e:?}`);
         },
     }
 }

@@ -13,18 +13,12 @@ pub struct Post {
 
 /// Build a post from its slug (typically the file stem) and source document.
 pub fn build(slug: String, source: &String) -> Result<Post, String> {
-    match parse(source) {
-        Ok([fm, body]) => {
-            return Result::Ok(Post {
-                slug,
-                title: fm.title,
-                date: fm.date,
-                body_html: render(&body),
-                index: fm.index,
-            });
-        },
-        Err(e) => {
-            return Result::Err(e);
-        },
-    }
+    let [fm, body] = parse(source)?;
+    return Result::Ok(Post {
+        slug,
+        title: fm.title,
+        date: fm.date,
+        body_html: render(&body),
+        index: fm.index,
+    });
 }

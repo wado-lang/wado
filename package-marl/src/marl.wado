@@ -6,8 +6,8 @@
 //! blockquotes) can consume ahead and blockquotes can recurse.
 
 use { render_inline } from "./inline.wado";
-use { escape_attr } from "./html.wado";
-use { chars_of } from "./str_cursor.wado";
+use { escape_attr, escape_text } from "./html.wado";
+use { chars_of, slice_chars } from "./str_cursor.wado";
 
 pub fn render(source: &String) -> String {
     let normalized = source.replace("\r\n", "\n");
@@ -29,14 +29,10 @@ fn render_blocks(lines: &List<String>, start: i32, end: i32) -> String {
             i += 1;
             continue;
         }
-        match fence_marker(&line) {
-            Some([ch, fence_len, info]) => {
-                flush_paragraph(&mut out, &mut para);
-                i = render_fenced_code(lines, i, end, ch, fence_len, &info, &mut out);
-                continue;
-            },
-            None => {
-            },
+        if let Some([ch, fence_len, info]) = fence_marker(&line) {
+            flush_paragraph(&mut out, &mut para);
+            i = render_fenced_code(lines, i, end, ch, fence_len, &info, &mut out);
+            continue;
         }
         let level = heading_level(&line);
         if level > 0 {
@@ -108,7 +104,7 @@ fn render_fenced_code(
             k += 1;
             break;
         }
-        buf.push_str(&escape_block_text(&line));
+        buf.push_str(&escape_text(&line));
         buf.push('\n');
         k += 1;
     }
@@ -179,7 +175,7 @@ fn strip_atx_closing(s: &String) -> String {
         return "";
     }
     if chars[e - 1] matches { ' ' | '\t' } {
-        return substr(&chars, 0, e).trim();
+        return slice_chars(&chars, 0, e).trim();
     }
     return *s;
 }
@@ -214,10 +210,7 @@ fn is_thematic_break(line: &String) -> bool {
 fn fence_marker(line: &String) -> Option<[char, i32, String]> {
     let chars = chars_of(line);
     let len = chars.len();
-    let mut p = 0;
-    while p < len && p < 3 && is_indent(chars[p]) {
-        p += 1;
-    }
+    let mut p = skip_indent(&chars, len);
     if p >= len {
         return null;
     }
@@ -233,7 +226,7 @@ fn fence_marker(line: &String) -> Option<[char, i32, String]> {
     if run < 3 {
         return null;
     }
-    let info = substr(&chars, p, len).trim();
+    let info = slice_chars(&chars, p, len).trim();
     if ch == '`' && info.contains("`") {
         return null;
     }
@@ -243,10 +236,7 @@ fn fence_marker(line: &String) -> Option<[char, i32, String]> {
 fn is_code_fence_close(line: &String, ch: char, fence_len: i32) -> bool {
     let chars = chars_of(line);
     let len = chars.len();
-    let mut p = 0;
-    while p < len && p < 3 && is_indent(chars[p]) {
-        p += 1;
-    }
+    let mut p = skip_indent(&chars, len);
     let mut run = 0;
     while p < len && chars[p] == ch {
         run += 1;
@@ -267,27 +257,21 @@ fn is_code_fence_close(line: &String, ch: char, fence_len: i32) -> bool {
 fn is_blockquote(line: &String) -> bool {
     let chars = chars_of(line);
     let len = chars.len();
-    let mut p = 0;
-    while p < len && p < 3 && is_indent(chars[p]) {
-        p += 1;
-    }
+    let mut p = skip_indent(&chars, len);
     return p < len && chars[p] == '>';
 }
 
 fn strip_blockquote_marker(line: &String) -> String {
     let chars = chars_of(line);
     let len = chars.len();
-    let mut p = 0;
-    while p < len && p < 3 && is_indent(chars[p]) {
-        p += 1;
-    }
+    let mut p = skip_indent(&chars, len);
     if p < len && chars[p] == '>' {
         p += 1;
         if p < len && is_indent(chars[p]) {
             p += 1;
         }
     }
-    return substr(&chars, p, len);
+    return slice_chars(&chars, p, len);
 }
 
 fn line_has_pipe(line: &String) -> bool {
@@ -470,7 +454,7 @@ fn parse_list_marker(line: &String) -> Option<ListMarker> {
     } else if is_digit(c) {
         let mut q = p;
         while q < len && is_digit(chars[q]) {
-            number = number * 10 + (chars[q] as i32 - 48);
+            number = number * 10 + (chars[q] as i32 - '0' as i32);
             q += 1;
         }
         if q < len && chars[q] matches { '.' | ')' } {
@@ -561,7 +545,7 @@ fn render_list(lines: &List<String>, start: i32, end: i32, out: &mut List<String
 fn tighten(html: &String) -> String {
     if html.starts_with("<p>") && html.ends_with("</p>") {
         let chars = chars_of(html);
-        let inner = substr(&chars, 3, chars.len() - 4);
+        let inner = slice_chars(&chars, 3, chars.len() - 4);
         if !inner.contains("<p>") {
             return inner;
         }
@@ -571,7 +555,7 @@ fn tighten(html: &String) -> String {
 
 fn cut_prefix(line: &String, n: i32) -> String {
     let chars = chars_of(line);
-    return substr(&chars, n, chars.len());
+    return slice_chars(&chars, n, chars.len());
 }
 
 fn dedent(line: &String, n: i32) -> String {
@@ -581,7 +565,7 @@ fn dedent(line: &String, n: i32) -> String {
     while p < len && p < n && is_indent(chars[p]) {
         p += 1;
     }
-    return substr(&chars, p, len);
+    return slice_chars(&chars, p, len);
 }
 
 fn line_indent(line: &String) -> i32 {
@@ -607,14 +591,13 @@ fn is_indent(c: char) -> bool {
     return c matches { ' ' | '\t' };
 }
 
-fn substr(chars: &List<char>, s: i32, e: i32) -> String {
-    let mut out = String::new();
-    let mut k = s;
-    while k < e {
-        out.push(chars[k]);
-        k += 1;
+/// Skip up to three leading indentation columns, returning the new index.
+fn skip_indent(chars: &List<char>, len: i32) -> i32 {
+    let mut p = 0;
+    while p < len && p < 3 && is_indent(chars[p]) {
+        p += 1;
     }
-    return out;
+    return p;
 }
 
 fn first_word(s: &String) -> String {
@@ -624,19 +607,6 @@ fn first_word(s: &String) -> String {
             break;
         }
         out.push(c);
-    }
-    return out;
-}
-
-fn escape_block_text(line: &String) -> String {
-    let mut out = String::new();
-    for let c of line.chars() {
-        match c {
-            '&' => out.push_str(&"&amp;"),
-            '<' => out.push_str(&"&lt;"),
-            '>' => out.push_str(&"&gt;"),
-            _ => out.push(c),
-        }
     }
     return out;
 }

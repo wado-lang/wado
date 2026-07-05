@@ -163,12 +163,10 @@ fn process_emphasis(toks: &mut List<Tok>) {
     let mut ci = 0;
     while ci < toks.len() {
         let closer = toks[ci];
-        if closer.kind == TokKind::Delim && closer.close && closer.count > 0 {
-            let oi = find_opener(toks, ci);
-            if oi >= 0 {
-                ci = resolve_pair(toks, oi, ci);
-            } else {
-                ci += 1;
+        if closer.kind matches { Delim } && closer.close && closer.count > 0 {
+            match find_opener(toks, ci) {
+                Some(oi) => ci = resolve_pair(toks, oi, ci),
+                None => ci += 1,
             }
         } else {
             ci += 1;
@@ -176,18 +174,18 @@ fn process_emphasis(toks: &mut List<Tok>) {
     }
 }
 
-fn find_opener(toks: &List<Tok>, ci: i32) -> i32 {
+fn find_opener(toks: &List<Tok>, ci: i32) -> Option<i32> {
     let closer = toks[ci];
     let mut oi = ci - 1;
     while oi >= 0 {
         let opener = toks[oi];
-        let ok = opener.kind == TokKind::Delim && opener.open && opener.count > 0 && opener.ch == closer.ch;
+        let ok = opener.kind matches { Delim } && opener.open && opener.count > 0 && opener.ch == closer.ch;
         if ok && rule_of_three(&opener, &closer) {
-            return oi;
+            return Option::Some(oi);
         }
         oi -= 1;
     }
-    return -1;
+    return null;
 }
 
 fn rule_of_three(opener: &Tok, closer: &Tok) -> bool {
@@ -212,7 +210,7 @@ fn resolve_pair(toks: &mut List<Tok>, oi: i32, ci: i32) -> i32 {
     let mut bi = oi + 1;
     while bi < ci {
         let mut between = toks[bi];
-        if between.kind == TokKind::Delim {
+        if between.kind matches { Delim } {
             between.open = false;
             between.close = false;
             toks[bi] = between;
@@ -349,36 +347,48 @@ fn try_link(cur: &StrCursor, open: i32, is_image: bool) -> Option<[String, i32]>
     return Option::Some([`<a href="{href}"{title_attr}>{text_html}</a>`, pclose + 1]);
 }
 
+/// Parser state for `parse_dest_title`.
+enum Phase {
+    /// Reading the destination up to the first whitespace.
+    Dest,
+    /// Skipping whitespace, looking for a title's opening delimiter.
+    SeekTitle,
+    /// Inside the title, up to its closing delimiter.
+    InTitle,
+    /// Everything parsed; ignore the rest.
+    Done,
+}
+
 /// Split a link destination field into `[dest, title]`. The title is an
 /// optional `"..."`, `'...'`, or `(...)` string after the destination.
 fn parse_dest_title(raw: &String) -> [String, String] {
     let mut dest = String::new();
     let mut title = String::new();
-    let mut phase = 0;
+    let mut phase = Phase::Dest;
     let mut closing = ' ';
     for let c of raw.trim().chars() {
         match phase {
-            0 => if c matches { ' ' | '\t' } { phase = 1 } else { dest.push(c) },
-            1 => match c {
+            Dest => if c matches { ' ' | '\t' } { phase = Phase::SeekTitle } else { dest.push(c) },
+            SeekTitle => match c {
                 ' ' | '\t' => {
                 },
                 '"' => {
                     closing = '"';
-                    phase = 2;
+                    phase = Phase::InTitle;
                 },
                 '\'' => {
                     closing = '\'';
-                    phase = 2;
+                    phase = Phase::InTitle;
                 },
                 '(' => {
                     closing = ')';
-                    phase = 2;
+                    phase = Phase::InTitle;
                 },
-                _ => {
-                    phase = 3;
-                },
+                _ => phase = Phase::Done,
             },
-            _ => if phase == 2 && c != closing { title.push(c) } else { phase = 3 },
+            InTitle => if c != closing { title.push(c) } else { phase = Phase::Done },
+            Done => {
+            },
         }
     }
     return [dest, title];
