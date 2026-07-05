@@ -126,11 +126,15 @@ impl TraitPair {
         }
     }
     fn display_alt(names: &TraitsStdlibNames) -> Self {
+        // `DisplayAlt` delegates to `Display` (which in turn delegates to
+        // `Inspect`), not to `InspectAlt`: the alternate *display* of a value
+        // defaults to its plain display, mirroring Rust's `{:#}` vs `{:#?}`.
+        // Pretty-printing stays on the inspect side via `InspectAlt`.
         Self {
             target_trait: names.display_alt.clone(),
             target_method: names.display_alt_method.clone(),
-            delegate_trait: names.inspect_alt.clone(),
-            delegate_method: names.inspect_alt_method.clone(),
+            delegate_trait: names.display.clone(),
+            delegate_method: names.display_method.clone(),
         }
     }
 }
@@ -366,6 +370,9 @@ pub fn synthesize_traits(project: Package) -> Package {
         generate_variant_eq_impls(module, &mut ctx);
         generate_inspect_impls(module, &mut ctx);
         generate_inspect_alt_impls(module, &mut ctx);
+        // Order is load-bearing: `DisplayAlt` delegates to `Display`, so the
+        // Display pass must run first and record each type's Display impl in
+        // `ctx.pending` for the DisplayAlt pass's `needs_fallback` check.
         generate_display_fallback_impls(module, &mut ctx);
         generate_display_alt_fallback_impls(module, &mut ctx);
     }
@@ -1276,26 +1283,33 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         if ctx.has_methodful_impl_anywhere(&nt.name, &inspect_name) {
             continue;
         }
-        let base_type = match tt.get(nt.type_id) {
-            ResolvedType::Newtype { base_type, .. } => *base_type,
-            _ => continue,
+        let ResolvedType::Newtype { base_type, .. } = tt.get(nt.type_id) else {
+            unreachable!("module.newtypes entry {} is not a Newtype type", nt.name);
         };
+        let base_type = *base_type;
         let ref_type = tt.make_ref(nt.type_id);
-        generated.push(Rc::new(RefCell::new(generate_newtype_inspect_fn(
+        let span = synth_span();
+        let as_suffix = write_str_stmt(
+            format!(" as {}", nt.name),
+            local_expr(1, "f", fmt_type, span),
+            string_type,
+            ref_string_type,
+            span,
+            &formatter_name,
+        );
+        generated.push(Rc::new(RefCell::new(generate_newtype_fmt_fn(
             &nt.name,
             nt.type_id,
             base_type,
             ref_type,
             fmt_type,
-            string_type,
-            ref_string_type,
             ctx.trait_env,
             &module_source,
             &mut tt,
-            synth_span(),
+            span,
             &inspect_name,
             &inspect_method,
-            &formatter_name,
+            Some(as_suffix),
         ))));
         ctx.record_impl(&nt.name, &inspect_name);
     }
@@ -1785,32 +1799,31 @@ fn build_variant_inspect_body(
     vec![TirStmt::new(TirStmtKind::Expr(match_expr), span)]
 }
 
-/// Generate `NewtypeName^Inspect::inspect(&self, &mut Formatter)` for a newtype.
+/// Generate `NewtypeName^<Trait>::<method>(&self, &mut Formatter)` for a
+/// newtype: delegate to the base type's same method via `(self as Base).<method>(f)`,
+/// then append `suffix`.
 ///
-/// Body: inspects the base type value, then writes ` as NewtypeName`.
-/// e.g., `100.5 as Meters`
-fn generate_newtype_inspect_fn(
+/// `Inspect` passes `Some(write_str(" as NewtypeName"))` so debug output reads
+/// `100.5 as Meters`; `Display` passes `None` so it renders transparently like
+/// the base value.
+fn generate_newtype_fmt_fn(
     newtype_name: &str,
     newtype_type: TypeId,
     base_type: TypeId,
     ref_newtype_type: TypeId,
     fmt_type: TypeId,
-    string_type: TypeId,
-    ref_string_type: TypeId,
     trait_env: &TraitEnv,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
-    inspect_trait: &str,
-    inspect_method: &str,
-    formatter_name: &str,
+    fmt_trait: &str,
+    fmt_method: &str,
+    suffix: Option<TirStmt>,
 ) -> TirFunction {
-    let method_info = trait_method_info(newtype_name, inspect_trait, inspect_method);
+    let method_info = trait_method_info(newtype_name, fmt_trait, fmt_method);
     let qualified_name = method_info.to_mangled_name();
 
     let deref_self = deref_local(0, "self", ref_newtype_type, newtype_type, span);
-    let fmt = || local_expr(1, "f", fmt_type, span);
-
     let cast_to_base = TirExpr::new(
         TirExprKind::Cast {
             expr: Box::new(deref_self),
@@ -1820,27 +1833,18 @@ fn generate_newtype_inspect_fn(
         span,
     );
 
-    let stmts = vec![
-        inspect_call(
-            cast_to_base,
-            base_type,
-            fmt(),
-            trait_env,
-            module_source,
-            tt,
-            span,
-            inspect_trait,
-            inspect_method,
-        ),
-        write_str_stmt(
-            format!(" as {newtype_name}"),
-            fmt(),
-            string_type,
-            ref_string_type,
-            span,
-            formatter_name,
-        ),
-    ];
+    let mut stmts = vec![inspect_call(
+        cast_to_base,
+        base_type,
+        local_expr(1, "f", fmt_type, span),
+        trait_env,
+        module_source,
+        tt,
+        span,
+        fmt_trait,
+        fmt_method,
+    )];
+    stmts.extend(suffix);
 
     make_synthetic_method(
         qualified_name,
@@ -3084,7 +3088,7 @@ fn generate_display_fallback(
     }
 }
 
-/// Generate `DisplayAlt::fmt_alt` fallback implementations that delegate to `InspectAlt::inspect_alt`.
+/// Generate `DisplayAlt::fmt_alt` fallback implementations that delegate to `Display::fmt`.
 fn generate_display_alt_fallback_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
     let pair = TraitPair::display_alt(ctx.names);
     generate_fallback_impls(module, ctx, &pair);
@@ -3099,6 +3103,7 @@ fn generate_fallback_impls(
     pair: &TraitPair,
 ) {
     let module_source = module.module_source.clone();
+    let is_display_pair = pair.target_trait == ctx.names.display;
     let all_fn_names: IndexSet<String> = module
         .functions
         .iter()
@@ -3283,7 +3288,32 @@ fn generate_fallback_impls(
             continue;
         }
         let ref_type = tt.make_ref(nt.type_id);
-        generated.push(make_fallback(&nt.name, ref_type, nt.type_id, vec![], &tt));
+        if is_display_pair {
+            // A newtype's `Display` is transparent: it delegates to the base
+            // type's `Display` with no ` as Name` suffix (unlike `Inspect`).
+            // `DisplayAlt` reaches the same base display by chaining through
+            // this via the `DisplayAlt → Display` delegate.
+            let ResolvedType::Newtype { base_type, .. } = tt.get(nt.type_id) else {
+                unreachable!("module.newtypes entry {} is not a Newtype type", nt.name);
+            };
+            let base_type = *base_type;
+            generated.push(Rc::new(RefCell::new(generate_newtype_fmt_fn(
+                &nt.name,
+                nt.type_id,
+                base_type,
+                ref_type,
+                fmt_type,
+                ctx.trait_env,
+                &module_source,
+                &mut tt,
+                span,
+                &pair.target_trait,
+                &pair.target_method,
+                None,
+            ))));
+        } else {
+            generated.push(make_fallback(&nt.name, ref_type, nt.type_id, vec![], &tt));
+        }
         ctx.record_impl(&nt.name, &pair.target_trait);
     }
 

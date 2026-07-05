@@ -48,7 +48,10 @@ test "Display bound falls back to Inspect" {
 
 test "alt bounds" {
     let p = P { x: 5, y: 6 };
-    assert show_inspect_alt(&p) == show_display_alt(&p);
+    // `DisplayAlt` defaults to `Display` (compact), not `InspectAlt` (pretty).
+    assert show_display_alt(&p) == show_display(&p);
+    // `InspectAlt` still pretty-prints, so it differs from the display side.
+    assert show_inspect_alt(&p) != show_display_alt(&p);
 }
 
 __DATA__

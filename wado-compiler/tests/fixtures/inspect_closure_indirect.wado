@@ -57,8 +57,12 @@ test "let-bound closure stored in struct field passed across fn boundary keeps s
 
 test "specialised closure formatted via Display falls through to Inspect output" {
     let f = |x: i32| x + 1;
+    // Display (`{f}`) and DisplayAlt (`{f:#}`) both render the signature:
+    // DisplayAlt delegates to Display, not InspectAlt. The per-literal source
+    // form is on the inspect side, via `{f:#?}`.
     assert `{f}` == "|i32| -> i32";
-    assert `{f:#}` == "|x: i32| (x + 1)";
+    assert `{f:#}` == "|i32| -> i32";
+    assert `{f:#?}` == "|x: i32| (x + 1)";
 }
 
 test "capturing closure shows captures clause in :#?" {

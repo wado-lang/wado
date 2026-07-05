@@ -444,9 +444,10 @@ global mut global:__const_obj_1: ref null "wado-compiler/tests/fixtures/serde_js
 fn "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/__test_0_serialize_with_some_and_non_empty_array"() {
     let __b: ref "core:prelude//List<i32>";
     let s: ref "core:prelude/string.wado//String";
+    let __v1: ref "core:prelude/string.wado//String";
     let __cond: bool;
-    let __local_6: ref "core:prelude/string.wado//String";
-    let __local_7: ref "core:prelude/format.wado//Formatter";
+    let __local_7: ref "core:prelude/string.wado//String";
+    let __local_8: ref "core:prelude/format.wado//Formatter";
     global:__const_obj_0 = struct.new "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado//User" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 }, email: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("alice@example.com"), used: 17 }, scores: ref.as_non_null(__b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(95, 87, 92), used: 3 }; __b) };
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "core:prelude/string.wado//String";
@@ -454,12 +455,13 @@ fn "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/__test_0_se
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/User>"(global:__const_obj_0);
     if @likely(__sroa_r_discriminant == 0) {
         s = ref.as_non_null(__sroa_r_case0_payload_0);
-        __cond = "core:prelude/string.wado/String^Eq::eq"(s, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"name\":\"Alice\",\"email\":\"alice@example.com\",\"scores\":[95,87,92]}"), used: 64 });
+        __v1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"name\":\"Alice\",\"email\":\"alice@example.com\",\"scores\":[95,87,92]}"), used: 64 };
+        __cond = "core:prelude/string.wado/String^Eq::eq"(s, __v1);
         if @unlikely(__cond == 0) {
             cold_path;
-            "core:rt/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(179); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_serialize_with_some_and_non_empty_array"), used: 48 }); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_option_array_fields.wado"), used: 64 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 23 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+            "core:rt/panic"(__local_7 = "core:prelude/string.wado/String::with_capacity"(266); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_serialize_with_some_and_non_empty_array"), used: 48 }); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push"(__local_7, 97); "core:prelude/string.wado/String::push"(__local_7, 116); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_option_array_fields.wado"), used: 64 }); "core:prelude/string.wado/String::push"(__local_7, 58); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 23 }, __local_8); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: s == `\\{\"name\":\"Alice\",\"email\":\"alice@example.com\",\"scores\":[95,87,92]\\}`
-"), used: 86 }); "core:prelude/string.wado/String::push"(__local_6, 115); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/format.wado/String^Inspect::inspect"(s, __local_7); "core:prelude/string.wado/String::push"(__local_6, 10); __local_6);
+"), used: 86 }); "core:prelude/string.wado/String::push"(__local_7, 115); "core:prelude/string.wado/String::push"(__local_7, 58); "core:prelude/string.wado/String::push"(__local_7, 32); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/format.wado/String^Inspect::inspect"(s, __local_8); "core:prelude/string.wado/String::push"(__local_7, 10); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("`\\{\"name\":\"Alice\",\"email\":\"alice@example.com\",\"scores\":[95,87,92]\\}`: "), used: 70 }); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/format.wado/String^Inspect::inspect"(__v1, __local_8); "core:prelude/string.wado/String::push"(__local_7, 10); __local_7);
             unreachable;
         }
     } else {
@@ -472,9 +474,10 @@ fn "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/__test_1_se
     let __b: ref "core:prelude//List<i32>";
     let u: ref "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado//User";
     let s: ref "core:prelude/string.wado//String";
+    let __v1: ref "core:prelude/string.wado//String";
     let __cond: bool;
-    let __local_6: ref "core:prelude/string.wado//String";
-    let __local_7: ref "core:prelude/format.wado//Formatter";
+    let __local_7: ref "core:prelude/string.wado//String";
+    let __local_8: ref "core:prelude/format.wado//Formatter";
     u = struct.new "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado//User" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(66, 111, 98), used: 3 }, email: ref.null none, scores: ref.as_non_null(__b = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 }; __b) };
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "core:prelude/string.wado//String";
@@ -482,12 +485,13 @@ fn "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/__test_1_se
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/User>"(u);
     if @likely(__sroa_r_discriminant == 0) {
         s = ref.as_non_null(__sroa_r_case0_payload_0);
-        __cond = "core:prelude/string.wado/String^Eq::eq"(s, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"name\":\"Bob\",\"email\":null,\"scores\":[]}"), used: 39 });
+        __v1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"name\":\"Bob\",\"email\":null,\"scores\":[]}"), used: 39 };
+        __cond = "core:prelude/string.wado/String^Eq::eq"(s, __v1);
         if @unlikely(__cond == 0) {
             cold_path;
-            "core:rt/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(154); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_serialize_with_none_and_empty_array"), used: 44 }); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_option_array_fields.wado"), used: 64 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 37 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+            "core:rt/panic"(__local_7 = "core:prelude/string.wado/String::with_capacity"(216); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_serialize_with_none_and_empty_array"), used: 44 }); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push"(__local_7, 97); "core:prelude/string.wado/String::push"(__local_7, 116); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_option_array_fields.wado"), used: 64 }); "core:prelude/string.wado/String::push"(__local_7, 58); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 37 }, __local_8); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: s == `\\{\"name\":\"Bob\",\"email\":null,\"scores\":[]\\}`
-"), used: 61 }); "core:prelude/string.wado/String::push"(__local_6, 115); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/format.wado/String^Inspect::inspect"(s, __local_7); "core:prelude/string.wado/String::push"(__local_6, 10); __local_6);
+"), used: 61 }); "core:prelude/string.wado/String::push"(__local_7, 115); "core:prelude/string.wado/String::push"(__local_7, 58); "core:prelude/string.wado/String::push"(__local_7, 32); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/format.wado/String^Inspect::inspect"(s, __local_8); "core:prelude/string.wado/String::push"(__local_7, 10); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("`\\{\"name\":\"Bob\",\"email\":null,\"scores\":[]\\}`: "), used: 45 }); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/format.wado/String^Inspect::inspect"(__v1, __local_8); "core:prelude/string.wado/String::push"(__local_7, 10); __local_7);
             unreachable;
         }
     } else {

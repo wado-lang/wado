@@ -787,6 +787,38 @@ fn include_bytes_path_definition() {
 }
 
 #[test]
+fn global_closure_call_callee_definition() {
+    futures::executor::block_on(async {
+        let source = concat!(
+            "global ADD100: fn(i32) -> i32 = |z: i32| z + 100;\n",
+            "fn run() -> i32 {\n",
+            "    return ADD100(5);\n",
+            "}\n",
+        );
+        let result = def_at(source, 2, 13)
+            .await
+            .expect("call callee ADD100 resolves to the global");
+        assert_range(&result, 0, 7, 13);
+    });
+}
+
+#[test]
+fn local_closure_call_callee_definition() {
+    futures::executor::block_on(async {
+        let source = concat!(
+            "fn f() -> i32 {\n",
+            "    let g = |z: i32| z + 1;\n",
+            "    return g(5);\n",
+            "}\n",
+        );
+        let result = def_at(source, 2, 11)
+            .await
+            .expect("call callee g resolves to the local");
+        assert_range(&result, 1, 8, 9);
+    });
+}
+
+#[test]
 fn use_from_filename_definition() {
     futures::executor::block_on(async {
         let lib = "pub fn helper() -> i32 { return 42; }\n";

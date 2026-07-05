@@ -1,0 +1,25 @@
+// Calling a closure stored in a global via bare `NAME(args)`. The callee is a
+// value of function type (a global), so it must lower to an indirect call, not
+// a named-function lookup — otherwise it errors with "unknown function".
+
+use { println, Stdout } from "core:cli";
+
+global ADD100: fn(i32) -> i32 = |z: i32| z + 100;
+global mut STEP: fn(i32) -> i32 = |z: i32| z * 2;
+
+global mut COUNTER: i32 = 0;
+global TICK: fn mut () -> i32 = || {
+    COUNTER = COUNTER + 1;
+    return COUNTER;
+};
+
+export fn run() with Stdout {
+    println(`{ADD100(5)}`);
+    STEP = |z: i32| z + 1;
+    println(`{STEP(5)}`);
+    println(`{TICK()}`);
+    println(`{TICK()}`);
+}
+
+__DATA__
+{"stdout": "105\n6\n1\n2\n"}

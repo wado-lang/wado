@@ -6,6 +6,7 @@
 
 use { ParserRule, AttrDecl, AltAction } from "./ir.wado";
 use { resolve_attrs, ResolvedAttr, AttrTarget } from "./attr_resolve.wado";
+use { find_attr_refs, AttrRef } from "./attr_scan.wado";
 use { splice_attrs } from "./attr_substitute.wado";
 use { to_pascal_case, to_snake_case, escape_ident } from "./ident.wado";
 use { is_self_ref_element } from "./lr_util.wado";
@@ -111,6 +112,10 @@ fn binding_for(bindings: &List<[bool, String, String]>, is_token: bool, base: &S
 /// `$start` / `$stop` substitution.
 pub global RULE_START_TOK_LOCAL: String = "_rule_start_tok";
 
+/// The precedence-threshold parameter a left-recursive rule fn carries; read
+/// by a `$_p` substitution in an LR rule (elsewhere `$_p` is the literal 0).
+global MIN_PREC_LOCAL: String = "min_prec";
+
 /// The LR precedence-climbing accumulator local (`gen_lr_fn`), holding the left
 /// operand's vals. java2wado maps `((Ctx)$ctx).<rule>(0)` onto it.
 pub global LR_ACC_LOCAL: String = "_lr_acc";
@@ -201,8 +206,11 @@ fn action_attr_expr(
 }
 
 /// A parser special: `$text` is the consumed input span, `$start`/`$stop` the
-/// rule's first/last token, `$ctx.toStringTree` the node under construction.
-/// `$text`/`$start` read the codegen-captured `_rule_start_tok`.
+/// rule's first/last token, `$ctx.toStringTree` the node under construction,
+/// `$_p` the current precedence threshold. Only a left-recursive rule fn carries
+/// a `min_prec` parameter, so `$_p` reads `min_prec` there and the literal `0`
+/// (its only value outside a precedence context) elsewhere. `$text`/`$start`
+/// read the codegen-captured `_rule_start_tok`.
 fn parser_special_expr(r: &ResolvedAttr, is_lr: bool, handle: &String) -> Result<String, String> {
     return match r.name {
         "text" && r.member matches { None } => Result::Ok(
@@ -214,8 +222,43 @@ fn parser_special_expr(r: &ResolvedAttr, is_lr: bool, handle: &String) -> Result
             let method = if is_lr { "rule_string_tree_final" } else { "rule_string_tree" };
             Result::Ok(`{*handle}.{method}()`);
         },
+        "_p" && r.member matches { None } => Result::Ok(if is_lr { MIN_PREC_LOCAL } else { "0" }),
         _ => Result::Err(`${r.name}: this parser special is not yet emitted`),
     };
+}
+
+/// Translate a lexer predicate / action body (identity translator): resolve
+/// lexer `$`-attributes to expressions over the match fn's `chars` / `start` /
+/// `pos`, leaving the surrounding host text (already Wado) verbatim. Only
+/// `$text` (the matched slice) is emitted today; any other `$`-reference is a
+/// loud error, so codegen never emits an unresolved `$ref`. A `$`-free body
+/// (`pos - start == 4`) passes through unchanged.
+pub fn translate_lexer_predicate(body: &String) -> Result<String, String> {
+    let raw = find_attr_refs(body);
+    let mut refs: List<ResolvedAttr> = [];
+    let mut replacements: List<String> = [];
+    for let r of &raw {
+        replacements.push(lexer_attr_expr(r)?);
+        refs.push(ResolvedAttr {
+            target: AttrTarget::LexerSpecial,
+            name: r.name,
+            member: r.member,
+            rule_name: "",
+            start: r.start,
+            end: r.end,
+        });
+    }
+    return Result::Ok(splice_attrs(body, &refs, &replacements));
+}
+
+/// The match-fn expression a lexer `$`-attribute becomes. `$text` is the slice
+/// matched so far (`chars[start..pos]`); other lexer attributes await their own
+/// resolution.
+fn lexer_attr_expr(r: &AttrRef) -> Result<String, String> {
+    if r.name == "text" && r.member matches { None } {
+        return Result::Ok("LexerSlice::new(chars, start, pos).to_string()");
+    }
+    return Result::Err(`${r.name}: this lexer attribute is not yet emitted`);
 }
 
 /// The local a call site binds a rule / label / token result to, matching

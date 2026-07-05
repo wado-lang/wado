@@ -279,7 +279,9 @@ internal trait InspectAlt {
 
 /// Trait for alternate display formatting.
 /// Used with the `{x:#}` format specifier.
-/// If not explicitly implemented, auto-generated to delegate to `InspectAlt::inspect_alt`.
+/// If not explicitly implemented, auto-generated to delegate to `Display::fmt`
+/// (which in turn falls back to `Inspect`). Pretty-printing lives on the
+/// inspect side via `InspectAlt`.
 #[compiler_item("display_alt")]
 internal trait DisplayAlt {
     fn fmt_alt(&self, f: &mut Formatter);

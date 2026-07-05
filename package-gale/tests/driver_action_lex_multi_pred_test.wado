@@ -1,0 +1,27 @@
+//! Stage C multi-alt lexer semantic predicate: a per-alt predicate on a
+//! multi-alt lexer rule (`KW : [a-z]+ { $text == "cat" }? | 'dog'`) gates its
+//! alt — a false predicate falls through to the next alt, then the next rule.
+//! `cat`/`dog` lex as KW, other runs fall through to ID.
+
+use lp from "./grammars/wado_lex_multi_pred.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_lex_multi_pred",
+        },
+    };
+
+test "a per-alt predicate gates a multi-alt lexer rule" {
+    let cat = lp::parse(&"cat");
+    assert cat.ok(), "clean parse of 'cat'";
+    assert cat.output == "kw", `output: '{cat.output}'`;
+
+    let dog = lp::parse(&"dog");
+    assert dog.ok(), "clean parse of 'dog'";
+    assert dog.output == "kw", `output: '{dog.output}'`;
+
+    let fox = lp::parse(&"fox");
+    assert fox.ok(), "clean parse of 'fox'";
+    assert fox.output == "id", `output: '{fox.output}'`;
+}

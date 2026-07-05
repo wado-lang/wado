@@ -92,3 +92,25 @@ pub(crate) struct ModuleDecls {
     pub(crate) local_flags_cases: IndexMap<String, FlagsInfo>,
     pub(crate) local_variant_cases: IndexMap<String, VariantInfo>,
 }
+
+impl ModuleDecls {
+    /// Resolve a bare name to a module or imported global as
+    /// `(source, original_name, type, is_mut)`. `source` is `current` for a
+    /// locally-declared global. Both the annotate and reify call-resolution
+    /// paths route their global-callee lookup through here so the two never
+    /// disagree on what a bare name binds to.
+    pub(crate) fn lookup_global(
+        &self,
+        name: &str,
+        current: &ModuleSource,
+    ) -> Option<(ModuleSource, String, TypeId, bool)> {
+        self.current_module_globals
+            .get(name)
+            .map(|&(ty, mutable)| (current.clone(), name.to_string(), ty, mutable))
+            .or_else(|| {
+                self.imported_globals
+                    .get(name)
+                    .map(|(src, orig, ty, mutable)| (src.clone(), orig.clone(), *ty, *mutable))
+            })
+    }
+}

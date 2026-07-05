@@ -312,6 +312,14 @@ impl CaptureScanner {
                 // `MethodCall`): capture the access whole.
                 self.add(unparse_expr_simple(expr), ast_id);
             }
+            Expr::TemplateString(_) => {
+                // Capture the rendered string whole; don't recurse into the
+                // interpolations. Capturing them individually would
+                // double-evaluate any side-effecting interpolation — once for
+                // its per-slot `let __vK = <interp>` and again when the
+                // template is rendered.
+                self.add(unparse_expr_simple(expr), ast_id);
+            }
             // Every other `Expr` variant is treated as an opaque leaf:
             // it is neither captured nor recursed into. This keeps
             // the failure-message shape predictable on shapes (`If`,
