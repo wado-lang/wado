@@ -162,9 +162,12 @@ impl SubstitutionContext {
                 {
                     return resolved;
                 }
-                // GenericInstance fallback: e.g. ListIter<i32>::Item -> i32
+                // GenericInstance fallback: e.g. ListIter<i32>::Item -> i32.
+                // Use the monomorphizing variant so a reference / nested
+                // associated type (`&T`, `I::Item`) is substituted with the
+                // instance's type args instead of returned verbatim.
                 if let Some(resolved) =
-                    type_table.resolve_generic_assoc_type(concrete_id, &assoc_name)
+                    type_table.resolve_generic_assoc_type_mono(concrete_id, &assoc_name)
                 {
                     return resolved;
                 }
@@ -1831,8 +1834,52 @@ impl TypeTable {
                 }
                 self.resolve_generic_assoc_type(inner_concrete_id, &inner_assoc_name)
             }
-            _ => Some(def_type_id),
+            // A composite def (`&T`, `List<T>`, …) still carrying the base
+            // struct's type params cannot be substituted here without interning
+            // (this is a `&self` fast path). Return `None` so the caller keeps
+            // the projection unresolved; the `&mut`
+            // `resolve_generic_assoc_type_mono` resolves it with the instance's
+            // type args. A param-free composite def is returned as-is.
+            _ => {
+                if self.contains_type_param(def_type_id) {
+                    None
+                } else {
+                    Some(def_type_id)
+                }
+            }
         }
+    }
+
+    /// Monomorphization-time associated-type resolution for a `GenericInstance`.
+    ///
+    /// Unlike [`Self::resolve_generic_assoc_type`] (a `&self` fast path that only
+    /// substitutes a bare-`TypeParam` def and cannot intern a substituted
+    /// composite def), this substitutes the instance's type args into the def
+    /// positionally (param index `i` -> `type_args[i]`) via
+    /// [`Self::substitute_type_params`], so a reference / composite / nested
+    /// associated type (`&T`, `I::Item`) becomes fully concrete. The mutual
+    /// recursion through `substitute_type_params` resolves nested projections
+    /// one level at a time, each with its own instance's args.
+    pub fn resolve_generic_assoc_type_mono(
+        &mut self,
+        concrete_id: TypeId,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        let (base_name, type_args) = match self.get(concrete_id).clone() {
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } => (name, type_args),
+            _ => return None,
+        };
+        let def_type_id = *self
+            .generic_assoc_type_defs
+            .get(&(base_name, assoc_name.to_string()))?;
+        let subst: IndexMap<u32, TypeId> = type_args
+            .iter()
+            .enumerate()
+            .map(|(i, &a)| (i as u32, a))
+            .collect();
+        Some(self.substitute_type_params(def_type_id, &subst))
     }
 
     /// Substitute `TypeParam` and `TypePack` indices in `type_id` using `substitution`.
@@ -1987,7 +2034,9 @@ impl TypeTable {
                     if let Some(resolved) = self.resolve_assoc_type(concrete, &assoc_name) {
                         return resolved;
                     }
-                    if let Some(resolved) = self.resolve_generic_assoc_type(concrete, &assoc_name) {
+                    if let Some(resolved) =
+                        self.resolve_generic_assoc_type_mono(concrete, &assoc_name)
+                    {
                         return resolved;
                     }
                 }

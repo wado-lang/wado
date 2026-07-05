@@ -2251,9 +2251,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             continue;
                         }
                         let resolved = {
-                            let tt = self.tysys.type_table.borrow();
-                            tt.resolve_assoc_type(owner_ty, &assoc.name)
-                                .or_else(|| tt.resolve_generic_assoc_type(owner_ty, &assoc.name))
+                            let mut tt = self.tysys.type_table.borrow_mut();
+                            match tt.resolve_assoc_type(owner_ty, &assoc.name) {
+                                Some(r) => Some(r),
+                                None => tt.resolve_generic_assoc_type_mono(owner_ty, &assoc.name),
+                            }
                         };
                         if let Some(resolved) = resolved {
                             args[target_idx] = resolved;
