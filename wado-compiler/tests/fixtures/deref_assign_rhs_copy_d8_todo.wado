@@ -1,0 +1,25 @@
+// Minimal reproduction of the deref-assign aliasing gap (reference-representation
+// WEP, divergence D8): `*ref = v` writes each field of the shared handle but does
+// not deep-copy the RHS, so the referent ends up aliasing `v`'s interior (here a
+// `List`'s backing array). Mutating `v` afterward then corrupts the referent.
+//
+// The value copy is dropped because deref-expansion `Let`s are synthesized after
+// `value_copy::insert`'s walk, and `wrap_value_copy_operand` finds no registered
+// helper for the referent type at that site. Fresh RHS values (`[]`, literals)
+// are unaffected; only a live, later-mutated RHS variable is observable.
+//
+// A lowering gap, so it reproduces at every opt level. Remove #[TODO] once
+// `*ref = v` deep-copies its RHS.
+
+#[TODO]
+test "deref-assign deep-copies the RHS (WEP D8)" {
+    let mut a: List<i32> = [0, 0];
+    let mut b: List<i32> = [5, 6];
+    let r: &mut List<i32> = &mut a;
+    *r = b;
+    b[0] = 999;
+    assert a[0] == 5;
+}
+
+__DATA__
+{"test": {}}
