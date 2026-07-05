@@ -75,6 +75,93 @@ directory) performed the manifest-driven project build. That behavior moves to
 `wado build`; `wado compile` now always compiles a single explicit target
 against a resolved index it never computes itself.
 
+### Subcommand ↔ Cargo Mapping and Dependency Consistency
+
+The dependency model must be coherent across every subcommand. Each command
+plays exactly one role toward the dependency graph:
+
+- resolve — computes the graph, writes `wado.lock`, may fetch (owns resolution)
+- consume — reads the resolved graph to compile/analyze user code; never
+  resolves itself (a stale lock triggers a re-resolve through the shared build
+  core, not per-command)
+- cache — reads the on-disk dependency cache only
+- none — touches no dependency state
+
+| wado      | cargo analog                | tier         | dependency role                 |
+| --------- | --------------------------- | ------------ | ------------------------------- |
+| `init`    | `cargo new` / `init`        | scaffold     | none                            |
+| `add`     | `cargo add`                 | manifest-op  | resolve (+ edit toml)           |
+| `remove`  | `cargo remove`              | manifest-op  | resolve (+ edit toml)           |
+| `update`  | `cargo update`              | manifest-op  | resolve                         |
+| `fetch`   | `cargo fetch`               | manifest-op  | resolve if no lock, + download  |
+| `list`    | `cargo tree` (cache view)   | inspect      | cache                           |
+| `build`   | `cargo build`               | orchestrator | consume (auto-resolve if stale) |
+| `run`     | `cargo run`                 | driver       | consume                         |
+| `serve`   | `cargo run` (service world) | driver       | consume                         |
+| `test`    | `cargo test`                | driver       | consume                         |
+| `publish` | `cargo publish`             | driver       | consume (needs a full lock)     |
+| `exec`    | `cargo run -p` / a tool     | driver       | consume                         |
+| `check`   | `cargo check`               | analyze      | consume                         |
+| `doc`     | `cargo doc` / `rustdoc`     | analyze      | consume¹                        |
+| `wit`     | — (emit component contract) | analyze      | consume                         |
+| `dump`    | `rustc -Z unpretty`         | analyze      | consume                         |
+| `query`   | rust-analyzer queries       | analyze      | consume                         |
+| `compile` | `rustc`                     | primitive    | consume (never resolves)        |
+| `format`  | `cargo fmt` / rustfmt       | file tool    | none                            |
+| `lsp`     | rust-analyzer               | server       | consume (on demand)             |
+| `syntax`  | — (grammar codegen)         | tooling      | none                            |
+
+¹ `doc` today parses one module and extracts docs from its AST — it resolves no
+imports, so it cannot follow dependency-referenced types or `pub use`
+re-exports across packages. Acceptable as a syntactic public-API view; a
+resolving mode is future work.
+
+This refines the coarse [Command Tiers](#command-tiers-compile-vs-build) table:
+its "does not resolve" group is `compile` (primitive) + the `analyze` /
+`file tool` / `server` / `tooling` rows here; its project tier is the
+`orchestrator` + `driver` rows; its dependency-management tier is `manifest-op`
+
+- `inspect`. The `analyze` commands are file-scoped like `compile` but, unlike
+  it, still resolve imports through the host (they consume the graph).
+
+Rules that keep this consistent:
+
+- One resolver. Only the manifest-op tier resolves and writes `wado.lock`;
+  `build` auto-resolves when the lock is stale, and the drivers reach that same
+  resolver through the build core. Nothing else resolves.
+- Uniform consumption. Every `consume` command reads the resolved graph through
+  the `CompilerHost`. Today the host resolves the nearest manifest's path deps
+  on demand — `attach_manifest_deps` merely precomputes that same index — so
+  every consumer (orchestrator, drivers, analyze commands) shares one seam;
+  Phase 3/4 makes it lock/cache-backed and they all gain registry/git resolution
+  at once, with no per-command wiring.
+- `compile` is the sole primitive that consumes but never resolves (`rustc`),
+  the deterministic seam of [Command Tiers](#command-tiers-compile-vs-build).
+
+#### Reproducibility flags (`--locked` / `--offline` / `--frozen`)
+
+Cargo accepts these on every command that reads the graph; Wado has none yet.
+They belong uniformly to every tier that reads the graph (resolve, orchestrator,
+driver, analyze), never to the pure primitives:
+
+- `--locked` — fail if `wado.lock` is stale (would need re-resolution); CI reproducibility
+- `--offline` — never hit the network; use only cache + lock; fail if a needed package is absent
+- `--frozen` — `--locked` and `--offline` together
+
+Consistency TODOs (do not implement piecemeal — land them together in Phase 3):
+
+- [ ] Add `--locked` / `--offline` / `--frozen` to every graph-reading tier:
+      resolve (`update`, `add`, `remove`, `fetch`), orchestrator (`build`),
+      driver (`run`, `serve`, `test`, `publish`, `exec`), and analyze (`check`,
+      `doc`, `wit`, `dump`, `query`). Reject them on the primitives (`compile`,
+      `format`, `init`, `syntax`, `lsp`) so the flag surface stays honest.
+- [ ] `publish` must verify against a full, fresh lock before uploading (a stale
+      or partial lock is an error, like `cargo publish`'s verification build).
+- [ ] `exec` consumes the same resolved graph (lock + cache) as the other
+      drivers — no separate resolution path (Phase 5).
+- [ ] Decide whether `doc` gains a resolving mode or stays syntactic; record the
+      choice in the [doc WEP](./wep-2026-02-28-doc-command.md).
+
 ### `wado init`
 
 Create a new `wado.toml` interactively.

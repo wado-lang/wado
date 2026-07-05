@@ -144,8 +144,10 @@ Make the `build` core lock-aware (inherited by `run` / `serve` / `test` /
 - [ ] In `build`, load `wado.lock` if present; else resolve and write it.
 - [ ] Freshness: compare `deps_hash` against the current manifest; stale →
       auto re-resolve (default) or error under `--locked`.
-- [ ] Add `--locked` to `build` (and the drivers) — reject stale locks for CI
-      reproducibility.
+- [ ] Add `--locked` / `--offline` / `--frozen` uniformly across the resolve and
+      driver tiers, rejected on the primitives — per the CLI-subcommands WEP
+      [Reproducibility flags](./wep-2026-02-22-cli-subcommands.md) consistency
+      TODOs. Land them together, not piecemeal.
 - [ ] When the lock exists, skip the resolver: read the graph, versions, and
       entry points straight from `wado.lock` (self-sufficient per the WEP).
 
