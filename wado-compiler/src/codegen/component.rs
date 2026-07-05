@@ -46,15 +46,9 @@ pub fn build_component(
         enc.defined_type().result(None, None);
     }
 
-    // Kiln shared types (`input-file`, `output-file`, `response`, `error`):
-    // emitted as an imported `core:kiln/types` instance so the generator's
-    // `generate(primary, inputs, options) -> result<response, error>` export
-    // signature and its task-return canon can reference them before
-    // `emit_canonical_intrinsics` and `emit_world_exports` run. Gate on the
-    // world's `import KilnHost` declaration so any kiln-generator-shaped world
-    // picks this path up — the previous form matched
-    // `target_world == "core:kiln/generator"` by string and missed future
-    // generator worlds.
+    // Emit the shared `core:kiln/types` instance before the canon and export
+    // passes, which reference its `input-file`/`response`/`error` types. Any
+    // world importing `KilnHost` is a generator world.
     if project.world_imports_interface("KilnHost") {
         emit_kiln_world_types(&mut builder, &mut ctx);
     }
@@ -1003,7 +997,7 @@ fn build_transmission_future_type_for(
 ///
 /// Structure:
 /// - Build an `InstanceType` whose interior defines `input-file`,
-///   `output-file`, `response`, `error`, `raw-request` as records/variants
+///   `output-file`, `response`, `error` as records/variants
 ///   and exports each one by its WIT name. The CM validator's
 ///   `all_valtypes_named_in_defined` check requires records/variants
 ///   referenced by a component-level export to have their original type
@@ -1661,12 +1655,6 @@ fn emit_canonical_intrinsics(
             }
             CanonicalIntrinsic::TaskReturn(key) => {
                 let memory_idx = ctx.memory_idx();
-                // A kiln generator borrows the `--lib` path for its typed
-                // signature but returns `Result<Response, Error>` over records /
-                // variants that `CmExportType` cannot express (its `cm_result`
-                // is `Unit`). Build the canon result type from the raw Wado type
-                // via the shared lib type engine, so the canon flattening matches
-                // `task_return_flat_params` (the core import's by-value shape).
                 let result_ty = lib_task_return_valtype(
                     key,
                     component_plan,

@@ -425,13 +425,10 @@ fn synthesize_lib_world_info(
         }
     }
 
-    // Tag the package's own named types in the export signatures with the
-    // library's default-interface FQ as their CM source. `register_lib_local_decls`
-    // records these under that FQ, so the lift/lower machinery (which resolves
-    // named types via `source_interface`) finds them like WASI types. Only the
-    // entry module's *own* declarations are tagged — a kiln generator's
-    // `generate` also references shared `core:kiln/types` records that must keep
-    // resolving to their own interface, not the generator's.
+    // Tag the entry module's own named types in the export signatures with the
+    // library's default-interface FQ, matching `register_lib_local_decls`, so
+    // the lift/lower machinery resolves them like WASI types. Only the module's
+    // own declarations — types from other interfaces keep their source.
     let local_type_names: crate::hashmap::IndexSet<String> = entry_module
         .map(|module| {
             module
@@ -477,12 +474,9 @@ fn annotate_lib_local_sources(
     use crate::ast::Type;
     match ty {
         Type::Named(named) => {
-            // Only tag the package's own declarations. A kiln generator's
-            // `generate` references shared `core:kiln/types` records
-            // (`InputFile` / `Response` / `Error`) that must keep resolving to
-            // their own interface — tagging them generator-local makes the CM
-            // lift/lower fall back to i32 handles. Already-resolved types are
-            // left as-is too.
+            // Only untagged, package-local names: an already-resolved type (a
+            // shared `core:kiln/types` record) keeps its own interface, which
+            // the CM lift/lower needs to find its fields.
             if named.source_interface.is_none() && local_type_names.contains(&named.name) {
                 named.source_interface = Some(fq.to_string());
             }
@@ -711,19 +705,10 @@ fn compile_after_load<H: CompilerHost>(
         .as_ref()
         .map(|fq| synthesize_lib_world_info(fq, sem.modules.get(&sem.entry_module_source)));
 
-    // A kiln generator's `generate` references shared `core:kiln/types` records
-    // that analysis leaves without a `source_interface`, so they otherwise
-    // resolve to a same-named type in another package (`wasi:http`'s `Response`).
-    // Stamp them with their real interface so the CM lift/lower finds their
-    // fields instead of falling back to i32 handles.
-    if is_kiln_generator
-        && let Some(world) = lib_world_info.as_mut()
-    {
-        // Only `generate` is the generator world's contract. A generator may
-        // declare helper `export fn`s beside it (used internally by
-        // `generate`); those are not world exports and must not be force-routed
-        // through the async task-return binding below, which would emit an
-        // invalid component.
+    if is_kiln_generator && let Some(world) = lib_world_info.as_mut() {
+        // Only `generate` is the generator world's contract; a helper
+        // `export fn` beside it is not a world export and must not be
+        // force-routed through the async binding below.
         world.exports.retain(|e| e.name == "generate");
         let kiln_shared: crate::hashmap::IndexSet<String> =
             kiln::import_check::KILN_SHARED_TYPE_NAMES
@@ -731,17 +716,28 @@ fn compile_after_load<H: CompilerHost>(
                 .map(|s| (*s).to_string())
                 .collect();
         for export in &mut world.exports {
+            // `generate`'s shared `core:kiln/types` records reach analysis
+            // without a `source_interface`; stamp their real interface so the
+            // CM lift/lower resolves their fields instead of a same-named type
+            // elsewhere (`wasi:http`'s `Response`) or an i32 handle.
             for (_, ty) in &mut export.params {
-                annotate_lib_local_sources(ty, kiln::import_check::KILN_TYPES_INTERFACE, &kiln_shared);
+                annotate_lib_local_sources(
+                    ty,
+                    kiln::import_check::KILN_TYPES_INTERFACE,
+                    &kiln_shared,
+                );
             }
             if let Some(ty) = export.return_type.as_mut() {
-                annotate_lib_local_sources(ty, kiln::import_check::KILN_TYPES_INTERFACE, &kiln_shared);
+                annotate_lib_local_sources(
+                    ty,
+                    kiln::import_check::KILN_TYPES_INTERFACE,
+                    &kiln_shared,
+                );
             }
-            // The static `core:kiln/generator` world declares `generate` async,
-            // so its canon uses the `task.return` lift. The result-returning
-            // binding (which handles nested records / lists) relies on that
-            // async canon (`sync_lift = !is_async`); force it here since the
-            // user's `fn generate` is not written `async`.
+            // `generate` returns `Result<_, _>` and must lift via `task.return`
+            // (the result binding handles nested records/lists); the canon's
+            // async-ness follows `is_async` (`sync_lift = !is_async`), so force
+            // it — the user writes `fn generate`, not `async fn`.
             export.is_async = true;
         }
     }

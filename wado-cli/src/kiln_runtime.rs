@@ -97,21 +97,17 @@ fn lift_diagnostic(d: kiln_host::Diagnostic) -> GeneratorDiagnostic {
     }
 }
 
-/// Locate the generator's `generate` export without hardcoding the interface
-/// FQ: a generator whose `generate` references named `core:kiln/types` records
-/// exports it inside its synthesized default interface (whose FQ the compiler
-/// owns and may make package-specific), while a primitive-only generator could
-/// expose it as a bare world export. Try the bare export, then scan the
-/// component's exported interfaces for one that contains `generate`.
+/// Locate the generator's `generate` export by scanning the component's
+/// exported interfaces. `generate` always references named `core:kiln/types`
+/// records, so the compiler groups it into a synthesized default interface
+/// whose FQ it owns (and may make package-specific) — scanning avoids
+/// hardcoding that FQ.
 fn find_generate<T>(
     component: &Component,
     engine: &Engine,
     instance: &Instance,
     store: &mut Store<T>,
 ) -> Result<Func, GeneratorRunnerError> {
-    if let Some(func) = instance.get_func(&mut *store, "generate") {
-        return Ok(func);
-    }
     let interface_names: Vec<String> = component
         .component_type()
         .exports(engine)
@@ -381,9 +377,6 @@ pub async fn run_generator<H: CompilerHost + 'static>(
             .set_fuel(fuel)
             .map_err(|e| GeneratorRunnerError::Host(format!("set fuel: {e}")))?;
 
-        // v0.3: each generator has its own synthesized world, so there is no
-        // shared static binding to `generate`. Instantiate generically and
-        // drive `generate` dynamically as typed `Val`s.
         let instance = linker
             .instantiate_async(&mut store, component)
             .await
@@ -391,10 +384,8 @@ pub async fn run_generator<H: CompilerHost + 'static>(
 
         let generate = find_generate(component, engine, &instance, &mut store)?;
 
-        // `generate(primary: input-file, inputs: list<input-file>[, options:
-        // <Options>])`. The options parameter is present only for a generator
-        // that declares a non-empty `Options`; introspect the signature to
-        // build exactly the arguments the component expects.
+        // `generate(primary, inputs[, options])`: the options parameter is
+        // present only when the generator declares a non-empty `Options`.
         let options_ty = generate.ty(&store).params().nth(2).map(|(_, t)| t);
         let mut args: Vec<Val> = Vec::with_capacity(3);
         args.push(input_file_val(&request.primary));
@@ -407,10 +398,9 @@ pub async fn run_generator<H: CompilerHost + 'static>(
             args.push(val);
         }
 
-        // `Func::call_async` drives the async (task-return) export to
-        // completion and runs its post-return; it returns wasmtime runtime
-        // errors, while the generator's own typed `error` is the `Val::Result`
-        // payload below.
+        // `call_async` drives the async task-return export to completion; its
+        // error is a host/runtime failure, distinct from the generator's own
+        // typed `error` in the `Val::Result` payload below.
         let mut results = [Val::Bool(false)];
         generate
             .call_async(&mut store, &args, &mut results)
@@ -423,9 +413,9 @@ pub async fn run_generator<H: CompilerHost + 'static>(
                 files: lift_response(payload.as_deref())?,
                 reads: std::mem::take(&mut *reads_inner.lock().unwrap()),
             }),
-            Val::Result(Err(payload)) => {
-                Err(GeneratorRunnerError::Generator(lift_error_val(payload.as_deref())?))
-            }
+            Val::Result(Err(payload)) => Err(GeneratorRunnerError::Generator(lift_error_val(
+                payload.as_deref(),
+            )?)),
             other => Err(GeneratorRunnerError::Host(format!(
                 "generate returned a non-result value: {other:?}"
             ))),
@@ -657,7 +647,10 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
             values: vec![
                 ("max_depth".to_string(), CanonicalValue::I64(3)),
                 ("ratio".to_string(), CanonicalValue::F64(0.5)),
-                ("mode".to_string(), CanonicalValue::Enum("HighContrast".to_string())),
+                (
+                    "mode".to_string(),
+                    CanonicalValue::Enum("HighContrast".to_string()),
+                ),
             ],
         };
 

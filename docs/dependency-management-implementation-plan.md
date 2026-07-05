@@ -240,9 +240,9 @@ one from a **local path** today (`example/hello-packages` uses
 - [ ] Fetch a dependency's generator at its world sub-path (`<ns>/<pkg>/core-kiln-generator`),
       not just the bare repository — extend `wado fetch` / the provider.
 - [~] Run a prebuilt generator component. The driver already runs a generator
-      from component bytes (`run_generator(generator.wasm, …)`), so a prebuilt
-      component needs no new execution path — only its `OptionsDescriptor`, which
-      a prebuilt component carries via `describe-options` rather than source.
+  from component bytes (`run_generator(generator.wasm, …)`), so a prebuilt
+  component needs no new execution path — only its `OptionsDescriptor`, which
+  a prebuilt component carries via `describe-options` rather than source.
   - [x] Decode `describe-options` CBOR → `OptionsDescriptor`
         (`kiln::decode_options_schema`, the inverse of the encoder; exact for
         bool/string/enum/object/`Option`, integer widths coalesce to `i64`).

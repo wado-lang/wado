@@ -17,8 +17,8 @@
 //!
 //! See WEP 2026-04-12 §"M6.5 stage 2".
 use crate::ast::{
-    AstId, Expr, GenericType, IdentExpr, Item, LetStmt, Module, NamedType, Param, Pattern, SelfKind,
-    Stmt, StructLiteralExpr, StructLiteralField, Type, UseDecl, UseItem,
+    AstId, Expr, GenericType, IdentExpr, Item, LetStmt, Module, NamedType, Param, Pattern,
+    SelfKind, Stmt, StructLiteralExpr, StructLiteralField, Type, UseDecl, UseItem,
 };
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::IndexMap;
@@ -120,9 +120,11 @@ pub fn inject_kiln_request_adapter(
     let has_options = matches!(request_options, RequestOptions::Explicit(_));
     let options_type = match request_options {
         RequestOptions::Explicit(ty) => ty,
-        RequestOptions::Default => {
-            Type::Named(NamedType::new(module.alloc_ast_id(), "NoOptions".to_string(), span))
-        }
+        RequestOptions::Default => Type::Named(NamedType::new(
+            module.alloc_ast_id(),
+            "NoOptions".to_string(),
+            span,
+        )),
     };
 
     // Stamp `InputFile` with its shared `core:kiln/types` source so downstream

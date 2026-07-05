@@ -503,7 +503,8 @@ mod tests {
             "x",
             CanonicalValue::String("Rpc".to_string()),
         )]));
-        let e = encode_options_canonical(&opts(vec![("x", CanonicalValue::Enum("Rpc".to_string()))]));
+        let e =
+            encode_options_canonical(&opts(vec![("x", CanonicalValue::Enum("Rpc".to_string()))]));
         assert_ne!(s, e, "a string and an enum are distinct value kinds");
     }
 
@@ -570,6 +571,9 @@ mod tests {
                 ("y".to_string(), CanonicalValue::I64(2)),
             ]),
         )]));
-        assert_eq!(a, b, "a nested struct's field order must not affect the key");
+        assert_eq!(
+            a, b,
+            "a nested struct's field order must not affect the key"
+        );
     }
 }

@@ -3208,15 +3208,23 @@ impl CmTypeGen {
                         let cases_opt = self
                             .interface_hint
                             .as_deref()
-                            .and_then(|h| cm_interface_registry.get_variant_cases_by_interface(h, name))
-                            .or_else(|| cm_interface_registry.get_variant_cases_by_source(source, name));
+                            .and_then(|h| {
+                                cm_interface_registry.get_variant_cases_by_interface(h, name)
+                            })
+                            .or_else(|| {
+                                cm_interface_registry.get_variant_cases_by_source(source, name)
+                            });
                         cases_opt.map(<[CmVariantCase]>::to_vec)
                     } {
                         let cm_name = self
                             .interface_hint
                             .as_deref()
-                            .and_then(|h| cm_interface_registry.get_variant_cm_name_by_interface(h, name))
-                            .or_else(|| cm_interface_registry.get_variant_cm_name_by_source(source, name))
+                            .and_then(|h| {
+                                cm_interface_registry.get_variant_cm_name_by_interface(h, name)
+                            })
+                            .or_else(|| {
+                                cm_interface_registry.get_variant_cm_name_by_source(source, name)
+                            })
                             .expect("variant cm_name present when cases are")
                             .to_string();
                         let idx = self.define_variant(

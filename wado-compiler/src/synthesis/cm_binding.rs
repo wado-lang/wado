@@ -432,11 +432,10 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
     // Library world exports use a synchronous lift (the core function returns
     // the value directly), unlike the async/task-return WASI worlds.
     let is_lib_world = project.is_lib_world();
-    // The kiln generator borrows the lib path only for its typed params; its
-    // `generate` returns `Result<Response, Error>` over nested records / lists,
-    // which the synchronous lower path cannot lower. Route it through the
-    // async task-return result binding instead (matching the static
-    // `core:kiln/generator` world, which declares `generate` async).
+    // The kiln generator uses the lib path only for its typed params; its
+    // `generate` returns `Result<_, _>` over nested records/lists that the
+    // synchronous lower path cannot handle, so it routes through the async
+    // task-return result binding instead (see the routing below).
     let is_kiln_generator = project
         .world_registry
         .world_imports_interface(&project.target_world, "KilnHost");
@@ -731,14 +730,10 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
             }
         }
 
-        // Compute the correct task-return params from the export's flat return types.
-        // The builtin registry defines task_return with a single i32 param, but for
-        // Result-returning exports the task-return call passes the full flattened type.
-        // Store on Package so optimize_dce can use it when creating the import.
-        // Library exports use a synchronous lift and never call task.return, so
-        // skip this for them — except the kiln generator, which borrows the lib
-        // path for its typed params yet lowers `generate` through the async
-        // task-return result binding.
+        // The builtin `task_return` takes a single i32, but a Result-returning
+        // export passes its full flattened result; record those flat params on
+        // the Package for optimize_dce to type the import. Sync-lift lib exports
+        // never call task.return, so skip them — but the kiln generator does.
         for export in world_info
             .exports
             .iter()

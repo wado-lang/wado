@@ -658,7 +658,10 @@ fn host_caches_compiled_component_across_run_generator_calls() {
         inputs: vec![],
         options: wado_compiler::kiln::CanonicalOptions {
             descriptor: wado_compiler::kiln::OptionsDescriptor::default(),
-            values: vec![("verbose".to_string(), wado_compiler::kiln::CanonicalValue::Bool(false))],
+            values: vec![(
+                "verbose".to_string(),
+                wado_compiler::kiln::CanonicalValue::Bool(false),
+            )],
         },
     };
 
@@ -729,7 +732,10 @@ fn shared_kiln_cache_compiles_generator_once_across_hosts() {
         inputs: vec![],
         options: wado_compiler::kiln::CanonicalOptions {
             descriptor: wado_compiler::kiln::OptionsDescriptor::default(),
-            values: vec![("verbose".to_string(), wado_compiler::kiln::CanonicalValue::Bool(false))],
+            values: vec![(
+                "verbose".to_string(),
+                wado_compiler::kiln::CanonicalValue::Bool(false),
+            )],
         },
     };
 

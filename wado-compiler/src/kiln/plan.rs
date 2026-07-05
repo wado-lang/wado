@@ -330,7 +330,10 @@ mod tests {
         let mut a2 = inv("a", "s.proto", &[], "build/kiln/a");
         a2.options = crate::kiln::options_check::CanonicalOptions {
             descriptor: crate::kiln::options::OptionsDescriptor::default(),
-            values: vec![("k".to_string(), crate::kiln::options::CanonicalValue::Bool(true))],
+            values: vec![(
+                "k".to_string(),
+                crate::kiln::options::CanonicalValue::Bool(true),
+            )],
         };
         let err = build_plan(vec![a1, a2]).unwrap_err();
         match err {
