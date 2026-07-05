@@ -19,7 +19,7 @@
 //! with `"null"` (the `TypeSet::Many` shape `package-jade` models).
 
 use crate::kiln::import_check::DESCRIBE_OPTIONS_FN;
-use crate::kiln::options::{CanonicalValue, OptionsDescriptor, OptionsType};
+use crate::kiln::options::{CanonicalValue, OptionsDescriptor, OptionsField, OptionsType};
 use crate::tir::{TirExprKind, TirModule, TirStmtKind};
 
 /// The `$schema` dialect Jade emits (mirrors `package-jade`'s `Schema::DRAFT`).
@@ -298,10 +298,236 @@ fn encode_value(enc: &mut EncVec, value: &SchemaValue) {
     }
 }
 
+/// A prebuilt (registry) generator carries its options schema via
+/// `describe-options`, not its `OptionsDescriptor` — the source is gone. Decode
+/// that CBOR JSON Schema back into an `OptionsDescriptor` so the consumer reuses
+/// the same options validation and canonical-encoding machinery as a
+/// source-compiled generator.
+///
+/// The reconstruction is exact for the shapes the schema distinguishes, but
+/// lossy where JSON Schema is coarser than Wado's types: every integer width
+/// (`i32`/`i64`/`u32`/`u64`) maps to `"integer"`, so it decodes back to `I64`;
+/// `"number"` decodes to `F64`. Generators whose options are booleans, strings,
+/// enums, nested objects, or `Option`s round-trip exactly.
+pub fn decode_options_schema(cbor: &[u8]) -> Result<OptionsDescriptor, SchemaDecodeError> {
+    let mut dec = minicbor::Decoder::new(cbor);
+    let node = decode_node(&mut dec)?;
+    if dec.position() != cbor.len() {
+        return Err(SchemaDecodeError::new("trailing bytes after schema"));
+    }
+    object_descriptor(&node)
+}
+
+/// A failure decoding a `describe-options` schema.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SchemaDecodeError {
+    pub message: String,
+}
+
+impl SchemaDecodeError {
+    fn new(message: impl Into<String>) -> Self {
+        SchemaDecodeError {
+            message: message.into(),
+        }
+    }
+}
+
+impl std::fmt::Display for SchemaDecodeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "invalid describe-options schema: {}", self.message)
+    }
+}
+
+/// A decoded CBOR value — the JSON Schema data model.
+#[derive(Debug, Clone, PartialEq)]
+enum Node {
+    Bool(bool),
+    Int(i64),
+    Uint(u64),
+    Float(f64),
+    Text(String),
+    Null,
+    Array(Vec<Node>),
+    Map(Vec<(String, Node)>),
+}
+
+fn decode_node(dec: &mut minicbor::Decoder<'_>) -> Result<Node, SchemaDecodeError> {
+    use minicbor::data::Type;
+    let err = |m: &str| SchemaDecodeError::new(m.to_string());
+    match dec.datatype().map_err(|e| err(&e.to_string()))? {
+        Type::Bool => Ok(Node::Bool(dec.bool().map_err(|e| err(&e.to_string()))?)),
+        Type::U8 | Type::U16 | Type::U32 | Type::U64 => {
+            Ok(Node::Uint(dec.u64().map_err(|e| err(&e.to_string()))?))
+        }
+        Type::I8 | Type::I16 | Type::I32 | Type::I64 => {
+            Ok(Node::Int(dec.i64().map_err(|e| err(&e.to_string()))?))
+        }
+        Type::F16 | Type::F32 | Type::F64 => {
+            Ok(Node::Float(dec.f64().map_err(|e| err(&e.to_string()))?))
+        }
+        Type::String => Ok(Node::Text(
+            dec.str().map_err(|e| err(&e.to_string()))?.to_string(),
+        )),
+        Type::Null => {
+            dec.null().map_err(|e| err(&e.to_string()))?;
+            Ok(Node::Null)
+        }
+        Type::Array => {
+            let len = dec
+                .array()
+                .map_err(|e| err(&e.to_string()))?
+                .ok_or_else(|| err("indefinite arrays are not supported"))?;
+            let mut items = Vec::with_capacity(len as usize);
+            for _ in 0..len {
+                items.push(decode_node(dec)?);
+            }
+            Ok(Node::Array(items))
+        }
+        Type::Map => {
+            let len = dec
+                .map()
+                .map_err(|e| err(&e.to_string()))?
+                .ok_or_else(|| err("indefinite maps are not supported"))?;
+            let mut entries = Vec::with_capacity(len as usize);
+            for _ in 0..len {
+                let key = dec.str().map_err(|_| err("map key must be text"))?.to_string();
+                entries.push((key, decode_node(dec)?));
+            }
+            Ok(Node::Map(entries))
+        }
+        other => Err(err(&format!("unsupported CBOR type {other:?}"))),
+    }
+}
+
+fn map_get<'a>(node: &'a Node, key: &str) -> Option<&'a Node> {
+    match node {
+        Node::Map(entries) => entries.iter().find(|(k, _)| k == key).map(|(_, v)| v),
+        _ => None,
+    }
+}
+
+/// Interpret an object schema `Node` as an `OptionsDescriptor`.
+fn object_descriptor(node: &Node) -> Result<OptionsDescriptor, SchemaDecodeError> {
+    let required: Vec<String> = match map_get(node, "required") {
+        Some(Node::Array(items)) => items
+            .iter()
+            .filter_map(|n| match n {
+                Node::Text(s) => Some(s.clone()),
+                _ => None,
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+
+    let Some(Node::Map(properties)) = map_get(node, "properties") else {
+        // An object with no properties (e.g. a no-options generator) is a valid
+        // empty descriptor.
+        return Ok(OptionsDescriptor { fields: Vec::new() });
+    };
+
+    let mut fields = Vec::with_capacity(properties.len());
+    for (name, schema) in properties {
+        let ty = property_type(schema)
+            .ok_or_else(|| SchemaDecodeError::new(format!("property `{name}` has no usable type")))?;
+        let default = if required.iter().any(|r| r == name) {
+            None
+        } else {
+            map_get(schema, "default").map(decode_default)
+        };
+        fields.push(OptionsField {
+            name: name.clone(),
+            ty,
+            default,
+            span: crate::token::Span::default(),
+        });
+    }
+    Ok(OptionsDescriptor { fields })
+}
+
+/// Interpret a property sub-schema `Node` as an `OptionsType`.
+fn property_type(schema: &Node) -> Option<OptionsType> {
+    // An `enum` keyword marks a string enum, regardless of the `type` union.
+    if let Some(Node::Array(values)) = map_get(schema, "enum") {
+        let variants: Vec<String> = values
+            .iter()
+            .filter_map(|n| match n {
+                Node::Text(s) => Some(s.clone()),
+                _ => None,
+            })
+            .collect();
+        let inner = OptionsType::Enum {
+            name: "Enum".to_string(),
+            variants,
+        };
+        return Some(wrap_nullable(schema, inner));
+    }
+
+    match map_get(schema, "type")? {
+        Node::Text(name) if name == "object" => {
+            let descriptor = object_descriptor(schema).ok()?;
+            Some(OptionsType::Struct {
+                name: "Struct".to_string(),
+                descriptor,
+            })
+        }
+        Node::Text(name) => scalar_type(name),
+        Node::Array(names) => {
+            // A `["T", "null"]` union is `Option<T>`.
+            let concrete = names.iter().find_map(|n| match n {
+                Node::Text(s) if s != "null" => scalar_type(s),
+                _ => None,
+            })?;
+            let has_null = names
+                .iter()
+                .any(|n| matches!(n, Node::Text(s) if s == "null"));
+            if has_null {
+                Some(OptionsType::Option(Box::new(concrete)))
+            } else {
+                Some(concrete)
+            }
+        }
+        _ => None,
+    }
+}
+
+/// If the schema's `type` union includes `"null"`, wrap `inner` in `Option`.
+fn wrap_nullable(schema: &Node, inner: OptionsType) -> OptionsType {
+    if let Some(Node::Array(names)) = map_get(schema, "type")
+        && names.iter().any(|n| matches!(n, Node::Text(s) if s == "null"))
+    {
+        return OptionsType::Option(Box::new(inner));
+    }
+    inner
+}
+
+fn scalar_type(name: &str) -> Option<OptionsType> {
+    match name {
+        "boolean" => Some(OptionsType::Bool),
+        // JSON Schema is coarser than Wado's integer widths — see the module
+        // note. `integer` decodes to `I64`, `number` to `F64`.
+        "integer" => Some(OptionsType::I64),
+        "number" => Some(OptionsType::F64),
+        "string" => Some(OptionsType::String),
+        "object" => None, // nested objects handled by the caller via recursion
+        _ => None,
+    }
+}
+
+fn decode_default(node: &Node) -> CanonicalValue {
+    match node {
+        Node::Bool(b) => CanonicalValue::Bool(*b),
+        Node::Int(n) => CanonicalValue::I64(*n),
+        Node::Uint(n) => CanonicalValue::U64(*n),
+        Node::Float(f) => CanonicalValue::F64(*f),
+        Node::Text(s) => CanonicalValue::String(s.clone()),
+        Node::Null => CanonicalValue::None,
+        Node::Array(_) | Node::Map(_) => CanonicalValue::None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kiln::options::{OptionsField, OptionsType};
     use crate::token::Span;
 
     fn field(name: &str, ty: OptionsType, default: Option<CanonicalValue>) -> OptionsField {
@@ -491,6 +717,81 @@ mod tests {
         );
         let width = get(get(layout, "properties").unwrap(), "width").unwrap();
         assert_eq!(get(width, "type"), Some(&Cbor::Text("integer".to_string())));
+    }
+
+    /// Recursively sort fields by name — the CBOR schema stores `properties`
+    /// in canonical key order, so declaration order does not survive a
+    /// round-trip (and is not semantically significant).
+    fn sorted(mut d: OptionsDescriptor) -> OptionsDescriptor {
+        for f in &mut d.fields {
+            if let OptionsType::Struct { descriptor, .. } = &mut f.ty {
+                *descriptor = sorted(descriptor.clone());
+            }
+        }
+        d.fields.sort_by(|a, b| a.name.cmp(&b.name));
+        d
+    }
+
+    fn roundtrip(descriptor: &OptionsDescriptor) -> OptionsDescriptor {
+        sorted(decode_options_schema(&describe_options_cbor(descriptor)).expect("decodes"))
+    }
+
+    #[test]
+    fn gale_options_roundtrip_exactly() {
+        // `{ highlight: bool (required), trace: bool = false }` — gale's shape.
+        let descriptor = OptionsDescriptor {
+            fields: vec![
+                field("highlight", OptionsType::Bool, None),
+                field("trace", OptionsType::Bool, Some(CanonicalValue::Bool(false))),
+            ],
+        };
+        assert_eq!(roundtrip(&descriptor), sorted(descriptor.clone()));
+    }
+
+    #[test]
+    fn string_enum_and_nested_object_roundtrip() {
+        let descriptor = OptionsDescriptor {
+            fields: vec![
+                field(
+                    "style",
+                    OptionsType::Enum {
+                        name: "Enum".to_string(),
+                        variants: vec!["Rpc".to_string(), "Rest".to_string()],
+                    },
+                    None,
+                ),
+                field(
+                    "layout",
+                    OptionsType::Struct {
+                        name: "Struct".to_string(),
+                        descriptor: OptionsDescriptor {
+                            fields: vec![field("name", OptionsType::String, None)],
+                        },
+                    },
+                    None,
+                ),
+            ],
+        };
+        assert_eq!(roundtrip(&descriptor), sorted(descriptor.clone()));
+    }
+
+    #[test]
+    fn integer_widths_coalesce_to_i64_on_decode() {
+        // JSON Schema has one `integer`, so width is lost on the round-trip.
+        let descriptor = OptionsDescriptor {
+            fields: vec![field("count", OptionsType::U32, None)],
+        };
+        let decoded = roundtrip(&descriptor);
+        assert_eq!(decoded.fields[0].ty, OptionsType::I64);
+    }
+
+    #[test]
+    fn empty_schema_decodes_to_empty_descriptor() {
+        let decoded = decode_options_schema(&describe_options_cbor(&OptionsDescriptor {
+            fields: vec![],
+        }))
+        .unwrap();
+        assert!(decoded.fields.is_empty());
     }
 
     #[test]

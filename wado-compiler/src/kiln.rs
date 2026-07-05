@@ -27,7 +27,9 @@ pub use cache::{
     encode_options_canonical, file_hash, gather_file_hashes, generator_identity,
     hash_options_canonical, hex_digest,
 };
-pub use describe_options::describe_options_cbor;
+pub use describe_options::{
+    SchemaDecodeError, decode_options_schema, describe_options_cbor,
+};
 pub use header::{GeneratedHeader, has_generated_marker, parse_header};
 pub use inline::{InvocationIndex, collect_inline_invocations};
 pub use invocation::{DeclSite, GeneratorModule, Invocation, InvocationPath};
