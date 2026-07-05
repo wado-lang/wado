@@ -245,6 +245,16 @@ one from a **local path** today (`example/hello-packages` uses
       source-extracted `OptionsDescriptor` → `package-jade` `Schema` → CBOR; the
       consumer validates options against a decoded schema. Republish gale under
       the new world (existing 0.0.x predate the export).
+  - [x] `OptionsDescriptor` → JSON-Schema (Jade shape) → CBOR encoder in Rust
+        (`kiln::describe_options::describe_options_cbor`), TDD against the WEP's
+        gale example; primitives follow `package-jade`'s constructors, a field
+        with a default is optional with `default`, no-default lands in
+        `required`, a no-payload `enum` is a string `enum`, `Option<T>` is the
+        nullable `type` union.
+  - [ ] Add `describe-options: func() -> list<u8>` to the `core:kiln/generator`
+        world and synthesize its body (constant CBOR from the resolved
+        descriptor) when compiling a generator-world component.
+  - [ ] Republish gale under the new world (version TBD).
 - [ ] Reconcile the `[build-dependencies]` bare-key deprecation: `module: "gale"`
       resolves only a bare `"gale"` key, but the manifest validator deprecates
       bare keys in favor of coordinates / `lib:` nicknames the lookup rejects.

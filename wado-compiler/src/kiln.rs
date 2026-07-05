@@ -12,6 +12,7 @@
 //! checks each step against the lockfile via [`cache::compose_cache_key`].
 
 pub mod cache;
+pub mod describe_options;
 pub mod header;
 pub mod import_check;
 pub mod inline;
@@ -26,6 +27,7 @@ pub use cache::{
     encode_options_canonical, file_hash, gather_file_hashes, generator_identity,
     hash_options_canonical, hex_digest,
 };
+pub use describe_options::describe_options_cbor;
 pub use header::{GeneratedHeader, has_generated_marker, parse_header};
 pub use inline::{InvocationIndex, collect_inline_invocations};
 pub use invocation::{DeclSite, GeneratorModule, Invocation, InvocationPath};
