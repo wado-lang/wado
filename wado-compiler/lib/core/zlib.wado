@@ -1665,6 +1665,32 @@ fn hash3(a: u8, b: u8, c: u8) -> i32 {
     return (a as i32 << 10 ^ b as i32 << 5 ^ c as i32) & 32767;
 }
 
+// Longest common byte run of `scratch[a..]` and `scratch[b..]`, capped at
+// `max_len`, via a 16-byte SIMD compare per step. The scratch buffer's 16-byte
+// zero pad makes the final `v128.load` past the match end well-defined, so the
+// loop runs up to `max_len` with no scalar tail; a coincidental match into the
+// pad is bounded by the `max_len` clamp.
+#[inline(always)]
+fn simd_match_len(scratch: i32, a: i32, b: i32, max_len: i32) -> i32 {
+    let mut n = 0;
+    while n < max_len {
+        let eq = builtin::i8x16_bitmask(builtin::i8x16_eq(
+            builtin::v128_load(scratch + a + n),
+            builtin::v128_load(scratch + b + n),
+        ));
+        if eq == 0xFFFF {
+            n += 16;
+        } else {
+            n += builtin::i32_ctz(eq ^ 0xFFFF);
+            break;
+        }
+    }
+    if n > max_len {
+        return max_len;
+    }
+    return n;
+}
+
 /// Compresses data using DEFLATE with fixed Huffman codes and LZ77 matching.
 pub fn deflate_huffman(input: &List<u8>) -> List<u8> {
     let ltree = build_fixed_ltree();
@@ -2550,32 +2576,7 @@ pub fn deflate_with_level(input: &List<u8>, level: i32, strategy: i32) -> List<u
                             continue;
                         }
 
-                        // SIMD match extension. 16-byte compare + bitmask + CTZ
-                        // finds the first differing byte per step.
-                        let mut match_len = 0;
-                        let word_limit = max_len - 15;
-                        while match_len < word_limit {
-                            let eq = builtin::i8x16_bitmask(builtin::i8x16_eq(builtin::v128_load(
-                                scratch + chain + match_len,
-                            ), builtin::v128_load(scratch + pos + match_len)));
-                            if eq == 0xFFFF {
-                                match_len += 16;
-                            } else {
-                                match_len += builtin::i32_ctz(eq ^ 0xFFFF);
-                                break;
-                            }
-                        }
-                        if match_len >= word_limit {
-                            while match_len < max_len
-                                && builtin::i32_load8_u(scratch + chain + match_len) == builtin::i32_load8_u(
-                                scratch + pos + match_len,
-                            ) {
-                                match_len += 1;
-                            }
-                        }
-                        if match_len > max_len {
-                            match_len = max_len;
-                        }
+                        let match_len = simd_match_len(scratch, chain, pos, max_len);
 
                         if match_len >= 3 && match_len > best_len {
                             best_len = match_len;
@@ -2691,30 +2692,7 @@ pub fn deflate_with_level(input: &List<u8>, level: i32, strategy: i32) -> List<u
                             continue;
                         }
 
-                        let mut match_len = 0;
-                        let word_limit = max_len - 15;
-                        while match_len < word_limit {
-                            let eq = builtin::i8x16_bitmask(builtin::i8x16_eq(builtin::v128_load(
-                                scratch + chain + match_len,
-                            ), builtin::v128_load(scratch + pos + match_len)));
-                            if eq == 0xFFFF {
-                                match_len += 16;
-                            } else {
-                                match_len += builtin::i32_ctz(eq ^ 0xFFFF);
-                                break;
-                            }
-                        }
-                        if match_len >= word_limit {
-                            while match_len < max_len
-                                && builtin::i32_load8_u(scratch + chain + match_len) == builtin::i32_load8_u(
-                                scratch + pos + match_len,
-                            ) {
-                                match_len += 1;
-                            }
-                        }
-                        if match_len > max_len {
-                            match_len = max_len;
-                        }
+                        let match_len = simd_match_len(scratch, chain, pos, max_len);
 
                         if match_len >= 3 && match_len > best_len {
                             best_len = match_len;
