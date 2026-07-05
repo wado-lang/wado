@@ -686,7 +686,13 @@ fn apply_in_expr(
             } => emit_ref(engine, id, NirUnaryOp::MutRef, index, name, inner_type_id),
             CopySource::RefProjection { op, projection, .. } => {
                 let cloned = engine.clone_expr(projection);
-                engine.replace_expr_kind(id, ExprKind::Unary { op, expr: cloned.into() });
+                engine.replace_expr_kind(
+                    id,
+                    ExprKind::Unary {
+                        op,
+                        expr: cloned.into(),
+                    },
+                );
             }
             CopySource::Promoted(v) => {
                 engine.redirect_expr(id, Operand::Value(v));
