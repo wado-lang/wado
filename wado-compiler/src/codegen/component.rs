@@ -1196,6 +1196,15 @@ fn emit_kiln_world_types(builder: &mut ComponentBuilder, ctx: &mut ComponentMode
         },
         None,
     );
+
+    // Pre-intern `list<u8>` for the synthesized `describe-options` export
+    // (`func() -> list<u8>`); `cm_export_type_to_idx` looks it up by structure.
+    intern_cm_type(
+        builder,
+        ctx,
+        &CmTypeKey::List(Box::new(CmTypeKey::Primitive(PrimitiveValType::U8))),
+        None,
+    );
 }
 
 /// Intern a defined CM type by its structural [`CmTypeKey`], emitting it once.
@@ -1896,6 +1905,19 @@ fn cm_export_type_to_idx(
             };
             ctx.intern_lookup(&key)
                 .unwrap_or_else(|| panic!("handler-result type not interned: {key:?}"))
+        }
+        CmExportType::List(inner) => {
+            let elem = match &**inner {
+                CmExportType::Primitive(name) => CmTypeKey::Primitive(
+                    crate::component_model::wado_primitive_name_to_cm(name).unwrap_or_else(|| {
+                        panic!("list export element `{name}` is not a CM primitive")
+                    }),
+                ),
+                other => panic!("unsupported list export element type: {other:?}"),
+            };
+            let key = CmTypeKey::List(Box::new(elem));
+            ctx.intern_lookup(&key)
+                .unwrap_or_else(|| panic!("list export type not interned: {key:?}"))
         }
     }
 }
@@ -4145,6 +4167,9 @@ fn append_interface_instance_exports(
                 collect_type_items(ok, ctx, out);
                 collect_type_items(err, ctx, out);
             }
+            // A list of a primitive references no named CM type; a list of a
+            // named type would, but no world export produces that shape today.
+            CmExportType::List(inner) => collect_type_items(inner, ctx, out),
         }
     }
 

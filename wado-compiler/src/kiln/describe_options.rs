@@ -18,7 +18,9 @@
 //! `string`). An `Option<T>` is the nullable form: its `type` becomes a union
 //! with `"null"` (the `TypeSet::Many` shape `package-jade` models).
 
+use crate::kiln::import_check::DESCRIBE_OPTIONS_FN;
 use crate::kiln::options::{CanonicalValue, OptionsDescriptor, OptionsType};
+use crate::tir::{TirExprKind, TirModule, TirStmtKind};
 
 /// The `$schema` dialect Jade emits (mirrors `package-jade`'s `Schema::DRAFT`).
 pub const DRAFT: &str = "https://json-schema.org/draft/2020-12/schema";
@@ -102,6 +104,31 @@ pub fn describe_options_cbor(descriptor: &OptionsDescriptor) -> Vec<u8> {
     let mut enc = minicbor::Encoder::new(Vec::new());
     encode_schema(&mut enc, &object_schema(descriptor, true));
     enc.into_writer()
+}
+
+/// Replace the placeholder `BytesLiteral` in the injected `describe_options`
+/// function body (see `import_check::inject_describe_options_export`) with the
+/// CBOR-encoded options schema. Returns `true` when the function was found and
+/// patched. The injected body is exactly `{ task return b""; }`, so the single
+/// task-return-value `BytesLiteral` is the one patched.
+#[must_use]
+pub fn patch_describe_options(module: &TirModule, bytes: Vec<u8>) -> bool {
+    let Some(func) = module.find_function(DESCRIBE_OPTIONS_FN) else {
+        return false;
+    };
+    let mut func = func.borrow_mut();
+    let Some(body) = func.body.as_mut() else {
+        return false;
+    };
+    for stmt in &mut body.stmts {
+        if let TirStmtKind::TaskReturn { value } = &mut stmt.kind
+            && let TirExprKind::BytesLiteral(existing) = &mut value.kind
+        {
+            *existing = bytes;
+            return true;
+        }
+    }
+    false
 }
 
 /// Build the object schema for a descriptor. `is_root` stamps `$schema`.

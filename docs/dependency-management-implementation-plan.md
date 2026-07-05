@@ -251,10 +251,18 @@ one from a **local path** today (`example/hello-packages` uses
         with a default is optional with `default`, no-default lands in
         `required`, a no-payload `enum` is a string `enum`, `Option<T>` is the
         nullable `type` union.
-  - [ ] Add `describe-options: func() -> list<u8>` to the `core:kiln/generator`
-        world and synthesize its body (constant CBOR from the resolved
-        descriptor) when compiling a generator-world component.
-  - [ ] Republish gale under the new world (version TBD).
+  - [x] Add `describe-options: async func() -> list<u8>` to the
+        `core:kiln/generator` world and synthesize its body when compiling a
+        generator-world component: inject an `export async fn describe_options`
+        stub pre-analysis, then patch its `BytesLiteral` with the CBOR schema
+        once the `Options` descriptor is extracted. `async` matches `generate`
+        (the world lifts every export through the async `task.return` canon; a
+        sync export in that world is not codegen-supported). Added a
+        `CmExportType::List` boundary type + a pre-interned `list<u8>` for the
+        return. Verified: the schema is baked into the component and a generator
+        compiles, validates, and runs (`kiln_generator_world`, `kiln_build_dep`).
+  - [ ] Republish gale under the new world (gale's version syncs with the
+        workspace, currently 0.0.9).
 - [ ] Reconcile the `[build-dependencies]` bare-key deprecation: `module: "gale"`
       resolves only a bare `"gale"` key, but the manifest validator deprecates
       bare keys in favor of coordinates / `lib:` nicknames the lookup rejects.

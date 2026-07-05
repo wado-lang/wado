@@ -584,6 +584,16 @@ fn compile_after_load<H: CompilerHost>(
         &mut load_result.modules,
     );
 
+    // === Phase 1c: Kiln `describe-options` export stub ===
+    // The `core:kiln/generator` world requires a `describe-options` export;
+    // the author never writes it. Inject a placeholder returning `b""`; the
+    // descriptor-extraction step below patches its body with the CBOR schema.
+    kiln::import_check::inject_describe_options_export(
+        options.target_world.as_deref(),
+        &load_result.entry_module_source,
+        &mut load_result.modules,
+    );
+
     // Save wasm asset bytes before `semantics_with_logger` consumes the
     // `LoadResult`. They flow through the package to codegen below.
     let wasm_assets = load_result.wasm_assets.clone();
@@ -643,7 +653,7 @@ fn compile_after_load<H: CompilerHost>(
     // produces a valid cache key.
     let kiln_options_descriptor = if options.target_world.as_deref() == Some("core:kiln/generator")
     {
-        match kiln::extract_options_descriptor(&sem, &sem.entry_module_source) {
+        let descriptor = match kiln::extract_options_descriptor(&sem, &sem.entry_module_source) {
             Ok(d) => Some(d),
             Err(diags) => {
                 for d in diags {
@@ -651,7 +661,23 @@ fn compile_after_load<H: CompilerHost>(
                 }
                 None
             }
+        };
+        // Bake the CBOR-encoded options schema into the injected
+        // `describe-options` export (Phase 1c). A failed extraction still
+        // gets a valid empty-object schema so the export returns decodable
+        // CBOR rather than the `b""` placeholder.
+        let schema_source = descriptor
+            .clone()
+            .unwrap_or(kiln::OptionsDescriptor { fields: Vec::new() });
+        let cbor = kiln::describe_options_cbor(&schema_source);
+        if let Some(entry_tir) = sem.tir_modules.get(&sem.entry_module_source) {
+            let patched = kiln::describe_options::patch_describe_options(entry_tir, cbor);
+            debug_assert!(
+                patched,
+                "kiln: injected `describe_options` stub missing at schema-bake time"
+            );
         }
+        descriptor
     } else {
         None
     };

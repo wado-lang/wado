@@ -128,6 +128,11 @@ pub enum CmExportType {
         ok: Box<CmExportType>,
         err: Box<CmExportType>,
     },
+    /// `list<T>` at the boundary. Produced for a `List<T>` return (e.g. the
+    /// synthesized kiln `describe-options: func() -> list<u8>`). Codegen
+    /// resolves it through the structural interner, keyed on the element type,
+    /// so it shares the `list<...>` type pre-interned for the world.
+    List(Box<CmExportType>),
 }
 
 /// A test function to export from the component.
@@ -366,6 +371,16 @@ fn resolve_cm_export_type(
         && is_cm_primitive_name(&named.name)
     {
         return CmExportType::Primitive(named.name.clone());
+    }
+    if let Type::Generic(generic) = ty
+        && generic.name == "List"
+        && generic.args.len() == 1
+    {
+        return CmExportType::List(Box::new(resolve_cm_export_type(
+            &generic.args[0],
+            cm_interface_registry,
+            world_namespace_prefix,
+        )));
     }
     if let Type::Named(named) = ty {
         // World bodies (`lib/wasi/**/worlds.wado`, `lib/core/kiln/worlds.wado`)

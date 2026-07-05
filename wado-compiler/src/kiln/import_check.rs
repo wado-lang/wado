@@ -17,8 +17,9 @@
 //!
 //! See WEP 2026-04-12 §"M6.5 stage 2".
 use crate::ast::{
-    AstId, CallExpr, Expr, IdentExpr, Item, LetStmt, Module, NamedType, Pattern, Stmt, TryOpExpr,
-    Type, UseDecl, UseItem,
+    AstId, Block, CallExpr, Expr, Function, GenericType, IdentExpr, Item, LetStmt, Literal,
+    LiteralExpr, Module, NamedType, Pattern, Stmt, TaskReturnStmt, TryOpExpr, Type, UseDecl,
+    UseItem, Visibility,
 };
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::IndexMap;
@@ -179,6 +180,84 @@ pub fn inject_kiln_request_adapter(
             body.stmts.insert(0, let_stmt);
         }
     }
+}
+
+/// The name of the compiler-synthesized options-schema export.
+pub const DESCRIBE_OPTIONS_FN: &str = "describe_options";
+
+/// Inject the `describe-options` world export into a Kiln generator's entry
+/// module as `export async fn describe_options() -> List<u8> { task return
+/// b""; }`. The body is a placeholder empty bytes literal; the batch pipeline
+/// patches it with the generator's CBOR-encoded options schema once the
+/// `Options` descriptor is known (see the descriptor-extraction step).
+///
+/// `async` so it shares `generate`'s async canon lift (`task.return`): the
+/// generator world lifts every export through the async path, and a sync
+/// export in that world is not codegen-supported.
+///
+/// Gated on `target_world == core:kiln/generator`. The generator author never
+/// writes this function — the `core:kiln/generator` world requires it (see
+/// `lib/core/kiln/worlds.wado`) and the compiler synthesizes it so a prebuilt
+/// generator is self-describing. A no-op if the author already declared a
+/// `describe_options` (they should not, but we do not clobber it).
+pub fn inject_describe_options_export(
+    target_world: Option<&str>,
+    entry_module: &ModuleSource,
+    modules: &mut IndexMap<ModuleSource, Module>,
+) {
+    if target_world != Some(KILN_GENERATOR_WORLD) {
+        return;
+    }
+    let Some(module) = modules.get_mut(entry_module) else {
+        return;
+    };
+    let already_present = module.items.iter().any(
+        |item| matches!(item, Item::Function(f) if f.name == DESCRIBE_OPTIONS_FN),
+    );
+    if already_present {
+        return;
+    }
+
+    let span = synthesized_span();
+    let u8_ty = Type::Named(NamedType::new(module.alloc_ast_id(), "u8".to_string(), span));
+    let list_u8_ty = Type::Generic(GenericType {
+        id: module.alloc_ast_id(),
+        name: "List".to_string(),
+        args: vec![u8_ty],
+        span,
+    });
+    let empty_bytes = Expr::Literal(LiteralExpr {
+        id: module.alloc_ast_id(),
+        value: Literal::Bytes(String::new()),
+        span,
+    });
+    let body = Block {
+        id: module.alloc_ast_id(),
+        stmts: vec![Stmt::TaskReturn(TaskReturnStmt {
+            id: module.alloc_ast_id(),
+            value: empty_bytes,
+            span,
+        })],
+        span,
+    };
+    let func = Function {
+        id: module.alloc_ast_id(),
+        name: DESCRIBE_OPTIONS_FN.to_string(),
+        name_span: span,
+        visibility: Visibility::Public,
+        is_export: true,
+        is_async: true,
+        type_params: Vec::new(),
+        attrs: Vec::new(),
+        params: Vec::new(),
+        return_type: Some(list_u8_ty),
+        effects: Vec::new(),
+        effect_ids: Vec::new(),
+        stores: Vec::new(),
+        body: Some(body),
+        span,
+    };
+    module.items.push(Item::Function(func));
 }
 
 /// The options binding implied by a `generate` first-parameter type.
