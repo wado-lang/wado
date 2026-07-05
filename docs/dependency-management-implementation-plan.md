@@ -230,9 +230,24 @@ one from a **local path** today (`example/hello-packages` uses
 
 - [ ] Fetch a dependency's generator at its world sub-path (`<ns>/<pkg>/core-kiln-generator`),
       not just the bare repository — extend `wado fetch` / the provider.
-- [ ] Run a prebuilt generator component. The Kiln pipeline compiles
-      `GeneratorModule::LocalPath` from source; add a "run these component bytes"
-      path and implement the deferred `GeneratorModule::Spec("ns:name@ver")`.
+- [~] Run a prebuilt generator component. The driver already runs a generator
+      from component bytes (`run_generator(generator.wasm, …)`), so a prebuilt
+      component needs no new execution path — only its `OptionsDescriptor`, which
+      a prebuilt component carries via `describe-options` rather than source.
+  - [x] Decode `describe-options` CBOR → `OptionsDescriptor`
+        (`kiln::decode_options_schema`, the inverse of the encoder; exact for
+        bool/string/enum/object/`Option`, integer widths coalesce to `i64`).
+  - [x] Run a prebuilt component's `describe-options`
+        (`kiln_runtime::run_describe_options` +
+        `FilesystemCompilerHost::run_describe_options`), sharing the AOT cache.
+        Verified end to end: a compiled generator's baked schema decodes back to
+        the source descriptor (`kiln_compile::describe_options_roundtrips…`).
+  - [ ] Implement `GeneratorModule::Spec("ns:name@ver")` resolution: resolve the
+        coordinate against `[build-dependencies]`, fetch the component at its
+        world sub-path into `build/`, run `describe-options` for the descriptor,
+        return a `ResolvedGenerator`. Needs a seam for the provider to run
+        `describe-options` (it has no engine today; the host does) and a live
+        registry + republished gale to validate the fetch half.
 - [x] Decided how a prebuilt generator carries its options schema: the
       `core:kiln/generator` world gains `describe-options: func() -> list<u8>`
       returning a JSON Schema (Draft 2020-12 subset), CBOR-encoded — shape is
