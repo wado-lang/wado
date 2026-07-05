@@ -18,8 +18,8 @@
 //! See WEP 2026-04-12 §"M6.5 stage 2".
 use crate::ast::{
     AstId, Block, CallExpr, Expr, Function, GenericType, IdentExpr, Item, LetStmt, Literal,
-    LiteralExpr, Module, NamedType, Pattern, Stmt, TaskReturnStmt, TryOpExpr, Type, UseDecl,
-    UseItem, Visibility,
+    LiteralExpr, Module, NamedType, Pattern, ReturnStmt, Stmt, TryOpExpr, Type, UseDecl, UseItem,
+    Visibility,
 };
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::IndexMap;
@@ -186,14 +186,14 @@ pub fn inject_kiln_request_adapter(
 pub const DESCRIBE_OPTIONS_FN: &str = "describe_options";
 
 /// Inject the `describe-options` world export into a Kiln generator's entry
-/// module as `export async fn describe_options() -> List<u8> { task return
-/// b""; }`. The body is a placeholder empty bytes literal; the batch pipeline
-/// patches it with the generator's CBOR-encoded options schema once the
-/// `Options` descriptor is known (see the descriptor-extraction step).
+/// module as `export fn describe_options() -> List<u8> { return b""; }`. The
+/// body is a placeholder empty bytes literal; the batch pipeline patches it
+/// with the generator's CBOR-encoded options schema once the `Options`
+/// descriptor is known (see the descriptor-extraction step).
 ///
-/// `async` so it shares `generate`'s async canon lift (`task.return`): the
-/// generator world lifts every export through the async path, and a sync
-/// export in that world is not codegen-supported.
+/// Sync (`func`, not `async func`): the options schema is a pure constant, so
+/// it uses the synchronous canon lift. `generate` stays async; a component may
+/// mix sync and async exports.
 ///
 /// Gated on `target_world == core:kiln/generator`. The generator author never
 /// writes this function — the `core:kiln/generator` world requires it (see
@@ -233,9 +233,9 @@ pub fn inject_describe_options_export(
     });
     let body = Block {
         id: module.alloc_ast_id(),
-        stmts: vec![Stmt::TaskReturn(TaskReturnStmt {
+        stmts: vec![Stmt::Return(ReturnStmt {
             id: module.alloc_ast_id(),
-            value: empty_bytes,
+            value: Some(empty_bytes),
             span,
         })],
         span,
@@ -246,7 +246,7 @@ pub fn inject_describe_options_export(
         name_span: span,
         visibility: Visibility::Public,
         is_export: true,
-        is_async: true,
+        is_async: false,
         type_params: Vec::new(),
         attrs: Vec::new(),
         params: Vec::new(),

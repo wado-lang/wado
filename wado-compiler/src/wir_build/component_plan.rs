@@ -309,9 +309,14 @@ fn build_world_export_plans(
                 cm_result,
                 param_types,
                 result_type,
-                // Non-async library exports use a synchronous lift; WASI worlds
-                // and `async` lib exports deliver results via `task.return`.
-                sync_lift: is_lib_world && !export.is_async,
+                // A non-`async` export uses the synchronous lift; the canon
+                // lift's async-ness must match the export's function type
+                // (`.async_(is_async)`). This covers non-async `--lib` exports
+                // and sync exports in an otherwise-async world (the kiln
+                // generator's `describe-options`). `async` exports (WASI CLI /
+                // HTTP, kiln `generate`, async lib exports) keep the
+                // `task.return` lift.
+                sync_lift: !export.is_async,
                 is_lib: is_lib_world,
             }
         })

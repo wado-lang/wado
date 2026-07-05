@@ -109,8 +109,8 @@ pub fn describe_options_cbor(descriptor: &OptionsDescriptor) -> Vec<u8> {
 /// Replace the placeholder `BytesLiteral` in the injected `describe_options`
 /// function body (see `import_check::inject_describe_options_export`) with the
 /// CBOR-encoded options schema. Returns `true` when the function was found and
-/// patched. The injected body is exactly `{ task return b""; }`, so the single
-/// task-return-value `BytesLiteral` is the one patched.
+/// patched. The injected body is exactly `{ return b""; }`, so the single
+/// return-value `BytesLiteral` is the one patched.
 #[must_use]
 pub fn patch_describe_options(module: &TirModule, bytes: Vec<u8>) -> bool {
     let Some(func) = module.find_function(DESCRIBE_OPTIONS_FN) else {
@@ -121,7 +121,7 @@ pub fn patch_describe_options(module: &TirModule, bytes: Vec<u8>) -> bool {
         return false;
     };
     for stmt in &mut body.stmts {
-        if let TirStmtKind::TaskReturn { value } = &mut stmt.kind
+        if let TirStmtKind::Return { value: Some(value) } = &mut stmt.kind
             && let TirExprKind::BytesLiteral(existing) = &mut value.kind
         {
             *existing = bytes;

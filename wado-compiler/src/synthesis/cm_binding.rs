@@ -32,9 +32,8 @@ use crate::wir::CmPayloadType;
 
 pub use export_adapter::export_binding_func_name;
 use export_adapter::{
-    synthesize_async_export_binding, synthesize_general_export_binding,
-    synthesize_result_export_binding, synthesize_sync_export_binding,
-    synthesize_void_export_binding,
+    synthesize_async_export_binding, synthesize_result_export_binding,
+    synthesize_sync_export_binding, synthesize_void_export_binding,
 };
 pub use import_adapter::binding_func_name;
 use import_adapter::synthesize_adapter;
@@ -535,15 +534,12 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                     }
 
                     // Validate return-type compatibility with the world. The
-                    // dispatch below routes a `Result<_, _>`-returning world
-                    // export to dedicated adapters for the async, Result, and
-                    // `()` user return shapes; any other user return type
-                    // falls through to `synthesize_general_export_binding`,
-                    // which lowers the user's return value directly into the
-                    // world's task-return slots. When the world expects only
+                    // dispatch below routes an async export to the task-return
+                    // adapters (async / Result / `()` shapes) and a sync export
+                    // to the synchronous lift. When an async world expects only
                     // a discriminant (`Result<(), ()>`, the wasi:cli/command
-                    // shape) but the user supplies, say, `i32`, the general
-                    // adapter emits an extra flat value beyond what the
+                    // shape) but the user supplies, say, `i32`, the async
+                    // adapter would emit an extra flat value beyond what the
                     // runtime declares for task-return — surfacing as an
                     // opaque "values remaining on stack" wasm-validation
                     // panic at codegen. Catch the mismatch here with a
@@ -697,15 +693,24 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                     &entry_source,
                                 )
                             } else {
-                                // General adapter: handles params (with lifting if needed)
-                                // and non-void return types
-                                synthesize_general_export_binding(
+                                // Sync export returning a plain value (not a
+                                // `Result`), e.g. the synthesized kiln
+                                // `describe-options: func() -> list<u8>`. It uses
+                                // the synchronous canon lift — the core function
+                                // returns the flattened result directly (an
+                                // out-pointer for multi-value results like a
+                                // list). It must NOT go through task-return: the
+                                // component declares the export sync
+                                // (`.async_(false)`), so an async task-return
+                                // lowering produces an invalid core module.
+                                synthesize_sync_export_binding(
                                     &export.name,
                                     user_func_rc,
                                     &entry_source,
                                     &project.tir_modules,
                                     &entry_type_table,
                                     &export.params,
+                                    export.return_type.as_ref(),
                                     &project.cm_interface_registry,
                                     &binding_cm_package,
                                     &project.interner,
