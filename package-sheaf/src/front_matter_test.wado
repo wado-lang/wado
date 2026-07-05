@@ -6,11 +6,11 @@ test "split extracts the json block and body" {
 ---
 Hello body";
     match split(&src) {
-        Some([json, body]) => {
+        Ok([json, body]) => {
             assert json == "{ \"title\": \"Hi\", \"date\": \"2026-07-05\" }";
             assert body == "Hello body";
         },
-        None => {
+        Err(_) => {
             assert false;
         },
     }
@@ -23,19 +23,27 @@ test "split preserves a multi-line body" {
 line1
 line2";
     match split(&src) {
-        Some([_, body]) => {
+        Ok([_, body]) => {
             assert body == "line1
 line2";
         },
-        None => {
+        Err(_) => {
             assert false;
         },
     }
 }
 
-test "split returns none without a json fence" {
+test "split errors without a json fence" {
     assert split(&"no front matter
-body") matches { None };
+body") matches { Err(_) };
+}
+
+test "split distinguishes an unterminated fence from a missing one" {
+    let unterminated = "---json
+{ \"title\": \"Hi\" }
+still inside";
+    assert split(&unterminated) matches { Err(msg) && msg.contains("unterminated") };
+    assert split(&"no fence") matches { Err(msg) && msg.contains("missing") };
 }
 
 test "parse fills defaults for missing index and tags" {

@@ -23,47 +23,48 @@ fn render_blocks(lines: &List<String>, start: i32, end: i32) -> String {
     let mut para: List<String> = [];
     let mut i = start;
     while i < end {
-        let line = lines[i];
-        if is_blank(&line) {
+        let line = &lines[i];
+        if is_blank(line) {
             flush_paragraph(&mut out, &mut para);
             i += 1;
             continue;
         }
-        if let Some([ch, fence_len, info]) = fence_marker(&line) {
+        let chars = chars_of(line);
+        if let Some([ch, fence_len, info]) = fence_marker(&chars) {
             flush_paragraph(&mut out, &mut para);
             i = render_fenced_code(lines, i, end, ch, fence_len, &info, &mut out);
             continue;
         }
-        let level = heading_level(&line);
+        let level = heading_level(line);
         if level > 0 {
             flush_paragraph(&mut out, &mut para);
-            let content = heading_content(&line, level);
+            let content = heading_content(line, level);
             out.push(`<h{level}>{render_inline(&content)}</h{level}>`);
             i += 1;
             continue;
         }
-        if is_thematic_break(&line) {
+        if is_thematic_break(line) {
             flush_paragraph(&mut out, &mut para);
             out.push("<hr />");
             i += 1;
             continue;
         }
-        if is_blockquote(&line) {
+        if is_blockquote(&chars) {
             flush_paragraph(&mut out, &mut para);
             i = render_blockquote(lines, i, end, &mut out);
             continue;
         }
-        if is_list_marker(&line) {
+        if is_list_marker(&chars) {
             flush_paragraph(&mut out, &mut para);
             i = render_list(lines, i, end, &mut out);
             continue;
         }
-        if i + 1 < end && line_has_pipe(&line) && line_has_pipe(&lines[i + 1]) && is_delimiter_row(&lines[i + 1]) {
+        if i + 1 < end && line_has_pipe(line) && line_has_pipe(&lines[i + 1]) && is_delimiter_row(&lines[i + 1]) {
             flush_paragraph(&mut out, &mut para);
             i = render_table(lines, i, end, &mut out);
             continue;
         }
-        para.push(line);
+        para.push(*line);
         i += 1;
     }
     flush_paragraph(&mut out, &mut para);
@@ -116,7 +117,7 @@ fn render_fenced_code(
 fn render_blockquote(lines: &List<String>, start: i32, end: i32, out: &mut List<String>) -> i32 {
     let mut inner: List<String> = [];
     let mut k = start;
-    while k < end && is_blockquote(&lines[k]) {
+    while k < end && is_blockquote(&chars_of(&lines[k])) {
         inner.push(strip_blockquote_marker(&lines[k]));
         k += 1;
     }
@@ -207,10 +208,9 @@ fn is_thematic_break(line: &String) -> bool {
     return count >= 3;
 }
 
-fn fence_marker(line: &String) -> Option<[char, i32, String]> {
-    let chars = chars_of(line);
+fn fence_marker(chars: &List<char>) -> Option<[char, i32, String]> {
     let len = chars.len();
-    let mut p = skip_indent(&chars, len);
+    let mut p = skip_indent(chars, len);
     if p >= len {
         return null;
     }
@@ -226,7 +226,7 @@ fn fence_marker(line: &String) -> Option<[char, i32, String]> {
     if run < 3 {
         return null;
     }
-    let info = slice_chars(&chars, p, len).trim();
+    let info = slice_chars(chars, p, len).trim();
     if ch == '`' && info.contains("`") {
         return null;
     }
@@ -253,10 +253,9 @@ fn is_code_fence_close(line: &String, ch: char, fence_len: i32) -> bool {
     return true;
 }
 
-fn is_blockquote(line: &String) -> bool {
-    let chars = chars_of(line);
+fn is_blockquote(chars: &List<char>) -> bool {
     let len = chars.len();
-    let mut p = skip_indent(&chars, len);
+    let mut p = skip_indent(chars, len);
     return p < len && chars[p] == '>';
 }
 
@@ -420,8 +419,8 @@ fn align_at(aligns: &List<String>, idx: i32) -> String {
     };
 }
 
-fn is_list_marker(line: &String) -> bool {
-    return parse_list_marker(line) matches { Some(_) };
+fn is_list_marker(chars: &List<char>) -> bool {
+    return parse_list_marker(chars) matches { Some(_) };
 }
 
 struct ListMarker {
@@ -432,8 +431,7 @@ struct ListMarker {
     number: i32,
 }
 
-fn parse_list_marker(line: &String) -> Option<ListMarker> {
-    let chars = chars_of(line);
+fn parse_list_marker(chars: &List<char>) -> Option<ListMarker> {
     let len = chars.len();
     let mut p = 0;
     let mut indent = 0;
@@ -481,7 +479,7 @@ fn render_list(lines: &List<String>, start: i32, end: i32, out: &mut List<String
     let mut ordered = false;
     let mut base_delim = '-';
     let mut start_number = 1;
-    match parse_list_marker(&lines[start]) {
+    match parse_list_marker(&chars_of(&lines[start])) {
         Some(m) => {
             base_indent = m.indent;
             ordered = m.ordered;
@@ -500,7 +498,7 @@ fn render_list(lines: &List<String>, start: i32, end: i32, out: &mut List<String
             break;
         }
         let mut content_col = -1;
-        match parse_list_marker(&lines[k]) {
+        match parse_list_marker(&chars_of(&lines[k])) {
             Some(m) => {
                 if m.indent == base_indent && m.ordered == ordered && m.delim == base_delim {
                     content_col = m.content_col;

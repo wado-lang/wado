@@ -26,7 +26,14 @@ fn read_posts(root: &Descriptor) -> List<Post> with Stderr {
             return posts;
         },
     };
-    for let name of read_dir_names(&content) {
+    let names = match read_dir_names(&content) {
+        Ok(n) => n,
+        Err(e) => {
+            eprintln(`sheaf: cannot read content/ directory: {e:?}`);
+            return posts;
+        },
+    };
+    for let name of names {
         match name.strip_suffix(".md") {
             Some(slug) => match read_file(&content, name) {
                 Ok(source) => match build(slug, &source) {
@@ -79,7 +86,7 @@ fn open_dir(root: &Descriptor, name: String) -> Result<Descriptor, ErrorCode> {
     return root.open_at(PathFlags::none(), name, OpenFlags::Directory, DescriptorFlags::Read).wait();
 }
 
-fn read_dir_names(dir: &Descriptor) -> List<String> {
+fn read_dir_names(dir: &Descriptor) -> Result<List<String>, ErrorCode> {
     let mut names: List<String> = [];
     let [stream, done] = dir.read_directory();
     loop {
@@ -92,8 +99,12 @@ fn read_dir_names(dir: &Descriptor) -> List<String> {
         }
     }
     stream.drop();
+    let read_result = done.read();
     done.drop();
-    return names;
+    if let Some(Err(e)) = read_result {
+        return Result::Err(e);
+    }
+    return Result::Ok(names);
 }
 
 fn read_file(dir: &Descriptor, path: String) -> Result<String, ErrorCode> {
@@ -108,7 +119,11 @@ fn read_file(dir: &Descriptor, path: String) -> Result<String, ErrorCode> {
         bytes.extend(&chunk);
     }
     stream.drop();
+    let read_result = done.read();
     done.drop();
+    if let Some(Err(e)) = read_result {
+        return Result::Err(e);
+    }
     return Result::Ok(String::from_utf8_lossy(bytes));
 }
 
@@ -124,6 +139,10 @@ fn write_file(dir: &Descriptor, path: String, content: &String) -> Result<(), Er
     let sub = file.write_via_stream(rx, 0 as Filesize);
     tx.write(bytes);
     tx.drop();
+    let write_result = sub.read();
     sub.drop();
+    if let Some(Err(e)) = write_result {
+        return Result::Err(e);
+    }
     return Result::Ok(());
 }

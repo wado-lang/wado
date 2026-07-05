@@ -7,7 +7,7 @@
 //! rule of three, and nested `*`/`**`/`***`). Strikethrough (`~`) reuses the
 //! same machinery.
 
-use { escape_attr, escape_text } from "./html.wado";
+use { escape_attr, escape_text, sanitize_url } from "./html.wado";
 use { StrCursor, chars_of } from "./str_cursor.wado";
 
 pub fn render_inline(text: &String) -> String {
@@ -53,8 +53,13 @@ fn tokenize(cursor: StrCursor, toks: &mut List<Tok>) {
                 buf.push(char_at(&cur, i + 1));
                 cur.set_position(i + 2);
             },
+            '\\' && cur.is_at(i + 1, '\n') => {
+                flush_text(&mut buf, toks);
+                push_raw("<br />\n", toks);
+                cur.set_position(i + 2);
+            },
             '\n' => {
-                push_line_break(&mut buf, &cur, i, toks);
+                buf.push('\n');
                 cur.set_position(i + 1);
             },
             'h' => {
@@ -101,7 +106,8 @@ fn flush_text(buf: &mut String, toks: &mut List<Tok>) {
         return;
     }
     // Copy via push_str + clear rather than `let t = *buf; *buf = String::new()`:
-    // the latter is miscompiled at -O2 (wado-lang/wado#1522).
+    // the latter is miscompiled at -O1+ (wado-lang/wado#1522; see the TODO fixture
+    // opt_move_out_string_reset_1522_todo.wado).
     let mut text = String::new();
     text.push_str(buf);
     toks.push(Tok { kind: TokKind::Text, text, ch: ' ', count: 0, orig: 0, open: false, close: false });
@@ -123,19 +129,6 @@ fn push_construct(result: Option<[String, i32]>, c: char, i: i32, buf: &mut Stri
             buf.push(c);
             return i + 1;
         },
-    }
-}
-
-fn push_line_break(buf: &mut String, cur: &StrCursor, i: i32, toks: &mut List<Tok>) {
-    // A trailing backslash is a hard break. Trailing-space hard breaks are an
-    // intentional non-goal (invisible whitespace footgun); such lines fold as
-    // an ordinary soft break.
-    if cur.is_at(i - 1, '\\') {
-        buf.pop();
-        flush_text(buf, toks);
-        push_raw("<br />\n", toks);
-    } else {
-        buf.push('\n');
     }
 }
 
@@ -274,11 +267,12 @@ fn code_content(cur: &StrCursor, s: i32, e: i32) -> String {
         a += 1;
         b -= 1;
     }
-    let mut out = String::new();
+    let mut raw = String::new();
     for let k of a..<b {
-        push_code_char(&mut out, char_at(cur, k));
+        let c = char_at(cur, k);
+        raw.push(if c == '\n' { ' ' } else { c });
     }
-    return out;
+    return escape_text(&raw);
 }
 
 fn try_link(cur: &StrCursor, open: i32, is_image: bool) -> Option<[String, i32]> {
@@ -329,7 +323,7 @@ fn try_link(cur: &StrCursor, open: i32, is_image: bool) -> Option<[String, i32]>
     }
     let dest_raw = cur.slice(close + 2, pclose);
     let [dest, title] = parse_dest_title(&dest_raw);
-    let href = escape_attr(&dest);
+    let href = escape_attr(&sanitize_url(&dest));
     let title_attr = title_attribute(&title);
     if is_image {
         let alt = escape_attr(&cur.slice(open + 1, close));
@@ -339,51 +333,53 @@ fn try_link(cur: &StrCursor, open: i32, is_image: bool) -> Option<[String, i32]>
     return Option::Some([`<a href="{href}"{title_attr}>{text_html}</a>`, pclose + 1]);
 }
 
-/// Parser state for `parse_dest_title`.
-enum Phase {
-    /// Reading the destination up to the first whitespace.
-    Dest,
-    /// Skipping whitespace, looking for a title's opening delimiter.
-    SeekTitle,
-    /// Inside the title, up to its closing delimiter.
-    InTitle,
-    /// Everything parsed; ignore the rest.
-    Done,
-}
-
-/// Split a link destination field into `[dest, title]`. The title is an
-/// optional `"..."`, `'...'`, or `(...)` string after the destination.
+/// Split a link destination field into `[dest, title]`. The destination is
+/// either a bare run up to the first space or an angle-bracketed `<...>` that
+/// may contain spaces; the title is an optional `"..."`, `'...'`, or `(...)`
+/// string after it.
 fn parse_dest_title(raw: &String) -> [String, String] {
+    let chars = chars_of(&raw.trim());
+    let len = chars.len();
     let mut dest = String::new();
-    let mut title = String::new();
-    let mut phase = Phase::Dest;
-    let mut closing = ' ';
-    for let c of raw.trim().chars() {
-        match phase {
-            Dest => if c matches { ' ' | '\t' } { phase = Phase::SeekTitle } else { dest.push(c) },
-            SeekTitle => match c {
-                ' ' | '\t' => {
-                },
-                '"' => {
-                    closing = '"';
-                    phase = Phase::InTitle;
-                },
-                '\'' => {
-                    closing = '\'';
-                    phase = Phase::InTitle;
-                },
-                '(' => {
-                    closing = ')';
-                    phase = Phase::InTitle;
-                },
-                _ => phase = Phase::Done,
-            },
-            InTitle => if c != closing { title.push(c) } else { phase = Phase::Done },
-            Done => {
-            },
+    let mut p = 0;
+    if p < len && chars[p] == '<' {
+        p += 1;
+        while p < len && chars[p] != '>' {
+            dest.push(chars[p]);
+            p += 1;
+        }
+        if p < len {
+            p += 1;
+        }
+    } else {
+        while p < len && !chars[p] matches { ' ' | '\t' } {
+            dest.push(chars[p]);
+            p += 1;
         }
     }
+    while p < len && chars[p] matches { ' ' | '\t' } {
+        p += 1;
+    }
+    let title = if p < len { read_title(&chars, p) } else { "" };
     return [dest, title];
+}
+
+fn read_title(chars: &List<char>, start: i32) -> String {
+    let closing = match chars[start] {
+        '"' => '"',
+        '\'' => '\'',
+        '(' => ')',
+        _ => {
+            return "";
+        },
+    };
+    let mut title = String::new();
+    let mut p = start + 1;
+    while p < chars.len() && chars[p] != closing {
+        title.push(chars[p]);
+        p += 1;
+    }
+    return title;
 }
 
 fn title_attribute(title: &String) -> String {
@@ -394,6 +390,9 @@ fn title_attribute(title: &String) -> String {
 }
 
 fn try_autolink(cur: &StrCursor, i: i32) -> Option<[String, i32]> {
+    if opt_is_alnum(cur.at(i - 1)) {
+        return null;
+    }
     if !starts_with_at(cur, i, "http://") && !starts_with_at(cur, i, "https://") {
         return null;
     }
@@ -475,6 +474,18 @@ fn opt_is_punct(o: Option<char>) -> bool {
     };
 }
 
+fn opt_is_alnum(o: Option<char>) -> bool {
+    return match o {
+        Some(c) => is_ascii_alnum(c),
+        None => false,
+    };
+}
+
+fn is_ascii_alnum(c: char) -> bool {
+    let v = c as i32;
+    return 48 <= v <= 57 || 65 <= v <= 90 || 97 <= v <= 122;
+}
+
 fn run_length(cur: &StrCursor, from: i32, d: char) -> i32 {
     let mut n = 0;
     let mut i = from;
@@ -505,14 +516,4 @@ fn is_space(c: char) -> bool {
 fn is_ascii_punct(c: char) -> bool {
     let v = c as i32;
     return 33 <= v <= 47 || 58 <= v <= 64 || 91 <= v <= 96 || 123 <= v <= 126;
-}
-
-fn push_code_char(out: &mut String, c: char) {
-    match c {
-        '&' => out.push_str(&"&amp;"),
-        '<' => out.push_str(&"&lt;"),
-        '>' => out.push_str(&"&gt;"),
-        '\n' => out.push(' '),
-        _ => out.push(c),
-    }
 }

@@ -1,15 +1,10 @@
-//! HTML escaping helpers.
+//! HTML escaping and URL sanitization helpers.
 
 /// Escape text for use in HTML element content: `&`, `<`, `>`.
 pub fn escape_text(s: &String) -> String {
     let mut out = String::with_capacity(s.len());
     for let c of s.chars() {
-        match c {
-            '&' => out.push_str(&"&amp;"),
-            '<' => out.push_str(&"&lt;"),
-            '>' => out.push_str(&"&gt;"),
-            _ => out.push(c),
-        }
+        push_escaped(&mut out, c, false);
     }
     return out;
 }
@@ -19,13 +14,38 @@ pub fn escape_text(s: &String) -> String {
 pub fn escape_attr(s: &String) -> String {
     let mut out = String::with_capacity(s.len());
     for let c of s.chars() {
-        match c {
-            '&' => out.push_str(&"&amp;"),
-            '<' => out.push_str(&"&lt;"),
-            '>' => out.push_str(&"&gt;"),
-            '"' => out.push_str(&"&quot;"),
-            _ => out.push(c),
-        }
+        push_escaped(&mut out, c, true);
     }
     return out;
+}
+
+fn push_escaped(out: &mut String, c: char, in_attr: bool) {
+    match c {
+        '&' => out.push_str(&"&amp;"),
+        '<' => out.push_str(&"&lt;"),
+        '>' => out.push_str(&"&gt;"),
+        '"' && in_attr => out.push_str(&"&quot;"),
+        _ => out.push(c),
+    }
+}
+
+/// Neutralize a link/image destination whose scheme could execute script:
+/// return it unchanged when the scheme is safe (or absent), else `""`. Blocks
+/// `javascript:`, `data:`, `vbscript:`, and any other unlisted scheme.
+pub fn sanitize_url(url: &String) -> String {
+    let mut scheme = String::new();
+    for let c of url.chars() {
+        if c == ':' {
+            return if scheme_is_safe(&scheme) { *url } else { "" };
+        }
+        if c matches { '/' | '?' | '#' } {
+            return *url;
+        }
+        scheme.push(c.to_ascii_lowercase());
+    }
+    return *url;
+}
+
+fn scheme_is_safe(scheme: &String) -> bool {
+    return *scheme == "http" || *scheme == "https" || *scheme == "mailto" || *scheme == "tel";
 }

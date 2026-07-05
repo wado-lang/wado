@@ -116,3 +116,32 @@ test "render_inline leaves an unmatched opener literal" {
     assert render_inline(&"**bold") == "**bold";
     assert render_inline(&"foo * bar") == "foo * bar";
 }
+
+test "render_inline neutralizes unsafe URL schemes" {
+    assert render_inline(&"[x](javascript:alert(1))") == "<a href=\"\">x</a>";
+    assert render_inline(&"![x](data:text/html,evil)") == "<img src=\"\" alt=\"x\" />";
+    assert render_inline(&"[x](vbscript:foo)") == "<a href=\"\">x</a>";
+}
+
+test "render_inline keeps safe and relative URLs" {
+    assert render_inline(&"[x](http://example.com)") == "<a href=\"http://example.com\">x</a>";
+    assert render_inline(&"[x](mailto:a@b.com)") == "<a href=\"mailto:a@b.com\">x</a>";
+    assert render_inline(&"[x](./page.html)") == "<a href=\"./page.html\">x</a>";
+    assert render_inline(&"[x](#anchor)") == "<a href=\"#anchor\">x</a>";
+}
+
+test "render_inline unwraps an angle-bracketed destination" {
+    assert render_inline(&"[a](<http://example.com/x>)") == "<a href=\"http://example.com/x\">a</a>";
+}
+
+test "render_inline requires a boundary before a bare autolink" {
+    assert render_inline(&"foohttp://example.com") == "foohttp://example.com";
+    assert render_inline(&"see http://example.com now") == "see <a href=\"http://example.com\">http://example.com</a> now";
+}
+
+test "render_inline treats an escaped backslash before a newline as a soft break" {
+    assert !render_inline(&"a\\\\
+b").contains("<br");
+    assert render_inline(&"a\\
+b").contains("<br");
+}
