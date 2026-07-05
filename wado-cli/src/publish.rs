@@ -51,6 +51,36 @@ fn format_usage() -> String {
     )
     .unwrap();
     writeln!(buf, "  -h, --help     Show this help message").unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "Authentication:").unwrap();
+    writeln!(
+        buf,
+        "  Credentials are handled by wkg, not Wado. Authenticate to the target"
+    )
+    .unwrap();
+    writeln!(buf, "  registry before publishing, via either:").unwrap();
+    writeln!(
+        buf,
+        "    - the ambient OCI credential store: `docker login <registry>`"
+    )
+    .unwrap();
+    writeln!(buf, "      (in GitHub Actions, use docker/login-action)").unwrap();
+    writeln!(
+        buf,
+        "    - the WKG_OCI_USERNAME / WKG_OCI_PASSWORD environment variables"
+    )
+    .unwrap();
+    writeln!(
+        buf,
+        "  For GHCR, the username is your GitHub account (github.actor in Actions)"
+    )
+    .unwrap();
+    writeln!(
+        buf,
+        "  and the password a token with the `write:packages` scope"
+    )
+    .unwrap();
+    writeln!(buf, "  (e.g. GITHUB_TOKEN in Actions).").unwrap();
     buf
 }
 
@@ -448,6 +478,15 @@ fn problems_error(header: &str, problems: &[PublishError]) -> CliExit {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn usage_documents_authentication() {
+        let usage = format_usage();
+        assert!(usage.contains("Authentication:"), "{usage}");
+        assert!(usage.contains("docker login"), "{usage}");
+        assert!(usage.contains("WKG_OCI_USERNAME"), "{usage}");
+        assert!(usage.contains("write:packages"), "{usage}");
+    }
 
     #[test]
     fn parse_args_defaults_to_no_dry_run() {

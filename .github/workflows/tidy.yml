@@ -45,10 +45,6 @@ jobs:
             echo "should-run=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Check out the vendored wasmtime fork (path dependency)
-        if: steps.precheck.outputs.should-run == 'true'
-        run: git submodule update --init --depth 1 vendor/wasmtime
-
       - uses: Swatinem/rust-cache@v2
         if: steps.precheck.outputs.should-run == 'true'
         with:
