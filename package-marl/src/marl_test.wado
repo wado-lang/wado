@@ -46,3 +46,42 @@ test "render mixes headings, paragraphs, and breaks" {
 test "render trims a closing-space heading" {
     assert render(&"##   Spaced   ") == "<h2>Spaced</h2>";
 }
+
+test "render emits a fenced code block" {
+    assert render(&"```\ncode\n```") == "<pre><code>code\n</code></pre>";
+}
+
+test "render tags a fenced code block with its language" {
+    assert render(&"```wado\nlet x = 1;\n```")
+        == "<pre><code class=\"language-wado\">let x = 1;\n</code></pre>";
+}
+
+test "render escapes html inside a code fence but not markdown" {
+    assert render(&"```\na < b & *c*\n```")
+        == "<pre><code>a &lt; b &amp; *c*\n</code></pre>";
+}
+
+test "render accepts tilde fences" {
+    assert render(&"~~~\nx\n~~~") == "<pre><code>x\n</code></pre>";
+}
+
+test "render wraps shorter fences inside a longer fence" {
+    assert render(&"````\n```\ninner\n```\n````")
+        == "<pre><code>```\ninner\n```\n</code></pre>";
+}
+
+test "render closes an unterminated fence at end of input" {
+    assert render(&"```\nabc") == "<pre><code>abc\n</code></pre>";
+}
+
+test "render emits a blockquote" {
+    assert render(&"> quote") == "<blockquote>\n<p>quote</p>\n</blockquote>";
+}
+
+test "render joins blockquote lines" {
+    assert render(&"> a\n> b") == "<blockquote>\n<p>a\nb</p>\n</blockquote>";
+}
+
+test "render renders block structure inside a blockquote" {
+    assert render(&"> # Title") == "<blockquote>\n<h1>Title</h1>\n</blockquote>";
+}

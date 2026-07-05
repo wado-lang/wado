@@ -1,48 +1,124 @@
-//! Block-level rendering entry point.
+//! Block-level rendering.
 //!
-//! v0.1 slice: ATX headings, paragraphs, thematic breaks. Inline content is
-//! HTML-escaped; richer inline handling arrives with `inline.wado`.
+//! v0.1 blocks: fenced code, ATX headings, thematic breaks, blockquotes, and
+//! paragraphs. Inline content is rendered by `inline.wado`. Blocks are parsed
+//! from a line array with an explicit index so multi-line blocks (fences,
+//! blockquotes) can consume ahead and blockquotes can recurse.
 
 use { render_inline } from "./inline.wado";
+use { escape_attr } from "./html.wado";
 
 pub fn render(source: &String) -> String {
     let normalized = source.replace("\r\n", "\n");
-    let mut out: List<String> = [];
-    let mut para = String::new();
-
+    let mut lines: List<String> = [];
     for let line of normalized.split("\n") {
-        if line.trim().len() == 0 {
+        lines.push(line);
+    }
+    return render_blocks(&lines, 0, lines.len());
+}
+
+fn render_blocks(lines: &List<String>, start: i32, end: i32) -> String {
+    let mut out: List<String> = [];
+    let mut para: List<String> = [];
+    let mut i = start;
+    while i < end {
+        let line = lines[i];
+        if is_blank(&line) {
             flush_paragraph(&mut out, &mut para);
+            i += 1;
             continue;
+        }
+        match fence_marker(&line) {
+            Some([ch, fence_len, info]) => {
+                flush_paragraph(&mut out, &mut para);
+                i = render_fenced_code(lines, i, end, ch, fence_len, &info, &mut out);
+                continue;
+            },
+            None => {},
         }
         let level = heading_level(&line);
         if level > 0 {
             flush_paragraph(&mut out, &mut para);
             let content = heading_content(&line, level);
             out.push(`<h{level}>{render_inline(&content)}</h{level}>`);
+            i += 1;
             continue;
         }
         if is_thematic_break(&line) {
             flush_paragraph(&mut out, &mut para);
             out.push("<hr />");
+            i += 1;
             continue;
         }
-        if para.len() > 0 {
-            para.push_str(&"\n");
+        if is_blockquote(&line) {
+            flush_paragraph(&mut out, &mut para);
+            i = render_blockquote(lines, i, end, &mut out);
+            continue;
         }
-        para.push_str(&line);
+        para.push(line);
+        i += 1;
     }
     flush_paragraph(&mut out, &mut para);
-
     return out.join("\n");
 }
 
-fn flush_paragraph(out: &mut List<String>, para: &mut String) {
-    if para.len() == 0 {
+fn flush_paragraph(out: &mut List<String>, para: &mut List<String>) {
+    if para.is_empty() {
         return;
     }
-    out.push(`<p>{render_inline(para)}</p>`);
+    let joined = para.join("\n");
+    out.push(`<p>{render_inline(&joined)}</p>`);
     para.clear();
+}
+
+fn render_fenced_code(
+    lines: &List<String>,
+    open: i32,
+    end: i32,
+    ch: char,
+    fence_len: i32,
+    info: &String,
+    out: &mut List<String>,
+) -> i32 {
+    let lang = first_word(info);
+    let mut buf = String::new();
+    buf.push_str(&"<pre><code");
+    if lang.len() > 0 {
+        let cls = escape_attr(&lang);
+        buf.push_str(&` class="language-{cls}"`);
+    }
+    buf.push_str(&">");
+
+    let mut k = open + 1;
+    while k < end {
+        let line = lines[k];
+        if is_code_fence_close(&line, ch, fence_len) {
+            k += 1;
+            break;
+        }
+        buf.push_str(&escape_block_text(&line));
+        buf.push('\n');
+        k += 1;
+    }
+    buf.push_str(&"</code></pre>");
+    out.push(buf);
+    return k;
+}
+
+fn render_blockquote(lines: &List<String>, start: i32, end: i32, out: &mut List<String>) -> i32 {
+    let mut inner: List<String> = [];
+    let mut k = start;
+    while k < end && is_blockquote(&lines[k]) {
+        inner.push(strip_blockquote_marker(&lines[k]));
+        k += 1;
+    }
+    let body = render_blocks(&inner, 0, inner.len());
+    out.push(`<blockquote>\n{body}\n</blockquote>`);
+    return k;
+}
+
+fn is_blank(line: &String) -> bool {
+    return line.trim().len() == 0;
 }
 
 fn heading_level(line: &String) -> i32 {
@@ -102,4 +178,125 @@ fn is_thematic_break(line: &String) -> bool {
         }
     }
     return count >= 3;
+}
+
+fn fence_marker(line: &String) -> Option<[char, i32, String]> {
+    let chars = to_chars(line);
+    let len = chars.len();
+    let mut p = 0;
+    while p < len && p < 3 && chars[p] == ' ' {
+        p += 1;
+    }
+    if p >= len {
+        return null;
+    }
+    let ch = chars[p];
+    if ch != '`' && ch != '~' {
+        return null;
+    }
+    let mut run = 0;
+    while p < len && chars[p] == ch {
+        run += 1;
+        p += 1;
+    }
+    if run < 3 {
+        return null;
+    }
+    let info = substr(&chars, p, len).trim();
+    if ch == '`' && info.contains("`") {
+        return null;
+    }
+    return Option::Some([ch, run, info]);
+}
+
+fn is_code_fence_close(line: &String, ch: char, fence_len: i32) -> bool {
+    let chars = to_chars(line);
+    let len = chars.len();
+    let mut p = 0;
+    while p < len && p < 3 && chars[p] == ' ' {
+        p += 1;
+    }
+    let mut run = 0;
+    while p < len && chars[p] == ch {
+        run += 1;
+        p += 1;
+    }
+    if run < fence_len {
+        return false;
+    }
+    while p < len {
+        if chars[p] != ' ' && chars[p] != '\t' {
+            return false;
+        }
+        p += 1;
+    }
+    return true;
+}
+
+fn is_blockquote(line: &String) -> bool {
+    let chars = to_chars(line);
+    let len = chars.len();
+    let mut p = 0;
+    while p < len && p < 3 && chars[p] == ' ' {
+        p += 1;
+    }
+    return p < len && chars[p] == '>';
+}
+
+fn strip_blockquote_marker(line: &String) -> String {
+    let chars = to_chars(line);
+    let len = chars.len();
+    let mut p = 0;
+    while p < len && p < 3 && chars[p] == ' ' {
+        p += 1;
+    }
+    if p < len && chars[p] == '>' {
+        p += 1;
+        if p < len && chars[p] == ' ' {
+            p += 1;
+        }
+    }
+    return substr(&chars, p, len);
+}
+
+fn to_chars(line: &String) -> List<char> {
+    let mut chars: List<char> = [];
+    for let c of line.chars() {
+        chars.push(c);
+    }
+    return chars;
+}
+
+fn substr(chars: &List<char>, s: i32, e: i32) -> String {
+    let mut out = String::new();
+    let mut k = s;
+    while k < e {
+        out.push(chars[k]);
+        k += 1;
+    }
+    return out;
+}
+
+fn first_word(s: &String) -> String {
+    let mut out = String::new();
+    for let c of s.chars() {
+        if c == ' ' || c == '\t' {
+            break;
+        }
+        out.push(c);
+    }
+    return out;
+}
+
+fn escape_block_text(line: &String) -> String {
+    let mut out = String::new();
+    for let c of line.chars() {
+        match c {
+            '&' => out.push_str(&"&amp;"),
+            '<' => out.push_str(&"&lt;"),
+            '>' => out.push_str(&"&gt;"),
+            _ => out.push(c),
+        }
+    }
+    return out;
 }
