@@ -537,6 +537,17 @@ fn gen_lexer_alts(
     w.line(&`if !alts_ok_{id} \{ {fail_action}; \}`);
 }
 
+/// Whether `alt` has a semantic predicate strictly between element `after` and
+/// the trailing position (`after < before_index < elements.len()`).
+fn lexer_alt_has_predicate_after(alt: &LexerAlternative, after: i32) -> bool {
+    for let a of &alt.actions {
+        if a.kind matches { Predicate } && a.before_index > after && a.before_index < alt.elements.len() {
+            return true;
+        }
+    }
+    return false;
+}
+
 fn gen_lexer_alt_seq(
     w: &mut CodeWriter,
     alt: &LexerAlternative,
@@ -552,21 +563,34 @@ fn gen_lexer_alt_seq(
         // position here — rather than the alt-initial / trailing pair in the
         // caller — is what lets a single-alt inlined group / fragment (reached
         // straight through this fn, with no `gen_lexer_alts` wrapper) gate on
-        // its boundary predicates.
+        // its boundary predicates. A predicate positioned after a repeat that
+        // consumes its own suffix (non-greedy / lookahead-aware) is handled at
+        // that repeat, not here.
         gen_lexer_rule_predicates(w, &alt.actions, i, ea, fail_action);
         let elem = &alt.elements[i];
         if let Repeat(rep) = elem {
             if rep.non_greedy {
-                // Build a sub-alt from remaining elements
+                // Build a sub-alt from the remaining elements, re-basing the
+                // suffix's predicates onto it (`before_index - (i + 1)`), so a
+                // predicate positioned after the non-greedy repeat is still
+                // emitted — inside the synthesized suffix, which the non-greedy
+                // emit consumes. `return` (not `break`): the rest alt already
+                // covers every position from `i + 1` through the trailing one.
                 let mut rest_elems: List<LexerElement> = [];
                 for let mut j = i + 1; j < alt.elements.len(); j += 1 {
                     rest_elems.push(alt.elements[j]);
                 }
-                let rest_alt = LexerAlternative { elements: rest_elems };
+                let mut rest_actions: List<AltAction> = [];
+                for let a of &alt.actions {
+                    if a.before_index >= i + 1 {
+                        rest_actions.push(
+                            AltAction { kind: a.kind, source: a.source, before_index: a.before_index - (i + 1) },
+                        );
+                    }
+                }
+                let rest_alt = LexerAlternative { elements: rest_elems, actions: rest_actions };
                 gen_lexer_non_greedy_repeat(w, rep, &rest_alt, all_rules, fail_action, ci, ea);
-                // The suffix (and its trailing predicate) is consumed inside the
-                // non-greedy emit; break to the shared post-loop trailing guard.
-                break;
+                return;
             }
             // Greedy Plus / Star whose inner is a single-char-consuming
             // shape (Literal of one char / CharRange / CharClass /
@@ -599,6 +623,15 @@ fn gen_lexer_alt_seq(
                     suffix_elems.push(alt.elements[j]);
                 }
                 if lexer_suffix_is_peekable(&suffix_elems) {
+                    // The peek/commit emitter replays the suffix elements but
+                    // carries no actions, so a predicate strictly after the
+                    // repeat cannot be placed here. Fail loudly rather than drop
+                    // it (the trailing predicate is still emitted post-loop).
+                    if lexer_alt_has_predicate_after(alt, i) {
+                        panic(
+                            `lexer predicate after a lookahead-aware greedy repeat is not yet supported (rule alt element {i})`,
+                        );
+                    }
                     gen_lexer_repeat_lookahead_aware(w, rep, &suffix_elems, all_rules, fail_action, ci, ea);
                     break;
                 }

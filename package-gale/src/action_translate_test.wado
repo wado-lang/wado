@@ -190,6 +190,22 @@ e : e '+' e { print($_p); } | INT ;
     assert out == " print(min_prec); ", `out: '{out}'`;
 }
 
+test "translate maps $_p to 0 in a non-left-recursive rule" {
+    let g = parse("grammar T;
+r : X { print($_p); } ;
+").unwrap();
+    // A non-LR rule fn carries no `min_prec` parameter, so `$_p` (always 0
+    // outside a precedence context) must not emit an undeclared local.
+    let out = translate_wado_action(
+        &g.parser_rules[0],
+        &g.parser_rules,
+        &" print($_p); ",
+        false,
+        &NO_BINDINGS,
+    ).unwrap();
+    assert out == " print(0); ", `out: '{out}'`;
+}
+
 test "translate maps $ctx.toStringTree in a left-recursive rule to the final-node render" {
     let g = parse("grammar T;
 e @after { p.emit($ctx.toStringTree()); } : e '+' e | INT ;

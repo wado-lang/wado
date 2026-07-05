@@ -1323,6 +1323,7 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
 }
 pub enum TokenKind {
     KW,
+    NG,
     ID,
     WS,
     Eof,
@@ -1330,10 +1331,11 @@ pub enum TokenKind {
 }
 
 pub global TK_KW: i32 = 0;
-pub global TK_ID: i32 = 1;
-pub global TK_WS: i32 = 2;
-pub global TK_EOF: i32 = 3;
-pub global TK_ERROR: i32 = 4;
+pub global TK_NG: i32 = 1;
+pub global TK_ID: i32 = 2;
+pub global TK_WS: i32 = 3;
+pub global TK_EOF: i32 = 4;
+pub global TK_ERROR: i32 = 5;
 
 struct Lexer {
     chars: List<char>,
@@ -1369,20 +1371,44 @@ fn try_KW(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
+fn try_NG(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != 'q' { return -1; }
+    pos += 1;
+    loop {
+        let ng_saved_0 = pos;
+        let mut ng_exit_0 = false;
+        ng_0: {
+            if !( pos - start == 2 ) { break ng_0; }
+            if pos >= chars.len() || chars[pos] != 'z' { break ng_0; }
+            pos += 1;
+            ng_exit_0 = true;
+        }
+        if ng_exit_0 {
+            break;
+        }
+        pos = ng_saved_0;
+        if pos >= chars.len() { return -1; }
+        if !((chars[pos] matches { 'a'..='z' })) { return -1; }
+        pos += 1;
+    }
+    return pos;
+}
+
 fn try_ID(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !((chars[pos] matches { 'a'..='z' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_0 = pos;
-        rep_0: {
-            if pos >= chars.len() { break rep_0; }
-            if !((chars[pos] matches { 'a'..='z' })) { break rep_0; }
+        let rep_saved_1 = pos;
+        rep_1: {
+            if pos >= chars.len() { break rep_1; }
+            if !((chars[pos] matches { 'a'..='z' })) { break rep_1; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_0;
+        pos = rep_saved_1;
         break;
     }
     return pos;
@@ -1408,6 +1434,13 @@ pub fn tokenize(input: &String) -> TokenStream {
         if first_char == ' ' {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
+        } else if first_char == 'q' {
+            end = try_KW(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW; }
+            end = try_NG(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_NG; }
+            end = try_ID(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_ID; }
         } else if 'a' <= first_char <= 'z' {
             end = try_KW(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KW; }
@@ -1442,6 +1475,7 @@ pub fn tokenize(input: &String) -> TokenStream {
 pub fn token_kind_name(kind: i32) -> String {
     return match kind {
         TK_KW => "KW",
+        TK_NG => "NG",
         TK_ID => "ID",
         TK_WS => "WS",
         TK_EOF => "Eof",
@@ -1799,10 +1833,18 @@ fn scan_s(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind == TK_ID {
+        } else if alt_kind == TK_NG {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_NG { break try_1; }
+                pos += 1;
+                break scan_alts;
+            }
+            return -1;
+        } else if alt_kind == TK_ID {
+            pos = start;
+            try_2: {
+                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_2; }
                 pos += 1;
                 break scan_alts;
             }
@@ -1824,6 +1866,13 @@ fn _parse_s__inner(p: &mut Parser) -> () {
         }
         return;
     }
+    if kind == TK_NG {
+        let n = p.expect(TK_NG, &EMPTY_SYNC);
+        if !p.speculating {
+             p.emit("ng") 
+        }
+        return;
+    }
     if kind == TK_ID {
         let i = p.expect(TK_ID, &EMPTY_SYNC);
         if !p.speculating {
@@ -1834,7 +1883,7 @@ fn _parse_s__inner(p: &mut Parser) -> () {
     p.no_viable(
         "expected s",
         p.peek_span(),
-        ["TK_KW", "TK_ID"],
+        ["TK_KW", "TK_NG", "TK_ID"],
     );
     return;
 }
@@ -1876,8 +1925,8 @@ pub fn parse_s(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 }
 
 fn _ctx_token_names() -> List<String> {
-    let mut v: List<String> = List::with_capacity(5);
-    for let mut k = 0; k < 5; k += 1 {
+    let mut v: List<String> = List::with_capacity(6);
+    for let mut k = 0; k < 6; k += 1 {
         v.push(token_kind_name(k));
     }
     return v;
@@ -1886,16 +1935,16 @@ fn _ctx_token_names() -> List<String> {
 global CTX_TOKEN_NAMES: List<String> = _ctx_token_names();
 
 pub fn to_string_tree(result: &ParseResult) -> String {
-    let mut token_names: List<String> = List::with_capacity(5);
-    for let mut k = 0; k < 5; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(6);
+    for let mut k = 0; k < 6; k += 1 {
         token_names.push(token_kind_name(k));
     }
     return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &token_names);
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
-    let mut token_names: List<String> = List::with_capacity(5);
-    for let mut k = 0; k < 5; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(6);
+    for let mut k = 0; k < 6; k += 1 {
         token_names.push(token_kind_name(k));
     }
     let mut _kind: i32 = -1;

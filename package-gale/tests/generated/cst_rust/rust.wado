@@ -2421,12 +2421,13 @@ pub fn atn_predict_with_stack(
         if sim.tr_kind[start + j] == ATN_TR_PRECEDENCE && sim.tr_prec[start + j] < min_prec {
             continue;
         }
-        // Exclude an alternative whose context-free semantic predicate the
-        // caller evaluated to false (`{cond}?` at the decision, `pred_<id>(p)`).
-        // The alt index is the seed's `alt` (== the grammar alt index the
-        // dispatch maps back), so a false predicate makes that alt unseedable —
-        // it can never win the prediction.
-        if disabled_alts.contains(&j) {
+        // Exclude an alternative whose semantic predicate the caller evaluated
+        // to false (`{cond}?` at the decision). The alt index is the seed's
+        // `alt` (== the grammar alt index the dispatch maps back), so a false
+        // predicate makes that alt unseedable — it can never win. The
+        // `is_empty` guard keeps the common (no-predicate) decision to a length
+        // check instead of a full scan per transition.
+        if !disabled_alts.is_empty() && disabled_alts.contains(&j) {
             continue;
         }
         seeds.push(AtnConfig { state: sim.tr_target[start + j], alt: j, pctx: CTX_EMPTY, rs: rs_init, pr: min_prec });
