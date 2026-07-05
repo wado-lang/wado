@@ -3199,27 +3199,26 @@ impl CmTypeGen {
                         ComponentValType::Type(idx)
                     } else if let Some(cases) = {
                         // Prefer the explicit `interface_hint` for cross-
-                        // interface aliases (e.g. re-exported variants);
-                        // otherwise use the resolved source.
-                        let hint = self.interface_hint.clone();
-                        let cases_opt = if let Some(h) = hint.as_deref() {
-                            cm_interface_registry.get_variant_cases_by_interface(h, name)
-                        } else {
-                            cm_interface_registry.get_variant_cases_by_source(source, name)
-                        };
+                        // interface aliases (e.g. re-exported variants), but fall
+                        // back to the resolved source when the hinted interface
+                        // does not own the variant. A kiln generator's export
+                        // interface is hinted, yet its `generate` returns shared
+                        // `core:kiln/types` variants (e.g. `Error`) sourced
+                        // elsewhere.
+                        let cases_opt = self
+                            .interface_hint
+                            .as_deref()
+                            .and_then(|h| cm_interface_registry.get_variant_cases_by_interface(h, name))
+                            .or_else(|| cm_interface_registry.get_variant_cases_by_source(source, name));
                         cases_opt.map(<[CmVariantCase]>::to_vec)
                     } {
-                        let cm_name = if let Some(hint) = &self.interface_hint {
-                            cm_interface_registry
-                                .get_variant_cm_name_by_interface(hint, name)
-                                .expect("variant cm_name present when cases are")
-                                .to_string()
-                        } else {
-                            cm_interface_registry
-                                .get_variant_cm_name_by_source(source, name)
-                                .expect("variant cm_name present when cases are")
-                                .to_string()
-                        };
+                        let cm_name = self
+                            .interface_hint
+                            .as_deref()
+                            .and_then(|h| cm_interface_registry.get_variant_cm_name_by_interface(h, name))
+                            .or_else(|| cm_interface_registry.get_variant_cm_name_by_source(source, name))
+                            .expect("variant cm_name present when cases are")
+                            .to_string();
                         let idx = self.define_variant(
                             sink,
                             &cm_name,

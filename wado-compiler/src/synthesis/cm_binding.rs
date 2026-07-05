@@ -432,6 +432,15 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
     // Library world exports use a synchronous lift (the core function returns
     // the value directly), unlike the async/task-return WASI worlds.
     let is_lib_world = project.is_lib_world();
+    // The kiln generator borrows the lib path only for its typed params; its
+    // `generate` returns `Result<Response, Error>` over nested records / lists,
+    // which the synchronous lower path cannot lower. Route it through the
+    // async task-return result binding instead (matching the static
+    // `core:kiln/generator` world, which declares `generate` async).
+    let is_kiln_generator = project
+        .world_registry
+        .get(&project.target_world)
+        .is_some_and(|w| w.imports_interface("KilnHost"));
     if let Some(world_info) = world_info {
         let entry_type_table = project
             .tir_modules
@@ -623,7 +632,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                             &binding_cm_package,
                             &project.interner,
                         )
-                    } else if is_lib_world {
+                    } else if is_lib_world && !is_kiln_generator {
                         // Library exports: synchronous lift. The core function
                         // returns the lowered value directly (milestone 2:
                         // primitives only).
@@ -728,8 +737,14 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
         // Result-returning exports the task-return call passes the full flattened type.
         // Store on Package so optimize_dce can use it when creating the import.
         // Library exports use a synchronous lift and never call task.return, so
-        // skip this for them.
-        for export in world_info.exports.iter().filter(|_| !is_lib_world) {
+        // skip this for them — except the kiln generator, which borrows the lib
+        // path for its typed params yet lowers `generate` through the async
+        // task-return result binding.
+        for export in world_info
+            .exports
+            .iter()
+            .filter(|_| !is_lib_world || is_kiln_generator)
+        {
             if let Some(return_type) = &export.return_type {
                 let tt = entry_type_table.borrow();
                 let flat_types =

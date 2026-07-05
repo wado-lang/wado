@@ -724,6 +724,12 @@ fn compile_after_load<H: CompilerHost>(
             if let Some(ty) = export.return_type.as_mut() {
                 annotate_lib_local_sources(ty, kiln::import_check::KILN_TYPES_INTERFACE, &kiln_shared);
             }
+            // The static `core:kiln/generator` world declares `generate` async,
+            // so its canon uses the `task.return` lift. The result-returning
+            // binding (which handles nested records / lists) relies on that
+            // async canon (`sync_lift = !is_async`); force it here since the
+            // user's `fn generate` is not written `async`.
+            export.is_async = true;
         }
     }
 

@@ -287,6 +287,7 @@ pub fn build_component(
         &scalar_future_types,
         &value_future_types,
         component_plan,
+        &mut lib_type_gen,
     );
 
     // Lower WASI functions
@@ -1557,6 +1558,7 @@ fn emit_canonical_intrinsics(
     scalar_future_types: &IndexSet<(CmScalarType, u32)>,
     value_future_types: &IndexMap<CmPayloadType, u32>,
     component_plan: &crate::wir_build::component_plan::ComponentPlan,
+    lib_type_gen: &mut Option<CmTypeGen>,
 ) {
     // The `task.return` canon needs the export's CM-resolved result type.
     // Worlds with one boundary export (HTTP service `handle`, kiln
@@ -1688,18 +1690,34 @@ fn emit_canonical_intrinsics(
             }
             CanonicalIntrinsic::TaskReturn(key) => {
                 let memory_idx = ctx.memory_idx();
-                let result_ty = resolve_task_return_valtype(
+                // A kiln generator borrows the `--lib` path for its typed
+                // signature but returns `Result<Response, Error>` over records /
+                // variants that `CmExportType` cannot express (its `cm_result`
+                // is `Unit`). Build the canon result type from the raw Wado type
+                // via the shared lib type engine, so the canon flattening matches
+                // `task_return_flat_params` (the core import's by-value shape).
+                let result_ty = lib_task_return_valtype(
                     key,
                     component_plan,
                     project,
+                    builder,
                     ctx,
-                    result_unit_type,
-                    trailers_future_type,
-                    transmission_future_types,
-                    scalar_future_types,
-                    value_future_types,
-                    stream_types,
-                );
+                    lib_type_gen,
+                )
+                .unwrap_or_else(|| {
+                    resolve_task_return_valtype(
+                        key,
+                        component_plan,
+                        project,
+                        ctx,
+                        result_unit_type,
+                        trailers_future_type,
+                        transmission_future_types,
+                        scalar_future_types,
+                        value_future_types,
+                        stream_types,
+                    )
+                });
                 builder.task_return(Some(result_ty), [CanonicalOption::Memory(memory_idx)]);
             }
             CanonicalIntrinsic::WaitableSetNew => {
@@ -1761,6 +1779,46 @@ fn emit_canonical_intrinsics(
             }
         }
     }
+}
+
+/// Build the `task.return` result type for a `--lib` export whose result is a
+/// plain Wado type (e.g. the kiln generator's `Result<Response, Error>`), from
+/// the raw AST via the shared `lib_type_gen`. Named types land top-level and are
+/// cache-shared with [`emit_world_exports`], so the canon and the export func
+/// type reference the same defined types. Returns `None` for non-lib exports,
+/// exports without a result type, and `Future`/`Stream` results (handled by
+/// [`resolve_task_return_valtype`]).
+fn lib_task_return_valtype(
+    key: &str,
+    component_plan: &crate::wir_build::component_plan::ComponentPlan,
+    project: &NirPackage,
+    builder: &mut ComponentBuilder,
+    ctx: &mut ComponentModelContext,
+    lib_type_gen: &mut Option<CmTypeGen>,
+) -> Option<ComponentValType> {
+    let export = component_plan
+        .world_exports
+        .iter()
+        .find(|e| e.name == key)
+        .or_else(|| component_plan.world_exports.first())?;
+    if !export.is_lib {
+        return None;
+    }
+    let result_type = export.result_type.as_ref()?;
+    if matches!(result_type, crate::ast::Type::Generic(g) if g.name == "Future" || g.name == "Stream")
+    {
+        return None;
+    }
+    let type_gen = lib_type_gen.as_mut()?;
+    let no_resources: IndexMap<&str, u32> = IndexMap::default();
+    let resolved = project.cm_interface_registry.resolve_type(result_type);
+    let mut sink = TopLevelSink { builder, ctx };
+    Some(type_gen.ast_type_to_cm(
+        &mut sink,
+        &resolved,
+        &project.cm_interface_registry,
+        &no_resources,
+    ))
 }
 
 /// Resolve the `task.return` result type for an `async` export, keyed by its
