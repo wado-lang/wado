@@ -242,9 +242,7 @@ fn "wado-compiler/tests/fixtures/match_comprehensive.wado/match_variant_comprehe
     let __local_13: ref "core:prelude/format.wado//Formatter";
     let __match_14: ref null "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree";
     let f_45: ref "core:prelude/format.wado//Formatter";
-    let self_46: i32;
     let f_50: ref "core:prelude/format.wado//Formatter";
-    let self_51: i32;
     __b = struct.new "core:prelude//List<wado-compiler/tests/fixtures/match_comprehensive.wado/Tree>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree">(struct.new "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree::Leaf" { discriminant: 0, payload_0: 1 }, struct.new "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree::Node" { discriminant: 1, payload_0: struct.new "tuple//[i32, i32]" { 0: 10, 1: 20 } }, struct.new "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree" { 2 }, struct.new "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree::Leaf" { discriminant: 0, payload_0: 99 }), used: 4 };
     __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<wado-compiler/tests/fixtures/match_comprehensive.wado/Tree>" { repr: __b.repr, index: 0, end: 4 };
     b6: block {
@@ -286,11 +284,11 @@ fn "wado-compiler/tests/fixtures/match_comprehensive.wado/match_variant_comprehe
                     "core:prelude/string.wado/String::push"(__local_12, 40);
                     __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_12 };
                     f_45 = __local_13;
-                    "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_46(pair.0), f_45);
+                    "core:prelude/primitive.wado/i32::fmt_decimal"(pair.0, f_45);
                     "core:prelude/string.wado/String::push"(__local_12, 44);
                     __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_12 };
                     f_50 = __local_13;
-                    "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_51(pair.1), f_50);
+                    "core:prelude/primitive.wado/i32::fmt_decimal"(pair.1, f_50);
                     "core:prelude/string.wado/String::push"(__local_12, 41);
                     __local_12;
                 } else if @likely(tree.discriminant == 2) -> ref "core:prelude/string.wado//String" {
@@ -654,67 +652,27 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
-    let index_5: i32;
-    let value_6: u8;
-    let index_8: i32;
-    let value_9: u8;
-    let index_11: i32;
-    let value_12: u8;
-    let index_14: i32;
-    let value_15: u8;
-    let index_17: i32;
-    let value_18: u8;
-    let index_20: i32;
-    let value_21: u8;
-    let index_23: i32;
-    let value_24: u8;
-    let index_26: i32;
-    let value_27: u8;
-    let index_29: i32;
-    let value_30: u8;
-    let index_32: i32;
-    let value_33: u8;
     if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if c <u 128 {
-        index_5 = self.used;
-        value_6 = c & 255;
-        builtin::array_set_u8(self.repr, index_5, value_6);
+        builtin::array_set_u8(self.repr, self.used, c & 255);
         self.used = self.used + 1;
     } else if c <u 2048 {
-        index_8 = self.used;
-        value_9 = (192 | (c >>u 6)) & 255;
-        builtin::array_set_u8(self.repr, index_8, value_9);
-        index_11 = self.used + 1;
-        value_12 = (128 | (c & 63)) & 255;
-        builtin::array_set_u8(self.repr, index_11, value_12);
+        builtin::array_set_u8(self.repr, self.used, (192 | (c >>u 6)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | (c & 63)) & 255);
         self.used = self.used + 2;
     } else if c <u 65536 {
-        index_14 = self.used;
-        value_15 = (224 | (c >>u 12)) & 255;
-        builtin::array_set_u8(self.repr, index_14, value_15);
-        index_17 = self.used + 1;
-        value_18 = (128 | ((c >>u 6) & 63)) & 255;
-        builtin::array_set_u8(self.repr, index_17, value_18);
-        index_20 = self.used + 2;
-        value_21 = (128 | (c & 63)) & 255;
-        builtin::array_set_u8(self.repr, index_20, value_21);
+        builtin::array_set_u8(self.repr, self.used, (224 | (c >>u 12)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | (c & 63)) & 255);
         self.used = self.used + 3;
     } else {
-        index_23 = self.used;
-        value_24 = (240 | (c >>u 18)) & 255;
-        builtin::array_set_u8(self.repr, index_23, value_24);
-        index_26 = self.used + 1;
-        value_27 = (128 | ((c >>u 12) & 63)) & 255;
-        builtin::array_set_u8(self.repr, index_26, value_27);
-        index_29 = self.used + 2;
-        value_30 = (128 | ((c >>u 6) & 63)) & 255;
-        builtin::array_set_u8(self.repr, index_29, value_30);
-        index_32 = self.used + 3;
-        value_33 = (128 | (c & 63)) & 255;
-        builtin::array_set_u8(self.repr, index_32, value_33);
+        builtin::array_set_u8(self.repr, self.used, (240 | (c >>u 18)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 12) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((c >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 3, (128 | (c & 63)) & 255);
         self.used = self.used + 4;
     }
 }

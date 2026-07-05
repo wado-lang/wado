@@ -342,7 +342,6 @@ fn "core:prelude/intparse.wado/parse_signed_prefix_range"(s, start, end) {
 fn "core:prelude/intparse.wado/parse_i64_radix_range"(s, start, end, radix, max, min_abs) {
     let p: ref "tuple//[bool, i32]";
     let is_negative: bool;
-    let digit_start: i32;
     let kind_12: "core:prelude/intparse.wado//enum:IntErrorKind";
     let __pattern_temp_0: ref "tuple//[bool, i32]";
     let kind_16: "core:prelude/intparse.wado//enum:IntErrorKind";
@@ -366,11 +365,10 @@ fn "core:prelude/intparse.wado/parse_i64_radix_range"(s, start, end, radix, max,
         return 1, 0_i64, struct.new "core:prelude/intparse.wado//ParseIntError" { kind: __sroa___match_scrut_0_case1_payload_0 };
     });
     is_negative = __pattern_temp_0.0;
-    digit_start = __pattern_temp_0.1;
     let __sroa___match_scrut_1_discriminant: i32;
     let __sroa___match_scrut_1_case0_payload_0: u64;
     let __sroa___match_scrut_1_case1_payload_0: i32;
-    multivalue_bind [__sroa___match_scrut_1_discriminant, __sroa___match_scrut_1_case0_payload_0, __sroa___match_scrut_1_case1_payload_0] = "core:prelude/intparse.wado/parse_u64_digits"(s, digit_start, end, radix);
+    multivalue_bind [__sroa___match_scrut_1_discriminant, __sroa___match_scrut_1_case0_payload_0, __sroa___match_scrut_1_case1_payload_0] = "core:prelude/intparse.wado/parse_u64_digits"(s, __pattern_temp_0.1, end, radix);
     if __sroa___match_scrut_1_discriminant == 0 {
         if is_negative {
             if __sroa___match_scrut_1_case0_payload_0 >u min_abs {
@@ -596,67 +594,27 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
-    let index_5: i32;
-    let value_6: u8;
-    let index_8: i32;
-    let value_9: u8;
-    let index_11: i32;
-    let value_12: u8;
-    let index_14: i32;
-    let value_15: u8;
-    let index_17: i32;
-    let value_18: u8;
-    let index_20: i32;
-    let value_21: u8;
-    let index_23: i32;
-    let value_24: u8;
-    let index_26: i32;
-    let value_27: u8;
-    let index_29: i32;
-    let value_30: u8;
-    let index_32: i32;
-    let value_33: u8;
     if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if c <u 128 {
-        index_5 = self.used;
-        value_6 = c & 255;
-        builtin::array_set_u8(self.repr, index_5, value_6);
+        builtin::array_set_u8(self.repr, self.used, c & 255);
         self.used = self.used + 1;
     } else if c <u 2048 {
-        index_8 = self.used;
-        value_9 = (192 | (c >>u 6)) & 255;
-        builtin::array_set_u8(self.repr, index_8, value_9);
-        index_11 = self.used + 1;
-        value_12 = (128 | (c & 63)) & 255;
-        builtin::array_set_u8(self.repr, index_11, value_12);
+        builtin::array_set_u8(self.repr, self.used, (192 | (c >>u 6)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | (c & 63)) & 255);
         self.used = self.used + 2;
     } else if c <u 65536 {
-        index_14 = self.used;
-        value_15 = (224 | (c >>u 12)) & 255;
-        builtin::array_set_u8(self.repr, index_14, value_15);
-        index_17 = self.used + 1;
-        value_18 = (128 | ((c >>u 6) & 63)) & 255;
-        builtin::array_set_u8(self.repr, index_17, value_18);
-        index_20 = self.used + 2;
-        value_21 = (128 | (c & 63)) & 255;
-        builtin::array_set_u8(self.repr, index_20, value_21);
+        builtin::array_set_u8(self.repr, self.used, (224 | (c >>u 12)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | (c & 63)) & 255);
         self.used = self.used + 3;
     } else {
-        index_23 = self.used;
-        value_24 = (240 | (c >>u 18)) & 255;
-        builtin::array_set_u8(self.repr, index_23, value_24);
-        index_26 = self.used + 1;
-        value_27 = (128 | ((c >>u 12) & 63)) & 255;
-        builtin::array_set_u8(self.repr, index_26, value_27);
-        index_29 = self.used + 2;
-        value_30 = (128 | ((c >>u 6) & 63)) & 255;
-        builtin::array_set_u8(self.repr, index_29, value_30);
-        index_32 = self.used + 3;
-        value_33 = (128 | (c & 63)) & 255;
-        builtin::array_set_u8(self.repr, index_32, value_33);
+        builtin::array_set_u8(self.repr, self.used, (240 | (c >>u 18)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 12) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((c >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 3, (128 | (c & 63)) & 255);
         self.used = self.used + 4;
     }
 }

@@ -162,7 +162,6 @@ global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/cross_module_variant_iter.wado/__cm_export__run"() {
     let result: i32;
-    let __cond: bool;
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let __local_6: ref "core:prelude/string.wado//String";
@@ -182,8 +181,10 @@ fn "wado-compiler/tests/fixtures/cross_module_variant_iter.wado/__cm_export__run
         global:__modules_initialized = 1;
     };
     __sroa_tree_value = "./sub/cross_module_variant_iter_helper.wado/make_tree"();
-    __cond = local.tee result(counter = struct.new "./sub/cross_module_variant_iter_helper.wado//Counter" { total: 0 }; "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<./sub/cross_module_variant_iter_helper.wado/Counter>"(counter, __sroa_tree_value); counter.total) == 30;
-    if @unlikely(__cond == 0) {
+    counter = struct.new "./sub/cross_module_variant_iter_helper.wado//Counter" { total: 0 };
+    "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<./sub/cross_module_variant_iter_helper.wado/Counter>"(counter, __sroa_tree_value);
+    result = counter.total;
+    if @unlikely(result != 30) {
         cold_path;
         "core:rt/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(141); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_6, 114); "core:prelude/string.wado/String::push"(__local_6, 117); "core:prelude/string.wado/String::push"(__local_6, 110); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/cross_module_variant_iter.wado"), used: 59 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 6 }, __local_7); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, __local_4 = "core:prelude/string.wado/String::with_capacity"(33); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected 30, got "), used: 17 }); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: result }, __local_5); __local_4); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: result == 30
@@ -350,7 +351,6 @@ fn "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_
     let __local_6: ref null "core:prelude/types.wado//Box<./sub/cross_module_variant_iter_helper.wado/Choice>";
     let self_7: ref "core:prelude//List<./sub/cross_module_variant_iter_helper.wado/Choice>";
     let end: i32;
-    let v: i32;
     if ref.test "./sub/cross_module_variant_iter_helper.wado//Choice::A"(c) {
         a = ref.cast "./sub/cross_module_variant_iter_helper.wado//Choice::A"(c).payload_0;
         self_7 = a.children;
@@ -371,8 +371,7 @@ fn "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_
     } else {
         b = ref.cast "./sub/cross_module_variant_iter_helper.wado//Choice::B"(c).payload_0;
         block {
-            v = b.value;
-            h.total = h.total + v;
+            h.total = h.total + b.value;
         };
     }
 }
@@ -393,13 +392,11 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
 }
 
 fn "core:prelude/primitive.wado/i32^Display::fmt"(self, f) {
-    let self_2: i32;
-    "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_2(self.value), f);
+    "core:prelude/primitive.wado/i32::fmt_decimal"(self.value, f);
 }
 
 fn "core:prelude/primitive.wado/i32^Inspect::inspect"(self, f) {
-    let self_2: i32;
-    "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_2(self.value), f);
+    "core:prelude/primitive.wado/i32::fmt_decimal"(self.value, f);
 }
 
 fn "core:prelude/string.wado/String::with_capacity"(capacity) {
@@ -451,67 +448,27 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
-    let index_5: i32;
-    let value_6: u8;
-    let index_8: i32;
-    let value_9: u8;
-    let index_11: i32;
-    let value_12: u8;
-    let index_14: i32;
-    let value_15: u8;
-    let index_17: i32;
-    let value_18: u8;
-    let index_20: i32;
-    let value_21: u8;
-    let index_23: i32;
-    let value_24: u8;
-    let index_26: i32;
-    let value_27: u8;
-    let index_29: i32;
-    let value_30: u8;
-    let index_32: i32;
-    let value_33: u8;
     if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if c <u 128 {
-        index_5 = self.used;
-        value_6 = c & 255;
-        builtin::array_set_u8(self.repr, index_5, value_6);
+        builtin::array_set_u8(self.repr, self.used, c & 255);
         self.used = self.used + 1;
     } else if c <u 2048 {
-        index_8 = self.used;
-        value_9 = (192 | (c >>u 6)) & 255;
-        builtin::array_set_u8(self.repr, index_8, value_9);
-        index_11 = self.used + 1;
-        value_12 = (128 | (c & 63)) & 255;
-        builtin::array_set_u8(self.repr, index_11, value_12);
+        builtin::array_set_u8(self.repr, self.used, (192 | (c >>u 6)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | (c & 63)) & 255);
         self.used = self.used + 2;
     } else if c <u 65536 {
-        index_14 = self.used;
-        value_15 = (224 | (c >>u 12)) & 255;
-        builtin::array_set_u8(self.repr, index_14, value_15);
-        index_17 = self.used + 1;
-        value_18 = (128 | ((c >>u 6) & 63)) & 255;
-        builtin::array_set_u8(self.repr, index_17, value_18);
-        index_20 = self.used + 2;
-        value_21 = (128 | (c & 63)) & 255;
-        builtin::array_set_u8(self.repr, index_20, value_21);
+        builtin::array_set_u8(self.repr, self.used, (224 | (c >>u 12)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | (c & 63)) & 255);
         self.used = self.used + 3;
     } else {
-        index_23 = self.used;
-        value_24 = (240 | (c >>u 18)) & 255;
-        builtin::array_set_u8(self.repr, index_23, value_24);
-        index_26 = self.used + 1;
-        value_27 = (128 | ((c >>u 12) & 63)) & 255;
-        builtin::array_set_u8(self.repr, index_26, value_27);
-        index_29 = self.used + 2;
-        value_30 = (128 | ((c >>u 6) & 63)) & 255;
-        builtin::array_set_u8(self.repr, index_29, value_30);
-        index_32 = self.used + 3;
-        value_33 = (128 | (c & 63)) & 255;
-        builtin::array_set_u8(self.repr, index_32, value_33);
+        builtin::array_set_u8(self.repr, self.used, (240 | (c >>u 18)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 12) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((c >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 3, (128 | (c & 63)) & 255);
         self.used = self.used + 4;
     }
 }

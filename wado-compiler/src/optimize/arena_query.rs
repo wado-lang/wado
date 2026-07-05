@@ -46,6 +46,48 @@ pub(super) fn place_root_local(body: &Body, expr: ExprId) -> Option<u32> {
     }
 }
 
+/// A place as its root local plus the field-index chain leading off it.
+pub(super) type Place = (u32, Vec<u32>);
+
+/// The [`Place`] of an expression — its root local and field-access chain —
+/// seeing through `&`/`&mut`/deref wrappers (so an inlined `self.f` whose
+/// receiver became `&mut b` still roots at `b`). `None` at an `Index` or any
+/// non-place step: a non-field place can never be a prefix of a pure
+/// Local/field place, so it never overlaps one.
+pub(super) fn place_path(body: &Body, expr: ExprId) -> Option<Place> {
+    match &body.exprs[expr].kind {
+        ExprKind::Local { index, .. } => Some((*index, Vec::new())),
+        ExprKind::FieldAccess {
+            expr: inner,
+            field_index,
+            ..
+        } => {
+            let (root, mut fields) = place_path(body, inner.as_expr()?)?;
+            fields.push(*field_index);
+            Some((root, fields))
+        }
+        ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
+            expr: inner,
+        } => place_path(body, inner.as_expr()?),
+        _ => None,
+    }
+}
+
+/// Whether place `q` is a (non-strict) prefix of place `p`: same root and `q`'s
+/// field chain leads `p`'s. Replacing the handle at `q` replaces the object a
+/// reference to `p` observes.
+pub(super) fn is_place_prefix(q: &Place, p: &Place) -> bool {
+    q.0 == p.0 && q.1.len() <= p.1.len() && q.1 == p.1[..q.1.len()]
+}
+
+/// Whether two places overlap — one is a prefix of the other — so a write to
+/// either may change a read of the other (`a.b` overlaps `a`, `a.b`, and
+/// `a.b.c`, but not the sibling `a.c`).
+pub(super) fn place_overlaps(a: &Place, b: &Place) -> bool {
+    is_place_prefix(a, b) || is_place_prefix(b, a)
+}
+
 /// The root local of an *escape* expression, looking through every projection
 /// plus `&`/`&mut`/`Cast`: `&mut a.b.f`, `(a.b as T)`, and `a.b[i]` all root at
 /// `a`. Distinct from [`place_root_local`], which looks through `Deref` only (a

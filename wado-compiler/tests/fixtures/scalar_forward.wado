@@ -1,0 +1,26 @@
+// A single-use pure scalar `let` — here the index/value parameters that
+// inlining `arr[i] = v` leaves behind — forwards into its adjacent use, so the
+// store takes its operands directly (`array_set_u8(self.repr, self.used, c &
+// 255)`) instead of routing through dead-weight locals. Index reads are
+// excluded, so read-modify-write element updates keep their pre-write value.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut s = "";
+    s.push('A');
+    s.push('Z');
+
+    let mut arr: List<i32> = [5, 10];
+    arr[0] = arr[0] + 1;
+    arr[1] = arr[0] + arr[1];
+    assert arr[0] == 6;
+    assert arr[1] == 16;
+
+    println(`{s}:{arr[0]}:{arr[1]}`)
+}
+
+__DATA__
+{
+    "stdout": "AZ:6:16\n",
+    "wir_expect:O2": ["array_set_u8(self.repr, self.used, "]
+}

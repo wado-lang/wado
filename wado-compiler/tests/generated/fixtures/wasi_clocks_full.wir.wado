@@ -228,12 +228,11 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__test_3_monotonic__wait_
     let now: u64;
     let target: u64;
     let after: u64;
-    let __cond: bool;
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
     "core:prelude/types.wado/AsyncCall<()>::wait"("wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_until"(local.tee target(local.tee now("wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"()) + 1000000_i64)));
-    __cond = local.tee after("wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"()) >=u target;
-    if @unlikely(__cond == 0) {
+    after = "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"();
+    if @unlikely(after <u target) {
         cold_path;
         "core:rt/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(150); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_3_monotonic__wait_until_reaches_target"), used: 45 }); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/wasi_clocks_full.wado"), used: 50 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 26 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: after >= target
@@ -245,24 +244,22 @@ condition: after >= target
 fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__test_6_system_clock__now_returns_valid_instant"() {
     let instant: ref "wasi:clocks/system_clock.wado//Instant";
     let __v0_1: i64;
-    let __cond_2: bool;
     let __v0_3: u32;
-    let __cond_4: bool;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let __local_7: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/format.wado//Formatter";
     instant = "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__SystemClock_now"();
-    __cond_2 = local.tee __v0_1(instant.seconds) > 0_i64;
-    if @unlikely(__cond_2 == 0) {
+    __v0_1 = instant.seconds;
+    if @unlikely(__v0_1 <= 0_i64) {
         cold_path;
         "core:rt/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(139); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_6_system_clock__now_returns_valid_instant"), used: 48 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/wasi_clocks_full.wado"), used: 50 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 44 }, __local_6); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: instant.seconds > 0
 "), used: 32 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("instant.seconds: "), used: 17 }); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i64^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i64>" { value: __v0_1 }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); __local_5);
         unreachable;
     }
-    __cond_4 = local.tee __v0_3(instant.nanoseconds) <u 1000000000;
-    if @unlikely(__cond_4 == 0) {
+    __v0_3 = instant.nanoseconds;
+    if @unlikely(__v0_3 >=u 1000000000) {
         cold_path;
         "core:rt/panic"(__local_7 = "core:prelude/string.wado/String::with_capacity"(166); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_6_system_clock__now_returns_valid_instant"), used: 48 }); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push"(__local_7, 97); "core:prelude/string.wado/String::push"(__local_7, 116); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/wasi_clocks_full.wado"), used: 50 }); "core:prelude/string.wado/String::push"(__local_7, 58); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 45 }, __local_8); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: instant.nanoseconds < 1_000_000_000 as u32
@@ -276,7 +273,6 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__test_8_system_clock__tw
     let t2: ref "wasi:clocks/system_clock.wado//Instant";
     let __v0: u32;
     let __v1: u32;
-    let __cond_5: bool;
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
     t1 = "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__SystemClock_now"();
@@ -285,8 +281,7 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__test_8_system_clock__tw
     } else if t2.seconds == t1.seconds {
         __v0 = t2.nanoseconds;
         __v1 = t1.nanoseconds;
-        __cond_5 = __v0 >=u __v1;
-        if @unlikely(__cond_5 == 0) {
+        if @unlikely(__v0 <u __v1) {
             cold_path;
             "core:rt/panic"(__local_8 = "core:prelude/string.wado/String::with_capacity"(184); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_8_system_clock__two_reads_are_consistent"), used: 47 }); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push"(__local_8, 97); "core:prelude/string.wado/String::push"(__local_8, 116); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/wasi_clocks_full.wado"), used: 50 }); "core:prelude/string.wado/String::push"(__local_8, 58); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 59 }, __local_9); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: t2.nanoseconds >= t1.nanoseconds
@@ -340,7 +335,6 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_lift__MonotonicClock
 fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_export____test_0_monotonic__now_is_non_decreasing"() {
     let t1: u64;
     let t2: u64;
-    let __cond: bool;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
@@ -350,8 +344,8 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_export____test_0_mon
         global:__modules_initialized = 1;
     };
     t1 = "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"();
-    __cond = local.tee t2("wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"()) >=u t1;
-    if @unlikely(__cond == 0) {
+    t2 = "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"();
+    if @unlikely(t2 <u t1) {
         cold_path;
         "core:rt/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(136); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_monotonic__now_is_non_decreasing"), used: 41 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/wasi_clocks_full.wado"), used: 50 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 6 }, __local_6); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: t2 >= t1
@@ -363,7 +357,6 @@ condition: t2 >= t1
 
 fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_export____test_1_monotonic__resolution_is_positive"() {
     let res: u64;
-    let __cond: bool;
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
@@ -372,8 +365,8 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_export____test_1_mon
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    __cond = local.tee res("wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_get_resolution"()) >u 0_i64;
-    if @unlikely(__cond == 0) {
+    res = "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_get_resolution"();
+    if @unlikely(res <=u 0_i64) {
         cold_path;
         "core:rt/panic"(__local_3 = "core:prelude/string.wado/String::with_capacity"(115); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_monotonic__resolution_is_positive"), used: 42 }); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push"(__local_3, 97); "core:prelude/string.wado/String::push"(__local_3, 116); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/wasi_clocks_full.wado"), used: 50 }); "core:prelude/string.wado/String::push"(__local_3, 58); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 11 }, __local_4); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: res > 0
@@ -386,7 +379,6 @@ condition: res > 0
 fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_export____test_2_monotonic__wait_for_advances_clock"() {
     let before: u64;
     let after: u64;
-    let __cond: bool;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
@@ -397,8 +389,8 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_export____test_2_mon
     };
     before = "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"();
     "core:prelude/types.wado/AsyncCall<()>::wait"("wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_for"(1000000_i64));
-    __cond = local.tee after("wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"()) >=u before;
-    if @unlikely(__cond == 0) {
+    after = "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"();
+    if @unlikely(after <u before) {
         cold_path;
         "core:rt/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(150); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_2_monotonic__wait_for_advances_clock"), used: 43 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/wasi_clocks_full.wado"), used: 50 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 18 }, __local_6); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: after >= before
@@ -422,7 +414,6 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_export____test_3_mon
 fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_export____test_4_monotonic__wait_for_zero_returns_immediately"() {
     let before: u64;
     let after: u64;
-    let __cond: bool;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
@@ -433,8 +424,8 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_export____test_4_mon
     };
     before = "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"();
     "core:prelude/types.wado/AsyncCall<()>::wait"("wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_for"(0_i64));
-    __cond = local.tee after("wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"()) >=u before;
-    if @unlikely(__cond == 0) {
+    after = "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"();
+    if @unlikely(after <u before) {
         cold_path;
         "core:rt/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(150); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_4_monotonic__wait_for_zero_returns_immediately"), used: 53 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/wasi_clocks_full.wado"), used: 50 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 33 }, __local_6); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: after >= before
@@ -446,7 +437,6 @@ condition: after >= before
 
 fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_export____test_5_monotonic__wait_until_past_returns_immediately"() {
     let after: u64;
-    let __cond: bool;
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
@@ -456,8 +446,8 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_export____test_5_mon
         global:__modules_initialized = 1;
     };
     "core:prelude/types.wado/AsyncCall<()>::wait"("wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_until"(0_i64));
-    __cond = local.tee after("wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"()) >u 0_i64;
-    if @unlikely(__cond == 0) {
+    after = "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"();
+    if @unlikely(after <=u 0_i64) {
         cold_path;
         "core:rt/panic"(__local_3 = "core:prelude/string.wado/String::with_capacity"(119); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_5_monotonic__wait_until_past_returns_immediately"), used: 55 }); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push"(__local_3, 97); "core:prelude/string.wado/String::push"(__local_3, 116); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/wasi_clocks_full.wado"), used: 50 }); "core:prelude/string.wado/String::push"(__local_3, 58); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 39 }, __local_4); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: after > 0
@@ -480,7 +470,6 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_export____test_6_sys
 
 fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_export____test_7_system_clock__resolution_is_positive"() {
     let res: u64;
-    let __cond: bool;
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
@@ -489,8 +478,8 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_export____test_7_sys
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    __cond = local.tee res("wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__SystemClock_get_resolution"()) >u 0_i64;
-    if @unlikely(__cond == 0) {
+    res = "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__SystemClock_get_resolution"();
+    if @unlikely(res <=u 0_i64) {
         cold_path;
         "core:rt/panic"(__local_3 = "core:prelude/string.wado/String::with_capacity"(115); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_7_system_clock__resolution_is_positive"), used: 45 }); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push"(__local_3, 97); "core:prelude/string.wado/String::push"(__local_3, 116); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/wasi_clocks_full.wado"), used: 50 }); "core:prelude/string.wado/String::push"(__local_3, 58); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 50 }, __local_4); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: res > 0
@@ -691,7 +680,6 @@ fn "core:prelude/primitive.wado/u32::fmt_decimal"(self, f) {
 fn "core:prelude/primitive.wado/i64::fmt_decimal"(self, f) {
     let is_negative: bool;
     let remaining_digits: i32;
-    let digit_count_6: i32;
     let offset_7: i32;
     let repr: ref Array<u8>;
     let abs_val: i64;
@@ -701,8 +689,8 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal"(self, f) {
     let self_13: ref "core:prelude/string.wado//String";
     is_negative = self < 0_i64;
     if self == -9223372036854775808_i64 {
-        digit_count_6 = local.tee remaining_digits("core:prelude/primitive.wado/count_digits_i64"(922337203685477580_i64)) + 1;
-        offset_7 = "core:prelude/format.wado/Formatter::prepare_int_write"(f, 1, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count_6);
+        remaining_digits = "core:prelude/primitive.wado/count_digits_i64"(922337203685477580_i64);
+        offset_7 = "core:prelude/format.wado/Formatter::prepare_int_write"(f, 1, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, remaining_digits + 1);
         self_12 = f.buf;
         repr = self_12.repr;
         "core:prelude/primitive.wado/write_decimal_digits"(repr, offset_7, 922337203685477580_i64, remaining_digits);
@@ -791,18 +779,15 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
 }
 
 fn "core:prelude/primitive.wado/i32^Display::fmt"(self, f) {
-    let self_2: i32;
-    "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_2(self.value), f);
+    "core:prelude/primitive.wado/i32::fmt_decimal"(self.value, f);
 }
 
 fn "core:prelude/primitive.wado/u32^Inspect::inspect"(self, f) {
-    let self_2: u32;
-    "core:prelude/primitive.wado/u32::fmt_decimal"(local.tee self_2(self.value), f);
+    "core:prelude/primitive.wado/u32::fmt_decimal"(self.value, f);
 }
 
 fn "core:prelude/primitive.wado/i64^Inspect::inspect"(self, f) {
-    let self_2: i64;
-    "core:prelude/primitive.wado/i64::fmt_decimal"(local.tee self_2(self.value), f);
+    "core:prelude/primitive.wado/i64::fmt_decimal"(self.value, f);
 }
 
 fn "core:prelude/string.wado/String::with_capacity"(capacity) {
@@ -854,83 +839,41 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
-    let index_5: i32;
-    let value_6: u8;
-    let index_8: i32;
-    let value_9: u8;
-    let index_11: i32;
-    let value_12: u8;
-    let index_14: i32;
-    let value_15: u8;
-    let index_17: i32;
-    let value_18: u8;
-    let index_20: i32;
-    let value_21: u8;
-    let index_23: i32;
-    let value_24: u8;
-    let index_26: i32;
-    let value_27: u8;
-    let index_29: i32;
-    let value_30: u8;
-    let index_32: i32;
-    let value_33: u8;
     if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if c <u 128 {
-        index_5 = self.used;
-        value_6 = c & 255;
-        builtin::array_set_u8(self.repr, index_5, value_6);
+        builtin::array_set_u8(self.repr, self.used, c & 255);
         self.used = self.used + 1;
     } else if c <u 2048 {
-        index_8 = self.used;
-        value_9 = (192 | (c >>u 6)) & 255;
-        builtin::array_set_u8(self.repr, index_8, value_9);
-        index_11 = self.used + 1;
-        value_12 = (128 | (c & 63)) & 255;
-        builtin::array_set_u8(self.repr, index_11, value_12);
+        builtin::array_set_u8(self.repr, self.used, (192 | (c >>u 6)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | (c & 63)) & 255);
         self.used = self.used + 2;
     } else if c <u 65536 {
-        index_14 = self.used;
-        value_15 = (224 | (c >>u 12)) & 255;
-        builtin::array_set_u8(self.repr, index_14, value_15);
-        index_17 = self.used + 1;
-        value_18 = (128 | ((c >>u 6) & 63)) & 255;
-        builtin::array_set_u8(self.repr, index_17, value_18);
-        index_20 = self.used + 2;
-        value_21 = (128 | (c & 63)) & 255;
-        builtin::array_set_u8(self.repr, index_20, value_21);
+        builtin::array_set_u8(self.repr, self.used, (224 | (c >>u 12)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | (c & 63)) & 255);
         self.used = self.used + 3;
     } else {
-        index_23 = self.used;
-        value_24 = (240 | (c >>u 18)) & 255;
-        builtin::array_set_u8(self.repr, index_23, value_24);
-        index_26 = self.used + 1;
-        value_27 = (128 | ((c >>u 12) & 63)) & 255;
-        builtin::array_set_u8(self.repr, index_26, value_27);
-        index_29 = self.used + 2;
-        value_30 = (128 | ((c >>u 6) & 63)) & 255;
-        builtin::array_set_u8(self.repr, index_29, value_30);
-        index_32 = self.used + 3;
-        value_33 = (128 | (c & 63)) & 255;
-        builtin::array_set_u8(self.repr, index_32, value_33);
+        builtin::array_set_u8(self.repr, self.used, (240 | (c >>u 18)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 12) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((c >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 3, (128 | (c & 63)) & 255);
         self.used = self.used + 4;
     }
 }
 
 fn "wasi:clocks/monotonic_clock.wado/Mark^Inspect::inspect"(self, f) {
-    let self_4: u64;
     let s: ref "core:prelude/string.wado//String";
-    "core:prelude/primitive.wado/u64::fmt_decimal"(local.tee self_4(self.value), f);
+    "core:prelude/primitive.wado/u64::fmt_decimal"(self.value, f);
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" as Mark"), used: 8 };
     "core:prelude/string.wado/String::push_str"(f.buf, s);
 }
 
 fn "wasi:clocks/types.wado/Duration^Inspect::inspect"(self, f) {
-    let self_4: u64;
     let s: ref "core:prelude/string.wado//String";
-    "core:prelude/primitive.wado/u64::fmt_decimal"(local.tee self_4(self.value), f);
+    "core:prelude/primitive.wado/u64::fmt_decimal"(self.value, f);
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" as Duration"), used: 12 };
     "core:prelude/string.wado/String::push_str"(f.buf, s);
 }
