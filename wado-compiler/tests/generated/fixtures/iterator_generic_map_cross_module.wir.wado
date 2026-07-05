@@ -452,34 +452,24 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
-    let self_4: ref Array<u8>;
     let index_5: i32;
     let value_6: u8;
-    let self_7: ref Array<u8>;
     let index_8: i32;
     let value_9: u8;
-    let self_10: ref Array<u8>;
     let index_11: i32;
     let value_12: u8;
-    let self_13: ref Array<u8>;
     let index_14: i32;
     let value_15: u8;
-    let self_16: ref Array<u8>;
     let index_17: i32;
     let value_18: u8;
-    let self_19: ref Array<u8>;
     let index_20: i32;
     let value_21: u8;
-    let self_22: ref Array<u8>;
     let index_23: i32;
     let value_24: u8;
-    let self_25: ref Array<u8>;
     let index_26: i32;
     let value_27: u8;
-    let self_28: ref Array<u8>;
     let index_29: i32;
     let value_30: u8;
-    let self_31: ref Array<u8>;
     let index_32: i32;
     let value_33: u8;
     if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -487,52 +477,42 @@ fn "core:prelude/string.wado/String::push"(self, c) {
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if c <u 128 {
-        self_4 = self.repr;
         index_5 = self.used;
         value_6 = c & 255;
-        builtin::array_set_u8(self_4, index_5, value_6);
+        builtin::array_set_u8(self.repr, index_5, value_6);
         self.used = self.used + 1;
     } else if c <u 2048 {
-        self_7 = self.repr;
         index_8 = self.used;
         value_9 = (192 | (c >>u 6)) & 255;
-        builtin::array_set_u8(self_7, index_8, value_9);
-        self_10 = self.repr;
+        builtin::array_set_u8(self.repr, index_8, value_9);
         index_11 = self.used + 1;
         value_12 = (128 | (c & 63)) & 255;
-        builtin::array_set_u8(self_10, index_11, value_12);
+        builtin::array_set_u8(self.repr, index_11, value_12);
         self.used = self.used + 2;
     } else if c <u 65536 {
-        self_13 = self.repr;
         index_14 = self.used;
         value_15 = (224 | (c >>u 12)) & 255;
-        builtin::array_set_u8(self_13, index_14, value_15);
-        self_16 = self.repr;
+        builtin::array_set_u8(self.repr, index_14, value_15);
         index_17 = self.used + 1;
         value_18 = (128 | ((c >>u 6) & 63)) & 255;
-        builtin::array_set_u8(self_16, index_17, value_18);
-        self_19 = self.repr;
+        builtin::array_set_u8(self.repr, index_17, value_18);
         index_20 = self.used + 2;
         value_21 = (128 | (c & 63)) & 255;
-        builtin::array_set_u8(self_19, index_20, value_21);
+        builtin::array_set_u8(self.repr, index_20, value_21);
         self.used = self.used + 3;
     } else {
-        self_22 = self.repr;
         index_23 = self.used;
         value_24 = (240 | (c >>u 18)) & 255;
-        builtin::array_set_u8(self_22, index_23, value_24);
-        self_25 = self.repr;
+        builtin::array_set_u8(self.repr, index_23, value_24);
         index_26 = self.used + 1;
         value_27 = (128 | ((c >>u 12) & 63)) & 255;
-        builtin::array_set_u8(self_25, index_26, value_27);
-        self_28 = self.repr;
+        builtin::array_set_u8(self.repr, index_26, value_27);
         index_29 = self.used + 2;
         value_30 = (128 | ((c >>u 6) & 63)) & 255;
-        builtin::array_set_u8(self_28, index_29, value_30);
-        self_31 = self.repr;
+        builtin::array_set_u8(self.repr, index_29, value_30);
         index_32 = self.used + 3;
         value_33 = (128 | (c & 63)) & 255;
-        builtin::array_set_u8(self_31, index_32, value_33);
+        builtin::array_set_u8(self.repr, index_32, value_33);
         self.used = self.used + 4;
     }
 }

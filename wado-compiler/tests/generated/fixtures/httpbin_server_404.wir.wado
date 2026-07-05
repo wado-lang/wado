@@ -1029,14 +1029,12 @@ fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
 
 fn "core:prelude/list.wado/List<u8>::push"(self, value) {
     let used: i32;
-    let self_4: ref Array<u8>;
     used = self.used;
     if @unlikely(used >= builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/list.wado/List<u8>::grow"(self);
     }
-    self_4 = self.repr;
-    builtin::array_set_u8(self_4, used, value);
+    builtin::array_set_u8(self.repr, used, value);
     self.used = used + 1;
 }
 
