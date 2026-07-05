@@ -3559,6 +3559,16 @@ Returns true if this string starts with the given prefix.
 
 Returns true if this string ends with the given suffix.
 
+#### `pub fn strip_prefix(&self, prefix: String) -> Option<String>`
+
+Returns the string with `prefix` removed from the front, or None when it
+does not start with `prefix`.
+
+#### `pub fn strip_suffix(&self, suffix: String) -> Option<String>`
+
+Returns the string with `suffix` removed from the end, or None when it
+does not end with `suffix`.
+
 #### `pub fn find(&self, pat: String) -> Option<i32>`
 
 Returns the byte index of the first occurrence of `pat`, or None.
