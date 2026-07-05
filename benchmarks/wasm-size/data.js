@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783201182108,
+  "lastUpdate": 1783209709122,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -38161,6 +38161,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/783bc7602d64c2ca4eae090b8e9c3ae14bdee4e4"
         },
         "date": 1783201181369,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8446,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17049,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 284954,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b9480803d7437939bcaa16b073bb996e05abf832",
+          "message": "Merge pull request #1516 from wado-lang/claude/enum-field-mut-ref-copy-4bsew9\n\nfix: reject `&mut` to an enum-typed struct field",
+          "timestamp": "2026-07-05T08:53:16+09:00",
+          "tree_id": "5de48bb7075fbd22507428bc0f0956dc913a14b7",
+          "url": "https://github.com/wado-lang/wado/commit/b9480803d7437939bcaa16b073bb996e05abf832"
+        },
+        "date": 1783209708607,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
