@@ -52,3 +52,25 @@ test "render_inline leaves unmatched delimiters literal" {
 test "render_inline escapes plain angle brackets" {
     assert render_inline(&"1 < 2 && 3 > 2") == "1 &lt; 2 &amp;&amp; 3 &gt; 2";
 }
+
+test "render_inline autolinks bare http urls" {
+    assert render_inline(&"see https://wado.example/docs here")
+        == "see <a href=\"https://wado.example/docs\">https://wado.example/docs</a> here";
+}
+
+test "render_inline trims trailing punctuation from autolinks" {
+    assert render_inline(&"visit http://a.example.")
+        == "visit <a href=\"http://a.example\">http://a.example</a>.";
+}
+
+test "render_inline makes a hard break on two trailing spaces" {
+    assert render_inline(&"a  \nb") == "a<br />\nb";
+}
+
+test "render_inline makes a hard break on a trailing backslash" {
+    assert render_inline(&"a\\\nb") == "a<br />\nb";
+}
+
+test "render_inline keeps a single trailing space as a soft break" {
+    assert render_inline(&"a \nb") == "a \nb";
+}

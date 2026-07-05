@@ -110,3 +110,19 @@ test "render nests a list under an item" {
     assert render(&"- parent\n  - child")
         == "<ul>\n<li>\n<p>parent</p>\n<ul>\n<li>child</li>\n</ul>\n</li>\n</ul>";
 }
+
+test "render emits a GFM table" {
+    let input = "| a | b |\n| --- | --- |\n| 1 | 2 |";
+    let expected = "<table>\n<thead>\n<tr>\n<th>a</th>\n<th>b</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>1</td>\n<td>2</td>\n</tr>\n</tbody>\n</table>";
+    assert render(&input) == expected;
+}
+
+test "render applies table column alignment" {
+    let input = "| L | C | R |\n| :-- | :-: | --: |\n| a | b | c |";
+    let expected = "<table>\n<thead>\n<tr>\n<th align=\"left\">L</th>\n<th align=\"center\">C</th>\n<th align=\"right\">R</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td align=\"left\">a</td>\n<td align=\"center\">b</td>\n<td align=\"right\">c</td>\n</tr>\n</tbody>\n</table>";
+    assert render(&input) == expected;
+}
+
+test "render treats a pipe line without a delimiter row as a paragraph" {
+    assert render(&"a | b") == "<p>a | b</p>";
+}

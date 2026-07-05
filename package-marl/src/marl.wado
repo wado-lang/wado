@@ -60,6 +60,11 @@ fn render_blocks(lines: &List<String>, start: i32, end: i32) -> String {
             i = render_list(lines, i, end, &mut out);
             continue;
         }
+        if i + 1 < end && line_has_pipe(&line) && line_has_pipe(&lines[i + 1]) && is_delimiter_row(&lines[i + 1]) {
+            flush_paragraph(&mut out, &mut para);
+            i = render_table(lines, i, end, &mut out);
+            continue;
+        }
         para.push(line);
         i += 1;
     }
@@ -262,6 +267,157 @@ fn strip_blockquote_marker(line: &String) -> String {
         }
     }
     return substr(&chars, p, len);
+}
+
+fn line_has_pipe(line: &String) -> bool {
+    return line.contains("|");
+}
+
+fn is_delimiter_row(line: &String) -> bool {
+    let cells = split_row(line);
+    if cells.is_empty() {
+        return false;
+    }
+    for let cell of cells {
+        if !is_delim_cell(&cell) {
+            return false;
+        }
+    }
+    return true;
+}
+
+fn is_delim_cell(cell: &String) -> bool {
+    let chars = to_chars(cell);
+    let len = chars.len();
+    if len == 0 {
+        return false;
+    }
+    let mut p = 0;
+    if chars[p] == ':' {
+        p += 1;
+    }
+    let mut dashes = 0;
+    while p < len && chars[p] == '-' {
+        dashes += 1;
+        p += 1;
+    }
+    if dashes == 0 {
+        return false;
+    }
+    if p < len && chars[p] == ':' {
+        p += 1;
+    }
+    return p == len;
+}
+
+fn alignment(cell: &String) -> String {
+    let left = cell.starts_with(":");
+    let right = cell.ends_with(":");
+    if left && right {
+        return "center";
+    }
+    if right {
+        return "right";
+    }
+    if left {
+        return "left";
+    }
+    return "";
+}
+
+fn split_row(line: &String) -> List<String> {
+    let chars = to_chars(line);
+    let len = chars.len();
+    let mut s = 0;
+    let mut e = len;
+    while s < e && (chars[s] == ' ' || chars[s] == '\t') {
+        s += 1;
+    }
+    while e > s && (chars[e - 1] == ' ' || chars[e - 1] == '\t') {
+        e -= 1;
+    }
+    if s < e && chars[s] == '|' {
+        s += 1;
+    }
+    if e > s && chars[e - 1] == '|' {
+        e -= 1;
+    }
+    let mut cells: List<String> = [];
+    let mut cur = String::new();
+    let mut k = s;
+    while k < e {
+        let c = chars[k];
+        if c == '\\' && k + 1 < e && chars[k + 1] == '|' {
+            cur.push('|');
+            k += 2;
+            continue;
+        }
+        if c == '|' {
+            cells.push(cur.trim());
+            cur = String::new();
+            k += 1;
+            continue;
+        }
+        cur.push(c);
+        k += 1;
+    }
+    cells.push(cur.trim());
+    return cells;
+}
+
+fn render_table(lines: &List<String>, start: i32, end: i32, out: &mut List<String>) -> i32 {
+    let header = split_row(&lines[start]);
+    let delims = split_row(&lines[start + 1]);
+    let mut aligns: List<String> = [];
+    for let d of delims {
+        aligns.push(alignment(&d));
+    }
+    let ncol = header.len();
+
+    let mut buf = String::new();
+    buf.push_str(&"<table>\n<thead>\n<tr>\n");
+    for let mut idx = 0; idx < ncol; idx += 1 {
+        buf.push_str(&cell_html(&"th", &cell_at(&header, idx), &align_at(&aligns, idx)));
+        buf.push('\n');
+    }
+    buf.push_str(&"</tr>\n</thead>\n<tbody>\n");
+
+    let mut k = start + 2;
+    while k < end && !is_blank(&lines[k]) && line_has_pipe(&lines[k]) {
+        let row = split_row(&lines[k]);
+        buf.push_str(&"<tr>\n");
+        for let mut idx = 0; idx < ncol; idx += 1 {
+            buf.push_str(&cell_html(&"td", &cell_at(&row, idx), &align_at(&aligns, idx)));
+            buf.push('\n');
+        }
+        buf.push_str(&"</tr>\n");
+        k += 1;
+    }
+    buf.push_str(&"</tbody>\n</table>");
+    out.push(buf);
+    return k;
+}
+
+fn cell_html(tag: &String, cell: &String, align: &String) -> String {
+    let inner = render_inline(cell);
+    if align.len() > 0 {
+        return `<{tag} align="{align}">{inner}</{tag}>`;
+    }
+    return `<{tag}>{inner}</{tag}>`;
+}
+
+fn cell_at(cells: &List<String>, idx: i32) -> String {
+    return match cells.get(idx) {
+        Some(c) => c,
+        None => "",
+    };
+}
+
+fn align_at(aligns: &List<String>, idx: i32) -> String {
+    return match aligns.get(idx) {
+        Some(a) => a,
+        None => "",
+    };
 }
 
 fn is_list_marker(line: &String) -> bool {

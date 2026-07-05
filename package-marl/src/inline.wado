@@ -7,7 +7,7 @@
 //! nested cases; some same-character nesting and flanking edge cases diverge
 //! from CommonMark, which is acceptable for the v0.1 subset.
 
-use { escape_attr } from "./html.wado";
+use { escape_attr, escape_text } from "./html.wado";
 
 pub fn render_inline(text: &String) -> String {
     let mut chars: List<char> = [];
@@ -26,6 +26,29 @@ fn render_range(chars: &List<char>, start: i32, end: i32) -> String {
             push_escaped(&mut out, chars[i + 1]);
             i += 2;
             continue;
+        }
+        if c == '\n' {
+            if i > start && chars[i - 1] == '\\' {
+                out.pop();
+                out.push_str(&"<br />\n");
+            } else if i - 2 >= start && chars[i - 1] == ' ' && chars[i - 2] == ' ' {
+                trim_trailing_spaces(&mut out);
+                out.push_str(&"<br />\n");
+            } else {
+                out.push('\n');
+            }
+            i += 1;
+            continue;
+        }
+        if c == 'h' {
+            match try_autolink(chars, i, end) {
+                Some([html, next]) => {
+                    out.push_str(&html);
+                    i = next;
+                    continue;
+                },
+                None => {},
+            }
         }
         if c == '`' {
             match try_code_span(chars, i, end) {
@@ -247,6 +270,62 @@ fn all_spaces(chars: &List<char>, s: i32, e: i32) -> bool {
         k += 1;
     }
     return true;
+}
+
+fn try_autolink(chars: &List<char>, i: i32, end: i32) -> Option<[String, i32]> {
+    if !starts_with_at(chars, i, "http://") && !starts_with_at(chars, i, "https://") {
+        return null;
+    }
+    let mut j = i;
+    while j < end {
+        let c = chars[j];
+        if is_space(c) || c == '<' || c == '>' {
+            break;
+        }
+        j += 1;
+    }
+    while j > i && is_trailing_punct(chars[j - 1]) {
+        j -= 1;
+    }
+    if j <= i {
+        return null;
+    }
+    let url = raw_string(chars, i, j);
+    let href = escape_attr(&url);
+    let text = escape_text(&url);
+    return Option::Some([`<a href="{href}">{text}</a>`, j]);
+}
+
+fn starts_with_at(chars: &List<char>, i: i32, pat: String) -> bool {
+    let len = chars.len();
+    let mut k = 0;
+    for let pc of pat.chars() {
+        if i + k >= len || chars[i + k] != pc {
+            return false;
+        }
+        k += 1;
+    }
+    return true;
+}
+
+fn is_trailing_punct(c: char) -> bool {
+    return c == '.' || c == ',' || c == ';' || c == ':' || c == '!' || c == '?';
+}
+
+fn trim_trailing_spaces(out: &mut String) {
+    loop {
+        match out.pop() {
+            Some(ch) => {
+                if ch != ' ' {
+                    out.push(ch);
+                    break;
+                }
+            },
+            None => {
+                break;
+            },
+        }
+    }
 }
 
 fn is_space(c: char) -> bool {
