@@ -6900,6 +6900,24 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
+    /// A function-typed global's `GlobalVarGet` parts
+    /// `(module_source, global_name, type)`, or `None` for a non-global or
+    /// non-function name. Shares `ModuleDecls::lookup_global` with the
+    /// annotate-side `Elaborator::global_var_type` so the two paths agree.
+    fn global_fn_callee(&self, name: &str) -> Option<(ModuleSource, String, TypeId)> {
+        let (module_source, global_name, ty, _mutable) = self
+            .sem
+            .decls
+            .lookup_global(name, &self.current_module_source)?;
+        let table = self.tysys.type_table.borrow();
+        let base = table.get_ultimate_base_type(table.peel_refs(ty));
+        matches!(table.get(base), crate::tir::ResolvedType::Function { .. }).then_some((
+            module_source,
+            global_name,
+            ty,
+        ))
+    }
+
     /// Reify a `CallExpr`. Stage 5 covers the common shapes: bare-ident
     /// callees that resolve to a current-module or imported free
     /// function (`TirExprKind::Call`), and qualified-ident
@@ -7211,6 +7229,62 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 recorded_type,
                 span,
             );
+        }
+
+        // Global closure call: a bare-ident callee that is not a local but
+        // names a *global* (current-module or imported) of `fn(...)` type.
+        // Mirrors `resolve_call`'s global path. Annotate records no type for
+        // the callee (like the local-variable path), so build the global read
+        // directly with the global's type rather than via `reify_expr`.
+        if let ast::Expr::Ident(ident) = &call.callee
+            && !ident.name.contains("::")
+            && ctx.lookup(&ident.name).is_none()
+            && let Some((module_source, global_name, callee_ty)) =
+                self.global_fn_callee(&ident.name)
+        {
+            let callee_expr = TirExpr::new(
+                TirExprKind::GlobalVarGet {
+                    module_source,
+                    name: global_name,
+                },
+                callee_ty,
+                ident.span,
+            );
+            let callee_expr = super::Elaborator::<H>::deref_to_value_static(
+                callee_expr,
+                ident.span,
+                &self.tysys.type_table,
+            );
+            let arg_exprs: Vec<TirExpr> = call
+                .args
+                .iter()
+                .map(|a| self.reify_expr(a, ctx, None))
+                .collect();
+            return TirExpr::new(
+                TirExprKind::IndirectCall {
+                    callee: Box::new(callee_expr),
+                    args: arg_exprs,
+                },
+                recorded_type,
+                span,
+            );
+        }
+
+        // A bare-ident callee that names a value binding (local/param or
+        // global) which is *not* function-typed — the fn cases returned
+        // above. Annotate already emitted `CalleeNotCallable`; recover with an
+        // error node so the free-function lookup below does not pile a second
+        // ("unknown function") diagnostic on top.
+        if let ast::Expr::Ident(ident) = &call.callee
+            && !ident.name.contains("::")
+            && (ctx.lookup(&ident.name).is_some()
+                || self
+                    .sem
+                    .decls
+                    .lookup_global(&ident.name, &self.current_module_source)
+                    .is_some())
+        {
+            return TirExpr::new(TirExprKind::Unit, crate::tir::TypeTable::ERROR, span);
         }
 
         // Indirect-call shape: callee is any non-ident expression
