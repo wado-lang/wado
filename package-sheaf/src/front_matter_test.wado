@@ -1,7 +1,10 @@
 use { split, parse } from "./front_matter.wado";
 
 test "split extracts the json block and body" {
-    let src = "---json\n{ \"title\": \"Hi\", \"date\": \"2026-07-05\" }\n---\nHello body";
+    let src = "---json
+{ \"title\": \"Hi\", \"date\": \"2026-07-05\" }
+---
+Hello body";
     match split(&src) {
         Some([json, body]) => {
             assert json == "{ \"title\": \"Hi\", \"date\": \"2026-07-05\" }";
@@ -14,10 +17,15 @@ test "split extracts the json block and body" {
 }
 
 test "split preserves a multi-line body" {
-    let src = "---json\n{}\n---\nline1\nline2";
+    let src = "---json
+{}
+---
+line1
+line2";
     match split(&src) {
         Some([_, body]) => {
-            assert body == "line1\nline2";
+            assert body == "line1
+line2";
         },
         None => {
             assert false;
@@ -26,11 +34,15 @@ test "split preserves a multi-line body" {
 }
 
 test "split returns none without a json fence" {
-    assert split(&"no front matter\nbody") matches { None };
+    assert split(&"no front matter
+body") matches { None };
 }
 
 test "parse fills defaults for missing index and tags" {
-    let src = "---json\n{ \"title\": \"Hi\", \"date\": \"2026-07-05\" }\n---\nbody";
+    let src = "---json
+{ \"title\": \"Hi\", \"date\": \"2026-07-05\" }
+---
+body";
     match parse(&src) {
         Ok([fm, body]) => {
             assert fm.title == "Hi";
@@ -46,7 +58,10 @@ test "parse fills defaults for missing index and tags" {
 }
 
 test "parse reads explicit index false and tags" {
-    let src = "---json\n{ \"title\": \"T\", \"date\": \"d\", \"index\": false, \"tags\": [\"a\", \"b\"] }\n---\nx";
+    let src = "---json
+{ \"title\": \"T\", \"date\": \"d\", \"index\": false, \"tags\": [\"a\", \"b\"] }
+---
+x";
     match parse(&src) {
         Ok([fm, _]) => {
             assert fm.index == false;

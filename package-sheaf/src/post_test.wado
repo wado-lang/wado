@@ -1,14 +1,20 @@
 use { build } from "./post.wado";
 
 test "build renders the markdown body and carries metadata" {
-    let src = "---json\n{ \"title\": \"Hello\", \"date\": \"2026-07-05\" }\n---\n# Heading\n\nA *para*.";
+    let src = "---json
+{ \"title\": \"Hello\", \"date\": \"2026-07-05\" }
+---
+# Heading
+
+A *para*.";
     match build("hello", &src) {
         Ok(post) => {
             assert post.slug == "hello";
             assert post.title == "Hello";
             assert post.date == "2026-07-05";
             assert post.index == true;
-            assert post.body_html == "<h1>Heading</h1>\n<p>A <em>para</em>.</p>";
+            assert post.body_html == "<h1>Heading</h1>
+<p>A <em>para</em>.</p>";
         },
         Err(_) => {
             assert false;
@@ -17,7 +23,10 @@ test "build renders the markdown body and carries metadata" {
 }
 
 test "build honors index false" {
-    let src = "---json\n{ \"title\": \"Draft\", \"date\": \"d\", \"index\": false }\n---\nbody";
+    let src = "---json
+{ \"title\": \"Draft\", \"date\": \"d\", \"index\": false }
+---
+body";
     match build("draft", &src) {
         Ok(post) => {
             assert post.index == false;

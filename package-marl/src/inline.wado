@@ -350,7 +350,7 @@ fn parse_dest_title(raw: &String) -> [String, String] {
     let mut closing = ' ';
     for let c of raw.trim().chars() {
         match phase {
-            0 => if c == ' ' || c == '\t' { phase = 1 } else { dest.push(c) },
+            0 => if c matches { ' ' | '\t' } { phase = 1 } else { dest.push(c) },
             1 => match c {
                 ' ' | '\t' => {
                 },
@@ -391,7 +391,7 @@ fn try_autolink(cur: &StrCursor, i: i32) -> Option<[String, i32]> {
     let mut j = i;
     while j < end {
         let c = char_at(cur, j);
-        if is_space(c) || c == '<' || c == '>' {
+        if is_space(c) || c matches { '<' | '>' } {
             break;
         }
         j += 1;
@@ -482,11 +482,11 @@ fn all_spaces(cur: &StrCursor, s: i32, e: i32) -> bool {
 }
 
 fn is_trailing_punct(c: char) -> bool {
-    return c == '.' || c == ',' || c == ';' || c == ':' || c == '!' || c == '?';
+    return c matches { '.' | ',' | ';' | ':' | '!' | '?' };
 }
 
 fn is_space(c: char) -> bool {
-    return c == ' ' || c == '\t' || c == '\n';
+    return c matches { ' ' | '\t' | '\n' };
 }
 
 fn is_ascii_punct(c: char) -> bool {

@@ -24,11 +24,16 @@ test "render escapes inline HTML in text and headings" {
 }
 
 test "render joins consecutive lines into one paragraph" {
-    assert render(&"line one\nline two") == "<p>line one\nline two</p>";
+    assert render(&"line one
+line two") == "<p>line one
+line two</p>";
 }
 
 test "render separates paragraphs on a blank line" {
-    assert render(&"first\n\nsecond") == "<p>first</p>\n<p>second</p>";
+    assert render(&"first
+
+second") == "<p>first</p>
+<p>second</p>";
 }
 
 test "render emits a thematic break" {
@@ -38,8 +43,17 @@ test "render emits a thematic break" {
 }
 
 test "render mixes headings, paragraphs, and breaks" {
-    let input = "# Heading\n\nA paragraph.\n\n---\n\nAnother.";
-    let expected = "<h1>Heading</h1>\n<p>A paragraph.</p>\n<hr />\n<p>Another.</p>";
+    let input = "# Heading
+
+A paragraph.
+
+---
+
+Another.";
+    let expected = "<h1>Heading</h1>
+<p>A paragraph.</p>
+<hr />
+<p>Another.</p>";
     assert render(&input) == expected;
 }
 
@@ -48,70 +62,156 @@ test "render trims a closing-space heading" {
 }
 
 test "render emits a fenced code block" {
-    assert render(&"```\ncode\n```") == "<pre><code>code\n</code></pre>";
+    assert render(&"```
+code
+```") == "<pre><code>code
+</code></pre>";
 }
 
 test "render tags a fenced code block with its language" {
-    assert render(&"```wado\nlet x = 1;\n```") == "<pre><code class=\"language-wado\">let x = 1;\n</code></pre>";
+    assert render(&"```wado
+let x = 1;
+```") == "<pre><code class=\"language-wado\">let x = 1;
+</code></pre>";
 }
 
 test "render escapes html inside a code fence but not markdown" {
-    assert render(&"```\na < b & *c*\n```") == "<pre><code>a &lt; b &amp; *c*\n</code></pre>";
+    assert render(&"```
+a < b & *c*
+```") == "<pre><code>a &lt; b &amp; *c*
+</code></pre>";
 }
 
 test "render accepts tilde fences" {
-    assert render(&"~~~\nx\n~~~") == "<pre><code>x\n</code></pre>";
+    assert render(&"~~~
+x
+~~~") == "<pre><code>x
+</code></pre>";
 }
 
 test "render wraps shorter fences inside a longer fence" {
-    assert render(&"````\n```\ninner\n```\n````") == "<pre><code>```\ninner\n```\n</code></pre>";
+    assert render(&"````
+```
+inner
+```
+````") == "<pre><code>```
+inner
+```
+</code></pre>";
 }
 
 test "render closes an unterminated fence at end of input" {
-    assert render(&"```\nabc") == "<pre><code>abc\n</code></pre>";
+    assert render(&"```
+abc") == "<pre><code>abc
+</code></pre>";
 }
 
 test "render emits a blockquote" {
-    assert render(&"> quote") == "<blockquote>\n<p>quote</p>\n</blockquote>";
+    assert render(&"> quote") == "<blockquote>
+<p>quote</p>
+</blockquote>";
 }
 
 test "render joins blockquote lines" {
-    assert render(&"> a\n> b") == "<blockquote>\n<p>a\nb</p>\n</blockquote>";
+    assert render(&"> a
+> b") == "<blockquote>
+<p>a
+b</p>
+</blockquote>";
 }
 
 test "render renders block structure inside a blockquote" {
-    assert render(&"> # Title") == "<blockquote>\n<h1>Title</h1>\n</blockquote>";
+    assert render(&"> # Title") == "<blockquote>
+<h1>Title</h1>
+</blockquote>";
 }
 
 test "render emits an unordered list" {
-    assert render(&"- a\n- b\n- c") == "<ul>\n<li>a</li>\n<li>b</li>\n<li>c</li>\n</ul>";
+    assert render(&"- a
+- b
+- c") == "<ul>
+<li>a</li>
+<li>b</li>
+<li>c</li>
+</ul>";
 }
 
 test "render emits an ordered list" {
-    assert render(&"1. one\n2. two") == "<ol>\n<li>one</li>\n<li>two</li>\n</ol>";
+    assert render(&"1. one
+2. two") == "<ol>
+<li>one</li>
+<li>two</li>
+</ol>";
 }
 
 test "render renders inline markup in list items" {
-    assert render(&"- **bold** item") == "<ul>\n<li><strong>bold</strong> item</li>\n</ul>";
+    assert render(&"- **bold** item") == "<ul>
+<li><strong>bold</strong> item</li>
+</ul>";
 }
 
 test "render ends a list at a blank line" {
-    assert render(&"- a\n\ntext") == "<ul>\n<li>a</li>\n</ul>\n<p>text</p>";
+    assert render(&"- a
+
+text") == "<ul>
+<li>a</li>
+</ul>
+<p>text</p>";
 }
 
 test "render nests a list under an item" {
-    assert render(&"- parent\n  - child") == "<ul>\n<li>\n<p>parent</p>\n<ul>\n<li>child</li>\n</ul>\n</li>\n</ul>";
+    assert render(&"- parent
+  - child") == "<ul>
+<li>
+<p>parent</p>
+<ul>
+<li>child</li>
+</ul>
+</li>
+</ul>";
 }
 
 test "render emits a GFM table" {
-    let input = "| a | b |\n| --- | --- |\n| 1 | 2 |";
-    let expected = "<table>\n<thead>\n<tr>\n<th>a</th>\n<th>b</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>1</td>\n<td>2</td>\n</tr>\n</tbody>\n</table>";
+    let input = "| a | b |
+| --- | --- |
+| 1 | 2 |";
+    let expected = "<table>
+<thead>
+<tr>
+<th>a</th>
+<th>b</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>2</td>
+</tr>
+</tbody>
+</table>";
     assert render(&input) == expected;
 }
 
 test "render applies table column alignment" {
-    let input = "| L | C | R |\n| :-- | :-: | --: |\n| a | b | c |";
-    let expected = "<table>\n<thead>\n<tr>\n<th align=\"left\">L</th>\n<th align=\"center\">C</th>\n<th align=\"right\">R</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td align=\"left\">a</td>\n<td align=\"center\">b</td>\n<td align=\"right\">c</td>\n</tr>\n</tbody>\n</table>";
+    let input = "| L | C | R |
+| :-- | :-: | --: |
+| a | b | c |";
+    let expected = "<table>
+<thead>
+<tr>
+<th align=\"left\">L</th>
+<th align=\"center\">C</th>
+<th align=\"right\">R</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align=\"left\">a</td>
+<td align=\"center\">b</td>
+<td align=\"right\">c</td>
+</tr>
+</tbody>
+</table>";
     assert render(&input) == expected;
 }
 
@@ -139,18 +239,35 @@ test "render keeps hashes that are not a closing sequence" {
 }
 
 test "render splits lists when the bullet marker changes" {
-    assert render(&"- a\n* b") == "<ul>\n<li>a</li>\n</ul>\n<ul>\n<li>b</li>\n</ul>";
+    assert render(&"- a
+* b") == "<ul>
+<li>a</li>
+</ul>
+<ul>
+<li>b</li>
+</ul>";
 }
 
 test "render emits an ol start attribute for non-1 first number" {
-    assert render(&"3. three\n4. four") == "<ol start=\"3\">\n<li>three</li>\n<li>four</li>\n</ol>";
+    assert render(&"3. three
+4. four") == "<ol start=\"3\">
+<li>three</li>
+<li>four</li>
+</ol>";
 }
 
 test "render treats a tab like a space in list and quote markers" {
-    assert render(&"-\titem") == "<ul>\n<li>item</li>\n</ul>";
-    assert render(&">\tquoted") == "<blockquote>\n<p>quoted</p>\n</blockquote>";
+    assert render(&"-\titem") == "<ul>
+<li>item</li>
+</ul>";
+    assert render(&">\tquoted") == "<blockquote>
+<p>quoted</p>
+</blockquote>";
 }
 
 test "render preserves tabs inside code content" {
-    assert render(&"```\n\tcode\n```") == "<pre><code>\tcode\n</code></pre>";
+    assert render(&"```
+\tcode
+```") == "<pre><code>\tcode
+</code></pre>";
 }

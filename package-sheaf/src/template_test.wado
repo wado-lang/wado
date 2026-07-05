@@ -9,7 +9,21 @@ test "render_page emits a full page and escapes the title" {
         body_html: "<p>x</p>",
         index: true,
     };
-    let expected = "<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\" />\n<title>Hi &amp; Co</title>\n</head>\n<body>\n<article>\n<h1>Hi &amp; Co</h1>\n<time>2026-07-05</time>\n<p>x</p>\n</article>\n</body>\n</html>\n";
+    let expected = "<!doctype html>
+<html>
+<head>
+<meta charset=\"utf-8\" />
+<title>Hi &amp; Co</title>
+</head>
+<body>
+<article>
+<h1>Hi &amp; Co</h1>
+<time>2026-07-05</time>
+<p>x</p>
+</article>
+</body>
+</html>
+";
     assert render_page(&post) == expected;
 }
 
@@ -30,6 +44,19 @@ test "render_index lists published posts newest-first and omits unlisted" {
         Post { slug: "a", title: "A", date: "2026-03-01", body_html: "", index: true },
         Post { slug: "d", title: "Draft", date: "2026-04-01", body_html: "", index: false },
     ];
-    let expected = "<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\" />\n<title>Blog</title>\n</head>\n<body>\n<ul>\n<li><a href=\"a.html\">A</a> <time>2026-03-01</time></li>\n<li><a href=\"b.html\">B</a> <time>2026-02-01</time></li>\n</ul>\n</body>\n</html>\n";
+    let expected = "<!doctype html>
+<html>
+<head>
+<meta charset=\"utf-8\" />
+<title>Blog</title>
+</head>
+<body>
+<ul>
+<li><a href=\"a.html\">A</a> <time>2026-03-01</time></li>
+<li><a href=\"b.html\">B</a> <time>2026-02-01</time></li>
+</ul>
+</body>
+</html>
+";
     assert render_index(&posts) == expected;
 }
