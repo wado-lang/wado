@@ -1,0 +1,21 @@
+//! Site generation: turn a list of posts into output files (pure; no I/O).
+
+use { Post } from "./post.wado";
+use { render_page, render_index } from "./template.wado";
+
+pub struct SiteFile {
+    pub path: String,
+    pub content: String,
+}
+
+/// Produce every output file: one page per post (including unlisted ones, so
+/// they remain reachable by URL) plus the index page (published posts only).
+pub fn build_site(posts: &List<Post>) -> List<SiteFile> {
+    let mut files: List<SiteFile> = [];
+    for let mut i = 0; i < posts.len(); i += 1 {
+        let p = posts[i];
+        files.push(SiteFile { path: `{p.slug}.html`, content: render_page(&p) });
+    }
+    files.push(SiteFile { path: "index.html", content: render_index(posts) });
+    return files;
+}

@@ -1,0 +1,20 @@
+use { build_site } from "./site.wado";
+use { Post } from "./post.wado";
+
+test "build_site emits a page per post plus an index" {
+    let posts: List<Post> = [
+        Post { slug: "hello", title: "Hello", date: "2026-03-01", body_html: "<p>hi</p>", index: true },
+        Post { slug: "wip", title: "WIP", date: "2026-04-01", body_html: "<p>wip</p>", index: false },
+    ];
+    let files = build_site(&posts);
+    assert files.len() == 3;
+    assert files[0].path == "hello.html";
+    assert files[1].path == "wip.html";
+    assert files[2].path == "index.html";
+
+    // The unlisted post still gets a page, carrying the noindex meta.
+    assert files[1].content.contains("noindex");
+    // The index lists the published post but not the unlisted one.
+    assert files[2].content.contains("hello.html");
+    assert !files[2].content.contains("wip.html");
+}
