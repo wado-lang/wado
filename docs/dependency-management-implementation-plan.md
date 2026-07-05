@@ -222,6 +222,15 @@ conflict errors, once real registries make multi-constraint graphs common.
 
 #### Registry Kiln generators
 
+> **Redesign (Kiln WEP "Protocol revision v0.3").** Options move from an opaque
+> CBOR `list<u8>` blob to a **typed WIT argument** on `generate`, in each
+> generator's own world. This retires the `describe-options` mechanism (the
+> options shape is read directly from the generator's component WIT) and the
+> whole options-blob subsystem. The `[x]` items below under "Add the
+> `describe-options` export" are superseded — the encoder/decoder/synthesis
+> landed on this branch and are reverted by the redesign (a shallow wound, all
+> within this branch). See the new work list at the end of this subsection.
+
 A Kiln generator can be published (gale is, at
 `ghcr.io/wado-lang/gale/core-kiln-generator`), but a project can only consume
 one from a **local path** today (`example/hello-packages` uses
@@ -287,6 +296,34 @@ one from a **local path** today (`example/hello-packages` uses
 - [ ] Reconcile the `[build-dependencies]` bare-key deprecation: `module: "gale"`
       resolves only a bare `"gale"` key, but the manifest validator deprecates
       bare keys in favor of coordinates / `lib:` nicknames the lookup rejects.
+
+##### v0.3 typed-options work list
+
+The redesign replaces the options-blob subsystem with typed WIT arguments:
+
+- [ ] Revert the `describe-options` blob work landed on this branch (encoder,
+      decoder, world export + synthesis, `CmExportType::List` if unused
+      elsewhere). Keep the sync-lift compiler-bug fix (issue #1523) — it is
+      independently correct.
+- [ ] Synthesize the generator world with `generate(primary, inputs, options:
+      <options-record>)`: lower the generator's `Options` struct to a WIT record
+      argument (exact widths, enums, nested records, `option<T>`); drop
+      `raw-request` and the CBOR options field. A no-`Options` generator omits
+      the argument.
+- [ ] Generator-side adapter: assemble `Request<Options>` from the three typed
+      arguments instead of `bind_request` + `core:cbor::from_bytes`.
+- [ ] Consumer: type-check the user's `options = { … }` against the generator's
+      options-record type (from source for path deps, from the component WIT for
+      registry deps via WEP 2026-06-26) and lower it through the canonical ABI.
+- [ ] Host: invoke `generate` dynamically (wasmtime component `Val` calls) since
+      the signature is per-generator; shared `kiln-host` linking is unchanged.
+- [ ] Cache key: canonically encode the validated options value as the key
+      function only (no wire blob).
+- [ ] `GeneratorModule::Spec` resolution: resolve coordinate against
+      `[build-dependencies]`, fetch the component at its world sub-path into
+      `build/`, read its options type from the WIT, return a `ResolvedGenerator`.
+- [ ] Republish gale under the new world; validate `example/hello-packages`
+      against the registry.
 
 ## Milestones
 
