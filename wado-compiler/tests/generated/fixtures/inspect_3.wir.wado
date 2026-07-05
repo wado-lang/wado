@@ -2057,22 +2057,10 @@ fn "core:prelude/string.wado/String^Eq::eq"(self, other) {
 fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
     let i: i32;
     i = 0;
-<<<<<<< HEAD
-    b188: block {
-        l189: loop {
-            break_if b188 i >= len;
-            if builtin::array_get<u8>(a, i) != builtin::array_get<u8>(b, i) {
-||||||| d7c5ace5d
-    b188: block {
-        l189: loop {
-            break_if b188 i >= len;
-            if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
-=======
     b202: block {
         l203: loop {
             break_if b202 i >= len;
-            if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
->>>>>>> origin/main
+            if builtin::array_get<u8>(a, i) != builtin::array_get<u8>(b, i) {
                 return 0;
             }
             i = i + 1;
@@ -2093,30 +2081,44 @@ fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
     let b2_8: u32;
     let b3: u32;
     let code_10: u32;
+    let index_12: i32;
+    let index_15: i32;
+    let index_18: i32;
+    let index_20: i32;
+    let index_23: i32;
+    let index_25: i32;
+    let index_27: i32;
     if self.byte_index >= self.used {
         return 1, 0;
     }
-    b0 = builtin::array_get_u8(self.repr, self.byte_index);
+    index_12 = self.byte_index;
+    b0 = builtin::array_get<u8>(self.repr, index_12);
     self.byte_index = self.byte_index + 1;
     if b0 <u 128 {
         return 0, b0;
     }
     if b0 <u 224 {
-        b1_2 = builtin::array_get_u8(self.repr, self.byte_index);
+        index_15 = self.byte_index;
+        b1_2 = builtin::array_get<u8>(self.repr, index_15);
         self.byte_index = self.byte_index + 1;
         code_3 = ((b0 & 31) << 6) | (b1_2 & 63);
         return 0, code_3;
     }
     if b0 <u 240 {
-        b1_4 = builtin::array_get_u8(self.repr, self.byte_index);
-        b2_5 = builtin::array_get_u8(self.repr, self.byte_index + 1);
+        index_18 = self.byte_index;
+        b1_4 = builtin::array_get<u8>(self.repr, index_18);
+        index_20 = self.byte_index + 1;
+        b2_5 = builtin::array_get<u8>(self.repr, index_20);
         self.byte_index = self.byte_index + 2;
         code_6 = (((b0 & 15) << 12) | ((b1_4 & 63) << 6)) | (b2_5 & 63);
         return 0, code_6;
     }
-    b1_7 = builtin::array_get_u8(self.repr, self.byte_index);
-    b2_8 = builtin::array_get_u8(self.repr, self.byte_index + 1);
-    b3 = builtin::array_get_u8(self.repr, self.byte_index + 2);
+    index_23 = self.byte_index;
+    b1_7 = builtin::array_get<u8>(self.repr, index_23);
+    index_25 = self.byte_index + 1;
+    b2_8 = builtin::array_get<u8>(self.repr, index_25);
+    index_27 = self.byte_index + 2;
+    b3 = builtin::array_get<u8>(self.repr, index_27);
     self.byte_index = self.byte_index + 3;
     code_10 = ((((b0 & 7) << 18) | ((b1_7 & 63) << 12)) | ((b2_8 & 63) << 6)) | (b3 & 63);
     return 0, code_10;
@@ -2392,31 +2394,13 @@ fn "core:prelude/format.wado/Formatter::apply_padding_slow"(self, start_pos) {
         right_pad = padding - left_pad;
         "core:prelude/string.wado/String::append_byte_filled"(self.buf, fill_byte, left_pad);
         i_8 = content_len - 1;
-<<<<<<< HEAD
         _licm_buf_45 = self.buf;
         _licm_arith_46 = start_pos + left_pad;
         _licm_repr_51 = _licm_buf_45.repr;
-        b208: block {
-            l209: loop {
-                break_if b208 i_8 < 0;
-                index_14 = _licm_arith_46 + i_8;
-||||||| d7c5ace5d
-        _licm_buf_29 = self.buf;
-        _licm_arith_30 = start_pos + left_pad;
-        _licm_repr_35 = _licm_buf_29.repr;
-        b208: block {
-            l209: loop {
-                break_if b208 i_8 < 0;
-                index_14 = _licm_arith_30 + i_8;
-=======
-        _licm_buf_29 = self.buf;
-        _licm_arith_30 = start_pos + left_pad;
-        _licm_repr_35 = _licm_buf_29.repr;
         b226: block {
             l227: loop {
                 break_if b226 i_8 < 0;
-                index_14 = _licm_arith_30 + i_8;
->>>>>>> origin/main
+                index_14 = _licm_arith_46 + i_8;
                 index_17 = start_pos + i_8;
                 value_15 = builtin::array_get<u8>(_licm_repr_51, index_17);
                 builtin::array_set_u8(_licm_repr_51, index_14, value_15);
@@ -2425,31 +2409,13 @@ fn "core:prelude/format.wado/Formatter::apply_padding_slow"(self, start_pos) {
             };
         };
         j_9 = 0;
-<<<<<<< HEAD
         _licm_buf_47 = self.buf;
         _licm_repr_52 = _licm_buf_47.repr;
-        b210: block {
-            l211: loop {
-                break_if b210 j_9 >= left_pad;
-                index_24 = start_pos + j_9;
-                builtin::array_set_u8(_licm_repr_52, index_24, fill_byte);
-||||||| d7c5ace5d
-        _licm_buf_31 = self.buf;
-        _licm_repr_36 = _licm_buf_31.repr;
-        b210: block {
-            l211: loop {
-                break_if b210 j_9 >= left_pad;
-                index_19 = start_pos + j_9;
-                builtin::array_set_u8(_licm_repr_36, index_19, fill_byte);
-=======
-        _licm_buf_31 = self.buf;
-        _licm_repr_36 = _licm_buf_31.repr;
         b228: block {
             l229: loop {
                 break_if b228 j_9 >= left_pad;
-                index_19 = start_pos + j_9;
-                builtin::array_set_u8(_licm_repr_36, index_19, fill_byte);
->>>>>>> origin/main
+                index_24 = start_pos + j_9;
+                builtin::array_set_u8(_licm_repr_52, index_24, fill_byte);
                 j_9 = j_9 + 1;
                 continue l229;
             };
@@ -2458,70 +2424,28 @@ fn "core:prelude/format.wado/Formatter::apply_padding_slow"(self, start_pos) {
     } else {
         "core:prelude/string.wado/String::append_byte_filled"(self.buf, fill_byte, padding);
         i_10 = content_len - 1;
-<<<<<<< HEAD
         _licm_buf_48 = self.buf;
         _licm_arith_49 = start_pos + padding;
         _licm_repr_53 = _licm_buf_48.repr;
-        b212: block {
-            l213: loop {
-                break_if b212 i_10 < 0;
+        b230: block {
+            l231: loop {
+                break_if b230 i_10 < 0;
                 index_30 = _licm_arith_49 + i_10;
                 index_33 = start_pos + i_10;
                 value_31 = builtin::array_get<u8>(_licm_repr_53, index_33);
                 builtin::array_set_u8(_licm_repr_53, index_30, value_31);
-||||||| d7c5ace5d
-        _licm_buf_32 = self.buf;
-        _licm_arith_33 = start_pos + padding;
-        _licm_repr_37 = _licm_buf_32.repr;
-        b212: block {
-            l213: loop {
-                break_if b212 i_10 < 0;
-                index_22 = _licm_arith_33 + i_10;
-                index_25 = start_pos + i_10;
-                value_23 = builtin::array_get_u8(_licm_repr_37, index_25);
-                builtin::array_set_u8(_licm_repr_37, index_22, value_23);
-=======
-        _licm_buf_32 = self.buf;
-        _licm_arith_33 = start_pos + padding;
-        _licm_repr_37 = _licm_buf_32.repr;
-        b230: block {
-            l231: loop {
-                break_if b230 i_10 < 0;
-                index_22 = _licm_arith_33 + i_10;
-                index_25 = start_pos + i_10;
-                value_23 = builtin::array_get_u8(_licm_repr_37, index_25);
-                builtin::array_set_u8(_licm_repr_37, index_22, value_23);
->>>>>>> origin/main
                 i_10 = i_10 - 1;
                 continue l231;
             };
         };
         j_11 = 0;
-<<<<<<< HEAD
         _licm_buf_50 = self.buf;
         _licm_repr_54 = _licm_buf_50.repr;
-        b214: block {
-            l215: loop {
-                break_if b214 j_11 >= padding;
-                index_40 = start_pos + j_11;
-                builtin::array_set_u8(_licm_repr_54, index_40, fill_byte);
-||||||| d7c5ace5d
-        _licm_buf_34 = self.buf;
-        _licm_repr_38 = _licm_buf_34.repr;
-        b214: block {
-            l215: loop {
-                break_if b214 j_11 >= padding;
-                index_27 = start_pos + j_11;
-                builtin::array_set_u8(_licm_repr_38, index_27, fill_byte);
-=======
-        _licm_buf_34 = self.buf;
-        _licm_repr_38 = _licm_buf_34.repr;
         b232: block {
             l233: loop {
                 break_if b232 j_11 >= padding;
-                index_27 = start_pos + j_11;
-                builtin::array_set_u8(_licm_repr_38, index_27, fill_byte);
->>>>>>> origin/main
+                index_40 = start_pos + j_11;
+                builtin::array_set_u8(_licm_repr_54, index_40, fill_byte);
                 j_11 = j_11 + 1;
                 continue l233;
             };

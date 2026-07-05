@@ -17693,102 +17693,10 @@ fn "core/prelude/array.wado/write_seq_inspect<u8>"(repr: &Array<u8>, len: i32, f
     f.Formatter::write_char(']');
 }
 
-<<<<<<< HEAD
-pub fn "&Array<u8>^Inspect::inspect"(self: &&Array<u8>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"&", used: 1 });
-    let inner: &Array<u8> = *self;
-    *inner."Array<u8>^Inspect::inspect"(f);
-}
-
-fn "core/prelude/array.wado/write_seq_inspect_alt<u8>"(repr: &Array<u8>, len: i32, f: &mut Formatter, marker: bool, limit: i32) {
-    if (len == 0) {
-        f.Formatter::write_str(&String { repr: packed"[]", used: 2 });
-        return;
-    }
-    f.Formatter::open_brace(String { repr: packed"[", used: 1 });
-    let mut shown: i32 = 0;
-    let mut truncated: bool = false;
-    let mut i: i32 = 0;
-    loop {
-        if !(i < len) {
-            break;
-        }
-        __for_0_body: {
-            if ((limit >= 0) && (shown >= limit)) {
-                truncated = true;
-                break;
-            }
-            f.Formatter::write_newline_indent();
-            Box<u8> { value: repr."Array<u8>^IndexValue<i32>::index_value"(i) }."u8^InspectAlt::inspect_alt"(f);
-            f.Formatter::write_char(',');
-            shown = (shown + 1);
-        }
-        i = (i + 1);
-    }
-    if (marker && truncated) {
-        f.Formatter::write_newline_indent();
-        f.Formatter::write_str(&String { repr: packed"...", used: 3 });
-    }
-    f.Formatter::close_brace(String { repr: packed"]", used: 1 });
-}
-
-pub fn "&Array<u8>^InspectAlt::inspect_alt"(self: &&Array<u8>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"&", used: 1 });
-    let inner: &Array<u8> = *self;
-    *inner."Array<u8>^InspectAlt::inspect_alt"(f);
-}
-
 fn "Array<u64>^IndexValue<i32>::index_value"(self: &Array<u64>, index: i32) -> u64 {
     return core::builtin::array_get::<u64>(self, index);
 }
 
-||||||| d7c5ace5d
-pub fn "&Array<u8>^Inspect::inspect"(self: &&Array<u8>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"&", used: 1 });
-    let inner: &Array<u8> = *self;
-    *inner."Array<u8>^Inspect::inspect"(f);
-}
-
-fn "core/prelude/array.wado/write_seq_inspect_alt<u8>"(repr: &Array<u8>, len: i32, f: &mut Formatter, marker: bool, limit: i32) {
-    if (len == 0) {
-        f.Formatter::write_str(&String { repr: packed"[]", used: 2 });
-        return;
-    }
-    f.Formatter::open_brace(String { repr: packed"[", used: 1 });
-    let mut shown: i32 = 0;
-    let mut truncated: bool = false;
-    let mut i: i32 = 0;
-    loop {
-        if !(i < len) {
-            break;
-        }
-        __for_0_body: {
-            if ((limit >= 0) && (shown >= limit)) {
-                truncated = true;
-                break;
-            }
-            f.Formatter::write_newline_indent();
-            Box<u8> { value: repr."Array<u8>^IndexValue<i32>::index_value"(i) }."u8^InspectAlt::inspect_alt"(f);
-            f.Formatter::write_char(',');
-            shown = (shown + 1);
-        }
-        i = (i + 1);
-    }
-    if (marker && truncated) {
-        f.Formatter::write_newline_indent();
-        f.Formatter::write_str(&String { repr: packed"...", used: 3 });
-    }
-    f.Formatter::close_brace(String { repr: packed"]", used: 1 });
-}
-
-pub fn "&Array<u8>^InspectAlt::inspect_alt"(self: &&Array<u8>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"&", used: 1 });
-    let inner: &Array<u8> = *self;
-    *inner."Array<u8>^InspectAlt::inspect_alt"(f);
-}
-
-=======
->>>>>>> origin/main
 #[inline(never)]
 fn "core/prelude/types.wado/unwrap_failed<core:prelude/intparse.wado/IntErrorKind>"(msg: String, value: IntErrorKind) -> ! {
     core::rt::panic(__tmpl: {
@@ -17876,11 +17784,10 @@ pub fn "List<[i32,char]>::grow"(self: &mut List<[i32, char]>) {
     self.repr = new_repr;
 }
 
-<<<<<<< HEAD
 pub fn "Array<[i32,char]>::len"(self: &Array<[i32, char]>) -> i32 {
     return core::builtin::array_len(self);
-||||||| d7c5ace5d
-=======
+}
+
 fn "core/prelude/array.wado/write_seq_inspect_alt<u8>"(repr: &Array<u8>, len: i32, f: &mut Formatter, marker: bool, limit: i32) {
     if (len == 0) {
         f.Formatter::write_str(&String { repr: packed"[]", used: 2 });
@@ -17911,7 +17818,6 @@ fn "core/prelude/array.wado/write_seq_inspect_alt<u8>"(repr: &Array<u8>, len: i3
         f.Formatter::write_str(&String { repr: packed"...", used: 3 });
     }
     f.Formatter::close_brace(String { repr: packed"]", used: 1 });
->>>>>>> origin/main
 }
 
 pub fn "List<u64>::with_capacity"(capacity: i32) -> List<u64> {

@@ -613,30 +613,44 @@ fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
     let b2_8: u32;
     let b3: u32;
     let code_10: u32;
+    let index_12: i32;
+    let index_15: i32;
+    let index_18: i32;
+    let index_20: i32;
+    let index_23: i32;
+    let index_25: i32;
+    let index_27: i32;
     if self.byte_index >= self.used {
         return 1, 0;
     }
-    b0 = builtin::array_get_u8(self.repr, self.byte_index);
+    index_12 = self.byte_index;
+    b0 = builtin::array_get<u8>(self.repr, index_12);
     self.byte_index = self.byte_index + 1;
     if b0 <u 128 {
         return 0, b0;
     }
     if b0 <u 224 {
-        b1_2 = builtin::array_get_u8(self.repr, self.byte_index);
+        index_15 = self.byte_index;
+        b1_2 = builtin::array_get<u8>(self.repr, index_15);
         self.byte_index = self.byte_index + 1;
         code_3 = ((b0 & 31) << 6) | (b1_2 & 63);
         return 0, code_3;
     }
     if b0 <u 240 {
-        b1_4 = builtin::array_get_u8(self.repr, self.byte_index);
-        b2_5 = builtin::array_get_u8(self.repr, self.byte_index + 1);
+        index_18 = self.byte_index;
+        b1_4 = builtin::array_get<u8>(self.repr, index_18);
+        index_20 = self.byte_index + 1;
+        b2_5 = builtin::array_get<u8>(self.repr, index_20);
         self.byte_index = self.byte_index + 2;
         code_6 = (((b0 & 15) << 12) | ((b1_4 & 63) << 6)) | (b2_5 & 63);
         return 0, code_6;
     }
-    b1_7 = builtin::array_get_u8(self.repr, self.byte_index);
-    b2_8 = builtin::array_get_u8(self.repr, self.byte_index + 1);
-    b3 = builtin::array_get_u8(self.repr, self.byte_index + 2);
+    index_23 = self.byte_index;
+    b1_7 = builtin::array_get<u8>(self.repr, index_23);
+    index_25 = self.byte_index + 1;
+    b2_8 = builtin::array_get<u8>(self.repr, index_25);
+    index_27 = self.byte_index + 2;
+    b3 = builtin::array_get<u8>(self.repr, index_27);
     self.byte_index = self.byte_index + 3;
     code_10 = ((((b0 & 7) << 18) | ((b1_7 & 63) << 12)) | ((b2_8 & 63) << 6)) | (b3 & 63);
     return 0, code_10;
