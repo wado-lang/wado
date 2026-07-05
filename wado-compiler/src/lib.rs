@@ -425,16 +425,35 @@ fn synthesize_lib_world_info(
         }
     }
 
-    // Tag every user named type in the export signatures with the library's
-    // default-interface FQ as its CM source. `register_lib_local_decls` records
-    // these types under that FQ, so the lift/lower machinery (which resolves
-    // named types via `source_interface`) finds them like WASI types.
+    // Tag the package's own named types in the export signatures with the
+    // library's default-interface FQ as their CM source. `register_lib_local_decls`
+    // records these under that FQ, so the lift/lower machinery (which resolves
+    // named types via `source_interface`) finds them like WASI types. Only the
+    // entry module's *own* declarations are tagged — a kiln generator's
+    // `generate` also references shared `core:kiln/types` records that must keep
+    // resolving to their own interface, not the generator's.
+    let local_type_names: std::collections::HashSet<String> = entry_module
+        .map(|module| {
+            module
+                .items
+                .iter()
+                .filter_map(|item| match item {
+                    Item::Struct(d) => Some(d.name.clone()),
+                    Item::Enum(d) => Some(d.name.clone()),
+                    Item::Variant(d) => Some(d.name.clone()),
+                    Item::Flags(d) => Some(d.name.clone()),
+                    Item::Newtype(d) => Some(d.name.clone()),
+                    _ => None,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
     for export in &mut exports {
         for (_, ty) in &mut export.params {
-            annotate_lib_local_sources(ty, fq);
+            annotate_lib_local_sources(ty, fq, &local_type_names);
         }
         if let Some(ty) = export.return_type.as_mut() {
-            annotate_lib_local_sources(ty, fq);
+            annotate_lib_local_sources(ty, fq, &local_type_names);
         }
     }
 
@@ -450,35 +469,36 @@ fn synthesize_lib_world_info(
 /// records / variants / enums / flags / newtypes against the package's
 /// default-interface registration. CM primitives and the unit type are left
 /// untouched.
-fn annotate_lib_local_sources(ty: &mut ast::Type, fq: &str) {
+fn annotate_lib_local_sources(
+    ty: &mut ast::Type,
+    fq: &str,
+    local_type_names: &std::collections::HashSet<String>,
+) {
     use crate::ast::Type;
     match ty {
         Type::Named(named) => {
-            // Only mark a type local when it has not already resolved to an
-            // interface. A pure `--lib` export references only the package's own
-            // types (all `None` here), but a kiln generator's `generate` also
-            // takes shared `core:kiln/types` (`InputFile` / `Response` / `Error`),
-            // whose source is already set — leave those pointing at their
-            // interface so the CM machinery resolves them there, not locally.
-            if named.name != "()"
-                && named.source_interface.is_none()
-                && crate::component_model::wado_primitive_name_to_cm(&named.name).is_none()
-            {
+            // Only tag the package's own declarations. A kiln generator's
+            // `generate` references shared `core:kiln/types` records
+            // (`InputFile` / `Response` / `Error`) that must keep resolving to
+            // their own interface — tagging them generator-local makes the CM
+            // lift/lower fall back to i32 handles. Already-resolved types are
+            // left as-is too.
+            if named.source_interface.is_none() && local_type_names.contains(&named.name) {
                 named.source_interface = Some(fq.to_string());
             }
         }
         Type::Generic(g) => {
             for arg in &mut g.args {
-                annotate_lib_local_sources(arg, fq);
+                annotate_lib_local_sources(arg, fq, local_type_names);
             }
         }
         Type::Tuple(elems) => {
             for elem in elems {
-                annotate_lib_local_sources(elem, fq);
+                annotate_lib_local_sources(elem, fq, local_type_names);
             }
         }
         Type::Reference(inner) | Type::MutReference(inner) => {
-            annotate_lib_local_sources(inner, fq);
+            annotate_lib_local_sources(inner, fq, local_type_names);
         }
         _ => {}
     }
@@ -681,9 +701,31 @@ fn compile_after_load<H: CompilerHost>(
         .lib_world
         .clone()
         .or_else(|| is_kiln_generator.then(|| KILN_GENERATOR_IMPL_FQ.to_string()));
-    let lib_world_info = synth_world_fq
+    let mut lib_world_info = synth_world_fq
         .as_ref()
         .map(|fq| synthesize_lib_world_info(fq, sem.modules.get(&sem.entry_module_source)));
+
+    // A kiln generator's `generate` references shared `core:kiln/types` records
+    // that analysis leaves without a `source_interface`, so they otherwise
+    // resolve to a same-named type in another package (`wasi:http`'s `Response`).
+    // Stamp them with their real interface so the CM lift/lower finds their
+    // fields instead of falling back to i32 handles.
+    if is_kiln_generator
+        && let Some(world) = lib_world_info.as_mut()
+    {
+        let kiln_shared: std::collections::HashSet<String> = ["OutputFile", "Response", "Error"]
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
+        for export in &mut world.exports {
+            for (_, ty) in &mut export.params {
+                annotate_lib_local_sources(ty, kiln::import_check::KILN_TYPES_INTERFACE, &kiln_shared);
+            }
+            if let Some(ty) = export.return_type.as_mut() {
+                annotate_lib_local_sources(ty, kiln::import_check::KILN_TYPES_INTERFACE, &kiln_shared);
+            }
+        }
+    }
 
     // Capture the entry module so its own named types can be registered into
     // the CM interface registry (cloned before `sem` is destructured below).
