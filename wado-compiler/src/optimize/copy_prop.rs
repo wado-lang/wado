@@ -286,16 +286,9 @@ fn analyze_block(
         }
         if let Some(mut binding) = analyze_copy_binding(body, stmt, copy_value_id) {
             // The target's uses are confined to this block from `k` onward, so
-            // the source is stable for the propagation iff it is not mutated in
-            // those statements (a promoted value is unconditionally stable).
-            //
-            // A `RefProjection` (`&root.f`) is re-materialized at the target's
-            // single use, so what it must preserve is capture-at-binding: the
-            // object `root.f` denotes must be unchanged between the binding and
-            // that use. Only mutations of `root` in the open interval
-            // `(k, use]` can change it — a later mutation (e.g. `self.used = …`
-            // after the store) is irrelevant, and the coarse "mutated anywhere
-            // after `k`" test wrongly rejects it.
+            // the source is stable iff it is not mutated in those statements (a
+            // promoted value is unconditionally stable). A `RefProjection` needs
+            // the precise capture-at-binding condition — see `refproj_scope_stable`.
             binding.source_scope_stable = match &binding.source {
                 CopySource::RefProjection { root_local, .. } => refproj_scope_stable(
                     *root_local,
