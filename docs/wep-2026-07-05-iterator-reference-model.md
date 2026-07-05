@@ -29,8 +29,12 @@ Match Rust's conventions exactly:
 - `into_iter()` and owned `for let x of list` keep `Item = T` (by value),
   matching Rust's owned iteration. Unchanged.
 - `for let x of &list` keeps `&T`. Unchanged.
-- `copied()` adaptor (`Iterator<Item = &T>` to `Item = T`) for iterating a
-  primitive list by value: `for let x of nums.copied() { sum += x; }`.
+- `copied()` for iterating a reference list by value: `nums.iter().copied()`.
+  Implemented as an inherent `ArrayRefIter::copied() -> ArrayIter<T>` (both share
+  the same backing), not a generic `Iterator` adaptor — a generic
+  `impl<I: Iterator<Item = &T>, T>` can't yet resolve `I::Item` to `&T` in its
+  body (associated-type-equality bounds aren't propagated), so `copied()` chains
+  only directly off `iter()` today, not mid-chain after `filter()`/`map()`.
 
 Rejected — flipping owned `for-of list` to `&T` (and dropping the value
 iterator): Rust's owned `for x in v` yields values, so this would _add_ a new
@@ -54,9 +58,17 @@ separate proposal.
   no wide migration and no iterate-while-mutate hazard.
 - Operator semantics untouched (`==` stays reference identity).
 
+## Status
+
+- [x] `iter()` yields `&T` (`List::iter -> ArrayRefIter`).
+- [x] `copied()` (inherent on `ArrayRefIter`); regression fixture
+      `iter_ref_adapter_monomorph.wado`.
+- [x] Migrated the breaking `iter()` call sites (stdlib tests, fixtures,
+      `package-gale`).
+
 ## TODO
 
-- [ ] Confirm `iter_mut` `&mut T` composes with write-back
-      (`next -> Option<&mut T>`), or defer it.
-- [ ] Add `copied()`; check `String` / deep-copy element ergonomics.
-- [ ] Migrate the `iter()` call sites that break; run the workspace suite.
+- [ ] `iter_mut` (`&mut T`): needs the reference write-back model
+      (`next -> Option<&mut T>`); deferred.
+- [ ] Generic `copied()` on any `Iterator<Item = &T>`: blocked on propagating
+      associated-type-equality bounds (`Item = &T`) into the impl body.

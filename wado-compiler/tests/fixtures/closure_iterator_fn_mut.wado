@@ -8,7 +8,7 @@ test "fold can accumulate via outer mut" {
 
     // Side-channel accumulation through a captured mut binding.
     let mut side_total = 0;
-    let acc_sum = nums.iter().fold(0, |acc: i32, x: i32| {
+    let acc_sum = nums.iter().copied().fold(0, |acc: i32, x: i32| {
         side_total += x;
         return acc + x;
     });
@@ -20,7 +20,7 @@ test "for_each method runs side effects" {
     let nums: List<i32> = [10, 20, 30];
 
     let mut total = 0;
-    nums.iter().for_each(|x: i32| {
+    nums.iter().copied().for_each(|x: i32| {
         total += x;
     });
     assert total == 60;
@@ -28,7 +28,7 @@ test "for_each method runs side effects" {
 
 test "pure fn still accepted via sub-typing" {
     let nums: List<i32> = [1, 2, 3];
-    let doubled = nums.iter().map(|x: i32| x * 2).collect();
+    let doubled = nums.iter().copied().map(|x: i32| x * 2).collect();
     assert doubled[0] == 2;
     assert doubled[2] == 6;
 }

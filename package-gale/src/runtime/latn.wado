@@ -112,7 +112,7 @@ fn latn_closure(
                 // Unresolved rule reference — a dead edge, skip it.
                 continue;
             }
-            if open.iter().any(|o: i32| o == target) {
+            if open.iter().any(|o: &i32| *o == target) {
                 // Epsilon left-recursion: re-entering an open rule without
                 // consuming. Prune (see the `open` doc above).
                 continue;

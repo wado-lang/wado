@@ -356,7 +356,7 @@ fn ci_ranges(ci: bool, lo: char, hi: char) -> List<[i32, i32]> {
     }
     let mut folded: List<CharRange> = [];
     fold_range_ci(lo, hi, &mut folded);
-    return folded.iter().map(|f: CharRange| [f.start as i32, f.end as i32]).collect();
+    return folded.iter().map(|f: &CharRange| [f.start as i32, f.end as i32]).collect();
 }
 
 fn build_literal(b: &mut LatnBuilder, text: &String) -> [i32, i32] {

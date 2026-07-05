@@ -572,7 +572,7 @@ pub fn dedup_append_arr(arr: &mut List<String>, source: &List<String>) {
 }
 
 pub fn subtract_sets(a: &List<String>, b: &List<String>) -> List<String> {
-    return a.iter().filter(|x: String| !first_contains(b, &x)).collect();
+    return a.iter().copied().filter(|x: String| !first_contains(b, &x)).collect();
 }
 
 // Parser codegen names every consumed element so the surrounding struct

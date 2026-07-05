@@ -160,7 +160,7 @@ pub fn group_prediction_order(
 ) -> List<i32> {
     let mut sorted_group = group.sorted();
     sort_group_by_specificity(&mut sorted_group, first_sets);
-    return sorted_group.iter().map(|gi: i32| non_lr_indices[gi]).collect();
+    return sorted_group.iter().map(|gi: &i32| non_lr_indices[*gi]).collect();
 }
 
 /// Build the prediction tree for an overlap group already projected to
@@ -172,7 +172,7 @@ pub fn build_group_prediction_tree_from_order(
     real_indices: &List<i32>,
     ctx: &mut GenContext,
 ) -> PredictionNode {
-    let pred_elements: List<List<Element>> = real_indices.iter().map(|ri: i32| alts[ri].elements).collect();
+    let pred_elements: List<List<Element>> = real_indices.iter().map(|ri: &i32| alts[*ri].elements).collect();
     return build_prediction(real_indices, &pred_elements, MAX_LOOKAHEAD_DEPTH, ctx);
 }
 
@@ -212,7 +212,7 @@ fn strip_dead_consume(node: PredictionNode) -> PredictionNode {
             }
         },
         Dispatch(d) => {
-            let new_branches: List<PredictionBranch> = d.branches.iter().map(|b: PredictionBranch| PredictionBranch {
+            let new_branches: List<PredictionBranch> = d.branches.iter().map(|b: &PredictionBranch| PredictionBranch {
                 tokens: b.tokens,
                 child: strip_dead_consume(b.child),
             }).collect();
@@ -274,13 +274,13 @@ pub fn prediction_collect_all_indices(node: &PredictionNode, out: &mut List<i32>
     match *node {
         Ambiguous(a) => {
             for let i of &a.alts {
-                if !out.iter().any(|x: i32| x == *i) {
+                if !out.iter().any(|x: &i32| *x == *i) {
                     out.push(*i);
                 }
             }
         },
         Leaf(idx) => {
-            if !out.iter().any(|x: i32| x == idx) {
+            if !out.iter().any(|x: &i32| *x == idx) {
                 out.push(idx);
             }
         },
@@ -652,7 +652,8 @@ fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &m
     let common = sll_find_common_terminal(&closed);
     if let Some(elem) = common {
         // Advance all configs past this shared terminal.
-        let advanced: List<SllConfig> = closed.iter().map(|c: SllConfig| SllConfig { ..c, pos: c.pos + 1 }).collect();
+        let advanced: List<SllConfig> = closed.iter().copied().map(|c: SllConfig| SllConfig { ..c, pos: c.pos + 1 }).collect(
+        );
         let child = build_sll_node(&advanced, depth, max_depth, ctx);
         return PredictionNode::Consume(ConsumeNode { element: elem, child });
     }

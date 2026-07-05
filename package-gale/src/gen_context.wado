@@ -1490,7 +1490,7 @@ pub fn sets_overlap(a: &List<String>, b: &List<String>) -> bool {
 /// otherwise-identical masks share the same registry key regardless of
 /// the order in which the underlying analysis discovered the tokens.
 fn canonicalize_k_prefix(prefix: &List<List<String>>) -> List<List<String>> {
-    return prefix.iter().map(|depth_set: List<String>| canonical_kind_set(&depth_set)).collect();
+    return prefix.iter().map(|depth_set: &List<String>| canonical_kind_set(depth_set)).collect();
 }
 
 /// String form of a K-prefix mask for use as a registry key.
@@ -1532,5 +1532,5 @@ pub fn union_kind_arrays(a: &List<String>, b: &List<String>) -> List<String> {
 }
 
 fn remove_from_visiting(visiting: &mut List<String>, name: &String) {
-    *visiting = visiting.iter().filter(|v: String| v != *name).collect();
+    *visiting = visiting.iter().copied().filter(|v: String| v != *name).collect();
 }

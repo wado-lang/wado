@@ -80,7 +80,7 @@ test "nested counter" {
 test "iterator chain" {
     let nums: List<i32> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-    let result = nums.iter().filter(|x: i32| x % 2 == 0).map(|x: i32| x * x).collect();
+    let result = nums.iter().copied().filter(|x: i32| x % 2 == 0).map(|x: i32| x * x).collect();
     assert result[0] == 4;
     assert result[1] == 16;
     assert result[2] == 36;
@@ -88,20 +88,20 @@ test "iterator chain" {
     assert result[4] == 100;
     assert result.len() == 5;
 
-    let sum = nums.iter().map(|x: i32| x * 2).fold(0, |acc: i32, x: i32| acc + x);
+    let sum = nums.iter().copied().map(|x: i32| x * 2).fold(0, |acc: i32, x: i32| acc + x);
     assert sum == 110;
 }
 
 test "iterator filter" {
     let nums: List<i32> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-    let evens = nums.iter().filter(|x: i32| x % 2 == 0).collect();
+    let evens = nums.iter().copied().filter(|x: i32| x % 2 == 0).collect();
     assert evens.len() == 5;
     assert evens[0] == 2;
     assert evens[4] == 10;
 
     let threshold = 5;
-    let large = nums.iter().filter(|x: i32| x > threshold).collect();
+    let large = nums.iter().copied().filter(|x: i32| x > threshold).collect();
     assert large.len() == 5;
     assert large[0] == 6;
     assert large[4] == 10;
@@ -110,13 +110,13 @@ test "iterator filter" {
 test "iterator fold" {
     let nums: List<i32> = [1, 2, 3, 4, 5];
 
-    let sum = nums.iter().fold(0, |acc: i32, x: i32| acc + x);
+    let sum = nums.iter().copied().fold(0, |acc: i32, x: i32| acc + x);
     assert sum == 15;
 
-    let product = nums.iter().fold(1, |acc: i32, x: i32| acc * x);
+    let product = nums.iter().copied().fold(1, |acc: i32, x: i32| acc * x);
     assert product == 120;
 
-    let max = nums.iter().fold(i32::MIN, |acc: i32, x: i32| {
+    let max = nums.iter().copied().fold(i32::MIN, |acc: i32, x: i32| {
         if x > acc {
             return x;
         }
@@ -124,7 +124,7 @@ test "iterator fold" {
     });
     assert max == 5;
 
-    let count = nums.iter().fold(0, |acc: i32, x: i32| {
+    let count = nums.iter().copied().fold(0, |acc: i32, x: i32| {
         if x > 2 {
             return acc + 1;
         }
@@ -136,12 +136,12 @@ test "iterator fold" {
 test "iterator map" {
     let nums: List<i32> = [1, 2, 3, 4, 5];
 
-    let doubled = nums.iter().map(|x: i32| x * 2).collect();
+    let doubled = nums.iter().copied().map(|x: i32| x * 2).collect();
     assert doubled[0] == 2;
     assert doubled[4] == 10;
 
     let factor = 3;
-    let tripled = nums.iter().map(|x: i32| x * factor).collect();
+    let tripled = nums.iter().copied().map(|x: i32| x * factor).collect();
     assert tripled[0] == 3;
     assert tripled[4] == 15;
 }

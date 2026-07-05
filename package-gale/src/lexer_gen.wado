@@ -408,7 +408,7 @@ fn fragment_elem_refs_self(
             if name == *target {
                 return true;
             }
-            if visited.iter().any(|v: String| v == name) {
+            if visited.iter().any(|v: &String| *v == name) {
                 return false;
             }
             visited.push(name);
@@ -2141,8 +2141,8 @@ fn gen_tokenize_fn(
         w.line(&"let tok_start = start;");
     }
 
-    let skip_names: List<String> = lexer_rules.iter().filter(|rule: LexerRule| rule.skip).map(
-        |rule: LexerRule| `TK_{rule.name}`,
+    let skip_names: List<String> = lexer_rules.iter().filter(|rule: &LexerRule| rule.skip).map(
+        |rule: &LexerRule| `TK_{rule.name}`,
     ).collect();
     if skip_names.is_empty() {
         w.line(&"let is_skip = false;");
