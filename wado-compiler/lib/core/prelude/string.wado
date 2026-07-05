@@ -921,6 +921,31 @@ impl String {
         return true;
     }
 
+    /// Returns the string with `prefix` removed from the front, or None when it
+    /// does not start with `prefix`.
+    pub fn strip_prefix(&self, prefix: String) -> Option<String> {
+        if !self.starts_with(prefix) {
+            return null;
+        }
+        let start = prefix.len();
+        let len = self.used - start;
+        let mut part: Array<u8> = builtin::array_new(len);
+        builtin::array_copy(&mut part, 0, &self.repr, start, len);
+        return Option::Some(String::internal_from_utf8_raw(part, len));
+    }
+
+    /// Returns the string with `suffix` removed from the end, or None when it
+    /// does not end with `suffix`.
+    pub fn strip_suffix(&self, suffix: String) -> Option<String> {
+        if !self.ends_with(suffix) {
+            return null;
+        }
+        let len = self.used - suffix.len();
+        let mut part: Array<u8> = builtin::array_new(len);
+        builtin::array_copy(&mut part, 0, &self.repr, 0, len);
+        return Option::Some(String::internal_from_utf8_raw(part, len));
+    }
+
     /// Returns the byte index of the first occurrence of `pat`, or None.
     pub fn find(&self, pat: String) -> Option<i32> {
         let pat_len = pat.len();
