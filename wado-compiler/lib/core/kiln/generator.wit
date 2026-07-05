@@ -100,11 +100,4 @@ world generator {
     /// wasmtime host bindgen drives the call
     /// (`exports: { default: async }`).
     export generate: async func(req: raw-request) -> result<response, error>;
-
-    /// The generator's options schema: a JSON Schema (Draft 2020-12
-    /// subset), CBOR-encoded. The compiler synthesizes the body from the
-    /// generator's `Options` struct, so a prebuilt (registry) generator is
-    /// self-describing — a consumer validates and encodes options without
-    /// the generator's source. See WEP 2026-04-12 §"Options introspection".
-    export describe-options: func() -> list<u8>;
 }

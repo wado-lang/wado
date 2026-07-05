@@ -129,37 +129,6 @@ fn noop_generator_compiles_to_component_bytes() {
     );
 }
 
-#[test]
-fn generator_bakes_describe_options_schema_into_component() {
-    let host = MapHost::new(&[]);
-    let result = block_on(compile_with_options(
-        NOOP_GENERATOR,
-        &host,
-        Some("generator.wado"),
-        kiln_options(),
-    ))
-    .expect("noop generator compiles");
-
-    // The compiler synthesizes `describe-options`, baking the CBOR-encoded
-    // options schema (derived from `Options`) as its return constant. Encode
-    // the extracted descriptor the same way and assert the bytes appear in the
-    // component — i.e. the `describe_options` body was patched with the schema,
-    // not left as the `b""` placeholder.
-    let descriptor = result
-        .kiln_options_descriptor
-        .expect("generator with `Options` yields a descriptor");
-    let expected = wado_compiler::kiln::describe_options_cbor(&descriptor);
-    assert!(!expected.is_empty());
-    assert!(
-        result
-            .wasm
-            .windows(expected.len())
-            .any(|window| window == expected),
-        "describe-options CBOR schema ({} bytes) not found in component",
-        expected.len(),
-    );
-}
-
 const FORBIDDEN_IMPORT_GENERATOR: &str = r#"
 use { RawRequest, Response, Error, bind_request } from "core:kiln";
 use { now } from "wasi:clocks";

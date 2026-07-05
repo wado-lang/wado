@@ -213,44 +213,6 @@ pub async fn run_generator<H: CompilerHost + 'static>(
     (outcome, emitted)
 }
 
-/// Instantiate a pre-built generator [`Component`] and invoke its
-/// `describe-options` export, returning the CBOR-encoded options schema
-/// (a JSON Schema, Draft 2020-12 subset). Used to recover a prebuilt
-/// (registry) generator's `OptionsDescriptor` — decode the bytes with
-/// [`wado_compiler::kiln::decode_options_schema`] — since its source is
-/// unavailable at the consumption site.
-pub async fn run_describe_options<H: CompilerHost + 'static>(
-    engine: &Engine,
-    host: Arc<H>,
-    component: &Component,
-) -> Result<Vec<u8>, GeneratorRunnerError> {
-    let state = KilnHostState {
-        host,
-        reads: Arc::new(Mutex::new(Vec::new())),
-        diagnostics: Arc::new(Mutex::new(Vec::new())),
-    };
-
-    let mut linker: Linker<KilnHostState<H>> = Linker::new(engine);
-    kiln_host::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s)
-        .map_err(|e| GeneratorRunnerError::Host(format!("linker setup: {e}")))?;
-
-    let mut store = Store::new(engine, state);
-    store
-        .set_fuel(u64::MAX)
-        .map_err(|e| GeneratorRunnerError::Host(format!("set fuel: {e}")))?;
-
-    let generator = Generator::instantiate_async(&mut store, component, &linker)
-        .await
-        .map_err(|e| GeneratorRunnerError::Host(format!("instantiate: {e}")))?;
-
-    // `describe-options` is a sync export (a pure constant getter), so the
-    // bindgen call takes the store directly rather than an `Accessor`.
-    generator
-        .call_describe_options(&mut store)
-        .await
-        .map_err(|e| GeneratorRunnerError::Host(format!("describe-options call: {e}")))
-}
-
 pub(crate) fn relay_diagnostic<H: CompilerHost + ?Sized>(host: &H, diag: GeneratorDiagnostic) {
     use wado_compiler::{Code, Diagnostic, DiagnosticSpan, Severity};
     let severity = match diag.level {

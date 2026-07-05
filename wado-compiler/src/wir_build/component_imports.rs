@@ -236,7 +236,6 @@ fn collect_export_interface_fqs(
             collect_export_interface_fqs(ok, out);
             collect_export_interface_fqs(err, out);
         }
-        CmExportType::List(inner) => collect_export_interface_fqs(inner, out),
     }
 }
 
