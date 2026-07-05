@@ -118,3 +118,11 @@ test "render applies table column alignment" {
 test "render treats a pipe line without a delimiter row as a paragraph" {
     assert render(&"a | b") == "<p>a | b</p>";
 }
+
+test "render accepts a tab after the hashes" {
+    assert render(&"#\ttitle") == "<h1>title</h1>";
+}
+
+test "render treats an all-hash line as an empty heading" {
+    assert render(&"###") == "<h3></h3>";
+}
