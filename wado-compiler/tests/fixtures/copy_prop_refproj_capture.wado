@@ -1,8 +1,6 @@
-// A `let r = &place` reference captures its object at binding time (GC keeps it
-// alive). copy_prop's RefProjection must NOT re-materialize `&place` at a later
-// use when the place's root is reassigned in between — that would re-read the
-// new object. The callee is recursive so it is not inlined, isolating the
-// place-ref call-argument path.
+// copy_prop must not re-materialize `&place` at a use when the place's root was
+// reassigned after the binding — the reference captures its object at binding
+// time. The recursive callee is not inlined, isolating the call-argument path.
 use { println, Stdout } from "core:cli";
 
 struct Box { xs: List<i32> }

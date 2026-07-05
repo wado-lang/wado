@@ -1665,11 +1665,9 @@ fn hash3(a: u8, b: u8, c: u8) -> i32 {
     return (a as i32 << 10 ^ b as i32 << 5 ^ c as i32) & 32767;
 }
 
-// Longest common byte run of `scratch[a..]` and `scratch[b..]`, capped at
-// `max_len`, via a 16-byte SIMD compare per step. The scratch buffer's 16-byte
-// zero pad makes the final `v128.load` past the match end well-defined, so the
-// loop runs up to `max_len` with no scalar tail; a coincidental match into the
-// pad is bounded by the `max_len` clamp.
+// Longest common run of `scratch[a..]` and `scratch[b..]`, capped at `max_len`.
+// Relies on the scratch buffer's 16-byte zero pad so the trailing `v128.load`
+// past the match end stays in bounds.
 #[inline(always)]
 fn simd_match_len(scratch: i32, a: i32, b: i32, max_len: i32) -> i32 {
     let mut n = 0;
@@ -2507,23 +2505,16 @@ pub fn deflate_with_level(input: &List<u8>, level: i32, strategy: i32) -> List<u
             }
         }
     } else {
-        // Z_DEFAULT_STRATEGY or Z_FILTERED: full LZ77 matching.
-        //
-        // The hash head/prev tables live in linear memory, not GC arrays: the
-        // chain-walk inner loop follows `prev` once per probe, and a WasmGC
-        // array.get is bounds-checked with no unchecked variant, whereas a
-        // linear-memory i32.load rides wasmtime's guard pages with no check.
-        // memory.fill with 0xFF sets every i32 slot to -1 (empty).
+        // Z_DEFAULT_STRATEGY or Z_FILTERED: full LZ77 matching. head/prev in
+        // linear memory (i32.load has no bounds check, unlike WasmGC array.get);
+        // memory.fill 0xFF sets each i32 slot to -1.
         let hash_bytes = 32768 * 4;
         let head_ptr = builtin::realloc(0, 0, 4, hash_bytes);
         let prev_ptr = builtin::realloc(0, 0, 4, hash_bytes);
         builtin::memory_fill(head_ptr, 0xFF as u8, hash_bytes);
         builtin::memory_fill(prev_ptr, 0xFF as u8, hash_bytes);
-        // Mirror input into linear memory to enable 16-byte SIMD compares
-        // in the LZ77 match-extension inner loops. GC arrays only support
-        // byte-level access; linear memory lets us load 16 bytes in a single
-        // v128.load. The extra 16 bytes of padding keep v128 reads near the
-        // end well-defined.
+        // Mirror input into linear memory for the 16-byte SIMD match compares;
+        // the 16-byte pad keeps the trailing v128.load in bounds.
         let scratch_size = input_len + 16;
         let scratch = builtin::realloc(0, 0, 16, scratch_size);
         for let mut i = 0; i < input_len; i += 1 {
