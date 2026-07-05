@@ -7,6 +7,7 @@
 )]
 
 pub mod args;
+pub mod build;
 pub mod check;
 pub mod compile;
 pub mod compiler_host;

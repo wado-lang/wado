@@ -96,7 +96,7 @@ fn test_init_help() {
 }
 
 #[test]
-fn test_compile_with_manifest() {
+fn test_build_with_manifest() {
     let tmp = tempfile::tempdir().unwrap();
 
     // Create project structure
@@ -124,7 +124,7 @@ export fn run() with Stdout {
     let output_path = tmp.path().join("out.wasm");
 
     wado_in(tmp.path())
-        .args(["compile", "-o", output_path.to_str().unwrap()])
+        .args(["build", "-o", output_path.to_str().unwrap()])
         .assert()
         .success()
         .stderr(predicate::str::contains("Generated:"));
@@ -216,10 +216,10 @@ fn test_compile_no_manifest_no_file() {
 }
 
 #[test]
-fn test_compile_manifest_missing_command() {
+fn test_build_no_world_declared() {
     let tmp = tempfile::tempdir().unwrap();
 
-    // Manifest with no `[world]` entry for wasi:cli/command.
+    // Manifest with no [package].lib and no [world] entry — nothing to build.
     let toml = r#"[package]
 name = "lib-only"
 version = "0.1.0"
@@ -227,12 +227,10 @@ version = "0.1.0"
     fs::write(tmp.path().join("wado.toml"), toml).unwrap();
 
     wado_in(tmp.path())
-        .arg("compile")
+        .arg("build")
         .assert()
         .failure()
-        .stderr(predicate::str::contains(
-            "[world].\"wasi:cli/command\" is not set",
-        ));
+        .stderr(predicate::str::contains("no world to build"));
 }
 
 #[test]
@@ -258,7 +256,7 @@ version = "0.1.0"
 }
 
 #[test]
-fn test_compile_from_subdirectory() {
+fn test_build_from_subdirectory() {
     let tmp = tempfile::tempdir().unwrap();
 
     let src_dir = tmp.path().join("src");
@@ -286,7 +284,7 @@ export fn run() with Stdout {
 
     // Run from src/ subdirectory — should discover wado.toml in parent
     wado_in(&src_dir)
-        .args(["compile", "-o", output_path.to_str().unwrap()])
+        .args(["build", "-o", output_path.to_str().unwrap()])
         .assert()
         .success();
 

@@ -13,6 +13,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 enum Cmd {
     Init,
     Update,
+    Build,
     Compile,
     Check,
     Run,
@@ -32,6 +33,7 @@ impl Cmd {
     const ALL: &[Self] = &[
         Self::Init,
         Self::Update,
+        Self::Build,
         Self::Compile,
         Self::Check,
         Self::Run,
@@ -51,6 +53,7 @@ impl Cmd {
         match self {
             Self::Init => "init",
             Self::Update => "update",
+            Self::Build => "build",
             Self::Compile => "compile",
             Self::Check => "check",
             Self::Run => "run",
@@ -69,11 +72,14 @@ impl Cmd {
 
     const fn args(self) -> &'static str {
         match self {
-            Self::Compile | Self::Run | Self::Serve | Self::Check => "[options] [file.wado]",
+            Self::Run | Self::Serve | Self::Check => "[options] [file.wado]",
+            Self::Compile => "[options] <file.wado>",
             Self::Wit => "[options] [file.wado | dir]",
             Self::Test => "[options] [files or dirs...]",
             Self::Format | Self::Doc | Self::Dump => "[options] <file.wado>...",
-            Self::Init | Self::Update | Self::Syntax | Self::Lsp | Self::Publish => "[options]",
+            Self::Init | Self::Update | Self::Build | Self::Syntax | Self::Lsp | Self::Publish => {
+                "[options]"
+            }
             Self::Query => "<kind> [options] <file.wado>",
         }
     }
@@ -82,7 +88,8 @@ impl Cmd {
         match self {
             Self::Init => "Create a new wado.toml manifest",
             Self::Update => "Resolve dependencies and write wado.lock",
-            Self::Compile => "Compile a Wado source file",
+            Self::Build => "Build the project's worlds from wado.toml",
+            Self::Compile => "Compile a single Wado source file",
             Self::Check => "Verify Kiln generators match committed source (CI)",
             Self::Run => "Compile and run a Wado CLI program",
             Self::Serve => "Compile and serve a Wado HTTP service",
@@ -196,6 +203,10 @@ async fn dispatch() -> Result<(), CliExit> {
                 Cmd::Update => {
                     let opts = wado_cli::update::parse_args(parser)?;
                     Box::pin(wado_cli::update::run(opts)).await
+                }
+                Cmd::Build => {
+                    let opts = wado_cli::build::parse_args(parser)?;
+                    Box::pin(wado_cli::build::run(opts)).await
                 }
                 // Each subcommand's future is boxed so `dispatch`'s state
                 // machine doesn't recursively inline all 12 subcommands'

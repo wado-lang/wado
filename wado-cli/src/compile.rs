@@ -111,6 +111,43 @@ pub struct CompileOptions {
 }
 
 impl CompileOptions {
+    /// A manifest-driven build of one world: metadata embedded, output at
+    /// `output`. Exactly one of `lib_world` / `target_world` is `Some`, selecting
+    /// the world as `--lib` / `--world` do. Shared by `wado build` and
+    /// `wado publish`; callers override optimization / allocator / embed / param
+    /// fields as needed before calling [`run`].
+    #[must_use]
+    pub fn for_world_build(
+        input: String,
+        output: std::path::PathBuf,
+        lib_world: Option<String>,
+        target_world: Option<String>,
+    ) -> Self {
+        Self {
+            input,
+            output: Some(output.to_string_lossy().into_owned()),
+            format: Some(OutputFormat::Wasm),
+            opt_level: OptLevel::default(),
+            wat_to_stdout: false,
+            log_level: LogLevel::default(),
+            target_world,
+            skip_validation: false,
+            inline_threshold: None,
+            opt_iterations: None,
+            allocator: None,
+            no_cache: false,
+            codegen_flags: Vec::new(),
+            lib_world,
+            param_overrides: wado_compiler::hashmap::IndexMap::default(),
+            param_policy: wado_compiler::param_resolution::ParamPolicy::default(),
+            no_embed_wit: false,
+            embed_wit: false,
+            no_embed_metadata: false,
+            embed_metadata: false,
+            manifest_driven: true,
+        }
+    }
+
     /// Resolve whether to embed the `component-type` WIT section. Returns
     /// `Some(explicit)`, where `explicit` is true when the user passed
     /// `--embed-wit` (so an embedding failure is fatal rather than a warning),
@@ -226,7 +263,6 @@ enum Opt {
     Format,
     WatToStdout,
     World,
-    Lib,
     OptLevel,
     InlineThreshold,
     OptIterations,
@@ -237,8 +273,6 @@ enum Opt {
     Feature,
     NoEmbedWit,
     EmbedWit,
-    NoEmbedMetadata,
-    EmbedMetadata,
     Help,
 }
 
@@ -248,7 +282,6 @@ impl Opt {
         Self::Format,
         Self::WatToStdout,
         Self::World,
-        Self::Lib,
         Self::OptLevel,
         Self::InlineThreshold,
         Self::OptIterations,
@@ -259,8 +292,6 @@ impl Opt {
         Self::Feature,
         Self::NoEmbedWit,
         Self::EmbedWit,
-        Self::NoEmbedMetadata,
-        Self::EmbedMetadata,
         Self::Help,
     ];
 
@@ -285,12 +316,6 @@ impl Opt {
                 desc: "Output WAT to stdout (shorthand for --format wat -o /dev/stdout)",
             },
             Self::World => args::WORLD_SPEC,
-            Self::Lib => args::OptSpec {
-                long: Some("lib"),
-                short: None,
-                value: None,
-                desc: "Compile as a Component Model library, exporting every `export fn`\n(entry from [package].lib; requires [package].namespace)",
-            },
             Self::OptLevel => args::OPT_LEVEL_SPEC,
             Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
             Self::OptIterations => args::OPT_ITERATIONS_SPEC,
@@ -310,18 +335,6 @@ impl Opt {
                 short: None,
                 value: None,
                 desc: "Force embedding the WIT section on (e.g. under -Os, where it is off by default)",
-            },
-            Self::NoEmbedMetadata => args::OptSpec {
-                long: Some("no-embed-metadata"),
-                short: None,
-                value: None,
-                desc: "Do not embed the [package] metadata sections in the output",
-            },
-            Self::EmbedMetadata => args::OptSpec {
-                long: Some("embed-metadata"),
-                short: None,
-                value: None,
-                desc: "Force embedding the [package] metadata on (e.g. under -Os, where it is off by default)",
             },
             Self::Help => args::HELP_SPEC,
         }
@@ -364,11 +377,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     let mut allocator: Option<String> = None;
     let mut codegen_flags: Vec<String> = Vec::new();
     let mut no_cache = false;
-    let mut lib = false;
     let mut no_embed_wit = false;
     let mut embed_wit = false;
-    let mut no_embed_metadata = false;
-    let mut embed_metadata = false;
     let mut param_args = args::ParamArgs::default();
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
@@ -384,7 +394,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
                 }
                 Opt::WatToStdout => wat_to_stdout = true,
                 Opt::World => target_world = Some(args::require_string(&mut parser)?),
-                Opt::Lib => lib = true,
                 Opt::OptLevel => opt_level = parse_opt_level_arg(&mut parser)?,
                 Opt::InlineThreshold => {
                     inline_threshold = Some(args::parse_inline_threshold_arg(
@@ -407,8 +416,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
                 Opt::Feature => codegen_flags.push(args::require_string(&mut parser)?),
                 Opt::NoEmbedWit => no_embed_wit = true,
                 Opt::EmbedWit => embed_wit = true,
-                Opt::NoEmbedMetadata => no_embed_metadata = true,
-                Opt::EmbedMetadata => embed_metadata = true,
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -419,50 +426,29 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         }
     }
 
-    if lib && target_world.is_some() {
-        return Err(CliExit::error(
-            "`--lib` and `--world` are mutually exclusive",
-        ));
-    }
-
     if no_embed_wit && embed_wit {
         return Err(CliExit::error(
             "`--no-embed-wit` and `--embed-wit` are mutually exclusive",
         ));
     }
 
-    if no_embed_metadata && embed_metadata {
-        return Err(CliExit::error(
-            "`--no-embed-metadata` and `--embed-metadata` are mutually exclusive",
+    // `compile` is the file-scoped primitive: it takes one explicit `.wado`
+    // file and never reads `wado.toml` to discover an entry or embed metadata.
+    // Project builds (worlds, metadata, `build/<world>.wasm`) are `wado build`.
+    let Some(input) = input else {
+        return Err(CliExit::error_with_usage(
+            "no input file specified; `wado compile` takes a single .wado file \
+             (use `wado build` to build a project from wado.toml)",
+            &usage,
         ));
-    }
-
-    // No path argument or a directory argument resolves the entry through a
-    // manifest; an explicit `.wado` file is a standalone target. Gates metadata
-    // embedding (WEP `wep-2026-02-14-package-manifest.md`).
-    let manifest_driven = input.as_deref().is_none_or(|s| Path::new(s).is_dir());
-
-    // Metadata embedding only happens for manifest-driven builds, so these flags
-    // would be silently ignored on a standalone file — reject the combination.
-    if (no_embed_metadata || embed_metadata) && !manifest_driven {
-        return Err(CliExit::error(
-            "`--embed-metadata` / `--no-embed-metadata` apply only to manifest-driven builds \
-             (no argument or a directory argument), not an explicit file",
-        ));
-    }
-
-    let (input, lib_world) = if lib {
-        let (entry, world_fq) = manifest::resolve_lib_input(input, &usage)?;
-        // The library defaults to the freelist allocator (long-lived host),
-        // still overridable by an explicit `--allocator`.
-        if allocator.is_none() {
-            allocator = Some("freelist".to_string());
-        }
-        (entry, Some(world_fq))
-    } else {
-        let entry = manifest::resolve_input(input, manifest::EntryPointKind::Command, &usage)?;
-        (entry, None)
     };
+    if Path::new(&input).is_dir() {
+        return Err(CliExit::error_with_usage(
+            "`wado compile` takes a single .wado file, not a directory \
+             (use `wado build` to build a project from wado.toml)",
+            &usage,
+        ));
+    }
 
     Ok(CompileOptions {
         input,
@@ -478,14 +464,14 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         allocator,
         no_cache,
         codegen_flags,
-        lib_world,
+        lib_world: None,
         param_overrides: param_args.overrides,
         param_policy: param_args.policy,
         no_embed_wit,
         embed_wit,
-        no_embed_metadata,
-        embed_metadata,
-        manifest_driven,
+        no_embed_metadata: false,
+        embed_metadata: false,
+        manifest_driven: false,
     })
 }
 
@@ -1215,29 +1201,12 @@ pub async fn build_publish_world(
     lib_world: Option<String>,
     target_world: Option<String>,
 ) -> Result<(), CliExit> {
-    let opts = CompileOptions {
-        input: entry.to_string_lossy().into_owned(),
-        output: Some(output.to_string_lossy().into_owned()),
-        format: Some(OutputFormat::Wasm),
-        opt_level: OptLevel::default(),
-        wat_to_stdout: false,
-        log_level: LogLevel::default(),
-        target_world,
-        skip_validation: false,
-        inline_threshold: None,
-        opt_iterations: None,
-        allocator: None,
-        no_cache: false,
-        codegen_flags: Vec::new(),
+    let opts = CompileOptions::for_world_build(
+        entry.to_string_lossy().into_owned(),
+        output.to_path_buf(),
         lib_world,
-        param_overrides: wado_compiler::hashmap::IndexMap::default(),
-        param_policy: wado_compiler::param_resolution::ParamPolicy::default(),
-        no_embed_wit: false,
-        embed_wit: false,
-        no_embed_metadata: false,
-        embed_metadata: false,
-        manifest_driven: true,
-    };
+        target_world,
+    );
     run(opts).await
 }
 

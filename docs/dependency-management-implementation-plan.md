@@ -75,24 +75,29 @@ compiles". Phases 5+ are follow-ups, orderable independently.
 
 Establish the primitive/orchestrator boundary before wiring dependencies.
 
-- [ ] Introduce `wado build`: read the manifest, resolve/lock deps, compile each
-      world through the `compile` primitive with the resolved `DependencyIndex`,
-      embed `[package]` metadata, write `build/<world>.wasm`. Move the current
-      manifest-driven behavior of `compile` here verbatim.
-- [ ] Make `wado compile` do no resolution and no metadata embedding, while
-      still consuming a resolved index (the `with_dependency_index` seam stays).
-      Keep `-o`, `--wat-to-stdout`, `--no-validate`, `--world`, `--allocator`,
-      `-O*`.
-- [ ] Standalone-in-project `wado compile <file>`: assemble the index offline
-      from `wado.lock` (+ path deps read fresh from `wado.toml`); no lock entry
-      for a registry/git dep → error pointing at `wado build` / `wado update`.
-      No project → empty index (`ns:`/`lib:` imports need a `with { … }` source).
-- [ ] Route `run` / `serve` / `test` / `publish` project mode through the shared
-      `build` core; a bare-file argument stays on the standalone `compile` path.
+- [x] Introduce `wado build`: read the manifest, build every declared world
+      (`[package].lib` plus each `[world]` entry) through the `compile` primitive,
+      embed `[package]` metadata, write `build/<world>.wasm`. `--lib` / `--world`
+      select one world. Dependency resolve/lock is a later phase; the compile
+      core already reads path deps from the nearest manifest.
+- [x] Make `wado compile` a file primitive: require an explicit `.wado` file
+      (no manifest-driven entry discovery), `manifest_driven = false`, no metadata
+      embedding. `--lib` and the `--embed-metadata` flags moved to `build`. Kept
+      `-o`, `--wat-to-stdout`, `--no-validate`, `--world`, `--allocator`, `-O*`,
+      `--embed-wit`. The dependency index (path deps via `try_compile`) still
+      resolves, so a project file's imports compile.
+- [ ] Standalone-in-project `wado compile <file>`: consume the resolved index
+      offline from `wado.lock` for registry/git deps; no lock entry → error
+      pointing at `wado build` / `wado update`. (Deferred to Phase 3/4 — no
+      registry deps exist yet; today only path deps are indexed.)
+- [x] `run` / `serve` resolve the entry via the manifest and call the pure
+      compile core already; `publish` builds each world via the shared
+      `for_world_build` constructor — no manifest-driven `compile` coupling
+      remained to reroute.
 - [x] Specify the split in the [CLI-subcommands WEP][cli-wep] (Command Tiers)
       and fix the `wado compile` project-build references in the manifest WEP.
-- [ ] Migrate existing tests and any docs/examples that call `wado compile`
-      for a project build.
+- [x] Migrate the manifest-driven `wado compile` tests (`cli.rs`,
+      `manifest_integration.rs`, `cli_parse.rs`) to `wado build`.
 
 ### Phase 1 — OCI registry provider
 
