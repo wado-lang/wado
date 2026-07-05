@@ -135,7 +135,7 @@ Materialize resolved packages on disk so the compiler can load them.
 - [x] `wado fetch` (bridge): resolve, then pull each registry component into
       `<root>/build/<name>.wasm` — the local wasm-asset location a project
       imports today, since registry-dep import resolution is Phase 4. Verified
-      live end to end: `example/cm-catalog` runs `update` → `fetch` → `run` and
+      live end to end: `example/hello-packages` runs `update` → `fetch` → `run` and
       round-trips values through the published `wado-lang:cm-catalog` component.
 - [ ] Move the cache to `~/wado/`, overridable by `WADO_ROOT`, once Phase 4
       resolves registry-dep imports from it (retire the `build/` bridge).

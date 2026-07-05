@@ -317,7 +317,7 @@ fn cm_catalog_matches_committed_wit() {
     assert_eq!(
         text.trim_end(),
         expected.trim_end(),
-        "cm-catalog.wit is stale; regenerate with `wado wit example/cm-catalog/src/lib.wado`\n--- emitted ---\n{text}"
+        "cm-catalog.wit is stale; regenerate with `wado wit package-cm-catalog/src/lib.wado`\n--- emitted ---\n{text}"
     );
     let mut resolve = wit_parser::Resolve::new();
     resolve

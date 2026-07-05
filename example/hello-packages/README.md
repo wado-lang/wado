@@ -1,8 +1,9 @@
-# cm-catalog example
+# hello-packages
 
-Imports the [`wado-lang:cm-catalog`](../../package-cm-catalog) Component Model
-component from an OCI registry and round-trips values through its identity
-functions (the full value-type ABI surface).
+A hello-world for package dependencies: imports the
+[`wado-lang:cm-catalog`](../../package-cm-catalog) Component Model component from
+an OCI registry and round-trips values through its identity functions (the full
+value-type ABI surface).
 
 `wado.toml` declares the component as an OCI registry dependency; `src/main.wado`
 imports the fetched `.wasm` component directly and calls `CmCatalog::id_*`.
@@ -10,9 +11,9 @@ imports the fetched `.wasm` component directly and calls `CmCatalog::id_*`.
 ## Run
 
 ```sh
-wado update                  # resolve wado-lang:cm-catalog → wado.lock
-wado fetch                   # download the component into ./build (gitignored)
-wado run example/cm-catalog  # compile + run
+wado update                     # resolve wado-lang:cm-catalog → wado.lock
+wado fetch                      # download the component into ./build (gitignored)
+wado run example/hello-packages # compile + run
 ```
 
 `build/` is gitignored — the fetched component is not committed. `wado fetch`
@@ -25,8 +26,8 @@ To build the component locally instead of pulling it, build `package-cm-catalog`
 library world into place:
 
 ```sh
-( cd package-cm-catalog && wado build --lib -o ../example/cm-catalog/build/cm-catalog.wasm )
-wado run example/cm-catalog
+( cd package-cm-catalog && wado build --lib -o ../example/hello-packages/build/cm-catalog.wasm )
+wado run example/hello-packages
 ```
 
 ## Publishing the component (one-time)
