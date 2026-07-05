@@ -143,13 +143,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The function signature of a *global* (current-module or imported)
-    /// named `name`, if it is function-typed. Lets a bare call on a global
-    /// closure (`G(x)`) become an indirect call instead of a named-function
-    /// lookup.
-    fn global_fn_signature(&self, name: &str) -> Option<FnSignature> {
-        let ty = self
-            .sem
+    /// The declared type of a *global* (current-module or imported) named
+    /// `name`, if one exists. Lets a bare call resolve a global callee (a
+    /// function-typed global becomes an indirect call; any other type gets a
+    /// clear not-callable diagnostic instead of "unknown function").
+    fn global_var_type(&self, name: &str) -> Option<TypeId> {
+        self.sem
             .decls
             .current_module_globals
             .get(name)
@@ -160,8 +159,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .imported_globals
                     .get(name)
                     .map(|&(_, _, t, _)| t)
-            })?;
-        self.as_fn_signature(ty)
+            })
     }
 
     /// Walk a callee expression down to its *root place* identifier so
@@ -275,34 +273,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        // Closure call: a bare identifier that names a *value* of function
-        // type is invoked indirectly, not looked up as a named function. A
-        // local/param (checked first, so shadowing wins) or a module/imported
-        // global both qualify.
+        // Closure call: a bare identifier that names a *value* binding (a
+        // local/param — checked first, so shadowing wins — or a module/imported
+        // global) is invoked on its value, not looked up as a named function.
         if let Expr::Ident(ident) = &call.callee
             && !ident.name.contains("::")
         {
-            let local_sig = ctx
-                .lookup(&ident.name)
-                .map(|local| local.type_id)
-                .and_then(|ty| self.as_fn_signature(ty));
-            let is_local = local_sig.is_some();
-            if let Some(sig) = local_sig.or_else(|| self.global_fn_signature(&ident.name)) {
-                // `fn mut` closures need a `mut` root binding — mirrors
-                // Rust's FnMut rule. The check goes through the same helper
-                // used by the indirect-call path below so identifier and
-                // non-identifier callees share one code path.
-                self.check_fn_mut_root_mutability(&call.callee, ctx, sig.is_mut);
+            let local_ty = ctx.lookup(&ident.name).map(|local| local.type_id);
+            if let Some(value_ty) = local_ty.or_else(|| self.global_var_type(&ident.name)) {
+                if let Some(sig) = self.as_fn_signature(value_ty) {
+                    // `fn mut` closures need a `mut` root binding — mirrors
+                    // Rust's FnMut rule. The check goes through the same helper
+                    // used by the indirect-call path below so identifier and
+                    // non-identifier callees share one code path.
+                    self.check_fn_mut_root_mutability(&call.callee, ctx, sig.is_mut);
 
-                // Closure `let`-site defaults can pad missing trailing args
-                // only for local callees.
-                return self.build_indirect_call(
-                    call,
-                    ctx,
-                    &sig.params,
-                    sig.return_type,
-                    /* pad_with_defaults */ is_local,
-                );
+                    // Closure `let`-site defaults can pad missing trailing args
+                    // only for local callees.
+                    return self.build_indirect_call(
+                        call,
+                        ctx,
+                        &sig.params,
+                        sig.return_type,
+                        /* pad_with_defaults */ local_ty.is_some(),
+                    );
+                }
+
+                // Names a binding that is not a function — a clear
+                // not-callable diagnostic, not the misleading "unknown
+                // function 'x'" from the named-function lookup below.
+                let type_name = self.tysys.type_table.borrow().type_name(value_ty);
+                let _ = self.logger.error(TypeError::CalleeNotCallable {
+                    type_name,
+                    span: call.callee.span(),
+                });
+                return TypeTable::ERROR;
             }
         }
 

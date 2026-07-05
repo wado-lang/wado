@@ -7281,6 +7281,24 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
 
+        // A bare-ident callee that names a value binding (local/param or
+        // global) which is *not* function-typed — the fn cases returned
+        // above. Annotate already emitted `CalleeNotCallable`; recover with an
+        // error node so the free-function lookup below does not pile a second
+        // ("unknown function") diagnostic on top.
+        if let ast::Expr::Ident(ident) = &call.callee
+            && !ident.name.contains("::")
+            && (ctx.lookup(&ident.name).is_some()
+                || self
+                    .sem
+                    .decls
+                    .current_module_globals
+                    .contains_key(&ident.name)
+                || self.sem.decls.imported_globals.contains_key(&ident.name))
+        {
+            return TirExpr::new(TirExprKind::Unit, crate::tir::TypeTable::ERROR, span);
+        }
+
         // Indirect-call shape: callee is any non-ident expression
         // whose type resolves to a function (e.g. `arr[i](x)`,
         // `(foo.bar)(x)`, `(get_fn())(x)`, `(|x| x)(1)`). Mirrors
