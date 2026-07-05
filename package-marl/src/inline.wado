@@ -1,11 +1,10 @@
 //! Inline rendering: code spans, emphasis/strong, strikethrough, links,
-//! images, and backslash escapes.
+//! images, autolinks, hard breaks, and backslash escapes.
 //!
-//! Emphasis matching uses a pragmatic forward search rather than the full
-//! CommonMark delimiter stack: an opener is matched to the next same-character
-//! run that is right-flanking. This resolves the common and cross-delimiter
-//! nested cases; some same-character nesting and flanking edge cases diverge
-//! from CommonMark, which is acceptable for the v0.1 subset.
+//! The text is tokenized into literal text, final-HTML, and delimiter-run
+//! tokens; emphasis is then resolved by the CommonMark "process emphasis"
+//! delimiter-stack procedure (flanking rules, the rule of three, and nested
+//! `*`/`**`/`***`). Strikethrough (`~`) reuses the same machinery.
 
 use { escape_attr, escape_text } from "./html.wado";
 
@@ -17,75 +16,220 @@ pub fn render_inline(text: &String) -> String {
     return render_range(&chars, 0, chars.len());
 }
 
+/// An inline token. `kind` is 0 for literal text (escaped on serialize), 1 for
+/// final HTML emitted verbatim, and 2 for a `*`/`_`/`~` delimiter run.
+struct Tok {
+    kind: i32,
+    text: String,
+    ch: char,
+    count: i32,
+    orig: i32,
+    open: bool,
+    close: bool,
+}
+
 fn render_range(chars: &List<char>, start: i32, end: i32) -> String {
-    let mut out = String::new();
+    let mut toks: List<Tok> = [];
+    tokenize(chars, start, end, &mut toks);
+    process_emphasis(&mut toks);
+    return serialize(&toks);
+}
+
+fn tokenize(chars: &List<char>, start: i32, end: i32, toks: &mut List<Tok>) {
+    let mut cur = String::new();
     let mut i = start;
     while i < end {
         let c = chars[i];
         match c {
             '\\' && i + 1 < end && is_ascii_punct(chars[i + 1]) => {
-                push_escaped(&mut out, chars[i + 1]);
+                cur.push(chars[i + 1]);
                 i += 2;
             },
             '\n' => {
-                i = render_line_break(chars, i, start, &mut out);
+                i = push_line_break(&mut cur, chars, i, start, toks);
             },
             'h' => {
-                i = emit_or_literal(try_autolink(chars, i, end), c, i, &mut out);
+                i = push_construct(try_autolink(chars, i, end), c, i, &mut cur, toks);
             },
             '`' => {
-                i = emit_or_literal(try_code_span(chars, i, end), c, i, &mut out);
+                i = push_construct(try_code_span(chars, i, end), c, i, &mut cur, toks);
             },
             '!' && i + 1 < end && chars[i + 1] == '[' => {
-                i = emit_or_literal(try_link(chars, i + 1, end, true), c, i, &mut out);
+                i = push_construct(try_link(chars, i + 1, end, true), c, i, &mut cur, toks);
             },
             '[' => {
-                i = emit_or_literal(try_link(chars, i, end, false), c, i, &mut out);
+                i = push_construct(try_link(chars, i, end, false), c, i, &mut cur, toks);
             },
             '*' | '_' | '~' => {
-                i = emit_or_literal(try_emphasis(chars, i, end, c), c, i, &mut out);
+                flush_text(&mut cur, toks);
+                i = push_delim(chars, start, i, end, c, toks);
             },
             _ => {
-                push_escaped(&mut out, c);
+                cur.push(c);
                 i += 1;
             },
         }
     }
-    return out;
+    flush_text(&mut cur, toks);
 }
 
-/// Append the rendered construct and advance past it, or fall back to the
-/// escaped literal character and advance by one.
-fn emit_or_literal(result: Option<[String, i32]>, c: char, i: i32, out: &mut String) -> i32 {
+fn flush_text(cur: &mut String, toks: &mut List<Tok>) {
+    if cur.len() == 0 {
+        return;
+    }
+    let text = *cur;
+    toks.push(Tok { kind: 0, text, ch: ' ', count: 0, orig: 0, open: false, close: false });
+    *cur = String::new();
+}
+
+fn push_raw(html: String, toks: &mut List<Tok>) {
+    toks.push(Tok { kind: 1, text: html, ch: ' ', count: 0, orig: 0, open: false, close: false });
+}
+
+fn push_construct(result: Option<[String, i32]>, c: char, i: i32, cur: &mut String, toks: &mut List<Tok>) -> i32 {
     match result {
         Some([html, next]) => {
-            out.push_str(&html);
+            flush_text(cur, toks);
+            push_raw(html, toks);
             return next;
         },
         None => {
-            push_escaped(out, c);
+            cur.push(c);
             return i + 1;
         },
     }
 }
 
-fn render_line_break(chars: &List<char>, i: i32, start: i32, out: &mut String) -> i32 {
-    let hard_backslash = i > start && chars[i - 1] == '\\';
-    let hard_spaces = i - 2 >= start && chars[i - 1] == ' ' && chars[i - 2] == ' ';
-    match [hard_backslash, hard_spaces] {
-        [true, _] => {
-            out.pop();
-            out.push_str(&"<br />\n");
-        },
-        [_, true] => {
-            trim_trailing_spaces(out);
-            out.push_str(&"<br />\n");
-        },
-        _ => {
-            out.push('\n');
-        },
+fn push_line_break(cur: &mut String, chars: &List<char>, i: i32, start: i32, toks: &mut List<Tok>) -> i32 {
+    if i > start && chars[i - 1] == '\\' {
+        cur.pop();
+        flush_text(cur, toks);
+        push_raw("<br />\n", toks);
+    } else if i - 2 >= start && chars[i - 1] == ' ' && chars[i - 2] == ' ' {
+        trim_trailing_spaces(cur);
+        flush_text(cur, toks);
+        push_raw("<br />\n", toks);
+    } else {
+        cur.push('\n');
     }
     return i + 1;
+}
+
+fn push_delim(chars: &List<char>, start: i32, i: i32, end: i32, d: char, toks: &mut List<Tok>) -> i32 {
+    let n = run_length(chars, i, d);
+    let prev = opt_char(chars, i - 1, start, end);
+    let next = opt_char(chars, i + n, start, end);
+    toks.push(Tok {
+        kind: 2,
+        text: "",
+        ch: d,
+        count: n,
+        orig: n,
+        open: can_open(d, prev, next),
+        close: can_close(d, prev, next),
+    });
+    return i + n;
+}
+
+/// Resolve `*`/`_`/`~` delimiter pairs into emphasis, following the CommonMark
+/// "process emphasis" procedure: scan closers left to right, match each to the
+/// nearest compatible opener (honoring flanking and the rule of three), and
+/// wrap the span in `<em>`/`<strong>` (or `<del>` for `~`).
+fn process_emphasis(toks: &mut List<Tok>) {
+    let mut ci = 0;
+    while ci < toks.len() {
+        let closer = toks[ci];
+        if closer.kind == 2 && closer.close && closer.count > 0 {
+            let oi = find_opener(toks, ci);
+            if oi >= 0 {
+                ci = resolve_pair(toks, oi, ci);
+            } else {
+                ci += 1;
+            }
+        } else {
+            ci += 1;
+        }
+    }
+}
+
+fn find_opener(toks: &List<Tok>, ci: i32) -> i32 {
+    let closer = toks[ci];
+    let mut oi = ci - 1;
+    while oi >= 0 {
+        let opener = toks[oi];
+        let ok = opener.kind == 2 && opener.open && opener.count > 0 && opener.ch == closer.ch;
+        if ok && rule_of_three(&opener, &closer) {
+            return oi;
+        }
+        oi -= 1;
+    }
+    return -1;
+}
+
+fn rule_of_three(opener: &Tok, closer: &Tok) -> bool {
+    let both = opener.open && opener.close || closer.open && closer.close;
+    let sum = opener.orig + closer.orig;
+    if both && sum % 3 == 0 && !(opener.orig % 3 == 0 && closer.orig % 3 == 0) {
+        return false;
+    }
+    return true;
+}
+
+fn resolve_pair(toks: &mut List<Tok>, oi: i32, ci: i32) -> i32 {
+    let opener = toks[oi];
+    let closer = toks[ci];
+    let strong = opener.count >= 2 && closer.count >= 2;
+    let use_n = if strong { 2 } else { 1 };
+    let tag = match closer.ch {
+        '~' => "del",
+        _ => if strong { "strong" } else { "em" },
+    };
+
+    let mut bi = oi + 1;
+    while bi < ci {
+        let mut between = toks[bi];
+        if between.kind == 2 {
+            between.open = false;
+            between.close = false;
+            toks[bi] = between;
+        }
+        bi += 1;
+    }
+
+    toks.insert(ci, raw_tok(`</{tag}>`));
+    toks.insert(oi + 1, raw_tok(`<{tag}>`));
+    let closer_idx = ci + 2;
+
+    let mut op = toks[oi];
+    op.count -= use_n;
+    toks[oi] = op;
+    let mut cl = toks[closer_idx];
+    cl.count -= use_n;
+    toks[closer_idx] = cl;
+
+    return closer_idx;
+}
+
+fn raw_tok(html: String) -> Tok {
+    return Tok { kind: 1, text: html, ch: ' ', count: 0, orig: 0, open: false, close: false };
+}
+
+fn serialize(toks: &List<Tok>) -> String {
+    let mut out = String::new();
+    for let t of toks {
+        match t.kind {
+            0 => out.push_str(&escape_text(&t.text)),
+            1 => out.push_str(&t.text),
+            _ => {
+                let mut r = 0;
+                while r < t.count {
+                    out.push(t.ch);
+                    r += 1;
+                }
+            },
+        }
+    }
+    return out;
 }
 
 fn try_code_span(chars: &List<char>, i: i32, end: i32) -> Option<[String, i32]> {
@@ -170,55 +314,105 @@ fn try_link(chars: &List<char>, open: i32, end: i32, is_image: bool) -> Option<[
         return null;
     }
     let dest_raw = raw_string(chars, close + 2, pclose);
-    let dest_trimmed = dest_raw.trim();
-    let dest = first_field(&dest_trimmed);
+    let [dest, title] = parse_dest_title(&dest_raw);
     let href = escape_attr(&dest);
+    let title_attr = title_attribute(&title);
     if is_image {
-        let alt_raw = raw_string(chars, open + 1, close);
-        let alt = escape_attr(&alt_raw);
-        return Option::Some([`<img src="{href}" alt="{alt}" />`, pclose + 1]);
+        let alt = escape_attr(&raw_string(chars, open + 1, close));
+        return Option::Some([`<img src="{href}" alt="{alt}"{title_attr} />`, pclose + 1]);
     }
     let text_html = render_range(chars, open + 1, close);
-    return Option::Some([`<a href="{href}">{text_html}</a>`, pclose + 1]);
+    return Option::Some([`<a href="{href}"{title_attr}>{text_html}</a>`, pclose + 1]);
 }
 
-fn try_emphasis(chars: &List<char>, i: i32, end: i32, d: char) -> Option<[String, i32]> {
-    let n = run_length(chars, i, d);
-    if d == '~' && n < 2 {
-        return null;
-    }
-    let want = if d == '~' {
-        2;
-    } else if n >= 2 {
-        2;
-    } else {
-        1;
-    };
-    let after = i + n;
-    if after >= end || is_space(chars[after]) {
-        return null;
-    }
-    let mut j = after;
-    while j < end {
-        if chars[j] == d {
-            let m = run_length(chars, j, d);
-            if m >= want && !is_space(chars[j - 1]) {
-                let inner = render_range(chars, after, j);
-                let tag = if d == '~' {
-                    "del";
-                } else if want == 2 {
-                    "strong";
-                } else {
-                    "em";
-                };
-                return Option::Some([`<{tag}>{inner}</{tag}>`, j + want]);
-            }
-            j += m;
-        } else {
-            j += 1;
+/// Split a link destination field into `[dest, title]`. The title is an
+/// optional `"..."`, `'...'`, or `(...)` string after the destination.
+fn parse_dest_title(raw: &String) -> [String, String] {
+    let mut dest = String::new();
+    let mut title = String::new();
+    let mut phase = 0;
+    let mut closing = ' ';
+    for let c of raw.trim().chars() {
+        match phase {
+            0 => if c == ' ' || c == '\t' { phase = 1 } else { dest.push(c) },
+            1 => match c {
+                ' ' | '\t' => {
+                },
+                '"' => {
+                    closing = '"';
+                    phase = 2;
+                },
+                '\'' => {
+                    closing = '\'';
+                    phase = 2;
+                },
+                '(' => {
+                    closing = ')';
+                    phase = 2;
+                },
+                _ => {
+                    phase = 3;
+                },
+            },
+            _ => if phase == 2 && c != closing { title.push(c) } else { phase = 3 },
         }
     }
+    return [dest, title];
+}
+
+fn title_attribute(title: &String) -> String {
+    if title.len() == 0 {
+        return "";
+    }
+    return ` title="{escape_attr(title)}"`;
+}
+
+/// A delimiter run of `d` bounded by `prev`/`next` can open emphasis when it is
+/// left-flanking (with the `_` intraword restriction). See the CommonMark spec,
+/// "Emphasis and strong emphasis".
+fn can_open(d: char, prev: Option<char>, next: Option<char>) -> bool {
+    let lf = left_flanking(prev, next);
+    return match d {
+        '_' => lf && (!right_flanking(prev, next) || opt_is_punct(prev)),
+        _ => lf,
+    };
+}
+
+fn can_close(d: char, prev: Option<char>, next: Option<char>) -> bool {
+    let rf = right_flanking(prev, next);
+    return match d {
+        '_' => rf && (!left_flanking(prev, next) || opt_is_punct(next)),
+        _ => rf,
+    };
+}
+
+fn left_flanking(prev: Option<char>, next: Option<char>) -> bool {
+    return !opt_is_ws(next) && (!opt_is_punct(next) || opt_is_ws(prev) || opt_is_punct(prev));
+}
+
+fn right_flanking(prev: Option<char>, next: Option<char>) -> bool {
+    return !opt_is_ws(prev) && (!opt_is_punct(prev) || opt_is_ws(next) || opt_is_punct(next));
+}
+
+fn opt_char(chars: &List<char>, idx: i32, start: i32, end: i32) -> Option<char> {
+    if start <= idx < end {
+        return Option::Some(chars[idx]);
+    }
     return null;
+}
+
+fn opt_is_ws(o: Option<char>) -> bool {
+    return match o {
+        Some(c) => is_space(c),
+        None => true,
+    };
+}
+
+fn opt_is_punct(o: Option<char>) -> bool {
+    return match o {
+        Some(c) => is_ascii_punct(c),
+        None => false,
+    };
 }
 
 fn run_length(chars: &List<char>, start: i32, d: char) -> i32 {
@@ -238,17 +432,6 @@ fn raw_string(chars: &List<char>, s: i32, e: i32) -> String {
     while k < e {
         out.push(chars[k]);
         k += 1;
-    }
-    return out;
-}
-
-fn first_field(s: &String) -> String {
-    let mut out = String::new();
-    for let c of s.chars() {
-        if c == ' ' || c == '\t' {
-            break;
-        }
-        out.push(c);
     }
     return out;
 }
@@ -327,15 +510,6 @@ fn is_space(c: char) -> bool {
 fn is_ascii_punct(c: char) -> bool {
     let v = c as i32;
     return 33 <= v <= 47 || 58 <= v <= 64 || 91 <= v <= 96 || 123 <= v <= 126;
-}
-
-fn push_escaped(out: &mut String, c: char) {
-    match c {
-        '&' => out.push_str(&"&amp;"),
-        '<' => out.push_str(&"&lt;"),
-        '>' => out.push_str(&"&gt;"),
-        _ => out.push(c),
-    }
 }
 
 fn push_code_char(out: &mut String, c: char) {

@@ -69,3 +69,48 @@ test "render_inline makes a hard break on a trailing backslash" {
 test "render_inline keeps a single trailing space as a soft break" {
     assert render_inline(&"a \nb") == "a \nb";
 }
+
+test "render_inline does not emphasize intraword underscores" {
+    assert render_inline(&"foo_bar_baz") == "foo_bar_baz";
+    assert render_inline(&"5_6_78") == "5_6_78";
+}
+
+test "render_inline emphasizes intraword asterisks" {
+    assert render_inline(&"foo**bar**baz") == "foo<strong>bar</strong>baz";
+}
+
+test "render_inline opens underscore emphasis next to punctuation" {
+    assert render_inline(&"_(foo)_") == "<em>(foo)</em>";
+}
+
+test "render_inline rejects emphasis with inner flanking whitespace" {
+    assert render_inline(&"** notbold **") == "** notbold **";
+    assert render_inline(&"a * b * c") == "a * b * c";
+}
+
+test "render_inline still emphasizes plain underscore words" {
+    assert render_inline(&"_emph_ and _two words_") == "<em>emph</em> and <em>two words</em>";
+}
+
+test "render_inline emits link and image titles" {
+    assert render_inline(&"[home](http://x.test \"Home\")") == "<a href=\"http://x.test\" title=\"Home\">home</a>";
+    assert render_inline(&"![cat](cat.png \"A cat\")") == "<img src=\"cat.png\" alt=\"cat\" title=\"A cat\" />";
+}
+
+test "render_inline nests strong inside emphasis for triple markers" {
+    assert render_inline(&"***bi***") == "<em><strong>bi</strong></em>";
+    assert render_inline(&"a ***b*** c") == "a <em><strong>b</strong></em> c";
+}
+
+test "render_inline resolves adjacent emphasis runs" {
+    assert render_inline(&"**a**b**c**") == "<strong>a</strong>b<strong>c</strong>";
+}
+
+test "render_inline handles strong wrapping emphasis" {
+    assert render_inline(&"**a _b_ c**") == "<strong>a <em>b</em> c</strong>";
+}
+
+test "render_inline leaves an unmatched opener literal" {
+    assert render_inline(&"**bold") == "**bold";
+    assert render_inline(&"foo * bar") == "foo * bar";
+}

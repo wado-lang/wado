@@ -126,3 +126,22 @@ test "render accepts a tab after the hashes" {
 test "render treats an all-hash line as an empty heading" {
     assert render(&"###") == "<h3></h3>";
 }
+
+test "render strips an ATX closing sequence" {
+    assert render(&"## foo ##") == "<h2>foo</h2>";
+    assert render(&"# foo #########") == "<h1>foo</h1>";
+    assert render(&"### bar ###") == "<h3>bar</h3>";
+}
+
+test "render keeps hashes that are not a closing sequence" {
+    assert render(&"# foo#") == "<h1>foo#</h1>";
+    assert render(&"### foo ### b") == "<h3>foo ### b</h3>";
+}
+
+test "render splits lists when the bullet marker changes" {
+    assert render(&"- a\n* b") == "<ul>\n<li>a</li>\n</ul>\n<ul>\n<li>b</li>\n</ul>";
+}
+
+test "render emits an ol start attribute for non-1 first number" {
+    assert render(&"3. three\n4. four") == "<ol start=\"3\">\n<li>three</li>\n<li>four</li>\n</ol>";
+}

@@ -152,16 +152,35 @@ fn heading_level(line: &String) -> i32 {
 }
 
 fn heading_content(line: &String, level: i32) -> String {
-    let mut out = String::new();
+    let mut raw = String::new();
     let mut skipped = 0;
     for let c of line.chars() {
         if skipped < level {
             skipped += 1;
             continue;
         }
-        out.push(c);
+        raw.push(c);
     }
-    return out.trim();
+    return strip_atx_closing(&raw.trim());
+}
+
+fn strip_atx_closing(s: &String) -> String {
+    let chars = to_chars(s);
+    let len = chars.len();
+    let mut e = len;
+    while e > 0 && chars[e - 1] == '#' {
+        e -= 1;
+    }
+    if e == len {
+        return *s;
+    }
+    if e == 0 {
+        return "";
+    }
+    if chars[e - 1] == ' ' || chars[e - 1] == '\t' {
+        return substr(&chars, 0, e).trim();
+    }
+    return *s;
 }
 
 fn is_thematic_break(line: &String) -> bool {
@@ -421,8 +440,15 @@ fn is_list_marker(line: &String) -> bool {
     return parse_list_marker(line) matches { Some(_) };
 }
 
-/// Returns `[indent, content_col, is_ordered]` for a list-item line.
-fn parse_list_marker(line: &String) -> Option<[i32, i32, bool]> {
+struct ListMarker {
+    indent: i32,
+    content_col: i32,
+    ordered: bool,
+    delim: char,
+    number: i32,
+}
+
+fn parse_list_marker(line: &String) -> Option<ListMarker> {
     let chars = to_chars(line);
     let len = chars.len();
     let mut p = 0;
@@ -435,16 +461,20 @@ fn parse_list_marker(line: &String) -> Option<[i32, i32, bool]> {
         return null;
     }
     let c = chars[p];
-    let mut is_ordered = false;
+    let mut ordered = false;
+    let mut delim = c;
+    let mut number = 0;
     if c == '-' || c == '+' || c == '*' {
         p += 1;
     } else if is_digit(c) {
         let mut q = p;
         while q < len && is_digit(chars[q]) {
+            number = number * 10 + (chars[q] as i32 - 48);
             q += 1;
         }
         if q < len && (chars[q] == '.' || chars[q] == ')') {
-            is_ordered = true;
+            ordered = true;
+            delim = chars[q];
             p = q + 1;
         } else {
             return null;
@@ -459,16 +489,20 @@ fn parse_list_marker(line: &String) -> Option<[i32, i32, bool]> {
     if content_col < len && (chars[content_col] == ' ' || chars[content_col] == '\t') {
         content_col += 1;
     }
-    return Option::Some([indent, content_col, is_ordered]);
+    return Option::Some(ListMarker { indent, content_col, ordered, delim, number });
 }
 
 fn render_list(lines: &List<String>, start: i32, end: i32, out: &mut List<String>) -> i32 {
     let mut base_indent = 0;
-    let mut is_ordered = false;
+    let mut ordered = false;
+    let mut base_delim = '-';
+    let mut start_number = 1;
     match parse_list_marker(&lines[start]) {
-        Some([ind, _, ord]) => {
-            base_indent = ind;
-            is_ordered = ord;
+        Some(m) => {
+            base_indent = m.indent;
+            ordered = m.ordered;
+            base_delim = m.delim;
+            start_number = m.number;
         },
         None => {
             return start;
@@ -483,9 +517,9 @@ fn render_list(lines: &List<String>, start: i32, end: i32, out: &mut List<String
         }
         let mut content_col = -1;
         match parse_list_marker(&lines[k]) {
-            Some([ind, cc, ord]) => {
-                if ind == base_indent && ord == is_ordered {
-                    content_col = cc;
+            Some(m) => {
+                if m.indent == base_indent && m.ordered == ordered && m.delim == base_delim {
+                    content_col = m.content_col;
                 }
             },
             None => {
@@ -512,9 +546,14 @@ fn render_list(lines: &List<String>, start: i32, end: i32, out: &mut List<String
         }
     }
 
-    let tag = if is_ordered { "ol" } else { "ul" };
     let joined = items.join("\n");
-    out.push(`<{tag}>\n{joined}\n</{tag}>`);
+    if ordered && start_number != 1 {
+        out.push(`<ol start="{start_number}">\n{joined}\n</ol>`);
+    } else if ordered {
+        out.push(`<ol>\n{joined}\n</ol>`);
+    } else {
+        out.push(`<ul>\n{joined}\n</ul>`);
+    }
     return k;
 }
 
