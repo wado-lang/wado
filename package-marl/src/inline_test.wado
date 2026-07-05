@@ -1,0 +1,54 @@
+use { render_inline } from "./inline.wado";
+
+test "render_inline emits strong and emphasis" {
+    assert render_inline(&"**bold**") == "<strong>bold</strong>";
+    assert render_inline(&"*em*") == "<em>em</em>";
+    assert render_inline(&"_em_") == "<em>em</em>";
+}
+
+test "render_inline emits strikethrough for double tilde only" {
+    assert render_inline(&"~~gone~~") == "<del>gone</del>";
+    assert render_inline(&"a ~ b") == "a ~ b";
+}
+
+test "render_inline nests emphasis inside strong" {
+    assert render_inline(&"**a *b* c**") == "<strong>a <em>b</em> c</strong>";
+}
+
+test "render_inline renders inline code and escapes within it" {
+    assert render_inline(&"`code`") == "<code>code</code>";
+    assert render_inline(&"`a<b & c>`") == "<code>a&lt;b &amp; c&gt;</code>";
+}
+
+test "render_inline matches code span by backtick run length" {
+    assert render_inline(&"`` a`b ``") == "<code>a`b</code>";
+}
+
+test "render_inline renders links with escaped href" {
+    assert render_inline(&"[home](http://example.com)")
+        == "<a href=\"http://example.com\">home</a>";
+}
+
+test "render_inline renders images" {
+    assert render_inline(&"![a cat](cat.png)")
+        == "<img src=\"cat.png\" alt=\"a cat\" />";
+}
+
+test "render_inline renders inline markup inside link text" {
+    assert render_inline(&"[**bold**](/x)")
+        == "<a href=\"/x\"><strong>bold</strong></a>";
+}
+
+test "render_inline honors backslash escapes" {
+    assert render_inline(&"\\*not em\\*") == "*not em*";
+    assert render_inline(&"a \\& b") == "a &amp; b";
+}
+
+test "render_inline leaves unmatched delimiters literal" {
+    assert render_inline(&"a * b") == "a * b";
+    assert render_inline(&"unclosed `code") == "unclosed `code";
+}
+
+test "render_inline escapes plain angle brackets" {
+    assert render_inline(&"1 < 2 && 3 > 2") == "1 &lt; 2 &amp;&amp; 3 &gt; 2";
+}

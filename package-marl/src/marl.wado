@@ -3,7 +3,7 @@
 //! v0.1 slice: ATX headings, paragraphs, thematic breaks. Inline content is
 //! HTML-escaped; richer inline handling arrives with `inline.wado`.
 
-use { escape_text } from "./html.wado";
+use { render_inline } from "./inline.wado";
 
 pub fn render(source: &String) -> String {
     let normalized = source.replace("\r\n", "\n");
@@ -19,7 +19,7 @@ pub fn render(source: &String) -> String {
         if level > 0 {
             flush_paragraph(&mut out, &mut para);
             let content = heading_content(&line, level);
-            out.push(`<h{level}>{escape_text(&content)}</h{level}>`);
+            out.push(`<h{level}>{render_inline(&content)}</h{level}>`);
             continue;
         }
         if is_thematic_break(&line) {
@@ -41,7 +41,7 @@ fn flush_paragraph(out: &mut List<String>, para: &mut String) {
     if para.len() == 0 {
         return;
     }
-    out.push(`<p>{escape_text(para)}</p>`);
+    out.push(`<p>{render_inline(para)}</p>`);
     para.clear();
 }
 
