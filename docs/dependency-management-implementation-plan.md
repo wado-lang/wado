@@ -51,12 +51,15 @@ Closing that loop is the goal.
 - Provider-agnostic fetching: `DependencyProvider` is the source seam. `fetch`
   is the only user-facing acquisition verb; OCI-pull / git-clone / path are
   provider details behind it. No source-specific `wado pull`.
-- Thin, layered subcommands: a pure file-scoped `compile` primitive vs a
+- Thin, layered subcommands: a file-scoped `compile` primitive vs a
   manifest-aware `build` orchestrator, with `run` / `serve` / `test` / `publish`
-  layered on `build`. The dependency machinery lives entirely in the project
-  tier. This taxonomy is specified in the [CLI-subcommands WEP][cli-wep]
-  (Command Tiers); Phase 0 lands it before any dependency wiring so lock / cache
-  / resolve attach to `build`, never to `compile`.
+  layered on `build`. The seam between them is the resolved dependency index,
+  not `wado.toml`: `compile` never _resolves_ (no version solving, no fetch, no
+  lock writing) but does _consume_ a resolved index — the `cargo build` → `rustc
+  --extern` relationship. All resolution/lock/cache machinery lives in the
+  project tier. Specified in the [CLI-subcommands WEP][cli-wep] (Command Tiers);
+  Phase 0 lands it before any dependency wiring so resolution attaches to
+  `build`, never to `compile`.
 - The narrowest end-to-end slice that makes a registry dependency compile is the
   first target; UX commands and advanced resolution follow.
 
@@ -72,12 +75,18 @@ compiles". Phases 5+ are follow-ups, orderable independently.
 
 Establish the primitive/orchestrator boundary before wiring dependencies.
 
-- [ ] Introduce `wado build`: read the manifest, compile each world through the
-      `compile` primitive, embed `[package]` metadata, write `build/<world>.wasm`.
-      Move the current manifest-driven behavior of `compile` here verbatim.
-- [ ] Make `wado compile` a pure file primitive: drop manifest discovery, the
-      `[dependencies]` index, and metadata embedding; keep `-o`, `--wat-to-stdout`,
-      `--no-validate`, `--world`, `--allocator`, `-O*`.
+- [ ] Introduce `wado build`: read the manifest, resolve/lock deps, compile each
+      world through the `compile` primitive with the resolved `DependencyIndex`,
+      embed `[package]` metadata, write `build/<world>.wasm`. Move the current
+      manifest-driven behavior of `compile` here verbatim.
+- [ ] Make `wado compile` do no resolution and no metadata embedding, while
+      still consuming a resolved index (the `with_dependency_index` seam stays).
+      Keep `-o`, `--wat-to-stdout`, `--no-validate`, `--world`, `--allocator`,
+      `-O*`.
+- [ ] Standalone-in-project `wado compile <file>`: assemble the index offline
+      from `wado.lock` (+ path deps read fresh from `wado.toml`); no lock entry
+      for a registry/git dep → error pointing at `wado build` / `wado update`.
+      No project → empty index (`ns:`/`lib:` imports need a `with { … }` source).
 - [ ] Route `run` / `serve` / `test` / `publish` project mode through the shared
       `build` core; a bare-file argument stays on the standalone `compile` path.
 - [x] Specify the split in the [CLI-subcommands WEP][cli-wep] (Command Tiers)

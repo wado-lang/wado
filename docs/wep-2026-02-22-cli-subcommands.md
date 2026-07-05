@@ -27,40 +27,53 @@ wado exec <dep-name> [args...]     # run dependency's command entry point
 ### Command Tiers: `compile` vs `build`
 
 The CLI splits into a file-scoped compiler primitive and a manifest-aware
-project orchestrator. This is where dependency resolution, locking, caching, and
-metadata embedding belong — the primitive stays free of all of it.
+project orchestrator. Dependency _resolution_ — version solving, registry/git
+fetching, lock writing, caching — and metadata embedding belong to the
+orchestrator; the primitive does none of it.
 
 ```
-compile   file.wado → wasm/wat    pure, manifest-free, syscall-light   ← primitive
+compile   file.wado + resolved index → wasm/wat    no resolution, deterministic   ← primitive
    ↑
 build     project → build/<world>.wasm    resolve deps · lock · embed metadata · multi-world   ← orchestrator
    ↑
 run / serve / test / publish      build, then execute / serve / test / push    ← drivers
 ```
 
-- `wado compile <file>` is a pure compiler primitive: no `wado.toml`, no
-  dependencies, no metadata embedding. It is the deterministic path used by
-  tests, the LSP, `--wat-to-stdout`, `--no-validate`, and debugging, and it
-  keeps the compiler agnostic to package management. Precedent: `rustc` vs
-  `cargo build`, `go tool compile` vs `go build`, `zig build-exe` vs `zig build`.
-- `wado build` owns the project tier: read the manifest, resolve/lock
-  dependencies, compile each declared world through the `compile` primitive,
-  embed `[package]` metadata, and write `build/<world>.wasm`. All dependency,
-  lock, and cache machinery lives here — one home.
-- `run` / `serve` / `test` / `publish` share the `build` core in project mode.
-  A bare-file argument (`wado run file.wado`) routes straight through the
-  standalone `compile` primitive instead.
+The seam between the tiers is the resolved dependency index (name → resolved
+module path), not `wado.toml`. `compile` never _resolves_; it _consumes_ an
+already-resolved index — exactly as `cargo build` hands `rustc` its
+`--extern name=path` set rather than making `rustc` resolve. So the primitive
+still sees dependencies and builds real files; it just never does the resolving.
 
-| Tier                  | Commands                                                             | Reads manifest/deps |
-| --------------------- | -------------------------------------------------------------------- | ------------------- |
-| Compiler primitives   | `compile` `check` `dump` `query` `format` `doc` `wit` `syntax` `lsp` | No                  |
-| Project build & run   | `build` `run` `serve` `test` `publish`                               | Yes                 |
-| Dependency management | `add` `remove` `update` `fetch` `list` `exec`                        | Yes                 |
-| Scaffolding           | `init`                                                               | Writes it           |
+- `wado compile <file>` compiles one explicit target against a resolved index,
+  never resolving. Standalone (no project) it uses an empty index, so a
+  dependency import (`ns:pkg` / `lib:nick`) needs a single-file `with { … }`
+  source or it errors. Inside a project it assembles the index offline from
+  `wado.lock` (plus path deps read fresh from `wado.toml`) and compiles the one
+  file; a registry/git dependency with no lock entry is an error pointing at
+  `wado build` / `wado update` (compile still never resolves). This keeps it the
+  deterministic path for tests, the LSP, `--wat-to-stdout`, `--no-validate`, and
+  debugging. Precedent: `rustc` vs `cargo build`, `go tool compile` vs
+  `go build`, `zig build-exe` vs `zig build`.
+- `wado build` owns the project tier: read the manifest, resolve/lock
+  dependencies, compile each declared world through the `compile` primitive with
+  the resolved index, embed `[package]` metadata, and write `build/<world>.wasm`.
+  All dependency, lock, and cache machinery lives here — one home.
+- `run` / `serve` / `test` / `publish` share the `build` core in project mode.
+  A bare-file argument (`wado run file.wado`) routes through the standalone
+  `compile` path instead.
+
+| Tier                  | Commands                                                             | Resolves deps                  |
+| --------------------- | -------------------------------------------------------------------- | ------------------------------ |
+| Compiler primitives   | `compile` `check` `dump` `query` `format` `doc` `wit` `syntax` `lsp` | No (consumes a resolved index) |
+| Project build & run   | `build` `run` `serve` `test` `publish`                               | Yes                            |
+| Dependency management | `add` `remove` `update` `fetch` `list` `exec`                        | Yes                            |
+| Scaffolding           | `init`                                                               | —                              |
 
 This supersedes the earlier model where a bare `wado compile` (no argument or a
 directory) performed the manifest-driven project build. That behavior moves to
-`wado build`; `wado compile` now always compiles a single explicit target.
+`wado build`; `wado compile` now always compiles a single explicit target
+against a resolved index it never computes itself.
 
 ### `wado init`
 
