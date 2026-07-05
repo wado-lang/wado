@@ -371,7 +371,13 @@ pub async fn run(opts: RunOptions) -> Result<(), CliExit> {
         retain_wir: false,
     };
     let cranelift_opt = opts.opt_level.to_wasmtime();
-    let wasm = compile::compile(&opts.input, &flags).await?;
+    // `run` is a driver on the build tier (like `cargo run`): in a project it
+    // builds the cli/command world through the shared build core (metadata
+    // embedded, written to build/), then executes it; a bare file with no
+    // project stays on the in-memory compile primitive.
+    let wasm =
+        crate::build::build_for_driver(&opts.input, "wasi:cli/command", "wasi-cli-command", &flags)
+            .await?;
 
     run_cli_component(
         &wasm,

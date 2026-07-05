@@ -90,10 +90,15 @@ Establish the primitive/orchestrator boundary before wiring dependencies.
       offline from `wado.lock` for registry/git deps; no lock entry → error
       pointing at `wado build` / `wado update`. (Deferred to Phase 3/4 — no
       registry deps exist yet; today only path deps are indexed.)
-- [x] `run` / `serve` resolve the entry via the manifest and call the pure
-      compile core already; `publish` builds each world via the shared
-      `for_world_build` constructor — no manifest-driven `compile` coupling
-      remained to reroute.
+- [x] Make `run` / `serve` build-tier drivers (like `cargo run` / `cargo test`):
+      in a project they build the cli/command or http/service world through the
+      shared build core (`build_for_driver` → `build_world_component`), embedding
+      metadata and writing `build/<world>.wasm`, then execute it; a bare file
+      with no project stays on the in-memory compile primitive. `publish` builds
+      each world via the shared `for_world_build` constructor. This puts every
+      driver on one build core, so Phase 3/4 dependency resolution reaches them
+      uniformly. `test` remains a per-fixture test-world driver; it already
+      shares the compile core's dependency-index seam and needs no reroute.
 - [x] Specify the split in the [CLI-subcommands WEP][cli-wep] (Command Tiers)
       and fix the `wado compile` project-build references in the manifest WEP.
 - [x] Migrate the manifest-driven `wado compile` tests (`cli.rs`,

@@ -202,6 +202,16 @@ export fn run() with Stdout {
         .assert()
         .success()
         .stdout(predicate::str::contains("hello from manifest run"));
+
+    // `run` is a build-tier driver (like `cargo run`): the project build
+    // artifact lands in build/, ready to reuse.
+    assert!(
+        tmp.path()
+            .join("build")
+            .join("wasi-cli-command.wasm")
+            .exists(),
+        "expected `wado run` to build the world artifact into build/"
+    );
 }
 
 #[test]
