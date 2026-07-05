@@ -187,6 +187,15 @@ fix to conform; none should be preserved.
       box resource handles like other replace types, or explicitly reject `&mut`
       of a resource. (`&mut resource` is currently unverified / effectively
       unsupported.)
+- [x] D7 — whole-value `*ref = v` write-back for `List<T>`. An in-place `&mut T`
+      makes `*r = v` a field-wise write-back onto the shared handle, lowered by
+      `try_expand_deref_struct_assign`. That expansion only recognised
+      `ResolvedType::Struct` (`String`, and monomorphized generics like
+      `TreeMap<K,V>`), so `List<T>` — an in-place `GenericInstance` that is never
+      monomorphized into its own struct — fell through and the assignment was
+      silently dropped at every opt level (`*xs = []` was a no-op). Fixed by
+      decomposing `List<T>` through its canonical `SeqField` `{repr, used}` layout
+      with the concrete element type.
 
 ## Consequences
 

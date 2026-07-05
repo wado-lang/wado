@@ -98,7 +98,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         trait_env,
     } = flat;
 
-    // For `try_expand_deref_struct_assign`.
+    // For `try_expand_deref_aggregate_assign`.
     let mut struct_fields_map: IndexMap<
         (String, crate::module_source::ModuleSource),
         Vec<crate::tir::TirField>,
@@ -621,11 +621,13 @@ impl FunctionTranslator<'_, '_> {
         )
     }
 
-    /// Expand `*ref_to_struct = value` (non-Box ref) into field-by-
-    /// field assignments through two fresh temp locals. Box-shaped
-    /// deref-assigns lower as a single statement via the regular
-    /// `try_boxing_rewrite` `Deref` arm.
-    fn try_expand_deref_struct_assign(&self, stmt: &TirStmt) -> Option<Vec<StmtId>> {
+    /// Expand `*ref = value` for an in-place aggregate (non-Box ref) into
+    /// field-by-field assignments through two fresh temp locals — a `struct`
+    /// (`String`) via `struct_fields_map`, or `List<T>` via its `SeqField`
+    /// layout. Box-shaped deref-assigns lower as a single statement via the
+    /// regular `try_boxing_rewrite` `Deref` arm.
+    fn try_expand_deref_aggregate_assign(&self, stmt: &TirStmt) -> Option<Vec<StmtId>> {
+        use crate::compiler_item::SeqField;
         let TirStmtKind::Expr(expr) = &stmt.kind else {
             return None;
         };
@@ -652,21 +654,45 @@ impl FunctionTranslator<'_, '_> {
             _ => return None,
         };
 
-        let (struct_name, struct_module) = if let crate::tir::ResolvedType::Struct {
-            name,
-            module_source,
-            ..
-        } = self.base.type_table.borrow().get(inner_type_id)
-        {
-            (name.clone(), module_source.clone())
-        } else {
-            return None;
+        // The referent must be an in-place aggregate, so `*ref = v` writes each
+        // field of the shared handle. Replace-on-assign referents (variant /
+        // enum / fn) are boxed and were filtered by the `box_type_ids` check
+        // above. Two in-place shapes reach here:
+        //   - a plain `struct` (`String`): fields from `struct_fields_map`.
+        //   - `List<T>`: an in-place `GenericInstance` that is never
+        //     monomorphized into its own struct, so its canonical `{repr, used}`
+        //     layout comes from `SeqField` with the concrete element type.
+        // `(field_name, field_index, field_type)` for each write-back.
+        let inner_resolved = self.base.type_table.borrow().get(inner_type_id).clone();
+        let fields: Vec<(String, u32, tir::TypeId)> = match inner_resolved {
+            crate::tir::ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } => self
+                .base
+                .struct_fields_map
+                .get(&(name, module_source))?
+                .iter()
+                .map(|f| (f.name.clone(), f.index, f.type_id))
+                .collect(),
+            _ => {
+                let elem = self.base.type_table.borrow().as_list(inner_type_id)?;
+                let repr_ty = self.base.type_table.borrow_mut().make_builtin_array(elem);
+                vec![
+                    (
+                        SeqField::Backing.field_name().to_string(),
+                        SeqField::Backing.index(),
+                        repr_ty,
+                    ),
+                    (
+                        SeqField::Len.field_name().to_string(),
+                        SeqField::Len.index(),
+                        crate::tir::TypeTable::I32,
+                    ),
+                ]
+            }
         };
-        let fields = self
-            .base
-            .struct_fields_map
-            .get(&(struct_name, struct_module))?
-            .clone();
         if fields.is_empty() {
             return None;
         }
@@ -708,7 +734,7 @@ impl FunctionTranslator<'_, '_> {
             },
             span,
         ));
-        for field in &fields {
+        for (field_name, field_index, field_type) in &fields {
             let ref_local = self.alloc_expr(
                 ExprKind::Local {
                     index: ref_idx,
@@ -728,19 +754,19 @@ impl FunctionTranslator<'_, '_> {
             let target_field = self.alloc_expr(
                 ExprKind::FieldAccess {
                     expr: ref_local.into(),
-                    field_index: field.index,
-                    field_name: field.name.clone(),
+                    field_index: *field_index,
+                    field_name: field_name.clone(),
                 },
-                field.type_id,
+                *field_type,
                 span,
             );
             let value_field = self.alloc_expr(
                 ExprKind::FieldAccess {
                     expr: val_local.into(),
-                    field_index: field.index,
-                    field_name: field.name.clone(),
+                    field_index: *field_index,
+                    field_name: field_name.clone(),
                 },
-                field.type_id,
+                *field_type,
                 span,
             );
             let assign = self.alloc_expr(
@@ -748,7 +774,7 @@ impl FunctionTranslator<'_, '_> {
                     target: target_field,
                     value: value_field.into(),
                 },
-                field.type_id,
+                *field_type,
                 span,
             );
             out.push(self.alloc_stmt(StmtKind::Expr(assign.into()), span));
@@ -832,7 +858,7 @@ impl FunctionTranslator<'_, '_> {
     fn convert_block(&self, block: &TirBlock) -> BlockId {
         let mut stmts: Vec<StmtId> = Vec::with_capacity(block.stmts.len());
         for s in &block.stmts {
-            if let Some(expanded) = self.try_expand_deref_struct_assign(s) {
+            if let Some(expanded) = self.try_expand_deref_aggregate_assign(s) {
                 stmts.extend(expanded);
             } else {
                 stmts.push(self.convert_stmt(s));
