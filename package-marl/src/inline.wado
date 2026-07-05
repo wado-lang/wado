@@ -15,10 +15,18 @@ pub fn render_inline(text: &String) -> String {
     return render_range(StrCursor::over(&chars));
 }
 
-/// An inline token. `kind` is 0 for literal text (escaped on serialize), 1 for
-/// final HTML emitted verbatim, and 2 for a `*`/`_`/`~` delimiter run.
+/// An inline token kind.
+enum TokKind {
+    /// Literal text, HTML-escaped on serialize.
+    Text,
+    /// Final HTML emitted verbatim.
+    Html,
+    /// A `*`/`_`/`~` delimiter run.
+    Delim,
+}
+
 struct Tok {
-    kind: i32,
+    kind: TokKind,
     text: String,
     ch: char,
     count: i32,
@@ -96,7 +104,7 @@ fn flush_text(buf: &mut String, toks: &mut List<Tok>) {
     // the latter is miscompiled at -O2 (wado-lang/wado#1522).
     let mut text = String::new();
     text.push_str(buf);
-    toks.push(Tok { kind: 0, text, ch: ' ', count: 0, orig: 0, open: false, close: false });
+    toks.push(Tok { kind: TokKind::Text, text, ch: ' ', count: 0, orig: 0, open: false, close: false });
     buf.clear();
 }
 
@@ -136,7 +144,7 @@ fn push_delim(cur: &StrCursor, i: i32, d: char, toks: &mut List<Tok>) -> i32 {
     let prev = cur.at(i - 1);
     let next = cur.at(i + n);
     toks.push(Tok {
-        kind: 2,
+        kind: TokKind::Delim,
         text: "",
         ch: d,
         count: n,
@@ -155,7 +163,7 @@ fn process_emphasis(toks: &mut List<Tok>) {
     let mut ci = 0;
     while ci < toks.len() {
         let closer = toks[ci];
-        if closer.kind == 2 && closer.close && closer.count > 0 {
+        if closer.kind == TokKind::Delim && closer.close && closer.count > 0 {
             let oi = find_opener(toks, ci);
             if oi >= 0 {
                 ci = resolve_pair(toks, oi, ci);
@@ -173,7 +181,7 @@ fn find_opener(toks: &List<Tok>, ci: i32) -> i32 {
     let mut oi = ci - 1;
     while oi >= 0 {
         let opener = toks[oi];
-        let ok = opener.kind == 2 && opener.open && opener.count > 0 && opener.ch == closer.ch;
+        let ok = opener.kind == TokKind::Delim && opener.open && opener.count > 0 && opener.ch == closer.ch;
         if ok && rule_of_three(&opener, &closer) {
             return oi;
         }
@@ -204,7 +212,7 @@ fn resolve_pair(toks: &mut List<Tok>, oi: i32, ci: i32) -> i32 {
     let mut bi = oi + 1;
     while bi < ci {
         let mut between = toks[bi];
-        if between.kind == 2 {
+        if between.kind == TokKind::Delim {
             between.open = false;
             between.close = false;
             toks[bi] = between;
@@ -227,16 +235,16 @@ fn resolve_pair(toks: &mut List<Tok>, oi: i32, ci: i32) -> i32 {
 }
 
 fn raw_tok(html: String) -> Tok {
-    return Tok { kind: 1, text: html, ch: ' ', count: 0, orig: 0, open: false, close: false };
+    return Tok { kind: TokKind::Html, text: html, ch: ' ', count: 0, orig: 0, open: false, close: false };
 }
 
 fn serialize(toks: &List<Tok>) -> String {
     let mut out = String::new();
     for let t of toks {
         match t.kind {
-            0 => out.push_str(&escape_text(&t.text)),
-            1 => out.push_str(&t.text),
-            _ => {
+            Text => out.push_str(&escape_text(&t.text)),
+            Html => out.push_str(&t.text),
+            Delim => {
                 let mut r = 0;
                 while r < t.count {
                     out.push(t.ch);

@@ -26,23 +26,23 @@ fn read_posts(root: &Descriptor) -> List<Post> with Stderr {
             return posts;
         },
     };
-    let names = read_dir_names(&content);
-    for let mut i = 0; i < names.len(); i += 1 {
-        let name = names[i];
-        if !name.ends_with(".md") {
-            continue;
-        }
-        match read_file(&content, name) {
-            Some(source) => match build(strip_ext(&name), &source) {
-                Ok(post) => {
-                    posts.push(post);
+    for let name of read_dir_names(&content) {
+        match name.strip_suffix(".md") {
+            Some(slug) => match read_file(&content, name) {
+                Some(source) => match build(slug, &source) {
+                    Ok(post) => {
+                        posts.push(post);
+                    },
+                    Err(e) => {
+                        eprintln(`sheaf: {name}: {e}`);
+                    },
                 },
-                Err(e) => {
-                    eprintln(`sheaf: {name}: {e}`);
+                None => {
+                    eprintln(`sheaf: cannot read {name}`);
                 },
             },
             None => {
-                eprintln(`sheaf: cannot read {name}`);
+                // Not a Markdown file; skip.
             },
         }
     }
@@ -58,13 +58,12 @@ fn write_site(root: &Descriptor, files: &List<SiteFile>) with Stderr {
         DescriptorFlags::Read | DescriptorFlags::MutateDirectory,
     ).wait() {
         Ok(d) => d,
-        Err(_) => {
-            eprintln("sheaf: cannot open _site/ directory");
+        Err(e) => {
+            eprintln(`sheaf: cannot open _site/: {e:?}`);
             return;
         },
     };
-    for let mut i = 0; i < files.len(); i += 1 {
-        let f = files[i];
+    for let f of files {
         if !write_file(&site, f.path, &f.content) {
             eprintln(`sheaf: cannot write {f.path}`);
         }
@@ -111,10 +110,7 @@ fn read_file(dir: &Descriptor, path: String) -> Option<String> {
             }
             stream.drop();
             done.drop();
-            match String::from_utf8(bytes) {
-                Ok(s) => Option::Some(s),
-                Err(_) => null,
-            }
+            Option::Some(String::from_utf8_lossy(bytes));
         },
         Err(_) => null,
     };
@@ -138,19 +134,4 @@ fn write_file(dir: &Descriptor, path: String, content: &String) -> bool {
         },
         Err(_) => false,
     };
-}
-
-fn strip_ext(name: &String) -> String {
-    let mut chars: List<char> = [];
-    for let c of name.chars() {
-        chars.push(c);
-    }
-    let keep = chars.len() - 3;
-    let mut out = String::new();
-    let mut i = 0;
-    while i < keep {
-        out.push(chars[i]);
-        i += 1;
-    }
-    return out;
 }
