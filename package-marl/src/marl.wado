@@ -55,6 +55,11 @@ fn render_blocks(lines: &List<String>, start: i32, end: i32) -> String {
             i = render_blockquote(lines, i, end, &mut out);
             continue;
         }
+        if is_list_marker(&line) {
+            flush_paragraph(&mut out, &mut para);
+            i = render_list(lines, i, end, &mut out);
+            continue;
+        }
         para.push(line);
         i += 1;
     }
@@ -257,6 +262,153 @@ fn strip_blockquote_marker(line: &String) -> String {
         }
     }
     return substr(&chars, p, len);
+}
+
+fn is_list_marker(line: &String) -> bool {
+    return parse_list_marker(line) matches { Some(_) };
+}
+
+/// Returns `[indent, content_col, is_ordered]` for a list-item line.
+fn parse_list_marker(line: &String) -> Option<[i32, i32, bool]> {
+    let chars = to_chars(line);
+    let len = chars.len();
+    let mut p = 0;
+    let mut indent = 0;
+    while p < len && chars[p] == ' ' {
+        indent += 1;
+        p += 1;
+    }
+    if p >= len {
+        return null;
+    }
+    let c = chars[p];
+    let mut is_ordered = false;
+    if c == '-' || c == '+' || c == '*' {
+        p += 1;
+    } else if is_digit(c) {
+        let mut q = p;
+        while q < len && is_digit(chars[q]) {
+            q += 1;
+        }
+        if q < len && (chars[q] == '.' || chars[q] == ')') {
+            is_ordered = true;
+            p = q + 1;
+        } else {
+            return null;
+        }
+    } else {
+        return null;
+    }
+    if p < len && chars[p] != ' ' && chars[p] != '\t' {
+        return null;
+    }
+    let mut content_col = p;
+    if content_col < len && (chars[content_col] == ' ' || chars[content_col] == '\t') {
+        content_col += 1;
+    }
+    return Option::Some([indent, content_col, is_ordered]);
+}
+
+fn render_list(lines: &List<String>, start: i32, end: i32, out: &mut List<String>) -> i32 {
+    let mut base_indent = 0;
+    let mut is_ordered = false;
+    match parse_list_marker(&lines[start]) {
+        Some([ind, _, ord]) => {
+            base_indent = ind;
+            is_ordered = ord;
+        },
+        None => {
+            return start;
+        },
+    }
+
+    let mut items: List<String> = [];
+    let mut k = start;
+    loop {
+        if k >= end || is_blank(&lines[k]) {
+            break;
+        }
+        let mut content_col = -1;
+        match parse_list_marker(&lines[k]) {
+            Some([ind, cc, ord]) => {
+                if ind == base_indent && ord == is_ordered {
+                    content_col = cc;
+                }
+            },
+            None => {},
+        }
+        if content_col < 0 {
+            break;
+        }
+
+        let mut inner: List<String> = [];
+        inner.push(cut_prefix(&lines[k], content_col));
+        k += 1;
+        while k < end && !is_blank(&lines[k]) && line_indent(&lines[k]) >= content_col {
+            inner.push(dedent(&lines[k], content_col));
+            k += 1;
+        }
+
+        let body = render_blocks(&inner, 0, inner.len());
+        let tight = tighten(&body);
+        if tight == body {
+            items.push(`<li>\n{body}\n</li>`);
+        } else {
+            items.push(`<li>{tight}</li>`);
+        }
+    }
+
+    let tag = if is_ordered {
+        "ol"
+    } else {
+        "ul"
+    };
+    let joined = items.join("\n");
+    out.push(`<{tag}>\n{joined}\n</{tag}>`);
+    return k;
+}
+
+fn tighten(html: &String) -> String {
+    if html.starts_with("<p>") && html.ends_with("</p>") {
+        let chars = to_chars(html);
+        let inner = substr(&chars, 3, chars.len() - 4);
+        if !inner.contains("<p>") {
+            return inner;
+        }
+    }
+    return *html;
+}
+
+fn cut_prefix(line: &String, n: i32) -> String {
+    let chars = to_chars(line);
+    return substr(&chars, n, chars.len());
+}
+
+fn dedent(line: &String, n: i32) -> String {
+    let chars = to_chars(line);
+    let len = chars.len();
+    let mut p = 0;
+    while p < len && p < n && chars[p] == ' ' {
+        p += 1;
+    }
+    return substr(&chars, p, len);
+}
+
+fn line_indent(line: &String) -> i32 {
+    let mut n = 0;
+    for let c of line.chars() {
+        if c == ' ' {
+            n += 1;
+        } else {
+            break;
+        }
+    }
+    return n;
+}
+
+fn is_digit(c: char) -> bool {
+    let v = c as i32;
+    return v >= 48 && v <= 57;
 }
 
 fn to_chars(line: &String) -> List<char> {
