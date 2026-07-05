@@ -640,13 +640,12 @@ fn element_first_has_lr(elem: &Element, lr_first: &List<String>) -> bool {
         Not(_) => true,
         Repeat(rep) => element_first_has_lr(&rep.element, lr_first),
         Group(g) => {
-            let mut found = false;
             for let alt of &g.alternatives {
                 if elements_seq_first_has_lr(&alt.elements, 0, lr_first, false) {
-                    found = true;
+                    return true;
                 }
             }
-            found;
+            false;
         },
         Label(lab) => element_first_has_lr(&lab.element, lr_first),
     };
@@ -666,13 +665,12 @@ fn element_nullable(elem: &Element) -> bool {
             RepeatKind::Plus => element_nullable(&rep.element),
         },
         Group(g) => {
-            let mut any_nullable = false;
             for let alt of &g.alternatives {
                 if elements_all_nullable(&alt.elements) {
-                    any_nullable = true;
+                    return true;
                 }
             }
-            any_nullable;
+            false;
         },
         Label(lab) => element_nullable(&lab.element),
     };
@@ -706,8 +704,7 @@ fn elements_seq_first_has_lr(elements: &List<Element>, idx: i32, lr_first: &List
 /// True iff `elem` contains a self-reference to `rule_name` anywhere —
 /// including nested inside a Group / Repeat / Not / Label. Used to detect
 /// a nested self-ref in an LR suffix (the top-level case is
-/// `element_is_self_ref`). Flag-based walk (no early `break`/`return` inside
-/// the nested loop) to sidestep a known compiler codegen ICE.
+/// `element_is_self_ref`).
 fn element_contains_self_ref(elem: &Element, rule_name: &String) -> bool {
     return match *elem {
         RuleRef(rr) => rr.name == *rule_name,
@@ -715,16 +712,14 @@ fn element_contains_self_ref(elem: &Element, rule_name: &String) -> bool {
         Repeat(rep) => element_contains_self_ref(&rep.element, rule_name),
         Not(n) => element_contains_self_ref(&n.element, rule_name),
         Group(g) => {
-            let mut found = false;
-            for let mut i = 0; i < g.alternatives.len(); i += 1 {
-                let alt = &g.alternatives[i];
-                for let mut j = 0; j < alt.elements.len(); j += 1 {
-                    if element_contains_self_ref(&alt.elements[j], rule_name) {
-                        found = true;
+            for let alt of &g.alternatives {
+                for let inner of &alt.elements {
+                    if element_contains_self_ref(inner, rule_name) {
+                        return true;
                     }
                 }
             }
-            found;
+            false;
         },
         _ => false,
     };

@@ -858,19 +858,14 @@ fn op_subtree_contains_self_ref(op: &Op, rule_name: &String) -> bool {
         ListLabel(ll) => op_subtree_contains_self_ref(&ll.inner, rule_name),
         Repeat(r) => op_subtree_contains_self_ref(&r.body, rule_name),
         Group(g) => {
-            let mut found = false;
             for let alt of &g.alts {
                 for let inner of &alt.ops {
                     if op_subtree_contains_self_ref(inner, rule_name) {
-                        found = true;
-                        break;
+                        return true;
                     }
                 }
-                if found {
-                    break;
-                }
             }
-            found;
+            false;
         },
         Token(_) => false,
         Literal(_) => false,
@@ -911,13 +906,12 @@ fn op_first_has_lr(op: &Op, lr_first: &List<String>) -> bool {
         Excluded(_) => true,
         Repeat(r) => op_first_has_lr(&r.body, lr_first),
         Group(g) => {
-            let mut found = false;
             for let alt of &g.alts {
                 if seq_first_has_lr(&alt.ops, 0, lr_first, false) {
-                    found = true;
+                    return true;
                 }
             }
-            found;
+            false;
         },
         ListLabel(ll) => op_first_has_lr(&ll.inner, lr_first),
     };
@@ -937,13 +931,12 @@ fn op_nullable(op: &Op) -> bool {
             RepeatKind::Plus => op_nullable(&r.body),
         },
         Group(g) => {
-            let mut any_nullable = false;
             for let alt of &g.alts {
                 if seq_all_nullable(&alt.ops) {
-                    any_nullable = true;
+                    return true;
                 }
             }
-            any_nullable;
+            false;
         },
         ListLabel(ll) => op_nullable(&ll.inner),
     };
@@ -1055,23 +1048,21 @@ fn scan_first_has_lr(se: &ScanElement, lr_first: &List<String>) -> bool {
         Excluded(_) => true,
         Repeat(r) => scan_first_has_lr(&r.body, lr_first),
         Group(g) => {
-            let mut found = false;
             for let alt of &g.alts {
                 if scan_seq_first_has_lr(&alt.elements, 0, lr_first, false) {
-                    found = true;
+                    return true;
                 }
             }
-            found;
+            false;
         },
         // `?`-over-group: its body's FIRST.
         OptionalLookahead(ole) => {
-            let mut found = false;
             for let body of &ole.bodies {
                 if scan_seq_first_has_lr(&body.elements, 0, lr_first, false) {
-                    found = true;
+                    return true;
                 }
             }
-            found;
+            false;
         },
     };
 }
@@ -1089,13 +1080,12 @@ fn scan_nullable(se: &ScanElement) -> bool {
             RepeatKind::Plus => scan_nullable(&r.body),
         },
         Group(g) => {
-            let mut any_nullable = false;
             for let alt of &g.alts {
                 if scan_seq_all_nullable(&alt.elements) {
-                    any_nullable = true;
+                    return true;
                 }
             }
-            any_nullable;
+            false;
         },
         // `?`-over-group is itself optional.
         OptionalLookahead(_) => true,
