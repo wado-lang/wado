@@ -102,7 +102,7 @@ fn swallow_trailing_call(chars: &List<char>, end: i32) -> i32 {
 /// The actual local a `$ref` binds to: the post-dedup binding (so `e_2` resolves
 /// correctly), falling back to `base` when the reference is not in the map.
 fn binding_for(bindings: &List<[bool, String, String]>, is_token: bool, base: &String) -> String {
-    return match bindings.iter().find(|b: [bool, String, String]| b.0 == is_token && b.1 == *base) {
+    return match bindings.iter().find(|b: &[bool, String, String]| b.0 == is_token && b.1 == *base) {
         Some(b) => b.2,
         None => *base,
     };

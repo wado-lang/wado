@@ -388,9 +388,12 @@ impl List<T> {
         return ArraySlice::internal_new(&self.repr, 0, self.used);
     }
 
-    /// Returns a by-value iterator over the list's elements.
-    pub fn iter(&self) -> ArrayIter<T> {
-        return ArrayIter::internal_new(&self.repr, 0, self.used);
+    /// Returns an iterator over references to the list's elements (`&T`),
+    /// mirroring Rust's `iter()`. For owned values use `into_iter()` or
+    /// `for let x of list` (both yield `T`); to turn a reference iterator back
+    /// into values, chain `copied()`.
+    pub fn iter(&self) -> ArrayRefIter<T> {
+        return ArrayRefIter::internal_new(&self.repr, 0, self.used);
     }
 
     /// Returns an iterator over overlapping windows of `size` consecutive

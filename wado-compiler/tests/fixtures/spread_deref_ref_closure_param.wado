@@ -1,0 +1,19 @@
+// Regression: a functional-update spread over a dereferenced reference
+// (`S { ..*s }`) where `s` is a closure parameter of type `&S` must copy the
+// referenced struct's fields, not trap. Exposed by `list.iter().map(|s: &S|
+// S { ..*s, ... })` over a by-reference iterator; field access through the same
+// `&S` closure param works, only the spread base traps.
+
+struct S {
+    a: i32,
+    b: i32,
+    c: i32,
+}
+
+test "spread over a dereferenced &S closure parameter" {
+    let xs: List<S> = [S { a: 1, b: 2, c: 3 }, S { a: 4, b: 5, c: 6 }];
+    let ys: List<S> = xs.iter().map(|s: &S| S { ..*s, b: s.b + 10 }).collect();
+    assert ys.len() == 2;
+    assert ys[0].a == 1 && ys[0].b == 12 && ys[0].c == 3;
+    assert ys[1].a == 4 && ys[1].b == 15 && ys[1].c == 6;
+}

@@ -408,7 +408,7 @@ fn fragment_elem_refs_self(
             if name == *target {
                 return true;
             }
-            if visited.iter().any(|v: String| v == name) {
+            if visited.iter().any(|v: &String| *v == name) {
                 return false;
             }
             visited.push(name);
@@ -1793,7 +1793,7 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
         // Check if this group already exists
         let mut merged = false;
         for let g of &mut groups {
-            if arrays_equal(&g.calls, &matching) {
+            if g.calls == matching {
                 // Add char to existing group's guard
                 g.guard.push_str(&` || first_char == {char_lit(*c)}`);
                 merged = true;
@@ -1945,18 +1945,6 @@ fn gen_group_calls(w: &mut CodeWriter, calls: &List<TryCall>, indices: &List<i32
             w.line(&`if end > best_end \{ best_end = end; best_kind = {call.token_kind}; \}`);
         }
     }
-}
-
-fn arrays_equal(a: &List<i32>, b: &List<i32>) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    for let mut i = 0; i < a.len(); i += 1 {
-        if a[i] != b[i] {
-            return false;
-        }
-    }
-    return true;
 }
 
 fn gen_tokenize_fn(
@@ -2153,12 +2141,9 @@ fn gen_tokenize_fn(
         w.line(&"let tok_start = start;");
     }
 
-    let mut skip_names: List<String> = [];
-    for let rule of lexer_rules {
-        if rule.skip {
-            skip_names.push(`TK_{rule.name}`);
-        }
-    }
+    let skip_names: List<String> = lexer_rules.iter().filter(|rule: &LexerRule| rule.skip).map(
+        |rule: &LexerRule| `TK_{rule.name}`,
+    ).collect();
     if skip_names.is_empty() {
         w.line(&"let is_skip = false;");
     } else {

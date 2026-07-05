@@ -104,23 +104,19 @@ impl G4Lexer {
     fn read_string_escape(&mut self, text: &mut List<char>) {
         let ec = self.chars[self.pos];
         self.pos += 1;
-        if ec == 'u' {
-            let mut p = self.pos;
-            let ch = resolve_unicode_escape(self.chars, &mut p);
-            self.pos = p;
-            text.push(ch);
-        } else if ec == 'n' {
-            text.push('\n');
-        } else if ec == 'r' {
-            text.push('\r');
-        } else if ec == 't' {
-            text.push('\t');
-        } else if ec == 'b' {
-            text.push('\u0008');
-        } else if ec == 'f' {
-            text.push('\u000C');
-        } else {
-            text.push(ec);
+        match ec {
+            'u' => {
+                let mut p = self.pos;
+                let ch = resolve_unicode_escape(self.chars, &mut p);
+                self.pos = p;
+                text.push(ch);
+            },
+            'n' => text.push('\n'),
+            'r' => text.push('\r'),
+            't' => text.push('\t'),
+            'b' => text.push('\u0008'),
+            'f' => text.push('\u000C'),
+            _ => text.push(ec),
         }
     }
 
