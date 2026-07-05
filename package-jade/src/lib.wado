@@ -1,0 +1,239 @@
+//! Jade — JSON Schema for Wado (minimal: the Schema document model).
+//!
+//! Capability A of the Jade design (see `docs/wep-2026-06-13-jade.md`): a typed
+//! model of a JSON Schema (Draft 2020-12) document that serializes to JSON or
+//! CBOR. This is the subset used to describe Kiln generator options (see the
+//! Kiln WEP): objects, primitives, string enums, `required`, `default`,
+//! `additionalProperties`.
+//!
+//! Type→schema derivation (capability B) waits on `Reflect`; schema→value
+//! validation (capability C) is future work. For now a schema is built
+//! explicitly and emitted; the shape here is the one canonical definition
+//! producers and consumers agree on.
+
+use { Serialize, SerializeError, Serializer } from "core:serde";
+use { Value } from "core:value";
+use { TreeMap } from "core:collections";
+use { to_string } from "core:json";
+
+/// A JSON Schema `type` keyword: one type name (`"string"`) or a union
+/// including null (`["string", "null"]` for an optional field).
+pub variant TypeSet {
+    One(String),
+    Many(List<String>),
+}
+
+impl Serialize for TypeSet {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return match self {
+            One(name) => s.serialize_string(name),
+            Many(names) => {
+                let seq = s.begin_seq(names.len())?;
+                for let n of names {
+                    seq.element(n)?;
+                }
+                seq.end()
+            },
+        };
+    }
+}
+
+/// A JSON Schema (Draft 2020-12) document — the subset Jade needs to describe
+/// option structs. Absent fields (`None` / empty collections) are omitted on
+/// serialize, so the emitted schema stays idiomatic (no `"minimum": null`).
+pub struct Schema {
+    /// `$schema` — set on a root schema only.
+    pub dialect: Option<String> = null,
+    /// `type`
+    pub type_: Option<TypeSet> = null,
+    /// `properties` (object schemas)
+    pub properties: TreeMap<String, Schema> = TreeMap::new(),
+    /// `required` (property names without a default)
+    pub required: List<String> = [],
+    /// `additionalProperties`
+    pub additional_properties: Option<bool> = null,
+    /// `enum` (allowed values, e.g. string variants)
+    pub enum_: List<Value> = [],
+    /// `default`
+    pub default_: Option<Value> = null,
+    /// `format` (e.g. an integer width hint)
+    pub format: Option<String> = null,
+    /// `minimum`
+    pub minimum: Option<f64> = null,
+    /// `maximum`
+    pub maximum: Option<f64> = null,
+    /// `title`
+    pub title: Option<String> = null,
+    /// `description`
+    pub description: Option<String> = null,
+}
+
+impl Schema {
+    /// The `$schema` dialect Jade emits.
+    pub const DRAFT: String = "https://json-schema.org/draft/2020-12/schema";
+
+    /// An object schema with `additionalProperties: false`.
+    pub fn object() -> Schema {
+        return Schema {
+            type_: Option::Some(TypeSet::One("object")),
+            additional_properties: Option::Some(false),
+        };
+    }
+
+    pub fn boolean() -> Schema {
+        return Schema { type_: Option::Some(TypeSet::One("boolean")) };
+    }
+
+    pub fn string() -> Schema {
+        return Schema { type_: Option::Some(TypeSet::One("string")) };
+    }
+
+    pub fn integer() -> Schema {
+        return Schema { type_: Option::Some(TypeSet::One("integer")) };
+    }
+
+    pub fn number() -> Schema {
+        return Schema { type_: Option::Some(TypeSet::One("number")) };
+    }
+
+    /// Mark this the root schema by stamping `$schema`.
+    pub fn as_root(&mut self) {
+        self.dialect = Option::Some(Schema::DRAFT);
+    }
+
+    /// Add a property named `name` with schema `schema`.
+    pub fn property(&mut self, name: String, schema: Schema) {
+        self.properties[name] = schema;
+    }
+
+    /// Mark `name` a required property.
+    pub fn require(&mut self, name: String) {
+        self.required.push(name);
+    }
+
+    /// Set the `default` keyword.
+    pub fn set_default(&mut self, value: Value) {
+        self.default_ = Option::Some(value);
+    }
+}
+
+impl Serialize for Schema {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let mut n = 0;
+        if self.dialect matches { Some(_) } {
+            n += 1;
+        }
+        if self.type_ matches { Some(_) } {
+            n += 1;
+        }
+        if !self.properties.is_empty() {
+            n += 1;
+        }
+        if !self.required.is_empty() {
+            n += 1;
+        }
+        if self.additional_properties matches { Some(_) } {
+            n += 1;
+        }
+        if !self.enum_.is_empty() {
+            n += 1;
+        }
+        if self.default_ matches { Some(_) } {
+            n += 1;
+        }
+        if self.format matches { Some(_) } {
+            n += 1;
+        }
+        if self.minimum matches { Some(_) } {
+            n += 1;
+        }
+        if self.maximum matches { Some(_) } {
+            n += 1;
+        }
+        if self.title matches { Some(_) } {
+            n += 1;
+        }
+        if self.description matches { Some(_) } {
+            n += 1;
+        }
+
+        let m = s.begin_map(n)?;
+        if let Some(d) = &self.dialect {
+            m.key(&"$schema")?;
+            m.value(d)?;
+        }
+        if let Some(t) = &self.type_ {
+            m.key(&"type")?;
+            m.value(t)?;
+        }
+        if !self.properties.is_empty() {
+            m.key(&"properties")?;
+            m.value(&self.properties)?;
+        }
+        if !self.required.is_empty() {
+            m.key(&"required")?;
+            m.value(&self.required)?;
+        }
+        if let Some(ap) = &self.additional_properties {
+            m.key(&"additionalProperties")?;
+            m.value(ap)?;
+        }
+        if !self.enum_.is_empty() {
+            m.key(&"enum")?;
+            m.value(&self.enum_)?;
+        }
+        if let Some(v) = &self.default_ {
+            m.key(&"default")?;
+            m.value(v)?;
+        }
+        if let Some(f) = &self.format {
+            m.key(&"format")?;
+            m.value(f)?;
+        }
+        if let Some(mn) = &self.minimum {
+            m.key(&"minimum")?;
+            m.value(mn)?;
+        }
+        if let Some(mx) = &self.maximum {
+            m.key(&"maximum")?;
+            m.value(mx)?;
+        }
+        if let Some(t) = &self.title {
+            m.key(&"title")?;
+            m.value(t)?;
+        }
+        if let Some(d) = &self.description {
+            m.key(&"description")?;
+            m.value(d)?;
+        }
+        return m.end();
+    }
+}
+
+test "gale-style options object serializes to idiomatic JSON Schema" {
+    // { highlight: bool (required), trace: bool = false }
+    let mut root = Schema::object();
+    root.as_root();
+    root.property("highlight", Schema::boolean());
+    let mut trace = Schema::boolean();
+    trace.set_default(Value::Bool(false));
+    root.property("trace", trace);
+    root.require("highlight");
+
+    let json = to_string(&root).unwrap();
+    assert json == `\{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":\{"highlight":\{"type":"boolean"\},"trace":\{"type":"boolean","default":false\}\},"required":["highlight"],"additionalProperties":false\}`;
+}
+
+test "absent fields are omitted" {
+    let json = to_string(&Schema::boolean()).unwrap();
+    assert json == `\{"type":"boolean"\}`;
+}
+
+test "nullable string via a type union" {
+    let schema = Schema {
+        type_: Option::Some(TypeSet::Many(["string", "null"])),
+        default_: Option::Some(Value::Null),
+    };
+    let json = to_string(&schema).unwrap();
+    assert json == `\{"type":["string","null"],"default":null\}`;
+}

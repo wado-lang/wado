@@ -233,9 +233,18 @@ one from a **local path** today (`example/hello-packages` uses
 - [ ] Run a prebuilt generator component. The Kiln pipeline compiles
       `GeneratorModule::LocalPath` from source; add a "run these component bytes"
       path and implement the deferred `GeneratorModule::Spec("ns:name@ver")`.
-- [ ] Recover the generator's `OptionsDescriptor` from a prebuilt component
-      (embedded section, or an empty-options fast path), since Kiln currently
-      extracts it from generator source.
+- [x] Decided how a prebuilt generator carries its options schema: the
+      `core:kiln/generator` world gains `describe-options: func() -> list<u8>`
+      returning a JSON Schema (Draft 2020-12 subset), CBOR-encoded — shape is
+      [Jade](./wep-2026-06-13-jade.md)'s `Schema`, wire is CBOR. Language-agnostic
+      (any CM host reads a standard schema); see the
+      [Kiln WEP](./wep-2026-04-12-kiln.md) "Options introspection".
+- [x] `package-jade` minimal (Jade capability A: the `Schema` document model +
+      JSON/CBOR serialize) exists and is a workspace member.
+- [ ] Add the `describe-options` export: compiler synthesizes it from the
+      source-extracted `OptionsDescriptor` → `package-jade` `Schema` → CBOR; the
+      consumer validates options against a decoded schema. Republish gale under
+      the new world (existing 0.0.x predate the export).
 - [ ] Reconcile the `[build-dependencies]` bare-key deprecation: `module: "gale"`
       resolves only a bare `"gale"` key, but the manifest validator deprecates
       bare keys in favor of coordinates / `lib:` nicknames the lookup rejects.
