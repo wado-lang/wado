@@ -151,10 +151,7 @@ fn add_arg_params(f: &mut FnSpec, rule: &ParserRule, ctx: &GenContext) {
         return;
     }
     for let a of &rule.args {
-        let def = match wado_type_default(&a.type_text) {
-            Some(v) => v,
-            None => panic("add_arg_params: rule_threads_args/wado_type_default disagree"),
-        };
+        let def = wado_type_default(&a.type_text).expect("add_arg_params: rule_threads_args/wado_type_default disagree");
         f.add_param_spec(ParamSpec {
             name: arg_param_name(&a.name),
             type_str: a.type_text.trim(),
@@ -582,10 +579,7 @@ fn gen_vals_fields(w: &mut CodeWriter, decls: &List<AttrDecl>) {
         if !field_in_vals(d) {
             continue;
         }
-        let def = match wado_type_default(&d.type_text) {
-            Some(v) => v,
-            None => panic("gen_vals_fields: field_in_vals/wado_type_default disagree"),
-        };
+        let def = wado_type_default(&d.type_text).expect("gen_vals_fields: field_in_vals/wado_type_default disagree");
         w.line(&`{d.name}: {d.type_text} = {def},`);
     }
 }
@@ -2143,135 +2137,118 @@ fn gen_scan_op_element(
     fail_stmt: &String,
     min_prec_override: i32 = 0,
 ) {
-    if let Token(t) = se {
-        w.line(&`if pos >= tokens.len() || tokens[pos] != {t.kind} \{ {*fail_stmt} \}`);
-        w.line(&"pos += 1;");
-        return;
-    }
-    if let RuleCall(rc) = se {
-        // Single scan callee + runtime FOLLOW arg.
-        let fn_name = `scan_{rc.target_snake}`;
-        let follow_arg_str = follow_arg_sep(ctx.emit_follow(), &rc.follow_arg);
-        // `min_prec_arg`, when set, is the baked precedence for a
-        // self-recursive call inside an LR suffix (stamped by
-        // `stamp_lr_self_ref_min_prec`). Otherwise fall back to
-        // `min_prec_override`: `gen_alt_scan_op_elements` passes
-        // `i32::MAX` for the trailing self-ref to short-circuit
-        // any LR climb in the target rule; every other call site
-        // leaves it at the default `0`.
-        let min_prec = if let Some(p) = rc.min_prec_arg {
-            p;
-        } else {
-            min_prec_override;
-        };
-        // ATN-class scan: bracket every rule-call scan with the scan caller
-        // stack so the callee's LR loop yields the caller's mandatory
-        // continuation (e.g. `between`'s `'and'`), exactly as the parse side's
-        // rule-entry wrapper does. Pop before the fail check so an early return
-        // never leaks the frame.
-        let push_ret = ctx.scan_atn_push_return(rc.atn_call_site);
-        if push_ret >= 0 {
-            w.line(&`SCAN_STACK.push({push_ret});`);
-            w.line(&`pos = {fn_name}(tokens, pos{follow_arg_str}, {min_prec});`);
-            w.line(&"SCAN_STACK.pop();");
-        } else {
-            w.line(&`pos = {fn_name}(tokens, pos{follow_arg_str}, {min_prec});`);
-        }
-        w.line(&`if pos < 0 \{ {*fail_stmt} \}`);
-        return;
-    }
-    if let Wildcard = se {
-        w.line(&`if pos >= tokens.len() || tokens[pos] == TK_EOF \{ {*fail_stmt} \}`);
-        w.line(&"pos += 1;");
-        return;
-    }
-    if let Excluded(e) = se {
-        let mut check_parts: List<String> = [];
-        for let k of &e.kinds {
-            check_parts.push(`tokens[pos] == {*k}`);
-        }
-        let mut check = String::with_capacity(64);
-        for let mut i = 0; i < check_parts.len(); i += 1 {
-            if i > 0 {
-                check.push_str(&" || ");
+    match se {
+        Token(t) => {
+            w.line(&`if pos >= tokens.len() || tokens[pos] != {t.kind} \{ {*fail_stmt} \}`);
+            w.line(&"pos += 1;");
+        },
+        RuleCall(rc) => {
+            // Single scan callee + runtime FOLLOW arg.
+            let fn_name = `scan_{rc.target_snake}`;
+            let follow_arg_str = follow_arg_sep(ctx.emit_follow(), &rc.follow_arg);
+            // `min_prec_arg`, when set, is the baked precedence for a
+            // self-recursive call inside an LR suffix (stamped by
+            // `stamp_lr_self_ref_min_prec`). Otherwise fall back to
+            // `min_prec_override`: `gen_alt_scan_op_elements` passes
+            // `i32::MAX` for the trailing self-ref to short-circuit
+            // any LR climb in the target rule; every other call site
+            // leaves it at the default `0`.
+            let min_prec = if let Some(p) = rc.min_prec_arg {
+                p;
+            } else {
+                min_prec_override;
+            };
+            // ATN-class scan: bracket every rule-call scan with the scan caller
+            // stack so the callee's LR loop yields the caller's mandatory
+            // continuation (e.g. `between`'s `'and'`), exactly as the parse side's
+            // rule-entry wrapper does. Pop before the fail check so an early return
+            // never leaks the frame.
+            let push_ret = ctx.scan_atn_push_return(rc.atn_call_site);
+            if push_ret >= 0 {
+                w.line(&`SCAN_STACK.push({push_ret});`);
+                w.line(&`pos = {fn_name}(tokens, pos{follow_arg_str}, {min_prec});`);
+                w.line(&"SCAN_STACK.pop();");
+            } else {
+                w.line(&`pos = {fn_name}(tokens, pos{follow_arg_str}, {min_prec});`);
             }
-            check.push_str(&check_parts[i]);
-        }
-        w.line(&`if pos >= tokens.len() || tokens[pos] == TK_EOF || {check} \{ {*fail_stmt} \}`);
-        w.line(&"pos += 1;");
-        return;
+            w.line(&`if pos < 0 \{ {*fail_stmt} \}`);
+        },
+        Wildcard => {
+            w.line(&`if pos >= tokens.len() || tokens[pos] == TK_EOF \{ {*fail_stmt} \}`);
+            w.line(&"pos += 1;");
+        },
+        Excluded(e) => {
+            let mut check_parts: List<String> = [];
+            for let k of &e.kinds {
+                check_parts.push(`tokens[pos] == {*k}`);
+            }
+            let mut check = String::with_capacity(64);
+            for let mut i = 0; i < check_parts.len(); i += 1 {
+                if i > 0 {
+                    check.push_str(&" || ");
+                }
+                check.push_str(&check_parts[i]);
+            }
+            w.line(&`if pos >= tokens.len() || tokens[pos] == TK_EOF || {check} \{ {*fail_stmt} \}`);
+            w.line(&"pos += 1;");
+        },
+        Repeat(re) => gen_scan_op_repeat(w, re, ctx, fail_stmt),
+        Group(ge) => gen_scan_op_group(w, ge, ctx, fail_stmt, ge.lenient),
+        OptionalLookahead(ole) => gen_scan_op_optional_lookahead(w, ole, ctx),
     }
-    if let Repeat(re) = se {
-        gen_scan_op_repeat(w, re, ctx, fail_stmt);
-        return;
-    }
-    if let Group(ge) = se {
-        gen_scan_op_group(w, ge, ctx, fail_stmt, ge.lenient);
-        return;
-    }
-    if let OptionalLookahead(ole) = se {
-        gen_scan_op_optional_lookahead(w, ole, ctx);
-        return;
-    }
-    panic("gen_scan_op_element: unreachable ScanElement shape — every variant is handled");
 }
 
 /// Op-driven scan emitter where failure sets `pos = -1` rather than
 /// running `fail_stmt`. Used inside Optional/Repeat loops where a
 /// failed iteration means "skip", not abort.
 fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContext) {
-    if let Token(t) = se {
-        w.line(&`if pos >= tokens.len() || tokens[pos] != {t.kind} \{ pos = -1; \} else \{ pos += 1; \}`);
-        return;
-    }
-    if let RuleCall(rc) = se {
-        let fn_name = `scan_{rc.target_snake}`;
-        let follow_arg_str = follow_arg_sep(ctx.emit_follow(), &rc.follow_arg);
-        // `_assign` only fires inside Repeat bodies — never reachable
-        // from alt-scan's trailing-self-ref site, so `min_prec` here
-        // is always the rule's default `0` (or whatever
-        // `min_prec_arg` baked at lower time, e.g. LR self-refs).
-        let min_prec = if let Some(p) = rc.min_prec_arg {
-            p;
-        } else {
-            0;
-        };
-        w.line(&`pos = {fn_name}(tokens, pos{follow_arg_str}, {min_prec});`);
-        return;
-    }
-    if let Wildcard = se {
-        w.line(&"if pos >= tokens.len() || tokens[pos] == TK_EOF { pos = -1; } else { pos += 1; }");
-        return;
-    }
-    if let Excluded(e) = se {
-        let mut check_parts: List<String> = [];
-        for let k of &e.kinds {
-            check_parts.push(`tokens[pos] == {*k}`);
-        }
-        let mut check = String::with_capacity(64);
-        for let mut i = 0; i < check_parts.len(); i += 1 {
-            if i > 0 {
-                check.push_str(&" || ");
+    match se {
+        Token(t) => {
+            w.line(&`if pos >= tokens.len() || tokens[pos] != {t.kind} \{ pos = -1; \} else \{ pos += 1; \}`);
+        },
+        RuleCall(rc) => {
+            let fn_name = `scan_{rc.target_snake}`;
+            let follow_arg_str = follow_arg_sep(ctx.emit_follow(), &rc.follow_arg);
+            // `_assign` only fires inside Repeat bodies — never reachable
+            // from alt-scan's trailing-self-ref site, so `min_prec` here
+            // is always the rule's default `0` (or whatever
+            // `min_prec_arg` baked at lower time, e.g. LR self-refs).
+            let min_prec = if let Some(p) = rc.min_prec_arg {
+                p;
+            } else {
+                0;
+            };
+            w.line(&`pos = {fn_name}(tokens, pos{follow_arg_str}, {min_prec});`);
+        },
+        Wildcard => {
+            w.line(&"if pos >= tokens.len() || tokens[pos] == TK_EOF { pos = -1; } else { pos += 1; }");
+        },
+        Excluded(e) => {
+            let mut check_parts: List<String> = [];
+            for let k of &e.kinds {
+                check_parts.push(`tokens[pos] == {*k}`);
             }
-            check.push_str(&check_parts[i]);
-        }
-        w.line(&`if pos >= tokens.len() || tokens[pos] == TK_EOF || {check} \{ pos = -1; \} else \{ pos += 1; \}`);
-        return;
+            let mut check = String::with_capacity(64);
+            for let mut i = 0; i < check_parts.len(); i += 1 {
+                if i > 0 {
+                    check.push_str(&" || ");
+                }
+                check.push_str(&check_parts[i]);
+            }
+            w.line(&`if pos >= tokens.len() || tokens[pos] == TK_EOF || {check} \{ pos = -1; \} else \{ pos += 1; \}`);
+        },
+        Group(ge) => {
+            // Group inside a repeat body — emit strict scan so a
+            // 0-advance iteration cannot infinite-loop.
+            gen_scan_op_group(w, ge, ctx, &"pos = -1;", false);
+        },
+        Repeat(_) | OptionalLookahead(_) => {
+            // Nested Repeat / OptionalLookahead within a Repeat's loop
+            // body: emit through fail_stmt = "pos = -1;" so the outer
+            // loop sees failure as "stop iterating".
+            gen_scan_op_element(w, se, ctx, &"pos = -1;");
+        },
     }
-    if let Group(ge) = se {
-        // Group inside a repeat body — emit strict scan so a
-        // 0-advance iteration cannot infinite-loop.
-        gen_scan_op_group(w, ge, ctx, &"pos = -1;", false);
-        return;
-    }
-    if let Repeat(_) | OptionalLookahead(_) = se {
-        // Nested Repeat / OptionalLookahead within a Repeat's loop
-        // body: emit through fail_stmt = "pos = -1;" so the outer
-        // loop sees failure as "stop iterating".
-        gen_scan_op_element(w, se, ctx, &"pos = -1;");
-        return;
-    }
-    panic("gen_scan_op_element_assign: unreachable ScanElement shape — every variant is handled");
 }
 
 /// Scan a non-greedy wildcard repeat (`.*?` / `.+?`): advance past tokens
@@ -3207,10 +3184,7 @@ fn gen_parse_fn_named(
 
     let needs_start = rule_body_needs_start(has_overlaps, &groups);
 
-    let has_lr = match lowered_rule {
-        LeftRecursive(_) => true,
-        _ => false,
-    };
+    let has_lr = lowered_rule matches { LeftRecursive(_) };
 
     if has_lr {
         let atom_name = `{*fn_name}_atom`;

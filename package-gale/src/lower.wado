@@ -858,19 +858,14 @@ fn op_subtree_contains_self_ref(op: &Op, rule_name: &String) -> bool {
         ListLabel(ll) => op_subtree_contains_self_ref(&ll.inner, rule_name),
         Repeat(r) => op_subtree_contains_self_ref(&r.body, rule_name),
         Group(g) => {
-            let mut found = false;
             for let alt of &g.alts {
                 for let inner of &alt.ops {
                     if op_subtree_contains_self_ref(inner, rule_name) {
-                        found = true;
-                        break;
+                        return true;
                     }
                 }
-                if found {
-                    break;
-                }
             }
-            found;
+            false;
         },
         Token(_) => false,
         Literal(_) => false,
@@ -911,13 +906,12 @@ fn op_first_has_lr(op: &Op, lr_first: &List<String>) -> bool {
         Excluded(_) => true,
         Repeat(r) => op_first_has_lr(&r.body, lr_first),
         Group(g) => {
-            let mut found = false;
             for let alt of &g.alts {
                 if seq_first_has_lr(&alt.ops, 0, lr_first, false) {
-                    found = true;
+                    return true;
                 }
             }
-            found;
+            false;
         },
         ListLabel(ll) => op_first_has_lr(&ll.inner, lr_first),
     };
@@ -937,13 +931,12 @@ fn op_nullable(op: &Op) -> bool {
             RepeatKind::Plus => op_nullable(&r.body),
         },
         Group(g) => {
-            let mut any_nullable = false;
             for let alt of &g.alts {
                 if seq_all_nullable(&alt.ops) {
-                    any_nullable = true;
+                    return true;
                 }
             }
-            any_nullable;
+            false;
         },
         ListLabel(ll) => op_nullable(&ll.inner),
     };
@@ -1055,23 +1048,21 @@ fn scan_first_has_lr(se: &ScanElement, lr_first: &List<String>) -> bool {
         Excluded(_) => true,
         Repeat(r) => scan_first_has_lr(&r.body, lr_first),
         Group(g) => {
-            let mut found = false;
             for let alt of &g.alts {
                 if scan_seq_first_has_lr(&alt.elements, 0, lr_first, false) {
-                    found = true;
+                    return true;
                 }
             }
-            found;
+            false;
         },
         // `?`-over-group: its body's FIRST.
         OptionalLookahead(ole) => {
-            let mut found = false;
             for let body of &ole.bodies {
                 if scan_seq_first_has_lr(&body.elements, 0, lr_first, false) {
-                    found = true;
+                    return true;
                 }
             }
-            found;
+            false;
         },
     };
 }
@@ -1089,13 +1080,12 @@ fn scan_nullable(se: &ScanElement) -> bool {
             RepeatKind::Plus => scan_nullable(&r.body),
         },
         Group(g) => {
-            let mut any_nullable = false;
             for let alt of &g.alts {
                 if scan_seq_all_nullable(&alt.elements) {
-                    any_nullable = true;
+                    return true;
                 }
             }
-            any_nullable;
+            false;
         },
         // `?`-over-group is itself optional.
         OptionalLookahead(_) => true,
@@ -1508,10 +1498,7 @@ fn compute_lr_conflict_min_prec(
         let suffix_first = ctx.first_of_elements_from(&other.elements, 1);
         for let ft of &fixed_tokens {
             if first_contains(&suffix_first, ft) {
-                let candidate = other_prec + 1;
-                if candidate > min_prec {
-                    min_prec = candidate;
-                }
+                min_prec = i32::max(min_prec, other_prec + 1);
             }
         }
         lr_pos += 1;
@@ -1637,7 +1624,7 @@ fn build_overlap_dispatch(
 /// parse-side label. `strip_suffix` returns the input unchanged when the
 /// suffix is absent, so a shortened result means it matched.
 fn ends_with_scan(label: &String) -> bool {
-    return strip_suffix(label, &" (scan)") != *label;
+    return label.ends_with(" (scan)");
 }
 
 /// Collect the token kinds that appear in more than one alt's first
@@ -3619,10 +3606,7 @@ fn patch_repeat_op_caller_follow(
     caller_follow_first: List<String>,
     caller_follow_second: List<String>,
 ) -> RepeatOp {
-    let mut r = *rep_op;
-    r.caller_follow_first = caller_follow_first;
-    r.caller_follow_second = caller_follow_second;
-    return r;
+    return RepeatOp { ..*rep_op, caller_follow_first, caller_follow_second };
 }
 
 /// True iff `elem` is a list-label (`+=`). Used by
