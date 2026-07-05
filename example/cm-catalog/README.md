@@ -10,15 +10,22 @@ imports the fetched `.wasm` component directly and calls `CmCatalog::id_*`.
 ## Run
 
 ```sh
-wado update                       # fetch wado-lang:cm-catalog into ./build (gitignored)
-wado run example/cm-catalog       # compile + run
+wado update                  # resolve wado-lang:cm-catalog → wado.lock
+wado fetch                   # download the component into ./build (gitignored)
+wado run example/cm-catalog  # compile + run
 ```
 
-`build/` is gitignored — the component is not committed. Until the component is
-published (below), place it manually:
+`build/` is gitignored — the fetched component is not committed. `wado fetch`
+pulls it from `ghcr.io/wado-lang/cm-catalog` into `build/cm-catalog.wasm`, which
+`src/main.wado` imports as a local wasm asset. (Once import resolution for
+registry dependencies lands, `use { CmCatalog } from "wado-lang:cm-catalog"`
+will resolve directly and the `build/` bridge goes away.)
+
+To build the component locally instead of pulling it, build `package-cm-catalog`'s
+library world into place:
 
 ```sh
-wado compile --lib package-cm-catalog -o example/cm-catalog/build/cm-catalog.wasm
+( cd package-cm-catalog && wado build --lib -o ../example/cm-catalog/build/cm-catalog.wasm )
 wado run example/cm-catalog
 ```
 
@@ -32,7 +39,7 @@ ghcr token with `write:packages` for the `wado-lang` org and is done with
 publishing):
 
 ```sh
-wado compile --lib package-cm-catalog -o cm-catalog.wasm
+( cd package-cm-catalog && wado build --lib -o ../cm-catalog.wasm )
 mise run ghcr-login
 wkg oci push ghcr.io/wado-lang/cm-catalog:0.1.0 cm-catalog.wasm \
   --annotation org.opencontainers.image.source=https://github.com/wado-lang/wado \
@@ -42,5 +49,5 @@ wkg oci push ghcr.io/wado-lang/cm-catalog:0.1.0 cm-catalog.wasm \
 
 Make the package public (GitHub → wado-lang → Packages → cm-catalog) for
 unauthenticated pulls. After publishing, `wado update` resolves
-`wado-lang:cm-catalog` against the OCI registry and fetches the component into
-`build/`.
+`wado-lang:cm-catalog` against the OCI registry and `wado fetch` downloads the
+component into `build/`.

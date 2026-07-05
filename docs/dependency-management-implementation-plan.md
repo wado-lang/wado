@@ -126,14 +126,19 @@ it carries no transitive Wado dependencies and no source entry module.
       (`WKG_OCI_USERNAME` / `WKG_OCI_PASSWORD`, else anonymous).
 - [x] Verified live: `wado update` against `oci://ghcr.io` resolves
       `wado-lang:cm-catalog` to a real version + digest and writes `wado.lock`.
-- [ ] `oci::pull_component` (the `application/wasm` layer bytes) is in place for
-      Phase 2's cache/fetch, not yet exercised.
+- [x] `oci::pull_component` exercised by `wado fetch` (see Phase 2 bridge).
 
 ### Phase 2 — Dependency cache + `wado fetch`
 
-Materialize resolved packages on disk so the compiler can load their source.
+Materialize resolved packages on disk so the compiler can load them.
 
-- [ ] Cache root: `~/wado/`, overridable by `WADO_ROOT`.
+- [x] `wado fetch` (bridge): resolve, then pull each registry component into
+      `<root>/build/<name>.wasm` — the local wasm-asset location a project
+      imports today, since registry-dep import resolution is Phase 4. Verified
+      live end to end: `example/cm-catalog` runs `update` → `fetch` → `run` and
+      round-trips values through the published `wado-lang:cm-catalog` component.
+- [ ] Move the cache to `~/wado/`, overridable by `WADO_ROOT`, once Phase 4
+      resolves registry-dep imports from it (retire the `build/` bridge).
 - [ ] ghq-style layout: `{host}/{ns}/{name}/{version}/` for registry,
       `{host}/{owner}/{repo}/{version}-{short-ref}/` for git.
 - [ ] Extract the pulled component's Wado source tree (or, for wado-to-wado, the

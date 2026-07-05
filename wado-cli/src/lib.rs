@@ -14,6 +14,7 @@ pub mod compiler_host;
 pub mod discover;
 pub mod doc;
 pub mod dump;
+pub mod fetch;
 pub mod format;
 pub mod http_hooks;
 pub mod init;
