@@ -58,8 +58,8 @@ test "render_inline trims trailing punctuation from autolinks" {
     assert render_inline(&"visit http://a.example.") == "visit <a href=\"http://a.example\">http://a.example</a>.";
 }
 
-test "render_inline makes a hard break on two trailing spaces" {
-    assert render_inline(&"a  \nb") == "a<br />\nb";
+test "render_inline ignores trailing-space hard breaks (non-goal)" {
+    assert render_inline(&"a  \nb") == "a  \nb";
 }
 
 test "render_inline makes a hard break on a trailing backslash" {

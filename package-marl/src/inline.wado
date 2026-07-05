@@ -101,12 +101,11 @@ fn push_construct(result: Option<[String, i32]>, c: char, i: i32, cur: &mut Stri
 }
 
 fn push_line_break(cur: &mut String, chars: &List<char>, i: i32, start: i32, toks: &mut List<Tok>) -> i32 {
+    // A trailing backslash is a hard break. Trailing-space hard breaks are an
+    // intentional non-goal (invisible whitespace footgun); such lines fold as
+    // an ordinary soft break.
     if i > start && chars[i - 1] == '\\' {
         cur.pop();
-        flush_text(cur, toks);
-        push_raw("<br />\n", toks);
-    } else if i - 2 >= start && chars[i - 1] == ' ' && chars[i - 2] == ' ' {
-        trim_trailing_spaces(cur);
         flush_text(cur, toks);
         push_raw("<br />\n", toks);
     } else {
@@ -487,21 +486,6 @@ fn is_trailing_punct(c: char) -> bool {
     return c == '.' || c == ',' || c == ';' || c == ':' || c == '!' || c == '?';
 }
 
-fn trim_trailing_spaces(out: &mut String) {
-    loop {
-        match out.pop() {
-            Some(ch) => {
-                if ch != ' ' {
-                    out.push(ch);
-                    break;
-                }
-            },
-            None => {
-                break;
-            },
-        }
-    }
-}
 
 fn is_space(c: char) -> bool {
     return c == ' ' || c == '\t' || c == '\n';
