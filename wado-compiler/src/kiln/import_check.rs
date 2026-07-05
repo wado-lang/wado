@@ -61,7 +61,7 @@ pub fn check_loaded<H: CompilerHost>(
 }
 
 /// Rewrite a kiln generator's `fn generate(req: Request<T>) -> Result<...>`
-/// into the typed-options wire shape (Kiln WEP "Protocol revision v0.3"):
+/// into the typed-options wire shape (Kiln WEP "Protocol revision 3"):
 /// the single `req` parameter is replaced by `primary: InputFile`, `inputs:
 /// List<InputFile>`, and `options: T`, and the body starts with `let req =
 /// Request { primary, inputs, options };`. The user's subsequent body keeps

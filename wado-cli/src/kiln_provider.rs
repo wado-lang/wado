@@ -362,7 +362,7 @@ struct CompileArtifacts {
 /// `core:kiln` world types, so bump this on any `core:kiln/generator.wit` /
 /// `emit_kiln_world_types` change to invalidate caches built against the old
 /// ABI even when the generator source is unchanged. `v2`: `raw-request.options`
-/// became `list<u8>` (CBOR). `v3` (protocol v0.3): the world is import-only,
+/// became `list<u8>` (CBOR). `v3`: the world is import-only,
 /// `raw-request` is gone, and `generate` takes typed `(primary, inputs,
 /// options)` parameters.
 const KILN_GENERATOR_ABI_TAG: &[u8] = b"kiln-generator-v3\n";

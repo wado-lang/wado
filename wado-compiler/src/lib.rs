@@ -372,10 +372,10 @@ fn emit_unused_diagnostics<H: CompilerHost>(
 /// direct world function (`from_interface_fq = None`). Parameter and return
 /// types are taken straight from the AST signature.
 /// The interface FQ a `core:kiln/generator` component's synthesized world uses
-/// for `generate` and its options record (Kiln WEP v0.3). A generator's
+/// for `generate` and its options record (Kiln WEP revision 3). A generator's
 /// `generate` is grouped into this interface (it references the local `Options`
 /// record), and the record type is registered under this FQ.
-// TODO(v0.3): derive from the generator package's own namespace/name so the
+// TODO(kiln-abi-v3): derive from the generator package's own namespace/name so the
 // published component's WIT carries a package-specific identity.
 const KILN_GENERATOR_IMPL_FQ: &str = "kiln:generator/generator@0.1.0";
 
@@ -694,7 +694,7 @@ fn compile_after_load<H: CompilerHost>(
     };
 
     // Synthesize a world from the entry module's `export fn` signatures — for
-    // `--lib`, and for a kiln generator target (Kiln WEP v0.3), whose
+    // `--lib`, and for a kiln generator target (Kiln WEP revision 3), whose
     // `generate` carries its typed options via the same raw-Wado-type path.
     // Done before `sem.modules` is dropped by the destructure below.
     let synth_world_fq: Option<String> = options

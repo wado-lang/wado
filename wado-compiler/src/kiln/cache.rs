@@ -9,7 +9,7 @@
 //! The options encoding is intentionally opaque here (`&[u8]`). The caller
 //! supplies already-canonical bytes produced by [`encode_options_canonical`]:
 //! a deterministic, injective serialization of the validated options tree used
-//! solely as a hash input. In protocol v0.3 the options cross the generator
+//! solely as a hash input. In protocol revision 3 the options cross the generator
 //! boundary as a typed WIT argument, not a serialized blob, so nothing ever
 //! decodes these bytes — the encoding only has to be canonical, not an
 //! interchange format.
@@ -44,7 +44,7 @@ fn hex(bytes: &[u8; 32]) -> String {
 /// the M6.4 switch from the binary options encoder to canonical JSON;
 /// `v3` dropped NFC normalization on string values so cache keys reflect
 /// the literal UTF-8 bytes the user supplied; `v4` switched the options
-/// encoding to CBOR; `v5` (protocol revision v0.3) replaces CBOR with a
+/// encoding to CBOR; `v5` replaces CBOR with a
 /// tagged length-prefixed hash-only encoding when options became a typed
 /// WIT argument.
 const MAGIC: &[u8] = b"kiln-cache-key-v5\0";

@@ -9,7 +9,7 @@
 //! - Import-refusal: adding `use { now } from "wasi:clocks";` to a
 //!   generator surfaces `Code::KilnGeneratorForbiddenImport`.
 //!
-//! See WEP 2026-04-12 §"Protocol revision v0.3".
+//! See WEP 2026-04-12 §"Protocol revision 3".
 
 #![allow(unused_crate_dependencies)]
 
@@ -67,7 +67,7 @@ fn block_on<F: std::future::Future>(future: F) -> F::Output {
 }
 
 fn kiln_options() -> CompilerOptions {
-    // The v0.3 typed-request adapter produces a valid component, so no
+    // The revision-3 typed-request adapter produces a valid component, so no
     // `skip_validation` is needed — the `generate(primary, inputs, options)`
     // lift/lower round-trips through the CM ABI cleanly.
     CompilerOptions {
@@ -136,7 +136,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 #[test]
 fn typed_options_generator_compiles_to_valid_component() {
     let host = MapHost::new(&[]);
-    // No `skip_validation`: the v0.3 typed-options `generate(primary, inputs,
+    // No `skip_validation`: the revision-3 typed-options `generate(primary, inputs,
     // options)` shape must produce a valid component (unlike the old
     // `raw-request` GC-reference mismatch).
     let options = CompilerOptions {

@@ -222,7 +222,7 @@ conflict errors, once real registries make multi-constraint graphs common.
 
 #### Registry Kiln generators
 
-> **Redesign (Kiln WEP "Protocol revision v0.3").** Options move from an opaque
+> **Redesign (Kiln WEP "Protocol revision 3").** Options move from an opaque
 > CBOR `list<u8>` blob to a **typed WIT argument** on `generate`, in each
 > generator's own world. This retires the `describe-options` mechanism (the
 > options shape is read directly from the generator's component WIT) and the
@@ -297,7 +297,7 @@ one from a **local path** today (`example/hello-packages` uses
       resolves only a bare `"gale"` key, but the manifest validator deprecates
       bare keys in favor of coordinates / `lib:` nicknames the lookup rejects.
 
-##### v0.3 typed-options work list
+##### Revision 3 typed-options work list
 
 The redesign replaces the options-blob subsystem with typed WIT arguments:
 

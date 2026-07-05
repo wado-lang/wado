@@ -82,7 +82,7 @@ compiler rewrites `fn generate(req: Request<T>)` into the `RawRequest` +
 `bind_request::<T>` shape; the `#[compiler_item("kiln_request")]`
 attribute is that rewrite's lookup anchor. `T` defaults to `NoOptions`,
 so a generator that takes no options writes `fn generate(req: Request)`.
-See WEP 2026-04-12 §"Protocol revision v0.2".
+See WEP 2026-04-12 §"Protocol revision 2".
 
 #### `primary: InputFile`
 

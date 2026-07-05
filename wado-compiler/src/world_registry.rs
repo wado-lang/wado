@@ -482,7 +482,7 @@ mod tests {
             world_registry.has_world("core:kiln/generator"),
             "core:kiln/generator world should be registered"
         );
-        // v0.3: the static world is an import-only template — each generator
+        // Revision 3: the static world is an import-only template — each generator
         // synthesizes its own world with a typed `generate` (its `options`
         // shape is per-generator), so the static world carries no `generate`
         // export. It exists to hold the `KilnHost` import and anchor the
