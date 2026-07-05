@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783209709122,
+  "lastUpdate": 1783216731696,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -38205,6 +38205,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b9480803d7437939bcaa16b073bb996e05abf832"
         },
         "date": 1783209708607,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8446,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17049,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 284954,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "539c4c955fc1ed5df6acb96cc30faa8335caaf85",
+          "message": "Merge pull request #1519 from wado-lang/claude/release-workflow-artifact-error-skhoiy\n\nchore: drop dead vendor/wasmtime submodule checkout and document publish auth",
+          "timestamp": "2026-07-05T10:50:05+09:00",
+          "tree_id": "0693f07ab7ead69213e9ed14793e4c1db9d6ebb6",
+          "url": "https://github.com/wado-lang/wado/commit/539c4c955fc1ed5df6acb96cc30faa8335caaf85"
+        },
+        "date": 1783216730972,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
