@@ -92,9 +92,12 @@ fn flush_text(buf: &mut String, toks: &mut List<Tok>) {
     if buf.len() == 0 {
         return;
     }
-    let text = *buf;
+    // Copy via push_str + clear rather than `let t = *buf; *buf = String::new()`:
+    // the latter is miscompiled at -O2 (wado-lang/wado#1522).
+    let mut text = String::new();
+    text.push_str(buf);
     toks.push(Tok { kind: 0, text, ch: ' ', count: 0, orig: 0, open: false, close: false });
-    *buf = String::new();
+    buf.clear();
 }
 
 fn push_raw(html: String, toks: &mut List<Tok>) {

@@ -1,5 +1,156 @@
-use { println, Stdout } from "core:cli";
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use { build, Post } from "./post.wado";
+use { build_site, SiteFile } from "./site.wado";
 
-export fn run() with Stdout {
-    println("sheaf: not yet implemented");
+export fn run() with Stdout, Stderr, Preopens {
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("sheaf: no preopened directory available");
+        return;
+    }
+    let root = dirs[0].0;
+
+    let posts = read_posts(&root);
+    let files = build_site(&posts);
+    write_site(&root, &files);
+    println(`sheaf: generated {files.len()} file(s) from {posts.len()} post(s)`);
+}
+
+fn read_posts(root: &Descriptor) -> List<Post> with Stderr {
+    let mut posts: List<Post> = [];
+    let content = match open_dir(root, "content") {
+        Some(d) => d,
+        None => {
+            eprintln("sheaf: cannot open content/ directory");
+            return posts;
+        },
+    };
+    let names = read_dir_names(&content);
+    for let mut i = 0; i < names.len(); i += 1 {
+        let name = names[i];
+        if !name.ends_with(".md") {
+            continue;
+        }
+        match read_file(&content, name) {
+            Some(source) => match build(strip_ext(&name), &source) {
+                Ok(post) => {
+                    posts.push(post);
+                },
+                Err(e) => {
+                    eprintln(`sheaf: {name}: {e}`);
+                },
+            },
+            None => {
+                eprintln(`sheaf: cannot read {name}`);
+            },
+        }
+    }
+    return posts;
+}
+
+fn write_site(root: &Descriptor, files: &List<SiteFile>) with Stderr {
+    let _ = root.create_directory_at("_site").wait();
+    let site = match root.open_at(
+        PathFlags::none(),
+        "_site",
+        OpenFlags::Directory,
+        DescriptorFlags::Read | DescriptorFlags::MutateDirectory,
+    ).wait() {
+        Ok(d) => d,
+        Err(_) => {
+            eprintln("sheaf: cannot open _site/ directory");
+            return;
+        },
+    };
+    for let mut i = 0; i < files.len(); i += 1 {
+        let f = files[i];
+        if !write_file(&site, f.path, &f.content) {
+            eprintln(`sheaf: cannot write {f.path}`);
+        }
+    }
+}
+
+fn open_dir(root: &Descriptor, name: String) -> Option<Descriptor> {
+    return match root.open_at(PathFlags::none(), name, OpenFlags::Directory, DescriptorFlags::Read).wait() {
+        Ok(d) => Option::Some(d),
+        Err(_) => null,
+    };
+}
+
+fn read_dir_names(dir: &Descriptor) -> List<String> {
+    let mut names: List<String> = [];
+    let [stream, done] = dir.read_directory();
+    loop {
+        let chunk = stream.read(64);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let e of chunk {
+            names.push(e.name);
+        }
+    }
+    stream.drop();
+    done.drop();
+    return names;
+}
+
+fn read_file(dir: &Descriptor, path: String) -> Option<String> {
+    return match dir.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait() {
+        Ok(file) => {
+            let [stream, done] = file.read_via_stream(0 as Filesize);
+            let mut bytes: List<u8> = [];
+            loop {
+                let chunk = stream.read(8192);
+                if chunk.len() == 0 {
+                    break;
+                }
+                for let b of chunk {
+                    bytes.push(b);
+                }
+            }
+            stream.drop();
+            done.drop();
+            match String::from_utf8(bytes) {
+                Ok(s) => Option::Some(s),
+                Err(_) => null,
+            }
+        },
+        Err(_) => null,
+    };
+}
+
+fn write_file(dir: &Descriptor, path: String, content: &String) -> bool {
+    return match dir.open_at(
+        PathFlags::none(),
+        path,
+        OpenFlags::Create | OpenFlags::Truncate,
+        DescriptorFlags::Write | DescriptorFlags::Read,
+    ).wait() {
+        Ok(file) => {
+            let bytes: List<u8> = content.bytes().collect();
+            let [rx, tx] = Stream::<u8>::new();
+            let sub = file.write_via_stream(rx, 0 as Filesize);
+            tx.write(bytes);
+            tx.drop();
+            sub.drop();
+            true;
+        },
+        Err(_) => false,
+    };
+}
+
+fn strip_ext(name: &String) -> String {
+    let mut chars: List<char> = [];
+    for let c of name.chars() {
+        chars.push(c);
+    }
+    let keep = chars.len() - 3;
+    let mut out = String::new();
+    let mut i = 0;
+    while i < keep {
+        out.push(chars[i]);
+        i += 1;
+    }
+    return out;
 }
