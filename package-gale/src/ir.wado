@@ -932,7 +932,7 @@ fn stamp_alternatives(alts: &List<Alternative>, mode: StampMode, next: &mut i32)
         for let e of &alt.elements {
             elems.push(stamp_element(e, mode, next));
         }
-        out.push(Alternative { label: alt.label, options: alt.options, elements: elems, actions: acts });
+        out.push(Alternative { ..*alt, elements: elems, actions: acts });
     }
     return out;
 }
@@ -951,14 +951,7 @@ fn stamp_element(elem: &Element, mode: StampMode, next: &mut i32) -> Element {
                 Decisions => {
                 },
             }
-            Element::RuleRef(RuleRefElement {
-                name: rr.name,
-                options: rr.options,
-                snake_name: rr.snake_name,
-                field_name: rr.field_name,
-                atn_call_site: call_site,
-                arg_action: arg,
-            });
+            Element::RuleRef(RuleRefElement { ..rr, atn_call_site: call_site, arg_action: arg });
         },
         Repeat(rep) => {
             let mut decision = rep.atn_decision;
@@ -1002,10 +995,9 @@ fn stamp_element(elem: &Element, mode: StampMode, next: &mut i32) -> Element {
 fn stamp_alt_actions(actions: &List<AltAction>, next: &mut i32) -> List<AltAction> {
     let mut out: List<AltAction> = [];
     for let a of actions {
-        let mut src = a.source;
-        src.action_id = *next;
+        let src = ActionSource { ..a.source, action_id: *next };
         *next += 1;
-        out.push(AltAction { kind: a.kind, source: src, before_index: a.before_index });
+        out.push(AltAction { ..*a, source: src });
     }
     return out;
 }
@@ -1043,10 +1035,9 @@ pub fn assign_action_ids(grammar: &mut Grammar) {
         );
         let mut new_catches: List<CatchClause> = [];
         for let c of &grammar.parser_rules[ri].catches {
-            let mut body = c.body;
-            body.action_id = next;
+            let body = ActionSource { ..c.body, action_id: next };
             next += 1;
-            new_catches.push(CatchClause { decl_text: c.decl_text, body });
+            new_catches.push(CatchClause { ..*c, body });
         }
         grammar.parser_rules[ri].catches = new_catches;
         grammar.parser_rules[ri].finally_action = stamp_action_source_opt(
@@ -1064,8 +1055,7 @@ pub fn assign_action_ids(grammar: &mut Grammar) {
     }
     for let mut oi = 0; oi < grammar.options.len(); oi += 1 {
         if let Action(src) = &grammar.options[oi].value {
-            let mut ns = *src;
-            ns.action_id = next;
+            let ns = ActionSource { ..*src, action_id: next };
             next += 1;
             grammar.options[oi].value = OptionValue::Action(ns);
         }
@@ -1075,8 +1065,7 @@ pub fn assign_action_ids(grammar: &mut Grammar) {
 fn stamp_action_source_opt(opt: Option<ActionSource>, next: &mut i32) -> Option<ActionSource> {
     match opt {
         Some(s) => {
-            let mut ns = s;
-            ns.action_id = *next;
+            let ns = ActionSource { ..s, action_id: *next };
             *next += 1;
             return Option::<ActionSource>::Some(ns);
         },

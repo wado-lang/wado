@@ -1508,10 +1508,7 @@ fn compute_lr_conflict_min_prec(
         let suffix_first = ctx.first_of_elements_from(&other.elements, 1);
         for let ft of &fixed_tokens {
             if first_contains(&suffix_first, ft) {
-                let candidate = other_prec + 1;
-                if candidate > min_prec {
-                    min_prec = candidate;
-                }
+                min_prec = i32::max(min_prec, other_prec + 1);
             }
         }
         lr_pos += 1;
@@ -1637,7 +1634,7 @@ fn build_overlap_dispatch(
 /// parse-side label. `strip_suffix` returns the input unchanged when the
 /// suffix is absent, so a shortened result means it matched.
 fn ends_with_scan(label: &String) -> bool {
-    return strip_suffix(label, &" (scan)") != *label;
+    return label.ends_with(" (scan)");
 }
 
 /// Collect the token kinds that appear in more than one alt's first
@@ -3619,10 +3616,7 @@ fn patch_repeat_op_caller_follow(
     caller_follow_first: List<String>,
     caller_follow_second: List<String>,
 ) -> RepeatOp {
-    let mut r = *rep_op;
-    r.caller_follow_first = caller_follow_first;
-    r.caller_follow_second = caller_follow_second;
-    return r;
+    return RepeatOp { ..*rep_op, caller_follow_first, caller_follow_second };
 }
 
 /// True iff `elem` is a list-label (`+=`). Used by

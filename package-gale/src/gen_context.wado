@@ -290,12 +290,7 @@ impl GenContext {
             return true;
         }
         let follow = self.rule_follow_kinds[*rule_name];
-        for let t of branch_tokens {
-            if follow.contains(t) {
-                return true;
-            }
-        }
-        return false;
+        return sets_overlap(branch_tokens, &follow);
     }
 
     pub fn emits_at_end_conflict_via_atn(
@@ -449,12 +444,7 @@ impl GenContext {
 
     /// Whether an action id was handled by codegen.
     pub fn action_was_seen(&self, id: i32) -> bool {
-        for let s of &self.action_seen {
-            if *s == id {
-                return true;
-            }
-        }
-        return false;
+        return self.action_seen.contains(&id);
     }
 
     pub fn mark_predicate_gated(&mut self, id: i32) {
@@ -1500,11 +1490,7 @@ pub fn sets_overlap(a: &List<String>, b: &List<String>) -> bool {
 /// otherwise-identical masks share the same registry key regardless of
 /// the order in which the underlying analysis discovered the tokens.
 fn canonicalize_k_prefix(prefix: &List<List<String>>) -> List<List<String>> {
-    let mut result: List<List<String>> = [];
-    for let depth_set of prefix {
-        result.push(canonical_kind_set(depth_set));
-    }
-    return result;
+    return prefix.iter().map(|depth_set: List<String>| canonical_kind_set(&depth_set)).collect();
 }
 
 /// String form of a K-prefix mask for use as a registry key.
@@ -1546,11 +1532,5 @@ pub fn union_kind_arrays(a: &List<String>, b: &List<String>) -> List<String> {
 }
 
 fn remove_from_visiting(visiting: &mut List<String>, name: &String) {
-    let mut new_arr: List<String> = [];
-    for let v of visiting {
-        if *v != *name {
-            new_arr.push(*v);
-        }
-    }
-    *visiting = new_arr;
+    *visiting = visiting.iter().filter(|v: String| v != *name).collect();
 }
