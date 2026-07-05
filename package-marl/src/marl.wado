@@ -214,7 +214,7 @@ fn fence_marker(line: &String) -> Option<[char, i32, String]> {
     let chars = to_chars(line);
     let len = chars.len();
     let mut p = 0;
-    while p < len && p < 3 && chars[p] == ' ' {
+    while p < len && p < 3 && is_indent(chars[p]) {
         p += 1;
     }
     if p >= len {
@@ -243,7 +243,7 @@ fn is_code_fence_close(line: &String, ch: char, fence_len: i32) -> bool {
     let chars = to_chars(line);
     let len = chars.len();
     let mut p = 0;
-    while p < len && p < 3 && chars[p] == ' ' {
+    while p < len && p < 3 && is_indent(chars[p]) {
         p += 1;
     }
     let mut run = 0;
@@ -267,7 +267,7 @@ fn is_blockquote(line: &String) -> bool {
     let chars = to_chars(line);
     let len = chars.len();
     let mut p = 0;
-    while p < len && p < 3 && chars[p] == ' ' {
+    while p < len && p < 3 && is_indent(chars[p]) {
         p += 1;
     }
     return p < len && chars[p] == '>';
@@ -277,12 +277,12 @@ fn strip_blockquote_marker(line: &String) -> String {
     let chars = to_chars(line);
     let len = chars.len();
     let mut p = 0;
-    while p < len && p < 3 && chars[p] == ' ' {
+    while p < len && p < 3 && is_indent(chars[p]) {
         p += 1;
     }
     if p < len && chars[p] == '>' {
         p += 1;
-        if p < len && chars[p] == ' ' {
+        if p < len && is_indent(chars[p]) {
             p += 1;
         }
     }
@@ -453,7 +453,7 @@ fn parse_list_marker(line: &String) -> Option<ListMarker> {
     let len = chars.len();
     let mut p = 0;
     let mut indent = 0;
-    while p < len && chars[p] == ' ' {
+    while p < len && is_indent(chars[p]) {
         indent += 1;
         p += 1;
     }
@@ -577,7 +577,7 @@ fn dedent(line: &String, n: i32) -> String {
     let chars = to_chars(line);
     let len = chars.len();
     let mut p = 0;
-    while p < len && p < n && chars[p] == ' ' {
+    while p < len && p < n && is_indent(chars[p]) {
         p += 1;
     }
     return substr(&chars, p, len);
@@ -586,7 +586,7 @@ fn dedent(line: &String, n: i32) -> String {
 fn line_indent(line: &String) -> i32 {
     let mut n = 0;
     for let c of line.chars() {
-        if c == ' ' {
+        if is_indent(c) {
             n += 1;
         } else {
             break;
@@ -598,6 +598,12 @@ fn line_indent(line: &String) -> i32 {
 fn is_digit(c: char) -> bool {
     let v = c as i32;
     return 48 <= v <= 57;
+}
+
+/// A leading-indentation whitespace column. A tab counts as one column, the
+/// same as a space (no tab-stop expansion) — an intentional simplification.
+fn is_indent(c: char) -> bool {
+    return c == ' ' || c == '\t';
 }
 
 fn to_chars(line: &String) -> List<char> {

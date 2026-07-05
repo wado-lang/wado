@@ -145,3 +145,12 @@ test "render splits lists when the bullet marker changes" {
 test "render emits an ol start attribute for non-1 first number" {
     assert render(&"3. three\n4. four") == "<ol start=\"3\">\n<li>three</li>\n<li>four</li>\n</ol>";
 }
+
+test "render treats a tab like a space in list and quote markers" {
+    assert render(&"-\titem") == "<ul>\n<li>item</li>\n</ul>";
+    assert render(&">\tquoted") == "<blockquote>\n<p>quoted</p>\n</blockquote>";
+}
+
+test "render preserves tabs inside code content" {
+    assert render(&"```\n\tcode\n```") == "<pre><code>\tcode\n</code></pre>";
+}
