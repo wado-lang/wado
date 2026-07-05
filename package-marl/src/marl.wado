@@ -1,0 +1,105 @@
+//! Block-level rendering entry point.
+//!
+//! v0.1 slice: ATX headings, paragraphs, thematic breaks. Inline content is
+//! HTML-escaped; richer inline handling arrives with `inline.wado`.
+
+use { escape_text } from "./html.wado";
+
+pub fn render(source: &String) -> String {
+    let normalized = source.replace("\r\n", "\n");
+    let mut out: List<String> = [];
+    let mut para = String::new();
+
+    for let line of normalized.split("\n") {
+        if line.trim().len() == 0 {
+            flush_paragraph(&mut out, &mut para);
+            continue;
+        }
+        let level = heading_level(&line);
+        if level > 0 {
+            flush_paragraph(&mut out, &mut para);
+            let content = heading_content(&line, level);
+            out.push(`<h{level}>{escape_text(&content)}</h{level}>`);
+            continue;
+        }
+        if is_thematic_break(&line) {
+            flush_paragraph(&mut out, &mut para);
+            out.push("<hr />");
+            continue;
+        }
+        if para.len() > 0 {
+            para.push_str(&"\n");
+        }
+        para.push_str(&line);
+    }
+    flush_paragraph(&mut out, &mut para);
+
+    return out.join("\n");
+}
+
+fn flush_paragraph(out: &mut List<String>, para: &mut String) {
+    if para.len() == 0 {
+        return;
+    }
+    out.push(`<p>{escape_text(para)}</p>`);
+    para.clear();
+}
+
+fn heading_level(line: &String) -> i32 {
+    let mut hashes = 0;
+    let mut saw_non_hash = false;
+    let mut next_is_space = false;
+    for let c of line.chars() {
+        if c == '#' && !saw_non_hash {
+            hashes += 1;
+        } else {
+            saw_non_hash = true;
+            next_is_space = c == ' ';
+            break;
+        }
+    }
+    if hashes >= 1 && hashes <= 6 && (!saw_non_hash || next_is_space) {
+        return hashes;
+    }
+    return 0;
+}
+
+fn heading_content(line: &String, level: i32) -> String {
+    let mut out = String::new();
+    let mut skipped = 0;
+    for let c of line.chars() {
+        if skipped < level {
+            skipped += 1;
+            continue;
+        }
+        out.push(c);
+    }
+    return out.trim();
+}
+
+fn is_thematic_break(line: &String) -> bool {
+    let trimmed = line.trim();
+    if trimmed.len() < 3 {
+        return false;
+    }
+    let mut marker = '-';
+    let mut has_marker = false;
+    let mut count = 0;
+    for let c of trimmed.chars() {
+        if c == ' ' || c == '\t' {
+            continue;
+        }
+        if c == '-' || c == '*' || c == '_' {
+            if !has_marker {
+                marker = c;
+                has_marker = true;
+            } else if c != marker {
+                return false;
+            }
+            count += 1;
+        } else {
+            return false;
+        }
+    }
+    return count >= 3;
+}

@@ -1,0 +1,48 @@
+use { render } from "./marl.wado";
+
+test "render wraps a single line in a paragraph" {
+    assert render(&"hello world") == "<p>hello world</p>";
+}
+
+test "render emits ATX headings by level" {
+    assert render(&"# Title") == "<h1>Title</h1>";
+    assert render(&"### Deep") == "<h3>Deep</h3>";
+    assert render(&"###### Six") == "<h6>Six</h6>";
+}
+
+test "render rejects seven hashes as a heading" {
+    assert render(&"####### too deep") == "<p>####### too deep</p>";
+}
+
+test "render requires a space after the hashes" {
+    assert render(&"#notitle") == "<p>#notitle</p>";
+}
+
+test "render escapes inline HTML in text and headings" {
+    assert render(&"# a < b & c") == "<h1>a &lt; b &amp; c</h1>";
+    assert render(&"x < y & z") == "<p>x &lt; y &amp; z</p>";
+}
+
+test "render joins consecutive lines into one paragraph" {
+    assert render(&"line one\nline two") == "<p>line one\nline two</p>";
+}
+
+test "render separates paragraphs on a blank line" {
+    assert render(&"first\n\nsecond") == "<p>first</p>\n<p>second</p>";
+}
+
+test "render emits a thematic break" {
+    assert render(&"---") == "<hr />";
+    assert render(&"***") == "<hr />";
+    assert render(&"- - -") == "<hr />";
+}
+
+test "render mixes headings, paragraphs, and breaks" {
+    let input = "# Heading\n\nA paragraph.\n\n---\n\nAnother.";
+    let expected = "<h1>Heading</h1>\n<p>A paragraph.</p>\n<hr />\n<p>Another.</p>";
+    assert render(&input) == expected;
+}
+
+test "render trims a closing-space heading" {
+    assert render(&"##   Spaced   ") == "<h2>Spaced</h2>";
+}
