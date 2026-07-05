@@ -106,21 +106,28 @@ Establish the primitive/orchestrator boundary before wiring dependencies.
 
 ### Phase 1 — OCI registry provider
 
-Give `resolve` real registry data. Implement the `list_registry_versions` /
-`fetch_registry_package` methods of the CLI provider against OCI, mirroring how
-`publish` shells out to `wkg oci push`.
+Give `resolve` real registry data. A published Wado package is a **standalone
+Wasm Component Model artifact** (`wado publish` → `wkg oci push`): one
+`application/wasm` layer under a `application/vnd.wasm.config` config. So a
+registry dependency resolves to a prebuilt component, not a Wado source tree —
+it carries no transitive Wado dependencies and no source entry module.
 
-- [ ] `list_registry_versions`: list tags for `<host>/<prefix>/<ns>/<pkg>`
-      (`wkg oci` / the OCI tags API), strip an optional `[a-zA-Z]+` prefix,
-      keep valid semver tags.
-- [ ] `fetch_registry_package`: pull the artifact for a version, read the
-      embedded `wado.toml` metadata (the `org.wado-lang.*` / WIT sections
-      `publish` writes) into a `Manifest`, and compute the archive `integrity`.
-- [ ] Decide the mechanism: shell out to `wkg oci pull` (consistent with
-      publish, zero new deps) vs a native OCI client crate. Default to `wkg`
-      for symmetry; revisit only if pull needs data `wkg` will not surface.
-- [ ] Map registry URL forms (`oci://<host>/<prefix>`) to repository paths per
-      the WEP's [Registry backend](./wep-2026-02-14-package-manifest.md) rule.
+- [x] Mechanism decided: a **native OCI client** (`oci-client` crate, `wado-cli/src/oci.rs`),
+      not `wkg`. Consuming a dependency is a hot path that must not require an
+      external binary; publish keeps shelling to `wkg`. The two are asymmetric on
+      purpose. `oci-client` uses rustls (deduped with the workspace); extra CA
+      roots are loaded from `SSL_CERT_FILE` so custom/proxy CAs verify.
+- [x] `list_registry_versions`: OCI tags API for `<host>/<prefix>/<ns>/<pkg>`,
+      strip an optional `[a-zA-Z]+` prefix, keep valid semver tags (ignore
+      `latest` etc.). Registry URL `oci://<host>/<prefix>` → repository mapping.
+- [x] `fetch_registry_package`: `integrity` = the OCI manifest digest (no blob
+      download at resolve time). Returns an empty `Manifest` — a standalone
+      component has no transitive Wado deps. Auth mirrors publish
+      (`WKG_OCI_USERNAME` / `WKG_OCI_PASSWORD`, else anonymous).
+- [x] Verified live: `wado update` against `oci://ghcr.io` resolves
+      `wado-lang:cm-catalog` to a real version + digest and writes `wado.lock`.
+- [ ] `oci::pull_component` (the `application/wasm` layer bytes) is in place for
+      Phase 2's cache/fetch, not yet exercised.
 
 ### Phase 2 — Dependency cache + `wado fetch`
 
@@ -153,19 +160,26 @@ Make the `build` core lock-aware (inherited by `run` / `serve` / `test` /
 
 ### Phase 4 — Registry/git deps reach the compiler
 
-Extend the `DependencyIndex` construction beyond path deps and wire
-version-aware routing.
+Wire the resolved graph into the compiler. A registry dependency is a **prebuilt
+CM component**, so — unlike a path/source dependency that compiles into the
+consumer — it is consumed across the Component Model boundary via
+[Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md) (the
+provider-metadata fast path when the component carries Wado GC-type metadata,
+else the canonical ABI). This is the key modeling decision Phase 4 must settle:
+`ModuleSource::Dependency { path }` today loads Wado source; a prebuilt-component
+dependency needs its own representation (the cached `.wasm` + its WIT), distinct
+from source deps.
 
-- [ ] Extend `dependency_index_from` (or a lock-driven successor) to map a
-      registry/git dependency key to its cached entry-module path, producing a
-      `ModuleSource::Dependency`.
+- [ ] Represent a prebuilt-component dependency distinctly from a source
+      dependency (path deps stay source; registry deps are components).
+- [ ] Map a registry dependency key to its cached component + WIT so `use { … }
+      from "ns:pkg"` type-checks against the component's exported interface.
 - [ ] Version-aware routing: `resolve_import(from, spec)` resolves against the
       importing package's own deps, so semver-incompatible versions of one
-      package become distinct `Dependency` ids (WEP "Transitive Version
-      Isolation"). This is the host's job; the compiler already keys modules by
-      resolved path/id.
-- [ ] E2E: a fixture project with a registry dependency builds and runs
-      against a mocked/local OCI registry (`wado build` / `wado run`).
+      package become distinct dependency ids (WEP "Transitive Version
+      Isolation"). Natural for components (CM instances are type-isolated).
+- [ ] E2E: a fixture project depending on `wado-lang:cm-catalog` builds and runs
+      against ghcr (`wado build` / `wado run`).
 
 ### Phase 5 — Dependency-editing CLI
 
@@ -211,10 +225,15 @@ conflict errors, once real registries make multi-constraint graphs common.
 
 ## Open Questions
 
-- OCI pull mechanism (internal to the provider, not a user verb): `wkg oci pull`
-  (symmetry with publish, no new deps) vs a native OCI client (finer control,
-  more code). Leaning `wkg`.
-- Cached form for wado-to-wado deps: extract source from the component's
-  provider metadata, or require a source sidecar at publish time? Affects what
-  `publish` must embed.
+- Resolved (Phase 1): OCI pull uses a native `oci-client`, not `wkg` — consuming
+  a dependency must not require an external binary. Publish stays on `wkg`.
+- Resolved (Phase 1): a registry dependency is the published standalone
+  component (no source sidecar). It is consumed across the CM boundary (Phase 4),
+  so the Wado→Wado source-sharing optimization does not apply to registry deps —
+  only to `path` deps, which compile in from source. If source sharing across a
+  registry ever matters, `publish` would need to embed a Wado source/provider
+  section; not planned.
+- How a prebuilt-component dependency is modeled in the compiler (its
+  `ModuleSource` / lock representation and WIT-driven type-checking) — the Phase 4
+  design decision.
 - Whether `test` should fetch dev-dependencies eagerly or lazily.

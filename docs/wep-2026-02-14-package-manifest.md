@@ -252,6 +252,8 @@ Registry resolution and publishing use OCI (the OCI Distribution Spec): a compon
 
 The earlier warg protocol is dropped. Its registry (`bytecodealliance/registry`) is archived and the ecosystem (`wasm-pkg-tools`) defaults to OCI. A warg-only registry such as wa.dev is reachable only through the external `wkg` tool, not natively; Wado neither implements nor wraps warg. Publishing is likewise done with `wkg`, not a Wado subcommand.
 
+Consuming (pulling), unlike publishing, does not go through `wkg`: a published package is a standalone Wasm Component Model artifact (one `application/wasm` layer), and resolving a dependency is a hot path that must not require an external binary. So the CLI pulls with a native OCI client (the `oci-client` crate), authenticating exactly as publish does (`WKG_OCI_USERNAME` / `WKG_OCI_PASSWORD`, else anonymous). `integrity` is the OCI manifest digest. Because the artifact is a prebuilt component, a registry dependency carries no transitive Wado dependencies and is consumed across the Component Model boundary (see [Wado-to-Wado Optimization](#wado-to-wado-optimization) — the source-sharing path applies to `path` deps, not registry components).
+
 ### `[dependencies]` and `[dev-dependencies]`
 
 Each key is the specifier used in Wado source code, byte-for-byte (`"docs:regex"`, `"lib:shared"`). Values are inline tables specifying the dependency source. See [Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md) for the key forms and resolution rules.
