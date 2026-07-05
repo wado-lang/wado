@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783216731696,
+  "lastUpdate": 1783217265818,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -38249,6 +38249,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/539c4c955fc1ed5df6acb96cc30faa8335caaf85"
         },
         "date": 1783216730972,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8446,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17049,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 284954,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8952e5107fa5a85e50685488f7cddf7ac09d2312",
+          "message": "Merge pull request #1518 from wado-lang/claude/package-gale-action-completion-061cpc\n\nfeat(gale): execute semantic predicates in generated parsers and lexers",
+          "timestamp": "2026-07-05T10:57:29+09:00",
+          "tree_id": "a3934c2b07f0bdbf610f4cf652229624ee809c97",
+          "url": "https://github.com/wado-lang/wado/commit/8952e5107fa5a85e50685488f7cddf7ac09d2312"
+        },
+        "date": 1783217265112,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
