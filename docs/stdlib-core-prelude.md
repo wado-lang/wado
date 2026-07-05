@@ -3251,6 +3251,12 @@ _Fields are private._
 
 Internal: build a by-reference iterator over `[index, end)`.
 
+#### `pub fn copied(&self) -> ArrayIter<T>`
+
+Value ("copied") view over the same backing: yields `T` instead of `&T`.
+Mirrors Rust's `iter().copied()`, letting a reference iterator over a
+primitive list read as values (`xs.iter().copied()`).
+
 #### `impl Iterator for ArrayRefIter<T>`
 
 ##### `fn next(&mut self) -> Option<Self::Item>`
@@ -3989,9 +3995,12 @@ Returns a zero-copy view over `[start, end)`, clamped to `[0, len())`.
 
 Returns a view over the whole list.
 
-#### `pub fn iter(&self) -> ArrayIter<T>`
+#### `pub fn iter(&self) -> ArrayRefIter<T>`
 
-Returns a by-value iterator over the list's elements.
+Returns an iterator over references to the list's elements (`&T`),
+mirroring Rust's `iter()`. For owned values use `into_iter()` or
+`for let x of list` (both yield `T`); to turn a reference iterator back
+into values, chain `copied()`.
 
 #### `pub fn windows(&self, size: i32) -> ArrayWindows<T>`
 

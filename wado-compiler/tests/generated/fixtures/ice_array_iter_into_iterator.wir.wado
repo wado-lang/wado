@@ -115,11 +115,12 @@ fn "wado-compiler/tests/fixtures/ice_array_iter_into_iterator.wado/run"() with S
     let __match_3: ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>";
     let bytes_18: ref "core:prelude/slice.wado//ArrayIter<u8>";
     let collected: ref "core:prelude//List<u8>";
-    let repr_21: ref Array<u8>;
-    let bytes_26: ref "core:prelude/slice.wado//ArraySlice<u8>";
-    let repr_27: ref Array<u8>;
-    let end_29: i32;
-    let bytes_31: ref Array<u8>;
+    let repr_22: ref Array<u8>;
+    let bytes_27: ref "core:prelude/slice.wado//ArraySlice<u8>";
+    let repr_28: ref Array<u8>;
+    let repr_31: ref Array<u8>;
+    let end_33: i32;
+    let bytes_35: ref Array<u8>;
     let len: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
@@ -129,18 +130,19 @@ fn "wado-compiler/tests/fixtures/ice_array_iter_into_iterator.wado/run"() with S
     };
     __b = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111), used: 5 };
     arr = struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(builtin::array_clone<u8>(__b.repr)), used: 5 };
-    repr_21 = arr.repr;
-    bytes_18 = struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: repr_21, index: 0, end: 5 };
+    repr_28 = arr.repr;
+    repr_22 = repr_28;
+    bytes_18 = struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: repr_22, index: 0, end: 5 };
     collected = "core:prelude/slice.wado/ArrayIter<u8>::collect"(bytes_18);
-    __match_3 = __inline_String__from_utf8_slice_15: block -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>" {
-        repr_27 = collected.repr;
-        end_29 = collected.used;
-        bytes_26 = struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: repr_27, start: 0, end: end_29 };
-        if @unlikely("core:prelude/string.wado/String::is_valid_utf8"(bytes_26) == 0) {
+    __match_3 = __inline_String__from_utf8_slice_16: block -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>" {
+        repr_31 = collected.repr;
+        end_33 = collected.used;
+        bytes_27 = struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: repr_31, start: 0, end: end_33 };
+        if @unlikely("core:prelude/string.wado/String::is_valid_utf8"(bytes_27) == 0) {
             cold_path;
-            break __inline_String__from_utf8_slice_15: struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8"), used: 13 } };
+            break __inline_String__from_utf8_slice_16: struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8"), used: 13 } };
         }
-        break __inline_String__from_utf8_slice_15: struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: ref.as_non_null(bytes_31 = "core:prelude/slice.wado/ArraySlice<u8>::to_array"(bytes_26); len = bytes_26.end - bytes_26.start; struct.new "core:prelude/string.wado//String" { repr: bytes_31, used: len }) };
+        break __inline_String__from_utf8_slice_16: struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: ref.as_non_null(bytes_35 = "core:prelude/slice.wado/ArraySlice<u8>::to_array"(bytes_27); len = bytes_27.end - bytes_27.start; struct.new "core:prelude/string.wado//String" { repr: bytes_35, used: len }) };
     };
     if ref.test "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok"(__match_3) {
         s = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok"(__match_3).payload_0;
