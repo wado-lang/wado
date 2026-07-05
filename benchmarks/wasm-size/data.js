@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783217265818,
+  "lastUpdate": 1783221844998,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -38293,6 +38293,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8952e5107fa5a85e50685488f7cddf7ac09d2312"
         },
         "date": 1783217265112,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8446,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17049,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 284954,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2344cfa8d99fd0ea3e491206817fc5d2a707b17d",
+          "message": "Merge pull request #1520 from wado-lang/claude/newtype-display-inspect-vjfjc4\n\nfix: transparent newtype Display and closure/global format-trait coherence",
+          "timestamp": "2026-07-05T12:15:10+09:00",
+          "tree_id": "d6192c47817768ab2dab683913fa2eec374a7ddf",
+          "url": "https://github.com/wado-lang/wado/commit/2344cfa8d99fd0ea3e491206817fc5d2a707b17d"
+        },
+        "date": 1783221844494,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
