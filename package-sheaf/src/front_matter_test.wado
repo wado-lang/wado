@@ -1,0 +1,64 @@
+use { split, parse } from "./front_matter.wado";
+
+test "split extracts the json block and body" {
+    let src = "---json\n{ \"title\": \"Hi\", \"date\": \"2026-07-05\" }\n---\nHello body";
+    match split(&src) {
+        Some([json, body]) => {
+            assert json == "{ \"title\": \"Hi\", \"date\": \"2026-07-05\" }";
+            assert body == "Hello body";
+        },
+        None => {
+            assert false;
+        },
+    }
+}
+
+test "split preserves a multi-line body" {
+    let src = "---json\n{}\n---\nline1\nline2";
+    match split(&src) {
+        Some([_, body]) => {
+            assert body == "line1\nline2";
+        },
+        None => {
+            assert false;
+        },
+    }
+}
+
+test "split returns none without a json fence" {
+    assert split(&"no front matter\nbody") matches { None };
+}
+
+test "parse fills defaults for missing index and tags" {
+    let src = "---json\n{ \"title\": \"Hi\", \"date\": \"2026-07-05\" }\n---\nbody";
+    match parse(&src) {
+        Ok([fm, body]) => {
+            assert fm.title == "Hi";
+            assert fm.date == "2026-07-05";
+            assert fm.index == true;
+            assert fm.tags.is_empty();
+            assert body == "body";
+        },
+        Err(_) => {
+            assert false;
+        },
+    }
+}
+
+test "parse reads explicit index false and tags" {
+    let src = "---json\n{ \"title\": \"T\", \"date\": \"d\", \"index\": false, \"tags\": [\"a\", \"b\"] }\n---\nx";
+    match parse(&src) {
+        Ok([fm, _]) => {
+            assert fm.index == false;
+            assert fm.tags.len() == 2;
+            assert fm.tags[0] == "a";
+        },
+        Err(_) => {
+            assert false;
+        },
+    }
+}
+
+test "parse errors without front matter" {
+    assert parse(&"plain body") matches { Err(_) };
+}
