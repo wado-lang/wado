@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783221844998,
+  "lastUpdate": 1783288661026,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -38357,6 +38357,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 284954,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "27bcc18c694be55e9c9c6b06c1b444b521d77687",
+          "message": "Merge pull request #1524 from wado-lang/claude/package-gale-refactor-2tsbjh\n\nrefactor(gale): idiomatic cleanup and a Rust-aligned iterator model",
+          "timestamp": "2026-07-06T06:49:19+09:00",
+          "tree_id": "0b2a7df6e99b32e2b133fee4c2b927f63aec2fda",
+          "url": "https://github.com/wado-lang/wado/commit/27bcc18c694be55e9c9c6b06c1b444b521d77687"
+        },
+        "date": 1783288660491,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8446,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17049,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 284894,
             "unit": "bytes"
           }
         ]
