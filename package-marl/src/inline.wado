@@ -22,83 +22,70 @@ fn render_range(chars: &List<char>, start: i32, end: i32) -> String {
     let mut i = start;
     while i < end {
         let c = chars[i];
-        if c == '\\' && i + 1 < end && is_ascii_punct(chars[i + 1]) {
-            push_escaped(&mut out, chars[i + 1]);
-            i += 2;
-            continue;
+        match c {
+            '\\' && i + 1 < end && is_ascii_punct(chars[i + 1]) => {
+                push_escaped(&mut out, chars[i + 1]);
+                i += 2;
+            },
+            '\n' => {
+                i = render_line_break(chars, i, start, &mut out);
+            },
+            'h' => {
+                i = emit_or_literal(try_autolink(chars, i, end), c, i, &mut out);
+            },
+            '`' => {
+                i = emit_or_literal(try_code_span(chars, i, end), c, i, &mut out);
+            },
+            '!' && i + 1 < end && chars[i + 1] == '[' => {
+                i = emit_or_literal(try_link(chars, i + 1, end, true), c, i, &mut out);
+            },
+            '[' => {
+                i = emit_or_literal(try_link(chars, i, end, false), c, i, &mut out);
+            },
+            '*' | '_' | '~' => {
+                i = emit_or_literal(try_emphasis(chars, i, end, c), c, i, &mut out);
+            },
+            _ => {
+                push_escaped(&mut out, c);
+                i += 1;
+            },
         }
-        if c == '\n' {
-            if i > start && chars[i - 1] == '\\' {
-                out.pop();
-                out.push_str(&"<br />\n");
-            } else if i - 2 >= start && chars[i - 1] == ' ' && chars[i - 2] == ' ' {
-                trim_trailing_spaces(&mut out);
-                out.push_str(&"<br />\n");
-            } else {
-                out.push('\n');
-            }
-            i += 1;
-            continue;
-        }
-        if c == 'h' {
-            match try_autolink(chars, i, end) {
-                Some([html, next]) => {
-                    out.push_str(&html);
-                    i = next;
-                    continue;
-                },
-                None => {
-                },
-            }
-        }
-        if c == '`' {
-            match try_code_span(chars, i, end) {
-                Some([html, next]) => {
-                    out.push_str(&html);
-                    i = next;
-                    continue;
-                },
-                None => {
-                },
-            }
-        }
-        if c == '!' && i + 1 < end && chars[i + 1] == '[' {
-            match try_link(chars, i + 1, end, true) {
-                Some([html, next]) => {
-                    out.push_str(&html);
-                    i = next;
-                    continue;
-                },
-                None => {
-                },
-            }
-        }
-        if c == '[' {
-            match try_link(chars, i, end, false) {
-                Some([html, next]) => {
-                    out.push_str(&html);
-                    i = next;
-                    continue;
-                },
-                None => {
-                },
-            }
-        }
-        if c == '*' || c == '_' || c == '~' {
-            match try_emphasis(chars, i, end, c) {
-                Some([html, next]) => {
-                    out.push_str(&html);
-                    i = next;
-                    continue;
-                },
-                None => {
-                },
-            }
-        }
-        push_escaped(&mut out, c);
-        i += 1;
     }
     return out;
+}
+
+/// Append the rendered construct and advance past it, or fall back to the
+/// escaped literal character and advance by one.
+fn emit_or_literal(result: Option<[String, i32]>, c: char, i: i32, out: &mut String) -> i32 {
+    match result {
+        Some([html, next]) => {
+            out.push_str(&html);
+            return next;
+        },
+        None => {
+            push_escaped(out, c);
+            return i + 1;
+        },
+    }
+}
+
+fn render_line_break(chars: &List<char>, i: i32, start: i32, out: &mut String) -> i32 {
+    let hard_backslash = i > start && chars[i - 1] == '\\';
+    let hard_spaces = i - 2 >= start && chars[i - 1] == ' ' && chars[i - 2] == ' ';
+    match [hard_backslash, hard_spaces] {
+        [true, _] => {
+            out.pop();
+            out.push_str(&"<br />\n");
+        },
+        [_, true] => {
+            trim_trailing_spaces(out);
+            out.push_str(&"<br />\n");
+        },
+        _ => {
+            out.push('\n');
+        },
+    }
+    return i + 1;
 }
 
 fn try_code_span(chars: &List<char>, i: i32, end: i32) -> Option<[String, i32]> {
@@ -339,7 +326,7 @@ fn is_space(c: char) -> bool {
 
 fn is_ascii_punct(c: char) -> bool {
     let v = c as i32;
-    return v >= 33 && v <= 47 || v >= 58 && v <= 64 || v >= 91 && v <= 96 || v >= 123 && v <= 126;
+    return 33 <= v <= 47 || 58 <= v <= 64 || 91 <= v <= 96 || 123 <= v <= 126;
 }
 
 fn push_escaped(out: &mut String, c: char) {

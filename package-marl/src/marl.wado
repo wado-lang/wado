@@ -145,7 +145,7 @@ fn heading_level(line: &String) -> i32 {
             break;
         }
     }
-    if hashes >= 1 && hashes <= 6 && (!saw_non_hash || next_is_space) {
+    if 1 <= hashes <= 6 && (!saw_non_hash || next_is_space) {
         return hashes;
     }
     return 0;
@@ -314,16 +314,12 @@ fn is_delim_cell(cell: &String) -> bool {
 fn alignment(cell: &String) -> String {
     let left = cell.starts_with(":");
     let right = cell.ends_with(":");
-    if left && right {
-        return "center";
-    }
-    if right {
-        return "right";
-    }
-    if left {
-        return "left";
-    }
-    return "";
+    return match [left, right] {
+        [true, true] => "center",
+        [true, false] => "left",
+        [false, true] => "right",
+        [false, false] => "",
+    };
 }
 
 fn split_row(line: &String) -> List<String> {
@@ -562,7 +558,7 @@ fn line_indent(line: &String) -> i32 {
 
 fn is_digit(c: char) -> bool {
     let v = c as i32;
-    return v >= 48 && v <= 57;
+    return 48 <= v <= 57;
 }
 
 fn to_chars(line: &String) -> List<char> {
