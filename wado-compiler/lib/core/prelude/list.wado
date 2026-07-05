@@ -38,7 +38,7 @@ impl List<T> {
     }
 
     pub fn grow(&mut self) {
-        let capacity = builtin::array_len(&self.repr);
+        let capacity = self.repr.len();
         let new_capacity = i32_max(capacity * 2, 4);
         let mut new_repr: Array<T> = builtin::array_new(new_capacity);
         builtin::array_copy(&mut new_repr, 0, &self.repr, 0, self.used);
@@ -46,7 +46,7 @@ impl List<T> {
     }
 
     fn grow_to(&mut self, min_capacity: i32) {
-        let capacity = builtin::array_len(&self.repr);
+        let capacity = self.repr.len();
         if min_capacity <= capacity {
             return;
         }
@@ -72,7 +72,7 @@ impl List<T> {
 
     /// Returns the total number of elements the list can hold without reallocating.
     pub fn capacity(&self) -> i32 {
-        return builtin::array_len(&self.repr);
+        return self.repr.len();
     }
 
     pub fn internal_raw_data(&self) -> Array<T> {
@@ -87,11 +87,11 @@ impl List<T> {
     #[compiler_item("list_push")]
     pub fn push(&mut self, value: T) with stores[value] {
         let used = self.used;
-        if used >= builtin::array_len(&self.repr) {
+        if used >= self.repr.len() {
             builtin::cold_path();
             self.grow();
         }
-        builtin::array_set(&mut self.repr, used, value);
+        self.repr[used] = value;
         self.used = used + 1;
     }
 
@@ -102,7 +102,7 @@ impl List<T> {
     /// store, so an under-reserved call traps rather than corrupting memory.
     pub fn push_within_capacity(&mut self, value: T) with stores[value] {
         let used = self.used;
-        builtin::array_set(&mut self.repr, used, value);
+        self.repr[used] = value;
         self.used = used + 1;
     }
 
@@ -111,7 +111,7 @@ impl List<T> {
             return null;
         }
         self.used -= 1;
-        return Option::Some(builtin::array_get(&self.repr, self.used));
+        return Option::Some(self.repr[self.used]);
     }
 
     /// Returns the first element, or None if empty.
@@ -119,21 +119,21 @@ impl List<T> {
         if self.used == 0 {
             return null;
         }
-        return Option::Some(builtin::array_get(&self.repr, 0));
+        return Option::Some(self.repr[0]);
     }
 
     pub fn last(&self) -> Option<T> {
         if self.used == 0 {
             return null;
         }
-        return Option::Some(builtin::array_get(&self.repr, self.used - 1));
+        return Option::Some(self.repr[self.used - 1]);
     }
 
     pub fn get(&self, index: i32) -> Option<T> {
         if index < 0 || index >= self.used {
             return null;
         }
-        return Option::Some(builtin::array_get(&self.repr, index));
+        return Option::Some(self.repr[index]);
     }
 
     /// Returns the element at `index` without the `[]` power-assert bounds
@@ -160,13 +160,13 @@ impl List<T> {
     /// Panics if `index > len()`.
     pub fn insert(&mut self, index: i32, value: T) with stores[value] {
         assert 0 <= index <= self.used, "index out of bounds";
-        if self.used >= builtin::array_len(&self.repr) {
+        if self.used >= self.repr.len() {
             builtin::cold_path();
             self.grow();
         }
         // Shift elements right
         builtin::array_copy(&mut self.repr, index + 1, &self.repr, index, self.used - index);
-        builtin::array_set(&mut self.repr, index, value);
+        self.repr[index] = value;
         self.used += 1;
     }
 
@@ -174,7 +174,7 @@ impl List<T> {
     /// Panics if `index >= len()`.
     pub fn remove(&mut self, index: i32) -> T {
         assert 0 <= index < self.used, "index out of bounds";
-        let value = builtin::array_get(&self.repr, index);
+        let value = self.repr[index];
         // Shift elements left
         builtin::array_copy(&mut self.repr, index, &self.repr, index + 1, self.used - 1 - index);
         self.used -= 1;
@@ -186,9 +186,9 @@ impl List<T> {
     pub fn swap(&mut self, a: i32, b: i32) {
         assert 0 <= a < self.used, "index out of bounds";
         assert 0 <= b < self.used, "index out of bounds";
-        let tmp = builtin::array_get(&self.repr, a);
-        builtin::array_set(&mut self.repr, a, builtin::array_get(&self.repr, b));
-        builtin::array_set(&mut self.repr, b, tmp);
+        let tmp = self.repr[a];
+        self.repr[a] = self.repr[b];
+        self.repr[b] = tmp;
     }
 
     pub fn truncate(&mut self, len: i32) {
@@ -205,7 +205,7 @@ impl List<T> {
     /// Reserves capacity for at least `additional` more elements.
     pub fn reserve(&mut self, additional: i32) {
         let required = self.used + additional;
-        if required > builtin::array_len(&self.repr) {
+        if required > self.repr.len() {
             builtin::cold_path();
             self.grow_to(required);
         }
@@ -213,7 +213,7 @@ impl List<T> {
 
     /// Shrinks the capacity to match the current length.
     pub fn shrink_to_fit(&mut self) {
-        let capacity = builtin::array_len(&self.repr);
+        let capacity = self.repr.len();
         if capacity > self.used {
             let mut new_repr: Array<T> = builtin::array_new(self.used);
             builtin::array_copy(&mut new_repr, 0, &self.repr, 0, self.used);
@@ -228,7 +228,7 @@ impl List<T> {
             return;
         }
         let new_used = self.used + other_len;
-        if new_used > builtin::array_len(&self.repr) {
+        if new_used > self.repr.len() {
             builtin::cold_path();
             self.grow_to(new_used);
         }
@@ -247,7 +247,7 @@ impl List<T> {
             return;
         }
         let new_used = self.used + other_len;
-        if new_used > builtin::array_len(&self.repr) {
+        if new_used > self.repr.len() {
             builtin::cold_path();
             self.grow_to(new_used);
         }
@@ -266,9 +266,9 @@ impl List<T> {
         let mut lo = 0;
         let mut hi = self.used - 1;
         while lo < hi {
-            let tmp = builtin::array_get(&self.repr, lo);
-            builtin::array_set(&mut self.repr, lo, builtin::array_get(&self.repr, hi));
-            builtin::array_set(&mut self.repr, hi, tmp);
+            let tmp = self.repr[lo];
+            self.repr[lo] = self.repr[hi];
+            self.repr[hi] = tmp;
             lo += 1;
             hi -= 1;
         }
@@ -290,7 +290,7 @@ impl List<T> {
     #[inline(always)]
     pub fn copy_within_append(&mut self, src_start: i32, count: i32) {
         let new_used = self.used + count;
-        let capacity = builtin::array_len(&self.repr);
+        let capacity = self.repr.len();
         if new_used > capacity {
             builtin::cold_path();
             let new_capacity = i32_max(new_used, capacity * 2);
@@ -309,7 +309,7 @@ impl List<T> {
             // just-written values. `builtin::array_copy` uses copy-as-if-buffered
             // semantics, so it cannot replace this loop.
             for let mut i = 0; i < count; i += 1 {
-                builtin::array_set(&mut self.repr, base + i, builtin::array_get(&self.repr, src_start + i));
+                self.repr[base + i] = self.repr[src_start + i];
             }
         }
         self.used = new_used;
@@ -320,7 +320,7 @@ impl<T: Eq> List<T> {
     /// Returns true if the list contains the given value.
     pub fn contains(&self, value: &T) -> bool {
         for let mut i = 0; i < self.used; i += 1 {
-            if builtin::array_get(&self.repr, i) == *value {
+            if self.repr[i] == *value {
                 return true;
             }
         }
@@ -333,7 +333,7 @@ impl IndexValue<i32> for List<T> {
 
     fn index_value(&self, index: i32) -> Self::Output {
         assert index < self.used, "index out of bounds";
-        return builtin::array_get(&self.repr, index);
+        return self.repr[index];
     }
 }
 
@@ -342,7 +342,7 @@ impl IndexAssign<i32> for List<T> {
 
     fn index_assign(&mut self, index: i32, value: Self::Input) with stores[value] {
         assert index < self.used, "index out of bounds";
-        builtin::array_set(&mut self.repr, index, value);
+        self.repr[index] = value;
     }
 }
 
@@ -352,7 +352,7 @@ impl<T: Eq> Eq for List<T> {
             return false;
         }
         for let mut i = 0; i < self.used; i += 1 {
-            if builtin::array_get(&self.repr, i) != builtin::array_get(&other.repr, i) {
+            if self.repr[i] != other.repr[i] {
                 return false;
             }
         }
@@ -364,8 +364,8 @@ impl<T: Ord> Ord for List<T> {
     pub fn cmp(&self, other: &Self) -> Ordering {
         let min_len = i32_min(self.used, other.used);
         for let mut i = 0; i < min_len; i += 1 {
-            let a = builtin::array_get(&self.repr, i);
-            let b = builtin::array_get(&other.repr, i);
+            let a = self.repr[i];
+            let b = other.repr[i];
             if a < b {
                 return Ordering::Less;
             }
@@ -432,21 +432,21 @@ impl List<T> {
                     for let mut k = start; k < end; k += 1 {
                         if i < mid {
                             if j < end {
-                                let a = builtin::array_get(&self.repr, i);
-                                let b = builtin::array_get(&self.repr, j);
+                                let a = self.repr[i];
+                                let b = self.repr[j];
                                 if let Greater = cmp(&a, &b) {
-                                    builtin::array_set(&mut buf, k, b);
+                                    buf[k] = b;
                                     j += 1;
                                 } else {
-                                    builtin::array_set(&mut buf, k, a);
+                                    buf[k] = a;
                                     i += 1;
                                 }
                             } else {
-                                builtin::array_set(&mut buf, k, builtin::array_get(&self.repr, i));
+                                buf[k] = self.repr[i];
                                 i += 1;
                             }
                         } else {
-                            builtin::array_set(&mut buf, k, builtin::array_get(&self.repr, j));
+                            buf[k] = self.repr[j];
                             j += 1;
                         }
                     }
@@ -538,7 +538,7 @@ impl<T: Display> List<T> {
             if i > 0 {
                 f.write_str(&separator);
             }
-            let item = builtin::array_get(&self.repr, i);
+            let item = self.repr[i];
             item.fmt(&mut f);
         }
         return buf;
@@ -554,7 +554,7 @@ impl List<u8> {
     /// have already range-checked `index` (e.g. a forthcoming `core:cbor`
     /// decoder over an owned `ByteList`).
     pub fn get_byte_unchecked(&self, index: i32) -> u8 {
-        return builtin::array_get(&self.repr, index);
+        return self.repr[index];
     }
 
     /// Renders the bytes as a lowercase hexadecimal string, two digits per
@@ -562,7 +562,7 @@ impl List<u8> {
     pub fn to_hex(&self) -> String {
         let mut s = String::with_capacity(self.used * 2);
         for let mut i = 0; i < self.used; i += 1 {
-            let byte = builtin::array_get(&self.repr, i);
+            let byte = self.repr[i];
             s.push_str(&`{byte:02x}`);
         }
         return s;
