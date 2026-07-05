@@ -6900,16 +6900,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Reify a `CallExpr`. Stage 5 covers the common shapes: bare-ident
-    /// callees that resolve to a current-module or imported free
-    /// function (`TirExprKind::Call`), and qualified-ident
-    /// If `name` is a *global* (current-module or imported) of `fn(...)`
-    /// type, return its `GlobalVarGet` `(module_source, global_name)` and its
-    /// type. Shares `ModuleDecls::lookup_global` with the annotate-side
-    /// `Elaborator::global_var_type` so the two paths agree. Lets a bare call
-    /// on a global closure reify as an indirect call whose callee is built
-    /// directly with the global's type (annotate records no type for the
-    /// callee, mirroring the local-variable path).
+    /// A function-typed global's `GlobalVarGet` parts
+    /// `(module_source, global_name, type)`, or `None` for a non-global or
+    /// non-function name. Shares `ModuleDecls::lookup_global` with the
+    /// annotate-side `Elaborator::global_var_type` so the two paths agree.
     fn global_fn_callee(&self, name: &str) -> Option<(ModuleSource, String, TypeId)> {
         let (module_source, global_name, ty, _mutable) = self
             .sem
@@ -6924,6 +6918,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ))
     }
 
+    /// Reify a `CallExpr`. Stage 5 covers the common shapes: bare-ident
+    /// callees that resolve to a current-module or imported free
+    /// function (`TirExprKind::Call`), and qualified-ident
     /// variant-constructor calls (`Some(x)`, `Result::Ok(v)`)
     /// emitted as `TirExprKind::VariantConstruct` with a payload.
     /// Closure-call, indirect-callee, static-method, qualified-enum,
