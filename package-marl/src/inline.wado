@@ -176,14 +176,12 @@ fn process_emphasis(toks: &mut List<Tok>) {
 
 fn find_opener(toks: &List<Tok>, ci: i32) -> Option<i32> {
     let closer = toks[ci];
-    let mut oi = ci - 1;
-    while oi >= 0 {
+    for let mut oi = ci - 1; oi >= 0; oi -= 1 {
         let opener = toks[oi];
         let ok = opener.kind matches { Delim } && opener.open && opener.count > 0 && opener.ch == closer.ch;
         if ok && rule_of_three(&opener, &closer) {
             return Option::Some(oi);
         }
-        oi -= 1;
     }
     return null;
 }
@@ -207,15 +205,13 @@ fn resolve_pair(toks: &mut List<Tok>, oi: i32, ci: i32) -> i32 {
         _ => if strong { "strong" } else { "em" },
     };
 
-    let mut bi = oi + 1;
-    while bi < ci {
+    for let bi of oi + 1..<ci {
         let mut between = toks[bi];
         if between.kind matches { Delim } {
             between.open = false;
             between.close = false;
             toks[bi] = between;
         }
-        bi += 1;
     }
 
     toks.insert(ci, raw_tok(`</{tag}>`));
@@ -243,10 +239,8 @@ fn serialize(toks: &List<Tok>) -> String {
             Text => out.push_str(&escape_text(&t.text)),
             Html => out.push_str(&t.text),
             Delim => {
-                let mut r = 0;
-                while r < t.count {
+                for let _ of 0..<t.count {
                     out.push(t.ch);
-                    r += 1;
                 }
             },
         }
@@ -281,10 +275,8 @@ fn code_content(cur: &StrCursor, s: i32, e: i32) -> String {
         b -= 1;
     }
     let mut out = String::new();
-    let mut k = a;
-    while k < b {
+    for let k of a..<b {
         push_code_char(&mut out, char_at(cur, k));
-        k += 1;
     }
     return out;
 }
@@ -405,15 +397,7 @@ fn try_autolink(cur: &StrCursor, i: i32) -> Option<[String, i32]> {
     if !starts_with_at(cur, i, "http://") && !starts_with_at(cur, i, "https://") {
         return null;
     }
-    let end = cur.end();
-    let mut j = i;
-    while j < end {
-        let c = char_at(cur, j);
-        if is_space(c) || c matches { '<' | '>' } {
-            break;
-        }
-        j += 1;
-    }
+    let mut j = url_run_end(cur, i);
     while j > i && is_trailing_punct(char_at(cur, j - 1)) {
         j -= 1;
     }
@@ -424,6 +408,19 @@ fn try_autolink(cur: &StrCursor, i: i32) -> Option<[String, i32]> {
     let href = escape_attr(&url);
     let text = escape_text(&url);
     return Option::Some([`<a href="{href}">{text}</a>`, j]);
+}
+
+/// The index just past a bare URL run starting at `start`, stopping at
+/// whitespace or `<`/`>`.
+fn url_run_end(cur: &StrCursor, start: i32) -> i32 {
+    let end = cur.end();
+    for let j of start..<end {
+        let c = char_at(cur, j);
+        if is_space(c) || c matches { '<' | '>' } {
+            return j;
+        }
+    }
+    return end;
 }
 
 fn starts_with_at(cur: &StrCursor, i: i32, pat: String) -> bool {
@@ -489,12 +486,10 @@ fn run_length(cur: &StrCursor, from: i32, d: char) -> i32 {
 }
 
 fn all_spaces(cur: &StrCursor, s: i32, e: i32) -> bool {
-    let mut k = s;
-    while k < e {
+    for let k of s..<e {
         if !cur.is_at(k, ' ') {
             return false;
         }
-        k += 1;
     }
     return true;
 }

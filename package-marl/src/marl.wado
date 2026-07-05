@@ -245,11 +245,10 @@ fn is_code_fence_close(line: &String, ch: char, fence_len: i32) -> bool {
     if run < fence_len {
         return false;
     }
-    while p < len {
-        if !chars[p] matches { ' ' | '\t' } {
+    for let q of p..<len {
+        if !chars[q] matches { ' ' | '\t' } {
             return false;
         }
-        p += 1;
     }
     return true;
 }

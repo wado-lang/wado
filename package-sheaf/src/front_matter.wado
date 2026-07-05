@@ -21,13 +21,11 @@ pub fn split(source: &String) -> Result<[String, String], String> {
         return Result::Err("missing ---json front matter");
     }
     let mut close = -1;
-    let mut i = 1;
-    while i < lines.len() {
+    for let mut i = 1; i < lines.len(); i += 1 {
         if lines[i].trim() == "---" {
             close = i;
             break;
         }
-        i += 1;
     }
     if close < 0 {
         return Result::Err("unterminated ---json fence");
@@ -39,10 +37,8 @@ pub fn split(source: &String) -> Result<[String, String], String> {
 
 fn join_range(lines: &List<String>, s: i32, e: i32) -> String {
     let mut out: List<String> = [];
-    let mut k = s;
-    while k < e {
+    for let k of s..<e {
         out.push(lines[k]);
-        k += 1;
     }
     return out.join("\n");
 }
