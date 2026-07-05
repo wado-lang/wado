@@ -17,8 +17,8 @@
 //!
 //! See WEP 2026-04-12 §"M6.5 stage 2".
 use crate::ast::{
-    AstId, CallExpr, Expr, IdentExpr, Item, LetStmt, Module, NamedType, Pattern, Stmt, TryOpExpr,
-    Type, UseDecl, UseItem,
+    AstId, Expr, GenericType, IdentExpr, Item, LetStmt, Module, NamedType, Param, Pattern, SelfKind,
+    Stmt, StructLiteralExpr, StructLiteralField, Type, UseDecl, UseItem,
 };
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::IndexMap;
@@ -52,18 +52,23 @@ pub fn check_loaded<H: CompilerHost>(
 }
 
 /// Rewrite a kiln generator's `fn generate(req: Request<T>) -> Result<...>`
-/// so the first parameter becomes `req: RawRequest` and the body starts
-/// with `let req = bind_request::<T>(req)?;`. The user's subsequent body
-/// keeps seeing `req` as `Request<T>` via same-scope shadowing (WEP
-/// 2026-03-25), so the UX is "author writes `fn generate(req:
-/// Request<Options>)`".
+/// into the typed-options wire shape (Kiln WEP "Protocol revision v0.3"):
+/// the single `req` parameter is replaced by `primary: InputFile`, `inputs:
+/// List<InputFile>`, and `options: T`, and the body starts with `let req =
+/// Request { primary, inputs, options };`. The user's subsequent body keeps
+/// seeing `req` as `Request<T>` via same-scope shadowing (WEP 2026-03-25),
+/// so the UX is "author writes `fn generate(req: Request<Options>)`".
+///
+/// Options cross the boundary as a typed WIT value — not a CBOR blob — so
+/// there is no `bind_request` / `RawRequest`. A no-`Options` generator
+/// (`T = NoOptions`) omits the `options` parameter entirely (an empty record
+/// has no Component Model representation) and its `Request` is built with a
+/// literal `NoOptions {}`.
 ///
 /// Gated on `target_world == core:kiln/generator`. Fires when the first
 /// param's type is syntactically `Request<T>` (one type argument) or the
 /// bare `Request` (a no-options generator), in which case `T` is the
-/// default `NoOptions`. Generator authors who prefer the explicit v1
-/// `fn generate(raw: RawRequest)` shape keep working unchanged — this
-/// pass is a no-op for them.
+/// default `NoOptions`.
 pub fn inject_kiln_request_adapter(
     target_world: Option<&str>,
     entry_module: &ModuleSource,
@@ -103,58 +108,98 @@ pub fn inject_kiln_request_adapter(
         return;
     };
 
-    // Allocate every synthesized AstId up front so `module.items` stays
-    // free of mutable borrows when we reach back into the function.
-    let raw_ty_id = module.alloc_ast_id();
-    let bind_ident_id = module.alloc_ast_id();
-    let raw_arg_id = module.alloc_ast_id();
-    let call_id = module.alloc_ast_id();
-    let try_id = module.alloc_ast_id();
-    let let_id = module.alloc_ast_id();
-    let pattern_id = module.alloc_ast_id();
-
-    let inner_type = match request_options {
+    let has_options = matches!(request_options, RequestOptions::Explicit(_));
+    let options_type = match request_options {
         RequestOptions::Explicit(ty) => ty,
         RequestOptions::Default => {
-            let noopts_id = module.alloc_ast_id();
-            ensure_kiln_imports(module, span, &["NoOptions"]);
-            Type::Named(NamedType::new(noopts_id, "NoOptions".to_string(), span))
+            Type::Named(NamedType::new(module.alloc_ast_id(), "NoOptions".to_string(), span))
         }
     };
 
-    let raw_request_type = Type::Named(NamedType::new(raw_ty_id, "RawRequest".to_string(), span));
+    let input_file_ty = |module: &mut Module| {
+        Type::Named(NamedType::new(
+            module.alloc_ast_id(),
+            "InputFile".to_string(),
+            span,
+        ))
+    };
+    let param = |module: &mut Module, name: &str, ty: Type| Param {
+        id: module.alloc_ast_id(),
+        name: name.to_string(),
+        name_span: span,
+        ty,
+        self_kind: SelfKind::None,
+        is_mut: false,
+        default: None,
+        span,
+    };
 
-    let bind_callee = Expr::Ident(IdentExpr {
-        id: bind_ident_id,
-        name: "bind_request".to_string(),
+    let primary_ty = input_file_ty(module);
+    let primary_param = param(module, "primary", primary_ty);
+    let inputs_elem = input_file_ty(module);
+    let inputs_ty = Type::Generic(GenericType {
+        id: module.alloc_ast_id(),
+        name: "List".to_string(),
+        args: vec![inputs_elem],
         span,
-        segments: Vec::new(),
-        type_args: Vec::new(),
     });
-    let raw_arg = Expr::Ident(IdentExpr {
-        id: raw_arg_id,
-        name: param_name.clone(),
+    let inputs_param = param(module, "inputs", inputs_ty);
+    let options_param = has_options.then(|| param(module, "options", options_type));
+
+    // `Request { primary, inputs, options }`, where `options` is the typed
+    // `options` argument (or a literal `NoOptions {}` for a no-options
+    // generator). Same-scope shadowing rebinds `<param_name>` to `Request<T>`.
+    let ident_field = |module: &mut Module, name: &str| StructLiteralField {
+        name: name.to_string(),
+        name_id: module.alloc_ast_id(),
+        name_span: span,
+        value: Expr::Ident(IdentExpr {
+            id: module.alloc_ast_id(),
+            name: name.to_string(),
+            span,
+            segments: Vec::new(),
+            type_args: Vec::new(),
+        }),
+        is_shorthand: false,
         span,
-        segments: Vec::new(),
-        type_args: Vec::new(),
-    });
-    let bind_call = Expr::Call(Box::new(CallExpr {
-        id: call_id,
-        callee: bind_callee,
-        type_args: vec![inner_type],
-        args: vec![raw_arg],
+    };
+    let primary_field = ident_field(module, "primary");
+    let inputs_field = ident_field(module, "inputs");
+    let options_field = if has_options {
+        ident_field(module, "options")
+    } else {
+        StructLiteralField {
+            name: "options".to_string(),
+            name_id: module.alloc_ast_id(),
+            name_span: span,
+            value: Expr::StructLiteral(Box::new(StructLiteralExpr {
+                id: module.alloc_ast_id(),
+                name: Some("NoOptions".to_string()),
+                name_id: Some(module.alloc_ast_id()),
+                name_span: Some(span),
+                fields: Vec::new(),
+                spreads: Vec::new(),
+                has_trailing_comma: false,
+                span,
+            })),
+            is_shorthand: false,
+            span,
+        }
+    };
+    let request_lit = Expr::StructLiteral(Box::new(StructLiteralExpr {
+        id: module.alloc_ast_id(),
+        name: Some("Request".to_string()),
+        name_id: Some(module.alloc_ast_id()),
+        name_span: Some(span),
+        fields: vec![primary_field, inputs_field, options_field],
+        spreads: Vec::new(),
         has_trailing_comma: false,
         span,
     }));
-    let try_expr = Expr::TryOp(Box::new(TryOpExpr {
-        id: try_id,
-        expr: bind_call,
-        span,
-    }));
     let let_stmt = Stmt::Let(LetStmt {
-        id: let_id,
+        id: module.alloc_ast_id(),
         pattern: Pattern::Ident {
-            id: pattern_id,
+            id: module.alloc_ast_id(),
             name: param_name,
             span,
         },
@@ -162,19 +207,24 @@ pub fn inject_kiln_request_adapter(
         is_mut: false,
         is_reactive: false,
         ty: None,
-        value: Some(try_expr),
+        value: Some(request_lit),
         span,
     });
 
-    // Ensure `bind_request` and `RawRequest` are imported from
-    // `core:kiln` (the author only wrote `Request`/`Response`/`Error`;
-    // the synthesis needs the other two).
-    ensure_kiln_imports(module, span, &["bind_request", "RawRequest"]);
+    // The author imported `Request`; the synthesis also needs `InputFile`
+    // (and `NoOptions` for a no-options generator).
+    let mut needed: Vec<&str> = vec!["InputFile"];
+    if !has_options {
+        needed.push("NoOptions");
+    }
+    ensure_kiln_imports(module, span, &needed);
 
     if let Some(Item::Function(func)) = module.items.get_mut(item_idx) {
-        if let Some(first) = func.params.first_mut() {
-            first.ty = raw_request_type;
+        let mut params = vec![primary_param, inputs_param];
+        if let Some(options_param) = options_param {
+            params.push(options_param);
         }
+        func.params = params;
         if let Some(body) = func.body.as_mut() {
             body.stmts.insert(0, let_stmt);
         }
