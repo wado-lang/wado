@@ -6905,24 +6905,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// function (`TirExprKind::Call`), and qualified-ident
     /// If `name` is a *global* (current-module or imported) of `fn(...)`
     /// type, return its `GlobalVarGet` `(module_source, global_name)` and its
-    /// type — the reify-side mirror of `Elaborator::global_fn_signature`. Lets
-    /// a bare call on a global closure reify as an indirect call whose callee
-    /// is built directly with the global's type (annotate records no type for
-    /// the callee, mirroring the local-variable path).
+    /// type. Shares `ModuleDecls::lookup_global` with the annotate-side
+    /// `Elaborator::global_var_type` so the two paths agree. Lets a bare call
+    /// on a global closure reify as an indirect call whose callee is built
+    /// directly with the global's type (annotate records no type for the
+    /// callee, mirroring the local-variable path).
     fn global_fn_callee(&self, name: &str) -> Option<(ModuleSource, String, TypeId)> {
-        let (module_source, global_name, ty) = self
+        let (module_source, global_name, ty, _mutable) = self
             .sem
             .decls
-            .current_module_globals
-            .get(name)
-            .map(|&(t, _)| (self.current_module_source.clone(), name.to_string(), t))
-            .or_else(|| {
-                self.sem
-                    .decls
-                    .imported_globals
-                    .get(name)
-                    .map(|(src, orig, t, _)| (src.clone(), orig.clone(), *t))
-            })?;
+            .lookup_global(name, &self.current_module_source)?;
         let table = self.tysys.type_table.borrow();
         let base = table.get_ultimate_base_type(table.peel_refs(ty));
         matches!(table.get(base), crate::tir::ResolvedType::Function { .. }).then_some((
@@ -7292,9 +7284,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 || self
                     .sem
                     .decls
-                    .current_module_globals
-                    .contains_key(&ident.name)
-                || self.sem.decls.imported_globals.contains_key(&ident.name))
+                    .lookup_global(&ident.name, &self.current_module_source)
+                    .is_some())
         {
             return TirExpr::new(TirExprKind::Unit, crate::tir::TypeTable::ERROR, span);
         }

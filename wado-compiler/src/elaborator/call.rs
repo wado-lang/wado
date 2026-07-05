@@ -150,16 +150,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn global_var_type(&self, name: &str) -> Option<TypeId> {
         self.sem
             .decls
-            .current_module_globals
-            .get(name)
-            .map(|&(t, _)| t)
-            .or_else(|| {
-                self.sem
-                    .decls
-                    .imported_globals
-                    .get(name)
-                    .map(|&(_, _, t, _)| t)
-            })
+            .lookup_global(name, &self.current_module_source)
+            .map(|(_, _, ty, _)| ty)
     }
 
     /// Walk a callee expression down to its *root place* identifier so
@@ -279,8 +271,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Expr::Ident(ident) = &call.callee
             && !ident.name.contains("::")
         {
-            let local_ty = ctx.lookup(&ident.name).map(|local| local.type_id);
-            if let Some(value_ty) = local_ty.or_else(|| self.global_var_type(&ident.name)) {
+            let local = ctx
+                .lookup(&ident.name)
+                .map(|local| (local.type_id, local.defining_ast_id));
+            let value_ty = local
+                .map(|(ty, _)| ty)
+                .or_else(|| self.global_var_type(&ident.name));
+            if let Some(value_ty) = value_ty {
+                // Record the use→def edge the same way `resolve_ident` would,
+                // so navigation on a value-binding callee (local or global)
+                // still resolves — the fast path bypasses `resolve_ident`.
+                match local {
+                    Some((_, defining_ast_id)) => {
+                        self.record_reference_opt(ident.id, defining_ast_id);
+                    }
+                    None => self.record_item_reference_by_name(ident.id, &ident.name),
+                }
+
                 if let Some(sig) = self.as_fn_signature(value_ty) {
                     // `fn mut` closures need a `mut` root binding — mirrors
                     // Rust's FnMut rule. The check goes through the same helper
@@ -295,7 +302,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         ctx,
                         &sig.params,
                         sig.return_type,
-                        /* pad_with_defaults */ local_ty.is_some(),
+                        /* pad_with_defaults */ local.is_some(),
                     );
                 }
 
@@ -307,6 +314,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     type_name,
                     span: call.callee.span(),
                 });
+                // Still resolve the arguments so errors inside them are
+                // reported rather than masked by the callee error.
+                for arg in &call.args {
+                    self.resolve_expr(arg, ctx, None);
+                }
                 return TypeTable::ERROR;
             }
         }
