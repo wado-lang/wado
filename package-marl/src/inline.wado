@@ -1,19 +1,18 @@
 //! Inline rendering: code spans, emphasis/strong, strikethrough, links,
 //! images, autolinks, hard breaks, and backslash escapes.
 //!
-//! The text is tokenized into literal text, final-HTML, and delimiter-run
-//! tokens; emphasis is then resolved by the CommonMark "process emphasis"
-//! delimiter-stack procedure (flanking rules, the rule of three, and nested
-//! `*`/`**`/`***`). Strikethrough (`~`) reuses the same machinery.
+//! The text is scanned through a `StrCursor` and tokenized into literal-text,
+//! final-HTML, and delimiter-run tokens; emphasis is then resolved by the
+//! CommonMark "process emphasis" delimiter-stack procedure (flanking rules, the
+//! rule of three, and nested `*`/`**`/`***`). Strikethrough (`~`) reuses the
+//! same machinery.
 
 use { escape_attr, escape_text } from "./html.wado";
+use { StrCursor, chars_of } from "./str_cursor.wado";
 
 pub fn render_inline(text: &String) -> String {
-    let mut chars: List<char> = [];
-    for let c of text.chars() {
-        chars.push(c);
-    }
-    return render_range(&chars, 0, chars.len());
+    let chars = chars_of(text);
+    return render_range(StrCursor::over(&chars));
 }
 
 /// An inline token. `kind` is 0 for literal text (escaped on serialize), 1 for
@@ -28,96 +27,111 @@ struct Tok {
     close: bool,
 }
 
-fn render_range(chars: &List<char>, start: i32, end: i32) -> String {
+fn render_range(cursor: StrCursor) -> String {
     let mut toks: List<Tok> = [];
-    tokenize(chars, start, end, &mut toks);
+    tokenize(cursor, &mut toks);
     process_emphasis(&mut toks);
     return serialize(&toks);
 }
 
-fn tokenize(chars: &List<char>, start: i32, end: i32, toks: &mut List<Tok>) {
-    let mut cur = String::new();
-    let mut i = start;
-    while i < end {
-        let c = chars[i];
+fn tokenize(cursor: StrCursor, toks: &mut List<Tok>) {
+    let mut cur = cursor;
+    let mut buf = String::new();
+    while !cur.eof() {
+        let i = cur.position();
+        let c = char_at(&cur, i);
         match c {
-            '\\' && i + 1 < end && is_ascii_punct(chars[i + 1]) => {
-                cur.push(chars[i + 1]);
-                i += 2;
+            '\\' && is_escapable(&cur, i + 1) => {
+                buf.push(char_at(&cur, i + 1));
+                cur.set_position(i + 2);
             },
             '\n' => {
-                i = push_line_break(&mut cur, chars, i, start, toks);
+                push_line_break(&mut buf, &cur, i, toks);
+                cur.set_position(i + 1);
             },
             'h' => {
-                i = push_construct(try_autolink(chars, i, end), c, i, &mut cur, toks);
+                cur.set_position(push_construct(try_autolink(&cur, i), c, i, &mut buf, toks));
             },
             '`' => {
-                i = push_construct(try_code_span(chars, i, end), c, i, &mut cur, toks);
+                cur.set_position(push_construct(try_code_span(&cur, i), c, i, &mut buf, toks));
             },
-            '!' && i + 1 < end && chars[i + 1] == '[' => {
-                i = push_construct(try_link(chars, i + 1, end, true), c, i, &mut cur, toks);
+            '!' && cur.is_at(i + 1, '[') => {
+                cur.set_position(push_construct(try_link(&cur, i + 1, true), c, i, &mut buf, toks));
             },
             '[' => {
-                i = push_construct(try_link(chars, i, end, false), c, i, &mut cur, toks);
+                cur.set_position(push_construct(try_link(&cur, i, false), c, i, &mut buf, toks));
             },
             '*' | '_' | '~' => {
-                flush_text(&mut cur, toks);
-                i = push_delim(chars, start, i, end, c, toks);
+                flush_text(&mut buf, toks);
+                cur.set_position(push_delim(&cur, i, c, toks));
             },
             _ => {
-                cur.push(c);
-                i += 1;
+                buf.push(c);
+                cur.bump();
             },
         }
     }
-    flush_text(&mut cur, toks);
+    flush_text(&mut buf, toks);
 }
 
-fn flush_text(cur: &mut String, toks: &mut List<Tok>) {
-    if cur.len() == 0 {
+fn char_at(cur: &StrCursor, idx: i32) -> char {
+    return match cur.at(idx) {
+        Some(c) => c,
+        None => ' ',
+    };
+}
+
+fn is_escapable(cur: &StrCursor, idx: i32) -> bool {
+    return match cur.at(idx) {
+        Some(c) => is_ascii_punct(c),
+        None => false,
+    };
+}
+
+fn flush_text(buf: &mut String, toks: &mut List<Tok>) {
+    if buf.len() == 0 {
         return;
     }
-    let text = *cur;
+    let text = *buf;
     toks.push(Tok { kind: 0, text, ch: ' ', count: 0, orig: 0, open: false, close: false });
-    *cur = String::new();
+    *buf = String::new();
 }
 
 fn push_raw(html: String, toks: &mut List<Tok>) {
-    toks.push(Tok { kind: 1, text: html, ch: ' ', count: 0, orig: 0, open: false, close: false });
+    toks.push(raw_tok(html));
 }
 
-fn push_construct(result: Option<[String, i32]>, c: char, i: i32, cur: &mut String, toks: &mut List<Tok>) -> i32 {
+fn push_construct(result: Option<[String, i32]>, c: char, i: i32, buf: &mut String, toks: &mut List<Tok>) -> i32 {
     match result {
         Some([html, next]) => {
-            flush_text(cur, toks);
+            flush_text(buf, toks);
             push_raw(html, toks);
             return next;
         },
         None => {
-            cur.push(c);
+            buf.push(c);
             return i + 1;
         },
     }
 }
 
-fn push_line_break(cur: &mut String, chars: &List<char>, i: i32, start: i32, toks: &mut List<Tok>) -> i32 {
+fn push_line_break(buf: &mut String, cur: &StrCursor, i: i32, toks: &mut List<Tok>) {
     // A trailing backslash is a hard break. Trailing-space hard breaks are an
     // intentional non-goal (invisible whitespace footgun); such lines fold as
     // an ordinary soft break.
-    if i > start && chars[i - 1] == '\\' {
-        cur.pop();
-        flush_text(cur, toks);
+    if cur.is_at(i - 1, '\\') {
+        buf.pop();
+        flush_text(buf, toks);
         push_raw("<br />\n", toks);
     } else {
-        cur.push('\n');
+        buf.push('\n');
     }
-    return i + 1;
 }
 
-fn push_delim(chars: &List<char>, start: i32, i: i32, end: i32, d: char, toks: &mut List<Tok>) -> i32 {
-    let n = run_length(chars, i, d);
-    let prev = opt_char(chars, i - 1, start, end);
-    let next = opt_char(chars, i + n, start, end);
+fn push_delim(cur: &StrCursor, i: i32, d: char, toks: &mut List<Tok>) -> i32 {
+    let n = run_length(cur, i, d);
+    let prev = cur.at(i - 1);
+    let next = cur.at(i + n);
     toks.push(Tok {
         kind: 2,
         text: "",
@@ -231,14 +245,15 @@ fn serialize(toks: &List<Tok>) -> String {
     return out;
 }
 
-fn try_code_span(chars: &List<char>, i: i32, end: i32) -> Option<[String, i32]> {
-    let n = run_length(chars, i, '`');
+fn try_code_span(cur: &StrCursor, i: i32) -> Option<[String, i32]> {
+    let n = run_length(cur, i, '`');
+    let end = cur.end();
     let mut j = i + n;
     while j < end {
-        if chars[j] == '`' {
-            let m = run_length(chars, j, '`');
+        if cur.is_at(j, '`') {
+            let m = run_length(cur, j, '`');
             if m == n {
-                let content = code_content(chars, i + n, j);
+                let content = code_content(cur, i + n, j);
                 return Option::Some([`<code>{content}</code>`, j + n]);
             }
             j += m;
@@ -249,35 +264,35 @@ fn try_code_span(chars: &List<char>, i: i32, end: i32) -> Option<[String, i32]> 
     return null;
 }
 
-fn code_content(chars: &List<char>, s: i32, e: i32) -> String {
+fn code_content(cur: &StrCursor, s: i32, e: i32) -> String {
     let mut a = s;
     let mut b = e;
-    if b - a >= 2 && chars[a] == ' ' && chars[b - 1] == ' ' && !all_spaces(chars, a, b) {
+    if b - a >= 2 && cur.is_at(a, ' ') && cur.is_at(b - 1, ' ') && !all_spaces(cur, a, b) {
         a += 1;
         b -= 1;
     }
     let mut out = String::new();
     let mut k = a;
     while k < b {
-        push_code_char(&mut out, chars[k]);
+        push_code_char(&mut out, char_at(cur, k));
         k += 1;
     }
     return out;
 }
 
-fn try_link(chars: &List<char>, open: i32, end: i32, is_image: bool) -> Option<[String, i32]> {
+fn try_link(cur: &StrCursor, open: i32, is_image: bool) -> Option<[String, i32]> {
+    let end = cur.end();
     let mut depth = 0;
     let mut j = open;
     let mut close = -1;
     while j < end {
-        let c = chars[j];
-        if c == '\\' {
+        if cur.is_at(j, '\\') {
             j += 2;
             continue;
         }
-        if c == '[' {
+        if cur.is_at(j, '[') {
             depth += 1;
-        } else if c == ']' {
+        } else if cur.is_at(j, ']') {
             depth -= 1;
             if depth == 0 {
                 close = j;
@@ -286,21 +301,20 @@ fn try_link(chars: &List<char>, open: i32, end: i32, is_image: bool) -> Option<[
         }
         j += 1;
     }
-    if close < 0 || close + 1 >= end || chars[close + 1] != '(' {
+    if close < 0 || close + 1 >= end || !cur.is_at(close + 1, '(') {
         return null;
     }
     let mut k = close + 2;
     let mut pdepth = 1;
     let mut pclose = -1;
     while k < end {
-        let c = chars[k];
-        if c == '\\' {
+        if cur.is_at(k, '\\') {
             k += 2;
             continue;
         }
-        if c == '(' {
+        if cur.is_at(k, '(') {
             pdepth += 1;
-        } else if c == ')' {
+        } else if cur.is_at(k, ')') {
             pdepth -= 1;
             if pdepth == 0 {
                 pclose = k;
@@ -312,15 +326,15 @@ fn try_link(chars: &List<char>, open: i32, end: i32, is_image: bool) -> Option<[
     if pclose < 0 {
         return null;
     }
-    let dest_raw = raw_string(chars, close + 2, pclose);
+    let dest_raw = cur.slice(close + 2, pclose);
     let [dest, title] = parse_dest_title(&dest_raw);
     let href = escape_attr(&dest);
     let title_attr = title_attribute(&title);
     if is_image {
-        let alt = escape_attr(&raw_string(chars, open + 1, close));
+        let alt = escape_attr(&cur.slice(open + 1, close));
         return Option::Some([`<img src="{href}" alt="{alt}"{title_attr} />`, pclose + 1]);
     }
-    let text_html = render_range(chars, open + 1, close);
+    let text_html = render_range(cur.sub(open + 1, close));
     return Option::Some([`<a href="{href}"{title_attr}>{text_html}</a>`, pclose + 1]);
 }
 
@@ -366,6 +380,42 @@ fn title_attribute(title: &String) -> String {
     return ` title="{escape_attr(title)}"`;
 }
 
+fn try_autolink(cur: &StrCursor, i: i32) -> Option<[String, i32]> {
+    if !starts_with_at(cur, i, "http://") && !starts_with_at(cur, i, "https://") {
+        return null;
+    }
+    let end = cur.end();
+    let mut j = i;
+    while j < end {
+        let c = char_at(cur, j);
+        if is_space(c) || c == '<' || c == '>' {
+            break;
+        }
+        j += 1;
+    }
+    while j > i && is_trailing_punct(char_at(cur, j - 1)) {
+        j -= 1;
+    }
+    if j <= i {
+        return null;
+    }
+    let url = cur.slice(i, j);
+    let href = escape_attr(&url);
+    let text = escape_text(&url);
+    return Option::Some([`<a href="{href}">{text}</a>`, j]);
+}
+
+fn starts_with_at(cur: &StrCursor, i: i32, pat: String) -> bool {
+    let mut k = 0;
+    for let pc of pat.chars() {
+        if !cur.is_at(i + k, pc) {
+            return false;
+        }
+        k += 1;
+    }
+    return true;
+}
+
 /// A delimiter run of `d` bounded by `prev`/`next` can open emphasis when it is
 /// left-flanking (with the `_` intraword restriction). See the CommonMark spec,
 /// "Emphasis and strong emphasis".
@@ -393,13 +443,6 @@ fn right_flanking(prev: Option<char>, next: Option<char>) -> bool {
     return !opt_is_ws(prev) && (!opt_is_punct(prev) || opt_is_ws(next) || opt_is_punct(next));
 }
 
-fn opt_char(chars: &List<char>, idx: i32, start: i32, end: i32) -> Option<char> {
-    if start <= idx < end {
-        return Option::Some(chars[idx]);
-    }
-    return null;
-}
-
 fn opt_is_ws(o: Option<char>) -> bool {
     return match o {
         Some(c) => is_space(c),
@@ -414,67 +457,20 @@ fn opt_is_punct(o: Option<char>) -> bool {
     };
 }
 
-fn run_length(chars: &List<char>, start: i32, d: char) -> i32 {
+fn run_length(cur: &StrCursor, from: i32, d: char) -> i32 {
     let mut n = 0;
-    let mut i = start;
-    let len = chars.len();
-    while i < len && chars[i] == d {
+    let mut i = from;
+    while cur.is_at(i, d) {
         n += 1;
         i += 1;
     }
     return n;
 }
 
-fn raw_string(chars: &List<char>, s: i32, e: i32) -> String {
-    let mut out = String::new();
+fn all_spaces(cur: &StrCursor, s: i32, e: i32) -> bool {
     let mut k = s;
     while k < e {
-        out.push(chars[k]);
-        k += 1;
-    }
-    return out;
-}
-
-fn all_spaces(chars: &List<char>, s: i32, e: i32) -> bool {
-    let mut k = s;
-    while k < e {
-        if chars[k] != ' ' {
-            return false;
-        }
-        k += 1;
-    }
-    return true;
-}
-
-fn try_autolink(chars: &List<char>, i: i32, end: i32) -> Option<[String, i32]> {
-    if !starts_with_at(chars, i, "http://") && !starts_with_at(chars, i, "https://") {
-        return null;
-    }
-    let mut j = i;
-    while j < end {
-        let c = chars[j];
-        if is_space(c) || c == '<' || c == '>' {
-            break;
-        }
-        j += 1;
-    }
-    while j > i && is_trailing_punct(chars[j - 1]) {
-        j -= 1;
-    }
-    if j <= i {
-        return null;
-    }
-    let url = raw_string(chars, i, j);
-    let href = escape_attr(&url);
-    let text = escape_text(&url);
-    return Option::Some([`<a href="{href}">{text}</a>`, j]);
-}
-
-fn starts_with_at(chars: &List<char>, i: i32, pat: String) -> bool {
-    let len = chars.len();
-    let mut k = 0;
-    for let pc of pat.chars() {
-        if i + k >= len || chars[i + k] != pc {
+        if !cur.is_at(k, ' ') {
             return false;
         }
         k += 1;
@@ -485,7 +481,6 @@ fn starts_with_at(chars: &List<char>, i: i32, pat: String) -> bool {
 fn is_trailing_punct(c: char) -> bool {
     return c == '.' || c == ',' || c == ';' || c == ':' || c == '!' || c == '?';
 }
-
 
 fn is_space(c: char) -> bool {
     return c == ' ' || c == '\t' || c == '\n';
