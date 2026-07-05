@@ -1,0 +1,28 @@
+//! Stage C context-free predicate reading `p`: a `{ p.la(1) == TK_NUM }?`
+//! alt-initial predicate is extracted to `pred_<id>(p: &Parser) -> bool` and
+//! called from the token-led dispatch. Pins that a `p`-using predicate body
+//! compiles under the `&Parser` receiver and evaluates correctly.
+
+use pl from "./grammars/wado_pred_la.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_pred_la",
+        },
+    };
+
+test "a p-reading predicate gates the token-led branch" {
+    let num = pl::parse_takes(&"5");
+    assert num.ok(), "clean parse when p.la(1) == TK_NUM holds";
+    assert num.output == "num", `output: '{num.output}'`;
+
+    let id = pl::parse_takes(&"x");
+    assert id.ok(), "the unpredicated ID branch is unaffected";
+    assert id.output == "id", `output: '{id.output}'`;
+}
+
+test "a false p-reading predicate fails the selected branch" {
+    let bad = pl::parse_rejects(&"5");
+    assert !bad.ok(), "p.la(1) == TK_ID is false on a NUM token, so no viable alternative";
+}
