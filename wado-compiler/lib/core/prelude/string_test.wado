@@ -1113,27 +1113,27 @@ test "push_bytes_unchecked multibyte" {
 test "push_str_range_unchecked ASCII" {
     let mut dst = "[";
     let src = "hello";
-    dst.push_str_range_unchecked(src, 1, 4);
+    dst.push_str_range_unchecked(&src, 1, 4);
     dst.push_str(&"]");
     assert dst == "[ell]";
 }
 
 test "push_str_range_unchecked full range" {
     let mut dst = String::with_capacity(0);
-    dst.push_str_range_unchecked("abcd", 0, 4);
+    dst.push_str_range_unchecked(&"abcd", 0, 4);
     assert dst == "abcd";
 }
 
 test "push_str_range_unchecked empty range" {
     let mut dst = "x";
-    dst.push_str_range_unchecked("hello", 2, 2);
+    dst.push_str_range_unchecked(&"hello", 2, 2);
     assert dst == "x";
 }
 
 test "push_str_range_unchecked multibyte" {
     let mut dst = String::with_capacity(0);
     let src = "日本語";
-    dst.push_str_range_unchecked(src, 3, 6);  // "本"
+    dst.push_str_range_unchecked(&src, 3, 6);  // "本"
     assert dst == "本";
 }
 

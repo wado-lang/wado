@@ -1,0 +1,26 @@
+// Taking &mut to an enum-typed struct field is prohibited.
+// Enums are scalar (i32 discriminant), so struct.get returns a copy —
+// &mut field would create a disconnected Box whose writes never reach
+// the struct. Rejected like a primitive field (#1473).
+
+enum E {
+    A,
+    B,
+}
+
+fn setb(p: &mut E) {
+    *p = E::B;
+}
+
+struct H {
+    x: E,
+    tag: i32,
+}
+
+export fn run() {
+    let mut h = H { x: E::A, tag: 7 };
+    setb(&mut h.x);
+}
+
+__DATA__
+{"compile_error": "cannot take mutable reference to primitive struct field"}

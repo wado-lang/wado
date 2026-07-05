@@ -1,4 +1,4 @@
-use { ParserRule, Alternative, Element, RepeatElement, LabelElement, RepeatKind } from "./ir.wado";
+use { ParserRule, Alternative, Element, RepeatElement, LabelElement, RepeatKind, ActionLanguage } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
 use {
     literal_const_name,
@@ -149,6 +149,15 @@ pub struct GenContext {
     /// currently emit (`language = Wado`). Actionless / other-language
     /// grammars stay byte-identical.
     emit_actions: bool,
+    /// The grammar's action language (`options { language = X }`), so the
+    /// action / predicate splice sites route to the right translator front
+    /// end (identity for Wado, java2wado for Java). Set once at codegen entry.
+    action_language: ActionLanguage,
+    /// The grammar name and its `@members` method names, so the java2wado front
+    /// end resolves `T.CONST` token constants and `this.m()` / `m()` calls
+    /// against real declarations. Set once at codegen entry.
+    grammar_name: String,
+    action_member_methods: List<String>,
     /// `action_id`s codegen has handled (emitted, or already raised a loud
     /// diagnostic for). A post-emit sweep warns for any stamped parser action
     /// left unhandled, so an action on a not-yet-supported code path (nested
@@ -158,6 +167,11 @@ pub struct GenContext {
     /// `action_id`s of alt-initial predicates resolved at the dispatch by
     /// prediction-time gating; their in-body emit is suppressed.
     predicate_gated: List<i32>,
+    /// Context-free gated predicates extracted to standalone `pred_<id>(p)`
+    /// fns: `[action_id, body]`. The dispatch calls `pred_<id>(p)` instead of
+    /// inlining the condition, so the same fn is callable from every decision
+    /// path (dispatch today, the ATN callback next).
+    predicate_fns: List<[i32, String]>,
     rule_follow_kinds: TreeMap<String, List<String>>,
     rule_follow_exact: bool,
     /// Actual post-dedup bindings for the alternative currently being emitted:
@@ -199,8 +213,12 @@ impl GenContext {
             atn_rule_body_decisions: [],
             trace: false,
             emit_actions: false,
+            action_language: ActionLanguage::Wado,
+            grammar_name: "",
+            action_member_methods: [],
             action_seen: [],
             predicate_gated: [],
+            predicate_fns: [],
             rule_follow_kinds: TreeMap::new(),
             rule_follow_exact: false,
             alt_bindings: [],
@@ -403,6 +421,27 @@ impl GenContext {
         return self.emit_actions;
     }
 
+    pub fn set_action_language(&mut self, lang: &ActionLanguage) {
+        self.action_language = *lang;
+    }
+
+    pub fn action_language(&self) -> ActionLanguage {
+        return self.action_language;
+    }
+
+    pub fn set_action_grammar(&mut self, name: &String, member_methods: List<String>) {
+        self.grammar_name = *name;
+        self.action_member_methods = member_methods;
+    }
+
+    pub fn grammar_name(&self) -> &String {
+        return &self.grammar_name;
+    }
+
+    pub fn action_member_methods(&self) -> &List<String> {
+        return &self.action_member_methods;
+    }
+
     /// Record that codegen handled this action id (emitted or diagnosed).
     pub fn mark_action_seen(&mut self, id: i32) {
         self.action_seen.push(id);
@@ -420,6 +459,22 @@ impl GenContext {
 
     pub fn mark_predicate_gated(&mut self, id: i32) {
         self.predicate_gated.push(id);
+    }
+
+    /// Register a context-free gated predicate's body for a standalone
+    /// `pred_<id>(p)` fn. Deduped by `id` (a predicate is marked once, but stay
+    /// idempotent).
+    pub fn register_predicate_fn(&mut self, id: i32, body: &String) {
+        for let e of &self.predicate_fns {
+            if e.0 == id {
+                return;
+            }
+        }
+        self.predicate_fns.push([id, *body]);
+    }
+
+    pub fn predicate_fns(&self) -> &List<[i32, String]> {
+        return &self.predicate_fns;
     }
 
     /// Set the actual bindings for the alternative whose actions are about to be

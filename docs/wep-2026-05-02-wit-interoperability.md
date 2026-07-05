@@ -633,15 +633,38 @@ reconciled to "implemented, default-on, no scope knob".
 
 A `.wado` file with only `export` items and no world entry point
 (`fn run` / `fn handle`) is a _library_. It is declared by `[package].lib` in
-`wado.toml` and built with `wado compile --lib`: the entry module's `export fn`s
-become Component Model exports under a world named after the package
-(`<namespace>:<name>/<name>@<version>`; `[package].namespace` is required for
-`--lib`, and `--lib` is mutually exclusive with `--world`). The library world
-is synthesized from the entry module's export signatures and carried on
-`Package.lib_world_info` — it cannot live in the `&'static` stdlib
+`wado.toml` and built with `wado compile --lib` (`[package].namespace` is
+required for `--lib`, and `--lib` is mutually exclusive with `--world`). The
+library world is synthesized from the entry module's export signatures and
+carried on `Package.lib_world_info` — it cannot live in the `&'static` stdlib
 `WorldRegistry`, so it is special-cased like the `test` world. Library exports
 use a synchronous lift (the core function returns the value directly), and the
 default allocator is `freelist`.
+
+#### World naming: the anonymous root
+
+A component's type is anonymous: the Component Model binary encodes it as
+`componenttype ::= 0x41 vec(componentdecl)` (`Binary.md`) — a bare list of
+imports/exports with no world name — and WIT models a world as "an equivalent
+of a `component` type" whose name is only a text-level label (`WIT.md`).
+`wasm-tools component wit` confirms this: decoding a Wado library component
+yields `world root { … export <namespace>:<name>/<name> }`. The world name is
+discarded on decode and re-synthesized as `root`.
+
+So a library's world carries **no identity**; only its interface does. The
+identity consumers import is the **default interface**
+`<namespace>:<name>/<name>@<version>`. The library world is the anonymous root
+and is emitted as `root` (matching the decode convention), kept distinct from
+the default interface so the two never share one `namespace:package/<name>`
+slot — WIT worlds and interfaces occupy a single per-package namespace, so
+naming both after the package is a `duplicate item` error that silently drops
+the `component-type` embed. `[package].name` may therefore not be `root`. This
+splits two previously-conflated values: the world's emit name (`root`, textual
+only) and the default-interface FQ (`ns:name/name`, the codegen identity and
+the component's real export). The anonymous component binary is unaffected.
+
+`wado wit --lib` renders this same shape (`world root` exporting the default
+interface), so the human-readable text and the embedded `component-type` agree.
 
 Export grouping follows the same A/B rule the WIT producer applies
 (`wit_emit`, mirroring WEP: WIT and Wado Mapping → "Default Interface"):

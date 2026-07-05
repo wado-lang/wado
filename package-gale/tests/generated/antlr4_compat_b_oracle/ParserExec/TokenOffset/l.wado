@@ -2241,12 +2241,88 @@ struct Parser {
     max_errors: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
+    output: String,
 }
 
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], output: "" };
+    }
+
+    fn emit(&mut self, s: String) {
+        self.output.push_str(&s);
+    }
+
+    fn token_text(&self, i: i32) -> String {
+        return self.tokens.token_text(i);
+    }
+
+    fn token_kind(&self, i: i32) -> i32 {
+        return self.tokens.kind_at(i);
+    }
+
+    fn token_int(&self, i: i32) -> i64 {
+        let sp = self.tokens.span_at(i);
+        let mut acc: i64 = 0;
+        let mut neg = false;
+        let mut j = sp.start;
+        if j < sp.end && self.tokens.chars[j] == '-' {
+            neg = true;
+            j += 1;
+        }
+        while j < sp.end {
+            let c = self.tokens.chars[j];
+            if c >= '0' && c <= '9' {
+                acc = acc * 10 + (c as i32 - '0' as i32) as i64;
+            }
+            j += 1;
+        }
+        return if neg { -acc } else { acc };
+    }
+
+    fn token_line(&self, i: i32) -> i32 {
+        return line_col(self.tokens.chars, self.tokens.span_at(i).start).0;
+    }
+
+    fn token_col(&self, i: i32) -> i32 {
+        return line_col(self.tokens.chars, self.tokens.span_at(i).start).1;
+    }
+
+    fn token_start(&self, i: i32) -> i32 {
+        return self.tokens.starts[i];
+    }
+
+    fn la(&self, k: i32) -> i32 {
+        return self.peek_at(k - 1);
+    }
+
+    fn lt(&self, k: i32) -> i32 {
+        let idx = self.pos + k - 1;
+        if idx >= self.tokens.len() { return self.tokens.len() - 1; }
+        if idx < 0 { return 0; }
+        return idx;
+    }
+
+    fn text_span(&self, start: i32, end: i32) -> String {
+        let mut out = String::new();
+        let hi = if end < self.tokens.chars.len() { end } else { self.tokens.chars.len() };
+        for let mut i = start; i < hi; i += 1 {
+            out.push(self.tokens.chars[i]);
+        }
+        return out;
+    }
+
+    fn input_text(&self) -> String {
+        return self.text_span(0, self.tokens.chars.len());
+    }
+
+    fn rule_string_tree(&self) -> String {
+        return self.b.render_open(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+    }
+
+    fn rule_string_tree_final(&self) -> String {
+        return self.b.render_last_finished(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -3281,6 +3357,7 @@ fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
 
 fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
+    let _rule_start_tok = p.pos;
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -3698,6 +3775,9 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
         _plus_first = false;
         let lit_1_or_lit_2_or_lit_3_or_lit_4_or_lit_5_or_lit_6_or_lit_7_or_lit_8_or_lit_9_or_lit_10_or_lit_11_or_lit_12_or_lit_13_or_lit_14_or_lit_15_or_lit_16_or_lit_17_or_lit_18_or_lit_19_or_lit_20_or_lit_21_or_lit_22_or_lit_23_or_lit_24_or_lit_25_or_lit_26_or_lit_27_or_lit_28_or_lit_29_or_lit_30_or_lit_31_or_lit_32_or_lit_33_or_lit_34_or_lit_35_or_lit_36_or_lit_37_or_lit_38_or_lit_39_or_lit_40_or_lit_41_or_lit_42_or_lit_43_or_lit_44_or_lit_45_or_lit_46_or_lit_47_or_lit_48_or_lit_49_or_lit_50_or_lit_51_or_lit_52_or_lit_53_or_lit_54_or_lit_55_or_lit_56_or_lit_57_or_lit_58_or_lit_59_or_lit_60_or_lit_61_or_lit_62_or_lit_63_or_lit_64_or_lit_65_or_lit_66 = p.expect_set([TK_LIT_1, TK_LIT_2, TK_LIT_3, TK_LIT_4, TK_LIT_5, TK_LIT_6, TK_LIT_7, TK_LIT_8, TK_LIT_9, TK_LIT_10, TK_LIT_11, TK_LIT_12, TK_LIT_13, TK_LIT_14, TK_LIT_15, TK_LIT_16, TK_LIT_17, TK_LIT_18, TK_LIT_19, TK_LIT_20, TK_LIT_21, TK_LIT_22, TK_LIT_23, TK_LIT_24, TK_LIT_25, TK_LIT_26, TK_LIT_27, TK_LIT_28, TK_LIT_29, TK_LIT_30, TK_LIT_31, TK_LIT_32, TK_LIT_33, TK_LIT_34, TK_LIT_35, TK_LIT_36, TK_LIT_37, TK_LIT_38, TK_LIT_39, TK_LIT_40, TK_LIT_41, TK_LIT_42, TK_LIT_43, TK_LIT_44, TK_LIT_45, TK_LIT_46, TK_LIT_47, TK_LIT_48, TK_LIT_49, TK_LIT_50, TK_LIT_51, TK_LIT_52, TK_LIT_53, TK_LIT_54, TK_LIT_55, TK_LIT_56, TK_LIT_57, TK_LIT_58, TK_LIT_59, TK_LIT_60, TK_LIT_61, TK_LIT_62, TK_LIT_63, TK_LIT_64, TK_LIT_65, TK_LIT_66]);
     }
+    if !p.speculating {
+        p.emit(`{p.text_span(p.token_start(_rule_start_tok), p.last_end())}\n`);
+    }
     return;
 }
 
@@ -3726,7 +3806,7 @@ fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> 
             p.diagnostics.push(d);
         }
     }
-    return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics, output: p.output };
 }
 
 pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
@@ -3736,6 +3816,16 @@ pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 pub fn parse_a(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_a(p));
 }
+
+fn _ctx_token_names() -> List<String> {
+    let mut v: List<String> = List::with_capacity(69);
+    for let mut k = 0; k < 69; k += 1 {
+        v.push(token_kind_name(k));
+    }
+    return v;
+}
+
+global CTX_TOKEN_NAMES: List<String> = _ctx_token_names();
 
 pub fn to_string_tree(result: &ParseResult) -> String {
     let mut token_names: List<String> = List::with_capacity(69);

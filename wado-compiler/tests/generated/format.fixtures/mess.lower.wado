@@ -11006,7 +11006,7 @@ pub fn String::push_bytes_unchecked(self: &mut String, bytes: List<u8>) {
     self.used = new_used;
 }
 
-pub fn String::push_str_range_unchecked(self: &mut String, s: String, start: i32, end: i32) {
+pub fn String::push_str_range_unchecked(self: &mut String, s: &String, start: i32, end: i32) {
     let n: i32 = (end - start);
     if (n <= 0) {
         return;
@@ -11017,6 +11017,20 @@ pub fn String::push_str_range_unchecked(self: &mut String, s: String, start: i32
         self.String::grow(new_used);
     }
     "core::builtin::core/builtin/array_copy<u8>"(&mut self.repr, self.used, &s.String::internal_raw_bytes(), start, n);
+    self.used = new_used;
+}
+
+pub fn String::push_byte_slice_unchecked(self: &mut String, bytes: ArraySlice<u8>) {
+    let n: i32 = bytes."ArraySlice<u8>::len"();
+    if (n == 0) {
+        return;
+    }
+    let new_used: i32 = (self.used + n);
+    if (new_used > core::builtin::array_len(&self.repr)) {
+        core::builtin::cold_path();
+        self.String::grow(new_used);
+    }
+    "core::builtin::core/builtin/array_copy<u8>"(&mut self.repr, self.used, bytes."ArraySlice<u8>::internal_repr"(), bytes."ArraySlice<u8>::internal_start"(), n);
     self.used = new_used;
 }
 
@@ -11632,7 +11646,7 @@ pub fn String::truncate(self: &mut String, byte_len: i32) {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 607 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 625 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"negative length", used: 15 });
                 __r.String::push_str(&String { repr: packed"\ncondition: byte_len >= 0\n", used: 26 });
@@ -11657,7 +11671,7 @@ pub fn String::truncate(self: &mut String, byte_len: i32) {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 608 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 626 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"not on a UTF-8 character boundary", used: 33 });
                 __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(byte_len)\n", used: 44 });
@@ -11938,7 +11952,7 @@ pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 849 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 867 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"byte range out of bounds", used: 24 });
                 __r.String::push_str(&String { repr: packed"\ncondition: 0 <= start && start <= end && end <= self.used\n", used: 59 });
@@ -11996,7 +12010,7 @@ pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 850 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 868 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"byte range not on UTF-8 character boundaries", used: 44 });
                 __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(start) && self.is_char_boundary(end)\n", used: 71 });
@@ -12206,7 +12220,7 @@ pub fn String::insert(self: &mut String, byte_index: i32, ch: char) {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 986 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 1004 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"insert index not on UTF-8 character boundary", used: 44 });
                 __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(byte_index)\n", used: 46 });
@@ -12265,7 +12279,7 @@ pub fn String::insert_str(self: &mut String, byte_index: i32, s: String) {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 1027 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 1045 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"insert_str index not on UTF-8 character boundary", used: 48 });
                 __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(byte_index)\n", used: 46 });
@@ -12312,7 +12326,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 1055 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 1073 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"index out of bounds", used: 19 });
                 __r.String::push_str(&String { repr: packed"\ncondition: byte_index >= 0 && byte_index < self.used\n", used: 54 });
@@ -12353,7 +12367,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 1056 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 1074 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"remove index not on UTF-8 character boundary", used: 44 });
                 __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(byte_index)\n", used: 46 });
@@ -12502,6 +12516,14 @@ pub fn "String^Default::default"() -> String {
 }
 
 pub fn String::from_utf8_slice(bytes: ArraySlice<u8>) -> Result<String, String> {
+    if !"core::prelude/string.wado::String::is_valid_utf8"(bytes) {
+        core::builtin::cold_path();
+        return Result<String, String>::Err(String { repr: packed"invalid UTF-8", used: 13 });
+    }
+    return Result<String, String>::Ok("core::prelude/string.wado::String::internal_from_utf8_raw"(bytes."ArraySlice<u8>::to_array"(), bytes."ArraySlice<u8>::len"()));
+}
+
+pub fn String::is_valid_utf8(bytes: ArraySlice<u8>) -> bool {
     let len: i32 = bytes."ArraySlice<u8>::len"();
     let mut i: i32 = 0;
     loop {
@@ -12511,11 +12533,11 @@ pub fn String::from_utf8_slice(bytes: ArraySlice<u8>) -> Result<String, String> 
         let scalar: Utf8Scalar = "core::prelude/string.wado::decode_utf8_scalar"(bytes, i, len);
         if !scalar.valid {
             core::builtin::cold_path();
-            return Result<String, String>::Err(String { repr: packed"invalid UTF-8", used: 13 });
+            return false;
         }
         i = (i + scalar.advance);
     }
-    return Result<String, String>::Ok("core::prelude/string.wado::String::internal_from_utf8_raw"(bytes."ArraySlice<u8>::to_array"(), len));
+    return true;
 }
 
 pub fn "String^From<char>::from"(value: char) -> String {
@@ -21191,10 +21213,6 @@ pub fn "ArraySlice<u8>::to_array"(self: &ArraySlice<u8>) -> Array<u8> {
     return out;
 }
 
-pub fn "ArraySlice<u8>::len"(self: &ArraySlice<u8>) -> i32 {
-    return (self.end - self.start);
-}
-
 fn "core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"(self: &StrCharIter) -> StrCharIter {
     return *self;
 }
@@ -21242,6 +21260,18 @@ fn "List<char>^SequenceLiteralBuilder::build"(self: &List<char>) -> List<char> {
 
 fn "List<char>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> List<char> {
     return "core::prelude/list.wado::List<char>::with_capacity"(capacity);
+}
+
+pub fn "ArraySlice<u8>::internal_start"(self: &ArraySlice<u8>) -> i32 {
+    return self.start;
+}
+
+pub fn "ArraySlice<u8>::internal_repr"(self: &ArraySlice<u8>) -> &Array<u8> with stores[self] {
+    return self.repr;
+}
+
+pub fn "ArraySlice<u8>::len"(self: &ArraySlice<u8>) -> i32 {
+    return (self.end - self.start);
 }
 
 pub fn "List<u8>::internal_raw_data"(self: &List<u8>) -> Array<u8> {

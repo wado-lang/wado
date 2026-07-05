@@ -10,7 +10,7 @@ mod common;
 
 use common::InMemoryHost;
 use wado_compiler::semantics::{semantics, semantics_for_world};
-use wado_compiler::wit_emit::{WitEmitOptions, WitScope, emit_wit_text};
+use wado_compiler::wit_emit::{self, WitEmitOptions, WitScope, emit_wit_text};
 use wado_compiler::{OptLevel, dump_with_host_and_world};
 
 fn block_on<F: std::future::Future>(future: F) -> F::Output {
@@ -48,15 +48,15 @@ fn import_plan(source: &str, world_fq: &str) -> Vec<String> {
 /// emitter the faithful import plan as the CLI does.
 fn emit_world(source: &str, scope: WitScope, world_fq: &str) -> String {
     let host = InMemoryHost::new();
-    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+    let mut sem = block_on(semantics(source, &host, Some("entry.wado")));
     assert!(sem.is_complete(), "semantics did not complete for source");
-    let opts = WitEmitOptions {
-        scope,
-        world_fq: world_fq.to_string(),
-        default_interface_name: "entry".to_string(),
-        world_imports: import_plan(source, world_fq),
-    };
-    emit_wit_text(&sem, &opts).expect("emit_wit_text failed")
+    sem.set_wit_contract(wit_emit::wit_contract(Some(world_fq), None, Some("entry")));
+    emit_wit_text(
+        &sem,
+        &WitEmitOptions { scope },
+        &import_plan(source, world_fq),
+    )
+    .expect("emit_wit_text failed")
 }
 
 /// Emit WIT for `source` targeting the default CLI world, under `scope`.
@@ -104,21 +104,26 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 }
 "#;
     let host = InMemoryHost::new();
-    let sem = block_on(semantics_for_world(
+    let mut sem = block_on(semantics_for_world(
         GENERATOR,
         &host,
         Some("entry.wado"),
         Some("core:kiln/generator"),
     ));
     assert!(sem.is_complete(), "generator semantics did not complete");
-    let opts = WitEmitOptions {
-        scope: WitScope::Local,
-        world_fq: "core:kiln/generator".to_string(),
-        default_interface_name: "entry".to_string(),
-        world_imports: Vec::new(),
-    };
-    let text = emit_wit_text(&sem, &opts)
-        .expect("emit_wit_text must succeed for the generator world (issue #1478)");
+    sem.set_wit_contract(wit_emit::wit_contract(
+        Some("core:kiln/generator"),
+        None,
+        Some("entry"),
+    ));
+    let text = emit_wit_text(
+        &sem,
+        &WitEmitOptions {
+            scope: WitScope::Local,
+        },
+        &[],
+    )
+    .expect("emit_wit_text must succeed for the generator world (issue #1478)");
     assert!(
         text.contains("req: raw-request"),
         "generate must export the representable raw-request param:\n{text}"
@@ -293,16 +298,22 @@ fn cm_catalog_matches_committed_wit() {
     let source = include_str!("../../package-cm-catalog/src/lib.wado");
     let expected = include_str!("../../package-cm-catalog/cm-catalog.wit");
     let host = InMemoryHost::new();
-    let sem = block_on(semantics(source, &host, Some("lib.wado")));
+    let mut sem = block_on(semantics(source, &host, Some("lib.wado")));
     assert!(sem.is_complete(), "catalog source did not analyze");
-    let opts = WitEmitOptions {
-        scope: WitScope::Full,
-        world_fq: "wasi:cli/command".to_string(),
-        default_interface_name: "cm-catalog".to_string(),
-        // Pure value types import no CM interface.
-        world_imports: Vec::new(),
-    };
-    let text = emit_wit_text(&sem, &opts).expect("emit_wit_text failed");
+    sem.set_wit_contract(wit_emit::wit_contract(
+        Some("wasi:cli/command"),
+        None,
+        Some("cm-catalog"),
+    ));
+    // Pure value types import no CM interface.
+    let text = emit_wit_text(
+        &sem,
+        &WitEmitOptions {
+            scope: WitScope::Full,
+        },
+        &[],
+    )
+    .expect("emit_wit_text failed");
     assert_eq!(
         text.trim_end(),
         expected.trim_end(),

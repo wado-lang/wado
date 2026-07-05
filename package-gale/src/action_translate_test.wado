@@ -1,5 +1,6 @@
 use {
     translate_wado_action,
+    translate_lexer_predicate,
     rule_value_channel_ready,
     rule_returns_vals,
     rule_is_left_recursive,
@@ -175,6 +176,36 @@ e : ID ;
     assert d == " p.emit(p.rule_string_tree()); ", `d: '{d}'`;
 }
 
+test "translate maps $_p to the min_prec precedence parameter" {
+    let g = parse("grammar T;
+e : e '+' e { print($_p); } | INT ;
+").unwrap();
+    let out = translate_wado_action(
+        &g.parser_rules[0],
+        &g.parser_rules,
+        &" print($_p); ",
+        false,
+        &NO_BINDINGS,
+    ).unwrap();
+    assert out == " print(min_prec); ", `out: '{out}'`;
+}
+
+test "translate maps $_p to 0 in a non-left-recursive rule" {
+    let g = parse("grammar T;
+r : X { print($_p); } ;
+").unwrap();
+    // A non-LR rule fn carries no `min_prec` parameter, so `$_p` (always 0
+    // outside a precedence context) must not emit an undeclared local.
+    let out = translate_wado_action(
+        &g.parser_rules[0],
+        &g.parser_rules,
+        &" print($_p); ",
+        false,
+        &NO_BINDINGS,
+    ).unwrap();
+    assert out == " print(0); ", `out: '{out}'`;
+}
+
 test "translate maps $ctx.toStringTree in a left-recursive rule to the final-node render" {
     let g = parse("grammar T;
 e @after { p.emit($ctx.toStringTree()); } : e '+' e | INT ;
@@ -187,6 +218,21 @@ e @after { p.emit($ctx.toStringTree()); } : e '+' e | INT ;
         &NO_BINDINGS,
     ).unwrap();
     assert out == " p.emit(p.rule_string_tree_final()); ", `out: '{out}'`;
+}
+
+test "translate_lexer_predicate maps $text to the matched slice" {
+    let out = translate_lexer_predicate(&" $text == \"enum\" ").unwrap();
+    assert out == " LexerSlice::new(chars, start, pos).to_string() == \"enum\" ", `out: '{out}'`;
+}
+
+test "translate_lexer_predicate leaves a $-free body verbatim" {
+    let out = translate_lexer_predicate(&" pos - start == 4 ").unwrap();
+    assert out == " pos - start == 4 ", `out: '{out}'`;
+}
+
+test "translate_lexer_predicate rejects an unsupported lexer attribute" {
+    let res = translate_lexer_predicate(&" $type == 1 ");
+    assert res.is_err(), "$type is not yet emitted for lexer predicates";
 }
 
 test "wado_type_default covers the corpus surface" {

@@ -120,6 +120,13 @@ pub(super) fn build_alias_info(
         if let Some(r) = extra_aliased(body, node) {
             aliased.insert(r);
         }
+        collect_ref_arg_escapes(
+            body,
+            node,
+            call_immutability,
+            &mut aliased,
+            &mut syntactic_mut,
+        );
         collect_alias_edges_node(body, node, type_table, &mut edges);
         collect_mut_escaped_node(
             body,
@@ -683,6 +690,56 @@ fn summarize_receiver_writes(
 /// Immutable `&v` is deliberately *not* a mutable escape: a `&self` receiver
 /// or `&T` argument cannot mutate the pointee, so the local's fields survive
 /// across the call.
+/// A call argument that passes a reference-carrying local (`Box<T>`, `List<T>`,
+/// `&mut T`, resource handle, …) by value can be mutated by the callee through
+/// that handle — exactly like a `&mut`-place (`is_mut`) argument. Boxing lowers a
+/// `&mut x` place into a by-value `Box<x>`, so `is_mut` is `false` on the lowered
+/// arg (`step(xs, &mut pos)` → `step(xs, pos)`); keying only on `is_mut` misses
+/// it and the value graph forwards the callee-mutated pre-call fields across the
+/// call (`let mut pos = 0; step(&mut pos); pos` — a miscompile).
+///
+/// Keyed on the argument's type carrying shared mutable state, not on a
+/// whole-program per-parameter mutation analysis: the latter is unsound here
+/// because this runs after `field_scalarize`, which rewrites a callee's
+/// parameter-field writes into shadow-local writes the body walk no longer sees.
+/// The type check keeps the common read-only case fully optimizable — an
+/// immutable `&T` or a deep-copied value type is `is_call_immutable` and stays
+/// unmarked, so only genuinely mutable handles (which are nearly always actually
+/// mutated) lose cross-call forwarding. Marks both the alias set (field-write
+/// granularity) and `syntactic_mut` (`build_mut_escaped` keeps it escaped).
+fn collect_ref_arg_escapes(
+    body: &Body,
+    node: NodeRef,
+    call_immutability: &CallImmutability,
+    aliased: &mut LocalSet,
+    syntactic_mut: &mut IndexSet<u32>,
+) {
+    let NodeRef::Expr(e) = node else {
+        return;
+    };
+    let args = match &body.exprs[e].kind {
+        ExprKind::Call { args, .. } | ExprKind::MethodCall { args, .. } => args,
+        _ => return,
+    };
+    for arg in args {
+        // `is_mut` args are already aliased/escaped by the collectors above.
+        if arg.is_mut {
+            continue;
+        }
+        let Some(ae) = arg.expr.as_expr() else {
+            continue;
+        };
+        // A value / immutable-`&T` argument cannot carry a write back.
+        if call_immutability.is_call_immutable(body.exprs[ae].type_id) {
+            continue;
+        }
+        if let Some(r) = projection_root_local(body, ae) {
+            aliased.insert(r);
+            syntactic_mut.insert(r);
+        }
+    }
+}
+
 fn collect_mut_escaped_node(
     body: &Body,
     node: NodeRef,

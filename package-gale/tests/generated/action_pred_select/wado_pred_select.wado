@@ -1887,9 +1887,9 @@ fn _parse_item__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_A {
-        if (false) {
+        if (pred_0(p)) {
             return _parse_item__inner_alt_0(p);
-        } else if (true) {
+        } else if (pred_2(p)) {
             return _parse_item__inner_alt_1(p);
         } else {
             p.no_viable("no viable alternative", p.peek_span(), []);
@@ -1946,7 +1946,7 @@ fn _parse_fallback__inner_alt_1(p: &mut Parser) -> () {
 fn _parse_fallback__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_A {
-        if (false) {
+        if (pred_5(p)) {
             return _parse_fallback__inner_alt_0(p);
         } else {
             return _parse_fallback__inner_alt_1(p);
@@ -1969,6 +1969,18 @@ fn _parse_fallback(p: &mut Parser) -> () {
     if p.recovering {
         p.push_rule_stack("fallback");
     }
+}
+
+fn pred_0(p: &Parser) -> bool {
+    return false;
+}
+
+fn pred_2(p: &Parser) -> bool {
+    return true;
+}
+
+fn pred_5(p: &Parser) -> bool {
+    return false;
 }
 
 fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {

@@ -1,0 +1,24 @@
+//! Stage C boundary predicate on a single-alt inlined fragment: a trailing
+//! predicate on a single-alt fragment (`fragment LETTERS : [a-z]+ { $text ==
+//! "cat" }?`) inlined at `KW`. A single-alt fragment goes straight through
+//! `gen_lexer_alt_seq` (no `gen_lexer_alts` wrapper), so its boundary predicate
+//! must be placed by `gen_lexer_alt_seq`. `cat` lexes as KW, others as ID.
+
+use lp from "./grammars/wado_lex_frag_boundary_pred.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_lex_frag_boundary_pred",
+        },
+    };
+
+test "a boundary predicate on a single-alt fragment gates the rule" {
+    let cat = lp::parse(&"cat");
+    assert cat.ok(), "clean parse of 'cat'";
+    assert cat.output == "kw", `output: '{cat.output}'`;
+
+    let dog = lp::parse(&"dog");
+    assert dog.ok(), "clean parse of 'dog'";
+    assert dog.output == "id", `output: '{dog.output}'`;
+}

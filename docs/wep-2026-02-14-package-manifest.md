@@ -135,9 +135,13 @@ the WIT section; `--embed-metadata` forces it back on under `-Os` (mirroring
 shells out to `wkg` (wasm-pkg-tools), which derives the OCI annotations. There is no `wkg.toml` —
 `wado.toml` is the only source of truth, and `wkg` is an implementation detail
 (a missing `wkg` errors with install guidance). Authentication is delegated to
-the ambient OCI credential store (`docker login`), with an env-var token
-override for CI; Wado stores no credentials. `revision` is the git commit SHA,
-derived at build time; a dirty tree omits it, warned only at publish.
+`wkg`: either the ambient OCI credential store (`docker login <registry>`, or
+docker/login-action in GitHub Actions) or the `WKG_OCI_USERNAME` /
+`WKG_OCI_PASSWORD` environment variables. For GHCR the username is the GitHub
+account (`github.actor` in Actions) and the password a token with the
+`write:packages` scope (e.g. `GITHUB_TOKEN`). Wado stores no credentials.
+`revision` is the git commit SHA, derived at build time; a dirty tree omits it,
+warned only at publish.
 
 ### Entry Points and Worlds
 

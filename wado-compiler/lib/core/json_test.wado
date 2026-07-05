@@ -270,6 +270,21 @@ test "write_escaped_string helper" {
     buf = "";
     write_escaped_string(&mut buf, &"a\"b");
     assert buf == `"a\\"b"`;
+
+    // Control chars below 0x20 (other than \n\r\t) use the \u00xx form.
+    buf = "";
+    write_escaped_string(&mut buf, &"a\u{01}b\u{1f}c");
+    assert buf == `"a\\u0001b\\u001fc"`;
+
+    // Multibyte UTF-8 passes through the bulk-copy path untouched.
+    buf = "";
+    write_escaped_string(&mut buf, &"a日本b");
+    assert buf == `"a日本b"`;
+
+    // Escapes interleaved with runs on both sides.
+    buf = "";
+    write_escaped_string(&mut buf, &"pre\tmid\\end");
+    assert buf == `"pre\\tmid\\\\end"`;
 }
 
 test "deserialize i32" {
@@ -325,6 +340,15 @@ test "deserialize string" {
 test "deserialize string with escapes" {
     let r: Result<String, DeserializeError> = from_string(`"line1\\nline2"`);
     assert r matches { Ok(v) && v == "line1\nline2" };
+}
+
+// Non-ASCII content takes the UTF-8 validation branch, escape-free and split by `\/`.
+test "deserialize raw multibyte string value" {
+    let r: Result<String, DeserializeError> = from_string(`"café 日本 🦀"`);
+    assert r matches { Ok(v) && v == "café 日本 🦀" };
+
+    let split: Result<String, DeserializeError> = from_string(`"日本\/語"`);
+    assert split matches { Ok(v) && v == "日本/語" };
 }
 
 test "deserialize string with unicode" {
@@ -565,6 +589,18 @@ test "from_bytes rejects invalid UTF-8" {
     let bytes: ByteList = [0x7b, 0x22, 0xff, 0x22, 0x7d];  // {"<0xff>"}
     let r: Result<TreeMap<String, i32>, DeserializeError> = from_bytes(bytes);
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+}
+
+// A bad byte after an ASCII prefix must still be rejected: the ASCII-skip path
+// ORs every scanned byte, so the high bit is never missed.
+test "from_bytes rejects invalid UTF-8 after ASCII prefix" {
+    let bytes: ByteList = [0x22, 0x61, 0x62, 0xff, 0x22];  // "ab<0xff>"
+    let r: Result<String, DeserializeError> = from_bytes(bytes);
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+
+    let bytes2: ByteList = [0x22, 0x78, 0xc3, 0x22];  // "x<0xc3>" truncated lead
+    let r2: Result<String, DeserializeError> = from_bytes(bytes2);
+    assert r2 matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
 }
 
 test "to_bytes_canonical sorts map keys" {
