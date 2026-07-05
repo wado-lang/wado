@@ -269,6 +269,30 @@ fn arg_source_root(body: &Body, expr: ExprId) -> Option<u32> {
     }
 }
 
+/// True when `arg` reads storage reachable only by dereferencing a reference
+/// (`*r`, `*r as T`, a field of `*r`, …). The pointee of a reference has no
+/// local identity: mutations through the reference (`*r = v` lowers to
+/// `tmp = r; tmp.field = …` on a fresh alias local, so they never touch `r`'s
+/// own usage) are invisible to the local-usage oracle. Eliding such a copy
+/// would alias the pointee and let a later write through the reference corrupt
+/// the binding (wado-lang/wado#1522), so these copies are never stripped.
+fn reads_through_deref(body: &Body, expr: ExprId) -> bool {
+    match &body.exprs[expr].kind {
+        ExprKind::Unary { op, expr: inner } => {
+            *op == NirUnaryOp::Deref
+                || inner
+                    .as_expr()
+                    .is_some_and(|e| reads_through_deref(body, e))
+        }
+        ExprKind::FieldAccess { expr: inner, .. }
+        | ExprKind::VariantPayload { expr: inner, .. }
+        | ExprKind::Cast { expr: inner, .. } => {
+            inner.as_expr().is_some_and(|e| reads_through_deref(body, e))
+        }
+        _ => false,
+    }
+}
+
 /// Check whether `value` is a `$value_copy$T(arg)` call whose wrapper can be
 /// safely stripped given the binding target's local index and the
 /// function-wide usage map.
@@ -296,6 +320,15 @@ fn elision_safe(
     let Some(arg) = args.first() else {
         return false;
     };
+    // A copy sourced through a reference deref aliases a pointee whose mutations
+    // the local-usage oracle cannot see (wado-lang/wado#1522).
+    if arg
+        .expr
+        .as_expr()
+        .is_some_and(|e| reads_through_deref(body, e))
+    {
+        return false;
+    }
     // A promoted `Operand::Value` arg is a constant — uniquely owned, no root.
     match arg.expr.as_expr().and_then(|e| arg_source_root(body, e)) {
         Some(root) => match usage.get(&root) {
