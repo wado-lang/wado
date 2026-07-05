@@ -44,17 +44,87 @@ Closing that loop is the goal.
 - No git provider, no PubGrub, no integrity verification of fetched archives,
   no single-file `with { … }` dependency source.
 
-## Guiding Principle
+## Guiding Principles
 
-The compiler stays agnostic (per the WEP): it only consumes `ModuleSource`
-values from the `CompilerHost`. All version-aware routing lives in the CLI host.
-The narrowest end-to-end slice that makes a registry dependency compile is the
-first target; UX commands and advanced resolution follow.
+- Compiler stays agnostic (per the WEP): it only consumes `ModuleSource` values
+  from the `CompilerHost`. All version-aware routing lives in the CLI host.
+- Provider-agnostic fetching: `DependencyProvider` is the source seam. `fetch`
+  is the only user-facing acquisition verb; OCI-pull / git-clone / path are
+  provider details behind it. No source-specific `wado pull`.
+- Thin, layered subcommands (see [Subcommand Architecture](#subcommand-architecture)):
+  file-scoped compiler primitives vs manifest-aware project orchestrators. The
+  dependency machinery lives entirely in the project tier.
+- The narrowest end-to-end slice that makes a registry dependency compile is the
+  first target; UX commands and advanced resolution follow.
+
+## Subcommand Architecture
+
+The CLI-subcommands WEP is not binding; this plan revises the taxonomy for
+long-term DX and toolchain maintainability. Today `wado compile` is overloaded:
+a bare `.wado` argument means a pure standalone compile, while no argument (or a
+directory) means a manifest-driven project build with dependency resolution and
+metadata embedding. That double duty — and its conditional metadata behavior —
+is exactly where the dependency machinery would otherwise accrete in the wrong
+place.
+
+Split the surface into a primitive and an orchestrator, and layer the drivers on
+top:
+
+```
+compile   file.wado → wasm/wat    pure, manifest-free, syscall-light   ← primitive
+   ↑
+build     project → build/<world>.wasm    resolve deps · lock · embed metadata · multi-world   ← orchestrator
+   ↑
+run / serve / test / publish      build, then execute / serve / test / push    ← drivers
+```
+
+- `wado compile <file>` becomes a pure compiler primitive: no `wado.toml`, no
+  dependencies, no metadata embedding. Ideal for tests, LSP, `--wat-to-stdout`,
+  `--no-validate`, and deterministic debugging. Matches the compiler-agnostic
+  principle. Precedent: `rustc` vs `cargo build`, `go tool compile` vs
+  `go build`, `zig build-exe` vs `zig build`.
+- `wado build` (new) owns the project tier: read the manifest, resolve/lock
+  dependencies, compile each world through the `compile` primitive, embed
+  `[package]` metadata, write `build/<world>.wasm`. All dependency, lock, and
+  cache machinery lands here — one home.
+- `run` / `serve` / `test` / `publish` share the `build` core in project mode; a
+  bare-file argument (`wado run file.wado`) routes straight through the standalone
+  `compile` primitive.
+
+Full command taxonomy:
+
+| Group                 | Commands                                                             | Reads manifest/deps |
+| --------------------- | -------------------------------------------------------------------- | ------------------- |
+| Compiler primitives   | `compile` `check` `dump` `query` `format` `doc` `wit` `syntax` `lsp` | No                  |
+| Project build & run   | `build` (new) `run` `serve` `test` `publish`                         | Yes                 |
+| Dependency management | `add` `remove` `update` `fetch` `list` `exec`                        | Yes                 |
+| Scaffolding           | `init`                                                               | Writes it           |
+
+This split precedes the dependency wiring (Phase 0) so the lock/cache/resolve
+work attaches to `build` from the start, never to `compile`.
 
 ## Phases
 
-Phases 1–4 form the critical path to "a registry dependency compiles". Phases
-5+ are follow-ups, orderable independently.
+Phase 0 reshapes the CLI so later phases attach dependency work to the right
+command. Phases 1–4 then form the critical path to "a registry dependency
+compiles". Phases 5+ are follow-ups, orderable independently.
+
+### Phase 0 — Subcommand split (`compile` pure, `build` new)
+
+Establish the primitive/orchestrator boundary before wiring dependencies.
+
+- [ ] Introduce `wado build`: read the manifest, compile each world through the
+      `compile` primitive, embed `[package]` metadata, write `build/<world>.wasm`.
+      Move the current manifest-driven behavior of `compile` here verbatim.
+- [ ] Make `wado compile` a pure file primitive: drop manifest discovery, the
+      `[dependencies]` index, and metadata embedding; keep `-o`, `--wat-to-stdout`,
+      `--no-validate`, `--world`, `--allocator`, `-O*`.
+- [ ] Route `run` / `serve` / `test` / `publish` project mode through the shared
+      `build` core; a bare-file argument stays on the standalone `compile` path.
+- [ ] Update the CLI-subcommands and manifest WEPs where they attribute
+      project builds and default output paths to `wado compile` (now `wado build`).
+- [ ] Migrate existing tests and any docs/examples that call `wado compile`
+      for a project build.
 
 ### Phase 1 — OCI registry provider
 
@@ -90,12 +160,14 @@ Materialize resolved packages on disk so the compiler can load their source.
 
 ### Phase 3 — Lock file in the build path
 
-Make `compile` / `run` / `test` lock-aware.
+Make the `build` core lock-aware (inherited by `run` / `serve` / `test` /
+`publish`). The pure `compile` primitive stays lock-free.
 
-- [ ] On build, load `wado.lock` if present; else resolve and write it.
+- [ ] In `build`, load `wado.lock` if present; else resolve and write it.
 - [ ] Freshness: compare `deps_hash` against the current manifest; stale →
       auto re-resolve (default) or error under `--locked`.
-- [ ] Add `--locked` to build commands (reject stale locks — CI reproducibility).
+- [ ] Add `--locked` to `build` (and the drivers) — reject stale locks for CI
+      reproducibility.
 - [ ] When the lock exists, skip the resolver: read the graph, versions, and
       entry points straight from `wado.lock` (self-sufficient per the WEP).
 
@@ -112,8 +184,8 @@ version-aware routing.
       package become distinct `Dependency` ids (WEP "Transitive Version
       Isolation"). This is the host's job; the compiler already keys modules by
       resolved path/id.
-- [ ] E2E: a fixture project with a registry dependency compiles and runs
-      against a mocked/local OCI registry.
+- [ ] E2E: a fixture project with a registry dependency builds and runs
+      against a mocked/local OCI registry (`wado build` / `wado run`).
 
 ### Phase 5 — Dependency-editing CLI
 
@@ -151,18 +223,18 @@ conflict errors, once real registries make multi-constraint graphs common.
 
 ## Milestones
 
-- M1 (Phases 1–4): a published registry package can be declared in
-  `[dependencies]` and compiled/run — the core loop closes.
+- M1 (Phases 0–4): after the `compile`/`build` split, a published registry
+  package can be declared in `[dependencies]` and built/run — the core loop
+  closes.
 - M2 (Phase 5): day-to-day dependency editing without hand-writing `wado.toml`.
 - M3 (Phases 6–8): git deps, robust resolution, and the remaining WEP surface.
 
 ## Open Questions
 
-- Pull mechanism: `wkg oci pull` (symmetry, no new deps) vs a native OCI client
-  (finer control, more code). Leaning `wkg`.
+- OCI pull mechanism (internal to the provider, not a user verb): `wkg oci pull`
+  (symmetry with publish, no new deps) vs a native OCI client (finer control,
+  more code). Leaning `wkg`.
 - Cached form for wado-to-wado deps: extract source from the component's
   provider metadata, or require a source sidecar at publish time? Affects what
   `publish` must embed.
 - Whether `test` should fetch dev-dependencies eagerly or lazily.
-  </content>
-  </invoke>
