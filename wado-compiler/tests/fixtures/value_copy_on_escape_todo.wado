@@ -1,0 +1,65 @@
+// TODO: value-copy on pass/escape is incomplete. The spec says "every value is
+// deeply copied when assigned or passed to a function, except for references,"
+// but two value-semantic positions do not copy an aggregate variable, so a later
+// mutation of the source corrupts the copy. Both reproduce at every opt level.
+//
+// Root cause A — a non-mut by-value parameter aliases its argument (a `mut`
+// parameter copies correctly), so returning/storing it leaks the alias.
+// Root cause B — an aggregate literal (`[x, y]`, `Foo { f: x }`, `[x]`) does not
+// copy its element/field variables.
+//
+// A comprehensive fix belongs in the value-copy analyze/fold (copy non-mut
+// by-value aggregate args and literal element positions, with `value_copy_elide`
+// dropping the redundant copies). Remove #![TODO] once every test below passes.
+
+#![TODO]
+
+struct Holder {
+    xs: List<i32>,
+    n: i32,
+}
+
+fn id_plain(v: List<i32>) -> List<i32> {
+    return v;
+}
+
+// A — non-mut by-value parameter aliases the argument.
+test "non-mut by-value param does not alias the argument" {
+    let mut a: List<i32> = [7, 8];
+    let b = id_plain(a);
+    a[0] = 999;
+    assert b[0] == 7;
+}
+
+test "pushing a variable copies it" {
+    let mut inner: List<i32> = [7, 8];
+    let mut outer: List<List<i32>> = [];
+    outer.push(inner);
+    inner[0] = 999;
+    assert outer[0][0] == 7;
+}
+
+// B — aggregate literal element / field positions.
+test "tuple literal copies an element variable" {
+    let mut inner: List<i32> = [7, 8];
+    let t: [List<i32>, i32] = [inner, 1];
+    inner[0] = 999;
+    assert t.0[0] == 7;
+}
+
+test "struct literal copies a field variable" {
+    let mut inner: List<i32> = [7, 8];
+    let h = Holder { xs: inner, n: 1 };
+    inner[0] = 999;
+    assert h.xs[0] == 7;
+}
+
+test "list literal copies an element variable" {
+    let mut inner: List<i32> = [7, 8];
+    let a: List<List<i32>> = [inner];
+    inner[0] = 999;
+    assert a[0][0] == 7;
+}
+
+__DATA__
+{"test": {}}
