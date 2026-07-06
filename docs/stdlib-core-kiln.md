@@ -8,35 +8,9 @@ Kiln stdlib entry point.
 Import the user-facing Kiln types and the `KilnHost` effect via
 `use { ... } from "core:kiln"`. This facade re-exports the WIT-generated
 submodules under `lib/core/kiln/` and adds the Wado-only `Request<T>`
-wrapper plus the `bind_request` helper that generator authors write
-against.
+wrapper that generator authors write against.
 
-See WEP 2026-04-12 (Kiln) §"The `kiln` world" and §"M6.5 stage 2".
-
-## Functions
-
-### `pub fn bind_request<T: Deserialize>(raw: RawRequest) -> Result<Request<T>, Error>`
-
-Decode a wire-form `RawRequest` into a typed `Request<T>`.
-
-Generator authors call this at the top of their `generate` entry:
-
-```wado
-export fn generate(raw: RawRequest) -> Result<Response, Error> {
-    let req = bind_request::<Options>(raw)?;
-    // ... read req.primary.content, honor req.options, emit files ...
-}
-```
-
-`T` must be the generator's `pub struct Options`. The compiler
-auto-synthesizes `Options::deserialize` for every package targeting
-the `core:kiln/generator` world, so authors never write
-`impl Deserialize for Options;` explicitly.
-
-A `Result::Err` return signals a corrupt `options` payload; the
-compiler's caller-side encoder guarantees well-formed CBOR, so this
-branch should only fire if the wire bytes were tampered with
-out-of-band.
+See WEP 2026-04-12 (Kiln) §"The `kiln` world" and §"Protocol revision v0.3".
 
 ## Effects
 
@@ -71,18 +45,21 @@ Its CBOR wire form is the empty map, which decodes back into `NoOptions`.
 
 ### `pub struct Request<T = NoOptions>`
 
-The typed request a Kiln generator receives after `bind_request` decodes
-the CBOR `options` payload into its typed `Options` struct.
+The typed request a Kiln generator receives. Generator authors write
+`export fn generate(req: Request<Options>) -> Result<Response, Error>`
+(or `Request` for a no-options generator).
 
-`Request<T>` is Wado-only sugar: it never crosses the WIT boundary (the
-wire type is `RawRequest`, whose `options` is an opaque CBOR blob). A
-generic cannot be expressed in a fixed WIT world, so options travel as a
-serialized blob by design rather than as a typed WIT record. The
-compiler rewrites `fn generate(req: Request<T>)` into the `RawRequest` +
-`bind_request::<T>` shape; the `#[compiler_item("kiln_request")]`
-attribute is that rewrite's lookup anchor. `T` defaults to `NoOptions`,
-so a generator that takes no options writes `fn generate(req: Request)`.
-See WEP 2026-04-12 §"Protocol revision 2".
+`Request<T>` is Wado-only sugar and never crosses the WIT boundary as a
+single record: a generic cannot be expressed in a fixed WIT world (that is
+why generators do not share one world). The compiler rewrites
+`fn generate(req: Request<T>)` into flat, typed parameters
+`(primary: InputFile, inputs: List<InputFile>, options: T)` in the
+generator's own synthesized world, then rebinds them into a `Request<T>`
+value so the author's body sees `req` unchanged. `options` crosses as a
+typed WIT argument, not a serialized blob. The `#[compiler_item("kiln_request")]`
+attribute is that rewrite's lookup anchor. `T` defaults to `NoOptions`, so
+a generator that takes no options writes `fn generate(req: Request)`.
+See WEP 2026-04-12 §"Protocol revision v0.3".
 
 #### `primary: InputFile`
 
@@ -119,28 +96,6 @@ set is fully determined by the invocation declaration.
 #### `path: String`
 
 #### `content: String`
-
-### `pub struct RawRequest`
-
-The raw CM-level request record. Generator-side code sees
-`Request<Options>` (a Wado-only generic defined in `core:kiln`)
-whose `options: Options` field is populated from
-`raw-request.options` by a compiler-synthesized decoder.
-`raw-request` is an internal wire-form type and should not
-appear in generator source.
-
-`options` is a deterministic CBOR encoding of the user's
-`options = { ... }` block. The compiler uses the generator's
-typed `Options` descriptor (see `wado-compiler::kiln::options`)
-to encode on the caller side; the generator decodes it with
-`core:cbor::from_bytes`. The same bytes feed the invocation
-cache key directly.
-
-#### `primary: InputFile`
-
-#### `inputs: List<InputFile>`
-
-#### `options: List<u8>`
 
 ### `pub struct OutputFile`
 
