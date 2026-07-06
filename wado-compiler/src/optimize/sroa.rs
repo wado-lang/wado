@@ -1300,7 +1300,7 @@ mod tests {
     /// live parent and the un-emptied inner block, which this catches.
     fn assert_single_parent(body: &Body) {
         let mut seen = IndexSet::default();
-        for (_, blk) in body.blocks.iter() {
+        for (_, blk) in &body.blocks {
             for &s in &blk.stmts {
                 assert!(seen.insert(s), "statement {s:?} appears in two blocks");
             }
