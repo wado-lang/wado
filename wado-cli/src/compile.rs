@@ -547,9 +547,22 @@ pub async fn try_compile_with_kiln_cache(
         Some(cache) => base_host.with_shared_kiln_cache(cache),
         None => base_host,
     };
-    let host =
-        attach_manifest_and_component_deps(base_host, manifest_pair.as_ref(), &base_path, &source)
-            .await?;
+    let host = match attach_manifest_and_component_deps(
+        base_host,
+        manifest_pair.as_ref(),
+        &base_path,
+        &source,
+    )
+    .await
+    {
+        Ok(host) => host,
+        Err(e) => {
+            eprintln!("Error fetching component dependencies: {e}");
+            return Err(wado_compiler::CompileFailure {
+                is_todo_module: false,
+            });
+        }
+    };
 
     let pipeline_outcome =
         match maybe_run_pipeline(path, &host, flags.no_cache, manifest_pair).await {
@@ -617,24 +630,32 @@ pub(crate) fn attach_manifest_deps(
 /// resolves across the CM boundary. Two sources feed the component map: a
 /// manifest `[dependencies]` table entry (resolved via `wado.lock`) and a
 /// single-file inline `use … from "ns:pkg@ver" with { registry }` clause parsed
-/// from `entry_source`. Async because the fetch hits the registry; used by the
-/// compile/run path (`check`/`query` stay on the sync path-dep index). A fetch
-/// failure aborts the compile.
-async fn attach_manifest_and_component_deps(
+/// from `entry_source`. Async because the fetch hits the registry (offline on a
+/// warm cache); shared by `compile`/`run`, `check`, and `query` so every entry
+/// point resolves component imports identically. A fetch failure aborts.
+pub(crate) async fn attach_manifest_and_component_deps(
     base_host: FilesystemCompilerHost,
     project: Option<&manifest::ProjectManifest>,
     base_path: &Path,
     entry_source: &str,
-) -> Result<FilesystemCompilerHost, wado_compiler::CompileFailure> {
+) -> Result<FilesystemCompilerHost, String> {
+    let index = manifest_and_component_index(project, base_path, entry_source).await?;
+    Ok(base_host.with_dependency_index(index))
+}
+
+/// Build the [`DependencyIndex`] for `project` (path deps) plus its fetched
+/// registry/inline component deps. Decoupled from the host so each caller
+/// applies it to its own (`compile` verbose, `query` silent).
+async fn manifest_and_component_index(
+    project: Option<&manifest::ProjectManifest>,
+    base_path: &Path,
+    entry_source: &str,
+) -> Result<wado_compiler::DependencyIndex, String> {
     let mut index = match project {
         Some(project) => {
             wado_lsp::host::dependency_index_from(&project.manifest, &project.root, base_path)
         }
         None => wado_compiler::DependencyIndex::default(),
-    };
-
-    let abort = || wado_compiler::CompileFailure {
-        is_todo_module: false,
     };
 
     if let Some(project) = project {
@@ -644,31 +665,21 @@ async fn attach_manifest_and_component_deps(
             .values()
             .any(|d| matches!(d.source, wado_manifest::DependencySource::Registry { .. }));
         if has_registry_dep {
-            match crate::dep_component::fetch_component_dependencies(
+            let components = crate::dep_component::fetch_component_dependencies(
                 &project.manifest,
                 &project.root,
             )
-            .await
-            {
-                Ok(components) => index.components.extend(components),
-                Err(e) => {
-                    eprintln!("Error fetching component dependencies: {e}");
-                    return Err(abort());
-                }
-            }
+            .await?;
+            index.components.extend(components);
         }
     }
 
     let manifest = project.map(|p| &p.manifest);
-    match crate::dep_component::fetch_inline_component_dependencies(entry_source, manifest).await {
-        Ok(components) => index.components.extend(components),
-        Err(e) => {
-            eprintln!("Error fetching component dependencies: {e}");
-            return Err(abort());
-        }
-    }
+    let inline =
+        crate::dep_component::fetch_inline_component_dependencies(entry_source, manifest).await?;
+    index.components.extend(inline);
 
-    Ok(base_host.with_dependency_index(index))
+    Ok(index)
 }
 
 /// Collect inline `with { generator: { ... } }` clauses from `entry_file`

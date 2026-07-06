@@ -121,12 +121,17 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
+    let source = std::fs::read_to_string(path)
+        .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
     let manifest_pair = crate::compile::load_nearest_manifest(path);
-    let host = crate::compile::attach_manifest_deps(
+    let host = crate::compile::attach_manifest_and_component_deps(
         FilesystemCompilerHost::with_log_level(base_path.clone(), opts.log_level),
         manifest_pair.as_ref(),
         &base_path,
-    );
+        &source,
+    )
+    .await
+    .map_err(CliExit::error)?;
 
     let manifest_root = manifest_pair
         .as_ref()
