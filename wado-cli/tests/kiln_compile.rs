@@ -607,7 +607,7 @@ fn spec_module_without_build_dependency_surfaces_unsupported() {
     // A `module: "ns:name"` spec resolves against `[build-dependencies]`; a
     // provider with an empty registry context (no such entry) cannot resolve it.
     let provider = CliGeneratorProvider::new(tmp.clone());
-    let module = GeneratorModule::Spec("example:proto-codegen@1.2.3".to_string());
+    let module = GeneratorModule::Spec("example:proto-codegen@1.2.3".into());
     let err = runtime()
         .block_on(async { provider.resolve(&module).await })
         .expect_err("a spec with no matching build-dependency cannot resolve");

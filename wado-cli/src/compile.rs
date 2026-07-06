@@ -711,7 +711,7 @@ pub(crate) fn rewrite_build_dep_modules(
         let GeneratorModule::Spec(spec) = &inv.module else {
             continue;
         };
-        let key = crate::build_dep::spec_key(spec);
+        let key = crate::build_dep::spec_key(&spec.spec);
         if let Some(local) = build_dep_generator_local_path(key, manifest, manifest_root) {
             inv.module = GeneratorModule::LocalPath(local);
         }

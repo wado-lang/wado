@@ -163,7 +163,7 @@ fn alpha_inv() -> Invocation {
     invocation(
         "entry.wado",
         "kiln-alpha",
-        GeneratorModule::Spec("ns:proto@1.0.0".to_string()),
+        GeneratorModule::Spec("ns:proto@1.0.0".into()),
         "./alpha.proto",
         "build/kiln/kiln-alpha",
     )
@@ -173,7 +173,7 @@ fn beta_inv() -> Invocation {
     invocation(
         "entry.wado",
         "kiln-beta",
-        GeneratorModule::Spec("ns:graphql@1.0.0".to_string()),
+        GeneratorModule::Spec("ns:graphql@1.0.0".into()),
         "./beta.graphql",
         "build/kiln/kiln-beta",
     )
@@ -254,21 +254,21 @@ fn each_invocation_writes_its_own_metadata_file() {
     let z_inv = invocation(
         "entry.wado",
         "kiln-zebra",
-        GeneratorModule::Spec("ns:zebra@1.0.0".to_string()),
+        GeneratorModule::Spec("ns:zebra@1.0.0".into()),
         "./z.schema",
         "build/kiln/kiln-zebra",
     );
     let a_inv = invocation(
         "entry.wado",
         "kiln-alpha",
-        GeneratorModule::Spec("ns:alpha@1.0.0".to_string()),
+        GeneratorModule::Spec("ns:alpha@1.0.0".into()),
         "./a.schema",
         "build/kiln/kiln-alpha",
     );
     let m_inv = invocation(
         "entry.wado",
         "kiln-mango",
-        GeneratorModule::Spec("ns:mango@1.0.0".to_string()),
+        GeneratorModule::Spec("ns:mango@1.0.0".into()),
         "./m.schema",
         "build/kiln/kiln-mango",
     );
@@ -510,7 +510,7 @@ fn shared_module_across_invocations_calls_provider_once() {
     // Two invocations sharing the same `Spec` module. (Spec doesn't
     // resolve through `CliGeneratorProvider` in v1, but the dedup is
     // module-keyed and target-agnostic, so the test is valid.)
-    let shared_module = GeneratorModule::Spec("ns:proto@1.0.0".to_string());
+    let shared_module = GeneratorModule::Spec("ns:proto@1.0.0".into());
     let inv_a = invocation(
         "entry.wado",
         "kiln-a",

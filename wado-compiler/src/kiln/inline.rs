@@ -18,7 +18,7 @@ use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::IndexMap;
 
 use super::cache::{encode_options_canonical, hex_digest};
-use super::invocation::{DeclSite, GeneratorModule, Invocation, InvocationPath};
+use super::invocation::{DeclSite, GeneratorModule, GeneratorSpec, Invocation, InvocationPath};
 use super::options::OptionsDescriptor;
 use super::options_check::{CanonicalOptions, validate};
 
@@ -233,6 +233,33 @@ fn lower_inline(
         }
     };
 
+    // `version` / `registry` supply a registry generator's source inline (single-
+    // file mode, no `wado.toml`). They attach only to a specifier `module`; a
+    // relative-path `module` rejects them.
+    let inline_version = optional_source_string("version", cfg, module_path, use_decl, &mut errors);
+    let inline_registry =
+        optional_source_string("registry", cfg, module_path, use_decl, &mut errors);
+    let module = match module {
+        Some(GeneratorModule::Spec(mut s)) => {
+            s.version = inline_version;
+            s.registry = inline_registry;
+            Some(GeneratorModule::Spec(s))
+        }
+        other => {
+            if inline_version.is_some() || inline_registry.is_some() {
+                errors.push(Diagnostic {
+                    severity: Severity::Error,
+                    code: Code::GeneratorOptionsInvalid,
+                    message: "kiln: `generator.version` / `generator.registry` apply only to a \
+                              `[build-dependencies]` specifier `module`, not a relative path"
+                        .to_string(),
+                    span: Some(span_of(module_path, use_decl)),
+                });
+            }
+            other
+        }
+    };
+
     // The literal source string keys the loader redirect (frame-independent);
     // `from` is the same path resolved relative to the declaring file.
     let source = InvocationPath::normalize(&use_decl.source);
@@ -415,6 +442,34 @@ fn resolve_or_reject(
 ///
 /// A bare relative name without `./` is rejected with a hint to add the
 /// prefix — the same diagnostic regular `use` clauses produce.
+/// Read an optional string field (`version` / `registry`) from the inline
+/// `generator` object. Absent → `None`; a non-string value pushes a diagnostic
+/// and yields `None`.
+fn optional_source_string(
+    field: &str,
+    cfg: &IndexMap<String, AttrValue>,
+    module_path: &str,
+    use_decl: &UseDecl,
+    errors: &mut Vec<Diagnostic>,
+) -> Option<String> {
+    match cfg.get(field) {
+        None => None,
+        Some(AttrValue::String(s)) => Some(s.clone()),
+        Some(other) => {
+            errors.push(Diagnostic {
+                severity: Severity::Error,
+                code: Code::GeneratorOptionsInvalid,
+                message: format!(
+                    "kiln: `generator.{field}` must be a string, got {}",
+                    attr_kind(other),
+                ),
+                span: Some(span_of(module_path, use_decl)),
+            });
+            None
+        }
+    }
+}
+
 fn lower_module_specifier(
     module_path: &str,
     use_decl: &UseDecl,
@@ -447,7 +502,11 @@ fn lower_module_specifier(
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
     {
-        return Some(GeneratorModule::Spec(spec.to_string()));
+        return Some(GeneratorModule::Spec(GeneratorSpec {
+            spec: spec.to_string(),
+            version: None,
+            registry: None,
+        }));
     }
     // A bare name (no `:`) is not a valid specifier — the same rule that rejects
     // bare `[dependencies]` keys, applied at the reference site.
@@ -527,7 +586,7 @@ fn validate_inline_options(
 
 fn module_key(module: &GeneratorModule) -> String {
     match module {
-        GeneratorModule::Spec(s) => format!("spec:{s}"),
+        GeneratorModule::Spec(s) => format!("spec:{}", s.identity()),
         GeneratorModule::LocalPath(p) => format!("path:{}", p.as_str()),
     }
 }
@@ -616,7 +675,7 @@ mod tests {
         assert_eq!(result[0].from.as_str(), "src/schema.proto");
         // The literal source string is preserved for the loader redirect key.
         assert_eq!(result[0].source.as_str(), "schema.proto");
-        assert!(matches!(&result[0].module, GeneratorModule::Spec(s) if s == "ns:gen@1.0.0"));
+        assert!(matches!(&result[0].module, GeneratorModule::Spec(s) if s.spec == "ns:gen@1.0.0"));
         assert_eq!(result[0].decl_site.module, "src/main.wado");
     }
 
@@ -635,7 +694,7 @@ mod tests {
             "",
         )
         .unwrap();
-        assert!(matches!(&result[0].module, GeneratorModule::Spec(s) if s == "lib:gen"));
+        assert!(matches!(&result[0].module, GeneratorModule::Spec(s) if s.spec == "lib:gen"));
     }
 
     #[test]
@@ -656,6 +715,60 @@ mod tests {
         assert!(
             errs.iter()
                 .any(|d| d.message.contains("bare name is not allowed")),
+            "{errs:?}"
+        );
+    }
+
+    #[test]
+    fn inline_source_fields_attach_to_a_spec_module() {
+        // `version` / `registry` on a specifier `module` supply the inline
+        // (single-file) source.
+        let attrs = attr_with_generator(&[
+            ("module", AttrValue::String("wado-lang:gale".to_string())),
+            ("version", AttrValue::String("^0.0.9".to_string())),
+            ("registry", AttrValue::String("oci://ghcr.io".to_string())),
+        ]);
+        let module = module_with_use("./schema.g4", attrs);
+        let mut mods: IndexMap<String, Module> = IndexMap::default();
+        mods.insert("src/main.wado".to_string(), module);
+
+        let result = collect_inline_invocations(
+            mods.iter().map(|(k, v)| (k.as_str(), v)),
+            &IndexMap::default(),
+            "",
+        )
+        .unwrap();
+        match &result[0].module {
+            GeneratorModule::Spec(s) => {
+                assert_eq!(s.spec, "wado-lang:gale");
+                assert_eq!(s.version.as_deref(), Some("^0.0.9"));
+                assert_eq!(s.registry.as_deref(), Some("oci://ghcr.io"));
+            }
+            other => panic!("expected Spec, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn inline_source_on_a_relative_path_is_rejected() {
+        // `version` / `registry` make no sense on a relative-path generator.
+        let attrs = attr_with_generator(&[
+            ("module", AttrValue::String("./gen.wado".to_string())),
+            ("version", AttrValue::String("^0.0.9".to_string())),
+        ]);
+        let module = module_with_use("./schema.g4", attrs);
+        let mut mods: IndexMap<String, Module> = IndexMap::default();
+        mods.insert("src/main.wado".to_string(), module);
+
+        let errs = collect_inline_invocations(
+            mods.iter().map(|(k, v)| (k.as_str(), v)),
+            &IndexMap::default(),
+            "",
+        )
+        .unwrap_err();
+        assert!(
+            errs.iter().any(|d| d
+                .message
+                .contains("apply only to a `[build-dependencies]` specifier")),
             "{errs:?}"
         );
     }

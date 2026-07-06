@@ -11,11 +11,13 @@
 //!   `[build-dependencies]` specifier (rewritten by
 //!   [`crate::compile::rewrite_build_dep_modules`]). All compile from source.
 //! - [`GeneratorModule::Spec`] — a *registry* `[build-dependencies]` specifier
-//!   (`module: "wado-lang:gale"` / `module: "lib:gale"`). Its published version
-//!   is pulled from the `core-kiln-generator` world sub-path as a prebuilt
-//!   component and its options descriptor is recovered from the component WIT
-//!   (see [`resolve_spec`] and [`crate::kiln_wit`]). A spec with no matching
-//!   build-dependency surfaces [`ProviderError::Unsupported`].
+//!   (`module: "wado-lang:gale"` / `module: "lib:gale"`), or, in single-file mode
+//!   with no `wado.toml`, the same specifier with its source (`version` +
+//!   `registry`) supplied inline at the `use` site. Its published version is
+//!   pulled from the `core-kiln-generator` world sub-path as a prebuilt component
+//!   and its options descriptor is recovered from the component WIT (see
+//!   [`resolve_spec`] and [`crate::kiln_wit`]). A spec with neither a matching
+//!   build-dependency nor an inline registry surfaces [`ProviderError::Unsupported`].
 //!
 //! For `LocalPath`, `resolve` reads the generator source, consults the
 //! on-disk cache at `build/kiln/{generators,metadata}/<stable-id>.*`
@@ -638,59 +640,78 @@ impl CliGeneratorProvider {
     /// warm cache (or a fetched tree) short-circuits the registry round-trip. A
     /// published version is immutable, so this is sound. `--no-cache` forces a
     /// re-pull.
-    async fn resolve_spec(&self, spec: &str) -> Result<ResolvedGenerator, ProviderError> {
-        let parts = crate::build_dep::parse_spec(spec);
+    async fn resolve_spec(
+        &self,
+        spec: &wado_compiler::kiln::GeneratorSpec,
+    ) -> Result<ResolvedGenerator, ProviderError> {
+        let parts = crate::build_dep::parse_spec(&spec.spec);
         if parts.submodule.is_some() {
             return Err(ProviderError::Unsupported {
                 message: format!(
-                    "kiln: submodule paths in a generator specifier are not yet supported: `{spec}`"
+                    "kiln: submodule paths in a generator specifier are not yet supported: `{}`",
+                    spec.spec
                 ),
             });
         }
 
-        let dep = self
-            .registry
-            .build_dependencies
-            .get(parts.key)
-            .ok_or_else(|| ProviderError::Unsupported {
-                message: format!(
-                    "kiln: generator `{spec}` is not declared in [build-dependencies]; \
-                     add `\"{}\" = {{ version = \"...\" }}`",
-                    parts.key
-                ),
-            })?;
-        let wado_manifest::DependencySource::Registry {
-            registry,
-            package,
-            version,
-        } = &dep.source
-        else {
-            return Err(ProviderError::Unsupported {
-                message: format!(
-                    "kiln: generator `{spec}` must resolve to a registry or path \
-                     [build-dependencies] entry; git and workspace sources are not supported"
-                ),
-            });
-        };
-
-        // Resolve the version before the cache read so the cache key includes it:
-        // an explicit `@version` pin wins, then the `wado.lock` pin, then a live
-        // registry version listing.
-        let registry_url = self.registry_url(registry.as_deref())?;
-        let version = match parts
-            .version
-            .map(str::to_string)
-            .or_else(|| self.registry.locked_versions.get(package).cloned())
-        {
-            Some(v) => v,
-            None => crate::build_dep::resolve_generator_version(&registry_url, package, version)
-                .await
-                .map_err(|message| ProviderError::Unsupported { message })?,
-        };
+        // The specifier resolves against a `[build-dependencies]` entry when the
+        // manifest declares it; otherwise its source is supplied inline at the
+        // `use` site (single-file mode).
+        let (registry_url, package, version) =
+            if let Some(dep) = self.registry.build_dependencies.get(parts.key) {
+                if spec.version.is_some() || spec.registry.is_some() {
+                    return Err(ProviderError::Unsupported {
+                        message: format!(
+                            "kiln: inline `version`/`registry` are not allowed for `{}`, which is \
+                         declared in [build-dependencies] (manifest and inline are exclusive)",
+                            parts.key
+                        ),
+                    });
+                }
+                let wado_manifest::DependencySource::Registry {
+                    registry,
+                    package,
+                    version,
+                } = &dep.source
+                else {
+                    return Err(ProviderError::Unsupported {
+                        message: format!(
+                            "kiln: generator `{}` must resolve to a registry or path \
+                         [build-dependencies] entry; git and workspace sources are not supported",
+                            spec.spec
+                        ),
+                    });
+                };
+                let url = self.registry_url(registry.as_deref())?;
+                let ver = self
+                    .resolve_version(&url, package, parts.version, Some(version.as_str()))
+                    .await?;
+                (url, package.clone(), ver)
+            } else {
+                // Single-file / inline mode: the coordinate is the key, and the
+                // registry + version come from the inline `generator` fields.
+                let package = parts.key.to_string();
+                let url = spec
+                    .registry
+                    .clone()
+                    .or_else(|| self.registry.registries.get("default").cloned())
+                    .ok_or_else(|| ProviderError::Unsupported {
+                        message: format!(
+                            "kiln: generator `{}` is not in [build-dependencies]; supply an inline \
+                         `registry: \"oci://…\"` (single-file) or declare it in a wado.toml",
+                            spec.spec
+                        ),
+                    })?;
+                let ver = self
+                    .resolve_version(&url, &package, parts.version, spec.version.as_deref())
+                    .await?;
+                (url, package, ver)
+            };
 
         // Identity is the *resolved* coordinate + version, so a version bump
         // invalidates the cache and a coordinate and a `lib:` nickname for the
         // same package share one cache entry and lock pin (WEP "generator identity").
+        let package = &package;
         let stable_id = crate::build_dep::generator_stable_id(package, &version);
         if !self.no_cache
             && let Some(resolved) = self.try_read_spec_cache(&stable_id)
@@ -715,6 +736,35 @@ impl CliGeneratorProvider {
         })?;
         self.write_spec_cache(&stable_id, &resolved.wasm);
         Ok(resolved)
+    }
+
+    /// Pick the concrete version: an explicit `@version` pin, then the
+    /// `wado.lock` pin, then a live registry listing against the requirement.
+    /// Errors when no source of a version is available.
+    async fn resolve_version(
+        &self,
+        registry_url: &str,
+        package: &str,
+        pin: Option<&str>,
+        req: Option<&str>,
+    ) -> Result<String, ProviderError> {
+        if let Some(p) = pin {
+            return Ok(p.to_string());
+        }
+        if let Some(v) = self.registry.locked_versions.get(package) {
+            return Ok(v.clone());
+        }
+        let Some(req) = req else {
+            return Err(ProviderError::Unsupported {
+                message: format!(
+                    "kiln: generator `{package}` has no version; add `@version` to the module, \
+                     an inline `version`, or a [build-dependencies] entry"
+                ),
+            });
+        };
+        crate::build_dep::resolve_generator_version(registry_url, package, req)
+            .await
+            .map_err(|message| ProviderError::Unsupported { message })
     }
 
     /// Resolve a registry alias (`None` → `default`) to its `oci://…` URL.
@@ -826,7 +876,7 @@ mod tests {
         let provider = CliGeneratorProvider::new(PathBuf::from("/tmp"));
         let err = runtime().block_on(async {
             provider
-                .resolve(&GeneratorModule::Spec("ns:x@1.0.0".to_string()))
+                .resolve(&GeneratorModule::Spec("ns:x@1.0.0".into()))
                 .await
                 .unwrap_err()
         });
