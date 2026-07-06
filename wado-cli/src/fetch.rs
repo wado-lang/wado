@@ -5,9 +5,9 @@
 //!
 //! A registry dependency is a prebuilt component. At compile time the compiler
 //! resolves `use … from "ns:pkg"` to a fetched component and composes it in
-//! (see `dep_component`, which caches under `<root>/build/deps/`). `wado fetch`
-//! is a warm-the-cache convenience that pulls every component ahead of the
-//! build, writing each to `<root>/build/<name>.wasm`.
+//! (see `dep_component`, which caches under the shared `~/wado/` tree). `wado
+//! fetch` is a warm-the-cache convenience that pulls every component into that
+//! same cache ahead of the build.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -55,21 +55,25 @@ pub async fn run(_opts: FetchOptions) -> Result<(), CliExit> {
         .await
         .map_err(|e| CliExit::error(format!("resolving dependencies: {e}")))?;
 
-    let build_dir = project.root.join("build");
     let mut count = 0;
     for package in packages.iter().filter(|p| p.integrity.is_some()) {
-        let (registry_url, coordinate, name) = split_registry_id(&package.id)
+        let (registry_url, coordinate, _name) = split_registry_id(&package.id)
             .ok_or_else(|| CliExit::error(format!("unexpected lock id {:?}", package.id)))?;
-        let reference = oci::reference(registry_url, coordinate, &package.version)
-            .map_err(|e| CliExit::error(format!("{}: {e}", package.id)))?;
-        let bytes = oci::pull_component(&reference).await.map_err(|e| {
-            CliExit::error(format!("fetching {coordinate}@{}: {e}", package.version))
-        })?;
-        fs::create_dir_all(&build_dir)
-            .map_err(|e| CliExit::error(format!("creating {}: {e}", build_dir.display())))?;
-        let out = build_dir.join(format!("{name}.wasm"));
-        fs::write(&out, &bytes)
-            .map_err(|e| CliExit::error(format!("writing {}: {e}", out.display())))?;
+        let out = crate::cache::component_path(registry_url, coordinate, &package.version)
+            .map_err(CliExit::error)?;
+        if !out.is_file() {
+            let reference = oci::reference(registry_url, coordinate, &package.version)
+                .map_err(|e| CliExit::error(format!("{}: {e}", package.id)))?;
+            let bytes = oci::pull_component(&reference).await.map_err(|e| {
+                CliExit::error(format!("fetching {coordinate}@{}: {e}", package.version))
+            })?;
+            if let Some(dir) = out.parent() {
+                fs::create_dir_all(dir)
+                    .map_err(|e| CliExit::error(format!("creating {}: {e}", dir.display())))?;
+            }
+            fs::write(&out, &bytes)
+                .map_err(|e| CliExit::error(format!("writing {}: {e}", out.display())))?;
+        }
         eprintln!(
             "Fetched {coordinate}@{} → {}",
             package.version,

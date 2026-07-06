@@ -660,14 +660,7 @@ async fn attach_manifest_and_component_deps(
     }
 
     let manifest = project.map(|p| &p.manifest);
-    let cache_dir = project.map_or(base_path, |p| p.root.as_path());
-    match crate::dep_component::fetch_inline_component_dependencies(
-        entry_source,
-        manifest,
-        cache_dir,
-    )
-    .await
-    {
+    match crate::dep_component::fetch_inline_component_dependencies(entry_source, manifest).await {
         Ok(components) => index.components.extend(components),
         Err(e) => {
             eprintln!("Error fetching component dependencies: {e}");

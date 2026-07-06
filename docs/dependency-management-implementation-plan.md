@@ -132,15 +132,20 @@ it carries no transitive Wado dependencies and no source entry module.
 
 Materialize resolved packages on disk so the compiler can load them.
 
-- [x] `wado fetch` (bridge): resolve, then pull each registry component into
-      `<root>/build/<name>.wasm` — the local wasm-asset location a project
-      imports today, since registry-dep import resolution is Phase 4. Verified
-      live end to end: `example/hello-packages` runs `update` → `fetch` → `run` and
-      round-trips values through the published `wado-lang:cm-catalog` component.
-- [ ] Move the cache to `~/wado/`, overridable by `WADO_ROOT`, once Phase 4
-      resolves registry-dep imports from it (retire the `build/` bridge).
-- [ ] ghq-style layout: `{host}/{ns}/{name}/{version}/` for registry,
-      `{host}/{owner}/{repo}/{version}-{short-ref}/` for git.
+- [x] `wado fetch`: resolve, then pull each registry component into the shared
+      cache. Verified live end to end: `example/hello-packages` runs
+      `update` → `fetch` → `run` and round-trips values through the published
+      `wado-lang:cm-catalog` component.
+- [x] Cache moved to `~/wado/`, overridable by `WADO_ROOT` (`wado-cli::cache`);
+      the `build/` bridge is retired for registry components. Both the compiler's
+      component resolution (`dep_component`) and `wado fetch` write the same tree,
+      so a pre-fetch is a warm cache hit at build time. Kiln generator components
+      still cache project-locally (`build/kiln/generators/`, its own stable-id +
+      lock scheme); moving those is a separate follow-up.
+- [x] ghq-style layout for registry: `{host}/{ns}/{name}/{version}/component.wasm`
+      (registry prefix folds into `{host}/…` via the `oci::reference` repository
+      mapping). Git's `{host}/{owner}/{repo}/{version}-{short-ref}/` waits on the
+      git provider (Phase 6).
 - [ ] Extract the pulled component's Wado source tree (or, for wado-to-wado, the
       provider-metadata source) into the version directory alongside its
       `wado.toml`.

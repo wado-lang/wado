@@ -13,18 +13,14 @@
 //!   ([`fetch_inline_component_dependencies`]) — no lock, an exact pin, keyed by
 //!   the verbatim specifier.
 //!
-//! Components are cached under `<base>/build/deps/`; a published version is
-//! immutable, so a present cache file is reused without a re-pull.
-
-use std::path::Path;
+//! Components land in the shared `~/wado/` cache (see [`crate::cache`]); a
+//! published version is immutable, so a present cache file is reused without a
+//! re-pull, and every project shares one copy.
 
 use wado_manifest::Manifest;
 
 use crate::oci;
 use crate::registry::FilesystemProvider;
-
-/// Directory (under the base dir) where fetched component dependencies land.
-const DEPS_CACHE_DIR: &str = "build/deps";
 
 /// Resolve and fetch every registry `[dependencies]` entry into the component
 /// cache, returning `(specifier, absolute local .wasm path)` pairs. The
@@ -34,20 +30,18 @@ const DEPS_CACHE_DIR: &str = "build/deps";
 /// and non-registry sources are ignored.
 pub async fn fetch_component_dependencies(
     manifest: &Manifest,
-    manifest_dir: &Path,
+    manifest_dir: &std::path::Path,
 ) -> Result<Vec<(String, String)>, String> {
     let provider = FilesystemProvider::new(manifest_dir.to_path_buf());
     let packages = wado_manifest::resolve(manifest, &provider)
         .await
         .map_err(|e| format!("resolving dependencies: {e}"))?;
 
-    let deps_dir = manifest_dir.join(DEPS_CACHE_DIR);
     let mut out = Vec::new();
     for package in packages.iter().filter(|p| p.integrity.is_some()) {
-        let (registry_url, coordinate, name) = crate::fetch::split_registry_id(&package.id)
+        let (registry_url, coordinate, _name) = crate::fetch::split_registry_id(&package.id)
             .ok_or_else(|| format!("unexpected lock id {:?}", package.id))?;
-        let abs = pull_component_into(registry_url, coordinate, name, &package.version, &deps_dir)
-            .await?;
+        let abs = pull_component(registry_url, coordinate, &package.version).await?;
         // A registry dependency is a leaf (no transitive Wado deps), so the
         // loader only ever imports it by the consuming manifest's key. Map its
         // coordinate back to that key so a `lib:` alias resolves under its
@@ -80,20 +74,11 @@ fn manifest_key_for_coordinate<'a>(manifest: &'a Manifest, coordinate: &str) -> 
 pub async fn fetch_inline_component_dependencies(
     source: &str,
     manifest: Option<&Manifest>,
-    base_dir: &Path,
 ) -> Result<Vec<(String, String)>, String> {
     let deps = collect_inline_deps(source, manifest)?;
-    let deps_dir = base_dir.join(DEPS_CACHE_DIR);
     let mut out = Vec::new();
     for dep in deps {
-        let abs = pull_component_into(
-            &dep.registry_url,
-            &dep.coordinate,
-            &dep.name,
-            &dep.version,
-            &deps_dir,
-        )
-        .await?;
+        let abs = pull_component(&dep.registry_url, &dep.coordinate, &dep.version).await?;
         out.push((dep.specifier, abs));
     }
     Ok(out)
@@ -106,7 +91,6 @@ struct InlineDep {
     /// looks up (carries any `@ver` pin).
     specifier: String,
     coordinate: String,
-    name: String,
     registry_url: String,
     version: String,
 }
@@ -215,14 +199,9 @@ fn parse_inline_dep(
             format!("dependency {head:?} needs a registry (add `with {{ registry: \"oci://…\" }}`)")
         })?;
 
-    let name = coordinate
-        .split_once(':')
-        .map_or_else(|| coordinate.clone(), |(_, n)| n.to_string());
-
     Ok(Some(InlineDep {
         specifier,
         coordinate,
-        name,
         registry_url,
         version,
     }))
@@ -252,25 +231,24 @@ fn classify_specifier(spec: &str) -> Option<(&str, &str, Option<&str>)> {
     Some((namespace, head, version))
 }
 
-/// Pull `coordinate` @ `version` from `registry_url` into `deps_dir`, returning
-/// the absolute path. A present cache file (immutable published version) is
-/// reused without a re-pull.
-async fn pull_component_into(
+/// Pull `coordinate` @ `version` from `registry_url` into the shared `~/wado/`
+/// cache, returning the absolute path. A present cache file (immutable published
+/// version) is reused without a re-pull.
+async fn pull_component(
     registry_url: &str,
     coordinate: &str,
-    name: &str,
     version: &str,
-    deps_dir: &Path,
 ) -> Result<String, String> {
-    let out_path = deps_dir.join(format!("{name}-{version}.wasm"));
+    let out_path = crate::cache::component_path(registry_url, coordinate, version)?;
     if !out_path.is_file() {
         let reference = oci::reference(registry_url, coordinate, version)
             .map_err(|e| format!("{coordinate}@{version}: {e}"))?;
         let bytes = oci::pull_component(&reference)
             .await
             .map_err(|e| format!("fetching {coordinate}@{version}: {e}"))?;
-        std::fs::create_dir_all(deps_dir)
-            .map_err(|e| format!("creating {}: {e}", deps_dir.display()))?;
+        if let Some(dir) = out_path.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| format!("creating {}: {e}", dir.display()))?;
+        }
         std::fs::write(&out_path, &bytes)
             .map_err(|e| format!("writing {}: {e}", out_path.display()))?;
     }
@@ -340,7 +318,6 @@ mod tests {
         .unwrap()
         .unwrap();
         assert_eq!(dep.coordinate, "ns:pkg");
-        assert_eq!(dep.name, "pkg");
         assert_eq!(dep.version, "1.2.3");
         assert_eq!(dep.registry_url, "oci://ghcr.io");
         assert_eq!(dep.specifier, "ns:pkg@1.2.3");
@@ -436,7 +413,6 @@ mod tests {
         .unwrap();
         assert_eq!(dep.specifier, "lib:foo");
         assert_eq!(dep.coordinate, "ns:pkg");
-        assert_eq!(dep.name, "pkg");
         assert_eq!(dep.version, "1.2.3");
     }
 
