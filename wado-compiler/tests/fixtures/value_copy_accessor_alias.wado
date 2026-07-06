@@ -1,0 +1,16 @@
+// Regression (wado-lang/wado#1527): an indexed-element read (`container[i]`,
+// lowered to the `index_value` accessor) returns storage aliased into the
+// container, so binding it must produce an independent copy. The value-copy
+// inserter no longer treats a call result as fresh; the interprocedural
+// freshness analysis in `optimize::escape` recovers the copies that are
+// provably unnecessary, leaving the aliasing ones in place.
+
+test "indexed element bound to a local must be an independent copy" {
+    let mut outer: List<List<i32>> = [[1, 2]];
+    let mut x = outer[0];
+    x[0] = 999;
+    assert outer[0][0] == 1;
+}
+
+__DATA__
+{"test": {}}

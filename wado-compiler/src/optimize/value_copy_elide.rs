@@ -93,7 +93,16 @@ impl Rule for ValueCopyElideRule<'_> {
         for stmt in stmts {
             let mut targets = collect_strippable(engine.body, stmt, self.value_copy_ids, usage);
             self.collect_call_arg_copies(engine.body, NodeRef::Stmt(stmt), &mut targets);
+            self.collect_fresh_copies(engine.body, NodeRef::Stmt(stmt), &mut targets);
             for value in targets {
+                // The collectors overlap (a fresh copy can also sit in a call-arg
+                // or binding position) and a strip can rewrite an ancestor target
+                // in place, so re-check that `value` is still a `$value_copy$T`
+                // call before unwrapping — otherwise we would grab the first
+                // argument of whatever kind replaced it.
+                if !is_value_copy_call(engine.body, value, self.value_copy_ids) {
+                    continue;
+                }
                 // `value` is `$value_copy$T(arg)`; replace it with `arg` so the
                 // binding aliases the source. The call returns `arg`'s own type,
                 // so `value`'s type/span are unchanged.
@@ -509,6 +518,26 @@ fn collect_strippable(
 /// A deref-sourced argument is never stripped (wado-lang/wado#1522): the pointee
 /// has no local identity the usage oracle tracks.
 impl ValueCopyElideRule<'_> {
+    /// Collect every `$value_copy$T(arg)` in `node`'s subtree whose `arg` is a
+    /// fresh rvalue — the value semantics of the conservative copy inserted for a
+    /// call result (and any construction) is a no-op when the source aliases
+    /// nothing live, so it can be stripped in any position.
+    fn collect_fresh_copies(&self, body: &Body, node: NodeRef, out: &mut Vec<ExprId>) {
+        let mut stack = vec![node];
+        while let Some(n) = stack.pop() {
+            if let NodeRef::Expr(e) = n
+                && is_value_copy_call(body, e, self.value_copy_ids)
+                && let Some(arg) = call_arg(body, e)
+                && arg
+                    .as_expr()
+                    .is_some_and(|ae| self.escape.rvalue_is_fresh(body, ae, self.type_table))
+            {
+                out.push(e);
+            }
+            body.for_each_child(n, |c| stack.push(c));
+        }
+    }
+
     fn collect_call_arg_copies(&self, body: &Body, node: NodeRef, out: &mut Vec<ExprId>) {
         let mut stack = vec![node];
         while let Some(n) = stack.pop() {

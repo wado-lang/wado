@@ -177,10 +177,12 @@ fn is_fresh_in_context(
         | TirExprKind::TupleLen { .. }
         | TirExprKind::TypePackExpansion { .. }
         | TirExprKind::Null => true,
-        TirExprKind::Call { .. }
-        | TirExprKind::MethodCall { .. }
-        | TirExprKind::CmRawCall { .. }
-        | TirExprKind::IndirectCall { .. } => true,
+        // A call result is *not* assumed fresh: a function may return a value
+        // aliased into an argument, receiver, or global — an accessor like
+        // `index_value(self: &List, i) -> T { return self.repr[i] }` returns
+        // element storage aliased into the container (wado-lang/wado#1527). The
+        // conservative copy is recovered by `value_copy_elide` for calls the
+        // interprocedural escape analysis proves return a fresh value.
         TirExprKind::VariantConstruct { .. } | TirExprKind::EnumConstruct { .. } => true,
         TirExprKind::Local { index, .. } => fresh_locals.contains(index),
         TirExprKind::Unary {

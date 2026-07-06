@@ -55,6 +55,10 @@ struct ParamEscape {
 #[derive(Default)]
 pub(super) struct EscapeMap {
     funcs: IndexMap<FuncId, ParamEscape>,
+    /// Functions whose result is a genuinely fresh value — it aliases no
+    /// argument, receiver, global, or capture, so a copy of the result is a
+    /// no-op. Lets the elider recover the copies inserted for call results.
+    fresh_result: IndexSet<FuncId>,
 }
 
 impl EscapeMap {
@@ -69,6 +73,23 @@ impl EscapeMap {
             }
             None => true,
         }
+    }
+
+    /// Whether a call to `func` yields a genuinely fresh value, so copying its
+    /// result is a no-op. Unknown functions default to `false`.
+    pub(super) fn returns_fresh(&self, func: FuncId) -> bool {
+        self.fresh_result.contains(&func)
+    }
+
+    /// Whether `e` is a fresh *rvalue* — it produces a new value that aliases
+    /// nothing live, so `$value_copy$T(e)` is a no-op and can be stripped in any
+    /// position. A bare local read is *not* fresh here (it aliases a live local);
+    /// only constructions, copy clones, fresh-returning calls, and matches whose
+    /// arms destructure a fresh scrutinee qualify.
+    pub(super) fn rvalue_is_fresh(&self, body: &Body, e: ExprId, type_table: &TypeTable) -> bool {
+        expr_is_fresh(body, e, &IndexSet::default(), type_table, &|id| {
+            self.returns_fresh(id)
+        })
     }
 }
 
@@ -134,7 +155,59 @@ pub(super) fn analyze_param_escape(
         }
     }
 
-    EscapeMap { funcs }
+    // The element-read builtin whose result aliases its container; every other
+    // builtin allocates or computes a fresh result.
+    let mut array_get = IndexSet::default();
+    for func in &project.functions {
+        let func = func.borrow();
+        if let Some(id) = func.id
+            && kinds.get(&id) == Some(&Kind::Builtin)
+            && func.name == "array_get"
+        {
+            array_get.insert(id);
+        }
+    }
+
+    // Least fixpoint over "the function returns a fresh value": a copy helper
+    // clones; a builtin allocates (except `array_get`); a body function is fresh
+    // when every return operand is fresh given the freshness of the callees it
+    // returns. Start with the always-fresh callees and grow.
+    let mut fresh_result: IndexSet<FuncId> = IndexSet::default();
+    for (&id, &kind) in &kinds {
+        match kind {
+            Kind::ValueCopy => {
+                fresh_result.insert(id);
+            }
+            Kind::Builtin if !array_get.contains(&id) => {
+                fresh_result.insert(id);
+            }
+            _ => {}
+        }
+    }
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for func in &project.functions {
+            let func = func.borrow();
+            let (Some(id), Some(body)) = (func.id, func.body.as_ref()) else {
+                continue;
+            };
+            if fresh_result.contains(&id) {
+                continue;
+            }
+            let call_fresh = |c: FuncId| fresh_result.contains(&c);
+            let fl = compute_fresh_locals(body, func.params.len() as u32, &type_table, &call_fresh);
+            if function_result_is_fresh(body, &fl, &type_table, &call_fresh) {
+                fresh_result.insert(id);
+                changed = true;
+            }
+        }
+    }
+
+    EscapeMap {
+        funcs,
+        fresh_result,
+    }
 }
 
 fn classify_functions(
@@ -519,6 +592,182 @@ fn subtree_local_taint(body: &Body, taint: &IndexMap<u32, Taint>, e: ExprId) -> 
         body.for_each_child(node, |c| stack.push(c));
     }
     acc
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Freshness analysis
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// The locals of `body` (first `n_params` are parameters) that provably hold a
+/// uniquely owned, fresh value. A parameter never qualifies — it aliases its
+/// argument. Every other local qualifies only if it has at least one binding and
+/// every value bound to it is fresh; mutation in place (`x.push(..)`) does not
+/// rebind `x`, so it keeps a fresh value fresh.
+fn compute_fresh_locals(
+    body: &Body,
+    n_params: u32,
+    type_table: &TypeTable,
+    call_fresh: &dyn Fn(FuncId) -> bool,
+) -> IndexSet<u32> {
+    let mut bindings: IndexMap<u32, Vec<Operand>> = IndexMap::default();
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Stmt(s) = node
+            && let Some((local, value)) = binding_target(body, s)
+            && local >= n_params
+        {
+            bindings.entry(local).or_default().push(value);
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    // Optimistic: every bound non-parameter local is fresh; remove any whose a
+    // binding value is not fresh, to a fixpoint (a value may reference another
+    // local whose freshness is still shrinking).
+    let mut fresh: IndexSet<u32> = bindings.keys().copied().collect();
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for (&local, values) in &bindings {
+            if fresh.contains(&local)
+                && !values
+                    .iter()
+                    .all(|v| operand_is_fresh(body, *v, &fresh, type_table, call_fresh))
+            {
+                fresh.swap_remove(&local);
+                changed = true;
+            }
+        }
+    }
+    fresh
+}
+
+/// Whether every value `body` can return is fresh — the function's result
+/// aliases none of its arguments, so a copy of a call to it is a no-op.
+fn function_result_is_fresh(
+    body: &Body,
+    fresh_locals: &IndexSet<u32>,
+    type_table: &TypeTable,
+    call_fresh: &dyn Fn(FuncId) -> bool,
+) -> bool {
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Stmt(s) = node
+            && let StmtKind::Return { value: Some(op) } | StmtKind::Break { value: Some(op), .. } =
+                &body.stmts[s].kind
+            && !operand_is_fresh(body, *op, fresh_locals, type_table, call_fresh)
+        {
+            return false;
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    // A trailing bare expression is an implicit return.
+    if let Some(&last) = body.blocks[body.root].stmts.last()
+        && let StmtKind::Expr(op) = &body.stmts[last].kind
+        && !operand_is_fresh(body, *op, fresh_locals, type_table, call_fresh)
+    {
+        return false;
+    }
+    true
+}
+
+/// Whether `op`'s value is fresh in the context of the locals in `fresh`. A
+/// promoted constant is uniquely owned, hence fresh. A reference operand is
+/// shared on copy, never deep-copied, so it never makes an enclosing
+/// construction non-fresh.
+fn operand_is_fresh(
+    body: &Body,
+    op: Operand,
+    fresh: &IndexSet<u32>,
+    type_table: &TypeTable,
+    call_fresh: &dyn Fn(FuncId) -> bool,
+) -> bool {
+    let Some(e) = op.as_expr() else { return true };
+    matches!(
+        type_table.get(body.exprs[e].type_id),
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+    ) || expr_is_fresh(body, e, fresh, type_table, call_fresh)
+}
+
+/// Whether `e`'s value shares storage with nothing outside `fresh`: a fresh
+/// construction, a copy clone, a call whose result aliases no argument, a `fresh`
+/// local, or a match all of whose arms yield fresh values. `fresh` grows through
+/// a match with a fresh scrutinee, whose pattern bindings destructure unaliased
+/// data. Projections, deref, cast, and unrecognized shapes are not fresh —
+/// mirrors `lower::plan::value_copy::analyze::is_fresh_in_context` at NIR level.
+fn expr_is_fresh(
+    body: &Body,
+    e: ExprId,
+    fresh: &IndexSet<u32>,
+    type_table: &TypeTable,
+    call_fresh: &dyn Fn(FuncId) -> bool,
+) -> bool {
+    match &body.exprs[e].kind {
+        ExprKind::Local { index, .. } => fresh.contains(index),
+        ExprKind::PackedArray(_) | ExprKind::EnumConstruct { .. } => true,
+        ExprKind::StructLiteral { fields, .. } => fields
+            .iter()
+            .all(|f| operand_is_fresh(body, f.value, fresh, type_table, call_fresh)),
+        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
+            .iter()
+            .all(|el| operand_is_fresh(body, *el, fresh, type_table, call_fresh)),
+        ExprKind::VariantConstruct { payload, .. } => {
+            payload.is_none_or(|p| operand_is_fresh(body, p, fresh, type_table, call_fresh))
+        }
+        // The callee's result aliases no argument (or it is a copy helper).
+        ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => call_fresh(*func_id),
+        // A match yields fresh iff every value-producing arm does. When the
+        // scrutinee is fresh, an arm's pattern bindings destructure unaliased
+        // data and are fresh too.
+        ExprKind::Match { expr: scrut, arms } => {
+            let scrut_fresh = operand_is_fresh(body, *scrut, fresh, type_table, call_fresh);
+            arms.iter().all(|arm| {
+                // A diverging arm (`=> return …`) is `Never`-typed, yields no value.
+                if arm
+                    .body
+                    .as_expr()
+                    .is_some_and(|be| body.exprs[be].type_id == crate::tir::TypeTable::NEVER)
+                {
+                    return true;
+                }
+                let mut arm_fresh = fresh.clone();
+                if scrut_fresh {
+                    collect_pattern_bindings(body, arm.pattern, &mut arm_fresh);
+                }
+                operand_is_fresh(body, arm.body, &arm_fresh, type_table, call_fresh)
+            })
+        }
+        _ => false,
+    }
+}
+
+/// Collect every local a NIR pattern binds.
+fn collect_pattern_bindings(body: &Body, pat: crate::nir_arena::PatId, out: &mut IndexSet<u32>) {
+    use crate::nir_arena::PatKind;
+    match &body.pats[pat].kind {
+        PatKind::Binding { local_index, .. } => {
+            out.insert(*local_index);
+        }
+        PatKind::Tuple(subs, _) | PatKind::Or(subs) => {
+            for &s in subs {
+                collect_pattern_bindings(body, s, out);
+            }
+        }
+        PatKind::Variant { bindings, .. } => {
+            for &s in bindings {
+                collect_pattern_bindings(body, s, out);
+            }
+        }
+        PatKind::Struct { fields, .. } => {
+            for f in fields {
+                collect_pattern_bindings(body, f.pattern, out);
+            }
+        }
+        PatKind::Wildcard
+        | PatKind::Literal(_)
+        | PatKind::Enum { .. }
+        | PatKind::ConstantValue { .. }
+        | PatKind::Range { .. } => {}
+    }
 }
 
 fn union(mut a: Taint, b: Taint) -> Taint {
