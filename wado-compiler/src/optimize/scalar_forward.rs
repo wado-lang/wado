@@ -77,8 +77,9 @@ impl Rule for ScalarForwardRule<'_> {
             // The use's enclosing statement must be the binding's immediate
             // successor (which also rules out a use nested in a sub-block, whose
             // enclosing statement is the inner one). Forwarding into an aggregate
-            // literal is fine: `sroa` un-nests and scalarizes the aggregate
-            // whatever form its elements take.
+            // literal is fine here: this pass runs last, after every SROA /
+            // globalization recognizer has matched its shape, so folding a
+            // single-use scalar into a literal element only strips a dead temp.
             if enclosing_stmt(engine, use_id) != Some(use_stmt) {
                 continue;
             }

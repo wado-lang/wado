@@ -823,7 +823,7 @@ fn compile_after_load<H: CompilerHost>(
             }
         };
 
-    select_allocator(&mut package, options.allocator, &logger)?;
+    select_allocator(&mut package, options.allocator, logger)?;
 
     // Validate target world (test and library worlds are handled specially,
     // not in the static registry)

@@ -36,7 +36,7 @@ use std::cell::{Cell, RefCell};
 
 use cranelift_entity::EntityRef;
 
-use super::arena_query::is_pure_operand;
+use super::arena_query::{is_pure_operand, reachable_blocks};
 use super::gate::{FunctionGate, GatedPass};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
@@ -108,13 +108,12 @@ pub fn scalar_replace_aggregates(project: &mut NirPackage, gate: &mut FunctionGa
         let changed = {
             let NirFunction { body, locals, .. } = &mut *func;
             let body = body.as_mut().expect("checked above");
-            // Un-nest an effectful builder block that yields an aggregate
-            // (`let x = { let p = call(); Tuple{..} }`) so the candidate matcher
-            // sees a direct literal. Gated on the block being effectful, which is
-            // exactly what keeps it out of `const_object_globalization`'s domain
-            // (const, side-effect-free) — so this never competes with it.
-            let flattened = flatten_effectful_aggregate_blocks(body);
             let mut engine = Engine::new(body, &mut buffers, locals);
+            // Un-nest a builder block that yields an aggregate
+            // (`let x = { <prefix>; Tuple{..} }`) so the candidate matcher below
+            // sees a direct literal. Runs through the engine edit API so it never
+            // competes with the SROA rewrite's coherence guarantees.
+            let flattened = flatten_aggregate_builder_blocks(&mut engine);
             engine.run(&[&rule]) || flattened
         };
         let newly = rule.newly_aliased.into_inner();
@@ -126,52 +125,76 @@ pub fn scalar_replace_aggregates(project: &mut NirPackage, gate: &mut FunctionGa
 }
 
 // -----------------------------------------------------------------------
-// Pre-pass: un-nest effectful builder blocks
+// Pre-pass: un-nest aggregate builder blocks
 // -----------------------------------------------------------------------
 
 /// Rewrite every `let x = { <lets…>; <aggregate literal> }` whose block is
-/// effectful into `<lets…>; let x = <aggregate literal>`, hoisting the prefix
-/// bindings to precede the binding. The block sits in value position of the
-/// `let`, evaluated unconditionally there, so moving its statements to just
-/// before the `let` preserves order and effects.
+/// effectful into `<lets…>; let x = <aggregate literal>`, collapsing the block
+/// wrapper onto its aggregate tail and hoisting the prefix bindings to precede
+/// the binding. The block sits in value position of the `let`, evaluated
+/// unconditionally there, so moving its `let` prefix to just before the `let`
+/// preserves order and effects. This exposes the literal to the SROA candidate
+/// matcher, which only recognises a direct `let x = MyStruct { … }`.
 ///
-/// Restricted to *effectful* blocks: a side-effect-free constant aggregate is
-/// `const_object_globalization`'s to hoist into a shared global, and un-nesting
-/// one would strip the closed-constant shape it matches. An effectful block
-/// (its prefix contains a call, e.g. a CM `future-new`) is never const, so the
-/// two passes partition the block-wrapped aggregates between them by this gate.
-fn flatten_effectful_aggregate_blocks(body: &mut Body) -> bool {
+/// Runs through the engine edit API (`become_expr` / `set_block_stmts`) so the
+/// parent map and use index stay coherent — a hand mutation of the arena would
+/// leave the emptied inner block aliasing the hoisted statement ids, which
+/// `Engine::new`'s whole-arena `build_parents` then double-parents. Nested
+/// builder blocks converge across the SROA fixpoint loop: one flatten exposes
+/// the next inner `let` to the following iteration.
+///
+/// See [`flattenable_aggregate_block`] for the effectful gate, which keeps this
+/// off both `const_object_globalization`'s and the value-copy passes' turf.
+fn flatten_aggregate_builder_blocks(engine: &mut Engine) -> bool {
     let mut changed = false;
-    for block in reachable_blocks(body) {
-        let stmts = body.blocks[block].stmts.clone();
+    for block in reachable_blocks(engine.body) {
+        let stmts = engine.body.blocks[block].stmts.clone();
+        if !stmts
+            .iter()
+            .any(|&s| flattenable_aggregate_block(engine.body, s).is_some())
+        {
+            continue;
+        }
         let mut new_stmts: Vec<StmtId> = Vec::with_capacity(stmts.len());
         for stmt in stmts {
-            let Some((inner, tail_value)) = flattenable_aggregate_block(body, stmt) else {
+            let Some((inner, block_expr, agg)) = flattenable_aggregate_block(engine.body, stmt)
+            else {
                 new_stmts.push(stmt);
                 continue;
             };
-            let inner_stmts = &body.blocks[inner].stmts;
-            let (_, prefix) = inner_stmts.split_last().expect("checked non-empty");
-            new_stmts.extend_from_slice(prefix);
-            if let StmtKind::Let { value, .. } = &mut body.stmts[stmt].kind {
-                *value = tail_value;
-            }
+            let (_, prefix) = engine.body.blocks[inner]
+                .stmts
+                .split_last()
+                .expect("checked non-empty");
+            let prefix = prefix.to_vec();
+            engine.become_expr(block_expr, agg);
+            engine.set_block_stmts(inner, Vec::new());
+            new_stmts.extend_from_slice(&prefix);
             new_stmts.push(stmt);
             changed = true;
         }
-        body.blocks[block].stmts = new_stmts;
+        engine.set_block_stmts(block, new_stmts);
     }
     changed
 }
 
-/// If `stmt` is `let x = Block(b)` where `b` is an effectful builder block whose
-/// prefix is all `let`s and whose tail is a struct / tuple literal, return the
-/// inner block and that literal's operand; otherwise `None`.
-fn flattenable_aggregate_block(body: &Body, stmt: StmtId) -> Option<(BlockId, Operand)> {
+/// If `stmt` is `let x = Block(b)` where `b` is an *effectful* builder block
+/// whose prefix is all `let`s and whose tail is a struct / tuple literal, return
+/// the inner block, the block-wrapper expr, and the aggregate expr; otherwise
+/// `None`.
+///
+/// The effectful gate (a prefix binding whose value is impure) is load-bearing
+/// twice over: an impure value is never `const_object_globalization`'s to hoist,
+/// so the two passes partition by construction; and it excludes the *pure*
+/// value-copy synthesis blocks (`let c = $value_copy$T(src); Struct { c }`) that
+/// `field_forward` / `value_copy_demote` consume in their block-wrapped form —
+/// un-nesting those regresses their recognizers.
+fn flattenable_aggregate_block(body: &Body, stmt: StmtId) -> Option<(BlockId, ExprId, ExprId)> {
     let StmtKind::Let { value, .. } = &body.stmts[stmt].kind else {
         return None;
     };
-    let ExprKind::Block(inner) = &body.exprs[value.as_expr()?].kind else {
+    let block_expr = value.as_expr()?;
+    let ExprKind::Block(inner) = &body.exprs[block_expr].kind else {
         return None;
     };
     let inner = *inner;
@@ -182,35 +205,24 @@ fn flattenable_aggregate_block(body: &Body, stmt: StmtId) -> Option<(BlockId, Op
     let StmtKind::Expr(tail_value) = &body.stmts[tail].kind else {
         return None;
     };
+    let agg = tail_value.as_expr()?;
     if !matches!(
-        &body.exprs[tail_value.as_expr()?].kind,
+        &body.exprs[agg].kind,
         ExprKind::StructLiteral { .. } | ExprKind::TupleLiteral { .. }
     ) {
         return None;
     }
-    // Effectful gate: at least one prefix binding is impure, so `const_object`
-    // would never claim this aggregate.
     prefix
         .iter()
         .any(|&s| matches!(&body.stmts[s].kind, StmtKind::Let { value, .. } if !is_pure_operand(body, *value)))
-        .then_some((inner, *tail_value))
+        .then_some((inner, block_expr, agg))
 }
 
 fn is_let_stmt(body: &Body, stmt: StmtId) -> bool {
-    matches!(&body.stmts[stmt].kind, StmtKind::Let { .. })
-}
-
-/// Every block reachable from the body root, outermost first.
-fn reachable_blocks(body: &Body) -> Vec<BlockId> {
-    let mut out = Vec::new();
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
-        if let NodeRef::Block(b) = node {
-            out.push(b);
-        }
-        body.for_each_child(node, |c| stack.push(c));
-    }
-    out
+    matches!(
+        &body.stmts[stmt].kind,
+        StmtKind::Let { .. } | StmtKind::LetDestructure { .. }
+    )
 }
 
 // -----------------------------------------------------------------------
@@ -1245,5 +1257,147 @@ fn reconstruct_aggregate(engine: &mut Engine, id: ExprId, local_idx: u32, ctx: &
                 fields,
             },
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::nir::NirLocal;
+    use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
+    use crate::tir::TypeTable;
+    use crate::token::Span;
+
+    fn sp() -> Span {
+        Span::new(0, 0, 0, 0)
+    }
+
+    /// A minimal impure expression (an argument-less call), so a prefix binding
+    /// makes its block effectful.
+    fn call_expr() -> ExprKind {
+        ExprKind::Call {
+            func_id: crate::nir::FuncId::from_u32(0),
+            type_args: vec![],
+            args: vec![],
+        }
+    }
+
+    fn local(name: &str) -> NirLocal {
+        NirLocal {
+            name: name.to_string(),
+            type_id: TypeTable::I32,
+            is_mut: false,
+        }
+    }
+
+    fn let_stmt(name: &str, index: u32, value: Operand) -> StmtNode {
+        StmtNode {
+            kind: StmtKind::Let {
+                name: name.to_string(),
+                local_index: index,
+                is_mut: false,
+                is_reactive: false,
+                type_id: TypeTable::I32,
+                value,
+                skip_value_copy: false,
+            },
+            span: sp(),
+        }
+    }
+
+    fn expr(body: &mut Body, kind: ExprKind) -> ExprId {
+        body.exprs.push(ExprNode {
+            kind,
+            type_id: TypeTable::I32,
+            span: sp(),
+        })
+    }
+
+    /// The single-parent tree invariant: no statement id may appear in two
+    /// blocks. The pre-fix hand mutation left hoisted statements in both the
+    /// live parent and the emptied inner block, which this catches.
+    fn assert_single_parent(body: &Body) {
+        let mut seen = IndexSet::default();
+        for (_, blk) in body.blocks.iter() {
+            for &s in &blk.stmts {
+                assert!(seen.insert(s), "statement {s:?} appears in two blocks");
+            }
+        }
+    }
+
+    /// `let x = { let p = arg; let y = { let q = arg; (q, q) }; (p, y) }` —
+    /// nested builder blocks whose free-local (`arg`) prefixes make them
+    /// non-const, so both flatten. Verifies the fixpoint fully un-nests them and
+    /// preserves the single-parent invariant (the nested case that miscompiled
+    /// under the arena hand mutation).
+    #[test]
+    fn flatten_nested_builder_blocks_stays_coherent() {
+        let mut body = Body::empty();
+        let mut locals = vec![
+            local("arg"),
+            local("p"),
+            local("q"),
+            local("y"),
+            local("x"),
+        ];
+        // Reserve block ids so exprs can reference them; root is block 0.
+        let r = body.blocks.push(BlockNode { stmts: vec![], span: sp() });
+        let a = body.blocks.push(BlockNode { stmts: vec![], span: sp() });
+        let b = body.blocks.push(BlockNode { stmts: vec![], span: sp() });
+        assert_eq!(r, body.root);
+
+        // Impure prefix values (calls) so both blocks pass the effectful gate.
+        let arg_q = expr(&mut body, call_expr());
+        let q1 = expr(&mut body, ExprKind::Local { index: 2, name: "q".into() });
+        let q2 = expr(&mut body, ExprKind::Local { index: 2, name: "q".into() });
+        let tuple_b = expr(&mut body, ExprKind::TupleLiteral {
+            elements: vec![Operand::Expr(q1), Operand::Expr(q2)],
+        });
+        let block_b = expr(&mut body, ExprKind::Block(b));
+        let arg_p = expr(&mut body, call_expr());
+        let p_use = expr(&mut body, ExprKind::Local { index: 1, name: "p".into() });
+        let y_use = expr(&mut body, ExprKind::Local { index: 3, name: "y".into() });
+        let tuple_a = expr(&mut body, ExprKind::TupleLiteral {
+            elements: vec![Operand::Expr(p_use), Operand::Expr(y_use)],
+        });
+        let block_a = expr(&mut body, ExprKind::Block(a));
+
+        let s_letq = body.stmts.push(let_stmt("q", 2, Operand::Expr(arg_q)));
+        let s_tailb = body.stmts.push(StmtNode { kind: StmtKind::Expr(Operand::Expr(tuple_b)), span: sp() });
+        let s_letp = body.stmts.push(let_stmt("p", 1, Operand::Expr(arg_p)));
+        let s_lety = body.stmts.push(let_stmt("y", 3, Operand::Expr(block_b)));
+        let s_taila = body.stmts.push(StmtNode { kind: StmtKind::Expr(Operand::Expr(tuple_a)), span: sp() });
+        let s_letx = body.stmts.push(let_stmt("x", 4, Operand::Expr(block_a)));
+
+        body.blocks[b].stmts = vec![s_letq, s_tailb];
+        body.blocks[a].stmts = vec![s_letp, s_lety, s_taila];
+        body.blocks[r].stmts = vec![s_letx];
+
+        let mut buffers = EngineBuffers::default();
+        let mut rounds = 0;
+        loop {
+            let mut engine = Engine::new(&mut body, &mut buffers, &mut locals);
+            let changed = flatten_aggregate_builder_blocks(&mut engine);
+            if !changed {
+                break;
+            }
+            rounds += 1;
+            assert!(rounds < 8, "flatten did not converge");
+        }
+
+        assert_single_parent(&body);
+        // Both wrappers collapsed onto their tuples.
+        assert!(matches!(body.exprs[block_a].kind, ExprKind::TupleLiteral { .. }));
+        assert!(matches!(body.exprs[block_b].kind, ExprKind::TupleLiteral { .. }));
+        // Root now binds the two prefix lets ahead of x, and y ahead of x.
+        let root_lets: Vec<&str> = body.blocks[r]
+            .stmts
+            .iter()
+            .filter_map(|&s| match &body.stmts[s].kind {
+                StmtKind::Let { name, .. } => Some(name.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(root_lets, vec!["p", "q", "y", "x"]);
     }
 }

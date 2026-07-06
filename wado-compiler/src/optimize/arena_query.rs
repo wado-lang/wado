@@ -10,6 +10,21 @@ use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 
+/// Every block reachable from the body root, in DFS pop order (a block precedes
+/// the blocks nested under it). The NIR block graph is a tree, so no visited set
+/// is needed.
+pub(super) fn reachable_blocks(body: &Body) -> Vec<BlockId> {
+    let mut out = Vec::new();
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Block(b) = node {
+            out.push(b);
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    out
+}
+
 /// The single optional payload-binding local of a variant arm's `bindings`,
 /// as two distinct outcomes callers tell apart (so `?` propagates the reject):
 /// `Some(None)` = no binding (`[]` or `[_]`); `Some(Some(idx))` = one `Binding`
