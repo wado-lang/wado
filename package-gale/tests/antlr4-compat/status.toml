@@ -150,3 +150,13 @@
 
 [stage_b_oracle_todo]
 "ParserErrors/LL1ErrorInfo" = "Error recovery: ANTLR4's recovered tree pulls `acClass` up as a bare token (single-token insertion), while Gale produces a proper empty-rule `(acClass)` node. Error-recovery shape differences are the same gap as `ParseTrees/ExtraToken` / `NoViableAlt` / `Sync`; flip together when error recovery lands."
+
+# Stage C — action-print output-compare (result.output vs descriptor [output]).
+# These execute action bodies but do not yet match; each names the gap.
+[stage_c_todo]
+"Sets/CharSetLiteral" = "action nested in a repeat group (`(A {print})+`) is not executed yet, so result.output is empty; action-in-repeat execution is a follow-up."
+"Sets/UnicodeEscapedSMPRangeSetMismatch" = "the printed `$text` includes the actual SMP code points Gale matched, while the descriptor [output] elides them; non-ASCII action-print divergence, same family as the Unicode oracle-encoding skips."
+"SemPredEvalParser/PredicateDependentOnArg" = "context-dependent predicate on a rule argument gates a different alt than ANTLR at this decision, so the printed alt differs."
+"SemPredEvalParser/ToLeftWithVaryingPredicate" = "member-state-dependent predicate (`i` mutated across iterations) is evaluated with different timing than ANTLR, so the printed values differ."
+"SemPredEvalParser/DepedentPredsInGlobalFOLLOW" = "predicate evaluated in the global FOLLOW context (outer-rule continuation) is treated as true by Gale's prediction, diverging from ANTLR's dependent-pred eval."
+"SemPredEvalParser/DependentPredNotInOuterCtxShouldBeIgnored" = "dependent predicate outside its owning context should be ignored; Gale's eval differs, changing the printed alt."

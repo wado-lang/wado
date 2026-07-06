@@ -343,6 +343,7 @@ struct TriageMaps {
     pub stage_a: TriageMap,
     pub stage_b: TriageMap,
     pub stage_b_oracle: TriageMap,
+    pub stage_c: TriageMap,
 }
 
 /// Parse the status file. Tolerant of missing file (returns empty maps).
@@ -370,10 +371,11 @@ fn load_triage_maps(content: &Option<String>) -> TriageMaps {
     let mut stage_a = TriageMap::new();
     let mut stage_b = TriageMap::new();
     let mut stage_b_oracle = TriageMap::new();
+    let mut stage_c = TriageMap::new();
     let text = match content {
         Some(t) => t,
         None => {
-            return TriageMaps { category, stage_a, stage_b, stage_b_oracle };
+            return TriageMaps { category, stage_a, stage_b, stage_b_oracle, stage_c };
         },
     };
     let mut section: String = "";
@@ -404,11 +406,13 @@ fn load_triage_maps(content: &Option<String>) -> TriageMaps {
             "stage_b_skip" => stage_b.entries.push(TriageEntry { key, triage: Triage::Skip(reason) }),
             "stage_b_oracle_skip" => stage_b_oracle.entries.push(TriageEntry { key, triage: Triage::Skip(reason) }),
             "stage_b_oracle_todo" => stage_b_oracle.entries.push(TriageEntry { key, triage: Triage::Todo(reason) }),
+            "stage_c_todo" => stage_c.entries.push(TriageEntry { key, triage: Triage::Todo(reason) }),
+            "stage_c_skip" => stage_c.entries.push(TriageEntry { key, triage: Triage::Skip(reason) }),
             _ => {
             },
         }
     }
-    return TriageMaps { category, stage_a, stage_b, stage_b_oracle };
+    return TriageMaps { category, stage_a, stage_b, stage_b_oracle, stage_c };
 }
 
 fn unquote(s: &String) -> String {
@@ -829,6 +833,61 @@ fn emit_stage_a_parse_test_file(
     });
 }
 
+/// Whether a descriptor is a Stage C output-compare candidate: a Parser whose
+/// `[output]` is host-language action-print text (a print action in the grammar,
+/// and an output that is not a `Token.toString` dump). The caller reaches this
+/// only when the `[output]` failed `normalize_output_for_stage_b` (i.e. it is
+/// not a clean parse tree) and `[input]`/`[output]` are non-empty.
+fn descriptor_is_stage_c_eligible(parsed: &ParsedDescriptor) -> bool {
+    let t = parsed.descriptor_type.trim();
+    if t != "Parser" {
+        return false;
+    }
+    if !parsed.grammar.contains("System.out.print") {
+        return false;
+    }
+    if parsed.output.contains("[@") {
+        return false;
+    }
+    return true;
+}
+
+/// Stage C claim: the generated parser, run on the descriptor's `[input]`,
+/// produces action-print output (`result.output`, the `p.emit` buffer) equal to
+/// the descriptor's `[output]`. Emitted for Parser descriptors whose `[output]`
+/// is host-language action-print text (rejected by `normalize_output_for_stage_b`
+/// as a non-tree). Reuses the Stage A generated parser (`antlr4_compat_a`) — the
+/// parser is identical; only the assertion differs.
+fn emit_stage_c_output_test_file(
+    category: &String,
+    name: &String,
+    input: &String,
+    output: &String,
+    start: &String,
+    triage: &Triage,
+) -> String {
+    let spec = TestFileSpec {
+        category: *category,
+        name: *name,
+        attr: generator_attr(),
+        doc_lines: [
+            triage_doc_line(&"stage_c"), "//",
+            "// Stage C claim: the generated parser's action-print output",
+            "// (result.output, the p.emit buffer) equals the descriptor's [output].",
+        ],
+        output_subdir: "antlr4_compat_a",
+        import_names: [],
+        test_label: "stage_c_output",
+        triage: *triage,
+    };
+    return emit_test_file(&spec, |w: &mut CodeWriter| {
+        w.line(&`let input = "{escape_for_wado_str(input)}";`);
+        w.line(&`let expected = "{escape_for_wado_str(output)}";`);
+        w.line(&`let result = t::{parse_call_for_start(start)}(&input);`);
+        w.line(&"assert result.output == expected, `output:\\n{result.output}\\nexpected:\\n{expected}`;");
+    });
+}
+
 /// Pick the public parser entry to call for a descriptor's `[start]`.
 /// Returns `parse` (the first-rule alias) when no `[start]` is set, or
 /// `parse_<snake_case(start)>` otherwise — Gale's codegen normalises
@@ -1139,6 +1198,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
     let stage_a_triage_map = triage_maps.stage_a;
     let stage_b_triage_map = triage_maps.stage_b;
     let stage_b_oracle_triage_map = triage_maps.stage_b_oracle;
+    let stage_c_triage_map = triage_maps.stage_c;
 
     let grammars_dir = match ensure_dir(&compat_dir, &grammars_subdir()) {
         Ok(d) => d,
@@ -1160,6 +1220,14 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
         Ok(d) => d,
         Err(_) => {
             eprintln("extract: cannot create or open antlr4-compat/stage_a/");
+            exit(1);
+        },
+    };
+
+    let stage_c_dir = match ensure_dir(&compat_dir, &"stage_c") {
+        Ok(d) => d,
+        Err(_) => {
+            eprintln("extract: cannot create or open antlr4-compat/stage_c/");
             exit(1);
         },
     };
@@ -1194,6 +1262,8 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
     let mut stage_b_auto_skip = 0;
     let mut stage_b_oracle_pending = 0;
     let mut stage_b_oracle_suppressed = 0;
+    let mut stage_c_emitted = 0;
+    let mut stage_c_todo = 0;
 
     for let category of &categories {
         let cat_src_dir = match open_dir(&src_root, category, false) {
@@ -1221,6 +1291,13 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
             Ok(d) => d,
             Err(_) => {
                 eprintln(`extract: cannot create stage_a/{*category}/, skipping`);
+                continue;
+            },
+        };
+        let stage_c_cat_dir = match ensure_dir(&stage_c_dir, category) {
+            Ok(d) => d,
+            Err(_) => {
+                eprintln(`extract: cannot create stage_c/{*category}/, skipping`);
                 continue;
             },
         };
@@ -1530,6 +1607,34 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
             let normalised = match normalize_output_for_stage_b(&parsed.output) {
                 Some(t) => t,
                 None => {
+                    // Stage C: the descriptor's own [output] is action-print
+                    // text, not a tree — emit an output-compare test (parses
+                    // [input], asserts result.output == [output]). Independent
+                    // of the Stage B′ oracle path below, which derives a tree.
+                    if descriptor_is_stage_c_eligible(&parsed) {
+                        let stage_c_triage = stage_c_triage_map.lookup(&key);
+                        let stage_c_filename = `{base}_output_test.wado`;
+                        if let Skip(_) = &stage_c_triage {
+                            let _ = remove_file(&stage_c_cat_dir, &stage_c_filename);
+                        } else {
+                            let src = emit_stage_c_output_test_file(
+                                category,
+                                &base,
+                                &parsed.input,
+                                &parsed.output,
+                                &parsed.start,
+                                &stage_c_triage,
+                            );
+                            if let Err(_) = write_file_string(&stage_c_cat_dir, &stage_c_filename, &src) {
+                                eprintln(`extract: cannot write stage_c/{*category}/{stage_c_filename}`);
+                            } else {
+                                stage_c_emitted += 1;
+                                if let Todo(_) = &stage_c_triage {
+                                    stage_c_todo += 1;
+                                }
+                            }
+                        }
+                    }
                     stage_b_auto_skip += 1;
                     if let Err(_) = remove_file(&stage_b_cat_dir, &stage_b_filename_pre) {
                     }
@@ -1684,6 +1789,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
         `extract: stage B' — JVM-oracle candidates: {stage_b_oracle_pending} pending (handed to scripts/extract-antlr4-descriptors.sh post-processor)`,
     );
     println(`extract:           {stage_b_oracle_suppressed} suppressed via [stage_b_oracle_skip]`);
+    println(`extract: stage C — action-print output: emitted {stage_c_emitted} output-compare driver(s), {stage_c_todo} marked #[TODO]`);
     println(`extract: deferred — gaps blocked on missing infrastructure:`);
     println(
         `extract:           {deferred_composite} composite descriptors — need Kiln multi-grammar \`use\` support to resolve \`import S;\` against sibling \`<Name>.slaveN.g4\``,

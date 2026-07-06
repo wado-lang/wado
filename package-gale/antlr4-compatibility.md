@@ -237,6 +237,23 @@ grammar parses) and may pass Stage B if the action body is
 `Inspect`/`writeln`-style chatter that doesn't change the parse
 tree shape.
 
+**Stage C output-compare (landed for the executable subset).** For a
+Parser descriptor whose `[output]` is action-print text (`<writeln(...)>`
+echoes — rejected by `normalize_output_for_stage_b` as a non-tree), the
+extractor emits `stage_c/<Category>/<Name>_output_test.wado`: it parses
+`[input]` and asserts `result.output` (the `p.emit` buffer on
+`ParseResult`) equals the descriptor `[output]`. This validates the
+`language = Java` parser-action translation that Phase 3 already landed —
+top-level alt actions and predicates (`SemPredEvalParser/Simple`,
+`Order`, …) produce the exact `alt N` prints. Descriptors whose actions
+don't yet execute or diverge (actions nested in a repeat group like
+`Sets/CharSetLiteral`, non-ASCII prints, context-dependent-predicate
+timing) are triaged in `status.toml` under `[stage_c_todo]` /
+`[stage_c_skip]` so the gap runs in CI as `#[TODO]`. The generated
+parser is shared with Stage A (`antlr4_compat_a`). Landed for `Sets` and
+`SemPredEvalParser`; the remaining categories are a mechanical extractor
+re-run plus triage.
+
 ## ATN-class prediction — the hybrid LR loop-entry decision
 
 Some descriptors (the `Performance/DropLoopEntryBranchInLRRule_*`
