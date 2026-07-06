@@ -36,6 +36,7 @@ use std::cell::{Cell, RefCell};
 
 use cranelift_entity::EntityRef;
 
+use super::arena_query::is_pure_operand;
 use super::gate::{FunctionGate, GatedPass};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
@@ -107,8 +108,14 @@ pub fn scalar_replace_aggregates(project: &mut NirPackage, gate: &mut FunctionGa
         let changed = {
             let NirFunction { body, locals, .. } = &mut *func;
             let body = body.as_mut().expect("checked above");
+            // Un-nest an effectful builder block that yields an aggregate
+            // (`let x = { let p = call(); Tuple{..} }`) so the candidate matcher
+            // sees a direct literal. Gated on the block being effectful, which is
+            // exactly what keeps it out of `const_object_globalization`'s domain
+            // (const, side-effect-free) — so this never competes with it.
+            let flattened = flatten_effectful_aggregate_blocks(body);
             let mut engine = Engine::new(body, &mut buffers, locals);
-            engine.run(&[&rule])
+            engine.run(&[&rule]) || flattened
         };
         let newly = rule.newly_aliased.into_inner();
         if !newly.is_empty() {
@@ -116,6 +123,94 @@ pub fn scalar_replace_aggregates(project: &mut NirPackage, gate: &mut FunctionGa
         }
         changed
     })
+}
+
+// -----------------------------------------------------------------------
+// Pre-pass: un-nest effectful builder blocks
+// -----------------------------------------------------------------------
+
+/// Rewrite every `let x = { <lets…>; <aggregate literal> }` whose block is
+/// effectful into `<lets…>; let x = <aggregate literal>`, hoisting the prefix
+/// bindings to precede the binding. The block sits in value position of the
+/// `let`, evaluated unconditionally there, so moving its statements to just
+/// before the `let` preserves order and effects.
+///
+/// Restricted to *effectful* blocks: a side-effect-free constant aggregate is
+/// `const_object_globalization`'s to hoist into a shared global, and un-nesting
+/// one would strip the closed-constant shape it matches. An effectful block
+/// (its prefix contains a call, e.g. a CM `future-new`) is never const, so the
+/// two passes partition the block-wrapped aggregates between them by this gate.
+fn flatten_effectful_aggregate_blocks(body: &mut Body) -> bool {
+    let mut changed = false;
+    for block in reachable_blocks(body) {
+        let stmts = body.blocks[block].stmts.clone();
+        let mut new_stmts: Vec<StmtId> = Vec::with_capacity(stmts.len());
+        for stmt in stmts {
+            let Some((inner, tail_value)) = flattenable_aggregate_block(body, stmt) else {
+                new_stmts.push(stmt);
+                continue;
+            };
+            let inner_stmts = &body.blocks[inner].stmts;
+            let (_, prefix) = inner_stmts.split_last().expect("checked non-empty");
+            new_stmts.extend_from_slice(prefix);
+            if let StmtKind::Let { value, .. } = &mut body.stmts[stmt].kind {
+                *value = tail_value;
+            }
+            new_stmts.push(stmt);
+            changed = true;
+        }
+        body.blocks[block].stmts = new_stmts;
+    }
+    changed
+}
+
+/// If `stmt` is `let x = Block(b)` where `b` is an effectful builder block whose
+/// prefix is all `let`s and whose tail is a struct / tuple literal, return the
+/// inner block and that literal's operand; otherwise `None`.
+fn flattenable_aggregate_block(body: &Body, stmt: StmtId) -> Option<(BlockId, Operand)> {
+    let StmtKind::Let { value, .. } = &body.stmts[stmt].kind else {
+        return None;
+    };
+    let ExprKind::Block(inner) = &body.exprs[value.as_expr()?].kind else {
+        return None;
+    };
+    let inner = *inner;
+    let (&tail, prefix) = body.blocks[inner].stmts.split_last()?;
+    if prefix.is_empty() || !prefix.iter().all(|&s| is_let_stmt(body, s)) {
+        return None;
+    }
+    let StmtKind::Expr(tail_value) = &body.stmts[tail].kind else {
+        return None;
+    };
+    if !matches!(
+        &body.exprs[tail_value.as_expr()?].kind,
+        ExprKind::StructLiteral { .. } | ExprKind::TupleLiteral { .. }
+    ) {
+        return None;
+    }
+    // Effectful gate: at least one prefix binding is impure, so `const_object`
+    // would never claim this aggregate.
+    prefix
+        .iter()
+        .any(|&s| matches!(&body.stmts[s].kind, StmtKind::Let { value, .. } if !is_pure_operand(body, *value)))
+        .then_some((inner, *tail_value))
+}
+
+fn is_let_stmt(body: &Body, stmt: StmtId) -> bool {
+    matches!(&body.stmts[stmt].kind, StmtKind::Let { .. })
+}
+
+/// Every block reachable from the body root, outermost first.
+fn reachable_blocks(body: &Body) -> Vec<BlockId> {
+    let mut out = Vec::new();
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Block(b) = node {
+            out.push(b);
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    out
 }
 
 // -----------------------------------------------------------------------

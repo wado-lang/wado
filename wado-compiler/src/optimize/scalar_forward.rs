@@ -75,11 +75,11 @@ impl Rule for ScalarForwardRule<'_> {
                 continue;
             };
             // The use's enclosing statement must be the binding's immediate
-            // successor, and the use must not sit inside an aggregate literal:
-            // downstream scalarization recognizes a tuple / struct built from
-            // element *locals* and would leave one built from inlined
-            // expressions materialized.
-            if enclosing_stmt_unless_in_literal(engine, use_id) != Some(use_stmt) {
+            // successor (which also rules out a use nested in a sub-block, whose
+            // enclosing statement is the inner one). Forwarding into an aggregate
+            // literal is fine: `sroa` un-nests and scalarizes the aggregate
+            // whatever form its elements take.
+            if enclosing_stmt(engine, use_id) != Some(use_stmt) {
                 continue;
             }
             let mut reads = Vec::new();
@@ -162,24 +162,12 @@ fn is_addressed(engine: &Engine, mention: ExprId) -> bool {
         if matches!(&engine.body.exprs[p].kind, ExprKind::Unary { op: NirUnaryOp::Ref | NirUnaryOp::MutRef, .. }))
 }
 
-/// The innermost statement containing `expr`, or `None` if an aggregate literal
-/// (`ArrayLiteral` / `TupleLiteral` / `StructLiteral`) sits between `expr` and
-/// it. Adjacency to the binding requires this to be its immediate successor,
-/// which also rules out a use nested in a sub-block (whose enclosing statement
-/// is the inner one).
-fn enclosing_stmt_unless_in_literal(engine: &Engine, expr: ExprId) -> Option<StmtId> {
+/// The innermost statement containing `expr`. Adjacency to the binding requires
+/// this to be its immediate successor, which also rules out a use nested in a
+/// sub-block (whose enclosing statement is the inner one).
+fn enclosing_stmt(engine: &Engine, expr: ExprId) -> Option<StmtId> {
     let mut node = NodeRef::Expr(expr);
     loop {
-        if let NodeRef::Expr(id) = node
-            && matches!(
-                &engine.body.exprs[id].kind,
-                ExprKind::ArrayLiteral { .. }
-                    | ExprKind::TupleLiteral { .. }
-                    | ExprKind::StructLiteral { .. }
-            )
-        {
-            return None;
-        }
         match engine.parent_of(node)? {
             NodeRef::Stmt(s) => return Some(s),
             parent => node = parent,
