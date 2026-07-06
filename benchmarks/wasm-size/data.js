@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783337180578,
+  "lastUpdate": 1783372389716,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -38469,6 +38469,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/44231d04b42b099e3b7db6a35c71e807b829eb54"
         },
         "date": 1783337180240,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15734,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 263813,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6ed772f3c79a10f9f9ea0af585ef2e732981427c",
+          "message": "Merge pull request #1526 from wado-lang/claude/package-gale-kiln-setup-wf1f0l\n\nfeat(deps): consume registry-published Kiln generators and library components",
+          "timestamp": "2026-07-07T06:03:58+09:00",
+          "tree_id": "e8bbdb7b9165ae35058d4613ba221861cd3e61fb",
+          "url": "https://github.com/wado-lang/wado/commit/6ed772f3c79a10f9f9ea0af585ef2e732981427c"
+        },
+        "date": 1783372389008,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
