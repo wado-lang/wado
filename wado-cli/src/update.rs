@@ -50,13 +50,20 @@ pub async fn run(_opts: UpdateOptions) -> Result<(), CliExit> {
     let packages = wado_manifest::resolve(&project.manifest, &provider)
         .await
         .map_err(|e| CliExit::error(format!("resolving dependencies: {e}")))?;
-    let build_dependencies: Vec<_> =
-        crate::build_dep::resolve_build_dependencies(&project.manifest)
+    // `update` re-resolves build-dependencies fresh (empty lock) so a new
+    // published version is picked up, then pins each with its integrity digest.
+    let resolved_build_deps =
+        crate::build_dep::resolve_build_dependencies(&project.manifest, &indexmap::IndexMap::new())
             .await
-            .map_err(|e| CliExit::error(format!("resolving build-dependencies: {e}")))?
-            .iter()
-            .map(crate::build_dep::ResolvedBuildDep::locked_package)
-            .collect();
+            .map_err(|e| CliExit::error(format!("resolving build-dependencies: {e}")))?;
+    let mut build_dependencies = Vec::with_capacity(resolved_build_deps.len());
+    for dep in &resolved_build_deps {
+        let integrity = dep
+            .integrity()
+            .await
+            .map_err(|e| CliExit::error(format!("resolving build-dependencies: {e}")))?;
+        build_dependencies.push(dep.locked_package(integrity));
+    }
 
     let count = packages.len() + build_dependencies.len();
     let lock = LockFile {

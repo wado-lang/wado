@@ -65,8 +65,12 @@ fn record_descriptor(
     ty: &Type,
 ) -> Option<Result<OptionsDescriptor, String>> {
     let Type::Id(id) = ty else { return None };
-    let TypeDefKind::Record(record) = &resolve.types[*id].kind else {
-        return None;
+    let record = match &resolve.types[*id].kind {
+        TypeDefKind::Record(record) => record,
+        // A named alias (`type opts = my-record`) forwards to its aliasee, matching
+        // how `options_type` unwraps aliases for nested fields.
+        TypeDefKind::Type(inner) => return record_descriptor(resolve, inner),
+        _ => return None,
     };
     let mut fields = Vec::with_capacity(record.fields.len());
     for field in &record.fields {
@@ -91,12 +95,13 @@ fn record_descriptor(
 fn options_type(resolve: &wit_parser::Resolve, ty: &Type) -> Result<OptionsType, String> {
     Ok(match ty {
         Type::Bool => OptionsType::Bool,
-        // Widths narrower than 32 bits have no distinct `OptionsType`; they
-        // widen to the signed/unsigned 32-bit case, matching how the source
-        // extractor treats small integer options.
-        Type::S8 | Type::S16 | Type::S32 => OptionsType::I32,
-        Type::U8 | Type::U16 | Type::U32 => OptionsType::U32,
+        Type::S8 => OptionsType::I8,
+        Type::S16 => OptionsType::I16,
+        Type::S32 => OptionsType::I32,
         Type::S64 => OptionsType::I64,
+        Type::U8 => OptionsType::U8,
+        Type::U16 => OptionsType::U16,
+        Type::U32 => OptionsType::U32,
         Type::U64 => OptionsType::U64,
         Type::F32 => OptionsType::F32,
         Type::F64 => OptionsType::F64,
@@ -205,5 +210,40 @@ interface i {
         let (resolve, ty) = record_type(wit, "options");
         let err = record_descriptor(&resolve, &ty).unwrap().unwrap_err();
         assert!(err.contains("items"), "{err}");
+    }
+
+    #[test]
+    fn follows_a_top_level_type_alias_to_its_record() {
+        // `type opts = real` used as the `options` param must resolve to `real`'s
+        // record, not be rejected as "not a record".
+        let wit = "\
+package test:alias;
+interface i {
+    record real { flag: bool }
+    type opts = real;
+}
+";
+        let (resolve, ty) = record_type(wit, "opts");
+        let descriptor = record_descriptor(&resolve, &ty).unwrap().unwrap();
+        assert_eq!(descriptor.fields.len(), 1);
+        assert_eq!(descriptor.fields[0].name, "flag");
+        assert_eq!(descriptor.fields[0].ty, OptionsType::Bool);
+    }
+
+    #[test]
+    fn preserves_narrow_integer_widths() {
+        // Exact widths are preserved (WEP: "exact integer widths preserved"); a
+        // `u8` stays `u8` so use-site range validation stays sound.
+        let wit = "\
+package test:narrow;
+interface i {
+    record options { level: u8, delta: s16 }
+}
+";
+        let (resolve, ty) = record_type(wit, "options");
+        let descriptor = record_descriptor(&resolve, &ty).unwrap().unwrap();
+        let by_name = |n: &str| descriptor.fields.iter().find(|f| f.name == n).unwrap();
+        assert_eq!(by_name("level").ty, OptionsType::U8);
+        assert_eq!(by_name("delta").ty, OptionsType::I16);
     }
 }

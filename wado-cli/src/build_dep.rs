@@ -27,25 +27,49 @@ pub const GENERATOR_WORLD_FQ: &str = "core:kiln/generator";
 /// maps the `core:kiln/generator` world to this segment).
 pub const GENERATOR_WORLD_SEGMENT: &str = "core-kiln-generator";
 
-/// The `[build-dependencies]` lookup key for a `module:` specifier: the
-/// coordinate or `lib:` nickname with any `@version` suffix stripped. The `@`
-/// split only applies to a specifier that carries a `:` segment, so a bare
-/// `foo@bar` (never valid here) is returned unchanged.
+/// The parts of a `module:` build-dependency specifier: the `[build-dependencies]`
+/// lookup key (`ns:name` or `lib:nick`), an optional pinned `@version`, and an
+/// optional `/submodule` path. The coordinate and version never contain `/`, so
+/// the first `/` starts the submodule; the `@` split only applies to a segment
+/// carrying a `:`.
+pub struct SpecParts<'a> {
+    pub key: &'a str,
+    pub version: Option<&'a str>,
+    pub submodule: Option<&'a str>,
+}
+
+/// Parse a `module:` specifier into its [`SpecParts`].
 #[must_use]
-pub fn spec_key(spec: &str) -> &str {
-    match spec.split_once('@') {
-        Some((key, _)) if key.contains(':') => key,
-        _ => spec,
+pub fn parse_spec(spec: &str) -> SpecParts<'_> {
+    let (head, submodule) = match spec.split_once('/') {
+        Some((h, s)) => (h, Some(s)),
+        None => (spec, None),
+    };
+    let (key, version) = match head.split_once('@') {
+        Some((k, v)) if k.contains(':') => (k, Some(v)),
+        _ => (head, None),
+    };
+    SpecParts {
+        key,
+        version,
+        submodule,
     }
 }
 
-/// Stable cache id for a generator coordinate. A published version is immutable,
-/// so keying on the coordinate is enough for the on-disk component cache
-/// (`build/kiln/generators/<id>.wasm`); `wado fetch` and the provider derive the
-/// same id, so a pre-fetched component is a warm cache hit at compile time.
+/// The `[build-dependencies]` lookup key for a `module:` specifier.
 #[must_use]
-pub fn generator_stable_id(coordinate: &str) -> String {
-    let digest = Sha256::digest(coordinate.as_bytes());
+pub fn spec_key(spec: &str) -> &str {
+    parse_spec(spec).key
+}
+
+/// Stable cache id for a generator at a specific version. Keyed on the resolved
+/// coordinate *and* version so a version bump invalidates the cache and two
+/// spellings of the same package (coordinate vs `lib:` nickname) share it.
+/// `wado fetch` and the provider derive the same id, so a pre-fetched component
+/// is a warm cache hit at compile time.
+#[must_use]
+pub fn generator_stable_id(coordinate: &str, version: &str) -> String {
+    let digest = Sha256::digest(format!("{coordinate}@{version}").as_bytes());
     let mut hex = String::with_capacity(16);
     for byte in &digest[..8] {
         use std::fmt::Write as _;
@@ -54,25 +78,12 @@ pub fn generator_stable_id(coordinate: &str) -> String {
     format!("spec-{hex}")
 }
 
-/// The on-disk cache path for a generator coordinate's pulled component.
+/// The on-disk cache path for a generator coordinate+version's pulled component.
 #[must_use]
-pub fn generator_cache_path(manifest_root: &Path, coordinate: &str) -> PathBuf {
+pub fn generator_cache_path(manifest_root: &Path, coordinate: &str, version: &str) -> PathBuf {
     manifest_root
         .join(crate::kiln_provider::CACHE_DIR)
-        .join(format!("{}.wasm", generator_stable_id(coordinate)))
-}
-
-/// Parse an OCI image tag into a [`semver::Version`], stripping an optional
-/// leading letter prefix (`v1.2.3`) as the registry resolver does. Non-semver
-/// tags (`latest`, …) yield `None`.
-fn parse_version_tag(tag: &str) -> Option<semver::Version> {
-    if let Ok(version) = semver::Version::parse(tag) {
-        return Some(version);
-    }
-    let rest = tag.trim_start_matches(|c: char| c.is_ascii_alphabetic());
-    (rest.len() < tag.len())
-        .then(|| semver::Version::parse(rest).ok())
-        .flatten()
+        .join(format!("{}.wasm", generator_stable_id(coordinate, version)))
 }
 
 /// The highest version published at the generator's world sub-path matching
@@ -90,25 +101,25 @@ pub async fn resolve_generator_version(
         .await
         .map_err(|e| format!("listing versions of `{package}`: {e}"))?;
     tags.iter()
-        .filter_map(|t| parse_version_tag(t))
+        .filter_map(|t| crate::registry::parse_version_tag(t))
         .filter(|v| req.matches(v))
         .max()
         .map(|v| v.to_string())
         .ok_or_else(|| format!("no published version of `{package}` matches `{req}`"))
 }
 
-/// A resolved build-dependency: the coordinate, its registry URL, chosen
-/// version, and the sub-path artifact's integrity digest.
+/// A resolved build-dependency: the coordinate, its registry URL, and the chosen
+/// version. The integrity digest is not read here (it needs an extra registry
+/// round-trip and is only wanted by `wado update`); call [`ResolvedBuildDep::integrity`].
 pub struct ResolvedBuildDep {
     pub coordinate: String,
     pub registry_url: String,
     pub version: String,
-    pub integrity: String,
 }
 
 impl ResolvedBuildDep {
     /// The OCI reference of the generator component (world sub-path).
-    fn reference(&self) -> Result<oci::OciReference, String> {
+    pub fn reference(&self) -> Result<oci::OciReference, String> {
         oci::world_reference(
             &self.registry_url,
             &self.coordinate,
@@ -117,14 +128,22 @@ impl ResolvedBuildDep {
         )
     }
 
-    /// The lock entry for this build-dependency.
+    /// The sub-path artifact's manifest digest — the lock's `integrity`. One
+    /// registry round-trip; called by `wado update` only.
+    pub async fn integrity(&self) -> Result<String, String> {
+        oci::manifest_digest(&self.reference()?)
+            .await
+            .map_err(|e| format!("resolving integrity of `{}`: {e}", self.coordinate))
+    }
+
+    /// The lock entry for this build-dependency, given its integrity digest.
     #[must_use]
-    pub fn locked_package(&self) -> LockedPackage {
+    pub fn locked_package(&self, integrity: String) -> LockedPackage {
         LockedPackage {
             id: format!("registry+{}/{}", self.registry_url, self.coordinate),
             version: self.version.clone(),
             resolved_ref: None,
-            integrity: Some(self.integrity.clone()),
+            integrity: Some(integrity),
             dev: false,
             // Record which world of the package is pinned; the entry path is
             // empty because a registry generator is a prebuilt component, not a
@@ -136,12 +155,14 @@ impl ResolvedBuildDep {
 }
 
 /// Resolve every registry `[build-dependencies]` entry to its generator
-/// component: pick the highest published version at the world sub-path and read
-/// the sub-path artifact's manifest digest as the integrity. Path/git/workspace
+/// coordinate + version. `locked` (`coordinate -> version`, from `wado.lock`)
+/// pins the version without a registry listing when present; pass an empty map
+/// to always resolve the highest matching version fresh. Path/git/workspace
 /// build-deps are skipped (path generators are compiled from source, not pinned,
 /// mirroring how path `[dependencies]` are not locked).
 pub async fn resolve_build_dependencies(
     manifest: &Manifest,
+    locked: &IndexMap<String, String>,
 ) -> Result<Vec<ResolvedBuildDep>, String> {
     let mut out = Vec::new();
     for (key, dep) in &manifest.build_dependencies {
@@ -160,19 +181,14 @@ pub async fn resolve_build_dependencies(
             .ok_or_else(|| {
                 format!("build-dependency `{key}`: no registry in scope (set [registries].default)")
             })?;
-        let chosen = resolve_generator_version(&registry_url, package, version).await?;
-        let resolved = ResolvedBuildDep {
+        let chosen = match locked.get(package).cloned() {
+            Some(v) => v,
+            None => resolve_generator_version(&registry_url, package, version).await?,
+        };
+        out.push(ResolvedBuildDep {
             coordinate: package.clone(),
             registry_url,
             version: chosen,
-            integrity: String::new(),
-        };
-        let integrity = oci::manifest_digest(&resolved.reference()?)
-            .await
-            .map_err(|e| format!("resolving integrity of `{package}`: {e}"))?;
-        out.push(ResolvedBuildDep {
-            integrity,
-            ..resolved
         });
     }
     Ok(out)
@@ -192,7 +208,7 @@ pub async fn fetch_build_dependencies(
                 dep.coordinate, dep.version
             )
         })?;
-        let out = generator_cache_path(manifest_root, &dep.coordinate);
+        let out = generator_cache_path(manifest_root, &dep.coordinate, &dep.version);
         if let Some(dir) = out.parent() {
             std::fs::create_dir_all(dir).map_err(|e| format!("creating {}: {e}", dir.display()))?;
         }
@@ -228,24 +244,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn stable_id_is_deterministic_and_coordinate_scoped() {
-        let a = generator_stable_id("wado-lang:gale");
-        assert_eq!(a, generator_stable_id("wado-lang:gale"));
-        assert_ne!(a, generator_stable_id("wado-lang:jade"));
+    fn stable_id_is_deterministic_version_and_coordinate_scoped() {
+        let a = generator_stable_id("wado-lang:gale", "0.0.9");
+        assert_eq!(a, generator_stable_id("wado-lang:gale", "0.0.9"));
+        assert_ne!(a, generator_stable_id("wado-lang:gale", "0.1.0"));
+        assert_ne!(a, generator_stable_id("wado-lang:jade", "0.0.9"));
         assert!(a.starts_with("spec-"), "{a}");
     }
 
     #[test]
-    fn parse_version_tag_reads_semver_and_prefixed() {
-        assert_eq!(
-            parse_version_tag("0.0.9"),
-            semver::Version::parse("0.0.9").ok()
-        );
-        assert_eq!(
-            parse_version_tag("v1.2.3"),
-            semver::Version::parse("1.2.3").ok()
-        );
-        assert_eq!(parse_version_tag("latest"), None);
+    fn parse_spec_splits_version_and_submodule() {
+        let bare = parse_spec("wado-lang:gale");
+        assert_eq!(bare.key, "wado-lang:gale");
+        assert_eq!(bare.version, None);
+        assert_eq!(bare.submodule, None);
+
+        let versioned = parse_spec("wado-lang:gale@0.0.9");
+        assert_eq!(versioned.key, "wado-lang:gale");
+        assert_eq!(versioned.version, Some("0.0.9"));
+        assert_eq!(versioned.submodule, None);
+
+        let sub = parse_spec("example:proto-codegen@1.2/generator");
+        assert_eq!(sub.key, "example:proto-codegen");
+        assert_eq!(sub.version, Some("1.2"));
+        assert_eq!(sub.submodule, Some("generator"));
+
+        let sub_no_ver = parse_spec("lib:gen/sub");
+        assert_eq!(sub_no_ver.key, "lib:gen");
+        assert_eq!(sub_no_ver.version, None);
+        assert_eq!(sub_no_ver.submodule, Some("sub"));
     }
 
     #[test]
@@ -254,9 +281,8 @@ mod tests {
             coordinate: "wado-lang:gale".to_string(),
             registry_url: "oci://ghcr.io".to_string(),
             version: "0.0.9".to_string(),
-            integrity: "sha256:abc".to_string(),
         };
-        let pkg = dep.locked_package();
+        let pkg = dep.locked_package("sha256:abc".to_string());
         assert_eq!(pkg.id, "registry+oci://ghcr.io/wado-lang:gale");
         assert_eq!(pkg.version, "0.0.9");
         assert_eq!(pkg.integrity.as_deref(), Some("sha256:abc"));

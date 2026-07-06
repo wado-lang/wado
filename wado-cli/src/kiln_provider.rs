@@ -639,19 +639,26 @@ impl CliGeneratorProvider {
     /// published version is immutable, so this is sound. `--no-cache` forces a
     /// re-pull.
     async fn resolve_spec(&self, spec: &str) -> Result<ResolvedGenerator, ProviderError> {
-        // The lookup key is the coordinate/nickname; a `@version` suffix pins the
-        // version directly.
-        let key = crate::build_dep::spec_key(spec);
-        let pinned = spec[key.len()..].strip_prefix('@').map(str::to_string);
+        let parts = crate::build_dep::parse_spec(spec);
+        if parts.submodule.is_some() {
+            return Err(ProviderError::Unsupported {
+                message: format!(
+                    "kiln: submodule paths in a generator specifier are not yet supported: `{spec}`"
+                ),
+            });
+        }
 
-        let dep = self.registry.build_dependencies.get(key).ok_or_else(|| {
-            ProviderError::Unsupported {
+        let dep = self
+            .registry
+            .build_dependencies
+            .get(parts.key)
+            .ok_or_else(|| ProviderError::Unsupported {
                 message: format!(
                     "kiln: generator `{spec}` is not declared in [build-dependencies]; \
-                     add `\"{key}\" = {{ version = \"...\" }}`"
+                     add `\"{}\" = {{ version = \"...\" }}`",
+                    parts.key
                 ),
-            }
-        })?;
+            })?;
         let wado_manifest::DependencySource::Registry {
             registry,
             package,
@@ -666,31 +673,30 @@ impl CliGeneratorProvider {
             });
         };
 
-        // Identity is the *resolved* coordinate (`package`), so a coordinate and
-        // a `lib:` nickname for the same package share one cache entry and lock
-        // pin (WEP "generator identity").
-        let stable_id = crate::build_dep::generator_stable_id(package);
-        if !self.no_cache
-            && let Some(resolved) = self.try_read_spec_cache(&stable_id)
-        {
-            return Ok(resolved);
-        }
-
-        let registry_url = self.registry_url(registry.as_deref())?;
-        // Prefer the `wado.lock` pin, then a `@version` spec suffix, then a live
+        // Resolve the version before the cache read so the cache key includes it:
+        // an explicit `@version` pin wins, then the `wado.lock` pin, then a live
         // registry version listing.
-        let version = match self
-            .registry
-            .locked_versions
-            .get(package)
-            .cloned()
-            .or(pinned)
+        let registry_url = self.registry_url(registry.as_deref())?;
+        let version = match parts
+            .version
+            .map(str::to_string)
+            .or_else(|| self.registry.locked_versions.get(package).cloned())
         {
             Some(v) => v,
             None => crate::build_dep::resolve_generator_version(&registry_url, package, version)
                 .await
                 .map_err(|message| ProviderError::Unsupported { message })?,
         };
+
+        // Identity is the *resolved* coordinate + version, so a version bump
+        // invalidates the cache and a coordinate and a `lib:` nickname for the
+        // same package share one cache entry and lock pin (WEP "generator identity").
+        let stable_id = crate::build_dep::generator_stable_id(package, &version);
+        if !self.no_cache
+            && let Some(resolved) = self.try_read_spec_cache(&stable_id)
+        {
+            return Ok(resolved);
+        }
 
         let reference = oci::world_reference(
             &registry_url,

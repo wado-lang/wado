@@ -80,25 +80,45 @@ pub async fn run(_opts: FetchOptions) -> Result<(), CliExit> {
     }
 
     // Build-dependencies are Kiln generators, published at their package's
-    // `core-kiln-generator` world sub-path. Pull each into the generator cache
-    // the Kiln provider reads at compile time.
-    let build_deps = crate::build_dep::resolve_build_dependencies(&project.manifest)
-        .await
-        .map_err(|e| CliExit::error(format!("resolving build-dependencies: {e}")))?;
-    let generators = crate::build_dep::fetch_build_dependencies(&build_deps, &project.root)
-        .await
-        .map_err(CliExit::error)?;
+    // `core-kiln-generator` world sub-path. Pre-pull each into the generator
+    // cache the Kiln provider reads at compile time. This is best-effort: the
+    // provider still resolves lazily at compile time, so a build-dependency that
+    // cannot be pre-fetched here (offline, missing registry) is a warning, not a
+    // hard failure that would leave the just-fetched `[dependencies]` orphaned.
+    // The `wado.lock` pin is preferred over a live version listing.
+    let locked = crate::build_dep::locked_generator_versions(&project.root);
+    let generators = match fetch_generators(&project, &locked).await {
+        Ok(n) => n,
+        Err(e) => {
+            eprintln!("warning: skipping build-dependency pre-fetch: {e}");
+            0
+        }
+    };
+
+    eprintln!("Fetched {} component(s)", count + generators);
+    Ok(())
+}
+
+/// Resolve and pull the project's registry build-dependencies into the generator
+/// cache; returns the number pulled. Separated so `run` can treat a failure as a
+/// non-fatal warning.
+async fn fetch_generators(
+    project: &crate::manifest::ProjectManifest,
+    locked: &indexmap::IndexMap<String, String>,
+) -> Result<usize, String> {
+    let build_deps =
+        crate::build_dep::resolve_build_dependencies(&project.manifest, locked).await?;
+    let generators = crate::build_dep::fetch_build_dependencies(&build_deps, &project.root).await?;
     for dep in &build_deps {
         eprintln!(
             "Fetched {}@{} (generator) → {}",
             dep.coordinate,
             dep.version,
-            crate::build_dep::generator_cache_path(&project.root, &dep.coordinate).display()
+            crate::build_dep::generator_cache_path(&project.root, &dep.coordinate, &dep.version)
+                .display()
         );
     }
-
-    eprintln!("Fetched {} component(s)", count + generators);
-    Ok(())
+    Ok(generators)
 }
 
 /// Split a registry lock id `registry+<url>/<ns>:<pkg>` into its registry URL,
