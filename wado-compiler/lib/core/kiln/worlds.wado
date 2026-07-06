@@ -1,9 +1,14 @@
 #![generated(by = "wado-from-idl", sources = ["wado-compiler/lib/core/kiln/generator.wit"])]
 #![stdlib("core:kiln/worlds.wado")]
 
+/// Import-only template world. A generator's `generate` export is
+/// per-generator — its `options` argument has a generator-specific shape — so
+/// each generator synthesizes its own world (see
+/// `wado-compiler::synthesize_lib_world_info`) rather than conforming to one
+/// fixed `generate` signature here. This world exists to carry the shared
+/// `kiln-host` import and to anchor the `core:kiln/generator` identity that
+/// import-refusal, provider selection, and generator detection key on.
 #[cm("core:kiln/generator@0.1.0")]
 pub world Generator {
     import KilnHost;
-
-    export async fn generate(req: RawRequest) -> Result<Response, Error>;
 }

@@ -143,7 +143,7 @@ fn invocation(
         source: InvocationPath::normalize(from),
         inputs: vec![],
         output_dir: InvocationPath::normalize(output_dir),
-        options_canonical: Vec::new(),
+        options: wado_compiler::kiln::CanonicalOptions::default(),
         raw_options: None,
     }
 }
@@ -399,7 +399,7 @@ fn pipeline_invocations_feed_compiler_options_for_use_redirect() {
         source: InvocationPath::normalize("./schema.proto"),
         inputs: vec![],
         output_dir: InvocationPath::normalize("build/kiln/kiln-abc12345"),
-        options_canonical: Vec::new(),
+        options: wado_compiler::kiln::CanonicalOptions::default(),
         raw_options: None,
     };
 
@@ -462,7 +462,7 @@ fn inline_invocation_populates_invocation_index_for_redirect() {
         source: InvocationPath::normalize("./sample.proto"),
         inputs: vec![],
         output_dir: InvocationPath::normalize("build/kiln/kiln-deadbeef"),
-        options_canonical: Vec::new(),
+        options: wado_compiler::kiln::CanonicalOptions::default(),
         raw_options: None,
     };
 

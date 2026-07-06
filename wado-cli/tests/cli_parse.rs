@@ -6,6 +6,7 @@
 use lexopt::Parser;
 
 use wado_cli::args::CliExit;
+use wado_cli::build;
 use wado_cli::check;
 use wado_cli::compile::{self, OptLevel, OutputFormat};
 
@@ -136,30 +137,30 @@ fn check_world_defaults_to_none() {
 }
 
 #[test]
-fn compile_lib_and_world_mutually_exclusive() {
-    let parser = Parser::from_args(&["--lib", "--world", "test", "pkgdir"]);
-    assert_err(compile::parse_args(parser), "mutually exclusive");
+fn build_lib_and_world_mutually_exclusive() {
+    let parser = Parser::from_args(&["--lib", "--world", "wasi:cli/command"]);
+    assert_err(build::parse_args(parser), "mutually exclusive");
 }
 
 #[test]
-fn compile_embed_metadata_flags_mutually_exclusive() {
-    let parser = Parser::from_args(&["--no-embed-metadata", "--embed-metadata", "pkgdir"]);
-    assert_err(compile::parse_args(parser), "mutually exclusive");
+fn build_embed_metadata_flags_mutually_exclusive() {
+    let parser = Parser::from_args(&["--no-embed-metadata", "--embed-metadata"]);
+    assert_err(build::parse_args(parser), "mutually exclusive");
 }
 
 #[test]
-fn compile_embed_metadata_requires_manifest_mode() {
-    // A metadata flag on an explicit file would be silently ignored — reject it.
-    let parser = Parser::from_args(&["--embed-metadata", "input.wado"]);
-    assert_err(compile::parse_args(parser), "manifest-driven");
+fn compile_requires_a_file() {
+    // `compile` is the file primitive; no argument is an error pointing at build.
+    let parser = Parser::from_args(&[] as &[&str]);
+    assert_err(compile::parse_args(parser), "no input file specified");
 }
 
 #[test]
-fn compile_lib_rejects_single_file() {
-    // `--lib` requires a package directory (for the [package] namespace), not a
-    // bare .wado file.
-    let parser = Parser::from_args(&["--lib", "input.wado"]);
-    assert_err(compile::parse_args(parser), "package directory");
+fn compile_rejects_directory() {
+    // A directory argument is a project build — `wado build`, not `compile`.
+    let dir = std::env::temp_dir();
+    let parser = Parser::from_args(&[dir.to_str().unwrap()]);
+    assert_err(compile::parse_args(parser), "not a directory");
 }
 
 #[test]
@@ -173,17 +174,6 @@ fn compile_log_level() {
 fn compile_help() {
     let parser = Parser::from_args(&["--help"]);
     assert_help(compile::parse_args(parser), "Usage: wado compile");
-}
-
-#[test]
-fn compile_no_input() {
-    // The repo root carries a wado.toml without `[world]."wasi:cli/command"`, so
-    // the resolver short-circuits with the more specific message.
-    let parser = Parser::from_args::<&[&str]>(&[]);
-    assert_err(
-        compile::parse_args(parser),
-        "wado.toml found but [world].\"wasi:cli/command\" is not set",
-    );
 }
 
 #[test]

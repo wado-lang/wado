@@ -367,6 +367,15 @@ impl WorldRegistry {
         self.worlds.contains_key(fq_name)
     }
 
+    /// Whether `world` is registered and imports `interface_name`. The single
+    /// predicate behind kiln-generator detection (`imports_interface("KilnHost")`),
+    /// so the frontend, `cm_binding`, and codegen all agree on what counts as a
+    /// generator world instead of some string-matching `core:kiln/generator`.
+    pub fn world_imports_interface(&self, world: &str, interface_name: &str) -> bool {
+        self.get(world)
+            .is_some_and(|w| w.imports_interface(interface_name))
+    }
+
     /// Get the number of registered worlds
     pub fn len(&self) -> usize {
         self.worlds.len()
@@ -473,18 +482,21 @@ mod tests {
             world_registry.has_world("core:kiln/generator"),
             "core:kiln/generator world should be registered"
         );
-        let generate = world_registry
-            .get_export("core:kiln/generator", "generate")
-            .expect("generate export not found");
-        assert_eq!(generate.params.len(), 1, "generate takes one parameter");
+        // Revision 3: the static world is an import-only template — each generator
+        // synthesizes its own world with a typed `generate` (its `options`
+        // shape is per-generator), so the static world carries no `generate`
+        // export. It exists to hold the `KilnHost` import and anchor the
+        // `core:kiln/generator` identity that detection keys on.
+        let world = world_registry
+            .get("core:kiln/generator")
+            .expect("world registered");
         assert!(
-            generate.is_async,
-            "generate is declared `async func` — the CM lift uses task.return \
-             and the wasmtime runtime drives the call through Accessor"
+            world.imports_interface("KilnHost"),
+            "the generator world imports KilnHost"
         );
         assert!(
-            generate.from_interface_fq.is_none(),
-            "kiln generate is a freestanding world export, not from an interface"
+            world.exports.is_empty(),
+            "the static generator world declares no exports"
         );
     }
 

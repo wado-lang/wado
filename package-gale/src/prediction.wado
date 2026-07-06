@@ -160,11 +160,7 @@ pub fn group_prediction_order(
 ) -> List<i32> {
     let mut sorted_group = group.sorted();
     sort_group_by_specificity(&mut sorted_group, first_sets);
-    let mut real: List<i32> = [];
-    for let gi of &sorted_group {
-        real.push(non_lr_indices[*gi]);
-    }
-    return real;
+    return sorted_group.iter().map(|gi: &i32| non_lr_indices[*gi]).collect();
 }
 
 /// Build the prediction tree for an overlap group already projected to
@@ -176,10 +172,7 @@ pub fn build_group_prediction_tree_from_order(
     real_indices: &List<i32>,
     ctx: &mut GenContext,
 ) -> PredictionNode {
-    let mut pred_elements: List<List<Element>> = [];
-    for let ri of real_indices {
-        pred_elements.push(alts[*ri].elements);
-    }
+    let pred_elements: List<List<Element>> = real_indices.iter().map(|ri: &i32| alts[*ri].elements).collect();
     return build_prediction(real_indices, &pred_elements, MAX_LOOKAHEAD_DEPTH, ctx);
 }
 
@@ -219,13 +212,10 @@ fn strip_dead_consume(node: PredictionNode) -> PredictionNode {
             }
         },
         Dispatch(d) => {
-            let mut new_branches: List<PredictionBranch> = [];
-            for let b of d.branches {
-                new_branches.push(PredictionBranch {
-                    tokens: b.tokens,
-                    child: strip_dead_consume(b.child),
-                });
-            }
+            let new_branches: List<PredictionBranch> = d.branches.iter().map(|b: &PredictionBranch| PredictionBranch {
+                tokens: b.tokens,
+                child: strip_dead_consume(b.child),
+            }).collect();
             PredictionNode::Dispatch(PredictionDispatch { depth: d.depth, branches: new_branches });
         },
         _ => node,
@@ -284,13 +274,13 @@ pub fn prediction_collect_all_indices(node: &PredictionNode, out: &mut List<i32>
     match *node {
         Ambiguous(a) => {
             for let i of &a.alts {
-                if !out.iter().any(|x: i32| x == *i) {
+                if !out.iter().any(|x: &i32| *x == *i) {
                     out.push(*i);
                 }
             }
         },
         Leaf(idx) => {
-            if !out.iter().any(|x: i32| x == idx) {
+            if !out.iter().any(|x: &i32| *x == idx) {
                 out.push(idx);
             }
         },
@@ -457,7 +447,7 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
                                         continue;
                                     }
                                     let exp = SllConfig {
-                                        alt_index: c.alt_index,
+                                        ..*c,
                                         elements: alt.elements,
                                         pos: 0,
                                         return_stack: new_stack,
@@ -473,12 +463,7 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
                 }
             }
             if !entered {
-                results.push(SllConfig {
-                    alt_index: c.alt_index,
-                    elements: c.elements,
-                    pos: c.pos + 1,
-                    return_stack: c.return_stack,
-                });
+                results.push(SllConfig { ..*c, pos: c.pos + 1 });
             }
         }
         // Also try skipping: advance past all consecutive nullables non-recursively.
@@ -486,65 +471,40 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
         while skip_pos < c.elements.len() && is_nullable(&c.elements[skip_pos]) {
             let mut v: List<String> = [];
             if first_contains(&ctx.first_of_element(&c.elements[skip_pos], &mut v), token) {
-                results.push(SllConfig {
-                    alt_index: c.alt_index,
-                    elements: c.elements,
-                    pos: skip_pos + 1,
-                    return_stack: c.return_stack,
-                });
+                results.push(SllConfig { ..*c, pos: skip_pos + 1 });
             }
             skip_pos += 1;
         }
         if skip_pos < c.elements.len() {
             let skipped_elem = &c.elements[skip_pos];
-            if let TokenRef(t) = skipped_elem {
-                if `TK_{t.name}` == *token {
-                    results.push(SllConfig {
-                        alt_index: c.alt_index,
-                        elements: c.elements,
-                        pos: skip_pos + 1,
-                        return_stack: c.return_stack,
-                    });
-                }
-            } else if let Literal(l) = skipped_elem {
-                if literal_const_name(&l.text) == *token {
-                    results.push(SllConfig {
-                        alt_index: c.alt_index,
-                        elements: c.elements,
-                        pos: skip_pos + 1,
-                        return_stack: c.return_stack,
-                    });
-                }
-            } else if let RuleRef(r) = skipped_elem {
-                let mut v: List<String> = [];
-                if first_contains(&ctx.first_of_rule(&r.name, &mut v), token) {
-                    let mut stv: List<String> = [];
-                    if ctx.rule_is_single_token(&r.name, &mut stv) {
-                        results.push(SllConfig {
-                            alt_index: c.alt_index,
-                            elements: c.elements,
-                            pos: skip_pos + 1,
-                            return_stack: c.return_stack,
-                        });
-                    } else {
-                        results.push(SllConfig {
-                            alt_index: c.alt_index,
-                            elements: c.elements,
-                            pos: SLL_POS_OPAQUE,
-                            return_stack: c.return_stack,
-                        });
+            match skipped_elem {
+                TokenRef(t) => {
+                    if `TK_{t.name}` == *token {
+                        results.push(SllConfig { ..*c, pos: skip_pos + 1 });
                     }
-                }
-            } else {
-                let mut v: List<String> = [];
-                if first_contains(&ctx.first_of_element(skipped_elem, &mut v), token) {
-                    results.push(SllConfig {
-                        alt_index: c.alt_index,
-                        elements: c.elements,
-                        pos: skip_pos + 1,
-                        return_stack: c.return_stack,
-                    });
-                }
+                },
+                Literal(l) => {
+                    if literal_const_name(&l.text) == *token {
+                        results.push(SllConfig { ..*c, pos: skip_pos + 1 });
+                    }
+                },
+                RuleRef(r) => {
+                    let mut v: List<String> = [];
+                    if first_contains(&ctx.first_of_rule(&r.name, &mut v), token) {
+                        let mut stv: List<String> = [];
+                        if ctx.rule_is_single_token(&r.name, &mut stv) {
+                            results.push(SllConfig { ..*c, pos: skip_pos + 1 });
+                        } else {
+                            results.push(SllConfig { ..*c, pos: SLL_POS_OPAQUE });
+                        }
+                    }
+                },
+                _ => {
+                    let mut v: List<String> = [];
+                    if first_contains(&ctx.first_of_element(skipped_elem, &mut v), token) {
+                        results.push(SllConfig { ..*c, pos: skip_pos + 1 });
+                    }
+                },
             }
         }
         return results;
@@ -553,12 +513,7 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
     if let TokenRef(t) = elem {
         if `TK_{t.name}` == *token {
             return [
-                SllConfig {
-                    alt_index: c.alt_index,
-                    elements: c.elements,
-                    pos: c.pos + 1,
-                    return_stack: c.return_stack,
-                },
+                SllConfig { ..*c, pos: c.pos + 1 },
             ];
         }
         return [];
@@ -566,12 +521,7 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
     if let Literal(l) = elem {
         if literal_const_name(&l.text) == *token {
             return [
-                SllConfig {
-                    alt_index: c.alt_index,
-                    elements: c.elements,
-                    pos: c.pos + 1,
-                    return_stack: c.return_stack,
-                },
+                SllConfig { ..*c, pos: c.pos + 1 },
             ];
         }
         return [];
@@ -590,23 +540,13 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
         if ctx.rule_is_single_token(&r.name, &mut st_visiting) {
             // Single-token rule: safe to advance, element position == token position.
             return [
-                SllConfig {
-                    alt_index: c.alt_index,
-                    elements: c.elements,
-                    pos: c.pos + 1,
-                    return_stack: c.return_stack,
-                },
+                SllConfig { ..*c, pos: c.pos + 1 },
             ];
         }
         // Multi-token rule: token matches FIRST but we can't advance past it.
         // Return config with pos = -1 as a sentinel meaning "opaque match".
         return [
-            SllConfig {
-                alt_index: c.alt_index,
-                elements: c.elements,
-                pos: SLL_POS_OPAQUE,
-                return_stack: c.return_stack,
-            },
+            SllConfig { ..*c, pos: SLL_POS_OPAQUE },
         ];
     }
 
@@ -620,42 +560,26 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
         }
         if group_first.contains(*token) {
             return [
-                SllConfig {
-                    alt_index: c.alt_index,
-                    elements: c.elements,
-                    pos: c.pos + 1,
-                    return_stack: c.return_stack,
-                },
+                SllConfig { ..*c, pos: c.pos + 1 },
             ];
         }
         return [];
     }
 
     if let Repeat(rep) = elem {
-        let mut inner_first: List<String> = [];
         let mut visiting: List<String> = [];
-        inner_first = ctx.first_of_element(&rep.element, &mut visiting);
+        let inner_first = ctx.first_of_element(&rep.element, &mut visiting);
         if first_contains(&inner_first, token) {
             // Advance past the repeat element (simplified: treat as consuming 1 token).
             return [
-                SllConfig {
-                    alt_index: c.alt_index,
-                    elements: c.elements,
-                    pos: c.pos + 1,
-                    return_stack: c.return_stack,
-                },
+                SllConfig { ..*c, pos: c.pos + 1 },
             ];
         }
         return [];
     }
 
     if let Label(lab) = elem {
-        let unwrapped = SllConfig {
-            alt_index: c.alt_index,
-            elements: replace_element_at(&c.elements, c.pos, &lab.element),
-            pos: c.pos,
-            return_stack: c.return_stack,
-        };
+        let unwrapped = SllConfig { ..*c, elements: replace_element_at(&c.elements, c.pos, &lab.element) };
         return sll_advance(&unwrapped, token, ctx, inline_depth);
     }
 
@@ -677,7 +601,7 @@ fn replace_element_at(elements: &List<Element>, pos: i32, replacement: &Element)
 fn sll_unique_alts(configs: &List<SllConfig>) -> List<i32> {
     let mut alts: List<i32> = [];
     for let c of configs {
-        if !array_contains_i32(&alts, c.alt_index) {
+        if !alts.contains(&c.alt_index) {
             alts.push(c.alt_index);
         }
     }
@@ -691,7 +615,7 @@ fn sll_dedup_by_alt(configs: &List<SllConfig>) -> List<SllConfig> {
     let mut seen_alts: List<i32> = [];
     let mut result: List<SllConfig> = [];
     for let c of configs {
-        if !array_contains_i32(&seen_alts, c.alt_index) {
+        if !seen_alts.contains(&c.alt_index) {
             seen_alts.push(c.alt_index);
             result.push(*c);
         }
@@ -728,15 +652,7 @@ fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &m
     let common = sll_find_common_terminal(&closed);
     if let Some(elem) = common {
         // Advance all configs past this shared terminal.
-        let mut advanced: List<SllConfig> = [];
-        for let c of closed {
-            advanced.push(SllConfig {
-                alt_index: c.alt_index,
-                elements: c.elements,
-                pos: c.pos + 1,
-                return_stack: c.return_stack,
-            });
-        }
+        let advanced: List<SllConfig> = closed.iter().map(|c: &SllConfig| SllConfig { ..*c, pos: c.pos + 1 }).collect();
         let child = build_sll_node(&advanced, depth, max_depth, ctx);
         return PredictionNode::Consume(ConsumeNode { element: elem, child });
     }
@@ -758,7 +674,7 @@ fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &m
                 for let a of advanced {
                     if a.pos == -1 {
                         // Opaque config: multi-token RuleRef, can't advance past.
-                        if !array_contains_i32(&opaque_alts, a.alt_index) {
+                        if !opaque_alts.contains(&a.alt_index) {
                             opaque_alts.push(a.alt_index);
                         }
                     } else {
@@ -777,7 +693,7 @@ fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &m
         let mut next_alts = sll_unique_alts(&deduped);
         // Add opaque alts (they survive regardless of further lookahead).
         for let oa of opaque_alts {
-            if !array_contains_i32(&next_alts, oa) {
+            if !next_alts.contains(&oa) {
                 next_alts.push(oa);
             }
         }
@@ -826,7 +742,7 @@ fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &m
     //  * Multiple at-end alts → true ambiguity → Ambiguous.
     let mut at_end_alts: List<i32> = [];
     for let c of &closed {
-        if config_is_at_end(c) && !array_contains_i32(&at_end_alts, c.alt_index) {
+        if config_is_at_end(c) && !at_end_alts.contains(&c.alt_index) {
             at_end_alts.push(c.alt_index);
         }
     }
@@ -876,7 +792,7 @@ fn try_expand_opaque(
     // Rule diversity check: only expand when opaque configs reference different rules.
     let mut rule_refs = TreeSet::<String>::new();
     for let c of original_configs {
-        if !array_contains_i32(&opaque_alts, c.alt_index) {
+        if !opaque_alts.contains(&c.alt_index) {
             continue;
         }
         if c.pos < 0 || c.pos >= c.elements.len() {
@@ -891,7 +807,7 @@ fn try_expand_opaque(
     }
     let mut expanded_configs: List<SllConfig> = [];
     for let c of original_configs {
-        if !array_contains_i32(&opaque_alts, c.alt_index) {
+        if !opaque_alts.contains(&c.alt_index) {
             continue;
         }
         if c.pos < 0 || c.pos >= c.elements.len() {
@@ -948,7 +864,7 @@ fn try_expand_opaque(
         let mut token_alts: List<i32> = [];
         for let mut i = 0; i < all_configs.len(); i += 1 {
             if config_firsts[i].contains(tk) {
-                if !array_contains_i32(&token_alts, all_configs[i].alt_index) {
+                if !token_alts.contains(&all_configs[i].alt_index) {
                     token_alts.push(all_configs[i].alt_index);
                 }
             }
@@ -984,13 +900,13 @@ fn try_expand_opaque(
     let mut covered_alts: List<i32> = [];
     for let b of branches {
         if let Leaf(idx) = b.child {
-            if !array_contains_i32(&covered_alts, idx) {
+            if !covered_alts.contains(&idx) {
                 covered_alts.push(idx);
             }
         }
     }
     for let oa of opaque_alts {
-        if !array_contains_i32(&covered_alts, oa) {
+        if !covered_alts.contains(&oa) {
             return null;
         }
     }
@@ -1068,13 +984,4 @@ fn element_eq(a: &Element, b: &Element) -> bool {
         [Literal(ta), Literal(tb)] => ta.text == tb.text,
         _ => false,
     };
-}
-
-fn array_contains_i32(arr: &List<i32>, val: i32) -> bool {
-    for let mut i = 0; i < arr.len(); i += 1 {
-        if arr[i] == val {
-            return true;
-        }
-    }
-    return false;
 }

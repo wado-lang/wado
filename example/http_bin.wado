@@ -292,7 +292,7 @@ fn respond_anything(request: Request) -> RouteResponse {
 }
 
 fn format_allow(methods: &List<Method>) -> String {
-    let names: List<String> = methods.iter().map(|m: Method| method_name(m)).collect();
+    let names: List<String> = methods.iter().copied().map(|m: Method| method_name(m)).collect();
     return names.join(", ");
 }
 

@@ -371,6 +371,14 @@ fn emit_unused_diagnostics<H: CompilerHost>(
 /// Milestone 2 is functions-only and primitives-only, so each export is a
 /// direct world function (`from_interface_fq = None`). Parameter and return
 /// types are taken straight from the AST signature.
+/// The interface FQ a `core:kiln/generator` component's synthesized world uses
+/// for `generate` and its options record (Kiln WEP revision 3). A generator's
+/// `generate` is grouped into this interface (it references the local `Options`
+/// record), and the record type is registered under this FQ.
+// TODO(kiln-abi-v3): derive from the generator package's own namespace/name so the
+// published component's WIT carries a package-specific identity.
+const KILN_GENERATOR_IMPL_FQ: &str = "kiln:generator/generator@0.1.0";
+
 fn synthesize_lib_world_info(
     fq: &str,
     entry_module: Option<&ast::Module>,
@@ -417,16 +425,32 @@ fn synthesize_lib_world_info(
         }
     }
 
-    // Tag every user named type in the export signatures with the library's
-    // default-interface FQ as its CM source. `register_lib_local_decls` records
-    // these types under that FQ, so the lift/lower machinery (which resolves
-    // named types via `source_interface`) finds them like WASI types.
+    // Tag the entry module's own named types in the export signatures with the
+    // library's default-interface FQ, matching `register_lib_local_decls`, so
+    // the lift/lower machinery resolves them like WASI types. Only the module's
+    // own declarations — types from other interfaces keep their source.
+    let local_type_names: crate::hashmap::IndexSet<String> = entry_module
+        .map(|module| {
+            module
+                .items
+                .iter()
+                .filter_map(|item| match item {
+                    Item::Struct(d) => Some(d.name.clone()),
+                    Item::Enum(d) => Some(d.name.clone()),
+                    Item::Variant(d) => Some(d.name.clone()),
+                    Item::Flags(d) => Some(d.name.clone()),
+                    Item::Newtype(d) => Some(d.name.clone()),
+                    _ => None,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
     for export in &mut exports {
         for (_, ty) in &mut export.params {
-            annotate_lib_local_sources(ty, fq);
+            annotate_lib_local_sources(ty, fq, &local_type_names);
         }
         if let Some(ty) = export.return_type.as_mut() {
-            annotate_lib_local_sources(ty, fq);
+            annotate_lib_local_sources(ty, fq, &local_type_names);
         }
     }
 
@@ -442,28 +466,33 @@ fn synthesize_lib_world_info(
 /// records / variants / enums / flags / newtypes against the package's
 /// default-interface registration. CM primitives and the unit type are left
 /// untouched.
-fn annotate_lib_local_sources(ty: &mut ast::Type, fq: &str) {
+fn annotate_lib_local_sources(
+    ty: &mut ast::Type,
+    fq: &str,
+    local_type_names: &crate::hashmap::IndexSet<String>,
+) {
     use crate::ast::Type;
     match ty {
         Type::Named(named) => {
-            if named.name != "()"
-                && crate::component_model::wado_primitive_name_to_cm(&named.name).is_none()
-            {
+            // Only untagged, package-local names: an already-resolved type (a
+            // shared `core:kiln/types` record) keeps its own interface, which
+            // the CM lift/lower needs to find its fields.
+            if named.source_interface.is_none() && local_type_names.contains(&named.name) {
                 named.source_interface = Some(fq.to_string());
             }
         }
         Type::Generic(g) => {
             for arg in &mut g.args {
-                annotate_lib_local_sources(arg, fq);
+                annotate_lib_local_sources(arg, fq, local_type_names);
             }
         }
         Type::Tuple(elems) => {
             for elem in elems {
-                annotate_lib_local_sources(elem, fq);
+                annotate_lib_local_sources(elem, fq, local_type_names);
             }
         }
         Type::Reference(inner) | Type::MutReference(inner) => {
-            annotate_lib_local_sources(inner, fq);
+            annotate_lib_local_sources(inner, fq, local_type_names);
         }
         _ => {}
     }
@@ -692,8 +721,16 @@ fn compile_after_load<H: CompilerHost>(
     // through the host without bailing: a malformed descriptor does not
     // fail the whole compile, so the driver's provisional fallback still
     // produces a valid cache key.
-    let kiln_options_descriptor = if options.target_world.as_deref() == Some("core:kiln/generator")
-    {
+    // A kiln generator is any target world that imports `KilnHost` — the same
+    // structural signal cm_binding and codegen use, so all three agree (a
+    // string match on `core:kiln/generator` would miss a future generator
+    // world with a different FQ).
+    let is_kiln_generator = match (options.target_world.as_deref(), sem.world_registry()) {
+        (Some(tw), Some(reg)) => reg.world_imports_interface(tw, "KilnHost"),
+        _ => false,
+    };
+
+    let kiln_options_descriptor = if is_kiln_generator {
         match kiln::extract_options_descriptor(&sem, &sem.entry_module_source) {
             Ok(d) => Some(d),
             Err(diags) => {
@@ -707,20 +744,58 @@ fn compile_after_load<H: CompilerHost>(
         None
     };
 
-    // Synthesize the library world (`--lib`) from the entry module's
-    // `export fn` signatures before `sem.modules` is dropped by the
-    // destructure below. Each `export fn` becomes one direct world export
-    // (functions-only, primitives — milestone 2).
-    let lib_world_info = options
+    // Synthesize a world from the entry module's `export fn` signatures — for
+    // `--lib`, and for a kiln generator target (Kiln WEP revision 3), whose
+    // `generate` carries its typed options via the same raw-Wado-type path.
+    // Done before `sem.modules` is dropped by the destructure below.
+    let synth_world_fq: Option<String> = options
         .lib_world
+        .clone()
+        .or_else(|| is_kiln_generator.then(|| KILN_GENERATOR_IMPL_FQ.to_string()));
+    let mut lib_world_info = synth_world_fq
         .as_ref()
         .map(|fq| synthesize_lib_world_info(fq, sem.modules.get(&sem.entry_module_source)));
 
-    // For `--lib`, capture the entry module so its own named types can be
-    // registered into the CM interface registry (cloned before `sem` is
-    // destructured below).
-    let lib_entry_module = options
-        .lib_world
+    if is_kiln_generator && let Some(world) = lib_world_info.as_mut() {
+        // Only `generate` is the generator world's contract; a helper
+        // `export fn` beside it is not a world export and must not be
+        // force-routed through the async binding below.
+        world.exports.retain(|e| e.name == "generate");
+        let kiln_shared: crate::hashmap::IndexSet<String> =
+            kiln::import_check::KILN_SHARED_TYPE_NAMES
+                .iter()
+                .map(|s| (*s).to_string())
+                .collect();
+        for export in &mut world.exports {
+            // `generate`'s shared `core:kiln/types` records reach analysis
+            // without a `source_interface`; stamp their real interface so the
+            // CM lift/lower resolves their fields instead of a same-named type
+            // elsewhere (`wasi:http`'s `Response`) or an i32 handle.
+            for (_, ty) in &mut export.params {
+                annotate_lib_local_sources(
+                    ty,
+                    kiln::import_check::KILN_TYPES_INTERFACE,
+                    &kiln_shared,
+                );
+            }
+            if let Some(ty) = export.return_type.as_mut() {
+                annotate_lib_local_sources(
+                    ty,
+                    kiln::import_check::KILN_TYPES_INTERFACE,
+                    &kiln_shared,
+                );
+            }
+            // `generate` returns `Result<_, _>` and must lift via `task.return`
+            // (the result binding handles nested records/lists); the canon's
+            // async-ness follows `is_async` (`sync_lift = !is_async`), so force
+            // it — the user writes `fn generate`, not `async fn`.
+            export.is_async = true;
+        }
+    }
+
+    // Capture the entry module so its own named types can be registered into
+    // the CM interface registry (cloned before `sem` is destructured below).
+    let lib_entry_module = synth_world_fq
         .as_ref()
         .and_then(|_| sem.modules.get(&sem.entry_module_source).cloned());
 
@@ -753,7 +828,7 @@ fn compile_after_load<H: CompilerHost>(
     // named types. `Arc::make_mut` copies-on-write — the stdlib snapshot still
     // holds a reference — so the shared copy is never mutated; only this
     // compilation's registry gains the local types.
-    if let (Some(fq), Some(entry)) = (options.lib_world.as_ref(), lib_entry_module.as_ref()) {
+    if let (Some(fq), Some(entry)) = (synth_world_fq.as_ref(), lib_entry_module.as_ref()) {
         std::sync::Arc::make_mut(&mut tysys.cm_interface_registry).register_lib_local_decls(
             entry,
             fq,
@@ -797,10 +872,16 @@ fn compile_after_load<H: CompilerHost>(
     if let Some(world) = options.target_world {
         package.target_world = world;
     }
-    // The library world (`--lib`) overrides the target world FQ and is carried
-    // owned on the package (the static registry cannot hold it).
+    // The synthesized world is carried owned on the package (the static
+    // registry cannot hold a per-package world). `--lib` also overrides the
+    // target world FQ; a kiln generator keeps `core:kiln/generator` as its
+    // target (the import-refusal check, provider, and descriptor extraction
+    // all key on it) while still routing `generate` through the lib
+    // param-types path via `is_lib_world()`.
     if let Some(lib_world) = lib_world_info {
-        package.target_world.clone_from(&lib_world.fq_name);
+        if !is_kiln_generator {
+            package.target_world.clone_from(&lib_world.fq_name);
+        }
         package.lib_world_info = Some(lib_world);
     }
     package.skip_validation = options.skip_validation;

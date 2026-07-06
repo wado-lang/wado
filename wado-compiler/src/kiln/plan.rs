@@ -228,7 +228,7 @@ mod tests {
                 .map(|p| InvocationPath::normalize(p))
                 .collect(),
             output_dir: InvocationPath::normalize(out),
-            options_canonical: vec![],
+            options: crate::kiln::options_check::CanonicalOptions::default(),
             raw_options: None,
         }
     }
@@ -328,7 +328,13 @@ mod tests {
     fn dedup_rejects_conflicting_duplicates() {
         let a1 = inv("a", "s.proto", &[], "build/kiln/a");
         let mut a2 = inv("a", "s.proto", &[], "build/kiln/a");
-        a2.options_canonical = vec![0xde, 0xad, 0xbe, 0xef];
+        a2.options = crate::kiln::options_check::CanonicalOptions {
+            descriptor: crate::kiln::options::OptionsDescriptor::default(),
+            values: vec![(
+                "k".to_string(),
+                crate::kiln::options::CanonicalValue::Bool(true),
+            )],
+        };
         let err = build_plan(vec![a1, a2]).unwrap_err();
         match err {
             PlanError::DuplicateGenerator { from, sites } => {

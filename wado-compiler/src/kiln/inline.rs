@@ -17,7 +17,7 @@ use crate::ast::{AttrValue, Module, UseDecl};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::IndexMap;
 
-use super::cache::{empty_options_canonical, encode_options_canonical, hex_digest};
+use super::cache::{encode_options_canonical, hex_digest};
 use super::invocation::{DeclSite, GeneratorModule, Invocation, InvocationPath};
 use super::options::OptionsDescriptor;
 use super::options_check::{CanonicalOptions, validate};
@@ -286,8 +286,8 @@ fn lower_inline(
         }
     };
 
-    let options_canonical = if let Some(module) = module.as_ref() {
-        encode_options(
+    let options = if let Some(module) = module.as_ref() {
+        validate_inline_options(
             module,
             cfg.get("options"),
             use_decl,
@@ -296,7 +296,7 @@ fn lower_inline(
             &mut errors,
         )
     } else {
-        Vec::new()
+        CanonicalOptions::default()
     };
 
     let output_dir_override = match cfg.get("output_dir") {
@@ -336,7 +336,7 @@ fn lower_inline(
             h.update(p.as_str().as_bytes());
             h.update([0u8]);
         }
-        h.update(&options_canonical);
+        h.update(encode_options_canonical(&options));
         let digest: [u8; 32] = h.finalize().into();
         format!("kiln-{}", &hex_digest(&digest)[..16])
     };
@@ -357,7 +357,7 @@ fn lower_inline(
         source,
         inputs,
         output_dir,
-        options_canonical,
+        options,
         raw_options: cfg.get("options").cloned(),
     })
 }
@@ -503,21 +503,21 @@ fn strip_manifest_root_prefix(manifest_root: &str, resolved: &str) -> String {
     out.join("/")
 }
 
-fn encode_options(
+fn validate_inline_options(
     module: &GeneratorModule,
     options_value: Option<&AttrValue>,
     use_decl: &UseDecl,
     module_path: &str,
     descriptors: &IndexMap<String, OptionsDescriptor>,
     errors: &mut Vec<Diagnostic>,
-) -> Vec<u8> {
+) -> CanonicalOptions {
     let key = module_key(module);
     let Some(descriptor) = descriptors.get(&key) else {
         // The descriptor is filled in later by the CLI provider.
-        return empty_options_canonical();
+        return CanonicalOptions::default();
     };
 
-    let canonical: CanonicalOptions = match validate(descriptor, options_value) {
+    match validate(descriptor, options_value) {
         Ok(c) => c,
         Err(mut errs) => {
             for d in &mut errs {
@@ -526,10 +526,9 @@ fn encode_options(
                 }
             }
             errors.append(&mut errs);
-            return empty_options_canonical();
+            CanonicalOptions::default()
         }
-    };
-    encode_options_canonical(&canonical)
+    }
 }
 
 fn module_key(module: &GeneratorModule) -> String {
@@ -549,7 +548,7 @@ fn identity_key(inv: &Invocation) -> String {
         h.update([0u8]);
     }
     h.update(inv.output_dir.as_str().as_bytes());
-    h.update(&inv.options_canonical);
+    h.update(inv.options_canonical());
     let digest: [u8; 32] = h.finalize().into();
     hex_digest(&digest)
 }

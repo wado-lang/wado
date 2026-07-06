@@ -103,12 +103,13 @@ pub struct Invocation {
     pub inputs: Vec<InvocationPath>,
     /// Resolved output directory (default: `build/kiln/<synthesized-id>`).
     pub output_dir: InvocationPath,
-    /// Canonical byte encoding of the `options` object.
-    ///
-    /// Produced by the inline-clause encoder via
-    /// [`crate::kiln::options::encode_canonical`] — the typed Component-Model
-    /// lifted encoding once the generator's `OptionsDescriptor` is known.
-    pub options_canonical: Vec<u8>,
+    /// Validated, typed options for this invocation. Crosses to the generator
+    /// as a typed WIT argument (the host builds a Component-Model value from
+    /// it); its canonical byte encoding ([`Self::options_canonical`]) feeds the
+    /// invocation cache key. Empty until the generator's `OptionsDescriptor`
+    /// is known (inline when it is available, otherwise the driver's
+    /// typed-encode pass).
+    pub options: crate::kiln::options_check::CanonicalOptions,
     /// Raw `options` `AttrValue` recovered from the inline
     /// `with { generator: { options: { ... } } }` clause. Stashed so the
     /// driver's typed-encode pass can re-validate against the generator's
@@ -120,18 +121,27 @@ pub struct Invocation {
 }
 
 impl Invocation {
+    /// Canonical byte encoding of [`Self::options`], for the invocation cache
+    /// key and dedup identity. Deterministic and injective; not an interchange
+    /// format (nothing decodes it — see
+    /// [`crate::kiln::cache::encode_options_canonical`]).
+    #[must_use]
+    pub fn options_canonical(&self) -> Vec<u8> {
+        crate::kiln::cache::encode_options_canonical(&self.options)
+    }
+
     /// The tuple used for dedup and cycle detection.
     ///
     /// Does not include `decl_site`: two clauses in the same file with
     /// identical invocation tuples merge into one invocation.
     #[must_use]
-    pub fn identity_tuple(&self) -> (&GeneratorModule, &str, &[InvocationPath], &str, &[u8]) {
+    pub fn identity_tuple(&self) -> (&GeneratorModule, &str, &[InvocationPath], &str, Vec<u8>) {
         (
             &self.module,
             self.from.as_str(),
             self.inputs.as_slice(),
             self.output_dir.as_str(),
-            self.options_canonical.as_slice(),
+            self.options_canonical(),
         )
     }
 }
@@ -184,7 +194,7 @@ mod tests {
             source: InvocationPath::normalize("./s.proto"),
             inputs: vec![],
             output_dir: InvocationPath::normalize("build/kiln/a"),
-            options_canonical: vec![],
+            options: crate::kiln::options_check::CanonicalOptions::default(),
             raw_options: None,
         };
         let inv_b = Invocation {

@@ -584,8 +584,29 @@ impl ClosureLowerer {
             // Return inside survives. The inliner's `remap_stmt_with_label`
             // turns Return into Break only at the statement level, so a
             // Return wrapped inside a Block expression would be missed.
+            //
+            // A single-expression body that reified into a Block (e.g. a
+            // spread struct literal `S { ..*s, .. }`, hoisted to
+            // `{ let __base = ..; S { .. } }`) leaves the produced value in
+            // the block's trailing `Expr` statement. For a value-returning
+            // closure that tail is the return value, so promote it to a
+            // `Return`; otherwise wir_build drops it as a bare statement.
             let body_stmts = match &transformed_body.kind {
-                TirExprKind::Block(block) => block.stmts.clone(),
+                TirExprKind::Block(block) => {
+                    let mut stmts = block.stmts.clone();
+                    if return_type != TypeTable::UNIT
+                        && let Some(last) = stmts.last_mut()
+                        && let TirStmtKind::Expr(value) = &last.kind
+                    {
+                        *last = TirStmt::new(
+                            TirStmtKind::Return {
+                                value: Some(value.clone()),
+                            },
+                            last.span,
+                        );
+                    }
+                    stmts
+                }
                 _ if return_type == TypeTable::UNIT => vec![TirStmt::new(
                     TirStmtKind::Expr(transformed_body),
                     collected.span,

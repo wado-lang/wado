@@ -19,7 +19,6 @@ libm = { version = "0.2" }
 cranelift-entity = { version = "=0.133.1" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
-minicbor = { version = "2", default-features = false, features = ["alloc"] }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync"] }
 # Keep the wasm-tools family (wasmparser/wasm-encoder/wasmprinter/wit-parser/
 # wat) pinned to the same generation wasmtime depends on, so cargo dedupes
@@ -38,6 +37,7 @@ wit-encoder = { version = "0.251" }
 wasm-compose = { version = "0.251" }
 semver = { version = "1" }
 spdx = { version = "0.13" }
+oci-client = { version = "0.15", default-features = false, features = ["rustls-tls"] }
 # Default features minus `cache` (wasmtime's disk cache is unused — Kiln is
 # wado's cache — and it drags in zstd-sys), `coredump`, `debug-builtins`, and
 # `debug` (guest DWARF debugging; wado never sets `Config::debug_info`).

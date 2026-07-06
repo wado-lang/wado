@@ -18,7 +18,7 @@ impl<I: Iterator, U> Iterator for GenericMapIter<I, U> {
 
 export fn run() {
     let arr: List<i32> = [1, 2, 3];
-    let mut iter = GenericMapIter { inner: arr.iter(), f: |x: i32| x * 2 };
+    let mut iter = GenericMapIter { inner: arr.iter().copied(), f: |x: i32| x * 2 };
     let a = iter.next();
     assert a matches { Some(2) };
     let b = iter.next();
