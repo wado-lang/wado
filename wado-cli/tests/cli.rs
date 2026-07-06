@@ -65,14 +65,14 @@ fn write_metadata_project(dir: &std::path::Path) {
 }
 
 #[test]
-fn test_compile_embeds_package_metadata_in_manifest_mode() {
+fn test_build_embeds_package_metadata() {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path();
     write_metadata_project(dir);
     let out = dir.join("out.wasm");
 
     wado_in(dir)
-        .arg("compile")
+        .arg("build")
         .arg("-o")
         .arg(&out)
         .assert()
@@ -100,14 +100,14 @@ fn test_compile_embeds_package_metadata_in_manifest_mode() {
 }
 
 #[test]
-fn test_compile_manifest_mode_default_output_to_build_dir() {
-    // Without -o, a manifest-driven build writes build/<world>.wasm at the
-    // manifest root, not into the source tree.
+fn test_build_default_output_to_build_dir() {
+    // Without -o, `wado build` writes build/<world>.wasm at the manifest root,
+    // not into the source tree.
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path();
     write_metadata_project(dir);
 
-    wado_in(dir).arg("compile").assert().success();
+    wado_in(dir).arg("build").assert().success();
 
     assert!(
         dir.join("build").join("wasi-cli-command.wasm").exists(),
@@ -117,6 +117,58 @@ fn test_compile_manifest_mode_default_output_to_build_dir() {
         !dir.join("src").join("main.wasm").exists(),
         "must not write into the source tree"
     );
+}
+
+#[test]
+fn test_build_all_declared_worlds() {
+    // A package with a library world and a hosted world: `wado build` (no
+    // selector) builds both into build/, one artifact per world.
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\n\
+         namespace = \"acme\"\n\
+         name = \"app\"\n\
+         version = \"0.1.0\"\n\
+         lib = \"src/lib.wado\"\n\n\
+         [world]\n\
+         \"wasi:cli/command\" = \"src/main.wado\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src").join("lib.wado"),
+        "export fn add(a: i32, b: i32) -> i32 { return a + b; }\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("src").join("main.wado"), "export fn run() {}\n").unwrap();
+
+    wado_in(dir).arg("build").assert().success();
+
+    assert!(
+        dir.join("build").join("lib.wasm").exists(),
+        "expected build/lib.wasm for the library world"
+    );
+    assert!(
+        dir.join("build").join("wasi-cli-command.wasm").exists(),
+        "expected build/wasi-cli-command.wasm for the hosted world"
+    );
+}
+
+#[test]
+fn test_build_world_selector_builds_one() {
+    // `--world <fq>` restricts the build to a single declared world.
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    write_metadata_project(dir);
+
+    wado_in(dir)
+        .args(["build", "--world", "wasi:cli/command"])
+        .assert()
+        .success();
+
+    assert!(dir.join("build").join("wasi-cli-command.wasm").exists());
 }
 
 #[test]
@@ -144,7 +196,7 @@ fn test_compile_file_arg_does_not_embed_metadata() {
 }
 
 #[test]
-fn test_compile_lib_embeds_component_type_without_interface_collision() {
+fn test_build_lib_embeds_component_type_without_interface_collision() {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path();
     std::fs::write(
@@ -161,7 +213,7 @@ fn test_compile_lib_embeds_component_type_without_interface_collision() {
     let out = dir.join("out.wasm");
 
     wado_in(dir)
-        .arg("compile")
+        .arg("build")
         .arg("--lib")
         .arg("-o")
         .arg(&out)
@@ -214,7 +266,7 @@ fn test_wit_lib_conflicts_with_world() {
 }
 
 #[test]
-fn test_compile_os_skips_metadata() {
+fn test_build_os_skips_metadata() {
     // -Os strips symbols for minimal frontend delivery; package metadata is
     // dropped too, matching the WIT section.
     let tmp = tempfile::tempdir().unwrap();
@@ -223,7 +275,7 @@ fn test_compile_os_skips_metadata() {
     let out = dir.join("out.wasm");
 
     wado_in(dir)
-        .arg("compile")
+        .arg("build")
         .arg("-Os")
         .arg("-o")
         .arg(&out)
@@ -238,7 +290,7 @@ fn test_compile_os_skips_metadata() {
 }
 
 #[test]
-fn test_compile_os_embed_metadata_forces_on() {
+fn test_build_os_embed_metadata_forces_on() {
     // --embed-metadata overrides the -Os default-off, mirroring --embed-wit.
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path();
@@ -246,7 +298,7 @@ fn test_compile_os_embed_metadata_forces_on() {
     let out = dir.join("out.wasm");
 
     wado_in(dir)
-        .arg("compile")
+        .arg("build")
         .arg("-Os")
         .arg("--embed-metadata")
         .arg("-o")
@@ -262,14 +314,14 @@ fn test_compile_os_embed_metadata_forces_on() {
 }
 
 #[test]
-fn test_compile_no_embed_metadata_opts_out() {
+fn test_build_no_embed_metadata_opts_out() {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path();
     write_metadata_project(dir);
     let out = dir.join("out.wasm");
 
     wado_in(dir)
-        .arg("compile")
+        .arg("build")
         .arg("--no-embed-metadata")
         .arg("-o")
         .arg(&out)

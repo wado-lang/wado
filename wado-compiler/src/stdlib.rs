@@ -367,7 +367,7 @@ mod tests {
         assert!(
             get_stdlib_module("core:kiln/types.wado")
                 .unwrap()
-                .contains("internal struct RawRequest")
+                .contains("internal struct InputFile")
         );
         assert!(
             get_stdlib_module("core:kiln/worlds.wado")

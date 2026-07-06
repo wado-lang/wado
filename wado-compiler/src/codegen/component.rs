@@ -46,16 +46,9 @@ pub fn build_component(
         enc.defined_type().result(None, None);
     }
 
-    // Kiln world types: defined inline at the component level (not
-    // inside an imported instance) because `core:kiln/types` enters the
-    // world scope via `use types.{...}`, not as an interface import.
-    // The generator's single export `generate(raw: raw-request) ->
-    // result<response, error>` plus its task-return canon need these
-    // types defined before `emit_canonical_intrinsics` and
-    // `emit_world_exports` run. Gate on the world's `import KilnHost`
-    // declaration so any kiln-generator-shaped world picks this path up
-    // — the previous form matched `target_world == "core:kiln/generator"`
-    // by string and missed future generator worlds.
+    // Emit the shared `core:kiln/types` instance before the canon and export
+    // passes, which reference its `input-file`/`response`/`error` types. Any
+    // world importing `KilnHost` is a generator world.
     if project.world_imports_interface("KilnHost") {
         emit_kiln_world_types(&mut builder, &mut ctx);
     }
@@ -287,6 +280,7 @@ pub fn build_component(
         &scalar_future_types,
         &value_future_types,
         component_plan,
+        &mut lib_type_gen,
     );
 
     // Lower WASI functions
@@ -1003,7 +997,7 @@ fn build_transmission_future_type_for(
 ///
 /// Structure:
 /// - Build an `InstanceType` whose interior defines `input-file`,
-///   `output-file`, `response`, `error`, `raw-request` as records/variants
+///   `output-file`, `response`, `error` as records/variants
 ///   and exports each one by its WIT name. The CM validator's
 ///   `all_valtypes_named_in_defined` check requires records/variants
 ///   referenced by a component-level export to have their original type
@@ -1070,7 +1064,7 @@ fn emit_kiln_world_types(builder: &mut ComponentBuilder, ctx: &mut ComponentMode
         &mut next_idx,
         &[("path", string_vt), ("content", string_vt)],
     );
-    let input_file_export = emit_export(
+    emit_export(
         &mut instance_type,
         &mut next_idx,
         "input-file",
@@ -1123,33 +1117,6 @@ fn emit_kiln_world_types(builder: &mut ComponentBuilder, ctx: &mut ComponentMode
         ],
     );
     emit_export(&mut instance_type, &mut next_idx, "error", error_local);
-
-    // list<input-file> + list<u8> (options blob) + raw-request record
-    let list_input_local = emit_list(
-        &mut instance_type,
-        &mut next_idx,
-        ComponentValType::Type(input_file_export),
-    );
-    let list_u8_local = emit_list(
-        &mut instance_type,
-        &mut next_idx,
-        ComponentValType::Primitive(PrimitiveValType::U8),
-    );
-    let raw_request_local = emit_record(
-        &mut instance_type,
-        &mut next_idx,
-        &[
-            ("primary", ComponentValType::Type(input_file_export)),
-            ("inputs", ComponentValType::Type(list_input_local)),
-            ("options", ComponentValType::Type(list_u8_local)),
-        ],
-    );
-    // The raw-request export advances the encoder counter once more,
-    // but we never reference that slot again so we drop the result.
-    instance_type.export(
-        "raw-request",
-        wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(raw_request_local)),
-    );
     let _ = next_idx;
 
     // Register the instance type at the component level.
@@ -1175,7 +1142,6 @@ fn emit_kiln_world_types(builder: &mut ComponentBuilder, ctx: &mut ComponentMode
         ("output-file", "kiln-output-file"),
         ("response", "kiln-response"),
         ("error", "kiln-error"),
-        ("raw-request", "kiln-raw-request"),
     ] {
         builder.alias_export(
             ctx.instance_idx("kiln-types"),
@@ -1557,6 +1523,7 @@ fn emit_canonical_intrinsics(
     scalar_future_types: &IndexSet<(CmScalarType, u32)>,
     value_future_types: &IndexMap<CmPayloadType, u32>,
     component_plan: &crate::wir_build::component_plan::ComponentPlan,
+    lib_type_gen: &mut Option<CmTypeGen>,
 ) {
     // The `task.return` canon needs the export's CM-resolved result type.
     // Worlds with one boundary export (HTTP service `handle`, kiln
@@ -1688,18 +1655,28 @@ fn emit_canonical_intrinsics(
             }
             CanonicalIntrinsic::TaskReturn(key) => {
                 let memory_idx = ctx.memory_idx();
-                let result_ty = resolve_task_return_valtype(
+                let result_ty = lib_task_return_valtype(
                     key,
                     component_plan,
                     project,
+                    builder,
                     ctx,
-                    result_unit_type,
-                    trailers_future_type,
-                    transmission_future_types,
-                    scalar_future_types,
-                    value_future_types,
-                    stream_types,
-                );
+                    lib_type_gen,
+                )
+                .unwrap_or_else(|| {
+                    resolve_task_return_valtype(
+                        key,
+                        component_plan,
+                        project,
+                        ctx,
+                        result_unit_type,
+                        trailers_future_type,
+                        transmission_future_types,
+                        scalar_future_types,
+                        value_future_types,
+                        stream_types,
+                    )
+                });
                 builder.task_return(Some(result_ty), [CanonicalOption::Memory(memory_idx)]);
             }
             CanonicalIntrinsic::WaitableSetNew => {
@@ -1761,6 +1738,46 @@ fn emit_canonical_intrinsics(
             }
         }
     }
+}
+
+/// Build the `task.return` result type for a `--lib` export whose result is a
+/// plain Wado type (e.g. the kiln generator's `Result<Response, Error>`), from
+/// the raw AST via the shared `lib_type_gen`. Named types land top-level and are
+/// cache-shared with [`emit_world_exports`], so the canon and the export func
+/// type reference the same defined types. Returns `None` for non-lib exports,
+/// exports without a result type, and `Future`/`Stream` results (handled by
+/// [`resolve_task_return_valtype`]).
+fn lib_task_return_valtype(
+    key: &str,
+    component_plan: &crate::wir_build::component_plan::ComponentPlan,
+    project: &NirPackage,
+    builder: &mut ComponentBuilder,
+    ctx: &mut ComponentModelContext,
+    lib_type_gen: &mut Option<CmTypeGen>,
+) -> Option<ComponentValType> {
+    let export = component_plan
+        .world_exports
+        .iter()
+        .find(|e| e.name == key)
+        .or_else(|| component_plan.world_exports.first())?;
+    if !export.is_lib {
+        return None;
+    }
+    let result_type = export.result_type.as_ref()?;
+    if matches!(result_type, crate::ast::Type::Generic(g) if g.name == "Future" || g.name == "Stream")
+    {
+        return None;
+    }
+    let type_gen = lib_type_gen.as_mut()?;
+    let no_resources: IndexMap<&str, u32> = IndexMap::default();
+    let resolved = project.cm_interface_registry.resolve_type(result_type);
+    let mut sink = TopLevelSink { builder, ctx };
+    Some(type_gen.ast_type_to_cm(
+        &mut sink,
+        &resolved,
+        &project.cm_interface_registry,
+        &no_resources,
+    ))
 }
 
 /// Resolve the `task.return` result type for an `async` export, keyed by its

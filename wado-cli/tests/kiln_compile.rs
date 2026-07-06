@@ -26,28 +26,23 @@ mod common;
 use common::runtime;
 
 const MINIMAL_GENERATOR: &str = r#"
-use { RawRequest, Response, Error, bind_request } from "core:kiln";
+use { Request, Response, Error } from "core:kiln";
 
 pub struct Options {
     pub verbose: bool,
 }
 
-export fn generate(raw: RawRequest) -> Result<Response, Error> {
-    let req = match bind_request::<Options>(raw) {
-        Ok(r) => r,
-        Err(e) => return Result::Err(e),
-    };
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
     let _ = req.options.verbose;
     return Result::Ok(Response { files: [] });
 }
 "#;
 
-/// v2-ergonomic form: author writes `fn generate(req: Request<Options>)`
-/// directly and the compiler's
-/// `kiln::import_check::inject_kiln_request_adapter` phase rewrites it
-/// to the internal `RawRequest + bind_request?` shape before analyze
-/// runs. Note we don't import `bind_request` or `RawRequest` — the
-/// phase extends the existing `use` automatically.
+/// Ergonomic form: the author writes `fn generate(req: Request<Options>)`
+/// and the compiler's `kiln::import_check::inject_kiln_request_adapter`
+/// phase rewrites it into the flat typed parameters
+/// `(primary, inputs, options)` of the generator's synthesized world before
+/// analyze runs.
 const ADAPTER_GENERATOR: &str = r#"
 use { Request, Response, Error } from "core:kiln";
 
@@ -260,7 +255,7 @@ fn no_options_generator_compiles_and_runs() {
             content: "syntax = \"proto3\";".to_string(),
         },
         inputs: vec![],
-        options: vec![0xa0], // empty CBOR map
+        options: wado_compiler::kiln::CanonicalOptions::default(),
     };
     runtime()
         .block_on(async { host.run_generator(&resolved.wasm, request).await })
@@ -314,18 +309,14 @@ fn transitive_dep_edit_invalidates_cache() {
     )
     .unwrap();
     let entry_src = r#"
-use { RawRequest, Response, Error, bind_request } from "core:kiln";
+use { Request, Response, Error } from "core:kiln";
 use { answer } from "./helper.wado";
 
 pub struct Options {
     pub verbose: bool,
 }
 
-export fn generate(raw: RawRequest) -> Result<Response, Error> {
-    let req = match bind_request::<Options>(raw) {
-        Ok(r) => r,
-        Err(e) => return Result::Err(e),
-    };
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
     let _ = req.options.verbose;
     let _ = answer();
     return Result::Ok(Response { files: [] });
@@ -401,18 +392,14 @@ fn fresh_recompile_produces_identical_source_hash() {
     std::fs::write(&helper_path, helper_src).unwrap();
 
     let entry_src = r#"
-use { RawRequest, Response, Error, bind_request } from "core:kiln";
+use { Request, Response, Error } from "core:kiln";
 use { answer } from "./helper.wado";
 
 pub struct Options {
     pub verbose: bool,
 }
 
-export fn generate(raw: RawRequest) -> Result<Response, Error> {
-    let req = match bind_request::<Options>(raw) {
-        Ok(r) => r,
-        Err(e) => return Result::Err(e),
-    };
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
     let _ = req.options.verbose;
     let _ = answer();
     return Result::Ok(Response { files: [] });
@@ -475,18 +462,14 @@ fn docstring_only_edit_preserves_source_hash() {
     .unwrap();
 
     let entry_src = r#"
-use { RawRequest, Response, Error, bind_request } from "core:kiln";
+use { Request, Response, Error } from "core:kiln";
 use { answer } from "./helper.wado";
 
 pub struct Options {
     pub verbose: bool,
 }
 
-export fn generate(raw: RawRequest) -> Result<Response, Error> {
-    let req = match bind_request::<Options>(raw) {
-        Ok(r) => r,
-        Err(e) => return Result::Err(e),
-    };
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
     let _ = req.options.verbose;
     let _ = answer();
     return Result::Ok(Response { files: [] });
@@ -565,18 +548,14 @@ fn transitive_edit_then_revert_restores_source_hash() {
     std::fs::write(&helper_path, helper_original).unwrap();
 
     let entry_src = r#"
-use { RawRequest, Response, Error, bind_request } from "core:kiln";
+use { Request, Response, Error } from "core:kiln";
 use { answer } from "./helper.wado";
 
 pub struct Options {
     pub verbose: bool,
 }
 
-export fn generate(raw: RawRequest) -> Result<Response, Error> {
-    let req = match bind_request::<Options>(raw) {
-        Ok(r) => r,
-        Err(e) => return Result::Err(e),
-    };
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
     let _ = req.options.verbose;
     let _ = answer();
     return Result::Ok(Response { files: [] });
@@ -677,8 +656,13 @@ fn host_caches_compiled_component_across_run_generator_calls() {
             content: "syntax = \"proto3\";".to_string(),
         },
         inputs: vec![],
-        // CBOR for `{ verbose: false }`.
-        options: vec![0xa1, 0x67, b'v', b'e', b'r', b'b', b'o', b's', b'e', 0xf4],
+        options: wado_compiler::kiln::CanonicalOptions {
+            descriptor: wado_compiler::kiln::OptionsDescriptor::default(),
+            values: vec![(
+                "verbose".to_string(),
+                wado_compiler::kiln::CanonicalValue::Bool(false),
+            )],
+        },
     };
 
     // First call: cranelift AOT runs, count goes to 1.
@@ -746,8 +730,13 @@ fn shared_kiln_cache_compiles_generator_once_across_hosts() {
             content: "syntax = \"proto3\";".to_string(),
         },
         inputs: vec![],
-        // CBOR for `{ verbose: false }`.
-        options: vec![0xa1, 0x67, b'v', b'e', b'r', b'b', b'o', b's', b'e', 0xf4],
+        options: wado_compiler::kiln::CanonicalOptions {
+            descriptor: wado_compiler::kiln::OptionsDescriptor::default(),
+            values: vec![(
+                "verbose".to_string(),
+                wado_compiler::kiln::CanonicalValue::Bool(false),
+            )],
+        },
     };
 
     let cache = std::sync::Arc::new(KilnComponentCache::new());

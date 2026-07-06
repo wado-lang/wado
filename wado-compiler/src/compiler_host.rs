@@ -455,19 +455,20 @@ pub struct DependencyIndex {
 
 /// Request handed to a Kiln generator by the compiler.
 ///
-/// Mirrors `core:kiln/types::raw-request` 1:1 but does not depend on
-/// wasmtime; hosts lift/lower at their own boundary.
+/// Carries the `generate(primary, inputs, options)` arguments in a
+/// wasmtime-independent form; the host lifts/lowers at its own boundary.
 #[derive(Debug, Clone)]
 pub struct GeneratorRequest {
     /// The schema file named by `from` in the invocation.
     pub primary: GeneratorInputFile,
     /// Supplementary schema files.
     pub inputs: Vec<GeneratorInputFile>,
-    /// Deterministic CBOR encoding of the user's `options = { ... }`
-    /// (see `crate::kiln::cache::encode_options_canonical`). The
-    /// generator-side `bind_request` decodes this into the typed
-    /// `Options` struct via `core:cbor::from_bytes` before user code runs.
-    pub options: Vec<u8>,
+    /// The validated, typed options for this invocation. The host builds a
+    /// Component-Model value from it — shaped by the generator component's own
+    /// introspected `generate` options parameter — and passes it as a typed
+    /// argument, so the generator receives its `Options` directly. Empty when
+    /// the generator takes no options.
+    pub options: crate::kiln::options_check::CanonicalOptions,
 }
 
 /// One schema file passed to a Kiln generator.
@@ -689,7 +690,7 @@ mod tests {
                         content: "syntax = \"proto3\";".to_string(),
                     },
                     inputs: vec![],
-                    options: Vec::new(),
+                    options: crate::kiln::options_check::CanonicalOptions::default(),
                 };
                 let result = host.run_generator(b"\0asm", req).await;
                 assert!(matches!(result, Err(GeneratorRunnerError::Unsupported)));
@@ -700,7 +701,12 @@ mod tests {
     fn kiln_generator_wit_is_embedded() {
         assert!(KILN_GENERATOR_WIT.contains("package core:kiln"));
         assert!(KILN_GENERATOR_WIT.contains("world generator"));
-        assert!(KILN_GENERATOR_WIT.contains("export generate"));
+        // Revision 3: the world is import-only (each generator synthesizes its own
+        // world with a per-generator typed `generate`), so it carries the
+        // `kiln-host` import and no fixed `generate` export / `raw-request`.
+        assert!(KILN_GENERATOR_WIT.contains("import kiln-host"));
+        assert!(!KILN_GENERATOR_WIT.contains("export generate"));
+        assert!(!KILN_GENERATOR_WIT.contains("raw-request"));
     }
 
     #[test]

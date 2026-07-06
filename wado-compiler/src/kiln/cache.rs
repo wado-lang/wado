@@ -8,17 +8,11 @@
 //!
 //! The options encoding is intentionally opaque here (`&[u8]`). The caller
 //! supplies already-canonical bytes produced by [`encode_options_canonical`]:
-//! a deterministic CBOR encoding (RFC 8949) of the validated options tree.
-//! The same bytes feed the cache key and the wire-form `options: list<u8>`
-//! on `core:kiln/types::raw-request`; the generator decodes them with
-//! `core:cbor::from_bytes`.
-//!
-//! CBOR replaced the earlier canonical-JSON layer (WEP 2026-04-12, protocol
-//! revision v0.2): a binary blob decodes faster and represents `i64` / `u64`
-//! / `f64` / byte payloads without JSON's numeric ambiguity. Because nothing
-//! re-encodes the blob on the generator side, the encoder only has to be
-//! deterministic and decodable by `core:cbor` — it need not be byte-identical
-//! to `core:cbor`'s own canonical serializer.
+//! a deterministic, injective serialization of the validated options tree used
+//! solely as a hash input. In protocol revision 3 the options cross the generator
+//! boundary as a typed WIT argument, not a serialized blob, so nothing ever
+//! decodes these bytes — the encoding only has to be canonical, not an
+//! interchange format.
 //!
 //! Swapping the encoder in one place keeps cache keys stable unless the
 //! user-facing options actually change.
@@ -49,9 +43,11 @@ fn hex(bytes: &[u8; 32]) -> String {
 /// way that must invalidate every existing lockfile entry. `v2` marked
 /// the M6.4 switch from the binary options encoder to canonical JSON;
 /// `v3` dropped NFC normalization on string values so cache keys reflect
-/// the literal UTF-8 bytes the user supplied; `v4` switches the options
-/// encoding from canonical JSON to CBOR (protocol revision v0.2).
-const MAGIC: &[u8] = b"kiln-cache-key-v4\0";
+/// the literal UTF-8 bytes the user supplied; `v4` switched the options
+/// encoding to CBOR; `v5` replaces CBOR with a
+/// tagged length-prefixed hash-only encoding when options became a typed
+/// WIT argument.
+const MAGIC: &[u8] = b"kiln-cache-key-v5\0";
 
 /// The core:kiln world version the generator was built against. Part of the
 /// cache key so a future world-version bump invalidates every cached entry.
@@ -116,78 +112,69 @@ pub fn hex_digest(digest: &[u8; 32]) -> String {
     hex(digest)
 }
 
-/// Encode a [`CanonicalOptions`] to the canonical cache-key / wire byte
-/// string: a deterministic CBOR (RFC 8949) encoding of the options tree,
-/// produced with the dependency-free `minicbor` encoder.
+/// Encode a [`CanonicalOptions`] to a deterministic byte string for the
+/// invocation cache key. This is purely a hash input — nothing ever decodes
+/// it (options now cross the generator boundary as a typed WIT argument, not a
+/// serialized blob) — so the format only has to be canonical and injective,
+/// not an interchange format.
 ///
-/// - A struct/table is a definite-length CBOR map whose entries are sorted
-///   in canonical key order (shorter encoded key first, then bytewise —
-///   for text keys that is `(len, bytes)`). Field names are text-string
-///   keys, matching how `core:cbor` decodes a struct.
-/// - Integers use `minicbor`'s preferred (shortest) head; `I64` renders as
-///   an unsigned or negative integer by sign, `U64` always unsigned.
-/// - `F64` is always the 8-byte double form. `core:cbor::deserialize_f32`
-///   narrows a double, so a single width decodes into both `f32` and `f64`
-///   fields. `NaN` / `±Inf` panic — no Wado options schema yields them.
-/// - String and enum values are text strings (enums by their Wado name).
-/// - `Option::None` fields are omitted from the enclosing map. `Some(x)`
-///   is transparent: the encoding is exactly `x`'s.
-///
-/// The result is deterministic, which is all the cache key needs; it does
-/// not have to match `core:cbor`'s own canonical serializer byte-for-byte,
-/// since nothing re-encodes the blob on the generator side.
+/// A table drops `None` options, sorts the rest by field name, and writes a
+/// length-prefixed entry list; each value is a one-byte type tag followed by
+/// its little-endian / length-prefixed bytes (`Some(x)` is transparent). `F64`
+/// canonicalizes `-0.0` to `0.0` and rejects non-finite values so equal option
+/// sets share a cache key.
 #[must_use]
 pub fn encode_options_canonical(options: &CanonicalOptions) -> Vec<u8> {
-    let mut enc = minicbor::Encoder::new(Vec::new());
-    encode_options_table(&mut enc, &options.values);
-    enc.into_writer()
+    let mut out = Vec::new();
+    encode_options_table(&mut out, &options.values);
+    out
 }
 
-/// Writing into a `Vec<u8>` is infallible, so `minicbor` encode results are
-/// unwrapped through this alias to keep the walk readable.
-type EncVec = minicbor::Encoder<Vec<u8>>;
-
-/// Writing into a `Vec<u8>` cannot fail (`minicbor`'s `Write` for `Vec`
-/// has `Error = Infallible`), so every encode result is unwrapped with this.
-const INFALLIBLE: &str = "vec writer is infallible";
-
-/// The canonical CBOR "no options" blob: the empty map `0xa0`. Used as the
-/// wire/cache-key fallback whenever a generator has no options descriptor,
-/// so the bytes on the wire are always a decodable CBOR document.
+/// The "no options" encoding (an empty table). The cache-key fallback whenever
+/// a generator has no options descriptor.
 #[must_use]
 pub fn empty_options_canonical() -> Vec<u8> {
-    let mut enc = minicbor::Encoder::new(Vec::new());
-    enc.map(0).expect(INFALLIBLE);
-    enc.into_writer()
+    let mut out = Vec::new();
+    encode_options_table(&mut out, &[]);
+    out
 }
 
-fn encode_options_table(enc: &mut EncVec, entries: &[(String, CanonicalValue)]) {
+fn write_len(out: &mut Vec<u8>, len: usize) {
+    out.extend_from_slice(&(len as u64).to_le_bytes());
+}
+
+fn write_str(out: &mut Vec<u8>, s: &str) {
+    write_len(out, s.len());
+    out.extend_from_slice(s.as_bytes());
+}
+
+fn encode_options_table(out: &mut Vec<u8>, entries: &[(String, CanonicalValue)]) {
     let mut kept: Vec<&(String, CanonicalValue)> = entries
         .iter()
         .filter(|(_, v)| !matches!(v, CanonicalValue::None))
         .collect();
-    // Canonical CBOR map order (RFC 8949 §4.2.1): by encoded key bytes. For
-    // text keys the head length is monotonic in the string length, so this
-    // reduces to (byte length, bytewise).
-    kept.sort_by(|a, b| a.0.len().cmp(&b.0.len()).then_with(|| a.0.cmp(&b.0)));
+    kept.sort_by(|a, b| a.0.cmp(&b.0));
 
-    enc.map(kept.len() as u64).expect(INFALLIBLE);
+    write_len(out, kept.len());
     for (k, v) in kept {
-        enc.str(k).expect(INFALLIBLE);
-        encode_canonical_value(enc, v);
+        write_str(out, k);
+        encode_canonical_value(out, v);
     }
 }
 
-fn encode_canonical_value(enc: &mut EncVec, v: &CanonicalValue) {
+fn encode_canonical_value(out: &mut Vec<u8>, v: &CanonicalValue) {
     match v {
         CanonicalValue::Bool(b) => {
-            enc.bool(*b).expect(INFALLIBLE);
+            out.push(0);
+            out.push(u8::from(*b));
         }
         CanonicalValue::I64(n) => {
-            enc.i64(*n).expect(INFALLIBLE);
+            out.push(1);
+            out.extend_from_slice(&n.to_le_bytes());
         }
         CanonicalValue::U64(n) => {
-            enc.u64(*n).expect(INFALLIBLE);
+            out.push(2);
+            out.extend_from_slice(&n.to_le_bytes());
         }
         CanonicalValue::F64(f) => {
             // Non-finite floats are rejected during options validation
@@ -195,19 +182,28 @@ fn encode_canonical_value(enc: &mut EncVec, v: &CanonicalValue) {
             // canonicalizes to `0.0` so `+0.0`/`-0.0` share a cache key.
             assert!(
                 f.is_finite(),
-                "kiln: CBOR options cannot encode non-finite float {f}"
+                "kiln: options cannot encode non-finite float {f}"
             );
             let f = if *f == 0.0 { 0.0 } else { *f };
-            enc.f64(f).expect(INFALLIBLE);
+            out.push(3);
+            out.extend_from_slice(&f.to_le_bytes());
         }
-        CanonicalValue::String(s) | CanonicalValue::Enum(s) => {
-            enc.str(s).expect(INFALLIBLE);
+        CanonicalValue::String(s) => {
+            out.push(4);
+            write_str(out, s);
+        }
+        CanonicalValue::Enum(s) => {
+            out.push(5);
+            write_str(out, s);
         }
         CanonicalValue::None => {
             panic!("kiln: encode_options_canonical reached bare None value");
         }
-        CanonicalValue::Some(inner) => encode_canonical_value(enc, inner),
-        CanonicalValue::Struct(fields) => encode_options_table(enc, fields),
+        CanonicalValue::Some(inner) => encode_canonical_value(out, inner),
+        CanonicalValue::Struct(fields) => {
+            out.push(6);
+            encode_options_table(out, fields);
+        }
     }
 }
 
@@ -442,7 +438,7 @@ mod tests {
             source: InvocationPath::normalize("./schema.proto"),
             inputs: vec![InvocationPath::normalize("dep.proto")],
             output_dir: InvocationPath::normalize("build/kiln/proto"),
-            options_canonical: vec![],
+            options: crate::kiln::options_check::CanonicalOptions::default(),
             raw_options: None,
         };
         let result: Result<(FileHash, Vec<FileHash>), &'static str> =
@@ -460,110 +456,60 @@ mod tests {
         }
     }
 
-    /// A decoded CBOR value, just rich enough for the encoder assertions.
-    #[derive(Debug, PartialEq)]
-    enum Cbor {
-        Bool(bool),
-        Int(i64),
-        Float(f64),
-        Text(String),
-        Map(std::collections::BTreeMap<String, Cbor>),
-    }
-
-    /// Decode the encoder's output by reading it back with `minicbor`'s
-    /// `Decoder` — an encode/decode split that still checks the bytes are
-    /// well-formed CBOR (the cross-implementation guarantee that
-    /// `core:cbor::from_bytes` accepts them is covered end-to-end by the
-    /// generator tests).
-    fn decode_map(bytes: &[u8]) -> std::collections::BTreeMap<String, Cbor> {
-        let mut dec = minicbor::Decoder::new(bytes);
-        let map = decode_map_inner(&mut dec);
-        assert_eq!(dec.position(), bytes.len(), "trailing bytes after map");
-        map
-    }
-
-    fn decode_map_inner(
-        dec: &mut minicbor::Decoder<'_>,
-    ) -> std::collections::BTreeMap<String, Cbor> {
-        let len = dec
-            .map()
-            .expect("expected a CBOR map")
-            .expect("map must be definite-length");
-        let mut out = std::collections::BTreeMap::new();
-        for _ in 0..len {
-            let k = dec.str().expect("map key must be text").to_string();
-            out.insert(k, decode_value(dec));
-        }
-        out
-    }
-
-    fn decode_value(dec: &mut minicbor::Decoder<'_>) -> Cbor {
-        use minicbor::data::Type;
-        match dec.datatype().expect("valid CBOR datatype") {
-            Type::Bool => Cbor::Bool(dec.bool().unwrap()),
-            Type::U8 | Type::U16 | Type::U32 | Type::U64 => Cbor::Int(dec.u64().unwrap() as i64),
-            Type::I8 | Type::I16 | Type::I32 | Type::I64 => Cbor::Int(dec.i64().unwrap()),
-            Type::F16 | Type::F32 | Type::F64 => Cbor::Float(dec.f64().unwrap()),
-            Type::String => Cbor::Text(dec.str().unwrap().to_string()),
-            Type::Map => Cbor::Map(decode_map_inner(dec)),
-            other => panic!("unexpected CBOR type {other:?}"),
-        }
-    }
+    // The cache-key encoding is a hash input, not an interchange format, so
+    // these assert the properties the cache key depends on directly on the
+    // bytes: determinism, distinctness, `None`-drop, `Some`-transparency, and
+    // `-0.0`/`+0.0` collapsing.
 
     #[test]
-    fn cbor_empty_table_is_empty_map() {
-        assert!(decode_map(&encode_options_canonical(&opts(vec![]))).is_empty());
-    }
-
-    #[test]
-    fn cbor_bool_int_u64_decode_to_their_values() {
-        let bytes = encode_options_canonical(&opts(vec![
-            ("flag", CanonicalValue::Bool(true)),
-            ("n", CanonicalValue::I64(-7)),
-            ("u", CanonicalValue::U64(42)),
-        ]));
-        let m = decode_map(&bytes);
-        assert_eq!(m["flag"], Cbor::Bool(true));
-        assert_eq!(m["n"], Cbor::Int(-7));
-        assert_eq!(m["u"], Cbor::Int(42));
-    }
-
-    #[test]
-    fn cbor_f64_decodes_as_float() {
-        let bytes = encode_options_canonical(&opts(vec![("ratio", CanonicalValue::F64(5.5))]));
-        assert_eq!(decode_map(&bytes)["ratio"], Cbor::Float(5.5));
-    }
-
-    #[test]
-    fn empty_options_is_the_empty_cbor_map() {
-        assert_eq!(empty_options_canonical(), vec![0xa0]);
+    fn empty_table_equals_empty_options_canonical() {
         assert_eq!(
             empty_options_canonical(),
             encode_options_canonical(&opts(vec![]))
         );
-        assert!(decode_map(&empty_options_canonical()).is_empty());
     }
 
     #[test]
-    fn cbor_negative_zero_canonicalizes_to_positive_zero() {
+    fn distinct_option_sets_encode_distinctly() {
+        let a = encode_options_canonical(&opts(vec![
+            ("flag", CanonicalValue::Bool(true)),
+            ("n", CanonicalValue::I64(-7)),
+            ("u", CanonicalValue::U64(42)),
+        ]));
+        assert_ne!(
+            a,
+            encode_options_canonical(&opts(vec![
+                ("flag", CanonicalValue::Bool(false)),
+                ("n", CanonicalValue::I64(-7)),
+                ("u", CanonicalValue::U64(42)),
+            ]))
+        );
+        assert_ne!(
+            a,
+            encode_options_canonical(&opts(vec![("ratio", CanonicalValue::F64(5.5))]))
+        );
+    }
+
+    #[test]
+    fn negative_zero_canonicalizes_to_positive_zero() {
         let pos = encode_options_canonical(&opts(vec![("z", CanonicalValue::F64(0.0))]));
         let neg = encode_options_canonical(&opts(vec![("z", CanonicalValue::F64(-0.0))]));
         assert_eq!(pos, neg);
     }
 
     #[test]
-    fn cbor_string_and_enum_decode_as_text() {
-        let bytes = encode_options_canonical(&opts(vec![
-            ("msg", CanonicalValue::String("a\"b".to_string())),
-            ("style", CanonicalValue::Enum("Rpc".to_string())),
-        ]));
-        let m = decode_map(&bytes);
-        assert_eq!(m["msg"], Cbor::Text("a\"b".to_string()));
-        assert_eq!(m["style"], Cbor::Text("Rpc".to_string()));
+    fn string_and_enum_of_the_same_text_encode_distinctly() {
+        let s = encode_options_canonical(&opts(vec![(
+            "x",
+            CanonicalValue::String("Rpc".to_string()),
+        )]));
+        let e =
+            encode_options_canonical(&opts(vec![("x", CanonicalValue::Enum("Rpc".to_string()))]));
+        assert_ne!(s, e, "a string and an enum are distinct value kinds");
     }
 
     #[test]
-    fn cbor_string_preserves_literal_utf8_without_normalization() {
+    fn string_preserves_literal_utf8_without_normalization() {
         let decomposed = "e\u{0301}";
         let composed = "\u{00e9}";
         let bytes_d = encode_options_canonical(&opts(vec![(
@@ -573,12 +519,10 @@ mod tests {
         let bytes_c =
             encode_options_canonical(&opts(vec![("a", CanonicalValue::String(composed.into()))]));
         assert_ne!(bytes_d, bytes_c, "NFC vs NFD must survive the encoder");
-        assert_eq!(decode_map(&bytes_d)["a"], Cbor::Text(decomposed.into()));
-        assert_eq!(decode_map(&bytes_c)["a"], Cbor::Text(composed.into()));
     }
 
     #[test]
-    fn cbor_output_is_deterministic_regardless_of_input_order() {
+    fn output_is_deterministic_regardless_of_input_order() {
         let a = encode_options_canonical(&opts(vec![
             ("zeta", CanonicalValue::I64(1)),
             ("alpha", CanonicalValue::I64(2)),
@@ -589,15 +533,14 @@ mod tests {
             ("mu", CanonicalValue::I64(3)),
             ("zeta", CanonicalValue::I64(1)),
         ]));
-        assert_eq!(a, b, "reordered fields must hash-encode identically");
-        let m = decode_map(&a);
-        assert_eq!(m.len(), 3);
-        assert_eq!(m["alpha"], Cbor::Int(2));
+        assert_eq!(a, b, "reordered fields must encode identically");
     }
 
     #[test]
-    fn cbor_option_none_is_omitted_and_some_is_transparent() {
-        let bytes = encode_options_canonical(&opts(vec![
+    fn option_none_is_omitted_and_some_is_transparent() {
+        // A `None` field encodes the same as omitting it, and `Some(x)` the
+        // same as bare `x`.
+        let with_none = encode_options_canonical(&opts(vec![
             ("kept", CanonicalValue::Bool(true)),
             ("dropped", CanonicalValue::None),
             (
@@ -605,25 +548,32 @@ mod tests {
                 CanonicalValue::Some(Box::new(CanonicalValue::String("x".to_string()))),
             ),
         ]));
-        let m = decode_map(&bytes);
-        assert!(!m.contains_key("dropped"), "None field is omitted");
-        assert_eq!(m["wrapped"], Cbor::Text("x".to_string()));
-        assert_eq!(m.len(), 2);
+        let without = encode_options_canonical(&opts(vec![
+            ("kept", CanonicalValue::Bool(true)),
+            ("wrapped", CanonicalValue::String("x".to_string())),
+        ]));
+        assert_eq!(with_none, without);
     }
 
     #[test]
-    fn cbor_struct_nests_as_a_sub_map() {
-        let bytes = encode_options_canonical(&opts(vec![(
+    fn struct_field_order_is_normalized() {
+        let a = encode_options_canonical(&opts(vec![(
             "nested",
             CanonicalValue::Struct(vec![
                 ("y".to_string(), CanonicalValue::I64(2)),
                 ("x".to_string(), CanonicalValue::I64(1)),
             ]),
         )]));
-        let Cbor::Map(inner) = &decode_map(&bytes)["nested"] else {
-            panic!("nested value must be a map");
-        };
-        assert_eq!(inner["x"], Cbor::Int(1));
-        assert_eq!(inner["y"], Cbor::Int(2));
+        let b = encode_options_canonical(&opts(vec![(
+            "nested",
+            CanonicalValue::Struct(vec![
+                ("x".to_string(), CanonicalValue::I64(1)),
+                ("y".to_string(), CanonicalValue::I64(2)),
+            ]),
+        )]));
+        assert_eq!(
+            a, b,
+            "a nested struct's field order must not affect the key"
+        );
     }
 }

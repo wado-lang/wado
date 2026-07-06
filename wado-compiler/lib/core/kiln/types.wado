@@ -12,29 +12,6 @@ internal struct InputFile {
     pub content: String,
 }
 
-/// The raw CM-level request record. Generator-side code sees
-/// `Request<Options>` (a Wado-only generic defined in `core:kiln`)
-/// whose `options: Options` field is populated from
-/// `raw-request.options` by a compiler-synthesized decoder.
-/// `raw-request` is an internal wire-form type and should not
-/// appear in generator source.
-/// 
-/// `options` is a deterministic CBOR encoding of the user's
-/// `options = { ... }` block. The compiler uses the generator's
-/// typed `Options` descriptor (see `wado-compiler::kiln::options`)
-/// to encode on the caller side; the generator decodes it with
-/// `core:cbor::from_bytes`. The same bytes feed the invocation
-/// cache key directly.
-#[cm("core:kiln/types@0.1.0#raw-request")]
-internal struct RawRequest {
-    #[cm("primary")]
-    pub primary: InputFile,
-    #[cm("inputs")]
-    pub inputs: List<InputFile>,
-    #[cm("options")]
-    pub options: List<u8>,
-}
-
 /// One generated Wado file. `path` is relative to the invocation's
 /// output directory (defaults to `build/kiln/<invocation-name>/`).
 /// Exactly one output file must be the entry module; supplementary

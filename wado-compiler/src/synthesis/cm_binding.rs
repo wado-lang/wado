@@ -32,9 +32,8 @@ use crate::wir::CmPayloadType;
 
 pub use export_adapter::export_binding_func_name;
 use export_adapter::{
-    synthesize_async_export_binding, synthesize_general_export_binding,
-    synthesize_result_export_binding, synthesize_sync_export_binding,
-    synthesize_void_export_binding,
+    synthesize_async_export_binding, synthesize_result_export_binding,
+    synthesize_sync_export_binding, synthesize_void_export_binding,
 };
 pub use import_adapter::binding_func_name;
 use import_adapter::synthesize_adapter;
@@ -433,6 +432,13 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
     // Library world exports use a synchronous lift (the core function returns
     // the value directly), unlike the async/task-return WASI worlds.
     let is_lib_world = project.is_lib_world();
+    // The kiln generator uses the lib path only for its typed params; its
+    // `generate` returns `Result<_, _>` over nested records/lists that the
+    // synchronous lower path cannot handle, so it routes through the async
+    // task-return result binding instead (see the routing below).
+    let is_kiln_generator = project
+        .world_registry
+        .world_imports_interface(&project.target_world, "KilnHost");
     if let Some(world_info) = world_info {
         let entry_type_table = project
             .tir_modules
@@ -535,15 +541,12 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                     }
 
                     // Validate return-type compatibility with the world. The
-                    // dispatch below routes a `Result<_, _>`-returning world
-                    // export to dedicated adapters for the async, Result, and
-                    // `()` user return shapes; any other user return type
-                    // falls through to `synthesize_general_export_binding`,
-                    // which lowers the user's return value directly into the
-                    // world's task-return slots. When the world expects only
+                    // dispatch below routes an async export to the task-return
+                    // adapters (async / Result / `()` shapes) and a sync export
+                    // to the synchronous lift. When an async world expects only
                     // a discriminant (`Result<(), ()>`, the wasi:cli/command
-                    // shape) but the user supplies, say, `i32`, the general
-                    // adapter emits an extra flat value beyond what the
+                    // shape) but the user supplies, say, `i32`, the async
+                    // adapter would emit an extra flat value beyond what the
                     // runtime declares for task-return — surfacing as an
                     // opaque "values remaining on stack" wasm-validation
                     // panic at codegen. Catch the mismatch here with a
@@ -627,7 +630,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                             &binding_cm_package,
                             &project.interner,
                         )
-                    } else if is_lib_world {
+                    } else if is_lib_world && !is_kiln_generator {
                         // Library exports: synchronous lift. The core function
                         // returns the lowered value directly (milestone 2:
                         // primitives only).
@@ -697,15 +700,24 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                     &entry_source,
                                 )
                             } else {
-                                // General adapter: handles params (with lifting if needed)
-                                // and non-void return types
-                                synthesize_general_export_binding(
+                                // Sync export returning a plain value (not a
+                                // `Result`), e.g. a `--lib` export like
+                                // `fn count() -> u32`. It uses the
+                                // synchronous canon lift — the core function
+                                // returns the flattened result directly (an
+                                // out-pointer for multi-value results like a
+                                // list). It must NOT go through task-return: the
+                                // component declares the export sync
+                                // (`.async_(false)`), so an async task-return
+                                // lowering produces an invalid core module.
+                                synthesize_sync_export_binding(
                                     &export.name,
                                     user_func_rc,
                                     &entry_source,
                                     &project.tir_modules,
                                     &entry_type_table,
                                     &export.params,
+                                    export.return_type.as_ref(),
                                     &project.cm_interface_registry,
                                     &binding_cm_package,
                                     &project.interner,
@@ -718,13 +730,15 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
             }
         }
 
-        // Compute the correct task-return params from the export's flat return types.
-        // The builtin registry defines task_return with a single i32 param, but for
-        // Result-returning exports the task-return call passes the full flattened type.
-        // Store on Package so optimize_dce can use it when creating the import.
-        // Library exports use a synchronous lift and never call task.return, so
-        // skip this for them.
-        for export in world_info.exports.iter().filter(|_| !is_lib_world) {
+        // The builtin `task_return` takes a single i32, but a Result-returning
+        // export passes its full flattened result; record those flat params on
+        // the Package for optimize_dce to type the import. Sync-lift lib exports
+        // never call task.return, so skip them — but the kiln generator does.
+        for export in world_info
+            .exports
+            .iter()
+            .filter(|_| !is_lib_world || is_kiln_generator)
+        {
             if let Some(return_type) = &export.return_type {
                 let tt = entry_type_table.borrow();
                 let flat_types =

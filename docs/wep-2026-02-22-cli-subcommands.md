@@ -24,6 +24,144 @@ wado list [filter]                 # list cached packages
 wado exec <dep-name> [args...]     # run dependency's command entry point
 ```
 
+### Command Tiers: `compile` vs `build`
+
+The CLI splits into a file-scoped compiler primitive and a manifest-aware
+project orchestrator. Dependency _resolution_ — version solving, registry/git
+fetching, lock writing, caching — and metadata embedding belong to the
+orchestrator; the primitive does none of it.
+
+```
+compile   file.wado + resolved index → wasm/wat    no resolution, deterministic   ← primitive
+   ↑
+build     project → build/<world>.wasm    resolve deps · lock · embed metadata · multi-world   ← orchestrator
+   ↑
+run / serve / test / publish      build, then execute / serve / test / push    ← drivers
+```
+
+The seam between the tiers is the resolved dependency index (name → resolved
+module path), not `wado.toml`. `compile` never _resolves_; it _consumes_ an
+already-resolved index — exactly as `cargo build` hands `rustc` its
+`--extern name=path` set rather than making `rustc` resolve. So the primitive
+still sees dependencies and builds real files; it just never does the resolving.
+
+- `wado compile <file>` compiles one explicit target against a resolved index,
+  never resolving. Standalone (no project) it uses an empty index, so a
+  dependency import (`ns:pkg` / `lib:nick`) needs a single-file `with { … }`
+  source or it errors. Inside a project it assembles the index offline from
+  `wado.lock` (plus path deps read fresh from `wado.toml`) and compiles the one
+  file; a registry/git dependency with no lock entry is an error pointing at
+  `wado build` / `wado update` (compile still never resolves). This keeps it the
+  deterministic path for tests, the LSP, `--wat-to-stdout`, `--no-validate`, and
+  debugging. Precedent: `rustc` vs `cargo build`, `go tool compile` vs
+  `go build`, `zig build-exe` vs `zig build`.
+- `wado build` owns the project tier: read the manifest, resolve/lock
+  dependencies, compile each declared world through the `compile` primitive with
+  the resolved index, embed `[package]` metadata, and write `build/<world>.wasm`.
+  All dependency, lock, and cache machinery lives here — one home.
+- `run` / `serve` / `test` / `publish` share the `build` core in project mode.
+  A bare-file argument (`wado run file.wado`) routes through the standalone
+  `compile` path instead.
+
+| Tier                  | Commands                                                             | Resolves deps                  |
+| --------------------- | -------------------------------------------------------------------- | ------------------------------ |
+| Compiler primitives   | `compile` `check` `dump` `query` `format` `doc` `wit` `syntax` `lsp` | No (consumes a resolved index) |
+| Project build & run   | `build` `run` `serve` `test` `publish`                               | Yes                            |
+| Dependency management | `add` `remove` `update` `fetch` `list` `exec`                        | Yes                            |
+| Scaffolding           | `init`                                                               | —                              |
+
+This supersedes the earlier model where a bare `wado compile` (no argument or a
+directory) performed the manifest-driven project build. That behavior moves to
+`wado build`; `wado compile` now always compiles a single explicit target
+against a resolved index it never computes itself.
+
+### Subcommand ↔ Cargo Mapping and Dependency Consistency
+
+The dependency model must be coherent across every subcommand. Each command
+plays exactly one role toward the dependency graph:
+
+- resolve — computes the graph, writes `wado.lock`, may fetch (owns resolution)
+- consume — reads the resolved graph to compile/analyze user code; never
+  resolves itself (a stale lock triggers a re-resolve through the shared build
+  core, not per-command)
+- cache — reads the on-disk dependency cache only
+- none — touches no dependency state
+
+| wado      | cargo analog                | tier         | dependency role                 |
+| --------- | --------------------------- | ------------ | ------------------------------- |
+| `init`    | `cargo new` / `init`        | scaffold     | none                            |
+| `add`     | `cargo add`                 | manifest-op  | resolve (+ edit toml)           |
+| `remove`  | `cargo remove`              | manifest-op  | resolve (+ edit toml)           |
+| `update`  | `cargo update`              | manifest-op  | resolve                         |
+| `fetch`   | `cargo fetch`               | manifest-op  | resolve if no lock, + download  |
+| `list`    | `cargo tree` (cache view)   | inspect      | cache                           |
+| `build`   | `cargo build`               | orchestrator | consume (auto-resolve if stale) |
+| `run`     | `cargo run`                 | driver       | consume                         |
+| `serve`   | `cargo run` (service world) | driver       | consume                         |
+| `test`    | `cargo test`                | driver       | consume                         |
+| `publish` | `cargo publish`             | driver       | consume (needs a full lock)     |
+| `exec`    | `cargo run -p` / a tool     | driver       | consume                         |
+| `check`   | `cargo check`               | analyze      | consume                         |
+| `doc`     | `cargo doc` / `rustdoc`     | analyze      | consume¹                        |
+| `wit`     | — (emit component contract) | analyze      | consume                         |
+| `dump`    | `rustc -Z unpretty`         | analyze      | consume                         |
+| `query`   | rust-analyzer queries       | analyze      | consume                         |
+| `compile` | `rustc`                     | primitive    | consume (never resolves)        |
+| `format`  | `cargo fmt` / rustfmt       | file tool    | none                            |
+| `lsp`     | rust-analyzer               | server       | consume (on demand)             |
+| `syntax`  | — (grammar codegen)         | tooling      | none                            |
+
+¹ `doc` today parses one module and extracts docs from its AST — it resolves no
+imports, so it cannot follow dependency-referenced types or `pub use`
+re-exports across packages. Acceptable as a syntactic public-API view; a
+resolving mode is future work.
+
+This refines the coarse [Command Tiers](#command-tiers-compile-vs-build) table:
+its "does not resolve" group is `compile` (primitive) + the `analyze` /
+`file tool` / `server` / `tooling` rows here; its project tier is the
+`orchestrator` + `driver` rows; its dependency-management tier is `manifest-op`
+
+- `inspect`. The `analyze` commands are file-scoped like `compile` but, unlike
+  it, still resolve imports through the host (they consume the graph).
+
+Rules that keep this consistent:
+
+- One resolver. Only the manifest-op tier resolves and writes `wado.lock`;
+  `build` auto-resolves when the lock is stale, and the drivers reach that same
+  resolver through the build core. Nothing else resolves.
+- Uniform consumption. Every `consume` command reads the resolved graph through
+  the `CompilerHost`. Today the host resolves the nearest manifest's path deps
+  on demand — `attach_manifest_deps` merely precomputes that same index — so
+  every consumer (orchestrator, drivers, analyze commands) shares one seam;
+  Phase 3/4 makes it lock/cache-backed and they all gain registry/git resolution
+  at once, with no per-command wiring.
+- `compile` is the sole primitive that consumes but never resolves (`rustc`),
+  the deterministic seam of [Command Tiers](#command-tiers-compile-vs-build).
+
+#### Reproducibility flags (`--locked` / `--offline` / `--frozen`)
+
+Cargo accepts these on every command that reads the graph; Wado has none yet.
+They belong uniformly to every tier that reads the graph (resolve, orchestrator,
+driver, analyze), never to the pure primitives:
+
+- `--locked` — fail if `wado.lock` is stale (would need re-resolution); CI reproducibility
+- `--offline` — never hit the network; use only cache + lock; fail if a needed package is absent
+- `--frozen` — `--locked` and `--offline` together
+
+Consistency TODOs (do not implement piecemeal — land them together in Phase 3):
+
+- [ ] Add `--locked` / `--offline` / `--frozen` to every graph-reading tier:
+      resolve (`update`, `add`, `remove`, `fetch`), orchestrator (`build`),
+      driver (`run`, `serve`, `test`, `publish`, `exec`), and analyze (`check`,
+      `doc`, `wit`, `dump`, `query`). Reject them on the primitives (`compile`,
+      `format`, `init`, `syntax`, `lsp`) so the flag surface stays honest.
+- [ ] `publish` must verify against a full, fresh lock before uploading (a stale
+      or partial lock is an error, like `cargo publish`'s verification build).
+- [ ] `exec` consumes the same resolved graph (lock + cache) as the other
+      drivers — no separate resolution path (Phase 5).
+- [ ] Decide whether `doc` gains a resolving mode or stays syntactic; record the
+      choice in the [doc WEP](./wep-2026-02-28-doc-command.md).
+
 ### `wado init`
 
 Create a new `wado.toml` interactively.
@@ -162,7 +300,7 @@ COPY wado.toml wado.lock ./
 RUN wado fetch                     # cached layer: dependencies only
 
 COPY src/ ./src/
-RUN wado compile -o app.wasm       # rebuilds only when source changes
+RUN wado build                     # rebuilds only when source changes
 ```
 
 If `wado.lock` exists, `wado fetch` downloads the exact versions recorded in the lock file. If `wado.lock` does not exist, it runs resolution first (generates `wado.lock`), then downloads.
@@ -253,7 +391,8 @@ wado list --path | xargs -I{} ls {}/wado.toml
 
 ### Entry Point and CLI Commands
 
-When `wado.toml` is present, the existing CLI commands use the entry point fields:
+When `wado.toml` is present, the project-tier commands use the entry point
+fields (see [Command Tiers](#command-tiers-compile-vs-build)):
 
 ```sh
 # Without wado.toml (single-file mode, unchanged)
@@ -261,33 +400,35 @@ wado run file.wado
 wado serve file.wado
 
 # With wado.toml (entry point auto-discovered)
+wado build                         # builds every declared world → build/<world>.wasm
 wado run                           # uses [package].command
 wado serve                         # uses [package].service
-wado compile -o out.wasm           # compiles the command entry point
 ```
 
-When a file argument is provided, it overrides the entry point from `wado.toml`.
+`wado compile` no longer reads `wado.toml`; project builds go through
+`wado build`. When a file argument is provided to a project-tier command, it
+overrides the entry point from `wado.toml` (routing that one target through the
+standalone `compile` path).
 
 #### Default output path
 
-Without `-o`, a manifest-driven build (no argument or a directory argument)
-writes `<manifest_root>/build/<world>.wasm`, keeping artifacts out of the source
-tree and giving each world its own file (mirroring kiln's `build/` layout).
-`<world>` is the target Component Model world FQ sanitized to a path segment
-(`@version` dropped, `:`/`/` → `-`), e.g. `build/wasi-cli-command.wasm`;
-`--lib` writes `build/lib.wasm`. A standalone file argument keeps the old
-`<input>.wasm` beside the source.
+Without `-o`, `wado build` writes `<manifest_root>/build/<world>.wasm`, keeping
+artifacts out of the source tree and giving each world its own file (mirroring
+kiln's `build/` layout). `<world>` is the target Component Model world FQ
+sanitized to a path segment (`@version` dropped, `:`/`/` → `-`), e.g.
+`build/wasi-cli-command.wasm`; `--lib` writes `build/lib.wasm`. A standalone
+`wado compile <file>` keeps the old `<input>.wasm` beside the source.
 
 #### `--lib` — pending
 
-`wado compile --lib` (compile the `[package].lib` entry as a library) is
-abolished pending a world model that fits libraries. A library has no command
-entry point, so it does not map onto `wasi:cli/command`; the previous
-implementation compiled the lib into that world and stubbed the absent `run`,
-which never surfaced the library's `export` API as component exports. The
-`[package].lib` manifest field and `EntryPointKind::Lib` resolution are retained
-as the data model; the CLI flag and its compile path return once a proper
-library/component-export world is designed.
+`wado build --lib` (build the `[package].lib` entry as a library) is abolished
+pending a world model that fits libraries. A library has no command entry point,
+so it does not map onto `wasi:cli/command`; the previous implementation compiled
+the lib into that world and stubbed the absent `run`, which never surfaced the
+library's `export` API as component exports. The `[package].lib` manifest field
+and `EntryPointKind::Lib` resolution are retained as the data model; the CLI
+flag and its build path return once a proper library/component-export world is
+designed.
 
 ### `wado exec`
 
@@ -314,6 +455,7 @@ The lock file's `command` field for the dependency determines which source file 
 - Version operator preservation means upgrading never silently changes the compatibility contract
 - Structured cache layout makes dependencies browsable with standard filesystem tools — no special commands needed to inspect cached source
 - `wado list` enables quick discovery and integrates naturally with Unix pipelines (`fzf`, `xargs`, etc.)
+- The `compile`/`build` split gives dependency, lock, cache, and metadata logic one home (`build`) and keeps `compile` a pure, deterministic primitive for tests, the LSP, and debugging
 
 ### Negative
 
@@ -324,6 +466,7 @@ The lock file's `command` field for the dependency determines which source file 
 
 - **`--pin` over `--sync-toml`**: `--pin` is shorter and conveys intent ("pin to what I resolved"). `--sync-toml` is more descriptive but verbose.
 - **`--breaking` as a flag, not a separate command**: keeps the update family unified. A separate `wado upgrade` command (like cargo-edit) would fragment the mental model.
-- **No `--locked` here**: `--locked` is a build-time flag (`wado compile --locked`, `wado run --locked`) that rejects stale lock files. It belongs on build commands, not on `wado update` which always writes the lock file.
+- **No `--locked` here**: `--locked` is a build-time flag (`wado build --locked`, `wado run --locked`) that rejects stale lock files. It belongs on the project-tier commands, not on `wado update` which always writes the lock file.
+- **`build` as a new command over overloading `compile`**: a bare `wado compile` used to mean "project build". Splitting it into a pure `compile` primitive and a `build` orchestrator removes the argument-shape-dependent behavior and the conditional metadata embedding, at the cost of one more command name. The layered `rustc`/`cargo build` precedent makes the two roles familiar.
 - **ghq-style cache over content-addressed store**: Cargo uses a content-addressed store (`~/.cargo/registry/cache/` with `.crate` archives + `src/` extraction). The ghq-style `host/owner/name/version/` layout trades deduplication for direct browsability — `cd` into any package without extraction or special tooling. For a Wasm ecosystem where packages are typically small, the storage overhead is negligible.
 - **`~/wado/` over `~/.wado/`**: ghq uses `~/ghq/` — visible, not hidden. Dependencies are source code you depend on; hiding them behind a dot prefix makes them feel opaque. A visible directory signals that the cache is a transparent, browsable workspace.
