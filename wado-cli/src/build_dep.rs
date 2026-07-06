@@ -11,10 +11,9 @@
 //! into the lock), `wado fetch` (pre-pull the generator component), and the Kiln
 //! provider (resolve `module: "ns:name"` at compile time).
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use indexmap::IndexMap;
-use sha2::{Digest, Sha256};
 
 use wado_manifest::{DependencySource, LockFile, LockedPackage, Manifest};
 
@@ -60,30 +59,6 @@ pub fn parse_spec(spec: &str) -> SpecParts<'_> {
 #[must_use]
 pub fn spec_key(spec: &str) -> &str {
     parse_spec(spec).key
-}
-
-/// Stable cache id for a generator at a specific version. Keyed on the resolved
-/// coordinate *and* version so a version bump invalidates the cache and two
-/// spellings of the same package (coordinate vs `lib:` nickname) share it.
-/// `wado fetch` and the provider derive the same id, so a pre-fetched component
-/// is a warm cache hit at compile time.
-#[must_use]
-pub fn generator_stable_id(coordinate: &str, version: &str) -> String {
-    let digest = Sha256::digest(format!("{coordinate}@{version}").as_bytes());
-    let mut hex = String::with_capacity(16);
-    for byte in &digest[..8] {
-        use std::fmt::Write as _;
-        let _ = write!(hex, "{byte:02x}");
-    }
-    format!("spec-{hex}")
-}
-
-/// The on-disk cache path for a generator coordinate+version's pulled component.
-#[must_use]
-pub fn generator_cache_path(manifest_root: &Path, coordinate: &str, version: &str) -> PathBuf {
-    manifest_root
-        .join(crate::kiln_provider::CACHE_DIR)
-        .join(format!("{}.wasm", generator_stable_id(coordinate, version)))
 }
 
 /// The highest version published at the generator's world sub-path matching
@@ -194,21 +169,21 @@ pub async fn resolve_build_dependencies(
     Ok(out)
 }
 
-/// Pull each resolved build-dependency's generator component into the on-disk
-/// generator cache (`build/kiln/generators/`), the location the Kiln provider
-/// reads at compile time. Returns the number pulled.
-pub async fn fetch_build_dependencies(
-    resolved: &[ResolvedBuildDep],
-    manifest_root: &Path,
-) -> Result<usize, String> {
+/// Pull each resolved build-dependency's generator component into the shared
+/// `~/wado/` cache, the location the Kiln provider reads at compile time.
+/// Returns the number pulled.
+pub async fn fetch_build_dependencies(resolved: &[ResolvedBuildDep]) -> Result<usize, String> {
     for dep in resolved {
+        let out = crate::cache::generator_path(&dep.registry_url, &dep.coordinate, &dep.version)?;
+        if out.is_file() {
+            continue;
+        }
         let bytes = oci::pull_component(&dep.reference()?).await.map_err(|e| {
             format!(
                 "fetching generator `{}@{}`: {e}",
                 dep.coordinate, dep.version
             )
         })?;
-        let out = generator_cache_path(manifest_root, &dep.coordinate, &dep.version);
         if let Some(dir) = out.parent() {
             std::fs::create_dir_all(dir).map_err(|e| format!("creating {}: {e}", dir.display()))?;
         }
@@ -242,15 +217,6 @@ pub fn locked_generator_versions(manifest_root: &Path) -> IndexMap<String, Strin
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn stable_id_is_deterministic_version_and_coordinate_scoped() {
-        let a = generator_stable_id("wado-lang:gale", "0.0.9");
-        assert_eq!(a, generator_stable_id("wado-lang:gale", "0.0.9"));
-        assert_ne!(a, generator_stable_id("wado-lang:gale", "0.1.0"));
-        assert_ne!(a, generator_stable_id("wado-lang:jade", "0.0.9"));
-        assert!(a.starts_with("spec-"), "{a}");
-    }
 
     #[test]
     fn parse_spec_splits_version_and_submodule() {

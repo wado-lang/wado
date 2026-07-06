@@ -48,8 +48,10 @@ use crate::compiler_host::FilesystemCompilerHost;
 use crate::kiln_driver::{GeneratorProvider, ProviderError, ResolvedGenerator};
 use crate::oci;
 
-/// Directory under the project root where compiled generator
-/// components are cached: `build/kiln/generators/`. See WEP 2026-04-12
+/// Directory under the project root where source-compiled (`LocalPath`)
+/// generator components are cached: `build/kiln/generators/`. A registry
+/// (`Spec`) generator is a prebuilt, immutable artifact and caches in the shared
+/// `~/wado/` tree (see [`crate::cache`]) instead. See WEP 2026-04-12
 /// §"`build/kiln/` directory layout".
 pub const CACHE_DIR: &str = "build/kiln/generators";
 
@@ -708,13 +710,12 @@ impl CliGeneratorProvider {
                 (url, package, ver)
             };
 
-        // Identity is the *resolved* coordinate + version, so a version bump
-        // invalidates the cache and a coordinate and a `lib:` nickname for the
-        // same package share one cache entry and lock pin (WEP "generator identity").
+        // Identity is the *resolved* coordinate + version: the shared-cache path
+        // keys on both, so a version bump misses and a coordinate and a `lib:`
+        // nickname for the same package share one entry (WEP "generator identity").
         let package = &package;
-        let stable_id = crate::build_dep::generator_stable_id(package, &version);
         if !self.no_cache
-            && let Some(resolved) = self.try_read_spec_cache(&stable_id)
+            && let Some(resolved) = self.try_read_spec_cache(&registry_url, package, &version)
         {
             return Ok(resolved);
         }
@@ -734,7 +735,7 @@ impl CliGeneratorProvider {
         let resolved = resolved_generator_from_wasm(wasm).map_err(|e| ProviderError::Internal {
             message: format!("kiln: reading options of generator {reference}: {e}"),
         })?;
-        self.write_spec_cache(&stable_id, &resolved.wasm);
+        self.write_spec_cache(&registry_url, package, &version, &resolved.wasm);
         Ok(resolved)
     }
 
@@ -779,18 +780,27 @@ impl CliGeneratorProvider {
             })
     }
 
-    /// Read a cached (or `wado fetch`-populated) generator component and rebuild
-    /// its `ResolvedGenerator`. The descriptor is recovered from the component
-    /// WIT every time rather than cached separately, so a component written by
-    /// `wado fetch` (which does not persist a descriptor sidecar) is a full cache
-    /// hit. `None` on a cache miss or an unreadable component.
-    fn try_read_spec_cache(&self, stable_id: &str) -> Option<ResolvedGenerator> {
-        let wasm = std::fs::read(self.cache_path(stable_id)).ok()?;
+    /// Read a cached (or `wado fetch`-populated) generator component from the
+    /// shared `~/wado/` cache and rebuild its `ResolvedGenerator`. The descriptor
+    /// is recovered from the component WIT every time rather than cached
+    /// separately, so a component written by `wado fetch` (which does not persist
+    /// a descriptor sidecar) is a full cache hit. `None` on a cache miss or an
+    /// unreadable component.
+    fn try_read_spec_cache(
+        &self,
+        registry_url: &str,
+        coordinate: &str,
+        version: &str,
+    ) -> Option<ResolvedGenerator> {
+        let path = crate::cache::generator_path(registry_url, coordinate, version).ok()?;
+        let wasm = std::fs::read(path).ok()?;
         resolved_generator_from_wasm(wasm).ok()
     }
 
-    fn write_spec_cache(&self, stable_id: &str, wasm: &[u8]) {
-        let cache_path = self.cache_path(stable_id);
+    fn write_spec_cache(&self, registry_url: &str, coordinate: &str, version: &str, wasm: &[u8]) {
+        let Ok(cache_path) = crate::cache::generator_path(registry_url, coordinate, version) else {
+            return;
+        };
         if let Some(dir) = cache_path.parent() {
             let _ = std::fs::create_dir_all(dir);
         }

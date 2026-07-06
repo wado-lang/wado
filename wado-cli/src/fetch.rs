@@ -111,14 +111,14 @@ async fn fetch_generators(
 ) -> Result<usize, String> {
     let build_deps =
         crate::build_dep::resolve_build_dependencies(&project.manifest, locked).await?;
-    let generators = crate::build_dep::fetch_build_dependencies(&build_deps, &project.root).await?;
+    let generators = crate::build_dep::fetch_build_dependencies(&build_deps).await?;
     for dep in &build_deps {
+        let path = crate::cache::generator_path(&dep.registry_url, &dep.coordinate, &dep.version)?;
         eprintln!(
             "Fetched {}@{} (generator) → {}",
             dep.coordinate,
             dep.version,
-            crate::build_dep::generator_cache_path(&project.root, &dep.coordinate, &dep.version)
-                .display()
+            path.display()
         );
     }
     Ok(generators)

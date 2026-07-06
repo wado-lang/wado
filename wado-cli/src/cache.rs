@@ -8,6 +8,10 @@
 //! ```text
 //! {root}/{registry-host}/{namespace}/{name}/{version}/component.wasm
 //! ```
+//!
+//! A Kiln generator caches under its package's `core-kiln-generator` world
+//! sub-path (the location it publishes to), so a library component and a
+//! generator of the same package share the tree without colliding.
 
 use std::path::{Path, PathBuf};
 
@@ -37,6 +41,26 @@ pub fn component_path(
     Ok(root()?.join(component_relative(registry_url, coordinate, version)?))
 }
 
+/// The cached path for a Kiln generator component. A generator publishes to its
+/// package's `core-kiln-generator` world sub-path, so it caches under that same
+/// sub-path — sharing the tree with the package's library component but never
+/// colliding with it.
+pub fn generator_path(
+    registry_url: &str,
+    coordinate: &str,
+    version: &str,
+) -> Result<PathBuf, String> {
+    Ok(root()?.join(reference_relative(
+        oci::world_reference(
+            registry_url,
+            coordinate,
+            crate::build_dep::GENERATOR_WORLD_SEGMENT,
+            version,
+        )?,
+        version,
+    )))
+}
+
 /// The cache-root-relative path `{host}/{repository}/{version}/component.wasm`.
 /// The host, optional prefix, and `ns:pkg` coordinate map through the same
 /// `oci::reference` layout `wado publish` pushes to. Pure (no `root` lookup),
@@ -46,11 +70,19 @@ fn component_relative(
     coordinate: &str,
     version: &str,
 ) -> Result<PathBuf, String> {
-    let reference = oci::reference(registry_url, coordinate, version)?;
-    Ok(Path::new(reference.registry())
+    Ok(reference_relative(
+        oci::reference(registry_url, coordinate, version)?,
+        version,
+    ))
+}
+
+/// The cache-root-relative path for an OCI reference: `{host}/{repository}/
+/// {version}/component.wasm`.
+fn reference_relative(reference: oci::OciReference, version: &str) -> PathBuf {
+    Path::new(reference.registry())
         .join(reference.repository())
         .join(version)
-        .join(COMPONENT_FILE))
+        .join(COMPONENT_FILE)
 }
 
 #[cfg(test)]
@@ -67,6 +99,22 @@ mod tests {
     fn layout_includes_registry_prefix() {
         let p = component_relative("oci://ghcr.io/acme", "ns:pkg", "1.2.3").unwrap();
         assert_eq!(p, Path::new("ghcr.io/acme/ns/pkg/1.2.3/component.wasm"));
+    }
+
+    #[test]
+    fn generator_caches_under_its_world_subpath() {
+        let reference = oci::world_reference(
+            "oci://ghcr.io",
+            "wado-lang:gale",
+            crate::build_dep::GENERATOR_WORLD_SEGMENT,
+            "0.0.9",
+        )
+        .unwrap();
+        let p = reference_relative(reference, "0.0.9");
+        assert_eq!(
+            p,
+            Path::new("ghcr.io/wado-lang/gale/core-kiln-generator/0.0.9/component.wasm")
+        );
     }
 
     #[test]

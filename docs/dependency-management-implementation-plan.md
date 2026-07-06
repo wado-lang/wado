@@ -137,15 +137,20 @@ Materialize resolved packages on disk so the compiler can load them.
       `update` → `fetch` → `run` and round-trips values through the published
       `wado-lang:cm-catalog` component.
 - [x] Cache moved to `~/wado/`, overridable by `WADO_ROOT` (`wado-cli::cache`);
-      the `build/` bridge is retired for registry components. Both the compiler's
-      component resolution (`dep_component`) and `wado fetch` write the same tree,
-      so a pre-fetch is a warm cache hit at build time. Kiln generator components
-      still cache project-locally (`build/kiln/generators/`, its own stable-id +
-      lock scheme); moving those is a separate follow-up.
-- [x] ghq-style layout for registry: `{host}/{ns}/{name}/{version}/component.wasm`
-      (registry prefix folds into `{host}/…` via the `oci::reference` repository
-      mapping). Git's `{host}/{owner}/{repo}/{version}-{short-ref}/` waits on the
-      git provider (Phase 6).
+      the `build/` bridge is retired for every fetched registry artifact. Library
+      components (`dep_component`), Kiln generator components (`build_dep` /
+      `kiln_provider`), and `wado fetch` all read and write this one tree, so a
+      pre-fetch is a warm cache hit at build time. `build/kiln/generators/` now
+      holds only source-compiled (`LocalPath`) generators — a genuine build
+      output, not a download.
+- [x] ghq-style layout: a library component at
+      `{host}/{ns}/{name}/{version}/component.wasm`, a generator at
+      `{host}/{ns}/{name}/core-kiln-generator/{version}/component.wasm` (its
+      publish world sub-path), so both artifacts of one package share the tree
+      without colliding. The registry prefix folds into `{host}/…` via the
+      `oci::reference` repository mapping. Git's
+      `{host}/{owner}/{repo}/{version}-{short-ref}/` waits on the git provider
+      (Phase 6).
 - [ ] Extract the pulled component's Wado source tree (or, for wado-to-wado, the
       provider-metadata source) into the version directory alongside its
       `wado.toml`.
