@@ -437,9 +437,10 @@ fn lower_module_specifier(
             manifest_root,
         )));
     }
-    // Namespaced specifier (`ns:name@ver`, `core:foo`, `wasi:foo`, …).
-    // The compiler does not interpret the body here — the build-dep
-    // elaborator / provider does.
+    // A `[build-dependencies]` specifier: an open coordinate (`ns:name[@ver]`)
+    // or a `lib:nickname` indirection. Both carry a `<segment>:` prefix; the
+    // compiler does not interpret the body here — the host resolves it against
+    // `[build-dependencies]`, dispatching on the matched entry's source.
     if let Some(colon) = spec.find(':')
         && colon > 0
         && spec[..colon]
@@ -448,22 +449,15 @@ fn lower_module_specifier(
     {
         return Some(GeneratorModule::Spec(spec.to_string()));
     }
-    // Bare `[build-dependencies]` key (`module: "gale"`). Resolved by the
-    // host against the manifest's build-dependency graph.
-    if !spec.is_empty()
-        && spec
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-    {
-        return Some(GeneratorModule::BuildDep(spec.to_string()));
-    }
+    // A bare name (no `:`) is not a valid specifier — the same rule that rejects
+    // bare `[dependencies]` keys, applied at the reference site.
     errors.push(Diagnostic {
         severity: Severity::Error,
         code: Code::GeneratorOptionsInvalid,
         message: format!(
-            "kiln: `generator.module` must be a relative path (\"./generator.wado\"), \
-             a `[build-dependencies]` name (\"gale\"), or a namespaced spec \
-             (\"ns:name@ver\"), got `{spec}`"
+            "kiln: `generator.module` must be a relative path (\"./generator.wado\") \
+             or a `[build-dependencies]` specifier — an open coordinate (\"ns:name@ver\") \
+             or a `lib:` nickname (\"lib:gale\"); a bare name is not allowed, got `{spec}`"
         ),
         span: Some(span_of(module_path, use_decl)),
     });
@@ -535,7 +529,6 @@ fn module_key(module: &GeneratorModule) -> String {
     match module {
         GeneratorModule::Spec(s) => format!("spec:{s}"),
         GeneratorModule::LocalPath(p) => format!("path:{}", p.as_str()),
-        GeneratorModule::BuildDep(s) => format!("builddep:{s}"),
     }
 }
 
@@ -625,6 +618,46 @@ mod tests {
         assert_eq!(result[0].source.as_str(), "schema.proto");
         assert!(matches!(&result[0].module, GeneratorModule::Spec(s) if s == "ns:gen@1.0.0"));
         assert_eq!(result[0].decl_site.module, "src/main.wado");
+    }
+
+    #[test]
+    fn lib_nickname_module_is_a_spec() {
+        // A `lib:` nickname is a `[build-dependencies]` specifier like an open
+        // coordinate; the host dispatches it on the entry's source.
+        let attrs = attr_with_generator(&[("module", AttrValue::String("lib:gen".to_string()))]);
+        let module = module_with_use("./schema.proto", attrs);
+        let mut mods: IndexMap<String, Module> = IndexMap::default();
+        mods.insert("src/main.wado".to_string(), module);
+
+        let result = collect_inline_invocations(
+            mods.iter().map(|(k, v)| (k.as_str(), v)),
+            &IndexMap::default(),
+            "",
+        )
+        .unwrap();
+        assert!(matches!(&result[0].module, GeneratorModule::Spec(s) if s == "lib:gen"));
+    }
+
+    #[test]
+    fn bare_name_module_is_rejected() {
+        // A bare name (no `:`) is not a valid specifier — only relative paths and
+        // `[build-dependencies]` specifiers (coordinate / `lib:` nickname).
+        let attrs = attr_with_generator(&[("module", AttrValue::String("gen".to_string()))]);
+        let module = module_with_use("./schema.proto", attrs);
+        let mut mods: IndexMap<String, Module> = IndexMap::default();
+        mods.insert("src/main.wado".to_string(), module);
+
+        let errs = collect_inline_invocations(
+            mods.iter().map(|(k, v)| (k.as_str(), v)),
+            &IndexMap::default(),
+            "",
+        )
+        .unwrap_err();
+        assert!(
+            errs.iter()
+                .any(|d| d.message.contains("bare name is not allowed")),
+            "{errs:?}"
+        );
     }
 
     #[test]

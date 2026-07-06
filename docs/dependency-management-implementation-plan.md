@@ -342,9 +342,17 @@ The redesign replaces the options-blob subsystem with typed WIT arguments:
       the `--locked` / `--offline` reproducibility flags (Phase 3).
 - [ ] Carry source-level option defaults across the registry boundary (encode
       them in the component) so an omitted field falls back to the default.
-- [ ] Reconcile the `[build-dependencies]` bare-key form (`module: "gale"` →
-      `BuildDep`) with the coordinate form now that `module: "ns:name"` → `Spec`
-      resolves against the registry.
+- [x] Reconcile the `module:` specifier forms with `[build-dependencies]` keys.
+      `module:` now follows the same rules as a `use ... from` clause: a relative
+      path, or a `[build-dependencies]` specifier (open coordinate or `lib:`
+      nickname) resolved against the manifest and dispatched on the entry's
+      source — a path entry compiles from source, a registry entry pulls a
+      prebuilt component. The syntax no longer selects the resolution path (the
+      old colon→registry / bare→path split is gone), the `GeneratorModule::Spec`
+      / `BuildDep` variants collapsed to one, cache/lock identity keys on the
+      resolved coordinate (so a coordinate and a nickname for one package share
+      an entry), and a bare `module:` name is rejected, as bare dependency keys
+      are.
 
 ## Milestones
 

@@ -70,13 +70,16 @@ impl fmt::Display for DeclSite {
 /// Comes from the `module: "..."` string at the inline `with` clause.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GeneratorModule {
-    /// `"ns:name@version"`, with optional `/<submodule>` suffix.
+    /// A `[build-dependencies]` specifier — an open coordinate
+    /// (`"ns:name[@version]"`) or a `"lib:nickname"` indirection, with an
+    /// optional `/<submodule>` suffix. Resolved by the host against
+    /// `[build-dependencies]`, dispatching on the matched entry's source: a
+    /// path entry is rewritten to [`GeneratorModule::LocalPath`] (compiled from
+    /// source) before it reaches the provider; a registry entry is pulled as a
+    /// prebuilt component. Bare names are rejected at lowering.
     Spec(String),
     /// Resolved local path, already joined against the consuming file's directory.
     LocalPath(InvocationPath),
-    /// A bare `[build-dependencies]` key (`module: "gale"`). Resolved by the
-    /// host to the dependency package's `core:kiln/generator` world entry.
-    BuildDep(String),
 }
 
 /// Compiler-internal canonical form of a Kiln generator invocation.

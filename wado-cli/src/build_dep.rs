@@ -27,6 +27,18 @@ pub const GENERATOR_WORLD_FQ: &str = "core:kiln/generator";
 /// maps the `core:kiln/generator` world to this segment).
 pub const GENERATOR_WORLD_SEGMENT: &str = "core-kiln-generator";
 
+/// The `[build-dependencies]` lookup key for a `module:` specifier: the
+/// coordinate or `lib:` nickname with any `@version` suffix stripped. The `@`
+/// split only applies to a specifier that carries a `:` segment, so a bare
+/// `foo@bar` (never valid here) is returned unchanged.
+#[must_use]
+pub fn spec_key(spec: &str) -> &str {
+    match spec.split_once('@') {
+        Some((key, _)) if key.contains(':') => key,
+        _ => spec,
+    }
+}
+
 /// Stable cache id for a generator coordinate. A published version is immutable,
 /// so keying on the coordinate is enough for the on-disk component cache
 /// (`build/kiln/generators/<id>.wasm`); `wado fetch` and the provider derive the

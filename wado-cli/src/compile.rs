@@ -692,14 +692,15 @@ pub(crate) async fn maybe_run_pipeline(
     Ok(outcome)
 }
 
-/// Rewrite each inline invocation whose `module` is a bare
-/// `[build-dependencies]` name (`module: "gale"`) into a concrete
-/// `LocalPath` pointing at the dependency package's
-/// `[world]."core:kiln/generator"` entry. This resolves build-dep
-/// generators once, off the already-loaded manifest, so the rest of the
-/// pipeline (cache key, generator identity, provider) sees a path-addressed
-/// module. Unresolvable names are left as `BuildDep` for the provider to
-/// report.
+/// Rewrite each inline invocation whose `module` is a `[build-dependencies]`
+/// specifier (`module: "wado-lang:gale"`, `module: "lib:gale"`) that resolves to
+/// a *path* dependency into a concrete `LocalPath` pointing at the dependency
+/// package's `[world]."core:kiln/generator"` entry. This dispatches the
+/// specifier on its declared source once, off the already-loaded manifest: a
+/// path build-dependency compiles from source (like any path dep), so the rest
+/// of the pipeline (cache key, generator identity, provider) sees a
+/// path-addressed module; a registry build-dependency is left as `Spec` for the
+/// provider to pull as a prebuilt component.
 pub(crate) fn rewrite_build_dep_modules(
     inline: &mut [wado_compiler::kiln::Invocation],
     manifest: &wado_manifest::Manifest,
@@ -707,10 +708,11 @@ pub(crate) fn rewrite_build_dep_modules(
 ) {
     use wado_compiler::kiln::GeneratorModule;
     for inv in inline.iter_mut() {
-        let GeneratorModule::BuildDep(name) = &inv.module else {
+        let GeneratorModule::Spec(spec) = &inv.module else {
             continue;
         };
-        if let Some(local) = build_dep_generator_local_path(name, manifest, manifest_root) {
+        let key = crate::build_dep::spec_key(spec);
+        if let Some(local) = build_dep_generator_local_path(key, manifest, manifest_root) {
             inv.module = GeneratorModule::LocalPath(local);
         }
     }
@@ -720,8 +722,8 @@ pub(crate) fn rewrite_build_dep_modules(
 /// at a *directory* (a generator package) into a `LocalPath` pointing at
 /// that package's `[world]."core:kiln/generator"` entry file. This collapses
 /// `module: "../pkg"` onto the same path-addressed identity — and therefore
-/// the same cache key — as `module: "../pkg/src/generator.wado"` and the
-/// `[build-dependencies]` name form, all of which resolve to one entry file.
+/// the same cache key — as `module: "../pkg/src/generator.wado"` and a path
+/// `[build-dependencies]` specifier, all of which resolve to one entry file.
 /// Resolved off the filesystem before the pipeline runs, mirroring
 /// [`rewrite_build_dep_modules`]. A directory without a resolvable generator
 /// world entry is left untouched for the provider to report.
@@ -752,11 +754,11 @@ pub(crate) fn rewrite_local_dir_modules(
 /// entry>`. `None` when the dependency is absent, not a path dep, or declares
 /// no `core:kiln/generator` world.
 fn build_dep_generator_local_path(
-    name: &str,
+    key: &str,
     manifest: &wado_manifest::Manifest,
     manifest_root: &Path,
 ) -> Option<wado_compiler::kiln::InvocationPath> {
-    let dep = manifest.build_dependencies.get(name)?;
+    let dep = manifest.build_dependencies.get(key)?;
     let DependencySource::Path { path, .. } = &dep.source else {
         return None;
     };

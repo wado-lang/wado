@@ -2,21 +2,20 @@
 //!
 //! Resolves a [`GeneratorModule`] into a [`ResolvedGenerator`] (wasm
 //! bytes + options descriptor + source-closure hash) for the Kiln
-//! driver. Supports [`GeneratorModule::LocalPath`] (`module:
-//! "./generator.wado"`) and [`GeneratorModule::BuildDep`] (`module:
-//! "gale"`, resolved against `[build-dependencies]` to the package's
-//! `core:kiln/generator` world entry). A directory `module:` (e.g.
-//! `"../package-gale"`) is rewritten to its package's
-//! `[world]."core:kiln/generator"` entry by
-//! [`crate::compile::rewrite_local_dir_modules`] before resolution, so it
-//! reaches this provider as a plain `LocalPath` to the entry file.
-//! Spec-form generators (`module = "ns:name"`) resolve against
-//! `[build-dependencies]` + `[registries]`: the coordinate's highest
-//! published version is pulled from the `core-kiln-generator` world
-//! sub-path as a prebuilt component, and its options descriptor is
-//! recovered from the component WIT (see [`resolve_spec`] and
-//! [`crate::kiln_wit`]). A spec with no matching build-dependency, or a
-//! non-registry one, surfaces [`ProviderError::Unsupported`].
+//! driver. It has two variants:
+//!
+//! - [`GeneratorModule::LocalPath`] — an inline relative-path `module:
+//!   "./generator.wado"`, a directory `module: "../package-gale"` (rewritten to
+//!   its `[world]."core:kiln/generator"` entry by
+//!   [`crate::compile::rewrite_local_dir_modules`]), or a *path*
+//!   `[build-dependencies]` specifier (rewritten by
+//!   [`crate::compile::rewrite_build_dep_modules`]). All compile from source.
+//! - [`GeneratorModule::Spec`] — a *registry* `[build-dependencies]` specifier
+//!   (`module: "wado-lang:gale"` / `module: "lib:gale"`). Its published version
+//!   is pulled from the `core-kiln-generator` world sub-path as a prebuilt
+//!   component and its options descriptor is recovered from the component WIT
+//!   (see [`resolve_spec`] and [`crate::kiln_wit`]). A spec with no matching
+//!   build-dependency surfaces [`ProviderError::Unsupported`].
 //!
 //! For `LocalPath`, `resolve` reads the generator source, consults the
 //! on-disk cache at `build/kiln/{generators,metadata}/<stable-id>.*`
@@ -625,40 +624,34 @@ fn hex32(bytes: &[u8; 32]) -> String {
 /// The OCI world segment a Kiln generator publishes to (`wado publish` maps
 /// the `core:kiln/generator` world to this repository sub-path).
 impl CliGeneratorProvider {
-    /// Resolve a `module: "ns:name"` registry generator: look the coordinate up
-    /// in `[build-dependencies]`, pick the version (the `wado.lock` pin when one
-    /// exists, else the highest published version matching the requirement), pull
-    /// its `core-kiln-generator` component, and recover its options descriptor
-    /// from the component WIT.
+    /// Resolve a `module: "ns:name"` / `module: "lib:nick"` registry generator:
+    /// look the specifier up in `[build-dependencies]`, pick the version (the
+    /// `wado.lock` pin when one exists, else the highest published version
+    /// matching the requirement), pull its `core-kiln-generator` component, and
+    /// recover its options descriptor from the component WIT.
+    ///
+    /// A path build-dependency is rewritten to `LocalPath` before it reaches the
+    /// provider, so a `Spec` here is always a registry entry.
     ///
     /// The pulled component is cached under `build/kiln/generators/` keyed by the
-    /// coordinate — the same location `wado fetch` pre-populates — so a warm cache
-    /// (or a fetched tree) short-circuits the registry round-trip. A published
-    /// version is immutable, so this is sound. `--no-cache` forces a re-pull.
+    /// resolved coordinate — the same location `wado fetch` pre-populates — so a
+    /// warm cache (or a fetched tree) short-circuits the registry round-trip. A
+    /// published version is immutable, so this is sound. `--no-cache` forces a
+    /// re-pull.
     async fn resolve_spec(&self, spec: &str) -> Result<ResolvedGenerator, ProviderError> {
-        // The build-dependency key is the bare coordinate; a `@version` suffix on
-        // the spec (rare) pins the version directly.
-        let (coordinate, pinned) = match spec.rsplit_once('@') {
-            Some((coord, ver)) if coord.contains(':') => (coord, Some(ver.to_string())),
-            _ => (spec, None),
-        };
-        let stable_id = crate::build_dep::generator_stable_id(coordinate);
-        if !self.no_cache
-            && let Some(resolved) = self.try_read_spec_cache(&stable_id)
-        {
-            return Ok(resolved);
-        }
+        // The lookup key is the coordinate/nickname; a `@version` suffix pins the
+        // version directly.
+        let key = crate::build_dep::spec_key(spec);
+        let pinned = spec[key.len()..].strip_prefix('@').map(str::to_string);
 
-        let dep = self
-            .registry
-            .build_dependencies
-            .get(coordinate)
-            .ok_or_else(|| ProviderError::Unsupported {
+        let dep = self.registry.build_dependencies.get(key).ok_or_else(|| {
+            ProviderError::Unsupported {
                 message: format!(
                     "kiln: generator `{spec}` is not declared in [build-dependencies]; \
-                     add `\"{coordinate}\" = {{ version = \"...\" }}`"
+                     add `\"{key}\" = {{ version = \"...\" }}`"
                 ),
-            })?;
+            }
+        })?;
         let wado_manifest::DependencySource::Registry {
             registry,
             package,
@@ -667,18 +660,29 @@ impl CliGeneratorProvider {
         else {
             return Err(ProviderError::Unsupported {
                 message: format!(
-                    "kiln: generator `{spec}` must be a registry [build-dependencies] entry; \
-                     path and git generator sources are not supported"
+                    "kiln: generator `{spec}` must resolve to a registry or path \
+                     [build-dependencies] entry; git and workspace sources are not supported"
                 ),
             });
         };
+
+        // Identity is the *resolved* coordinate (`package`), so a coordinate and
+        // a `lib:` nickname for the same package share one cache entry and lock
+        // pin (WEP "generator identity").
+        let stable_id = crate::build_dep::generator_stable_id(package);
+        if !self.no_cache
+            && let Some(resolved) = self.try_read_spec_cache(&stable_id)
+        {
+            return Ok(resolved);
+        }
+
         let registry_url = self.registry_url(registry.as_deref())?;
         // Prefer the `wado.lock` pin, then a `@version` spec suffix, then a live
         // registry version listing.
         let version = match self
             .registry
             .locked_versions
-            .get(coordinate)
+            .get(package)
             .cloned()
             .or(pinned)
         {
@@ -738,7 +742,8 @@ impl CliGeneratorProvider {
     }
 
     /// Compile (or read from cache) a generator at a manifest-root-relative
-    /// path. Shared by `LocalPath` and `BuildDep` resolution.
+    /// path. Used by `LocalPath` resolution (inline paths and rewritten path
+    /// build-dependencies).
     async fn resolve_local(
         &self,
         path: &InvocationPath,
@@ -764,19 +769,11 @@ impl CliGeneratorProvider {
 impl GeneratorProvider for CliGeneratorProvider {
     async fn resolve(&self, module: &GeneratorModule) -> Result<ResolvedGenerator, ProviderError> {
         match module {
+            // A `Spec` reaching the provider is a *registry* build-dependency:
+            // a path build-dependency is rewritten to `LocalPath` up front by
+            // `compile::rewrite_build_dep_modules`.
             GeneratorModule::Spec(spec) => self.resolve_spec(spec).await,
             GeneratorModule::LocalPath(path) => self.resolve_local(path).await,
-            // `BuildDep` is rewritten to `LocalPath` by the CLI before the
-            // pipeline runs (see `compile::rewrite_build_dep_modules`); an
-            // unresolved one means the `[build-dependencies]` entry was
-            // missing or declared no `core:kiln/generator` world.
-            GeneratorModule::BuildDep(name) => Err(ProviderError::Internal {
-                message: format!(
-                    "kiln: generator module `{name}` could not be resolved against \
-                     [build-dependencies]: no such path dependency, or it declares no \
-                     [world].\"core:kiln/generator\" entry"
-                ),
-            }),
         }
     }
 }
