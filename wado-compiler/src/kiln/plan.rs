@@ -220,7 +220,7 @@ mod tests {
                 module: format!("src/{name}.wado"),
                 synthetic_id: format!("kiln-{name}"),
             },
-            module: GeneratorModule::Spec(format!("ns:{name}@1.0.0")),
+            module: GeneratorModule::Spec(format!("ns:{name}@1.0.0").into()),
             from: InvocationPath::normalize(from),
             source: InvocationPath::normalize(from),
             inputs: inputs

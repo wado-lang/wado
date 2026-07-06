@@ -1,3 +1,4 @@
+pub mod cache;
 mod lockfile;
 mod manifest;
 mod metadata;

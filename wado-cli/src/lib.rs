@@ -8,9 +8,12 @@
 
 pub mod args;
 pub mod build;
+pub mod build_dep;
+pub mod cache;
 pub mod check;
 pub mod compile;
 pub mod compiler_host;
+pub mod dep_component;
 pub mod discover;
 pub mod doc;
 pub mod dump;
@@ -22,6 +25,7 @@ pub mod kiln_driver;
 pub mod kiln_metadata;
 pub mod kiln_provider;
 pub mod kiln_runtime;
+pub mod kiln_wit;
 pub mod lsp;
 pub mod manifest;
 pub mod metadata_embed;

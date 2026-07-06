@@ -15,6 +15,8 @@ use oci_client::client::{Certificate, CertificateEncoding, ClientConfig};
 use oci_client::secrets::RegistryAuth;
 use oci_client::{Client, Reference};
 
+pub use oci_client::Reference as OciReference;
+
 /// The OCI layer media type `wado publish` (via `wkg`) writes for a component.
 const WASM_LAYER_MEDIA_TYPE: &str = "application/wasm";
 
@@ -45,6 +47,25 @@ pub fn reference(registry_url: &str, package: &str, tag: &str) -> Result<Referen
     repository.push_str(name);
     Ok(Reference::with_tag(
         host.to_string(),
+        repository,
+        tag.to_string(),
+    ))
+}
+
+/// Build the OCI [`Reference`] for a package's *world sub-path* — the layout
+/// `wado publish` uses for a non-library world (`ns:pkg` at world `<segment>`
+/// pushes to `<host>/<prefix>/<ns>/<pkg>/<segment>:<tag>`). A Kiln generator
+/// lives at the `core-kiln-generator` segment of its package.
+pub fn world_reference(
+    registry_url: &str,
+    package: &str,
+    world_segment: &str,
+    tag: &str,
+) -> Result<Reference, String> {
+    let base = reference(registry_url, package, tag)?;
+    let repository = format!("{}/{world_segment}", base.repository());
+    Ok(Reference::with_tag(
+        base.registry().to_string(),
         repository,
         tag.to_string(),
     ))

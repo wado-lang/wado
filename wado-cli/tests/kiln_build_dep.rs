@@ -1,9 +1,11 @@
-//! End-to-end test: a Kiln generator referenced by its `[build-dependencies]`
-//! name (`module: "gen"`) instead of a relative path.
+//! End-to-end test: a Kiln generator referenced by a `lib:` nickname
+//! `[build-dependencies]` specifier (`module: "lib:gen"`) instead of a relative
+//! path.
 //!
-//! The bare name resolves against `[build-dependencies]`; the provider reads
-//! the dependency package's `[world]."core:kiln/generator"` entry, compiles
-//! it, runs it, and the generated module is imported by the consumer.
+//! The specifier resolves against `[build-dependencies]` and dispatches on the
+//! entry's source: a path entry reads the dependency package's
+//! `[world]."core:kiln/generator"` entry, compiles it, runs it, and the
+//! generated module is imported by the consumer.
 
 use predicates::prelude::*;
 use std::fs;
@@ -12,7 +14,7 @@ mod common;
 use common::wado_in;
 
 #[test]
-fn generator_resolved_by_build_dependency_name() {
+fn generator_resolved_by_build_dependency_nickname() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
 
@@ -52,7 +54,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
     )
     .unwrap();
 
-    // Consumer: references the generator by its build-dependency name.
+    // Consumer: references the generator by a `lib:` nickname build-dependency.
     let app = root.join("app");
     fs::create_dir_all(app.join("src")).unwrap();
     fs::write(
@@ -65,7 +67,7 @@ version = "0.1.0"
 "wasi:cli/command" = "src/main.wado"
 
 [build-dependencies]
-gen = { path = "../gen" }
+"lib:gen" = { path = "../gen" }
 "#,
     )
     .unwrap();
@@ -75,7 +77,7 @@ gen = { path = "../gen" }
         r#"use { println, Stdout } from "core:cli";
 use { greeting } from "./schema.idl" with {
     generator: {
-        module: "gen",
+        module: "lib:gen",
         options: { verbose: false },
     },
 };

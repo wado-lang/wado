@@ -132,15 +132,25 @@ it carries no transitive Wado dependencies and no source entry module.
 
 Materialize resolved packages on disk so the compiler can load them.
 
-- [x] `wado fetch` (bridge): resolve, then pull each registry component into
-      `<root>/build/<name>.wasm` — the local wasm-asset location a project
-      imports today, since registry-dep import resolution is Phase 4. Verified
-      live end to end: `example/hello-packages` runs `update` → `fetch` → `run` and
-      round-trips values through the published `wado-lang:cm-catalog` component.
-- [ ] Move the cache to `~/wado/`, overridable by `WADO_ROOT`, once Phase 4
-      resolves registry-dep imports from it (retire the `build/` bridge).
-- [ ] ghq-style layout: `{host}/{ns}/{name}/{version}/` for registry,
-      `{host}/{owner}/{repo}/{version}-{short-ref}/` for git.
+- [x] `wado fetch`: resolve, then pull each registry component into the shared
+      cache. Verified live end to end: `example/hello-packages` runs
+      `update` → `fetch` → `run` and round-trips values through the published
+      `wado-lang:cm-catalog` component.
+- [x] Cache moved to `~/wado/`, overridable by `WADO_ROOT` (`wado-cli::cache`);
+      the `build/` bridge is retired for every fetched registry artifact. Library
+      components (`dep_component`), Kiln generator components (`build_dep` /
+      `kiln_provider`), and `wado fetch` all read and write this one tree, so a
+      pre-fetch is a warm cache hit at build time. `build/kiln/generators/` now
+      holds only source-compiled (`LocalPath`) generators — a genuine build
+      output, not a download.
+- [x] ghq-style layout: a library component at
+      `{host}/{ns}/{name}/{version}/component.wasm`, a generator at
+      `{host}/{ns}/{name}/core-kiln-generator/{version}/component.wasm` (its
+      publish world sub-path), so both artifacts of one package share the tree
+      without colliding. The registry prefix folds into `{host}/…` via the
+      `oci::reference` repository mapping. Git's
+      `{host}/{owner}/{repo}/{version}-{short-ref}/` waits on the git provider
+      (Phase 6).
 - [ ] Extract the pulled component's Wado source tree (or, for wado-to-wado, the
       provider-metadata source) into the version directory alongside its
       `wado.toml`.
@@ -175,16 +185,33 @@ else the canonical ABI). This is the key modeling decision Phase 4 must settle:
 dependency needs its own representation (the cached `.wasm` + its WIT), distinct
 from source deps.
 
-- [ ] Represent a prebuilt-component dependency distinctly from a source
-      dependency (path deps stay source; registry deps are components).
-- [ ] Map a registry dependency key to its cached component + WIT so `use { … }
-      from "ns:pkg"` type-checks against the component's exported interface.
+- [x] Represent a prebuilt-component dependency distinctly from a source
+      dependency: `DependencyIndex.components` (coordinate/specifier → cached
+      `.wasm`) sits beside `resolved` (path/source deps), and the loader resolves
+      a component import to a `ModuleSource::Wasm` composed across the CM boundary.
+- [x] Map a registry dependency key to its cached component so `use { … } from
+      "ns:pkg"` type-checks against the component's exported interface (WIT
+      decoded from the component itself, WEP 2026-06-26).
+- [x] Every entry point resolves component imports, not just `build`/`run`:
+      `check` and `query` fetch through the shared resolver (offline on a warm
+      cache); the `wado lsp` server reads the warm `~/wado/` cache offline via
+      `dependency_index_from` (cold cache → an `unresolved` `wado fetch` hint).
+      Fixed a latent bug where the Engine's `DiagnosticCollector` dropped the
+      host's dependency index entirely (path deps included).
+- [ ] `wado lsp` server: resolve a **single-file inline** component source
+      (`use … from "ns:pkg@ver" with { registry }`, no `wado.toml`). The server's
+      `dependency_index()` builds from the nearest manifest and never sees the
+      open document's text, so an inline `with` in a manifest-less script is not
+      resolved in the editor — `wado check`/`query` (which parse the source)
+      handle it. Needs the server to parse the active document's `use` clauses
+      into the index, like the CLI does.
 - [ ] Version-aware routing: `resolve_import(from, spec)` resolves against the
       importing package's own deps, so semver-incompatible versions of one
       package become distinct dependency ids (WEP "Transitive Version
       Isolation"). Natural for components (CM instances are type-isolated).
-- [ ] E2E: a fixture project depending on `wado-lang:cm-catalog` builds and runs
-      against ghcr (`wado build` / `wado run`).
+- [x] E2E: `example/hello-packages` depends on `wado-lang:cm-catalog` and builds
+      and runs against ghcr (`wado run`), round-tripping values through the
+      composed component.
 
 ### Phase 5 — Dependency-editing CLI
 
@@ -216,7 +243,19 @@ conflict errors, once real registries make multi-constraint graphs common.
 
 ### Phase 8 — Remaining WEP surface
 
-- [ ] Single-file `with { … }` inline dependency source (no `wado.toml`).
+- [~] Single-file `with { … }` inline dependency source (no `wado.toml`). Done
+  for Kiln generators: `generator: { module, version, registry }` supplies a
+  registry generator's source inline, so a single `.wado` file consumes a
+  published generator with no manifest (Kiln WEP "Single-file mode: inline
+  generator source"). Done for registry library components:
+  `use { X } from "ns:pkg@ver" with { registry }` fetches the prebuilt
+  component inline (exact pin, no lock), keyed by the verbatim specifier;
+  an inline `with` for a specifier also in `[dependencies]` is rejected as
+  mutually exclusive. A `lib:nick` alias fetches the coordinate named by
+  `with { package }` while keeping the nickname as the loader's lookup key,
+  in both single-file (`with { package, registry, version }`) and manifest
+  (a `lib:nick` `[dependencies]` entry) mode. `with { git = … }` inline
+  sources are still pending.
 - [ ] Workspace publish/resolve edge cases beyond what `publish` covers.
 - [ ] `wado.lock` integrity extensibility (algorithm prefix already in schema).
 
@@ -319,11 +358,40 @@ The redesign replaces the options-blob subsystem with typed WIT arguments:
       the signature is per-generator; shared `kiln-host` linking is unchanged.
 - [ ] Cache key: canonically encode the validated options value as the key
       function only (no wire blob).
-- [ ] `GeneratorModule::Spec` resolution: resolve coordinate against
-      `[build-dependencies]`, fetch the component at its world sub-path into
-      `build/`, read its options type from the WIT, return a `ResolvedGenerator`.
-- [ ] Republish gale under the new world; validate `example/hello-packages`
-      against the registry.
+- [x] `GeneratorModule::Spec` resolution (`kiln_provider::resolve_spec`): resolve
+      the coordinate against `[build-dependencies]` + `[registries]`, pick the
+      highest published version matching the requirement, pull the component from
+      its `core-kiln-generator` world sub-path (versions listed on the sub-path
+      repository — public on GHCR while the bare repo may not be), and recover
+      the options descriptor from the component WIT (`kiln_wit`). Cached under
+      `build/kiln/generators/` keyed by the spec; a warm cache skips the registry
+      round-trip. WIT records carry no field defaults, so a registry generator's
+      options fields are all required (no source-level defaults across the
+      boundary).
+- [x] Republish gale under the new world (0.0.9) and validate
+      `example/hello-packages` against the registry: `module: "wado-lang:gale"`
+      compiles and runs end to end (`calc::parse("1 + 2 * 3")`).
+- [x] Fold `[build-dependencies]` into the lock/fetch path (`wado-cli::build_dep`):
+      `wado update` resolves each registry build-dependency at its generator world
+      sub-path and writes a `[[build-dependency]]` lock entry with the artifact's
+      integrity digest; `deps_hash` now covers `[build-dependencies]`; `wado fetch`
+      pre-pulls the generator into `build/kiln/generators/`; and `resolve_spec`
+      prefers the locked version (skipping the version listing) and reuses the
+      fetched component. Enforcing the recorded integrity on fetch/compile waits on
+      the `--locked` / `--offline` reproducibility flags (Phase 3).
+- [ ] Carry source-level option defaults across the registry boundary (encode
+      them in the component) so an omitted field falls back to the default.
+- [x] Reconcile the `module:` specifier forms with `[build-dependencies]` keys.
+      `module:` now follows the same rules as a `use ... from` clause: a relative
+      path, or a `[build-dependencies]` specifier (open coordinate or `lib:`
+      nickname) resolved against the manifest and dispatched on the entry's
+      source — a path entry compiles from source, a registry entry pulls a
+      prebuilt component. The syntax no longer selects the resolution path (the
+      old colon→registry / bare→path split is gone), the `GeneratorModule::Spec`
+      / `BuildDep` variants collapsed to one, cache/lock identity keys on the
+      resolved coordinate (so a coordinate and a nickname for one package share
+      an entry), and a bare `module:` name is rejected, as bare dependency keys
+      are.
 
 ## Milestones
 

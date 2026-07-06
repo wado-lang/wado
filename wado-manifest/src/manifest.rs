@@ -55,8 +55,9 @@ impl Manifest {
         self.world.get(world_fq).map(|w| w.entry.as_str())
     }
 
-    /// Deterministic `sha256:` hash of `[dependencies]` + `[dev-dependencies]`
-    /// for lock staleness. Sources are normalized so equal manifests hash equally.
+    /// Deterministic `sha256:` hash of `[dependencies]` + `[dev-dependencies]` +
+    /// `[build-dependencies]` for lock staleness. Sources are normalized so equal
+    /// manifests hash equally.
     #[must_use]
     pub fn deps_hash(&self) -> String {
         use sha2::{Digest, Sha256};
@@ -64,6 +65,7 @@ impl Manifest {
         for (label, deps) in [
             ("deps", &self.dependencies),
             ("dev", &self.dev_dependencies),
+            ("build", &self.build_dependencies),
         ] {
             let mut keys: Vec<&String> = deps.keys().collect();
             keys.sort();

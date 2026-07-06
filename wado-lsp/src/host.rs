@@ -86,14 +86,99 @@ impl CompilerHost for FilesystemCompilerHost {
     }
 }
 
-/// Build the bare-name → entry-path dependency index from a manifest's
-/// `[dependencies]`. Each path dependency's entry module (its
-/// `[package].lib`, or the file itself for a single-`.wado` path dependency)
-/// is recorded relative to `base` — the same base `load_source` joins against
-/// — so `use { … } from "<name>"` resolves to it. `manifest_dir` is the
-/// directory containing the manifest (path deps resolve against it).
-///
-/// Only `path` dependencies are supported for now; registry/git are skipped.
+/// A registry `[dependencies]` entry resolved to its exact lock-pinned version
+/// and shared-cache location — the single source of truth shared by the LSP
+/// (which reads the cache offline) and the CLI (which fetches a cold cache).
+#[derive(Debug)]
+pub struct RegistryComponentNeed {
+    /// Manifest dependency key — the specifier the loader looks up.
+    pub name: String,
+    /// `oci://…` registry URL the component is pulled from.
+    pub registry_url: String,
+    /// `ns:pkg` coordinate.
+    pub coordinate: String,
+    /// Exact version pinned by `wado.lock`.
+    pub version: String,
+    /// Absolute path the component occupies in the shared cache.
+    pub cache_path: PathBuf,
+}
+
+/// Resolve every registry `[dependencies]` entry to its lock-pinned cache need.
+/// `Ok(need)` carries the exact version + cache path (whether or not the file is
+/// present); `Err((name, reason))` explains why it cannot be placed offline (no
+/// registry in scope, no lock pin, or no cache root). Shared so the LSP index
+/// and the CLI fetch derive identical coordinates, versions, and paths.
+#[must_use]
+pub fn registry_component_needs(
+    manifest: &wado_manifest::Manifest,
+    manifest_dir: &Path,
+) -> Vec<Result<RegistryComponentNeed, (String, String)>> {
+    let root = cache_root();
+    let locked = locked_registry_versions(manifest_dir);
+    manifest
+        .dependencies
+        .iter()
+        .filter_map(|(name, dep)| match &dep.source {
+            DependencySource::Registry {
+                registry, package, ..
+            } => Some(
+                registry_component_need(
+                    manifest,
+                    name,
+                    registry.as_deref(),
+                    package,
+                    &locked,
+                    root.as_deref(),
+                )
+                .map_err(|reason| (name.clone(), reason)),
+            ),
+            _ => None,
+        })
+        .collect()
+}
+
+fn registry_component_need(
+    manifest: &wado_manifest::Manifest,
+    name: &str,
+    registry: Option<&str>,
+    package: &str,
+    locked: &std::collections::BTreeMap<String, String>,
+    cache_root: Option<&Path>,
+) -> Result<RegistryComponentNeed, String> {
+    let alias = registry.unwrap_or("default");
+    let registry_url = manifest
+        .registries
+        .get(alias)
+        .ok_or_else(|| format!("no `[registries].{alias}` for {package:?}"))?;
+    // Match by the full lock id (`registry+<url>/<coordinate>`), not the bare
+    // coordinate, so the same package hosted on two registries stays distinct.
+    let id = format!("registry+{registry_url}/{package}");
+    let version = locked
+        .get(&id)
+        .ok_or_else(|| format!("no `wado.lock` version for {package:?}; run `wado update`"))?;
+    let cache_root =
+        cache_root.ok_or_else(|| format!("no cache root for {package:?}; set `WADO_ROOT`"))?;
+    let relative =
+        wado_manifest::cache::registry_cache_relative(registry_url, package, None, version)
+            .ok_or_else(|| format!("cannot place {package:?} in the cache"))?;
+    Ok(RegistryComponentNeed {
+        name: name.to_string(),
+        registry_url: registry_url.clone(),
+        coordinate: package.to_string(),
+        version: version.clone(),
+        cache_path: cache_root.join(relative),
+    })
+}
+
+/// Build the dependency index from a manifest's `[dependencies]`. A `path`
+/// dependency's entry module (its `[package].lib`, or the file itself for a
+/// single-`.wado` path dependency) is recorded relative to `base` — the same
+/// base `load_source` joins against — so `use { … } from "<name>"` resolves to
+/// it. A `registry` dependency is a prebuilt component: its warm `~/wado/` cache
+/// path is recorded so the same import resolves offline (a cold cache lands in
+/// `unresolved` with a `wado fetch` hint instead of a generic error). `git` and
+/// `workspace` are skipped. `manifest_dir` contains the manifest (path deps and
+/// the lock resolve against it).
 #[must_use]
 pub fn dependency_index_from(
     manifest: &wado_manifest::Manifest,
@@ -103,21 +188,74 @@ pub fn dependency_index_from(
     let mut index = DependencyIndex::default();
     let base_abs = absolutize(base);
     for (name, dep) in &manifest.dependencies {
-        let DependencySource::Path { path, .. } = &dep.source else {
-            continue;
-        };
-        match dependency_entry_path(&manifest_dir.join(path)) {
-            Ok(entry) => {
-                index
-                    .resolved
-                    .insert(name.clone(), relative_path(&base_abs, &absolutize(&entry)));
+        match &dep.source {
+            DependencySource::Path { path, .. } => {
+                match dependency_entry_path(&manifest_dir.join(path)) {
+                    Ok(entry) => {
+                        index
+                            .resolved
+                            .insert(name.clone(), relative_path(&base_abs, &absolutize(&entry)));
+                    }
+                    Err(reason) => {
+                        index.unresolved.insert(name.clone(), reason);
+                    }
+                }
             }
-            Err(reason) => {
-                index.unresolved.insert(name.clone(), reason);
+            DependencySource::Git { .. } | DependencySource::Workspace => {}
+            // Registry deps are indexed from `registry_component_needs` below,
+            // so the lock is read once for the whole manifest.
+            DependencySource::Registry { .. } => {}
+        }
+    }
+    for need in registry_component_needs(manifest, manifest_dir) {
+        match need {
+            Ok(need) if need.cache_path.is_file() => {
+                index
+                    .components
+                    .insert(need.name, need.cache_path.display().to_string());
+            }
+            Ok(need) => {
+                index.unresolved.insert(
+                    need.name,
+                    format!("{:?} is not cached; run `wado fetch`", need.coordinate),
+                );
+            }
+            Err((name, reason)) => {
+                index.unresolved.insert(name, reason);
             }
         }
     }
     index
+}
+
+/// `lock id -> version` for every registry `[[package]]` in `manifest_dir`'s
+/// `wado.lock`. Keyed by the full id so distinct registries never collide.
+/// Empty when no lock is present (a cold checkout).
+fn locked_registry_versions(manifest_dir: &Path) -> std::collections::BTreeMap<String, String> {
+    let mut out = std::collections::BTreeMap::new();
+    let Ok(text) = std::fs::read_to_string(manifest_dir.join("wado.lock")) else {
+        return out;
+    };
+    let Ok(lock) = text.parse::<wado_manifest::LockFile>() else {
+        return out;
+    };
+    for pkg in &lock.packages {
+        out.insert(pkg.id.clone(), pkg.version.clone());
+    }
+    out
+}
+
+/// The dependency cache root: `$WADO_ROOT`, else `~/wado` (`$HOME/wado`).
+/// `None` when neither is set — an honest "no cache" (registry deps then read
+/// as uncached) rather than a meaningless relative path.
+#[must_use]
+pub fn cache_root() -> Option<PathBuf> {
+    if let Some(root) = std::env::var_os("WADO_ROOT").filter(|v| !v.is_empty()) {
+        return Some(PathBuf::from(root));
+    }
+    std::env::var_os("HOME")
+        .filter(|v| !v.is_empty())
+        .map(|home| PathBuf::from(home).join("wado"))
 }
 
 /// Walk up from `start` to find the nearest `wado.toml`, returning the parsed
@@ -201,4 +339,77 @@ fn normalized_components(p: &Path) -> Vec<String> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+    use std::path::Path;
+
+    use super::{RegistryComponentNeed, registry_component_need};
+
+    fn manifest_with_registry_dep() -> wado_manifest::Manifest {
+        "[package]\nname=\"app\"\nversion=\"0.1.0\"\n\n\
+         [registries]\ndefault=\"oci://ghcr.io\"\n\n\
+         [dependencies]\n\"wado-lang:cm-catalog\" = { version = \"^0.1\" }\n"
+            .parse()
+            .unwrap()
+    }
+
+    fn locked(version: &str) -> BTreeMap<String, String> {
+        BTreeMap::from([(
+            "registry+oci://ghcr.io/wado-lang:cm-catalog".to_string(),
+            version.to_string(),
+        )])
+    }
+
+    fn need(
+        locked: &BTreeMap<String, String>,
+        cache_root: Option<&Path>,
+    ) -> Result<RegistryComponentNeed, String> {
+        registry_component_need(
+            &manifest_with_registry_dep(),
+            "wado-lang:cm-catalog",
+            None,
+            "wado-lang:cm-catalog",
+            locked,
+            cache_root,
+        )
+    }
+
+    #[test]
+    fn need_uses_the_lock_version_and_ghq_layout() {
+        let n = need(&locked("0.1.0"), Some(Path::new("/cache"))).unwrap();
+        assert_eq!(n.name, "wado-lang:cm-catalog");
+        assert_eq!(n.coordinate, "wado-lang:cm-catalog");
+        assert_eq!(n.version, "0.1.0");
+        assert_eq!(n.registry_url, "oci://ghcr.io");
+        assert_eq!(
+            n.cache_path,
+            Path::new("/cache/ghcr.io/wado-lang/cm-catalog/0.1.0/component.wasm")
+        );
+    }
+
+    #[test]
+    fn need_matches_by_full_lock_id_not_bare_coordinate() {
+        // A different registry hosting the same coordinate must not match.
+        let other = BTreeMap::from([(
+            "registry+oci://other.io/wado-lang:cm-catalog".to_string(),
+            "9.9.9".to_string(),
+        )]);
+        let err = need(&other, Some(Path::new("/cache"))).unwrap_err();
+        assert!(err.contains("wado update"), "{err}");
+    }
+
+    #[test]
+    fn need_without_lock_pin_asks_for_update() {
+        let err = need(&BTreeMap::new(), Some(Path::new("/cache"))).unwrap_err();
+        assert!(err.contains("wado update"), "{err}");
+    }
+
+    #[test]
+    fn need_without_cache_root_asks_for_wado_root() {
+        let err = need(&locked("0.1.0"), None).unwrap_err();
+        assert!(err.contains("WADO_ROOT"), "{err}");
+    }
 }

@@ -30,8 +30,20 @@ async fn prepare_query(filename: &str) -> Result<PreparedQuery, CliExit> {
     // canonical path for the pipeline would seed the host's dependency index
     // from a different manifest root than the pipeline uses.
     let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let base = canonical
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_default();
     let manifest_pair = crate::compile::load_nearest_manifest(&canonical);
-    let host = entry_host(&canonical, manifest_pair.as_ref());
+    let host = crate::compile::attach_manifest_and_component_deps(
+        FilesystemCompilerHost::silent(base.clone()),
+        manifest_pair.as_ref(),
+        &base,
+        &source,
+        false,
+    )
+    .await
+    .map_err(CliExit::error)?;
     let uri = format!("file://{}", canonical.display());
 
     let mut engine = wado_lsp::Engine::new();
@@ -181,7 +193,7 @@ struct SymbolEnv {
     uri: String,
 }
 
-fn symbol_env(notation: &str, base: &str) -> Result<SymbolEnv, CliExit> {
+async fn symbol_env(notation: &str, base: &str) -> Result<SymbolEnv, CliExit> {
     let parsed = wado_compiler::symbol_notation::parse(notation)
         .map_err(|e| CliExit::error(format!("invalid symbol notation: {e}")))?;
     // Reject a module string that isn't a valid module path now, with a clean
@@ -191,14 +203,20 @@ fn symbol_env(notation: &str, base: &str) -> Result<SymbolEnv, CliExit> {
         .map_err(|e| CliExit::error(format!("invalid module '{}': {e}", parsed.module)))?;
     let base_dir = fs::canonicalize(base).unwrap_or_else(|_| Path::new(base).to_path_buf());
     // Synthetic entry: never read from disk (opened with explicit text), but
-    // its directory anchors relative-module resolution at `base`.
+    // its directory anchors relative-module resolution at `base`. Its imports
+    // come from the notation, not source text, so there are no inline component
+    // deps — pass empty source; manifest `[dependencies]` still resolve.
     let entry_path = base_dir.join("__wado_query__.wado");
     let manifest_pair = crate::compile::load_nearest_manifest(&entry_path);
-    let host = crate::compile::attach_manifest_deps(
+    let host = crate::compile::attach_manifest_and_component_deps(
         FilesystemCompilerHost::silent(base_dir.clone()),
         manifest_pair.as_ref(),
         &base_dir,
-    );
+        "",
+        false,
+    )
+    .await
+    .map_err(CliExit::error)?;
     let uri = format!("file://{}", entry_path.display());
     Ok(SymbolEnv {
         parsed,
@@ -274,7 +292,7 @@ async fn symbol_invocations(env: &SymbolEnv) -> Option<InvocationIndex> {
 /// Build a single-module query context (the notation's module only). Used by
 /// `definition` / `hover` / `document-highlight`.
 async fn prepare_symbol_query(notation: &str, base: &str) -> Result<SymbolQuery, CliExit> {
-    let env = symbol_env(notation, base)?;
+    let env = symbol_env(notation, base).await?;
     let invocations = symbol_invocations(&env).await;
     let engine = open_entry(
         &env.uri,
@@ -296,7 +314,7 @@ async fn prepare_symbol_query(notation: &str, base: &str) -> Result<SymbolQuery,
 /// without a build cache), re-import only the target and the files that analyze
 /// on their own, dropping the offender.
 async fn prepare_references_query(notation: &str, base: &str) -> Result<SymbolQuery, CliExit> {
-    let env = symbol_env(notation, base)?;
+    let env = symbol_env(notation, base).await?;
     let invocations = symbol_invocations(&env).await;
     let target = env.parsed.module.clone();
     let workspace = workspace_module_specs(&env.base_dir);

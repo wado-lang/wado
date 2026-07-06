@@ -53,8 +53,12 @@ pub struct OptionsField {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum OptionsType {
     Bool,
+    I8,
+    I16,
     I32,
     I64,
+    U8,
+    U16,
     U32,
     U64,
     F32,
@@ -78,8 +82,12 @@ impl OptionsType {
     pub fn describe(&self) -> String {
         match self {
             OptionsType::Bool => "bool".to_string(),
+            OptionsType::I8 => "i8".to_string(),
+            OptionsType::I16 => "i16".to_string(),
             OptionsType::I32 => "i32".to_string(),
             OptionsType::I64 => "i64".to_string(),
+            OptionsType::U8 => "u8".to_string(),
+            OptionsType::U16 => "u16".to_string(),
             OptionsType::U32 => "u32".to_string(),
             OptionsType::U64 => "u64".to_string(),
             OptionsType::F32 => "f32".to_string(),
@@ -231,8 +239,12 @@ fn lower_type(
     match types.get(type_id) {
         ResolvedType::Primitive(p) => match p {
             PrimitiveType::Bool => Some(OptionsType::Bool),
+            PrimitiveType::I8 => Some(OptionsType::I8),
+            PrimitiveType::I16 => Some(OptionsType::I16),
             PrimitiveType::I32 => Some(OptionsType::I32),
             PrimitiveType::I64 => Some(OptionsType::I64),
+            PrimitiveType::U8 => Some(OptionsType::U8),
+            PrimitiveType::U16 => Some(OptionsType::U16),
             PrimitiveType::U32 => Some(OptionsType::U32),
             PrimitiveType::U64 => Some(OptionsType::U64),
             PrimitiveType::F32 => Some(OptionsType::F32),
@@ -408,12 +420,14 @@ fn evaluate_literal(
 ) -> Option<CanonicalValue> {
     match (&expr.kind, ty) {
         (TirExprKind::BoolLiteral(b), OptionsType::Bool) => Some(CanonicalValue::Bool(*b)),
-        (TirExprKind::IntLiteral { value, .. }, OptionsType::I32 | OptionsType::I64) => {
-            Some(CanonicalValue::I64(*value as i64))
-        }
-        (TirExprKind::IntLiteral { value, .. }, OptionsType::U32 | OptionsType::U64) => {
-            Some(CanonicalValue::U64(*value))
-        }
+        (
+            TirExprKind::IntLiteral { value, .. },
+            OptionsType::I8 | OptionsType::I16 | OptionsType::I32 | OptionsType::I64,
+        ) => Some(CanonicalValue::I64(*value as i64)),
+        (
+            TirExprKind::IntLiteral { value, .. },
+            OptionsType::U8 | OptionsType::U16 | OptionsType::U32 | OptionsType::U64,
+        ) => Some(CanonicalValue::U64(*value)),
         (TirExprKind::FloatLiteral { value, .. }, OptionsType::F32 | OptionsType::F64) => {
             if !value.is_finite() {
                 push_unsupported(
