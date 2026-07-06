@@ -198,6 +198,13 @@ from source deps.
       `dependency_index_from` (cold cache → an `unresolved` `wado fetch` hint).
       Fixed a latent bug where the Engine's `DiagnosticCollector` dropped the
       host's dependency index entirely (path deps included).
+- [ ] `wado lsp` server: resolve a **single-file inline** component source
+      (`use … from "ns:pkg@ver" with { registry }`, no `wado.toml`). The server's
+      `dependency_index()` builds from the nearest manifest and never sees the
+      open document's text, so an inline `with` in a manifest-less script is not
+      resolved in the editor — `wado check`/`query` (which parse the source)
+      handle it. Needs the server to parse the active document's `use` clauses
+      into the index, like the CLI does.
 - [ ] Version-aware routing: `resolve_import(from, spec)` resolves against the
       importing package's own deps, so semver-incompatible versions of one
       package become distinct dependency ids (WEP "Transitive Version
