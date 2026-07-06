@@ -214,7 +214,7 @@ fn action_attr_expr(
 fn parser_special_expr(r: &ResolvedAttr, is_lr: bool, handle: &String) -> Result<String, String> {
     return match r.name {
         "text" && r.member matches { None } => Result::Ok(
-            `{*handle}.text_span({*handle}.token_start({RULE_START_TOK_LOCAL}), {*handle}.last_end())`,
+            `{*handle}.rule_text({RULE_START_TOK_LOCAL})`,
         ),
         "start" => token_member_of(&RULE_START_TOK_LOCAL, &r.member, handle),
         "stop" => token_member_of(&`({*handle}.pos - 1)`, &r.member, handle),

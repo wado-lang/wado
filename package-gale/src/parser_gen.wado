@@ -845,6 +845,21 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_acti
         w.end();
         w.blank();
 
+        // `$text` — the input matched by the current rule so far. ANTLR
+        // concatenates the parse-tree token texts (skipped tokens are absent
+        // from the token stream), so a `-> skip` gap between tokens does NOT
+        // appear; this differs from a raw source-span slice (`text_span`). The
+        // range is the rule's first token (`start_tok`) through the last
+        // consumed token (`self.pos - 1`).
+        let mut frt = FnSpec::new("rule_text");
+        frt.set_receiver(&"&self");
+        frt.add_param(&"start_tok", &"i32");
+        frt.set_return_type(&"String");
+        frt.emit_begin(w);
+        w.line(&"return self.tokens.rule_text(start_tok, self.pos - 1);");
+        w.end();
+        w.blank();
+
         // `_input.getText()` — the entire input.
         let mut fit = FnSpec::new("input_text");
         fit.set_receiver(&"&self");

@@ -346,6 +346,26 @@ impl TokenStream {
             self.push_text(out, self.triv_starts[j], self.triv_ends[j]);
         }
     }
+
+    /// `$text` for a rule spanning tokens `[start_tok, end_tok]`: the token
+    /// texts with each token's leading *hidden-channel* trivia interleaved
+    /// (`triv_chans != 0`), matching ANTLR's `TokenStream.getText(interval)`.
+    /// `skip` trivia (channel 0, removed from the stream) is excluded, and so is
+    /// the start token's own leading trivia (the interval begins at the token).
+    pub fn rule_text(&self, start_tok: i32, end_tok: i32) -> String {
+        let mut out = String::new();
+        for let mut i = start_tok; i <= end_tok; i += 1 {
+            if i > start_tok {
+                for let mut j = self.triv_lo[i]; j < self.triv_hi[i]; j += 1 {
+                    if self.triv_chans[j] != 0 {
+                        self.push_text(&mut out, self.triv_starts[j], self.triv_ends[j]);
+                    }
+                }
+            }
+            self.push_token_text(&mut out, i);
+        }
+        return out;
+    }
 }
 
 
@@ -2688,6 +2708,10 @@ impl Parser {
             out.push(self.tokens.chars[i]);
         }
         return out;
+    }
+
+    fn rule_text(&self, start_tok: i32) -> String {
+        return self.tokens.rule_text(start_tok, self.pos - 1);
     }
 
     fn input_text(&self) -> String {
