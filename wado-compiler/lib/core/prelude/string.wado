@@ -166,7 +166,7 @@ impl String {
     /// reserved for performance-critical code where bounds have been proven.
     #[compiler_item("string_get_byte_unchecked")]
     pub fn get_byte_unchecked(&self, index: i32) -> u8 {
-        return builtin::array_get_u8(&self.repr, index);
+        return self.repr[index];
     }
 
     /// Zero-copy view of the string's UTF-8 bytes as an `ArraySlice<u8>`.
@@ -185,7 +185,7 @@ impl String {
     /// - The resulting byte sequence must remain valid UTF-8. This is the
     ///   caller's responsibility (cf. Rust's `as_bytes_mut`, which is `unsafe`).
     pub fn set_byte_unchecked(&mut self, index: i32, value: u8) {
-        builtin::array_set_u8(&mut self.repr, index, value);
+        self.repr[index] = value;
     }
 
     /// Internal: Get raw bytes array (stdlib use only)
@@ -204,7 +204,7 @@ impl String {
     /// If the current capacity is less than `min_capacity`, grows the buffer.
     /// Uses amortized doubling strategy for efficiency.
     pub fn grow(&mut self, min_capacity: i32) {
-        let capacity = builtin::array_len(&self.repr);
+        let capacity = self.repr.len();
         if min_capacity <= capacity {
             return;
         }
@@ -226,12 +226,12 @@ impl String {
             return;
         }
         let new_used = self.used + len;
-        if new_used > builtin::array_len(&self.repr) {
+        if new_used > self.repr.len() {
             builtin::cold_path();
             self.grow(new_used);
         }
         for let mut i = 0; i < len; i += 1 {
-            builtin::array_set_u8(&mut self.repr, self.used + i, builtin::i32_load8_u(ptr + i));
+            self.repr[self.used + i] = builtin::i32_load8_u(ptr + i);
         }
         self.used = new_used;
     }
@@ -247,7 +247,7 @@ impl String {
     /// a single `array_copy` and do not require the caller to maintain a write offset.
     pub fn internal_reserve_uninit(&mut self, n: i32) -> i32 {
         let new_used = self.used + n;
-        if new_used > builtin::array_len(&self.repr) {
+        if new_used > self.repr.len() {
             builtin::cold_path();
             self.grow(new_used);
         }
@@ -263,7 +263,7 @@ impl String {
             return;
         }
         let new_used = self.used + n;
-        if new_used > builtin::array_len(&self.repr) {
+        if new_used > self.repr.len() {
             builtin::cold_path();
             self.grow(new_used);
         }
@@ -281,7 +281,7 @@ impl String {
         }
 
         let new_used = self.used + other_len;
-        if new_used > builtin::array_len(&self.repr) {
+        if new_used > self.repr.len() {
             builtin::cold_path();
             self.grow(new_used);
         }
@@ -300,7 +300,7 @@ impl String {
             return;
         }
         let new_used = self.used + n;
-        if new_used > builtin::array_len(&self.repr) {
+        if new_used > self.repr.len() {
             builtin::cold_path();
             self.grow(new_used);
         }
@@ -321,7 +321,7 @@ impl String {
             return;
         }
         let new_used = self.used + n;
-        if new_used > builtin::array_len(&self.repr) {
+        if new_used > self.repr.len() {
             builtin::cold_path();
             self.grow(new_used);
         }
@@ -339,7 +339,7 @@ impl String {
             return;
         }
         let new_used = self.used + n;
-        if new_used > builtin::array_len(&self.repr) {
+        if new_used > self.repr.len() {
             builtin::cold_path();
             self.grow(new_used);
         }
@@ -371,7 +371,7 @@ impl Eq for String {
 
     fn eq_bytes(a: &Array<u8>, b: &Array<u8>, len: i32) -> bool {
         for let mut i = 0; i < len; i += 1 {
-            if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
+            if a[i] != b[i] {
                 return false;
             }
         }
@@ -398,8 +398,8 @@ impl Ord for String {
         let a_repr = self.internal_raw_bytes();
         let b_repr = other.internal_raw_bytes();
         for let mut i = 0; i < min_len; i += 1 {
-            let a_byte = builtin::array_get_u8(&a_repr, i);
-            let b_byte = builtin::array_get_u8(&b_repr, i);
+            let a_byte = a_repr[i];
+            let b_byte = b_repr[i];
             if a_byte < b_byte {
                 return Ordering::Less;
             }
@@ -434,7 +434,7 @@ impl Iterator for StrUtf8ByteIter {
         if self.index >= self.used {
             return null;
         }
-        let byte = builtin::array_get_u8(&self.repr, self.index);
+        let byte = self.repr[self.index];
         self.index += 1;
         return Option::Some(byte);
     }
@@ -459,7 +459,7 @@ impl Iterator for StrCharIter {
             return null;
         }
 
-        let b0 = builtin::array_get_u8(&self.repr, self.byte_index);
+        let b0 = self.repr[self.byte_index];
         self.byte_index += 1;
 
         // Single byte (ASCII): 0xxxxxxx
@@ -469,7 +469,7 @@ impl Iterator for StrCharIter {
 
         // Two bytes: 110xxxxx 10xxxxxx
         if b0 < 0xE0 {
-            let b1 = builtin::array_get_u8(&self.repr, self.byte_index) as u32;
+            let b1 = self.repr[self.byte_index] as u32;
             self.byte_index += 1;
             let code = (b0 as u32 & 0x1F) << 6 | b1 & 0x3F;
             return Option::Some(char::from_u32_unchecked(code));
@@ -477,17 +477,17 @@ impl Iterator for StrCharIter {
 
         // Three bytes: 1110xxxx 10xxxxxx 10xxxxxx
         if b0 < 0xF0 {
-            let b1 = builtin::array_get_u8(&self.repr, self.byte_index) as u32;
-            let b2 = builtin::array_get_u8(&self.repr, self.byte_index + 1) as u32;
+            let b1 = self.repr[self.byte_index] as u32;
+            let b2 = self.repr[self.byte_index + 1] as u32;
             self.byte_index += 2;
             let code = (b0 as u32 & 0x0F) << 12 | (b1 & 0x3F) << 6 | b2 & 0x3F;
             return Option::Some(char::from_u32_unchecked(code));
         }
 
         // Four bytes: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
-        let b1 = builtin::array_get_u8(&self.repr, self.byte_index) as u32;
-        let b2 = builtin::array_get_u8(&self.repr, self.byte_index + 1) as u32;
-        let b3 = builtin::array_get_u8(&self.repr, self.byte_index + 2) as u32;
+        let b1 = self.repr[self.byte_index] as u32;
+        let b2 = self.repr[self.byte_index + 1] as u32;
+        let b3 = self.repr[self.byte_index + 2] as u32;
         self.byte_index += 3;
         let code = (b0 as u32 & 0x07) << 18 | (b1 & 0x3F) << 12 | (b2 & 0x3F) << 6 | b3 & 0x3F;
         return Option::Some(char::from_u32_unchecked(code));
@@ -540,7 +540,7 @@ impl String {
         if byte_index >= self.used {
             return null;
         }
-        let b0 = builtin::array_get_u8(&self.repr, byte_index);
+        let b0 = self.repr[byte_index];
         let needed = if b0 < 0x80 {
             1;
         } else if b0 < 0xE0 {
@@ -563,24 +563,24 @@ impl String {
     /// - The full multi-byte sequence (1–4 bytes) starting at `byte_index`
     ///   is in range `[0, self.len())`.
     pub fn char_at_byte_unchecked(&self, byte_index: i32) -> char {
-        let b0 = builtin::array_get_u8(&self.repr, byte_index);
+        let b0 = self.repr[byte_index];
         if b0 < 0x80 {
             return char::from_u32_unchecked(b0 as u32);
         }
         if b0 < 0xE0 {
-            let b1 = builtin::array_get_u8(&self.repr, byte_index + 1) as u32;
+            let b1 = self.repr[byte_index + 1] as u32;
             let code = (b0 as u32 & 0x1F) << 6 | b1 & 0x3F;
             return char::from_u32_unchecked(code);
         }
         if b0 < 0xF0 {
-            let b1 = builtin::array_get_u8(&self.repr, byte_index + 1) as u32;
-            let b2 = builtin::array_get_u8(&self.repr, byte_index + 2) as u32;
+            let b1 = self.repr[byte_index + 1] as u32;
+            let b2 = self.repr[byte_index + 2] as u32;
             let code = (b0 as u32 & 0x0F) << 12 | (b1 & 0x3F) << 6 | b2 & 0x3F;
             return char::from_u32_unchecked(code);
         }
-        let b1 = builtin::array_get_u8(&self.repr, byte_index + 1) as u32;
-        let b2 = builtin::array_get_u8(&self.repr, byte_index + 2) as u32;
-        let b3 = builtin::array_get_u8(&self.repr, byte_index + 3) as u32;
+        let b1 = self.repr[byte_index + 1] as u32;
+        let b2 = self.repr[byte_index + 2] as u32;
+        let b3 = self.repr[byte_index + 3] as u32;
         let code = (b0 as u32 & 0x07) << 18 | (b1 & 0x3F) << 12 | (b2 & 0x3F) << 6 | b3 & 0x3F;
         return char::from_u32_unchecked(code);
     }
@@ -590,28 +590,28 @@ impl String {
     pub fn push(&mut self, c: char) {
         let code = c as u32;
 
-        if self.used + 4 > builtin::array_len(&self.repr) {
+        if self.used + 4 > self.repr.len() {
             builtin::cold_path();
             self.grow(self.used + 4);
         }
 
         if code < 0x80 {
-            builtin::array_set_u8(&mut self.repr, self.used, code as u8);
+            self.repr[self.used] = code as u8;
             self.used += 1;
         } else if code < 0x800 {
-            builtin::array_set_u8(&mut self.repr, self.used, (0xC0 | code >> 6) as u8);
-            builtin::array_set_u8(&mut self.repr, self.used + 1, (0x80 | code & 0x3F) as u8);
+            self.repr[self.used] = (0xC0 | code >> 6) as u8;
+            self.repr[self.used + 1] = (0x80 | code & 0x3F) as u8;
             self.used += 2;
         } else if code < 0x10000 {
-            builtin::array_set_u8(&mut self.repr, self.used, (0xE0 | code >> 12) as u8);
-            builtin::array_set_u8(&mut self.repr, self.used + 1, (0x80 | code >> 6 & 0x3F) as u8);
-            builtin::array_set_u8(&mut self.repr, self.used + 2, (0x80 | code & 0x3F) as u8);
+            self.repr[self.used] = (0xE0 | code >> 12) as u8;
+            self.repr[self.used + 1] = (0x80 | code >> 6 & 0x3F) as u8;
+            self.repr[self.used + 2] = (0x80 | code & 0x3F) as u8;
             self.used += 3;
         } else {
-            builtin::array_set_u8(&mut self.repr, self.used, (0xF0 | code >> 18) as u8);
-            builtin::array_set_u8(&mut self.repr, self.used + 1, (0x80 | code >> 12 & 0x3F) as u8);
-            builtin::array_set_u8(&mut self.repr, self.used + 2, (0x80 | code >> 6 & 0x3F) as u8);
-            builtin::array_set_u8(&mut self.repr, self.used + 3, (0x80 | code & 0x3F) as u8);
+            self.repr[self.used] = (0xF0 | code >> 18) as u8;
+            self.repr[self.used + 1] = (0x80 | code >> 12 & 0x3F) as u8;
+            self.repr[self.used + 2] = (0x80 | code >> 6 & 0x3F) as u8;
+            self.repr[self.used + 3] = (0x80 | code & 0x3F) as u8;
             self.used += 4;
         }
     }
@@ -642,7 +642,7 @@ impl String {
         let mut byte_pos = 0;
         let mut chars_seen = 0;
         while byte_pos < self.used && chars_seen < char_count {
-            let b = builtin::array_get_u8(&self.repr, byte_pos);
+            let b = self.repr[byte_pos];
             if b < 0x80 {
                 byte_pos += 1;
             } else if b < 0xE0 {
@@ -667,7 +667,7 @@ impl String {
             return false;
         }
         // A continuation byte has the form 10xxxxxx (0x80..=0xBF).
-        let b = builtin::array_get_u8(&self.repr, byte_index);
+        let b = self.repr[byte_index];
         return b < 0x80 || b >= 0xC0;
     }
 
@@ -679,7 +679,7 @@ impl String {
         // Scan backwards past continuation bytes to find the start of the last char
         let mut pos = self.used - 1;
         while pos > 0 {
-            let b = builtin::array_get_u8(&self.repr, pos);
+            let b = self.repr[pos];
             if b >= 0x80 && b < 0xC0 {
                 pos -= 1;
             } else {
@@ -687,20 +687,20 @@ impl String {
             }
         }
         // Decode the character at pos
-        let b0 = builtin::array_get_u8(&self.repr, pos) as u32;
+        let b0 = self.repr[pos] as u32;
         let code = if b0 < 0x80 {
             b0;
         } else if b0 < 0xE0 {
-            let b1 = builtin::array_get_u8(&self.repr, pos + 1) as u32;
+            let b1 = self.repr[pos + 1] as u32;
             (b0 & 0x1F) << 6 | b1 & 0x3F;
         } else if b0 < 0xF0 {
-            let b1 = builtin::array_get_u8(&self.repr, pos + 1) as u32;
-            let b2 = builtin::array_get_u8(&self.repr, pos + 2) as u32;
+            let b1 = self.repr[pos + 1] as u32;
+            let b2 = self.repr[pos + 2] as u32;
             (b0 & 0x0F) << 12 | (b1 & 0x3F) << 6 | b2 & 0x3F;
         } else {
-            let b1 = builtin::array_get_u8(&self.repr, pos + 1) as u32;
-            let b2 = builtin::array_get_u8(&self.repr, pos + 2) as u32;
-            let b3 = builtin::array_get_u8(&self.repr, pos + 3) as u32;
+            let b1 = self.repr[pos + 1] as u32;
+            let b2 = self.repr[pos + 2] as u32;
+            let b3 = self.repr[pos + 3] as u32;
             (b0 & 0x07) << 18 | (b1 & 0x3F) << 12 | (b2 & 0x3F) << 6 | b3 & 0x3F;
         };
         self.used = pos;
@@ -714,20 +714,20 @@ impl String {
 
     /// Returns the total capacity in bytes.
     pub fn capacity(&self) -> i32 {
-        return builtin::array_len(&self.repr);
+        return self.repr.len();
     }
 
     /// Reserves capacity for at least `additional` more bytes.
     pub fn reserve(&mut self, additional: i32) {
         let required = self.used + additional;
-        if required > builtin::array_len(&self.repr) {
+        if required > self.repr.len() {
             self.grow(required);
         }
     }
 
     /// Shrinks the capacity to match the current byte length.
     pub fn shrink_to_fit(&mut self) {
-        let capacity = builtin::array_len(&self.repr);
+        let capacity = self.repr.len();
         if capacity > self.used {
             let mut new_repr: Array<u8> = builtin::array_new(self.used);
             builtin::array_copy(&mut new_repr, 0, &self.repr, 0, self.used);
@@ -739,7 +739,7 @@ impl String {
     pub fn trim_ascii_start(&self) -> String {
         let mut start = 0;
         while start < self.used {
-            if is_ascii_whitespace_byte(builtin::array_get_u8(&self.repr, start)) {
+            if is_ascii_whitespace_byte(self.repr[start]) {
                 start += 1;
             } else {
                 break;
@@ -752,7 +752,7 @@ impl String {
     pub fn trim_ascii_end(&self) -> String {
         let mut end = self.used;
         while end > 0 {
-            if is_ascii_whitespace_byte(builtin::array_get_u8(&self.repr, end - 1)) {
+            if is_ascii_whitespace_byte(self.repr[end - 1]) {
                 end -= 1;
             } else {
                 break;
@@ -791,7 +791,7 @@ impl String {
             // Find the start of the last character by scanning back past continuation bytes
             let mut pos = end - 1;
             while pos > 0 {
-                let b = builtin::array_get_u8(&self.repr, pos);
+                let b = self.repr[pos];
                 if b >= 0x80 && b < 0xC0 {
                     pos -= 1;
                 } else {
@@ -799,20 +799,20 @@ impl String {
                 }
             }
             // Decode the character at pos (cast to u32 before shifting to avoid u8 truncation)
-            let b0 = builtin::array_get_u8(&self.repr, pos) as u32;
+            let b0 = self.repr[pos] as u32;
             let code = if b0 < 0x80 {
                 b0;
             } else if b0 < 0xE0 {
-                let b1 = builtin::array_get_u8(&self.repr, pos + 1) as u32;
+                let b1 = self.repr[pos + 1] as u32;
                 (b0 & 0x1F) << 6 | b1 & 0x3F;
             } else if b0 < 0xF0 {
-                let b1 = builtin::array_get_u8(&self.repr, pos + 1) as u32;
-                let b2 = builtin::array_get_u8(&self.repr, pos + 2) as u32;
+                let b1 = self.repr[pos + 1] as u32;
+                let b2 = self.repr[pos + 2] as u32;
                 (b0 & 0x0F) << 12 | (b1 & 0x3F) << 6 | b2 & 0x3F;
             } else {
-                let b1 = builtin::array_get_u8(&self.repr, pos + 1) as u32;
-                let b2 = builtin::array_get_u8(&self.repr, pos + 2) as u32;
-                let b3 = builtin::array_get_u8(&self.repr, pos + 3) as u32;
+                let b1 = self.repr[pos + 1] as u32;
+                let b2 = self.repr[pos + 2] as u32;
+                let b3 = self.repr[pos + 3] as u32;
                 (b0 & 0x07) << 18 | (b1 & 0x3F) << 12 | (b2 & 0x3F) << 6 | b3 & 0x3F;
             };
             let ch = char::from_u32_unchecked(code);
@@ -852,8 +852,8 @@ impl String {
         let a = self.internal_raw_bytes();
         let b = other.internal_raw_bytes();
         for let mut i = 0; i < len; i += 1 {
-            let ab = builtin::array_get_u8(&a, i);
-            let bb = builtin::array_get_u8(&b, i);
+            let ab = a[i];
+            let bb = b[i];
             if byte_to_ascii_lowercase(ab) != byte_to_ascii_lowercase(bb) {
                 return false;
             }
@@ -898,7 +898,7 @@ impl String {
         }
         let pat_repr = pat.internal_raw_bytes();
         for let mut i = 0; i < pat_len; i += 1 {
-            if builtin::array_get_u8(&self.repr, i) != builtin::array_get_u8(&pat_repr, i) {
+            if self.repr[i] != pat_repr[i] {
                 return false;
             }
         }
@@ -914,7 +914,7 @@ impl String {
         let offset = self.used - pat_len;
         let pat_repr = pat.internal_raw_bytes();
         for let mut i = 0; i < pat_len; i += 1 {
-            if builtin::array_get_u8(&self.repr, offset + i) != builtin::array_get_u8(&pat_repr, i) {
+            if self.repr[offset + i] != pat_repr[i] {
                 return false;
             }
         }
@@ -935,7 +935,7 @@ impl String {
         for let mut i = 0; i <= limit; i += 1 {
             let mut matched = true;
             for let mut j = 0; j < pat_len; j += 1 {
-                if builtin::array_get_u8(&self.repr, i + j) != builtin::array_get_u8(&pat_repr, j) {
+                if self.repr[i + j] != pat_repr[j] {
                     matched = false;
                     break;
                 }
@@ -961,7 +961,7 @@ impl String {
         loop {
             let mut matched = true;
             for let mut j = 0; j < pat_len; j += 1 {
-                if builtin::array_get_u8(&self.repr, i + j) != builtin::array_get_u8(&pat_repr, j) {
+                if self.repr[i + j] != pat_repr[j] {
                     matched = false;
                     break;
                 }
@@ -1015,26 +1015,26 @@ impl String {
         let code = ch as u32;
         let char_len = ch.len_utf8();
         let new_used = self.used + char_len;
-        if new_used > builtin::array_len(&self.repr) {
+        if new_used > self.repr.len() {
             self.grow(new_used);
         }
         // Shift bytes right
         builtin::array_copy(&mut self.repr, byte_index + char_len, &self.repr, byte_index, self.used - byte_index);
         // Write encoded char
         if code < 0x80 {
-            builtin::array_set_u8(&mut self.repr, byte_index, code as u8);
+            self.repr[byte_index] = code as u8;
         } else if code < 0x800 {
-            builtin::array_set_u8(&mut self.repr, byte_index, (0xC0 | code >> 6) as u8);
-            builtin::array_set_u8(&mut self.repr, byte_index + 1, (0x80 | code & 0x3F) as u8);
+            self.repr[byte_index] = (0xC0 | code >> 6) as u8;
+            self.repr[byte_index + 1] = (0x80 | code & 0x3F) as u8;
         } else if code < 0x10000 {
-            builtin::array_set_u8(&mut self.repr, byte_index, (0xE0 | code >> 12) as u8);
-            builtin::array_set_u8(&mut self.repr, byte_index + 1, (0x80 | code >> 6 & 0x3F) as u8);
-            builtin::array_set_u8(&mut self.repr, byte_index + 2, (0x80 | code & 0x3F) as u8);
+            self.repr[byte_index] = (0xE0 | code >> 12) as u8;
+            self.repr[byte_index + 1] = (0x80 | code >> 6 & 0x3F) as u8;
+            self.repr[byte_index + 2] = (0x80 | code & 0x3F) as u8;
         } else {
-            builtin::array_set_u8(&mut self.repr, byte_index, (0xF0 | code >> 18) as u8);
-            builtin::array_set_u8(&mut self.repr, byte_index + 1, (0x80 | code >> 12 & 0x3F) as u8);
-            builtin::array_set_u8(&mut self.repr, byte_index + 2, (0x80 | code >> 6 & 0x3F) as u8);
-            builtin::array_set_u8(&mut self.repr, byte_index + 3, (0x80 | code & 0x3F) as u8);
+            self.repr[byte_index] = (0xF0 | code >> 18) as u8;
+            self.repr[byte_index + 1] = (0x80 | code >> 12 & 0x3F) as u8;
+            self.repr[byte_index + 2] = (0x80 | code >> 6 & 0x3F) as u8;
+            self.repr[byte_index + 3] = (0x80 | code & 0x3F) as u8;
         }
         self.used = new_used;
     }
@@ -1057,7 +1057,7 @@ impl String {
             return;
         }
         let new_used = self.used + s_len;
-        if new_used > builtin::array_len(&self.repr) {
+        if new_used > self.repr.len() {
             self.grow(new_used);
         }
         // Shift bytes right
@@ -1082,7 +1082,7 @@ impl String {
     /// - `0 <= byte_index < self.len()`.
     /// - `byte_index` lies on a UTF-8 character boundary.
     pub fn remove_unchecked(&mut self, byte_index: i32) -> char {
-        let b0 = builtin::array_get_u8(&self.repr, byte_index) as u32;
+        let b0 = self.repr[byte_index] as u32;
         let char_len = if b0 < 0x80 {
             1;
         } else if b0 < 0xE0 {
@@ -1096,16 +1096,16 @@ impl String {
         let code = if b0 < 0x80 {
             b0;
         } else if b0 < 0xE0 {
-            let b1 = builtin::array_get_u8(&self.repr, byte_index + 1) as u32;
+            let b1 = self.repr[byte_index + 1] as u32;
             (b0 & 0x1F) << 6 | b1 & 0x3F;
         } else if b0 < 0xF0 {
-            let b1 = builtin::array_get_u8(&self.repr, byte_index + 1) as u32;
-            let b2 = builtin::array_get_u8(&self.repr, byte_index + 2) as u32;
+            let b1 = self.repr[byte_index + 1] as u32;
+            let b2 = self.repr[byte_index + 2] as u32;
             (b0 & 0x0F) << 12 | (b1 & 0x3F) << 6 | b2 & 0x3F;
         } else {
-            let b1 = builtin::array_get_u8(&self.repr, byte_index + 1) as u32;
-            let b2 = builtin::array_get_u8(&self.repr, byte_index + 2) as u32;
-            let b3 = builtin::array_get_u8(&self.repr, byte_index + 3) as u32;
+            let b1 = self.repr[byte_index + 1] as u32;
+            let b2 = self.repr[byte_index + 2] as u32;
+            let b3 = self.repr[byte_index + 3] as u32;
             (b0 & 0x07) << 18 | (b1 & 0x3F) << 12 | (b2 & 0x3F) << 6 | b3 & 0x3F;
         };
         // Shift bytes left
@@ -1159,7 +1159,7 @@ impl String {
             // Check for match at pos
             let mut matched = true;
             for let mut j = 0; j < from_len; j += 1 {
-                if builtin::array_get_u8(&self.repr, pos + j) != builtin::array_get_u8(&from_repr, j) {
+                if self.repr[pos + j] != from_repr[j] {
                     matched = false;
                     break;
                 }
@@ -1168,7 +1168,7 @@ impl String {
                 // Append `to`
                 if to_len > 0 {
                     let new_used = result.used + to_len;
-                    if new_used > builtin::array_len(&result.repr) {
+                    if new_used > result.repr.len() {
                         result.grow(new_used);
                     }
                     builtin::array_copy(&mut result.repr, result.used, &to_repr, 0, to_len);
@@ -1178,20 +1178,20 @@ impl String {
                 replacements += 1;
             } else {
                 // Copy one byte
-                if result.used >= builtin::array_len(&result.repr) {
+                if result.used >= result.repr.len() {
                     result.grow(result.used + 1);
                 }
-                builtin::array_set_u8(&mut result.repr, result.used, builtin::array_get_u8(&self.repr, pos));
+                result.repr[result.used] = self.repr[pos];
                 result.used += 1;
                 pos += 1;
             }
         }
         // Copy remaining bytes
         while pos < self.used {
-            if result.used >= builtin::array_len(&result.repr) {
+            if result.used >= result.repr.len() {
                 result.grow(result.used + 1);
             }
-            builtin::array_set_u8(&mut result.repr, result.used, builtin::array_get_u8(&self.repr, pos));
+            result.repr[result.used] = self.repr[pos];
             result.used += 1;
             pos += 1;
         }
@@ -1340,7 +1340,7 @@ impl Iterator for StrSplitIter {
         while i <= limit {
             let mut matched = true;
             for let mut j = 0; j < self.sep_len; j += 1 {
-                if builtin::array_get_u8(&self.repr, i + j) != builtin::array_get_u8(&self.sep_repr, j) {
+                if self.repr[i + j] != self.sep_repr[j] {
                     matched = false;
                     break;
                 }
@@ -1395,7 +1395,7 @@ impl Iterator for StrSplitNIter {
         while i <= limit {
             let mut matched = true;
             for let mut j = 0; j < self.sep_len; j += 1 {
-                if builtin::array_get_u8(&self.repr, i + j) != builtin::array_get_u8(&self.sep_repr, j) {
+                if self.repr[i + j] != self.sep_repr[j] {
                     matched = false;
                     break;
                 }
@@ -1435,7 +1435,7 @@ impl Iterator for StrSplitWhitespaceIter {
 
     pub fn next(&mut self) -> Option<Self::Item> {
         // Skip leading whitespace
-        while self.pos < self.used && is_ascii_whitespace_byte(builtin::array_get_u8(&self.repr, self.pos)) {
+        while self.pos < self.used && is_ascii_whitespace_byte(self.repr[self.pos]) {
             self.pos += 1;
         }
         if self.pos >= self.used {
@@ -1443,7 +1443,7 @@ impl Iterator for StrSplitWhitespaceIter {
         }
         // Find end of word
         let start = self.pos;
-        while self.pos < self.used && !is_ascii_whitespace_byte(builtin::array_get_u8(&self.repr, self.pos)) {
+        while self.pos < self.used && !is_ascii_whitespace_byte(self.repr[self.pos]) {
             self.pos += 1;
         }
         let len = self.pos - start;
@@ -1475,7 +1475,7 @@ impl Iterator for StrLinesIter {
         let start = self.pos;
         // Find next \n or \r\n
         while self.pos < self.used {
-            let b = builtin::array_get_u8(&self.repr, self.pos);
+            let b = self.repr[self.pos];
             if b == 0x0A {
                 let len = self.pos - start;
                 let mut part: Array<u8> = builtin::array_new(len);
@@ -1488,7 +1488,7 @@ impl Iterator for StrLinesIter {
                 let mut part: Array<u8> = builtin::array_new(len);
                 builtin::array_copy(&mut part, 0, &self.repr, start, len);
                 self.pos += 1;  // skip \r
-                if self.pos < self.used && builtin::array_get_u8(&self.repr, self.pos) == 0x0A {
+                if self.pos < self.used && self.repr[self.pos] == 0x0A {
                     self.pos += 1;  // skip \n after \r
                 }
                 return Option::Some(String::internal_from_utf8_raw(part, len));
@@ -1523,28 +1523,28 @@ impl Iterator for StrCharIndicesIter {
             return null;
         }
         let idx = self.byte_index;
-        let b0 = builtin::array_get_u8(&self.repr, self.byte_index);
+        let b0 = self.repr[self.byte_index];
         self.byte_index += 1;
 
         if b0 < 0x80 {
             return Option::Some([idx, char::from_u32_unchecked(b0 as u32)]);
         }
         if b0 < 0xE0 {
-            let b1 = builtin::array_get_u8(&self.repr, self.byte_index) as u32;
+            let b1 = self.repr[self.byte_index] as u32;
             self.byte_index += 1;
             let code = (b0 as u32 & 0x1F) << 6 | b1 & 0x3F;
             return Option::Some([idx, char::from_u32_unchecked(code)]);
         }
         if b0 < 0xF0 {
-            let b1 = builtin::array_get_u8(&self.repr, self.byte_index) as u32;
-            let b2 = builtin::array_get_u8(&self.repr, self.byte_index + 1) as u32;
+            let b1 = self.repr[self.byte_index] as u32;
+            let b2 = self.repr[self.byte_index + 1] as u32;
             self.byte_index += 2;
             let code = (b0 as u32 & 0x0F) << 12 | (b1 & 0x3F) << 6 | b2 & 0x3F;
             return Option::Some([idx, char::from_u32_unchecked(code)]);
         }
-        let b1 = builtin::array_get_u8(&self.repr, self.byte_index) as u32;
-        let b2 = builtin::array_get_u8(&self.repr, self.byte_index + 1) as u32;
-        let b3 = builtin::array_get_u8(&self.repr, self.byte_index + 2) as u32;
+        let b1 = self.repr[self.byte_index] as u32;
+        let b2 = self.repr[self.byte_index + 1] as u32;
+        let b3 = self.repr[self.byte_index + 2] as u32;
         self.byte_index += 3;
         let code = (b0 as u32 & 0x07) << 18 | (b1 & 0x3F) << 12 | (b2 & 0x3F) << 6 | b3 & 0x3F;
         return Option::Some([idx, char::from_u32_unchecked(code)]);

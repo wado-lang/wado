@@ -27,6 +27,8 @@ pub struct DumpOptions {
     pub codegen_flags: Vec<String>,
     /// `--world <name>`; `None` selects the default `wasi:cli/command`.
     pub target_world: Option<String>,
+    /// `--allocator <mode>`; `None` selects the world's default.
+    pub allocator: Option<String>,
     pub param_overrides: wado_compiler::hashmap::IndexMap<String, String>,
     pub param_policy: wado_compiler::param_resolution::ParamPolicy,
 }
@@ -48,6 +50,7 @@ enum Opt {
     OptIterations,
     Feature,
     World,
+    Allocator,
     Help,
 }
 
@@ -68,6 +71,7 @@ impl Opt {
         Self::OptIterations,
         Self::Feature,
         Self::World,
+        Self::Allocator,
         Self::Help,
     ];
 
@@ -143,6 +147,7 @@ impl Opt {
             Self::OptIterations => args::OPT_ITERATIONS_SPEC,
             Self::Feature => args::FEATURE_SPEC,
             Self::World => args::WORLD_SPEC,
+            Self::Allocator => args::ALLOCATOR_SPEC,
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -200,7 +205,10 @@ fn format_usage() -> String {
     write!(
         buf,
         "{}",
-        args::format_opts_help(&[Opt::World, Opt::Feature, Opt::Help], |o| o.spec())
+        args::format_opts_help(
+            &[Opt::World, Opt::Allocator, Opt::Feature, Opt::Help],
+            |o| { o.spec() }
+        )
     )
     .unwrap();
     write!(
@@ -234,6 +242,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
     let mut opt_iterations: Option<u32> = None;
     let mut codegen_flags: Vec<String> = Vec::new();
     let mut target_world: Option<String> = None;
+    let mut allocator: Option<String> = None;
     let mut any_phase = false;
     let mut param_args = args::ParamArgs::default();
 
@@ -313,6 +322,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
                 }
                 Opt::Feature => codegen_flags.push(args::require_string(&mut parser)?),
                 Opt::World => target_world = Some(args::require_string(&mut parser)?),
+                Opt::Allocator => allocator = Some(args::require_string(&mut parser)?),
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -346,6 +356,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
         opt_iterations,
         codegen_flags,
         target_world,
+        allocator,
         param_overrides: param_args.overrides,
         param_policy: param_args.policy,
     })
@@ -385,6 +396,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         Some(input),
         opts.opt_level,
         target_world.as_deref(),
+        opts.allocator.as_deref(),
         opts.inline_threshold,
         opts.opt_iterations,
         &opts.codegen_flags,

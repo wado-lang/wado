@@ -283,7 +283,7 @@ fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
     b16: block {
         l17: loop {
             break_if b16 i >= len;
-            if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
+            if builtin::array_get<u8>(a, i) != builtin::array_get<u8>(b, i) {
                 return 0;
             }
             i = i + 1;
@@ -294,14 +294,8 @@ fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
 }
 
 fn "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Pixel^Eq::eq"(self, other) {
-    let other_3: i32;
-    let other_5: i32;
-    let __sroa_self_value_6: i32;
-    let __sroa_self_value_7: i32;
-    return (if (if __sroa_self_value_7 = self.x; other_3 = other.x; __sroa_self_value_7 == other_3 -> i32 {
-        __sroa_self_value_6 = self.y;
-        other_5 = other.y;
-        __sroa_self_value_6 == other_5;
+    return (if (if self.x == other.x -> i32 {
+        self.y == other.y;
     } else {
         0;
     }) -> i32 {

@@ -253,13 +253,13 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
-    let a_5: i32;
-    let a_7: i32;
+    let a_6: i32;
+    let a_8: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_8 = capacity * 2; a_6 = select i32(a_8 > min_capacity, a_8, min_capacity); select i32(a_6 > 8, a_6, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -310,20 +310,20 @@ fn "core:prelude/string.wado/String::truncate_chars"(self, char_count) {
     let byte_pos: i32;
     let chars_seen: i32;
     let b: u8;
-    let _licm_used_5: i32;
-    let _licm_repr_6: ref Array<u8>;
+    let _licm_used_7: i32;
+    let _licm_repr_8: ref Array<u8>;
     byte_pos = 0;
     chars_seen = 0;
-    _licm_used_5 = self.used;
-    _licm_repr_6 = self.repr;
+    _licm_used_7 = self.used;
+    _licm_repr_8 = self.repr;
     b14: block {
         l15: loop {
-            break_if b14 (if byte_pos < _licm_used_5 -> i32 {
+            break_if b14 (if byte_pos < _licm_used_7 -> i32 {
                 chars_seen < char_count;
             } else {
                 0;
             }) == 0;
-            b = builtin::array_get_u8(_licm_repr_6, byte_pos);
+            b = builtin::array_get<u8>(_licm_repr_8, byte_pos);
             if b <u 128 {
                 byte_pos = byte_pos + 1;
             } else if b <u 224 {

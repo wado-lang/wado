@@ -1,0 +1,23 @@
+// copy_prop must not re-materialize `&place` at a use when the place's root was
+// reassigned after the binding — the reference captures its object at binding
+// time. The recursive callee is not inlined, isolating the call-argument path.
+use { println, Stdout } from "core:cli";
+
+struct Box { xs: List<i32> }
+
+fn first_rec(xs: &List<i32>, depth: i32) -> i32 {
+    if depth > 0 {
+        return first_rec(xs, depth - 1);
+    }
+    return xs[0];
+}
+
+export fn run() with Stdout {
+    let mut b = Box { xs: [10] };
+    let r = &b.xs;
+    b.xs = [20];
+    println(`{first_rec(r, 0)}`);
+}
+
+__DATA__
+{ "stdout": "10\n" }

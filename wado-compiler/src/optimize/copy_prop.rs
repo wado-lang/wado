@@ -51,6 +51,7 @@ impl CopySource {
             CopySource::Local { index, .. }
             | CopySource::Ref { index, .. }
             | CopySource::MutRef { index, .. } => Some(*index),
+            CopySource::RefProjection { root_local, .. } => Some(*root_local),
             CopySource::Promoted(_) => None,
         }
     }
@@ -76,6 +77,15 @@ enum CopySource {
     /// forward to `Operand::Value(v)` directly; the pooled value is immutable so
     /// the copy is unconditionally stable.
     Promoted(crate::nir_value_graph::ValueId),
+    /// `let x = &place` / `&mut place` (a pure `FieldAccess` chain rooted at
+    /// `root_local`), re-materialized at `x`'s single use. Single-use +
+    /// `source_scope_stable` keep capture-at-binding semantics: a root reassigned
+    /// before the use blocks the propagation.
+    RefProjection {
+        root_local: u32,
+        op: NirUnaryOp,
+        projection: ExprId,
+    },
 }
 
 #[derive(Debug, Default)]
@@ -102,6 +112,15 @@ fn unwrap_copy_value(body: &Body, expr: ExprId, copy_value_id: Option<FuncId>) -
         return args[0].expr.as_expr().unwrap_or(expr);
     }
     expr
+}
+
+/// Root local of a pure `FieldAccess` chain (`local.f.g`), else `None`.
+fn field_chain_root(body: &Body, e: ExprId) -> Option<u32> {
+    match &body.exprs[e].kind {
+        ExprKind::Local { index, .. } => Some(*index),
+        ExprKind::FieldAccess { expr: inner, .. } => field_chain_root(body, inner.as_expr()?),
+        _ => None,
+    }
 }
 
 fn analyze_copy_binding(
@@ -146,11 +165,10 @@ fn analyze_copy_binding(
         ExprKind::Unary { op, expr: inner }
             if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef) =>
         {
-            let inner = *inner;
+            let op = *op;
             let is_ref = matches!(op, NirUnaryOp::Ref);
-            if let Some(ie) = inner.as_expr()
-                && let ExprKind::Local { index, name } = &body.exprs[ie].kind
-            {
+            let ie = inner.as_expr()?;
+            if let ExprKind::Local { index, name } = &body.exprs[ie].kind {
                 let inner_type_id = body.exprs[ie].type_id;
                 if is_ref {
                     CopySource::Ref {
@@ -164,6 +182,12 @@ fn analyze_copy_binding(
                         name: name.clone(),
                         inner_type_id,
                     }
+                }
+            } else if let Some(root_local) = field_chain_root(body, ie) {
+                CopySource::RefProjection {
+                    root_local,
+                    op,
+                    projection: ie,
                 }
             } else {
                 return None;
@@ -231,14 +255,24 @@ fn analyze_block(
     copy_value_id: Option<FuncId>,
 ) {
     let stmts = body.blocks[block].stmts.clone();
-    // Per-local last statement index whose subtree mutates it (one pass over the
-    // block). A binding at `k` is source-scope-stable iff its source has no
-    // mutation after `k`. Precomputing this avoids the per-binding
-    // `stmts[k+1..]` rescan, which is O(N²) when a block holds many copy
-    // bindings (e.g. a large sequence-literal builder chain — #1472 follow-up).
-    let mut last_mut: IndexMap<u32, usize> = IndexMap::default();
+    // Per-local sorted statement indices whose subtree mutates it (one pass over
+    // the block; ascending, since we scan in order). `.last()` is the last
+    // mutation — a binding at `k` is source-scope-stable iff its source has none
+    // after `k`. The full list additionally lets the projection-source check ask
+    // whether any mutation falls in the open interval `(binding, use]`.
+    // Precomputing this avoids the per-binding `stmts[k+1..]` rescan, which is
+    // O(N²) when a block holds many copy bindings (e.g. a large sequence-literal
+    // builder chain — #1472 follow-up).
+    let mut mut_indices: IndexMap<u32, Vec<usize>> = IndexMap::default();
     for (i, &stmt) in stmts.iter().enumerate() {
-        collect_mutated_locals(body, NodeRef::Stmt(stmt), &mut last_mut, i);
+        collect_mutated_locals(body, NodeRef::Stmt(stmt), &mut mut_indices, i);
+    }
+    // Per-local earliest statement index whose subtree reads it. For a
+    // single-use projection temp this is its unique use, bounding the interval
+    // the projection stability check scans for root mutations.
+    let mut first_read: IndexMap<u32, usize> = IndexMap::default();
+    for (i, &stmt) in stmts.iter().enumerate() {
+        collect_first_reads(body, NodeRef::Stmt(stmt), &mut first_read, i);
     }
     for (k, &stmt) in stmts.iter().enumerate() {
         match &body.stmts[stmt].kind {
@@ -252,11 +286,24 @@ fn analyze_block(
         }
         if let Some(mut binding) = analyze_copy_binding(body, stmt, copy_value_id) {
             // The target's uses are confined to this block from `k` onward, so
-            // the source is stable for the propagation iff it is not mutated in
-            // those statements (a promoted value is unconditionally stable).
-            binding.source_scope_stable = match binding.source.local_index() {
-                Some(src) => last_mut.get(&src).is_none_or(|&i| i <= k),
-                None => true,
+            // the source is stable iff it is not mutated in those statements (a
+            // promoted value is unconditionally stable). A `RefProjection` needs
+            // the precise capture-at-binding condition — see `refproj_scope_stable`.
+            binding.source_scope_stable = match &binding.source {
+                CopySource::RefProjection { root_local, .. } => refproj_scope_stable(
+                    *root_local,
+                    binding.target_local,
+                    k,
+                    &mut_indices,
+                    &first_read,
+                ),
+                _ => match binding.source.local_index() {
+                    Some(src) => mut_indices
+                        .get(&src)
+                        .and_then(|v| v.last())
+                        .is_none_or(|&i| i <= k),
+                    None => true,
+                },
             };
             result.bindings.push(binding);
         }
@@ -264,22 +311,28 @@ fn analyze_block(
     }
 }
 
-/// Record, into `last_mut`, every local whose subtree `node` mutates, mapping it
-/// to statement index `idx` (later indices overwrite earlier ones, so each local
-/// ends up keyed to the last statement that mutates it). Mirrors the mutation
-/// shapes recognised by [`subtree_mutates_local`], collecting all roots in one
-/// walk instead of testing a single local.
+/// Record, into `mut_indices`, statement index `idx` for every local whose
+/// subtree `node` mutates. Called with ascending `idx`, so each local's list
+/// stays sorted; `.last()` is its final mutation and the list supports interval
+/// queries. Mirrors the mutation shapes recognised by [`subtree_mutates_local`],
+/// collecting all roots in one walk instead of testing a single local.
 fn collect_mutated_locals(
     body: &Body,
     node: NodeRef,
-    last_mut: &mut IndexMap<u32, usize>,
+    mut_indices: &mut IndexMap<u32, Vec<usize>>,
     idx: usize,
 ) {
+    let mut note = |l: u32| {
+        let v = mut_indices.entry(l).or_default();
+        if v.last() != Some(&idx) {
+            v.push(idx);
+        }
+    };
     if let NodeRef::Expr(id) = node {
         match &body.exprs[id].kind {
             ExprKind::Assign { target, .. } => {
                 if let Some(l) = place_root_local(body, *target) {
-                    last_mut.insert(l, idx);
+                    note(l);
                 }
             }
             ExprKind::Unary {
@@ -287,12 +340,12 @@ fn collect_mutated_locals(
                 expr: inner,
             } => {
                 if let Some(l) = inner.as_expr().and_then(|ie| place_root_local(body, ie)) {
-                    last_mut.insert(l, idx);
+                    note(l);
                 }
             }
             ExprKind::MethodCall { receiver, .. } => {
                 if let Some(l) = receiver.as_expr().and_then(|e| place_root_local(body, e)) {
-                    last_mut.insert(l, idx);
+                    note(l);
                 }
             }
             ExprKind::Call { args, .. } => {
@@ -300,14 +353,55 @@ fn collect_mutated_locals(
                     if arg.is_mut
                         && let Some(l) = arg.expr.as_expr().and_then(|e| place_root_local(body, e))
                     {
-                        last_mut.insert(l, idx);
+                        note(l);
                     }
                 }
             }
             _ => {}
         }
     }
-    body.for_each_child(node, |c| collect_mutated_locals(body, c, last_mut, idx));
+    body.for_each_child(node, |c| collect_mutated_locals(body, c, mut_indices, idx));
+}
+
+/// Record, into `first_read`, the earliest statement index `idx` whose subtree
+/// reads each local. `or_insert` keeps the first (smallest) index seen.
+fn collect_first_reads(
+    body: &Body,
+    node: NodeRef,
+    first_read: &mut IndexMap<u32, usize>,
+    idx: usize,
+) {
+    if let NodeRef::Expr(id) = node
+        && let ExprKind::Local { index, .. } = &body.exprs[id].kind
+    {
+        first_read.entry(*index).or_insert(idx);
+    }
+    body.for_each_child(node, |c| collect_first_reads(body, c, first_read, idx));
+}
+
+/// Stability for a `RefProjection` source rooted at `root`, bound at statement
+/// `k`, whose target is re-materialized at its single use. Sound iff no mutation
+/// of `root` falls in `(k, use]`: mutations at or before the binding predate the
+/// captured object, and mutations after the single use cannot reach it. Without
+/// a recorded read the target is dead — treat as stable and let DCE remove it.
+fn refproj_scope_stable(
+    root: u32,
+    target: u32,
+    k: usize,
+    mut_indices: &IndexMap<u32, Vec<usize>>,
+    first_read: &IndexMap<u32, usize>,
+) -> bool {
+    let Some(&use_at) = first_read.get(&target) else {
+        return true;
+    };
+    // A use recorded at or before the binding is a backward/cross-iteration read
+    // the `(k, use]` interval cannot reason about; be conservative.
+    if use_at <= k {
+        return false;
+    }
+    mut_indices
+        .get(&root)
+        .is_none_or(|v| !v.iter().any(|&m| m > k && m <= use_at))
 }
 
 /// Count every `Binding` local a destructuring pattern introduces as a def.
@@ -580,6 +674,9 @@ fn can_propagate_copy(
             }
             true
         }
+        CopySource::RefProjection { .. } => {
+            target_usage.read_count == 1 && binding.source_scope_stable
+        }
         // A pooled value is immutable, so forwarding it to every read is always
         // sound; the read becomes `Operand::Value(v)`, re-emitted by the extractor.
         CopySource::Promoted(_) => true,
@@ -657,6 +754,16 @@ fn apply_in_expr(
                 name,
                 inner_type_id,
             } => emit_ref(engine, id, NirUnaryOp::MutRef, index, name, inner_type_id),
+            CopySource::RefProjection { op, projection, .. } => {
+                let cloned = engine.clone_expr(projection);
+                engine.replace_expr_kind(
+                    id,
+                    ExprKind::Unary {
+                        op,
+                        expr: cloned.into(),
+                    },
+                );
+            }
             CopySource::Promoted(v) => {
                 engine.redirect_expr(id, Operand::Value(v));
             }
@@ -727,6 +834,7 @@ fn propagate_at_root(
                 CopySource::Local { index, .. }
                 | CopySource::Ref { index, .. }
                 | CopySource::MutRef { index, .. } => target_set.contains(index),
+                CopySource::RefProjection { root_local, .. } => target_set.contains(root_local),
                 // A promoted value has no source local to conflict.
                 CopySource::Promoted(_) => false,
             };

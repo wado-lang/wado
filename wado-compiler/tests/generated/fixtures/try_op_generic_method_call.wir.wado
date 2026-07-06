@@ -126,11 +126,7 @@ fn "wado-compiler/tests/fixtures/try_op_generic_method_call.wado/write_values"(s
     let __iter_2: ref "core:prelude/slice.wado//ArrayIter<i32>";
     let __qm_e: ref "core:prelude/string.wado//String";
     let __local_7: ref null "core:prelude/string.wado//String";
-    let repr: ref Array<i32>;
-    let end: i32;
-    repr = values.repr;
-    end = values.used;
-    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr, index: 0, end: end };
+    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: values.repr, index: 0, end: values.used };
     b0: block {
         l1: loop {
             let __sroa___match_6_discriminant: i32;
@@ -339,13 +335,13 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
-    let a_5: i32;
-    let a_7: i32;
+    let a_6: i32;
+    let a_8: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_8 = capacity * 2; a_6 = select i32(a_8 > min_capacity, a_8, min_capacity); select i32(a_6 > 8, a_6, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

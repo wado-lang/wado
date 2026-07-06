@@ -370,13 +370,13 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
-    let a_5: i32;
-    let a_7: i32;
+    let a_6: i32;
+    let a_8: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_8 = capacity * 2; a_6 = select i32(a_8 > min_capacity, a_8, min_capacity); select i32(a_6 > 8, a_6, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -551,16 +551,12 @@ fn "wado-compiler/tests/fixtures/serde_serialize_array.wado/List<core:prelude/st
     let item: ref "core:prelude/string.wado//String";
     let __local_6: ref "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSeqSerializer";
     let __local_7: ref null "core:prelude/string.wado//String";
-    let repr: ref "Array<core:prelude/string.wado/String>";
-    let end: i32;
     "core:prelude/string.wado/String::push"(s.buf, 91);
     seq_2 = struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer,wado-compiler/tests/fixtures/serde_serialize_array.wado/SerializeError>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSeqSerializer" { ser: s, count: 0 } };
     if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer,wado-compiler/tests/fixtures/serde_serialize_array.wado/SerializeError>::Ok"(seq_2) {
         __local_6 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer,wado-compiler/tests/fixtures/serde_serialize_array.wado/SerializeError>::Ok"(seq_2).payload_0;
         seq_3 = struct.new "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSeqSerializer" { ser: __local_6.ser, count: __local_6.count };
-        repr = self.repr;
-        end = self.used;
-        __iter_4 = struct.new "core:prelude/slice.wado//ArrayRefIter<core:prelude/string.wado/String>" { repr: repr, index: 0, end: end };
+        __iter_4 = struct.new "core:prelude/slice.wado//ArrayRefIter<core:prelude/string.wado/String>" { repr: self.repr, index: 0, end: self.used };
         b41: block {
             l42: loop {
                 __local_7 = "core:prelude/slice.wado/ArrayRefIter<core:prelude/string.wado/String>^Iterator::next"(__iter_4);
@@ -586,16 +582,12 @@ fn "wado-compiler/tests/fixtures/serde_serialize_array.wado/List<i32>^Serialize:
     let item: ref "core:prelude/types.wado//Box<i32>";
     let __local_6: ref "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSeqSerializer";
     let __local_7: ref null "core:prelude/types.wado//Box<i32>";
-    let repr: ref Array<i32>;
-    let end: i32;
     "core:prelude/string.wado/String::push"(s.buf, 91);
     seq_2 = struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer,wado-compiler/tests/fixtures/serde_serialize_array.wado/SerializeError>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSeqSerializer" { ser: s, count: 0 } };
     if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer,wado-compiler/tests/fixtures/serde_serialize_array.wado/SerializeError>::Ok"(seq_2) {
         __local_6 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer,wado-compiler/tests/fixtures/serde_serialize_array.wado/SerializeError>::Ok"(seq_2).payload_0;
         seq_3 = struct.new "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSeqSerializer" { ser: __local_6.ser, count: __local_6.count };
-        repr = self.repr;
-        end = self.used;
-        __iter_4 = struct.new "core:prelude/slice.wado//ArrayRefIter<i32>" { repr: repr, index: 0, end: end };
+        __iter_4 = struct.new "core:prelude/slice.wado//ArrayRefIter<i32>" { repr: self.repr, index: 0, end: self.used };
         b45: block {
             l46: loop {
                 __local_7 = "core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(__iter_4);

@@ -47,7 +47,10 @@
 //! then `promote_fields`, the post-promote structural BCE rerun, and
 //! `loop_version_bce` (loop-versioned BCE: statically-unprovable in-loop
 //! bounds asserts get a runtime residual guard and a checkless fast clone;
-//! a constant-fill fast loop collapses to `array.fill`).
+//! a constant-fill fast loop collapses to `array.fill`). Last, after every
+//! scalarization / globalization recognizer has matched its shape,
+//! `scalar_forward` folds the inliner's leftover single-use pure-scalar
+//! value-parameter temps into their uses.
 //!
 //! Outside the loop ([`optimize`]): Dead Code Elimination (`dce`, around the
 //! loop) plus the always-on post-optimization rewrites the Wasm backend
@@ -85,6 +88,7 @@ mod mod_ref;
 mod multi_value_return;
 mod peephole;
 mod ref_elim;
+mod scalar_forward;
 mod select_lowering;
 mod sroa;
 mod sroa_param;
@@ -110,6 +114,7 @@ use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
 use licm::apply_licm;
 use match_to_switch::{match_to_switch_all, match_to_switch_globals};
+use scalar_forward::forward_scalar_temps;
 use sroa::scalar_replace_aggregates;
 use sroa_param::sroa_single_field_parameters;
 use store_load_forward::forward_stores_to_loads_all;
@@ -782,5 +787,11 @@ fn run_optimization_passes(
             changed = true;
         }
         changed
+    });
+    // Forward the inliner's leftover single-use pure-scalar value-parameter
+    // temps into their uses. Runs last, after every scalarization / globalization
+    // recognizer has matched its shape, so it only strips dead-weight locals.
+    run_pass("nir/scalar_forward", project, profiler, |p| {
+        forward_scalar_temps(p, &mut gate)
     });
 }

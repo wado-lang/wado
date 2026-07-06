@@ -516,6 +516,57 @@ fn lib_sig_uses_named_type(ty: &ast::Type) -> bool {
     }
 }
 
+/// Select the allocator: tag the `#[allocator("<mode>")]` function matching the
+/// chosen mode as the `realloc` export and clear the export from the others.
+/// `None` picks the world's default (debug for test, freelist for HTTP/library,
+/// bump otherwise). Shared by the compile and dump pipelines.
+fn select_allocator<H: CompilerHost>(
+    package: &mut Package,
+    allocator: Option<String>,
+    logger: &Logger<'_, H>,
+) -> Result<(), Bail> {
+    let allocator_tag = allocator.unwrap_or_else(|| {
+        // HTTP service worlds default to `freelist` (long-running process,
+        // benefits from reclamation). Detection routes through
+        // `WorldInfo::has_http_handler_export` so the "is this the HTTP
+        // service world?" rule stays in one place.
+        let is_http_service = package
+            .world_registry
+            .get(&package.target_world)
+            .is_some_and(crate::world_registry::WorldInfo::has_http_handler_export);
+        if package.is_test_world() {
+            "debug".to_string()
+        } else if is_http_service || package.is_lib_world() {
+            // A library is consumed by a long-running host; reclaim memory.
+            "freelist".to_string()
+        } else {
+            "bump".to_string()
+        }
+    });
+    if let Some(alloc_module) = package.tir_modules.get_mut(&ModuleSource::allocator()) {
+        let mut found = false;
+        for func_rc in &alloc_module.functions {
+            let mut func = func_rc.borrow_mut();
+            if func.allocator_tag.as_deref() == Some(&*allocator_tag) {
+                func.export_name = Some("realloc".to_string());
+                found = true;
+            } else if func.allocator_tag.is_some() {
+                func.export_name = None;
+            }
+        }
+        if !found {
+            let _ = logger.error(compiler_host::Diagnostic {
+                severity: compiler_host::Severity::Error,
+                code: compiler_host::Code::UnsupportedFeature,
+                message: format!("unknown allocator: `{allocator_tag}`"),
+                span: None,
+            });
+            return Err(Bail);
+        }
+    }
+    Ok(())
+}
+
 /// # Arguments
 /// * `source` - The entry module source code
 /// * `host` - `CompilerHost` for loading imported modules and emitting diagnostics
@@ -853,49 +904,7 @@ fn compile_after_load<H: CompilerHost>(
             }
         };
 
-    // Select allocator: find the function tagged with #[allocator("...")] matching the
-    // chosen mode, set its export_name to "realloc", and clear export_name from all others.
-    {
-        let allocator_tag = options.allocator.unwrap_or_else(|| {
-            // HTTP service worlds default to `freelist` (long-running process,
-            // benefits from reclamation). Detection routes through
-            // `WorldInfo::has_http_handler_export` so the "is this the HTTP
-            // service world?" rule stays in one place.
-            let is_http_service = package
-                .world_registry
-                .get(&package.target_world)
-                .is_some_and(crate::world_registry::WorldInfo::has_http_handler_export);
-            if package.is_test_world() {
-                "debug".to_string()
-            } else if is_http_service || package.is_lib_world() {
-                // A library is consumed by a long-running host; reclaim memory.
-                "freelist".to_string()
-            } else {
-                "bump".to_string()
-            }
-        });
-        if let Some(alloc_module) = package.tir_modules.get_mut(&ModuleSource::allocator()) {
-            let mut found = false;
-            for func_rc in &alloc_module.functions {
-                let mut func = func_rc.borrow_mut();
-                if func.allocator_tag.as_deref() == Some(&*allocator_tag) {
-                    func.export_name = Some("realloc".to_string());
-                    found = true;
-                } else if func.allocator_tag.is_some() {
-                    func.export_name = None;
-                }
-            }
-            if !found {
-                let _ = logger.error(compiler_host::Diagnostic {
-                    severity: compiler_host::Severity::Error,
-                    code: compiler_host::Code::UnsupportedFeature,
-                    message: format!("unknown allocator: `{allocator_tag}`"),
-                    span: None,
-                });
-                return Err(Bail);
-            }
-        }
-    }
+    select_allocator(&mut package, options.allocator, logger)?;
 
     // Validate target world (test and library worlds are handled specially,
     // not in the static registry)
@@ -1164,6 +1173,7 @@ pub async fn dump_with_host<H: CompilerHost>(
         None,
         None,
         None,
+        None,
         &[],
         &crate::hashmap::IndexMap::default(),
         param_resolution::ParamPolicy::default(),
@@ -1182,6 +1192,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     filename: Option<&str>,
     opt_level: OptLevel,
     target_world: Option<&str>,
+    allocator: Option<&str>,
     inline_threshold: Option<usize>,
     opt_iterations: Option<u32>,
     codegen_flags: &[String],
@@ -1373,6 +1384,9 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 });
                 return Err(Bail);
             }
+
+            // Select allocator (must run before synthesis, matching compile).
+            select_allocator(&mut package, allocator.map(String::from), &logger)?;
 
             // Synthesis (must run before monomorphize)
             let package = {

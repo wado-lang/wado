@@ -339,13 +339,13 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
-    let a_5: i32;
-    let a_7: i32;
+    let a_6: i32;
+    let a_8: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_8 = capacity * 2; a_6 = select i32(a_8 > min_capacity, a_8, min_capacity); select i32(a_6 > 8, a_6, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -409,17 +409,14 @@ fn "wado-compiler/tests/fixtures/trait_bound_4.wado/Point^Describe::describe"(se
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     let f_6: ref "core:prelude/format.wado//Formatter";
-    let self_7: i32;
     let f_11: ref "core:prelude/format.wado//Formatter";
-    let self_12: i32;
-    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 }, "core:prelude/string.wado/String::push"(__local_1, 40), __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }, f_6 = __local_2, "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_7(self.x), f_6), "core:prelude/string.wado/String::push"(__local_1, 44), "core:prelude/string.wado/String::push"(__local_1, 32), __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }, f_11 = __local_2, "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_12(self.y), f_11), "core:prelude/string.wado/String::push"(__local_1, 41), __local_1;
+    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 }, "core:prelude/string.wado/String::push"(__local_1, 40), __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }, f_6 = __local_2, "core:prelude/primitive.wado/i32::fmt_decimal"(self.x, f_6), "core:prelude/string.wado/String::push"(__local_1, 44), "core:prelude/string.wado/String::push"(__local_1, 32), __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }, f_11 = __local_2, "core:prelude/primitive.wado/i32::fmt_decimal"(self.y, f_11), "core:prelude/string.wado/String::push"(__local_1, 41), __local_1;
 }
 
 fn "wado-compiler/tests/fixtures/trait_bound_4.wado/i32^Describe::describe"(self) {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
-    let self_7: i32;
-    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 }, "core:prelude/string.wado/String::push"(__local_1, 105), "core:prelude/string.wado/String::push"(__local_1, 110), "core:prelude/string.wado/String::push"(__local_1, 116), "core:prelude/string.wado/String::push"(__local_1, 58), __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }, "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_7(self.value), __local_2), __local_1;
+    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 }, "core:prelude/string.wado/String::push"(__local_1, 105), "core:prelude/string.wado/String::push"(__local_1, 110), "core:prelude/string.wado/String::push"(__local_1, 116), "core:prelude/string.wado/String::push"(__local_1, 58), __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }, "core:prelude/primitive.wado/i32::fmt_decimal"(self.value, __local_2), __local_1;
 }
 
 fn "wado-compiler/tests/fixtures/trait_bound_4.wado/Button^Drawable::draw"(self) {
@@ -529,20 +526,20 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 
 fn "core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>^Eq::eq"(self, other) {
     let i: i32;
-    let _licm_used_3: i32;
-    let _licm_repr_4: ref "Array<core:prelude/list.wado/List<i32>>";
-    let _licm_repr_5: ref "Array<core:prelude/list.wado/List<i32>>";
+    let _licm_used_7: i32;
+    let _licm_repr_8: ref "Array<core:prelude/list.wado/List<i32>>";
+    let _licm_repr_9: ref "Array<core:prelude/list.wado/List<i32>>";
     if self.used != other.used {
         return 0;
     }
     i = 0;
-    _licm_used_3 = self.used;
-    _licm_repr_4 = self.repr;
-    _licm_repr_5 = other.repr;
+    _licm_used_7 = self.used;
+    _licm_repr_8 = self.repr;
+    _licm_repr_9 = other.repr;
     b42: block {
         l43: loop {
-            break_if b42 i >= _licm_used_3;
-            if "core:prelude/list.wado/List<i32>^Eq::eq"(builtin::array_get<ref "core:prelude//List<i32>">(_licm_repr_4, i), builtin::array_get<ref "core:prelude//List<i32>">(_licm_repr_5, i)) == 0 {
+            break_if b42 i >= _licm_used_7;
+            if "core:prelude/list.wado/List<i32>^Eq::eq"(builtin::array_get<ref "core:prelude//List<i32>">(_licm_repr_8, i), builtin::array_get<ref "core:prelude//List<i32>">(_licm_repr_9, i)) == 0 {
                 return 0;
             }
             i = i + 1;
@@ -554,20 +551,20 @@ fn "core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>^Eq::eq"(self, 
 
 fn "core:prelude/list.wado/List<i32>^Eq::eq"(self, other) {
     let i: i32;
-    let _licm_used_3: i32;
-    let _licm_repr_4: ref Array<i32>;
-    let _licm_repr_5: ref Array<i32>;
+    let _licm_used_7: i32;
+    let _licm_repr_8: ref Array<i32>;
+    let _licm_repr_9: ref Array<i32>;
     if self.used != other.used {
         return 0;
     }
     i = 0;
-    _licm_used_3 = self.used;
-    _licm_repr_4 = self.repr;
-    _licm_repr_5 = other.repr;
+    _licm_used_7 = self.used;
+    _licm_repr_8 = self.repr;
+    _licm_repr_9 = other.repr;
     b46: block {
         l47: loop {
-            break_if b46 i >= _licm_used_3;
-            if builtin::array_get<i32>(_licm_repr_4, i) != builtin::array_get<i32>(_licm_repr_5, i) {
+            break_if b46 i >= _licm_used_7;
+            if builtin::array_get<i32>(_licm_repr_8, i) != builtin::array_get<i32>(_licm_repr_9, i) {
                 return 0;
             }
             i = i + 1;

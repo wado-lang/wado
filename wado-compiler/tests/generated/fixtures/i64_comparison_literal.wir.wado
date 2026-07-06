@@ -69,7 +69,6 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/i64_comparison_literal.wado/run"() with Stdout {
-    let y: i64;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -77,8 +76,7 @@ fn "wado-compiler/tests/fixtures/i64_comparison_literal.wado/run"() with Stdout 
         global:__modules_initialized = 1;
     };
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x > 0: true"), used: 11 });
-    y = 0_i64 - 50_i64;
-    if y < 0_i64 {
+    if (0_i64 - 50_i64) < 0_i64 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("y < 0: true"), used: 11 });
     } else {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("y < 0: false"), used: 12 });

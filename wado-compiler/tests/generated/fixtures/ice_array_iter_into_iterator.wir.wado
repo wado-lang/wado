@@ -107,42 +107,33 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:__modules_initialized: bool = 0;
+global global:__const_obj_0: ref null "core:prelude//List<u8>" = struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(array.new_fixed<u8>(72, 101, 108, 108, 111)), used: 5 };
 
 fn "wado-compiler/tests/fixtures/ice_array_iter_into_iterator.wado/run"() with Stdout {
-    let __b: ref "core:prelude//List<u8>";
-    let arr: ref "core:prelude//List<u8>";
     let s: ref "core:prelude/string.wado//String";
     let __match_3: ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>";
     let bytes_18: ref "core:prelude/slice.wado//ArrayIter<u8>";
     let collected: ref "core:prelude//List<u8>";
-    let repr_22: ref Array<u8>;
     let bytes_27: ref "core:prelude/slice.wado//ArraySlice<u8>";
-    let repr_28: ref Array<u8>;
-    let repr_31: ref Array<u8>;
-    let end_33: i32;
-    let bytes_35: ref Array<u8>;
-    let len: i32;
+    let __sroa_arr_repr: ref Array<u8>;
+    let bytes_37: ref Array<u8>;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    __b = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111), used: 5 };
-    arr = struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(builtin::array_clone<u8>(__b.repr)), used: 5 };
-    repr_28 = arr.repr;
-    repr_22 = repr_28;
-    bytes_18 = struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: repr_22, index: 0, end: 5 };
+    __sroa_arr_repr = builtin::array_clone<u8>(global:__const_obj_0.repr);
+    drop(global:__const_obj_0.used);
+    bytes_18 = struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: __sroa_arr_repr, index: 0, end: 5 };
     collected = "core:prelude/slice.wado/ArrayIter<u8>::collect"(bytes_18);
     __match_3 = __inline_String__from_utf8_slice_16: block -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>" {
-        repr_31 = collected.repr;
-        end_33 = collected.used;
-        bytes_27 = struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: repr_31, start: 0, end: end_33 };
+        bytes_27 = struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: collected.repr, start: 0, end: collected.used };
         if @unlikely("core:prelude/string.wado/String::is_valid_utf8"(bytes_27) == 0) {
             cold_path;
             break __inline_String__from_utf8_slice_16: struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8"), used: 13 } };
         }
-        break __inline_String__from_utf8_slice_16: struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: ref.as_non_null(bytes_35 = "core:prelude/slice.wado/ArraySlice<u8>::to_array"(bytes_27); len = bytes_27.end - bytes_27.start; struct.new "core:prelude/string.wado//String" { repr: bytes_35, used: len }) };
+        break __inline_String__from_utf8_slice_16: struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: ref.as_non_null(bytes_37 = "core:prelude/slice.wado/ArraySlice<u8>::to_array"(bytes_27); struct.new "core:prelude/string.wado//String" { repr: bytes_37, used: bytes_27.end - bytes_27.start }) };
     };
     if ref.test "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok"(__match_3) {
         s = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok"(__match_3).payload_0;
@@ -198,20 +189,11 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
     let b0: u8;
     let b1_4: u8;
-    let code_5: u32;
     let b1_6: u8;
     let b2_7: u8;
-    let code_8: u32;
     let b1_9: u8;
     let b2_10: u8;
     let b3: u8;
-    let code_12: u32;
-    let index_16: i32;
-    let index_18: i32;
-    let index_20: i32;
-    let index_22: i32;
-    let index_24: i32;
-    let index_26: i32;
     b0 = builtin::array_get<u8>(bytes.repr, bytes.start + start);
     if @likely(b0 <u 128) {
         return b0, 1, 1;
@@ -225,8 +207,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 1, 0;
         }
-        index_16 = start + 1;
-        b1_4 = builtin::array_get<u8>(bytes.repr, bytes.start + index_16);
+        b1_4 = builtin::array_get<u8>(bytes.repr, bytes.start + (start + 1));
         if @unlikely((if b1_4 <u 128 -> i32 {
             1;
         } else {
@@ -235,16 +216,14 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 1, 0;
         }
-        code_5 = ((b0 & 31) << 6) | (b1_4 & 63);
-        return code_5, 2, 1;
+        return ((b0 & 31) << 6) | (b1_4 & 63), 2, 1;
     }
     if @likely(b0 <u 240) {
         if @unlikely((start + 1) >= len) {
             cold_path;
             return 0, 1, 0;
         }
-        index_18 = start + 1;
-        b1_6 = builtin::array_get<u8>(bytes.repr, bytes.start + index_18);
+        b1_6 = builtin::array_get<u8>(bytes.repr, bytes.start + (start + 1));
         if @unlikely((if (if (if b1_6 <u 128 -> i32 {
             1;
         } else {
@@ -269,8 +248,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 2, 0;
         }
-        index_20 = start + 2;
-        b2_7 = builtin::array_get<u8>(bytes.repr, bytes.start + index_20);
+        b2_7 = builtin::array_get<u8>(bytes.repr, bytes.start + (start + 2));
         if @unlikely((if b2_7 <u 128 -> i32 {
             1;
         } else {
@@ -279,16 +257,14 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 2, 0;
         }
-        code_8 = (((b0 & 15) << 12) | ((b1_6 & 63) << 6)) | (b2_7 & 63);
-        return code_8, 3, 1;
+        return (((b0 & 15) << 12) | ((b1_6 & 63) << 6)) | (b2_7 & 63), 3, 1;
     }
     if @likely(b0 <u 245) {
         if @unlikely((start + 1) >= len) {
             cold_path;
             return 0, 1, 0;
         }
-        index_22 = start + 1;
-        b1_9 = builtin::array_get<u8>(bytes.repr, bytes.start + index_22);
+        b1_9 = builtin::array_get<u8>(bytes.repr, bytes.start + (start + 1));
         if @unlikely((if (if (if b1_9 <u 128 -> i32 {
             1;
         } else {
@@ -313,8 +289,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 2, 0;
         }
-        index_24 = start + 2;
-        b2_10 = builtin::array_get<u8>(bytes.repr, bytes.start + index_24);
+        b2_10 = builtin::array_get<u8>(bytes.repr, bytes.start + (start + 2));
         if @unlikely((if b2_10 <u 128 -> i32 {
             1;
         } else {
@@ -327,8 +302,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 3, 0;
         }
-        index_26 = start + 3;
-        b3 = builtin::array_get<u8>(bytes.repr, bytes.start + index_26);
+        b3 = builtin::array_get<u8>(bytes.repr, bytes.start + (start + 3));
         if @unlikely((if b3 <u 128 -> i32 {
             1;
         } else {
@@ -337,8 +311,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 3, 0;
         }
-        code_12 = ((((b0 & 7) << 18) | ((b1_9 & 63) << 12)) | ((b2_10 & 63) << 6)) | (b3 & 63);
-        return code_12, 4, 1;
+        return ((((b0 & 7) << 18) | ((b1_9 & 63) << 12)) | ((b2_10 & 63) << 6)) | (b3 & 63), 4, 1;
     }
     cold_path;
     return 0, 1, 0;

@@ -72,13 +72,12 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/effect_propagation_stdout_stream.wado/writer"() with Stdout {
-    let tx_1: i32;
     let packed: i64;
     let rx_4: i32;
     let tx_5: i32;
     rx_4 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_5 = builtin::i32_wrap_i64(packed >> 32_i64);
-    "wasi/stream-drop-writable"(local.tee tx_1(tx_5));
+    "wasi/stream-drop-writable"(tx_5);
     "wasi/stream-drop-readable"(rx_4);
 }
 

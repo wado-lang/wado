@@ -30,6 +30,7 @@ fn monomorphized_tir(source: &str) -> String {
         None,
         None,
         None,
+        None,
         &[],
         &wado_compiler::hashmap::IndexMap::default(),
         wado_compiler::param_resolution::ParamPolicy::default(),

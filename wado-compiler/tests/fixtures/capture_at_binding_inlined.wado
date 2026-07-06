@@ -1,0 +1,49 @@
+// `&<non-local place>` captures the object the place denotes at binding time
+// (WEP reference-representation: it "reads a snapshot copy"). Reassigning the
+// place gives it a fresh handle the earlier reference never saw, so a later read
+// through the reference must observe the captured value, not the reassignment —
+// even after inlining turns `r[0]` into a field read that ref_elim would
+// otherwise fold back into a live re-read of the place. An *in-place* mutation
+// through the shared handle (`xs[i] = …`, `push`) stays visible; only a handle
+// replacement is snapshotted. Each case below reassigns through a different
+// path — direct, aliased `&mut`, and an out-of-line `&mut self` method.
+use { println, Stdout } from "core:cli";
+
+struct Box { xs: List<i32> }
+
+impl Box {
+    fn replace(&mut self, n: i32) {
+        if n > 1000 { self.replace(n - 1) }
+        self.xs = [n]
+    }
+}
+
+export fn run() with Stdout {
+    // Direct reassignment of the captured field.
+    let mut a = Box { xs: [10] };
+    let ra = &a.xs;
+    a.xs = [20];
+    println(`{ra[0]}`);
+
+    // In-place element write: visible through the shared handle.
+    let mut b = Box { xs: [10] };
+    let rb = &b.xs;
+    b.xs[0] = 20;
+    println(`{rb[0]}`);
+
+    // Reassignment through a `&mut` alias of the enclosing struct.
+    let mut c = Box { xs: [10] };
+    let rc = &c.xs;
+    let m = &mut c;
+    m.xs = [20];
+    println(`{rc[0]}`);
+
+    // Reassignment inside an out-of-line `&mut self` method.
+    let mut d = Box { xs: [10] };
+    let rd = &d.xs;
+    d.replace(20);
+    println(`{rd[0]}`);
+}
+
+__DATA__
+{ "stdout": "10\n20\n10\n10\n" }

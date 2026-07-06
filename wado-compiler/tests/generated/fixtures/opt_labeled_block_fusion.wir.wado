@@ -149,11 +149,7 @@ global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/opt_labeled_block_fusion.wado/first_positive"(arr) {
     let __iter_1: ref "core:prelude/slice.wado//ArrayIter<i32>";
-    let repr: ref Array<i32>;
-    let end: i32;
-    repr = arr.repr;
-    end = arr.used;
-    __iter_1 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr, index: 0, end: end };
+    __iter_1 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: arr.repr, index: 0, end: arr.used };
     b0: block {
         l1: loop {
             let __sroa___match_3_discriminant: i32;
@@ -175,12 +171,10 @@ fn "wado-compiler/tests/fixtures/opt_labeled_block_fusion.wado/first_positive"(a
 fn "wado-compiler/tests/fixtures/opt_labeled_block_fusion.wado/run"() with Stdout {
     let a: ref "core:prelude/types.wado//Option<i32>";
     let v_1: i32;
-    let __cond_3: bool;
     let __cond_5: bool;
     let __b_6: ref "core:prelude//List<i32>";
     let c: ref "core:prelude/types.wado//Option<i32>";
     let v_9: i32;
-    let __cond_11: bool;
     let __b_12: ref "core:prelude//List<i32>";
     let d: ref "core:prelude/types.wado//Option<i32>";
     let __cond_15: bool;
@@ -201,8 +195,7 @@ fn "wado-compiler/tests/fixtures/opt_labeled_block_fusion.wado/run"() with Stdou
     a = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 10 };
     if ref.test "core:prelude/types.wado//Option<i32>::Some"(a) {
         v_1 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(a).payload_0;
-        __cond_3 = v_1 == 10;
-        if @unlikely(__cond_3 == 0) {
+        if @unlikely(v_1 != 10) {
             cold_path;
             "core:rt/panic"(__local_16 = "core:prelude/string.wado/String::with_capacity"(113); "core:prelude/string.wado/String::push_str"(__local_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_16, 114); "core:prelude/string.wado/String::push"(__local_16, 117); "core:prelude/string.wado/String::push"(__local_16, 110); "core:prelude/string.wado/String::push"(__local_16, 32); "core:prelude/string.wado/String::push"(__local_16, 97); "core:prelude/string.wado/String::push"(__local_16, 116); "core:prelude/string.wado/String::push"(__local_16, 32); "core:prelude/string.wado/String::push_str"(__local_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_labeled_block_fusion.wado"), used: 58 }); "core:prelude/string.wado/String::push"(__local_16, 58); __local_17 = "core:prelude/format.wado/Formatter::new"(__local_16); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 32 }, __local_17); "core:prelude/string.wado/String::push_str"(__local_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: v == 10
@@ -223,8 +216,7 @@ condition: b matches { None }
     c = "wado-compiler/tests/fixtures/opt_labeled_block_fusion.wado/first_positive"(__b_6);
     if ref.test "core:prelude/types.wado//Option<i32>::Some"(c) {
         v_9 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(c).payload_0;
-        __cond_11 = v_9 == 3;
-        if @unlikely(__cond_11 == 0) {
+        if @unlikely(v_9 != 3) {
             cold_path;
             "core:rt/panic"(__local_20 = "core:prelude/string.wado/String::with_capacity"(112); "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_20, 114); "core:prelude/string.wado/String::push"(__local_20, 117); "core:prelude/string.wado/String::push"(__local_20, 110); "core:prelude/string.wado/String::push"(__local_20, 32); "core:prelude/string.wado/String::push"(__local_20, 97); "core:prelude/string.wado/String::push"(__local_20, 116); "core:prelude/string.wado/String::push"(__local_20, 32); "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_labeled_block_fusion.wado"), used: 58 }); "core:prelude/string.wado/String::push"(__local_20, 58); __local_21 = "core:prelude/format.wado/Formatter::new"(__local_20); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 42 }, __local_21); "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: v == 3
@@ -445,13 +437,11 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
 }
 
 fn "core:prelude/primitive.wado/i32^Display::fmt"(self, f) {
-    let self_2: i32;
-    "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_2(self.value), f);
+    "core:prelude/primitive.wado/i32::fmt_decimal"(self.value, f);
 }
 
 fn "core:prelude/primitive.wado/i32^Inspect::inspect"(self, f) {
-    let self_2: i32;
-    "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_2(self.value), f);
+    "core:prelude/primitive.wado/i32::fmt_decimal"(self.value, f);
 }
 
 fn "core:prelude/string.wado/String::with_capacity"(capacity) {
@@ -462,13 +452,13 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
-    let a_5: i32;
-    let a_7: i32;
+    let a_6: i32;
+    let a_8: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_8 = capacity * 2; a_6 = select i32(a_8 > min_capacity, a_8, min_capacity); select i32(a_6 > 8, a_6, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

@@ -201,25 +201,23 @@ fn "wado-compiler/tests/fixtures/cross_module_recursive_variant.wado/__test_0_sa
     let a: ref "./sub/cross_module_recursive_variant_a.wado//Node";
     let b: ref "./sub/cross_module_recursive_variant_b.wado//Node";
     let __v0_2: i32;
-    let __cond_3: bool;
     let __v0_4: i32;
-    let __cond_5: bool;
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
     a = "./sub/cross_module_recursive_variant_a.wado/make_a"();
     b = "./sub/cross_module_recursive_variant_b.wado/make_b"();
-    __cond_3 = local.tee __v0_2("./sub/cross_module_recursive_variant_a.wado/sum_a"(a)) == 3;
-    if @unlikely(__cond_3 == 0) {
+    __v0_2 = "./sub/cross_module_recursive_variant_a.wado/sum_a"(a);
+    if @unlikely(__v0_2 != 3) {
         cold_path;
         "core:rt/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(128); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_same_name_recursive_variant_types_from_two_modules_coexist"), used: 67 }); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/cross_module_recursive_variant.wado"), used: 64 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 16 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: sum_a(&a) == 3
 "), used: 27 }); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sum_a(&a): "), used: 11 }); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_2 }, __local_7); "core:prelude/string.wado/String::push"(__local_6, 10); __local_6);
         unreachable;
     }
-    __cond_5 = local.tee __v0_4("./sub/cross_module_recursive_variant_b.wado/sum_b"(b)) == 12;
-    if @unlikely(__cond_5 == 0) {
+    __v0_4 = "./sub/cross_module_recursive_variant_b.wado/sum_b"(b);
+    if @unlikely(__v0_4 != 12) {
         cold_path;
         "core:rt/panic"(__local_8 = "core:prelude/string.wado/String::with_capacity"(129); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_same_name_recursive_variant_types_from_two_modules_coexist"), used: 67 }); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push"(__local_8, 97); "core:prelude/string.wado/String::push"(__local_8, 116); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/cross_module_recursive_variant.wado"), used: 64 }); "core:prelude/string.wado/String::push"(__local_8, 58); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 17 }, __local_9); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: sum_b(&b) == 12
@@ -252,13 +250,9 @@ fn "./sub/cross_module_recursive_variant_a.wado/sum_a"(n) {
     let inner: ref "./sub/cross_module_recursive_variant_a.wado//Node";
     let __match_5: ref null "core:prelude/types.wado//Box<./sub/cross_module_recursive_variant_a.wado/Child>";
     let self: ref "core:prelude//List<./sub/cross_module_recursive_variant_a.wado/Child>";
-    let repr: ref "Array<./sub/cross_module_recursive_variant_a.wado/Child>";
-    let end: i32;
     total = n.kind;
     self = n.children;
-    repr = self.repr;
-    end = self.used;
-    __iter_2 = struct.new "core:prelude/slice.wado//ArrayRefIter<./sub/cross_module_recursive_variant_a.wado/Child>" { repr: repr, index: 0, end: end };
+    __iter_2 = struct.new "core:prelude/slice.wado//ArrayRefIter<./sub/cross_module_recursive_variant_a.wado/Child>" { repr: self.repr, index: 0, end: self.used };
     b2: block {
         l3: loop {
             __match_5 = "core:prelude/slice.wado/ArrayRefIter<./sub/cross_module_recursive_variant_a.wado/Child>^Iterator::next"(__iter_2);
@@ -293,13 +287,9 @@ fn "./sub/cross_module_recursive_variant_b.wado/sum_b"(n) {
     let inner: ref "./sub/cross_module_recursive_variant_b.wado//Node";
     let __match_5: ref null "core:prelude/types.wado//Box<./sub/cross_module_recursive_variant_b.wado/Child>";
     let self: ref "core:prelude//List<./sub/cross_module_recursive_variant_b.wado/Child>";
-    let repr: ref "Array<./sub/cross_module_recursive_variant_b.wado/Child>";
-    let end: i32;
     total = n.kind;
     self = n.children;
-    repr = self.repr;
-    end = self.used;
-    __iter_2 = struct.new "core:prelude/slice.wado//ArrayRefIter<./sub/cross_module_recursive_variant_b.wado/Child>" { repr: repr, index: 0, end: end };
+    __iter_2 = struct.new "core:prelude/slice.wado//ArrayRefIter<./sub/cross_module_recursive_variant_b.wado/Child>" { repr: self.repr, index: 0, end: self.used };
     b6: block {
         l7: loop {
             __match_5 = "core:prelude/slice.wado/ArrayRefIter<./sub/cross_module_recursive_variant_b.wado/Child>^Iterator::next"(__iter_2);
@@ -476,13 +466,11 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
 }
 
 fn "core:prelude/primitive.wado/i32^Display::fmt"(self, f) {
-    let self_2: i32;
-    "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_2(self.value), f);
+    "core:prelude/primitive.wado/i32::fmt_decimal"(self.value, f);
 }
 
 fn "core:prelude/primitive.wado/i32^Inspect::inspect"(self, f) {
-    let self_2: i32;
-    "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_2(self.value), f);
+    "core:prelude/primitive.wado/i32::fmt_decimal"(self.value, f);
 }
 
 fn "core:prelude/string.wado/String::with_capacity"(capacity) {
@@ -493,13 +481,13 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
-    let a_5: i32;
-    let a_7: i32;
+    let a_6: i32;
+    let a_8: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_8 = capacity * 2; a_6 = select i32(a_8 > min_capacity, a_8, min_capacity); select i32(a_6 > 8, a_6, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
