@@ -164,6 +164,7 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
             crate::kiln_provider::RegistryContext {
                 build_dependencies: manifest.build_dependencies.clone(),
                 registries: manifest.registries.clone(),
+                locked_versions: crate::build_dep::locked_generator_versions(&manifest_root),
             },
         );
         // Schemas are anchored at the manifest root; load them relative to it.

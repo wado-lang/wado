@@ -81,12 +81,15 @@ use calc from "./Calc.g4"
     with { generator: { module: "wado-lang:gale", options: { highlight: false, trace: false } } };
 ```
 
-On compile, `GeneratorModule::Spec("wado-lang:gale")` resolves the coordinate
-against `[build-dependencies]`, picks the highest published version matching the
-requirement, pulls the component from the generator world sub-path into
-`build/kiln/generators/` (cached; a published version is immutable), and recovers
-its options descriptor from the component WIT. The generator then runs as a
-prebuilt component through the same driver path as a source generator.
+`wado update` resolves the coordinate, picks the highest published version
+matching the requirement, and records it in `wado.lock` as a `[[build-dependency]]`
+with the generator artifact's integrity digest. `wado fetch` then pre-pulls the
+component from the generator world sub-path into `build/kiln/generators/`. On
+compile, `GeneratorModule::Spec("wado-lang:gale")` resolves to the locked version,
+reuses the fetched component (a published version is immutable, so the cache is
+sound), and recovers its options descriptor from the component WIT. The generator
+then runs as a prebuilt component through the same driver path as a source
+generator. Without a lock the compiler resolves and pulls lazily.
 
 ### Options and defaults
 
@@ -101,8 +104,8 @@ do not cross the registry boundary; supply each field explicitly.
 Tracked in
 [the dependency-management plan](../../docs/dependency-management-implementation-plan.md):
 
-- The generator is resolved/pulled lazily by the compiler, so it is **not** yet
-  recorded in `wado.lock` (no integrity pin) and `wado fetch` does not pre-pull
-  it. Folding `[build-dependencies]` into the lock/fetch path is a follow-up.
 - Carrying source-level option defaults across the boundary (so an omitted field
-  falls back to the generator's default) needs the component to encode them.
+  falls back to the generator's default) needs the component to encode them; see
+  the Kiln WEP's "Source vs registry options descriptor" note.
+- `wado.lock`'s recorded integrity is not yet enforced on fetch/compile (a
+  `--locked` / `--offline` mode is a separate dependency-management phase).

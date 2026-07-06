@@ -78,7 +78,26 @@ pub async fn run(_opts: FetchOptions) -> Result<(), CliExit> {
         );
         count += 1;
     }
-    eprintln!("Fetched {count} component(s)");
+
+    // Build-dependencies are Kiln generators, published at their package's
+    // `core-kiln-generator` world sub-path. Pull each into the generator cache
+    // the Kiln provider reads at compile time.
+    let build_deps = crate::build_dep::resolve_build_dependencies(&project.manifest)
+        .await
+        .map_err(|e| CliExit::error(format!("resolving build-dependencies: {e}")))?;
+    let generators = crate::build_dep::fetch_build_dependencies(&build_deps, &project.root)
+        .await
+        .map_err(CliExit::error)?;
+    for dep in &build_deps {
+        eprintln!(
+            "Fetched {}@{} (generator) → {}",
+            dep.coordinate,
+            dep.version,
+            crate::build_dep::generator_cache_path(&project.root, &dep.coordinate).display()
+        );
+    }
+
+    eprintln!("Fetched {} component(s)", count + generators);
     Ok(())
 }
 

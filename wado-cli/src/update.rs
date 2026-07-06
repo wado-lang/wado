@@ -50,13 +50,20 @@ pub async fn run(_opts: UpdateOptions) -> Result<(), CliExit> {
     let packages = wado_manifest::resolve(&project.manifest, &provider)
         .await
         .map_err(|e| CliExit::error(format!("resolving dependencies: {e}")))?;
+    let build_dependencies: Vec<_> =
+        crate::build_dep::resolve_build_dependencies(&project.manifest)
+            .await
+            .map_err(|e| CliExit::error(format!("resolving build-dependencies: {e}")))?
+            .iter()
+            .map(crate::build_dep::ResolvedBuildDep::locked_package)
+            .collect();
 
-    let count = packages.len();
+    let count = packages.len() + build_dependencies.len();
     let lock = LockFile {
         version: 1,
         deps_hash: project.manifest.deps_hash(),
         packages,
-        build_dependencies: Vec::new(),
+        build_dependencies,
     };
     let lock_path = project.root.join("wado.lock");
     fs::write(&lock_path, lock.to_toml())

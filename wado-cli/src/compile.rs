@@ -667,6 +667,7 @@ pub(crate) async fn maybe_run_pipeline(
         .with_registry_context(crate::kiln_provider::RegistryContext {
             build_dependencies: manifest.build_dependencies.clone(),
             registries: manifest.registries.clone(),
+            locked_versions: crate::build_dep::locked_generator_versions(&manifest_root),
         });
     // Kiln paths (`from`, `inputs`, `output_dir`) are anchored at the manifest
     // root, so schemas must be loaded relative to it — not the entry file's

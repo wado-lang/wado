@@ -64,6 +64,10 @@ pub struct RegistryContext {
     pub build_dependencies: indexmap::IndexMap<String, wado_manifest::Dependency>,
     /// The project's `[registries]` (alias → `oci://…` URL).
     pub registries: indexmap::IndexMap<String, String>,
+    /// Locked generator versions from `wado.lock` (`coordinate → version`).
+    /// When present, a spec resolves to the pinned version without a registry
+    /// version listing.
+    pub locked_versions: indexmap::IndexMap<String, String>,
 }
 
 #[derive(Debug, Clone)]
@@ -457,57 +461,16 @@ impl CompilerHost for SilentHost {
     }
 }
 
-/// Stable cache id for a registry generator spec. A published version is
-/// immutable, so keying on the spec string is enough — the warm cache serves
-/// the already-pulled artifact without a registry round-trip.
-fn spec_stable_id(spec: &str) -> String {
-    let digest = sha256_of(spec.as_bytes());
-    format!("spec-{}", &hex32(&digest)[..16])
-}
-
-/// Parse an OCI image tag into a [`semver::Version`], stripping an optional
-/// leading letter prefix (`v1.2.3`) the way the registry resolver does.
-fn parse_version_tag(tag: &str) -> Option<semver::Version> {
-    if let Ok(version) = semver::Version::parse(tag) {
-        return Some(version);
-    }
-    let rest = tag.trim_start_matches(|c: char| c.is_ascii_alphabetic());
-    (rest.len() < tag.len())
-        .then(|| semver::Version::parse(rest).ok())
-        .flatten()
-}
-
-/// Resolve a version requirement against a registry's published tags: the
-/// highest tag matching `req`. Mirrors the `wado update` resolver's
-/// highest-compatible policy, scoped to one package.
-///
-/// Tags are listed on the generator's *world sub-path* repository
-/// (`<ns>/<pkg>/core-kiln-generator`), the artifact actually pulled — its
-/// versions are what matter, and on registries like GHCR it can be public while
-/// the bare `<ns>/<pkg>` repository is not.
-async fn resolve_registry_version(
-    registry_url: &str,
-    package: &str,
-    req: &str,
-) -> Result<String, ProviderError> {
-    let req = semver::VersionReq::parse(req).map_err(|e| ProviderError::Unsupported {
-        message: format!("kiln: invalid version requirement `{req}` for `{package}`: {e}"),
-    })?;
-    let reference = oci::world_reference(registry_url, package, GENERATOR_WORLD_SEGMENT, "0.0.0")
-        .map_err(|message| ProviderError::Internal { message })?;
-    let tags = oci::list_tags(&reference)
-        .await
-        .map_err(|e| ProviderError::Internal {
-            message: format!("kiln: listing versions of `{package}`: {e}"),
-        })?;
-    tags.iter()
-        .filter_map(|t| parse_version_tag(t))
-        .filter(|v| req.matches(v))
-        .max()
-        .map(|v| v.to_string())
-        .ok_or_else(|| ProviderError::Unsupported {
-            message: format!("kiln: no published version of `{package}` matches `{req}`"),
-        })
+/// Build a [`ResolvedGenerator`] from a prebuilt generator component: recover
+/// the options descriptor from its WIT and hash the bytes as the source hash.
+fn resolved_generator_from_wasm(wasm: Vec<u8>) -> Result<ResolvedGenerator, String> {
+    let descriptor = crate::kiln_wit::options_descriptor_from_component(&wasm)?;
+    let source_hash = hex32(&sha256_of(&wasm));
+    Ok(ResolvedGenerator {
+        wasm,
+        descriptor,
+        source_hash,
+    })
 }
 
 fn sha256_of(bytes: &[u8]) -> [u8; 32] {
@@ -661,31 +624,31 @@ fn hex32(bytes: &[u8; 32]) -> String {
 
 /// The OCI world segment a Kiln generator publishes to (`wado publish` maps
 /// the `core:kiln/generator` world to this repository sub-path).
-const GENERATOR_WORLD_SEGMENT: &str = "core-kiln-generator";
-
 impl CliGeneratorProvider {
     /// Resolve a `module: "ns:name"` registry generator: look the coordinate up
-    /// in `[build-dependencies]`, pick the matching published version, pull its
-    /// `core-kiln-generator` component into the generator cache, and recover its
-    /// options descriptor from the component WIT.
+    /// in `[build-dependencies]`, pick the version (the `wado.lock` pin when one
+    /// exists, else the highest published version matching the requirement), pull
+    /// its `core-kiln-generator` component, and recover its options descriptor
+    /// from the component WIT.
     ///
-    /// The pulled artifact is cached under `build/kiln/generators/` keyed by the
-    /// spec; a warm cache short-circuits the registry round-trip entirely (a
-    /// published version is immutable). `--no-cache` forces a re-pull.
+    /// The pulled component is cached under `build/kiln/generators/` keyed by the
+    /// coordinate — the same location `wado fetch` pre-populates — so a warm cache
+    /// (or a fetched tree) short-circuits the registry round-trip. A published
+    /// version is immutable, so this is sound. `--no-cache` forces a re-pull.
     async fn resolve_spec(&self, spec: &str) -> Result<ResolvedGenerator, ProviderError> {
-        let stable_id = spec_stable_id(spec);
+        // The build-dependency key is the bare coordinate; a `@version` suffix on
+        // the spec (rare) pins the version directly.
+        let (coordinate, pinned) = match spec.rsplit_once('@') {
+            Some((coord, ver)) if coord.contains(':') => (coord, Some(ver.to_string())),
+            _ => (spec, None),
+        };
+        let stable_id = crate::build_dep::generator_stable_id(coordinate);
         if !self.no_cache
             && let Some(resolved) = self.try_read_spec_cache(&stable_id)
         {
             return Ok(resolved);
         }
 
-        // The build-dependency key is the bare coordinate; a `@version`
-        // suffix on the spec (rare) pins the version directly.
-        let (coordinate, pinned) = match spec.rsplit_once('@') {
-            Some((coord, ver)) if coord.contains(':') => (coord, Some(ver.to_string())),
-            _ => (spec, None),
-        };
         let dep = self
             .registry
             .build_dependencies
@@ -710,33 +673,37 @@ impl CliGeneratorProvider {
             });
         };
         let registry_url = self.registry_url(registry.as_deref())?;
-        let version = match pinned {
+        // Prefer the `wado.lock` pin, then a `@version` spec suffix, then a live
+        // registry version listing.
+        let version = match self
+            .registry
+            .locked_versions
+            .get(coordinate)
+            .cloned()
+            .or(pinned)
+        {
             Some(v) => v,
-            None => resolve_registry_version(&registry_url, package, version).await?,
+            None => crate::build_dep::resolve_generator_version(&registry_url, package, version)
+                .await
+                .map_err(|message| ProviderError::Unsupported { message })?,
         };
 
-        let reference =
-            oci::world_reference(&registry_url, package, GENERATOR_WORLD_SEGMENT, &version)
-                .map_err(|message| ProviderError::Internal { message })?;
+        let reference = oci::world_reference(
+            &registry_url,
+            package,
+            crate::build_dep::GENERATOR_WORLD_SEGMENT,
+            &version,
+        )
+        .map_err(|message| ProviderError::Internal { message })?;
         let wasm = oci::pull_component(&reference)
             .await
             .map_err(|e| ProviderError::Internal {
                 message: format!("kiln: fetching generator {reference}: {e}"),
             })?;
-        let descriptor =
-            crate::kiln_wit::options_descriptor_from_component(&wasm).map_err(|e| {
-                ProviderError::Internal {
-                    message: format!("kiln: reading options of generator {reference}: {e}"),
-                }
-            })?;
-        let source_hash = hex32(&sha256_of(&wasm));
-
-        let resolved = ResolvedGenerator {
-            wasm,
-            descriptor,
-            source_hash,
-        };
-        self.write_spec_cache(&stable_id, &resolved);
+        let resolved = resolved_generator_from_wasm(wasm).map_err(|e| ProviderError::Internal {
+            message: format!("kiln: reading options of generator {reference}: {e}"),
+        })?;
+        self.write_spec_cache(&stable_id, &resolved.wasm);
         Ok(resolved)
     }
 
@@ -752,40 +719,22 @@ impl CliGeneratorProvider {
             })
     }
 
+    /// Read a cached (or `wado fetch`-populated) generator component and rebuild
+    /// its `ResolvedGenerator`. The descriptor is recovered from the component
+    /// WIT every time rather than cached separately, so a component written by
+    /// `wado fetch` (which does not persist a descriptor sidecar) is a full cache
+    /// hit. `None` on a cache miss or an unreadable component.
     fn try_read_spec_cache(&self, stable_id: &str) -> Option<ResolvedGenerator> {
-        let cache_path = self.cache_path(stable_id);
-        let wasm = std::fs::read(&cache_path).ok()?;
-        let source_hash = hex32(&sha256_of(&wasm));
-        let descriptor = std::fs::read(self.descriptor_cache_path(stable_id))
-            .ok()
-            .and_then(|bytes| serde_json::from_slice::<OptionsDescriptor>(&bytes).ok());
-        Some(ResolvedGenerator {
-            wasm,
-            descriptor,
-            source_hash,
-        })
+        let wasm = std::fs::read(self.cache_path(stable_id)).ok()?;
+        resolved_generator_from_wasm(wasm).ok()
     }
 
-    fn write_spec_cache(&self, stable_id: &str, resolved: &ResolvedGenerator) {
+    fn write_spec_cache(&self, stable_id: &str, wasm: &[u8]) {
         let cache_path = self.cache_path(stable_id);
         if let Some(dir) = cache_path.parent() {
             let _ = std::fs::create_dir_all(dir);
         }
-        let _ = std::fs::write(&cache_path, &resolved.wasm);
-        let desc_path = self.descriptor_cache_path(stable_id);
-        if let Some(dir) = desc_path.parent() {
-            let _ = std::fs::create_dir_all(dir);
-        }
-        match &resolved.descriptor {
-            Some(descriptor) => {
-                if let Ok(bytes) = serde_json::to_vec_pretty(descriptor) {
-                    let _ = std::fs::write(&desc_path, bytes);
-                }
-            }
-            None => {
-                let _ = std::fs::remove_file(&desc_path);
-            }
-        }
+        let _ = std::fs::write(&cache_path, wasm);
     }
 
     /// Compile (or read from cache) a generator at a manifest-root-relative
@@ -887,27 +836,6 @@ mod tests {
             }
             other => panic!("expected Unsupported, got {other:?}"),
         }
-    }
-
-    #[test]
-    fn spec_stable_id_is_deterministic_and_scoped() {
-        let a = spec_stable_id("wado-lang:gale");
-        assert_eq!(a, spec_stable_id("wado-lang:gale"));
-        assert_ne!(a, spec_stable_id("wado-lang:jade"));
-        assert!(a.starts_with("spec-"), "{a}");
-    }
-
-    #[test]
-    fn parse_version_tag_reads_semver_and_prefixed() {
-        assert_eq!(
-            parse_version_tag("0.0.9"),
-            semver::Version::parse("0.0.9").ok()
-        );
-        assert_eq!(
-            parse_version_tag("v1.2.3"),
-            semver::Version::parse("1.2.3").ok()
-        );
-        assert_eq!(parse_version_tag("latest"), None);
     }
 
     #[test]

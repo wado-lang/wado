@@ -332,9 +332,14 @@ The redesign replaces the options-blob subsystem with typed WIT arguments:
 - [x] Republish gale under the new world (0.0.9) and validate
       `example/hello-packages` against the registry: `module: "wado-lang:gale"`
       compiles and runs end to end (`calc::parse("1 + 2 * 3")`).
-- [ ] Fold `[build-dependencies]` into the resolve/lock/fetch path so a registry
-      generator is version-pinned in `wado.lock` (integrity) and `wado fetch`
-      pre-pulls it — today `resolve_spec` fetches lazily at compile time.
+- [x] Fold `[build-dependencies]` into the lock/fetch path (`wado-cli::build_dep`):
+      `wado update` resolves each registry build-dependency at its generator world
+      sub-path and writes a `[[build-dependency]]` lock entry with the artifact's
+      integrity digest; `deps_hash` now covers `[build-dependencies]`; `wado fetch`
+      pre-pulls the generator into `build/kiln/generators/`; and `resolve_spec`
+      prefers the locked version (skipping the version listing) and reuses the
+      fetched component. Enforcing the recorded integrity on fetch/compile waits on
+      the `--locked` / `--offline` reproducibility flags (Phase 3).
 - [ ] Carry source-level option defaults across the registry boundary (encode
       them in the component) so an omitted field falls back to the default.
 - [ ] Reconcile the `[build-dependencies]` bare-key form (`module: "gale"` →

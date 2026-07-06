@@ -15,6 +15,8 @@ use oci_client::client::{Certificate, CertificateEncoding, ClientConfig};
 use oci_client::secrets::RegistryAuth;
 use oci_client::{Client, Reference};
 
+pub use oci_client::Reference as OciReference;
+
 /// The OCI layer media type `wado publish` (via `wkg`) writes for a component.
 const WASM_LAYER_MEDIA_TYPE: &str = "application/wasm";
 
