@@ -1,5 +1,6 @@
-//! A [`DependencyProvider`] for `wado update` that resolves path deps from
-//! disk; the registry (OCI) and git backends are not wired yet.
+//! A [`DependencyProvider`] for `wado update`: path deps from disk and registry
+//! deps from an OCI registry (via [`crate::oci`]). The git backend is not wired
+//! yet.
 
 use std::future::{Future, ready};
 use std::path::PathBuf;
@@ -7,6 +8,21 @@ use std::path::PathBuf;
 use wado_manifest::{
     DependencyProvider, GitTagInfo, Manifest, ProviderError, RegistryPackageInfo, Version,
 };
+
+use crate::oci;
+
+/// Parse an image tag into a semver [`Version`], stripping an optional leading
+/// letter prefix (`v1.2.3`, `release1.2.3`) as the manifest WEP's git-tag rule
+/// does. Tags that are not semver (e.g. `latest`) yield `None` and are ignored.
+fn parse_version_tag(tag: &str) -> Option<Version> {
+    if let Ok(version) = Version::parse(tag) {
+        return Some(version);
+    }
+    let rest = tag.trim_start_matches(|c: char| c.is_ascii_alphabetic());
+    (rest.len() < tag.len())
+        .then(|| Version::parse(rest).ok())
+        .flatten()
+}
 
 pub struct FilesystemProvider {
     root: PathBuf,
@@ -46,7 +62,7 @@ impl FilesystemProvider {
 fn backend_pending(source: String) -> ProviderError {
     ProviderError::NotFound {
         source,
-        message: "registry/git backend not wired yet (minimal OCI client pending)".to_string(),
+        message: "git dependency backend is not wired yet".to_string(),
     }
 }
 
@@ -56,7 +72,26 @@ impl DependencyProvider for FilesystemProvider {
         registry_url: &str,
         package: &str,
     ) -> impl Future<Output = Result<Vec<Version>, ProviderError>> + Send {
-        ready(Err(backend_pending(format!("{registry_url}/{package}"))))
+        let registry_url = registry_url.to_string();
+        let package = package.to_string();
+        async move {
+            let source = format!("{registry_url}/{package}");
+            let reference =
+                oci::reference(&registry_url, &package, "0.0.0").map_err(|message| {
+                    ProviderError::NotFound {
+                        source: source.clone(),
+                        message,
+                    }
+                })?;
+            let tags =
+                oci::list_tags(&reference)
+                    .await
+                    .map_err(|e| ProviderError::NetworkError {
+                        url: source,
+                        message: e.to_string(),
+                    })?;
+            Ok(tags.iter().filter_map(|t| parse_version_tag(t)).collect())
+        }
     }
 
     fn fetch_registry_package(
@@ -65,9 +100,31 @@ impl DependencyProvider for FilesystemProvider {
         package: &str,
         version: &Version,
     ) -> impl Future<Output = Result<RegistryPackageInfo, ProviderError>> + Send {
-        ready(Err(backend_pending(format!(
-            "{registry_url}/{package}@{version}"
-        ))))
+        let registry_url = registry_url.to_string();
+        let package = package.to_string();
+        let version = version.clone();
+        async move {
+            let source = format!("{registry_url}/{package}@{version}");
+            let reference = oci::reference(&registry_url, &package, &version.to_string()).map_err(
+                |message| ProviderError::NotFound {
+                    source: source.clone(),
+                    message,
+                },
+            )?;
+            let integrity = oci::manifest_digest(&reference).await.map_err(|e| {
+                ProviderError::NetworkError {
+                    url: source,
+                    message: e.to_string(),
+                }
+            })?;
+            // A published Wado package is a standalone Component Model artifact:
+            // no transitive Wado dependencies and no source entry module. The
+            // lock records the resolved version and the manifest digest.
+            Ok(RegistryPackageInfo {
+                manifest: crate::compile::empty_manifest(),
+                integrity,
+            })
+        }
     }
 
     fn list_git_tags(
@@ -146,10 +203,24 @@ version = "0.1.0"
     }
 
     #[test]
-    fn registry_backend_is_pending() {
+    fn non_oci_registry_url_is_rejected() {
+        // A registry dependency needs an `oci://` registry; anything else is
+        // rejected before any network access.
         let provider = FilesystemProvider::new(".".into());
         let err = block_on(provider.list_registry_versions("https://wa.dev", "mizchi:brotli"))
             .unwrap_err();
         assert!(matches!(err, ProviderError::NotFound { .. }), "{err:?}");
+    }
+
+    #[test]
+    fn parses_semver_tags_and_ignores_others() {
+        assert_eq!(parse_version_tag("0.0.9"), Version::parse("0.0.9").ok());
+        assert_eq!(parse_version_tag("v1.2.3"), Version::parse("1.2.3").ok());
+        assert_eq!(
+            parse_version_tag("release2.0.0"),
+            Version::parse("2.0.0").ok()
+        );
+        assert_eq!(parse_version_tag("latest"), None);
+        assert_eq!(parse_version_tag("overwrite-test"), None);
     }
 }

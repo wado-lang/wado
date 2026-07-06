@@ -27,7 +27,7 @@ use crate::tir::{
 use crate::token::Span;
 
 /// Structural description of a generator's `pub struct Options`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct OptionsDescriptor {
     pub fields: Vec<OptionsField>,
 }

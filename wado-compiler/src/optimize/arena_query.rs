@@ -10,6 +10,21 @@ use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 
+/// Every block reachable from the body root, in DFS pop order (a block precedes
+/// the blocks nested under it). The NIR block graph is a tree, so no visited set
+/// is needed.
+pub(super) fn reachable_blocks(body: &Body) -> Vec<BlockId> {
+    let mut out = Vec::new();
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Block(b) = node {
+            out.push(b);
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    out
+}
+
 /// The single optional payload-binding local of a variant arm's `bindings`,
 /// as two distinct outcomes callers tell apart (so `?` propagates the reject):
 /// `Some(None)` = no binding (`[]` or `[_]`); `Some(Some(idx))` = one `Binding`
@@ -44,6 +59,48 @@ pub(super) fn place_root_local(body: &Body, expr: ExprId) -> Option<u32> {
         } => inner.as_expr().and_then(|e| place_root_local(body, e)),
         _ => None,
     }
+}
+
+/// A place as its root local plus the field-index chain leading off it.
+pub(super) type Place = (u32, Vec<u32>);
+
+/// The [`Place`] of an expression — its root local and field-access chain —
+/// seeing through `&`/`&mut`/deref wrappers (so an inlined `self.f` whose
+/// receiver became `&mut b` still roots at `b`). `None` at an `Index` or any
+/// non-place step: a non-field place can never be a prefix of a pure
+/// Local/field place, so it never overlaps one.
+pub(super) fn place_path(body: &Body, expr: ExprId) -> Option<Place> {
+    match &body.exprs[expr].kind {
+        ExprKind::Local { index, .. } => Some((*index, Vec::new())),
+        ExprKind::FieldAccess {
+            expr: inner,
+            field_index,
+            ..
+        } => {
+            let (root, mut fields) = place_path(body, inner.as_expr()?)?;
+            fields.push(*field_index);
+            Some((root, fields))
+        }
+        ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
+            expr: inner,
+        } => place_path(body, inner.as_expr()?),
+        _ => None,
+    }
+}
+
+/// Whether place `q` is a (non-strict) prefix of place `p`: same root and `q`'s
+/// field chain leads `p`'s. Replacing the handle at `q` replaces the object a
+/// reference to `p` observes.
+pub(super) fn is_place_prefix(q: &Place, p: &Place) -> bool {
+    q.0 == p.0 && q.1.len() <= p.1.len() && q.1 == p.1[..q.1.len()]
+}
+
+/// Whether two places overlap — one is a prefix of the other — so a write to
+/// either may change a read of the other (`a.b` overlaps `a`, `a.b`, and
+/// `a.b.c`, but not the sibling `a.c`).
+pub(super) fn place_overlaps(a: &Place, b: &Place) -> bool {
+    is_place_prefix(a, b) || is_place_prefix(b, a)
 }
 
 /// The root local of an *escape* expression, looking through every projection

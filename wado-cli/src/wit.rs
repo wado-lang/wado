@@ -273,6 +273,7 @@ async fn resolve_world_imports(
         Some(world),
         None,
         None,
+        None,
         &[],
         &wado_compiler::hashmap::IndexMap::default(),
         wado_compiler::param_resolution::ParamPolicy::default(),

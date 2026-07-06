@@ -36,6 +36,8 @@ use crate::nir_engine::{Engine, Rule};
 use crate::tir::TypeId;
 use crate::token::Span;
 
+use super::arena_query::{Place, is_place_prefix, place_path};
+
 /// Per-binding analysis state, keyed by the ref local index.
 struct RefInfo {
     /// The *unresolved* source expression `E` from `let r = &E` (or the
@@ -44,6 +46,10 @@ struct RefInfo {
     referent_e: ExprId,
     /// True until a non-field-access use is found.
     eliminable: bool,
+    /// A `let r = s` shadow inheriting `s`'s referent. Its capture point is `s`'s
+    /// binding, not its own, so the positional capture guard falls back to a
+    /// whole-body check for it (the safe superset).
+    inherited: bool,
 }
 
 /// Reference elimination as a rule on the unified post-inline peephole session
@@ -67,6 +73,28 @@ pub(super) fn build_ref_elim(body: &Body) -> RefElimRule {
     let rebound = find_rebound_locals(body);
     let mut refs: IndexMap<u32, RefInfo> = IndexMap::default();
     analyze_block(body, body.root, &rebound, &mut refs);
+
+    // Capture-at-binding: a `let r = &<place>` reference captures the object the
+    // place denotes at binding time; folding `r.field` back into a re-read of
+    // `<place>` is unsound only if that place's handle is *replaced* while the
+    // capture is live — in the interval `(binding, last_use]`. A replacement
+    // before the binding predates the capture (`b.xs = …; let r = &b.xs`) and one
+    // after the last use can't reach it, so both fold soundly; only a replacement
+    // between does not. An inherited shadow (`let r = s`) captures at `s`'s
+    // binding, not its own, so it falls back to a whole-body check.
+    let facts = collect_capture_facts(body, &refs);
+    for (&local, info) in &mut refs {
+        let Some(referent) = place_path(body, info.referent_e) else {
+            continue;
+        };
+        let replaced = facts.replacements.iter().any(|r| {
+            replaces_capture(r, &referent)
+                && (info.inherited || in_capture_interval(r.pos, local, &facts))
+        });
+        if replaced {
+            info.eliminable = false;
+        }
+    }
 
     let mut deref: IndexMap<u32, DerefOnlyRef> = IndexMap::default();
     deref_collect_block(body, body.root, &mut deref);
@@ -251,6 +279,132 @@ fn find_rebound_locals(body: &Body) -> IndexSet<u32> {
     rebound
 }
 
+/// A place that may replace a captured handle, tagged with the pre-order
+/// statement position it occurs at (for the capture-interval check) and whether
+/// it reaches the handle directly (`Assign`, replaces `q ⊑ referent`) or through
+/// a `&mut` alias (reassigns only a *strictly* enclosed field, `q ⊏ referent`).
+struct Replacement {
+    place: Place,
+    pos: usize,
+    /// `true` for a `&mut` borrow (strict-prefix), `false` for a direct `Assign`.
+    via_borrow: bool,
+}
+
+/// Per-body positional facts for the capture-at-binding guard: each tracked ref's
+/// binding position and last-use position, plus every handle replacement. Ref
+/// captures are snapshots, so a replacement invalidates a fold only when it falls
+/// in the open-closed interval `(binding, last_use]`; a replacement before the
+/// binding predates the capture and one after the last use can't reach it.
+struct CaptureFacts {
+    binding_pos: IndexMap<u32, usize>,
+    last_use: IndexMap<u32, usize>,
+    replacements: Vec<Replacement>,
+}
+
+/// Walk the body in pre-order, numbering statements, and collect the
+/// [`CaptureFacts`]. An in-place mutation (method call, index / element write)
+/// leaves the handle and is recorded in neither replacement form; a borrow or
+/// write of a place deeper than a referent is never a prefix and never counts.
+fn collect_capture_facts(body: &Body, refs: &IndexMap<u32, RefInfo>) -> CaptureFacts {
+    let mut facts = CaptureFacts {
+        binding_pos: IndexMap::default(),
+        last_use: IndexMap::default(),
+        replacements: Vec::new(),
+    };
+    let mut pos = 0;
+    capture_walk(
+        body,
+        NodeRef::Block(body.root),
+        0,
+        &mut pos,
+        refs,
+        &mut facts,
+    );
+    facts
+}
+
+fn capture_walk(
+    body: &Body,
+    node: NodeRef,
+    enclosing: usize,
+    pos: &mut usize,
+    refs: &IndexMap<u32, RefInfo>,
+    facts: &mut CaptureFacts,
+) {
+    let here = match node {
+        NodeRef::Stmt(s) => {
+            let p = *pos;
+            *pos += 1;
+            if let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
+                && refs.contains_key(local_index)
+            {
+                facts.binding_pos.insert(*local_index, p);
+            }
+            p
+        }
+        _ => enclosing,
+    };
+    if let NodeRef::Expr(id) = node {
+        match &body.exprs[id].kind {
+            ExprKind::Assign { target, .. } => {
+                if let Some(place) = place_path(body, *target) {
+                    facts.replacements.push(Replacement {
+                        place,
+                        pos: here,
+                        via_borrow: false,
+                    });
+                }
+            }
+            ExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                expr: inner,
+            } => {
+                if let Some(place) = inner.as_expr().and_then(|e| place_path(body, e)) {
+                    facts.replacements.push(Replacement {
+                        place,
+                        pos: here,
+                        via_borrow: true,
+                    });
+                }
+            }
+            // A use of a tracked ref local (its `let` is not a use — the value is
+            // `&E`, never the ref itself). Extends the ref's capture interval.
+            ExprKind::Local { index, .. } if refs.contains_key(index) => {
+                let slot = facts.last_use.entry(*index).or_insert(here);
+                *slot = (*slot).max(here);
+            }
+            _ => {}
+        }
+    }
+    body.for_each_child(node, |c| capture_walk(body, c, here, pos, refs, facts));
+}
+
+/// Whether `replacement` replaces the handle observed through a reference to
+/// `referent`: an `Assign` to the referent or an enclosing field (`q ⊑ referent`),
+/// or a `&mut` alias of a *strictly* enclosing field through which a later
+/// `*m = …` / `m.f = …` can reassign it (`q ⊏ referent`). `&mut referent` itself
+/// is in-place mutation (`arr[i] = …`), which the shared handle folds soundly.
+fn replaces_capture(r: &Replacement, referent: &Place) -> bool {
+    if r.via_borrow {
+        &r.place != referent && is_place_prefix(&r.place, referent)
+    } else {
+        is_place_prefix(&r.place, referent)
+    }
+}
+
+/// Whether statement position `pos` falls in ref `local`'s live capture interval
+/// `(binding, last_use]`. An unused ref has no interval (nothing to invalidate);
+/// a missing binding position is treated conservatively as always live.
+fn in_capture_interval(pos: usize, local: u32, facts: &CaptureFacts) -> bool {
+    let Some(&k) = facts.binding_pos.get(&local) else {
+        return true;
+    };
+    let Some(&last_use) = facts.last_use.get(&local) else {
+        return false;
+    };
+    k < pos && pos <= last_use
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Pass 1: collect ref bindings + classify every use of each binding.
 // ──────────────────────────────────────────────────────────────────────────────
@@ -314,6 +468,7 @@ fn register_let_binding(
             RefInfo {
                 referent_e,
                 eliminable: true,
+                inherited: false,
             },
         );
         return;
@@ -325,6 +480,7 @@ fn register_let_binding(
         let inherited = RefInfo {
             referent_e: info.referent_e,
             eliminable: info.eliminable,
+            inherited: true,
         };
         refs.insert(local_index, inherited);
     }

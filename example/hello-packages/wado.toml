@@ -1,0 +1,21 @@
+[package]
+name = "hello-packages"
+version = "0.1.0"
+
+[world]
+"wasi:cli/command" = "src/main.wado"
+
+[registries]
+default = "oci://ghcr.io"
+
+[dependencies]
+"wado-lang:cm-catalog" = { version = "^0.1.0" }
+
+# gale (the Kiln generator for Calc.g4) is referenced by local path in
+# src/main.wado, not declared here: consuming the *published* gale generator
+# from the registry is not wired yet (see README).
+
+# Imports a component fetched by `wado fetch` (absent in CI), so it is not part
+# of the compile-test sweep.
+[test]
+exclude = ["src/main.wado"]

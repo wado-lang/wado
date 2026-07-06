@@ -225,3 +225,27 @@ export fn run() {}
         );
     });
 }
+
+/// A bare call on a non-function value binding reports the callee as
+/// not-callable *and* still resolves the arguments, so an error inside an
+/// argument is not masked by the callee error.
+#[test]
+fn not_callable_callee_still_reports_argument_errors() {
+    futures::executor::block_on(async {
+        let source = concat!(
+            "global X: i32 = 5;\n",
+            "export fn run() {\n",
+            "    let _ = X(undefined_fn());\n",
+            "}\n",
+        );
+        let diags = diagnostics_for("/work/not_callable.wado", source).await;
+        assert!(
+            diags.iter().any(|d| d.message.contains("not callable")),
+            "expected a not-callable diagnostic, got {diags:#?}"
+        );
+        assert!(
+            diags.iter().any(|d| d.message.contains("undefined_fn")),
+            "expected the argument's unknown-identifier diagnostic, got {diags:#?}"
+        );
+    });
+}

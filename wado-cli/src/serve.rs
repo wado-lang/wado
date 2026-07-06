@@ -1198,7 +1198,17 @@ pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
         retain_wir: false,
     };
     let cranelift_opt = opts.opt_level.to_wasmtime();
-    let wasm = compile::compile(&opts.input, &flags).await?;
+    // `serve` is a driver on the build tier: in a project it builds the
+    // http/service world through the shared build core (metadata embedded,
+    // written to build/), then serves it; a bare file with no project stays on
+    // the in-memory compile primitive.
+    let wasm = crate::build::build_for_driver(
+        &opts.input,
+        "wasi:http/service",
+        "wasi-http-service",
+        &flags,
+    )
+    .await?;
 
     let timeout = Duration::from_secs(opts.timeout_secs);
     // An explicit `--workers` is already validated against `--max-concurrency`

@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::fmt::Write as _;
 use std::rc::Rc;
 
+use crate::compiler_item::CompilerItem;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 
@@ -15,6 +16,36 @@ use crate::tir::{
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
+
+/// Body a per-functor format impl gets.
+enum FunctorFmtBody {
+    /// `f.write_str("<closure signature>")`, e.g. `|i32| -> i32`.
+    Signature,
+    /// `f.write_str("<closure source>")`, e.g. `|x: i32| (x + 1)`.
+    Source,
+    /// `self.<target trait>::<target method>(f)` — follows the delegation chain.
+    Delegate(CompilerItem),
+}
+
+/// The format traits a closure functor provides — the single source of truth
+/// for the format-trait set. [`ClosureLowerer::generate_functor_format_methods`]
+/// synthesizes one impl per entry, and [`ClosureCallSiteLowerer::try_redirect_inspect_to_functor`]
+/// recognises a redirect target by trait membership here. `Inspect` writes the
+/// signature, `InspectAlt` the source; `Display` / `DisplayAlt` follow the
+/// delegation chain (`Display → Inspect`, `DisplayAlt → Display`), which for a
+/// closure bottoms out at the signature.
+const CLOSURE_FORMAT_TRAITS: [(CompilerItem, FunctorFmtBody); 4] = [
+    (CompilerItem::Inspect, FunctorFmtBody::Signature),
+    (CompilerItem::InspectAlt, FunctorFmtBody::Source),
+    (
+        CompilerItem::Display,
+        FunctorFmtBody::Delegate(CompilerItem::Inspect),
+    ),
+    (
+        CompilerItem::DisplayAlt,
+        FunctorFmtBody::Delegate(CompilerItem::Display),
+    ),
+];
 
 /// Per-local entry recording that a function parameter has been
 /// specialized to a functor type. Populated for synthesized
@@ -553,8 +584,29 @@ impl ClosureLowerer {
             // Return inside survives. The inliner's `remap_stmt_with_label`
             // turns Return into Break only at the statement level, so a
             // Return wrapped inside a Block expression would be missed.
+            //
+            // A single-expression body that reified into a Block (e.g. a
+            // spread struct literal `S { ..*s, .. }`, hoisted to
+            // `{ let __base = ..; S { .. } }`) leaves the produced value in
+            // the block's trailing `Expr` statement. For a value-returning
+            // closure that tail is the return value, so promote it to a
+            // `Return`; otherwise wir_build drops it as a bare statement.
             let body_stmts = match &transformed_body.kind {
-                TirExprKind::Block(block) => block.stmts.clone(),
+                TirExprKind::Block(block) => {
+                    let mut stmts = block.stmts.clone();
+                    if return_type != TypeTable::UNIT
+                        && let Some(last) = stmts.last_mut()
+                        && let TirStmtKind::Expr(value) = &last.kind
+                    {
+                        *last = TirStmt::new(
+                            TirStmtKind::Return {
+                                value: Some(value.clone()),
+                            },
+                            last.span,
+                        );
+                    }
+                    stmts
+                }
                 _ if return_type == TypeTable::UNIT => vec![TirStmt::new(
                     TirStmtKind::Expr(transformed_body),
                     collected.span,
@@ -673,17 +725,16 @@ impl ClosureLowerer {
                 canonical_return: return_type,
             });
 
-            // Synthesize per-functor Inspect / InspectAlt impls so trait
-            // dispatch on the specialised `&__Closure_N` value writes the
-            // per-literal signature / TIR-unparsed source. Template
-            // expansion routes `{f:?}` / `{f:#?}` for fn-typed receivers
-            // through the same `Fn<N, Ret>^Inspect[Alt]::inspect[_alt]`
-            // call shape that user-written `f.inspect(&mut formatter)`
-            // produces, so these impls are reachable through three
-            // routes: explicit user calls, the `ClosureCallSiteLowerer`
-            // redirect added below (specialised path), and the
-            // canonical-vtable inspect slots (indirect path). Standard
-            // DCE removes them when none of these reach.
+            // Synthesize per-functor Inspect / InspectAlt / Display /
+            // DisplayAlt impls so trait dispatch on the specialised
+            // `&__Closure_N` value writes the per-literal signature /
+            // TIR-unparsed source. Template expansion routes `{f}` / `{f:?}`
+            // / `{f:#}` / `{f:#?}` for fn-typed receivers through the
+            // `Fn<N, Ret>^<Trait>::<method>` call shape; `ClosureCallSiteLowerer`
+            // retargets each to the matching impl here. These are reachable
+            // through three routes: explicit user calls, the redirect
+            // (specialised path), and the canonical-vtable inspect slots
+            // (indirect path). Standard DCE removes them when none reach.
             let signature = format_closure_signature(&collected.params, return_type, type_table);
             // Recover the per-literal source body (`|x: i32| x + 1`)
             // by unparsing the captured TIR closure form. The TIR is
@@ -709,15 +760,14 @@ impl ClosureLowerer {
         }
     }
 
-    /// Synthesize `__Closure_N^Inspect::inspect` and
-    /// `__Closure_N^InspectAlt::inspect_alt` for a single functor.
-    ///
-    /// Both methods take `(&self: &__Closure_N, f: &mut Formatter)` and
-    /// emit a single `f.write_str(<constant>)` body. The signature string
-    /// (`"|i32, i32| -> i32"`) and the source body string
-    /// (`"|x: i32, y: i32| x + y"`) are computed by the caller from
-    /// `CollectedClosure` so this helper stays focused on TIR
-    /// construction.
+    /// Synthesize the per-functor format impls for a single functor, one per
+    /// entry in [`CLOSURE_FORMAT_TRAITS`]. Each takes
+    /// `(&self: &__Closure_N, f: &mut Formatter)`. `Inspect` / `InspectAlt`
+    /// write the signature / source constant; `Display` / `DisplayAlt` delegate
+    /// down the chain to `Inspect`, so `{f}` / `{f:#}` show the signature while
+    /// `{f:#?}` shows the source — consistent with every other type.
+    /// `ClosureCallSiteLowerer` retargets the Fn-keyed template call to the
+    /// matching impl here; standard DCE drops the unreferenced ones.
     fn generate_functor_format_methods(
         &mut self,
         struct_name: &str,
@@ -727,66 +777,61 @@ impl ClosureLowerer {
         type_table: &mut TypeTable,
         span: Span,
     ) {
-        // Resolve Formatter / Inspect / InspectAlt through the
-        // `CompilerItem` registry. The struct name flows into the inner
-        // `Formatter::write_str` call below, so capture it once instead
-        // of looking it up per method. Method names come from the
-        // single-method trait's `trait_method_name` so a rename of
-        // `Inspect::inspect` → `Inspect::dump` (or similar) is picked
-        // up here without touching this site.
-        let (formatter_name, inspect_trait, inspect_method, inspect_alt_trait, inspect_alt_method) = {
-            let items = type_table.compiler_items();
-            (
-                items
-                    .struct_name(crate::compiler_item::CompilerItem::Formatter)
-                    .to_string(),
-                items
-                    .trait_name(crate::compiler_item::CompilerItem::Inspect)
-                    .to_string(),
-                items
-                    .trait_method_name(crate::compiler_item::CompilerItem::Inspect)
-                    .to_string(),
-                items
-                    .trait_name(crate::compiler_item::CompilerItem::InspectAlt)
-                    .to_string(),
-                items
-                    .trait_method_name(crate::compiler_item::CompilerItem::InspectAlt)
-                    .to_string(),
-            )
-        };
+        let formatter_name = type_table
+            .compiler_items()
+            .struct_name(CompilerItem::Formatter)
+            .to_string();
         let formatter_type = type_table.make_struct(formatter_name.clone(), ModuleSource::format());
         let formatter_mut_ref = type_table.make_mut_ref(formatter_type);
-        let string_type =
-            type_table.make_compiler_struct(crate::compiler_item::CompilerItem::String);
+        let string_type = type_table.make_compiler_struct(CompilerItem::String);
 
-        for (trait_name, method_name, payload) in [
-            (inspect_trait.as_str(), inspect_method.as_str(), signature),
-            (
-                inspect_alt_trait.as_str(),
-                inspect_alt_method.as_str(),
-                source,
-            ),
-        ] {
-            let func = self.build_functor_format_method(
-                struct_name,
-                trait_name,
-                method_name,
-                payload,
-                self_ref_type,
-                formatter_mut_ref,
-                string_type,
-                &formatter_name,
-                span,
-            );
+        for (item, body) in &CLOSURE_FORMAT_TRAITS {
+            let name = |it| type_table.compiler_items().trait_name(it).to_string();
+            let method = |it| {
+                type_table
+                    .compiler_items()
+                    .trait_method_name(it)
+                    .to_string()
+            };
+            let (trait_name, method_name) = (name(*item), method(*item));
+            let func = match body {
+                FunctorFmtBody::Signature | FunctorFmtBody::Source => {
+                    let payload = if matches!(body, FunctorFmtBody::Source) {
+                        source
+                    } else {
+                        signature
+                    };
+                    self.build_functor_write_method(
+                        struct_name,
+                        &trait_name,
+                        &method_name,
+                        payload,
+                        self_ref_type,
+                        formatter_mut_ref,
+                        string_type,
+                        &formatter_name,
+                        span,
+                    )
+                }
+                FunctorFmtBody::Delegate(target) => self.build_functor_delegate_method(
+                    struct_name,
+                    &trait_name,
+                    &method_name,
+                    &name(*target),
+                    &method(*target),
+                    self_ref_type,
+                    formatter_mut_ref,
+                    span,
+                ),
+            };
             self.generated_functions.push(Rc::new(RefCell::new(func)));
         }
     }
 
-    /// Build a single `__Closure_N^TraitName::method_name(&self, &mut Formatter)`
-    /// whose body is `f.write_str("<payload>")`. Shared by both `Inspect` and
-    /// `InspectAlt` synthesis.
+    /// Build `__Closure_N^Trait::method(&self, &mut Formatter)` whose body is
+    /// `f.write_str("<payload>")` (used for `Inspect` / `InspectAlt`).
     #[allow(clippy::too_many_arguments)]
-    fn build_functor_format_method(
+    fn build_functor_write_method(
         &self,
         struct_name: &str,
         trait_name: &str,
@@ -798,13 +843,6 @@ impl ClosureLowerer {
         formatter_name: &str,
         span: Span,
     ) -> TirFunction {
-        let method_info = LocalMethodName::new(
-            struct_name.to_string(),
-            Some(trait_name.to_string()),
-            method_name.to_string(),
-        );
-        let qualified_name = MethodName::format_local(struct_name, Some(trait_name), method_name);
-
         let fmt_local = TirExpr::new(
             TirExprKind::Local {
                 index: 1,
@@ -843,17 +881,108 @@ impl ClosureLowerer {
             vec![TirStmt::new(TirStmtKind::Expr(write_str_call), span)],
             span,
         );
+        self.make_functor_method(
+            struct_name,
+            trait_name,
+            method_name,
+            body,
+            self_ref_type,
+            formatter_mut_ref,
+            span,
+        )
+    }
 
+    /// Build `__Closure_N^Trait::method(&self, &mut Formatter)` whose body is
+    /// `self.<target trait>::<target method>(f)` (used for `Display` /
+    /// `DisplayAlt`, which delegate down to `Inspect`).
+    #[allow(clippy::too_many_arguments)]
+    fn build_functor_delegate_method(
+        &self,
+        struct_name: &str,
+        trait_name: &str,
+        method_name: &str,
+        target_trait: &str,
+        target_method: &str,
+        self_ref_type: TypeId,
+        formatter_mut_ref: TypeId,
+        span: Span,
+    ) -> TirFunction {
+        let self_local = TirExpr::new(
+            TirExprKind::Local {
+                index: 0,
+                name: "self".to_string(),
+            },
+            self_ref_type,
+            span,
+        );
+        let fmt_local = TirExpr::new(
+            TirExprKind::Local {
+                index: 1,
+                name: "f".to_string(),
+            },
+            formatter_mut_ref,
+            span,
+        );
+        let delegate_call = TirExpr::new(
+            TirExprKind::method_call(
+                Box::new(self_local),
+                FunctionRef {
+                    module_source: self.module_source.clone(),
+                    name: MethodName::format_local(struct_name, Some(target_trait), target_method),
+                    monomorph_info: None,
+                    method_info: Some(LocalMethodName::new(
+                        struct_name.to_string(),
+                        Some(target_trait.to_string()),
+                        target_method.to_string(),
+                    )),
+                },
+                vec![],
+                vec![CallArg::new(fmt_local, false)],
+            ),
+            TypeTable::UNIT,
+            span,
+        );
+        let body = TirBlock::new(
+            vec![TirStmt::new(TirStmtKind::Expr(delegate_call), span)],
+            span,
+        );
+        self.make_functor_method(
+            struct_name,
+            trait_name,
+            method_name,
+            body,
+            self_ref_type,
+            formatter_mut_ref,
+            span,
+        )
+    }
+
+    /// Wrap `body` in a `__Closure_N^Trait::method(&self, &mut Formatter)`
+    /// function. Shared by the write-str and delegate builders above.
+    fn make_functor_method(
+        &self,
+        struct_name: &str,
+        trait_name: &str,
+        method_name: &str,
+        body: TirBlock,
+        self_ref_type: TypeId,
+        formatter_mut_ref: TypeId,
+        span: Span,
+    ) -> TirFunction {
         TirFunction {
             module_source: self.module_source.clone(),
             is_async: false,
-            name: qualified_name,
+            name: MethodName::format_local(struct_name, Some(trait_name), method_name),
             visibility: crate::ast::Visibility::Private,
             is_export: false,
             type_params: Vec::new(),
             impl_type_params: Vec::new(),
             monomorph_info: None,
-            method_info: Some(method_info),
+            method_info: Some(LocalMethodName::new(
+                struct_name.to_string(),
+                Some(trait_name.to_string()),
+                method_name.to_string(),
+            )),
             params: vec![
                 TirParam {
                     name: "self".to_string(),
@@ -1554,28 +1683,23 @@ impl ClosureCallSiteLowerer<'_> {
         let Some(base_trait) = info.base_trait_name.as_deref() else {
             return;
         };
-        // Map each formatting trait to the per-functor impl that
-        // produces the right output. `Display`/`DisplayAlt` fall back
-        // to `Inspect`/`InspectAlt` so the redirect targets are the
-        // same per-functor method either way. All four trait names
-        // flow through the `CompilerItem` registry so a stdlib rename
-        // of any of them does not silently bypass this redirect.
-        let items = self.type_table.compiler_items();
-        let inspect = items.trait_name(crate::compiler_item::CompilerItem::Inspect);
-        let inspect_method = items.trait_method_name(crate::compiler_item::CompilerItem::Inspect);
-        let inspect_alt = items.trait_name(crate::compiler_item::CompilerItem::InspectAlt);
-        let inspect_alt_method =
-            items.trait_method_name(crate::compiler_item::CompilerItem::InspectAlt);
-        let display = items.trait_name(crate::compiler_item::CompilerItem::Display);
-        let display_alt = items.trait_name(crate::compiler_item::CompilerItem::DisplayAlt);
-        let (target_trait, target_method): (String, String) =
-            if base_trait == inspect || base_trait == display {
-                (inspect.to_string(), inspect_method.to_string())
-            } else if base_trait == inspect_alt || base_trait == display_alt {
-                (inspect_alt.to_string(), inspect_alt_method.to_string())
-            } else {
-                return;
-            };
+        // Retarget any format-trait call on a directly-known closure literal to
+        // the matching per-functor impl (`__Closure_N^<Trait>::<method>`), which
+        // takes `&__Closure_N` directly. This redirect is trait-agnostic: it
+        // keeps the same trait/method, so the delegation (`Display → Inspect`,
+        // `DisplayAlt → Display`) lives in the functor impls like every other
+        // type. Without it the Fn-keyed dispatch stub would `ref.cast` the
+        // devirtualised `&__Closure_N` receiver to the canonical inspectable
+        // base and trap. Membership uses the shared `CLOSURE_FORMAT_TRAITS` set.
+        let is_format_trait = {
+            let items = self.type_table.compiler_items();
+            CLOSURE_FORMAT_TRAITS
+                .iter()
+                .any(|(it, _)| items.trait_name(*it) == base_trait)
+        };
+        if !is_format_trait {
+            return;
+        }
 
         let local_idx = match peel_ref_to_local(receiver) {
             Some(idx) => idx,
@@ -1602,8 +1726,8 @@ impl ClosureCallSiteLowerer<'_> {
 
         let new_method_info = LocalMethodName::new(
             functor.struct_name.clone(),
-            Some(target_trait),
-            target_method,
+            Some(base_trait.to_string()),
+            info.method_name.clone(),
         );
         let new_name = new_method_info.to_mangled_name();
 

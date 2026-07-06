@@ -238,6 +238,13 @@ impl ArrayRefIter<T> {
     pub fn internal_new(repr: &Array<T>, index: i32, end: i32) -> ArrayRefIter<T> with stores[repr] {
         return ArrayRefIter { repr, index, end };
     }
+
+    /// Value ("copied") view over the same backing: yields `T` instead of `&T`.
+    /// Mirrors Rust's `iter().copied()`, letting a reference iterator over a
+    /// primitive list read as values (`xs.iter().copied()`).
+    pub fn copied(&self) -> ArrayIter<T> {
+        return ArrayIter::internal_new(self.repr, self.index, self.end);
+    }
 }
 
 impl<T> Iterator for ArrayRefIter<T> {

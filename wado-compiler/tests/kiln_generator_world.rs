@@ -2,12 +2,14 @@
 //! `core:kiln/generator` world compiles to valid component bytes.
 //!
 //! Covers:
-//! - Happy path: `export fn generate(raw: RawRequest)` using
-//!   `bind_request::<Options>(raw)?` and returning an empty `Response`.
-//! - Import-refusal: adding `use { now } from "wasi:clocks";` to the
-//!   same generator surfaces `Code::KilnGeneratorForbiddenImport`.
+//! - Happy path (no options): `export fn generate(req: Request)` returning
+//!   an empty `Response`.
+//! - Typed options: `export fn generate(req: Request<Options>)` produces a
+//!   valid component whose `generate` carries `Options` as a typed argument.
+//! - Import-refusal: adding `use { now } from "wasi:clocks";` to a
+//!   generator surfaces `Code::KilnGeneratorForbiddenImport`.
 //!
-//! See WEP 2026-04-12 §"M6.5 stage 2".
+//! See WEP 2026-04-12 §"Protocol revision 3".
 
 #![allow(unused_crate_dependencies)]
 
@@ -65,35 +67,21 @@ fn block_on<F: std::future::Future>(future: F) -> F::Output {
 }
 
 fn kiln_options() -> CompilerOptions {
-    // `skip_validation: true` is a placeholder until the CM adapter
-    // synthesis follow-up lands. Today the core Wasm wrapper treats the
-    // `raw: RawRequest` parameter as a Wasm GC reference, but canonical
-    // async lift materializes the record in linear memory — a type
-    // mismatch the validator catches. The generator still type-checks,
-    // synthesis still runs, and the bind_request call site exercises the
-    // full elaborator / auto-derive path. Remove this flag once the
-    // adapter lands.
+    // The revision-3 typed-request adapter produces a valid component, so no
+    // `skip_validation` is needed — the `generate(primary, inputs, options)`
+    // lift/lower round-trips through the CM ABI cleanly.
     CompilerOptions {
         log_level: Some(LogLevel::Warn),
         target_world: Some("core:kiln/generator".to_string()),
-        skip_validation: true,
         ..CompilerOptions::default()
     }
 }
 
 const NOOP_GENERATOR: &str = r#"
-use { RawRequest, Response, Error, bind_request } from "core:kiln";
+use { Request, Response, Error } from "core:kiln";
 
-pub struct Options {
-    pub verbose: bool,
-}
-
-export fn generate(raw: RawRequest) -> Result<Response, Error> {
-    let req = match bind_request::<Options>(raw) {
-        Ok(r) => r,
-        Err(e) => return Result::Err(e),
-    };
-    let _ = req.options.verbose;
+export fn generate(req: Request) -> Result<Response, Error> {
+    let _ = req.primary.path;
     return Result::Ok(Response { files: [] });
 }
 "#;
@@ -129,16 +117,105 @@ fn noop_generator_compiles_to_component_bytes() {
     );
 }
 
-const FORBIDDEN_IMPORT_GENERATOR: &str = r#"
-use { RawRequest, Response, Error, bind_request } from "core:kiln";
-use { now } from "wasi:clocks";
+const TYPED_OPTIONS_GENERATOR: &str = r#"
+use { Request, Response, Error } from "core:kiln";
 
 pub struct Options {
-    pub verbose: bool,
+    pub highlight: bool,
+    pub trace: bool,
 }
 
-export fn generate(raw: RawRequest) -> Result<Response, Error> {
-    let _req = bind_request::<Options>(raw);
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
+    let _ = req.primary.path;
+    let _ = req.options.highlight;
+    let _ = req.options.trace;
+    return Result::Ok(Response { files: [] });
+}
+"#;
+
+#[test]
+fn typed_options_generator_compiles_to_valid_component() {
+    let host = MapHost::new(&[]);
+    // No `skip_validation`: the revision-3 typed-options `generate(primary, inputs,
+    // options)` shape must produce a valid component (unlike the old
+    // `raw-request` GC-reference mismatch).
+    let options = CompilerOptions {
+        log_level: Some(LogLevel::Warn),
+        target_world: Some("core:kiln/generator".to_string()),
+        ..CompilerOptions::default()
+    };
+    let result = block_on(compile_with_options(
+        TYPED_OPTIONS_GENERATOR,
+        &host,
+        Some("generator.wado"),
+        options,
+    ));
+    let Ok(result) = result else {
+        let diags = host.diagnostics();
+        panic!(
+            "typed-options generator failed to compile:\n{}",
+            diags
+                .iter()
+                .map(|d| format!("  {d}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+    };
+    assert!(result.wasm.starts_with(b"\0asm"), "not component-shaped");
+}
+
+/// A generator may declare helper `export fn`s beside `generate`. Only
+/// `generate` is the world contract, so a non-`generate` export (here a plain
+/// `u32`-returning function) must not be force-routed through the async
+/// task-return result binding, which would emit an invalid component.
+const MULTI_EXPORT_GENERATOR: &str = r#"
+use { Request, Response, Error } from "core:kiln";
+
+export fn helper() -> u32 {
+    return 7;
+}
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    let _ = req.primary.path;
+    let _ = helper();
+    return Result::Ok(Response { files: [] });
+}
+"#;
+
+#[test]
+fn generator_with_extra_export_compiles_to_valid_component() {
+    let host = MapHost::new(&[]);
+    let options = CompilerOptions {
+        log_level: Some(LogLevel::Warn),
+        target_world: Some("core:kiln/generator".to_string()),
+        ..CompilerOptions::default()
+    };
+    let result = block_on(compile_with_options(
+        MULTI_EXPORT_GENERATOR,
+        &host,
+        Some("generator.wado"),
+        options,
+    ));
+    let Ok(result) = result else {
+        let diags = host.diagnostics();
+        panic!(
+            "multi-export generator failed to compile:\n{}",
+            diags
+                .iter()
+                .map(|d| format!("  {d}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+    };
+    assert!(result.wasm.starts_with(b"\0asm"), "not component-shaped");
+}
+
+const FORBIDDEN_IMPORT_GENERATOR: &str = r#"
+use { Request, Response, Error } from "core:kiln";
+use { now } from "wasi:clocks";
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    let _ = req.primary.path;
     let _ = now();
     return Result::Ok(Response { files: [] });
 }

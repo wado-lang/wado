@@ -40,7 +40,7 @@ use crate::synthesis::common::{
 };
 
 use super::import_adapter::make_binding_function;
-use super::lift::synthesize_lift;
+use super::lift::synthesize_lift_list;
 use super::lower::synthesize_lower_wasi_type_to_memory;
 use super::types::{
     LiftContext, binary_add, binary_ne, cm_val_type_to_type_id, cm_zero, coerce_flat_lift,
@@ -857,9 +857,14 @@ pub(super) fn synthesize_lift_from_flat_params(
                     ],
                     TypeTable::UNIT,
                 )));
-                let lifted = synthesize_lift(
-                    ty,
+                // Lift into the user function's exact `List<T>` type
+                // (`target_type_id`), not a rebuilt one, so a shared stdlib
+                // element type (e.g. `InputFile`) does not resolve to a second
+                // GC `TypeId` and mismatch the parameter.
+                let lifted = synthesize_lift_list(
+                    &generic.args[0],
                     local_ref(tmp_ptr_local, "__lift_tmp", TypeTable::I32),
+                    Some(target_type_id),
                     next_local,
                     stmts,
                     locals,
@@ -1908,161 +1913,14 @@ pub(super) fn synthesize_void_export_binding(
     binding
 }
 
-/// Synthesize a CM export binding for a non-Result return type.
+/// Synthesize a **synchronous** export binding for a non-`async` `--lib`
+/// world export.
 ///
-/// For exports where the user function returns a non-Result type (e.g., `-> i32`,
-/// `-> String`, `-> ()`), the CM export still wraps the return in `result<T, error-context>`.
-/// The binding calls `task-return(0, ...flat_values)` — Ok with the lowered return value.
-///
-/// This handles parameter lifting from flat CM params when needed.
-///
-/// Generated TIR (for `export fn add(a: i32, b: i32) -> i32`):
-/// ```text
-/// fn __cm_export__add(__p0: i32, __p1: i32) {
-///     let __result = add(__p0, __p1);
-///     let __flat0 = __result as i32;
-///     cm_raw_call task-return(0, __flat0);
-/// }
-/// ```
-///
-/// Known limitation: flat return types are computed from the user's return type,
-/// not from the world's `result<T, error-context>` wrapper. If `error-context`
-/// has more flat slots than the Ok payload, the binding may emit too few
-/// task-return args. In practice this is safe because:
-/// - Current worlds use `Result<(), ()>` (no error-context) or `Result<T, E>`
-///   (handled by `synthesize_result_export_binding`)
-/// - This function is only used when the user doesn't return Result
-pub(super) fn synthesize_general_export_binding(
-    export_name: &str,
-    user_func: Rc<RefCell<TirFunction>>,
-    entry_source: &ModuleSource,
-    tir_modules: &IndexMap<ModuleSource, TirModule>,
-    type_table: &Rc<RefCell<TypeTable>>,
-    world_params: &[(String, Type)],
-    cm_interface_registry: &CmInterfaceRegistry,
-    cm_package: &str,
-    interner: &RefCell<ModuleSourceInterner>,
-) -> Rc<RefCell<TirFunction>> {
-    let binding_name = export_binding_func_name(export_name);
-    let mut body_stmts: Vec<TirStmt> = Vec::new();
-    let mut locals: Vec<TirLocal> = Vec::new();
-
-    let user_func_ref = user_func.borrow();
-    let user_return_type = user_func_ref.return_type;
-    let lift_ctx = LiftContext {
-        cm_interface_registry,
-        type_table,
-        cm_package,
-        interner,
-    };
-
-    let (adapter_params, call_args, param_count) = build_export_adapter_params(
-        &user_func_ref,
-        tir_modules,
-        type_table,
-        world_params,
-        lift_ctx,
-        &mut body_stmts,
-        &mut locals,
-    );
-
-    let mut next_local = param_count;
-
-    // Call user function — derive param_is_mut from the actual function params.
-    let call_user_param_is_mut: Vec<bool> =
-        user_func.borrow().params.iter().map(|p| p.is_mut).collect();
-    let call_user = TirExpr::new(
-        TirExprKind::Call {
-            func: FunctionRef::from_resolved(&user_func.borrow(), entry_source.clone()),
-            type_args: vec![],
-            args: call_args
-                .into_iter()
-                .zip(
-                    call_user_param_is_mut
-                        .into_iter()
-                        .chain(std::iter::repeat(false)),
-                )
-                .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
-                .collect(),
-        },
-        user_return_type,
-        synth_span(),
-    );
-
-    // Check if return type is unit
-    let tt = type_table.borrow();
-    let is_unit_return = matches!(tt.get(user_return_type), ResolvedType::Unit);
-    let return_flat_types = flat_types_from_type_id(user_return_type, tir_modules, &tt);
-    drop(tt);
-
-    if is_unit_return || return_flat_types.is_empty() {
-        // Unit return — just call user function and task-return(0)
-        body_stmts.push(expr_stmt(call_user));
-        body_stmts.push(expr_stmt(cm_raw_call(
-            "task-return",
-            vec![i32_const(0)],
-            TypeTable::UNIT,
-        )));
-    } else {
-        // Non-unit return — lower return value and call task-return(0, ...flat_values)
-        let result_local = alloc_local(&mut next_local, &mut locals, user_return_type);
-        body_stmts.push(let_stmt(
-            "__result",
-            result_local,
-            user_return_type,
-            call_user,
-        ));
-
-        let lowered = synthesize_lower_to_flat(
-            local_ref(result_local, "__result", user_return_type),
-            user_return_type,
-            &mut next_local,
-            &mut body_stmts,
-            &mut locals,
-            tir_modules,
-            lift_ctx,
-        );
-
-        // Build task-return args: [0 (Ok disc), ...flat_return_values]
-        let mut task_return_args = vec![i32_const(0)];
-        for flat_val in &lowered {
-            let val_type = cm_val_type_to_type_id(flat_val.cm_type);
-            task_return_args.push(local_ref(flat_val.index, "__flat", val_type));
-        }
-
-        body_stmts.push(expr_stmt(cm_raw_call(
-            "task-return",
-            task_return_args,
-            TypeTable::UNIT,
-        )));
-    }
-
-    let body = block(body_stmts);
-    let local_count = next_local;
-
-    let binding = make_binding_function(
-        binding_name,
-        adapter_params,
-        TypeTable::UNIT,
-        body,
-        local_count,
-        locals,
-    );
-    {
-        let mut b = binding.borrow_mut();
-        b.is_export = true;
-        b.is_cm_export = true;
-    }
-    binding
-}
-
-/// Synthesize a **synchronous** export binding for a `--lib` world export.
-///
-/// Unlike [`synthesize_general_export_binding`] (which lifts via an async
-/// `task.return`), the library lift is synchronous: the core function returns
-/// the lowered value directly. For milestone 2 (primitives-only) no lowering is
-/// needed — the adapter returns `user_fn(args)` verbatim, after lifting any
-/// flat params (e.g. `string` ptr/len) back to Wado values.
+/// The synchronous canon lift returns the lowered value directly rather than
+/// via an async `task.return`: a single-core-value result is returned verbatim
+/// (after lifting any flat params, e.g. `string` ptr/len, back to Wado values);
+/// a multi-value result (string, list, tuple, record, option, result) is lowered
+/// into fresh linear memory and returned as the i32 out-pointer.
 ///
 /// Generated TIR for `export fn id_u32(v: u32) -> u32`:
 /// ```text

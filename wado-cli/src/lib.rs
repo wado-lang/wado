@@ -7,12 +7,14 @@
 )]
 
 pub mod args;
+pub mod build;
 pub mod check;
 pub mod compile;
 pub mod compiler_host;
 pub mod discover;
 pub mod doc;
 pub mod dump;
+pub mod fetch;
 pub mod format;
 pub mod http_hooks;
 pub mod init;
@@ -23,6 +25,7 @@ pub mod kiln_runtime;
 pub mod lsp;
 pub mod manifest;
 pub mod metadata_embed;
+pub mod oci;
 pub mod publish;
 pub mod query;
 pub mod query_adapter;

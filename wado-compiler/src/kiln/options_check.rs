@@ -15,7 +15,7 @@ use super::options::{CanonicalValue, OptionsDescriptor, OptionsField, OptionsTyp
 /// Wrap a validated options tree together with the descriptor it was built
 /// against. The encoder needs both: the descriptor defines field order, the
 /// canonical values define content.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct CanonicalOptions {
     pub descriptor: OptionsDescriptor,
     pub values: Vec<(String, CanonicalValue)>,

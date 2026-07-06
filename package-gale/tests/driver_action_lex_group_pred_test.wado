@@ -1,0 +1,27 @@
+//! Stage C group-inlined lexer semantic predicate: a predicate inside a group
+//! (`KW : ([a-z]+ { $text == "cat" }? | 'dog')`) gates its group branch — a
+//! false predicate falls through to the next branch, then the next rule.
+//! `cat`/`dog` lex as KW, other runs fall through to ID.
+
+use lp from "./grammars/wado_lex_group_pred.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_lex_group_pred",
+        },
+    };
+
+test "a group-inlined predicate gates its branch" {
+    let cat = lp::parse(&"cat");
+    assert cat.ok(), "clean parse of 'cat'";
+    assert cat.output == "kw", `output: '{cat.output}'`;
+
+    let dog = lp::parse(&"dog");
+    assert dog.ok(), "clean parse of 'dog'";
+    assert dog.output == "kw", `output: '{dog.output}'`;
+
+    let fox = lp::parse(&"fox");
+    assert fox.ok(), "clean parse of 'fox'";
+    assert fox.output == "id", `output: '{fox.output}'`;
+}

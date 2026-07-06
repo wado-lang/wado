@@ -191,7 +191,6 @@ fn "wado-compiler/tests/fixtures/match_literal.wado/match_literal_i8"() with Std
 fn "wado-compiler/tests/fixtures/match_literal.wado/match_literal_negative"() with Stdout {
     let r1: ref "core:prelude/string.wado//String";
     let r2: ref "core:prelude/string.wado//String";
-    let c: i64;
     let r3: ref "core:prelude/string.wado//String";
     let r4: ref "core:prelude/string.wado//String";
     let r5: ref "core:prelude/string.wado//String";
@@ -199,10 +198,11 @@ fn "wado-compiler/tests/fixtures/match_literal.wado/match_literal_negative"() wi
     "core:cli/println"(r1);
     r2 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("minus hundred"), used: 13 };
     "core:cli/println"(r2);
-    c = 0_i64 - 1000000000000_i64;
-    r3 = (if c == 0_i64 -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_0: i64;
+    __match_scrut_0 = 0_i64 - 1000000000000_i64;
+    r3 = (if __match_scrut_0 == 0_i64 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122, 101, 114, 111), used: 4 };
-    } else if c == -1000000000000_i64 -> ref "core:prelude/string.wado//String" {
+    } else if __match_scrut_0 == -1000000000000_i64 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("minus trillion"), used: 14 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };

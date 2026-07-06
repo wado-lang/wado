@@ -1,0 +1,27 @@
+//! Stage C fragment-inlined lexer semantic predicate: a predicate inside a
+//! non-recursive multi-alt fragment (`fragment LETTERS : [a-z]+ { $text ==
+//! "cat" }? | 'dog'`) inlined at `KW`'s use site. `$text` reads the enclosing
+//! rule's matched slice. `cat`/`dog` lex as KW, other runs fall through to ID.
+
+use lp from "./grammars/wado_lex_frag_pred.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_lex_frag_pred",
+        },
+    };
+
+test "a fragment-inlined predicate gates its branch" {
+    let cat = lp::parse(&"cat");
+    assert cat.ok(), "clean parse of 'cat'";
+    assert cat.output == "kw", `output: '{cat.output}'`;
+
+    let dog = lp::parse(&"dog");
+    assert dog.ok(), "clean parse of 'dog'";
+    assert dog.output == "kw", `output: '{dog.output}'`;
+
+    let fox = lp::parse(&"fox");
+    assert fox.ok(), "clean parse of 'fox'";
+    assert fox.output == "id", `output: '{fox.output}'`;
+}

@@ -136,7 +136,6 @@ fn "wado-compiler/tests/fixtures/hfs_consecutive_mut_calls_no_inter_sync.wado/ru
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let f_11: ref "core:prelude/format.wado//Formatter";
     let f_16: ref "core:prelude/format.wado//Formatter";
-    let self_17: i32;
     let __hfs_v_19: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
@@ -163,7 +162,7 @@ fn "wado-compiler/tests/fixtures/hfs_consecutive_mut_calls_no_inter_sync.wado/ru
             continue l1;
         };
     };
-    "core:cli/println"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; f_11 = __local_7; "core:prelude/primitive.wado/i32::fmt_decimal"(sum, f_11); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; f_16 = __local_7; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_17(b.v), f_16); __local_6);
+    "core:cli/println"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; f_11 = __local_7; "core:prelude/primitive.wado/i32::fmt_decimal"(sum, f_11); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; f_16 = __local_7; "core:prelude/primitive.wado/i32::fmt_decimal"(b.v, f_16); __local_6);
 }
 
 fn "wado-compiler/tests/fixtures/hfs_consecutive_mut_calls_no_inter_sync.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -334,13 +333,13 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
-    let a_5: i32;
-    let a_7: i32;
+    let a_6: i32;
+    let a_8: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_8 = capacity * 2; a_6 = select i32(a_8 > min_capacity, a_8, min_capacity); select i32(a_6 > 8, a_6, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

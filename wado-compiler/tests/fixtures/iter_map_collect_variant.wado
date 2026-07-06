@@ -1,4 +1,4 @@
-// Regression: `List<Variant>.iter().map(...).collect()` previously
+// Regression: `List<Variant>.iter().copied().map(...).collect()` previously
 // ICEd the WIR pipeline with
 //   Validation error: type mismatch:
 //     expected (ref null $type), found (ref $type)
@@ -31,7 +31,7 @@ fn name(c: Color) -> String {
 
 export fn run() with Stdout {
     let colors: List<Color> = [Color::Red, Color::Green];
-    let names: List<String> = colors.iter().map(|c: Color| name(c)).collect();
+    let names: List<String> = colors.iter().copied().map(|c: Color| name(c)).collect();
     println(names.join(", "));
 }
 

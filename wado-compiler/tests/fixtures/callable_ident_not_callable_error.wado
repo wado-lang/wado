@@ -1,0 +1,12 @@
+// A bare identifier that names a value binding of non-function type (here a
+// global `i32`) must report the type, not the misleading "unknown function 'X'"
+// from the named-function lookup.
+
+global X: i32 = 5;
+
+export fn run() {
+    let _ = X(3);
+}
+
+__DATA__
+{"compile_error": "expression is not callable: type 'i32' is not a function"}

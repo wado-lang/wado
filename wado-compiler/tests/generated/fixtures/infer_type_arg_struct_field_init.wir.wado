@@ -167,7 +167,6 @@ global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/infer_type_arg_struct_field_init.wado/__test_0_struct_field_initializers_infer_generic_type_args_from_the_field_type"() {
     let __v0_1: i32;
-    let __cond_2: bool;
     let __v1: ref "core:prelude/types.wado//Option<i32>";
     let __cond_5: bool;
     let __local_6: ref "core:prelude/string.wado//String";
@@ -180,8 +179,8 @@ fn "wado-compiler/tests/fixtures/infer_type_arg_struct_field_init.wado/__test_0_
     let __sroa_h_o: ref "core:prelude/types.wado//Option<i32>";
     __sroa_h_m = "core:collections/TreeMap<core:prelude/string.wado/String,i32>::new"();
     __sroa_h_o = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 1 };
-    __cond_2 = local.tee __v0_1(__sroa_h_m.size) == 0;
-    if @unlikely(__cond_2 == 0) {
+    __v0_1 = __sroa_h_m.size;
+    if @unlikely((__v0_1 == 0) == 0) {
         cold_path;
         "core:rt/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(128); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_struct_field_initializers_infer_generic_type_args_from_the_field_type"), used: 78 }); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/infer_type_arg_struct_field_init.wado"), used: 66 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 23 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: h.m.len() == 0
@@ -379,13 +378,11 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
 }
 
 fn "core:prelude/primitive.wado/i32^Display::fmt"(self, f) {
-    let self_2: i32;
-    "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_2(self.value), f);
+    "core:prelude/primitive.wado/i32::fmt_decimal"(self.value, f);
 }
 
 fn "core:prelude/primitive.wado/i32^Inspect::inspect"(self, f) {
-    let self_2: i32;
-    "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_2(self.value), f);
+    "core:prelude/primitive.wado/i32::fmt_decimal"(self.value, f);
 }
 
 fn "core:prelude/string.wado/String::with_capacity"(capacity) {
@@ -396,13 +393,13 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
-    let a_5: i32;
-    let a_7: i32;
+    let a_6: i32;
+    let a_8: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_8 = capacity * 2; a_6 = select i32(a_8 > min_capacity, a_8, min_capacity); select i32(a_6 > 8, a_6, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

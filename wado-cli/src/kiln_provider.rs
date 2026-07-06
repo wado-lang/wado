@@ -362,8 +362,10 @@ struct CompileArtifacts {
 /// `core:kiln` world types, so bump this on any `core:kiln/generator.wit` /
 /// `emit_kiln_world_types` change to invalidate caches built against the old
 /// ABI even when the generator source is unchanged. `v2`: `raw-request.options`
-/// became `list<u8>` (CBOR).
-const KILN_GENERATOR_ABI_TAG: &[u8] = b"kiln-generator-v2\n";
+/// became `list<u8>` (CBOR). `v3`: the world is import-only,
+/// `raw-request` is gone, and `generate` takes typed `(primary, inputs,
+/// options)` parameters.
+const KILN_GENERATOR_ABI_TAG: &[u8] = b"kiln-generator-v3\n";
 
 fn stable_id_for_local(path_str: &str, content: &[u8]) -> String {
     let mut hasher = Sha256::new();
@@ -754,17 +756,13 @@ mod tests {
         std::fs::create_dir_all(&tmp).unwrap();
 
         let generator_src = "\
-use { RawRequest, Response, Error, bind_request } from \"core:kiln\";\n\
+use { Request, Response, Error } from \"core:kiln\";\n\
 \n\
 pub struct Options {\n\
     pub verbose: bool,\n\
 }\n\
 \n\
-export fn generate(raw: RawRequest) -> Result<Response, Error> {\n\
-    let req = match bind_request::<Options>(raw) {\n\
-        Ok(r) => r,\n\
-        Err(e) => return Result::Err(e),\n\
-    };\n\
+export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
     let _ = req.options.verbose;\n\
     return Result::Ok(Response { files: [] });\n\
 }\n";
@@ -875,18 +873,14 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {\n\
         std::fs::create_dir_all(&tmp).unwrap();
 
         let generator_src = "\
-use { RawRequest, Response, Error, bind_request } from \"core:kiln\";\n\
+use { Request, Response, Error } from \"core:kiln\";\n\
 \n\
 pub struct Options {\n\
     pub highlight: bool,\n\
     pub depth: i32,\n\
 }\n\
 \n\
-export fn generate(raw: RawRequest) -> Result<Response, Error> {\n\
-    let req = match bind_request::<Options>(raw) {\n\
-        Ok(r) => r,\n\
-        Err(e) => return Result::Err(e),\n\
-    };\n\
+export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
     let _ = req.options.highlight;\n\
     let _ = req.options.depth;\n\
     return Result::Ok(Response { files: [] });\n\

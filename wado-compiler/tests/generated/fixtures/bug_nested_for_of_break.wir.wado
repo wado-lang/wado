@@ -160,8 +160,6 @@ fn "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/loop_entry_decisio
     let t: ref "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado//Transition";
     let __match_7: ref null "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado//Transition";
     let self_16: ref "core:prelude//List<wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/Transition>";
-    let repr: ref "Array<wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/Transition>";
-    let end: i32;
     let _licm_used_21: i32;
     let _licm_repr_22: ref "Array<wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/State>";
     i = 0;
@@ -182,9 +180,7 @@ fn "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/loop_entry_decisio
             }) {
                 has_prec = 0;
                 self_16 = st.transitions;
-                repr = self_16.repr;
-                end = self_16.used;
-                __iter_5 = struct.new "core:prelude/slice.wado//ArrayRefIter<wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/Transition>" { repr: repr, index: 0, end: end };
+                __iter_5 = struct.new "core:prelude/slice.wado//ArrayRefIter<wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/Transition>" { repr: self_16.repr, index: 0, end: self_16.used };
                 b5: block {
                     l6: loop {
                         __match_7 = "core:prelude/slice.wado/ArrayRefIter<wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/Transition>^Iterator::next"(__iter_5);
@@ -216,25 +212,23 @@ fn "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/__test_0_nested_fo
     let __b_1: ref "core:prelude//List<wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/Transition>";
     let __b_2: ref "core:prelude//List<wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/Transition>";
     let __v0_4: i32;
-    let __cond_5: bool;
     let __v0_6: i32;
-    let __cond_7: bool;
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
     let __local_10: ref "core:prelude/string.wado//String";
     let __local_11: ref "core:prelude/format.wado//Formatter";
     __b_0 = struct.new "core:prelude//List<wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/State>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado//State">(struct.new "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado//State" { kind: 9, rule: 0, decision: 0, transitions: ref.as_non_null(__b_1 = struct.new "core:prelude//List<wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/Transition>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado//Transition">(struct.new "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado//Transition" { kind: 1 }, struct.new "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado//Transition" { kind: 2 }), used: 2 }; __b_1) }, struct.new "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado//State" { kind: 9, rule: 0, decision: 1, transitions: ref.as_non_null(__b_2 = struct.new "core:prelude//List<wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/Transition>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado//Transition">(struct.new "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado//Transition" { kind: 1 }, struct.new "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado//Transition" { kind: 5 }), used: 2 }; __b_2) }), used: 2 };
     global:__const_obj_0 = __b_0;
-    __cond_5 = local.tee __v0_4("wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/loop_entry_decision"(global:__const_obj_0, 0)) == 1;
-    if @unlikely(__cond_5 == 0) {
+    __v0_4 = "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/loop_entry_decision"(global:__const_obj_0, 0);
+    if @unlikely(__v0_4 != 1) {
         cold_path;
         "core:rt/panic"(__local_8 = "core:prelude/string.wado/String::with_capacity"(172); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_nested_for_of_with_break_selects_the_precedence_loop_entry"), used: 67 }); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push"(__local_8, 97); "core:prelude/string.wado/String::push"(__local_8, 116); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/bug_nested_for_of_break.wado"), used: 57 }); "core:prelude/string.wado/String::push"(__local_8, 58); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 67 }, __local_9); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: loop_entry_decision(&states, 0) == 1
 "), used: 49 }); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("loop_entry_decision(&states, 0): "), used: 33 }); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_4 }, __local_9); "core:prelude/string.wado/String::push"(__local_8, 10); __local_8);
         unreachable;
     }
-    __cond_7 = local.tee __v0_6("wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/loop_entry_decision"(global:__const_obj_0, 7)) == -1;
-    if @unlikely(__cond_7 == 0) {
+    __v0_6 = "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/loop_entry_decision"(global:__const_obj_0, 7);
+    if @unlikely(__v0_6 != -1) {
         cold_path;
         "core:rt/panic"(__local_10 = "core:prelude/string.wado/String::with_capacity"(173); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_nested_for_of_with_break_selects_the_precedence_loop_entry"), used: 67 }); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push"(__local_10, 97); "core:prelude/string.wado/String::push"(__local_10, 116); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/bug_nested_for_of_break.wado"), used: 57 }); "core:prelude/string.wado/String::push"(__local_10, 58); __local_11 = "core:prelude/format.wado/Formatter::new"(__local_10); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 69 }, __local_11); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: loop_entry_decision(&states, 7) == -1
@@ -247,13 +241,12 @@ fn "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/__test_1_inner_bre
     let __b_0: ref "core:prelude//List<wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/State>";
     let __b_1: ref "core:prelude//List<wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/Transition>";
     let __v0: i32;
-    let __cond: bool;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     __b_0 = struct.new "core:prelude//List<wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/State>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado//State">(struct.new "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado//State" { kind: 9, rule: 3, decision: 4, transitions: ref.as_non_null(__b_1 = struct.new "core:prelude//List<wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/Transition>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado//Transition">(struct.new "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado//Transition" { kind: 5 }, struct.new "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado//Transition" { kind: 1 }), used: 2 }; __b_1) }), used: 1 };
     global:__const_obj_1 = __b_0;
-    __cond = local.tee __v0("wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/loop_entry_decision"(global:__const_obj_1, 3)) == 4;
-    if @unlikely(__cond == 0) {
+    __v0 = "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/loop_entry_decision"(global:__const_obj_1, 3);
+    if @unlikely(__v0 != 4) {
         cold_path;
         "core:rt/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(172); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_inner_break_stops_at_the_first_precedence_edge"), used: 55 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/bug_nested_for_of_break.wado"), used: 57 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 84 }, __local_6); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: loop_entry_decision(&states, 3) == 4
@@ -439,13 +432,11 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
 }
 
 fn "core:prelude/primitive.wado/i32^Display::fmt"(self, f) {
-    let self_2: i32;
-    "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_2(self.value), f);
+    "core:prelude/primitive.wado/i32::fmt_decimal"(self.value, f);
 }
 
 fn "core:prelude/primitive.wado/i32^Inspect::inspect"(self, f) {
-    let self_2: i32;
-    "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_2(self.value), f);
+    "core:prelude/primitive.wado/i32::fmt_decimal"(self.value, f);
 }
 
 fn "core:prelude/string.wado/String::with_capacity"(capacity) {
@@ -456,13 +447,13 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
-    let a_5: i32;
-    let a_7: i32;
+    let a_6: i32;
+    let a_8: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_8 = capacity * 2; a_6 = select i32(a_8 > min_capacity, a_8, min_capacity); select i32(a_6 > 8, a_6, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

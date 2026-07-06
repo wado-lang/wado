@@ -77,7 +77,6 @@ fn "wado-compiler/tests/fixtures/wasi_clocks.wado/run"() with Stdout, MonotonicC
     let t1: u64;
     let t2: u64;
     let t3: u64;
-    let elapsed: u64;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -110,8 +109,7 @@ fn "wado-compiler/tests/fixtures/wasi_clocks.wado/run"() with Stdout, MonotonicC
     } else {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: monotonic clock returned all zeros (unusual)"), used: 50 });
     }
-    elapsed = t3 - t1;
-    if elapsed >=u 0_i64 {
+    if (t3 - t1) >=u 0_i64 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: elapsed time is non-negative"), used: 34 });
     } else {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: FAILED - elapsed time is negative"), used: 39 });

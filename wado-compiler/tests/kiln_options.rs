@@ -133,7 +133,7 @@ pub fn generate() {}
 #[test]
 fn descriptor_missing_options_struct_is_empty() {
     // `Options` is optional: a generator that only exports `generate` gets an
-    // empty descriptor rather than an error (WEP §"Protocol revision v0.2").
+    // empty descriptor rather than an error (WEP §"Protocol revision 2").
     let source = r"
 pub fn generate() {}
 ";

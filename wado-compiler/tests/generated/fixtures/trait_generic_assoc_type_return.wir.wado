@@ -306,7 +306,6 @@ fn "core:prelude/intparse.wado/parse_signed_prefix_range"(s, start, end) {
     let first: u8;
     let is_negative: bool;
     let has_sign: bool;
-    let value_start: i32;
     if (if (if (if start >= 0 -> i32 {
         end <= s.used;
     } else {
@@ -322,7 +321,7 @@ fn "core:prelude/intparse.wado/parse_signed_prefix_range"(s, start, end) {
     }) {
         return 1, ref.null none, 0;
     }
-    is_negative = local.tee first(builtin::array_get_u8(s.repr, start)) == 45;
+    is_negative = local.tee first(builtin::array_get<u8>(s.repr, start)) == 45;
     has_sign = (if is_negative -> i32 {
         1;
     } else {
@@ -335,14 +334,12 @@ fn "core:prelude/intparse.wado/parse_signed_prefix_range"(s, start, end) {
     }) {
         return 1, ref.null none, 1;
     }
-    value_start = select i32(has_sign, start + 1, start);
-    return 0, struct.new "tuple//[bool, i32]" { 0: is_negative, 1: value_start }, 0;
+    return 0, struct.new "tuple//[bool, i32]" { 0: is_negative, 1: select i32(has_sign, start + 1, start) }, 0;
 }
 
 fn "core:prelude/intparse.wado/parse_i64_radix_range"(s, start, end, radix, max, min_abs) {
     let p: ref "tuple//[bool, i32]";
     let is_negative: bool;
-    let digit_start: i32;
     let kind_12: "core:prelude/intparse.wado//enum:IntErrorKind";
     let __pattern_temp_0: ref "tuple//[bool, i32]";
     let kind_16: "core:prelude/intparse.wado//enum:IntErrorKind";
@@ -366,11 +363,10 @@ fn "core:prelude/intparse.wado/parse_i64_radix_range"(s, start, end, radix, max,
         return 1, 0_i64, struct.new "core:prelude/intparse.wado//ParseIntError" { kind: __sroa___match_scrut_0_case1_payload_0 };
     });
     is_negative = __pattern_temp_0.0;
-    digit_start = __pattern_temp_0.1;
     let __sroa___match_scrut_1_discriminant: i32;
     let __sroa___match_scrut_1_case0_payload_0: u64;
     let __sroa___match_scrut_1_case1_payload_0: i32;
-    multivalue_bind [__sroa___match_scrut_1_discriminant, __sroa___match_scrut_1_case0_payload_0, __sroa___match_scrut_1_case1_payload_0] = "core:prelude/intparse.wado/parse_u64_digits"(s, digit_start, end, radix);
+    multivalue_bind [__sroa___match_scrut_1_discriminant, __sroa___match_scrut_1_case0_payload_0, __sroa___match_scrut_1_case1_payload_0] = "core:prelude/intparse.wado/parse_u64_digits"(s, __pattern_temp_0.1, end, radix);
     if __sroa___match_scrut_1_discriminant == 0 {
         if is_negative {
             if __sroa___match_scrut_1_case0_payload_0 >u min_abs {
@@ -555,13 +551,13 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
-    let a_5: i32;
-    let a_7: i32;
+    let a_6: i32;
+    let a_8: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_8 = capacity * 2; a_6 = select i32(a_8 > min_capacity, a_8, min_capacity); select i32(a_6 > 8, a_6, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

@@ -1,0 +1,26 @@
+// Regression: adapters over a by-reference iterator (`&List<T>` yields
+// `Item = &T`) must monomorphize the reference associated type with the
+// concrete `T`. A prior bug left `&T` unsubstituted: the map chain reached
+// codegen as `unsubstituted TypeParam T`, and collecting a filter (whose
+// `Item = I::Item` is a nested projection resolving to `&T`) left the element
+// type an unresolved `ArrayRefIter<i32>::Item`.
+
+test "map over a &List reference iterator" {
+    let xs: List<i32> = [1, 2, 3];
+    let doubled = (&xs).into_iter().map(|x: &i32| *x * 2).collect();
+    assert doubled == [2, 4, 6];
+}
+
+test "filter over a &List reference iterator, then map to values" {
+    let xs: List<i32> = [1, 2, 3, 4];
+    let evens = (&xs).into_iter().filter(|x: &i32| *x % 2 == 0).map(|x: &i32| *x).collect();
+    assert evens == [2, 4];
+}
+
+test "collect a filtered reference iterator into List<&T>" {
+    let xs: List<i32> = [10, 20, 30, 40];
+    let refs = (&xs).into_iter().filter(|x: &i32| *x > 20).collect();
+    assert refs.len() == 2;
+    assert *refs[0] == 30;
+    assert *refs[1] == 40;
+}

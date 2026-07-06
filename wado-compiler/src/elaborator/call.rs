@@ -143,6 +143,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// The declared type of a *global* (current-module or imported) named
+    /// `name`, if one exists. Lets a bare call resolve a global callee (a
+    /// function-typed global becomes an indirect call; any other type gets a
+    /// clear not-callable diagnostic instead of "unknown function").
+    fn global_var_type(&self, name: &str) -> Option<TypeId> {
+        self.sem
+            .decls
+            .lookup_global(name, &self.current_module_source)
+            .map(|(_, _, ty, _)| ty)
+    }
+
     /// Walk a callee expression down to its *root place* identifier so
     /// `(h.f)()`, `(a.b.c.f)()`, `arr[i]()`, and `(arr[i].f)()` all
     /// resolve to the underlying local binding (`h`, `a`, `arr`).
@@ -254,25 +265,62 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        // Check if this is a closure call (calling a local variable with function type)
+        // Closure call: a bare identifier that names a *value* binding (a
+        // local/param — checked first, so shadowing wins — or a module/imported
+        // global) is invoked on its value, not looked up as a named function.
         if let Expr::Ident(ident) = &call.callee
             && !ident.name.contains("::")
-            && let Some(local) = ctx.lookup(&ident.name)
-            && let Some(sig) = self.as_fn_signature(local.type_id)
         {
-            // `fn mut` closures need a `mut` root binding — mirrors
-            // Rust's FnMut rule. The check goes through the same helper
-            // used by the indirect-call path below so identifier and
-            // non-identifier callees share one code path.
-            self.check_fn_mut_root_mutability(&call.callee, ctx, sig.is_mut);
+            let local = ctx
+                .lookup(&ident.name)
+                .map(|local| (local.type_id, local.defining_ast_id));
+            let value_ty = local
+                .map(|(ty, _)| ty)
+                .or_else(|| self.global_var_type(&ident.name));
+            if let Some(value_ty) = value_ty {
+                // Record the use→def edge the same way `resolve_ident` would,
+                // so navigation on a value-binding callee (local or global)
+                // still resolves — the fast path bypasses `resolve_ident`.
+                match local {
+                    Some((_, defining_ast_id)) => {
+                        self.record_reference_opt(ident.id, defining_ast_id);
+                    }
+                    None => self.record_item_reference_by_name(ident.id, &ident.name),
+                }
 
-            return self.build_indirect_call(
-                call,
-                ctx,
-                &sig.params,
-                sig.return_type,
-                /* pad_with_defaults */ true,
-            );
+                if let Some(sig) = self.as_fn_signature(value_ty) {
+                    // `fn mut` closures need a `mut` root binding — mirrors
+                    // Rust's FnMut rule. The check goes through the same helper
+                    // used by the indirect-call path below so identifier and
+                    // non-identifier callees share one code path.
+                    self.check_fn_mut_root_mutability(&call.callee, ctx, sig.is_mut);
+
+                    // Closure `let`-site defaults can pad missing trailing args
+                    // only for local callees.
+                    return self.build_indirect_call(
+                        call,
+                        ctx,
+                        &sig.params,
+                        sig.return_type,
+                        /* pad_with_defaults */ local.is_some(),
+                    );
+                }
+
+                // Names a binding that is not a function — a clear
+                // not-callable diagnostic, not the misleading "unknown
+                // function 'x'" from the named-function lookup below.
+                let type_name = self.tysys.type_table.borrow().type_name(value_ty);
+                let _ = self.logger.error(TypeError::CalleeNotCallable {
+                    type_name,
+                    span: call.callee.span(),
+                });
+                // Still resolve the arguments so errors inside them are
+                // reported rather than masked by the callee error.
+                for arg in &call.args {
+                    self.resolve_expr(arg, ctx, None);
+                }
+                return TypeTable::ERROR;
+            }
         }
 
         // Indirect call on a non-identifier callee. Any expression whose
@@ -2203,9 +2251,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             continue;
                         }
                         let resolved = {
-                            let tt = self.tysys.type_table.borrow();
-                            tt.resolve_assoc_type(owner_ty, &assoc.name)
-                                .or_else(|| tt.resolve_generic_assoc_type(owner_ty, &assoc.name))
+                            let mut tt = self.tysys.type_table.borrow_mut();
+                            match tt.resolve_assoc_type(owner_ty, &assoc.name) {
+                                Some(r) => Some(r),
+                                None => tt.resolve_generic_assoc_type_mono(owner_ty, &assoc.name),
+                            }
                         };
                         if let Some(resolved) = resolved {
                             args[target_idx] = resolved;

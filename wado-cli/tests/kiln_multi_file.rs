@@ -21,15 +21,13 @@ use predicates::prelude::*;
 /// the entry module, so the grammar file *is* the generated Wado source. This
 /// makes a cross-read (reading the wrong sibling) observable as a wrong return
 /// value.
-const PASSTHROUGH_GENERATOR: &str = r#"use { RawRequest, Response, OutputFile, Error } from "core:kiln";
+const PASSTHROUGH_GENERATOR: &str = r#"use { Request, Response, OutputFile, Error } from "core:kiln";
 
-pub struct Options {}
-
-export fn generate(raw: RawRequest) -> Result<Response, Error> {
+export fn generate(req: Request) -> Result<Response, Error> {
     return Result::Ok(Response {
         files: [OutputFile {
             path: "out.wado",
-            content: raw.primary.content,
+            content: req.primary.content,
             is_entry: true,
         }],
     });

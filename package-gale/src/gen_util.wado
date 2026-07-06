@@ -458,11 +458,7 @@ pub fn all_alts_are_single_token(alts: &List<Alternative>) -> bool {
             return false;
         }
         let elem = &alt.elements[0];
-        let is_token = match elem {
-            TokenRef(_) | Literal(_) => true,
-            _ => false,
-        };
-        if !is_token {
+        if !elem matches { TokenRef(_) | Literal(_) } {
             return false;
         }
     }
@@ -576,13 +572,7 @@ pub fn dedup_append_arr(arr: &mut List<String>, source: &List<String>) {
 }
 
 pub fn subtract_sets(a: &List<String>, b: &List<String>) -> List<String> {
-    let mut result: List<String> = [];
-    for let x of a {
-        if !first_contains(b, x) {
-            result.push(*x);
-        }
-    }
-    return result;
+    return a.iter().copied().filter(|x: String| !first_contains(b, &x)).collect();
 }
 
 // Parser codegen names every consumed element so the surrounding struct

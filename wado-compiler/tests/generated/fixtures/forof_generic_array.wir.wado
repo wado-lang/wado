@@ -86,7 +86,6 @@ global mut global:__modules_initialized: bool = 0;
 fn "wado-compiler/tests/fixtures/forof_generic_array.wado/run"() with Stdout {
     let __b: ref "core:prelude//List<i32>";
     let __iter_1: ref "core:prelude/slice.wado//ArrayIter<i32>";
-    let repr: ref Array<i32>;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -94,8 +93,7 @@ fn "wado-compiler/tests/fixtures/forof_generic_array.wado/run"() with Stdout {
         global:__modules_initialized = 1;
     };
     __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
-    repr = __b.repr;
-    __iter_1 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr, index: 0, end: 3 };
+    __iter_1 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: __b.repr, index: 0, end: 3 };
     b0: block {
         l1: loop {
             let __sroa___match_3_discriminant: i32;

@@ -85,7 +85,6 @@ global mut global:__modules_initialized: bool = 0;
 fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_chained"() with Stdout, MonotonicClock {
     let t1: u64;
     let t2: u64;
-    let diff: u64;
     t1 = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__MonotonicClock_now"();
     if (if t1 == t1 -> i32 {
         t1 == t1;
@@ -97,8 +96,7 @@ fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_chained"() with 
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("FAILED: values differ"), used: 21 });
     }
     t2 = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__MonotonicClock_now"();
-    diff = t2 - t1;
-    if diff >=u 0_i64 {
+    if (t2 - t1) >=u 0_i64 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("timestamp arithmetic works"), used: 26 });
     }
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("chained newtype tests passed"), used: 28 });
@@ -106,15 +104,13 @@ fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_chained"() with 
 
 fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_duration"() with Stdout, MonotonicClock {
     let res: u64;
-    let double_res: u64;
     res = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__MonotonicClock_get_resolution"();
     if res >u 0_i64 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("resolution is positive"), used: 22 });
     } else {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("resolution is zero or negative"), used: 30 });
     }
-    double_res = res * 2_i64;
-    if double_res >=u res {
+    if (res * 2_i64) >=u res {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("double is >= original"), used: 21 });
     }
     if res >u 0_i64 {
@@ -127,7 +123,6 @@ fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_multiple"() with
     let start: u64;
     let res: u64;
     let end: u64;
-    let elapsed: u64;
     start = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__MonotonicClock_now"();
     res = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__MonotonicClock_get_resolution"();
     if (if start >u 0_i64 -> i32 {
@@ -137,8 +132,8 @@ fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_multiple"() with
     }) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("both newtypes have positive values"), used: 34 });
     }
-    elapsed = local.tee end("wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__MonotonicClock_now"()) - start;
-    if elapsed >=u 0_i64 {
+    end = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__MonotonicClock_now"();
+    if (end - start) >=u 0_i64 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("elapsed time is non-negative"), used: 28 });
     }
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("multiple wasi newtype tests passed"), used: 34 });

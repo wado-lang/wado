@@ -125,8 +125,6 @@ fn "wado-compiler/tests/fixtures/optimize_bce_if_guard.wado/sliding_sum"(input) 
     let n: i32;
     let sum: i32;
     let i: i32;
-    let index_13: i32;
-    let index_20: i32;
     let _licm_repr_27: ref Array<i32>;
     n = input.used;
     sum = 0;
@@ -136,7 +134,7 @@ fn "wado-compiler/tests/fixtures/optimize_bce_if_guard.wado/sliding_sum"(input) 
         l1: loop {
             break_if b0 i >= n;
             if (i + 2) < n {
-                sum = sum + ((builtin::array_get<i32>(_licm_repr_27, i) + index_13 = i + 1; builtin::array_get<i32>(_licm_repr_27, index_13)) + index_20 = i + 2; builtin::array_get<i32>(_licm_repr_27, index_20));
+                sum = sum + ((builtin::array_get<i32>(_licm_repr_27, i) + builtin::array_get<i32>(_licm_repr_27, i + 1)) + builtin::array_get<i32>(_licm_repr_27, i + 2));
             }
             i = i + 1;
             continue l1;
@@ -147,7 +145,6 @@ fn "wado-compiler/tests/fixtures/optimize_bce_if_guard.wado/sliding_sum"(input) 
 
 fn "wado-compiler/tests/fixtures/optimize_bce_if_guard.wado/run"() {
     let s: i32;
-    let __cond: bool;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
@@ -156,8 +153,8 @@ fn "wado-compiler/tests/fixtures/optimize_bce_if_guard.wado/run"() {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    __cond = local.tee s("wado-compiler/tests/fixtures/optimize_bce_if_guard.wado/sliding_sum"(global:__const_obj_0)) == 270;
-    if @unlikely(__cond == 0) {
+    s = "wado-compiler/tests/fixtures/optimize_bce_if_guard.wado/sliding_sum"(global:__const_obj_0);
+    if @unlikely(s != 270) {
         cold_path;
         "core:rt/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(114); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_5, 114); "core:prelude/string.wado/String::push"(__local_5, 117); "core:prelude/string.wado/String::push"(__local_5, 110); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/optimize_bce_if_guard.wado"), used: 55 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 18 }, __local_6); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: s == 270
@@ -332,13 +329,11 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
 }
 
 fn "core:prelude/primitive.wado/i32^Display::fmt"(self, f) {
-    let self_2: i32;
-    "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_2(self.value), f);
+    "core:prelude/primitive.wado/i32::fmt_decimal"(self.value, f);
 }
 
 fn "core:prelude/primitive.wado/i32^Inspect::inspect"(self, f) {
-    let self_2: i32;
-    "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_2(self.value), f);
+    "core:prelude/primitive.wado/i32::fmt_decimal"(self.value, f);
 }
 
 fn "core:prelude/string.wado/String::with_capacity"(capacity) {
@@ -349,13 +344,13 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
-    let a_5: i32;
-    let a_7: i32;
+    let a_6: i32;
+    let a_8: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_8 = capacity * 2; a_6 = select i32(a_8 > min_capacity, a_8, min_capacity); select i32(a_6 > 8, a_6, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

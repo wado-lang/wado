@@ -36,11 +36,11 @@ use crate::compiler_item::SeqField;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::nir::{FunctionKind, FunctionRef, NirFunction, NirParam, NirUnaryOp};
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
+use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeTable};
 
-use super::arena_query::{expr_mentions_local, is_local, strip_refs};
+use super::arena_query::{expr_mentions_local, is_local, reachable_blocks, strip_refs};
 use super::gate::{FunctionGate, GatedPass};
 use crate::nir::FuncId;
 use cranelift_entity::EntityRef;
@@ -219,21 +219,6 @@ pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) ->
 // ---------------------------------------------------------------------------
 // Reachable-node enumeration
 // ---------------------------------------------------------------------------
-
-/// Every `BlockId` reachable from the body root, in arbitrary order. Dead
-/// blocks left by a prior in-place arena pass are skipped — matching the tree
-/// bridge, which only ever materialized reachable nodes.
-fn reachable_blocks(body: &Body) -> Vec<BlockId> {
-    let mut out = Vec::new();
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
-        if let NodeRef::Block(b) = node {
-            out.push(b);
-        }
-        body.for_each_child(node, |c| stack.push(c));
-    }
-    out
-}
 
 /// Every `ExprId` reachable from the body root, in arbitrary order.
 fn reachable_exprs(body: &Body) -> Vec<ExprId> {

@@ -1,121 +1,121 @@
 test "find returns first matching element" {
     let arr: List<i32> = [1, 2, 3, 4, 5];
-    let found = arr.iter().find(|x: i32| x % 2 == 0);
+    let found = arr.iter().copied().find(|x: i32| x % 2 == 0);
     assert found matches { Some(v) && v == 2 };
 }
 
 test "find returns null when no match" {
     let arr: List<i32> = [1, 2, 3];
-    let found = arr.iter().find(|x: i32| x > 10);
+    let found = arr.iter().copied().find(|x: i32| x > 10);
     assert found matches { None };
 }
 
 test "find on empty array" {
     let arr: List<i32> = [];
-    let found = arr.iter().find(|x: i32| x == 1);
+    let found = arr.iter().copied().find(|x: i32| x == 1);
     assert found matches { None };
 }
 
 test "any returns true when predicate matches" {
     let arr: List<i32> = [1, 2, 3, 4, 5];
-    assert arr.iter().any(|x: i32| x % 2 == 0);
+    assert arr.iter().copied().any(|x: i32| x % 2 == 0);
 }
 
 test "any returns false when no match" {
     let arr: List<i32> = [1, 2, 3];
-    assert !arr.iter().any(|x: i32| x > 10);
+    assert !arr.iter().copied().any(|x: i32| x > 10);
 }
 
 test "any on empty array returns false" {
     let arr: List<i32> = [];
-    assert !arr.iter().any(|x: i32| x > 0);
+    assert !arr.iter().copied().any(|x: i32| x > 0);
 }
 
 test "all returns true when all match" {
     let arr: List<i32> = [2, 4, 6, 8];
-    assert arr.iter().all(|x: i32| x % 2 == 0);
+    assert arr.iter().copied().all(|x: i32| x % 2 == 0);
 }
 
 test "all returns false when some don't match" {
     let arr: List<i32> = [2, 3, 6, 8];
-    assert !arr.iter().all(|x: i32| x % 2 == 0);
+    assert !arr.iter().copied().all(|x: i32| x % 2 == 0);
 }
 
 test "all on empty array returns true" {
     let arr: List<i32> = [];
-    assert arr.iter().all(|x: i32| x > 0);
+    assert arr.iter().copied().all(|x: i32| x > 0);
 }
 
 test "last returns last element" {
     let arr: List<i32> = [10, 20, 30];
-    let result = arr.iter().last();
+    let result = arr.iter().copied().last();
     assert result matches { Some(v) && v == 30 };
 }
 
 test "last on single element" {
     let arr: List<i32> = [42];
-    let result = arr.iter().last();
+    let result = arr.iter().copied().last();
     assert result matches { Some(v) && v == 42 };
 }
 
 test "last on empty array" {
     let arr: List<i32> = [];
-    assert arr.iter().last() matches { None };
+    assert arr.iter().copied().last() matches { None };
 }
 
 test "nth returns nth element" {
     let arr: List<i32> = [10, 20, 30, 40, 50];
-    let result = arr.iter().nth(2);
+    let result = arr.iter().copied().nth(2);
     assert result matches { Some(v) && v == 30 };
 }
 
 test "nth 0 returns first element" {
     let arr: List<i32> = [10, 20, 30];
-    let result = arr.iter().nth(0);
+    let result = arr.iter().copied().nth(0);
     assert result matches { Some(v) && v == 10 };
 }
 
 test "nth out of bounds returns null" {
     let arr: List<i32> = [10, 20, 30];
-    assert arr.iter().nth(10) matches { None };
+    assert arr.iter().copied().nth(10) matches { None };
 }
 
 test "position returns index of first match" {
     let arr: List<i32> = [10, 20, 30, 40, 50];
-    let pos = arr.iter().position(|x: i32| x == 30);
+    let pos = arr.iter().copied().position(|x: i32| x == 30);
     assert pos matches { Some(v) && v == 2 };
 }
 
 test "position returns null when not found" {
     let arr: List<i32> = [10, 20, 30];
-    assert arr.iter().position(|x: i32| x == 99) matches { None };
+    assert arr.iter().copied().position(|x: i32| x == 99) matches { None };
 }
 
 test "position on empty array" {
     let arr: List<i32> = [];
-    assert arr.iter().position(|x: i32| x == 1) matches { None };
+    assert arr.iter().copied().position(|x: i32| x == 1) matches { None };
 }
 
 test "reduce with addition" {
     let arr: List<i32> = [1, 2, 3, 4, 5];
-    let result = arr.iter().reduce(|a: i32, b: i32| a + b);
+    let result = arr.iter().copied().reduce(|a: i32, b: i32| a + b);
     assert result matches { Some(v) && v == 15 };
 }
 
 test "reduce on single element" {
     let arr: List<i32> = [42];
-    let result = arr.iter().reduce(|a: i32, b: i32| a + b);
+    let result = arr.iter().copied().reduce(|a: i32, b: i32| a + b);
     assert result matches { Some(v) && v == 42 };
 }
 
 test "reduce on empty array" {
     let arr: List<i32> = [];
-    assert arr.iter().reduce(|a: i32, b: i32| a + b) matches { None };
+    assert arr.iter().copied().reduce(|a: i32, b: i32| a + b) matches { None };
 }
 
 test "take first n elements" {
     let arr: List<i32> = [1, 2, 3, 4, 5];
-    let result = arr.iter().take(3).collect();
+    let result = arr.iter().copied().take(3).collect();
     assert result.len() == 3;
     assert result[0] == 1;
     assert result[1] == 2;
@@ -124,13 +124,13 @@ test "take first n elements" {
 
 test "take more than available" {
     let arr: List<i32> = [1, 2, 3];
-    let result = arr.iter().take(100).collect();
+    let result = arr.iter().copied().take(100).collect();
     assert result.len() == 3;
 }
 
 test "take more than available returns None idempotently" {
     let arr: List<i32> = [1, 2];
-    let mut iter = arr.iter().take(5);
+    let mut iter = arr.iter().copied().take(5);
     assert iter.next() matches { Some(v) && v == 1 };
     assert iter.next() matches { Some(v) && v == 2 };
     assert iter.next() matches { None };
@@ -139,13 +139,13 @@ test "take more than available returns None idempotently" {
 
 test "take 0 yields empty" {
     let arr: List<i32> = [1, 2, 3];
-    let result = arr.iter().take(0).collect();
+    let result = arr.iter().copied().take(0).collect();
     assert result.len() == 0;
 }
 
 test "skip first n elements" {
     let arr: List<i32> = [1, 2, 3, 4, 5];
-    let result = arr.iter().skip(2).collect();
+    let result = arr.iter().copied().skip(2).collect();
     assert result.len() == 3;
     assert result[0] == 3;
     assert result[1] == 4;
@@ -154,20 +154,20 @@ test "skip first n elements" {
 
 test "skip all elements" {
     let arr: List<i32> = [1, 2, 3];
-    let result = arr.iter().skip(100).collect();
+    let result = arr.iter().copied().skip(100).collect();
     assert result.len() == 0;
 }
 
 test "skip 0 yields all" {
     let arr: List<i32> = [1, 2, 3];
-    let result = arr.iter().skip(0).collect();
+    let result = arr.iter().copied().skip(0).collect();
     assert result.len() == 3;
 }
 
 test "chain two iterators" {
     let a: List<i32> = [1, 2, 3];
     let b: List<i32> = [4, 5, 6];
-    let result = a.iter().chain(b.iter()).collect();
+    let result = a.iter().copied().chain(b.iter().copied()).collect();
     assert result.len() == 6;
     assert result[0] == 1;
     assert result[3] == 4;
@@ -177,10 +177,10 @@ test "chain two iterators" {
 test "chain with empty" {
     let a: List<i32> = [1, 2, 3];
     let empty: List<i32> = [];
-    let result = a.iter().chain(empty.iter()).collect();
+    let result = a.iter().copied().chain(empty.iter().copied()).collect();
     assert result.len() == 3;
 
-    let result2 = empty.iter().chain(a.iter()).collect();
+    let result2 = empty.iter().copied().chain(a.iter().copied()).collect();
     assert result2.len() == 3;
     assert result2[0] == 1;
 }
@@ -188,7 +188,7 @@ test "chain with empty" {
 test "zip pairs elements" {
     let a: List<i32> = [1, 2, 3];
     let b: List<i32> = [10, 20, 30];
-    let mut iter = a.iter().zip(b.iter());
+    let mut iter = a.iter().copied().zip(b.iter().copied());
 
     let first = iter.next();
     assert first matches { Some(pair) && pair.0 == 1 && pair.1 == 10 };
@@ -205,74 +205,74 @@ test "zip pairs elements" {
 test "zip stops at shorter" {
     let a: List<i32> = [1, 2];
     let b: List<i32> = [10, 20, 30, 40];
-    let result = a.iter().zip(b.iter()).count();
+    let result = a.iter().copied().zip(b.iter().copied()).count();
     assert result == 2;
 }
 
 test "sum of integers" {
     let arr: List<i32> = [1, 2, 3, 4, 5];
-    let result = arr.iter().sum();
+    let result = arr.iter().copied().sum();
     assert result matches { Some(v) && v == 15 };
 }
 
 test "sum of single element" {
     let arr: List<i32> = [42];
-    let result = arr.iter().sum();
+    let result = arr.iter().copied().sum();
     assert result matches { Some(v) && v == 42 };
 }
 
 test "sum of empty array" {
     let arr: List<i32> = [];
-    assert arr.iter().sum() matches { None };
+    assert arr.iter().copied().sum() matches { None };
 }
 
 test "min of integers" {
     let arr: List<i32> = [3, 1, 4, 1, 5, 9, 2, 6];
-    let result = arr.iter().min();
+    let result = arr.iter().copied().min();
     assert result matches { Some(v) && v == 1 };
 }
 
 test "max of integers" {
     let arr: List<i32> = [3, 1, 4, 1, 5, 9, 2, 6];
-    let result = arr.iter().max();
+    let result = arr.iter().copied().max();
     assert result matches { Some(v) && v == 9 };
 }
 
 test "min of single element" {
     let arr: List<i32> = [42];
-    assert arr.iter().min() matches { Some(v) && v == 42 };
+    assert arr.iter().copied().min() matches { Some(v) && v == 42 };
 }
 
 test "max of single element" {
     let arr: List<i32> = [42];
-    assert arr.iter().max() matches { Some(v) && v == 42 };
+    assert arr.iter().copied().max() matches { Some(v) && v == 42 };
 }
 
 test "min of empty array" {
     let arr: List<i32> = [];
-    assert arr.iter().min() matches { None };
+    assert arr.iter().copied().min() matches { None };
 }
 
 test "max of empty array" {
     let arr: List<i32> = [];
-    assert arr.iter().max() matches { None };
+    assert arr.iter().copied().max() matches { None };
 }
 
 test "sum of f64" {
     let arr: List<f64> = [1.5, 2.5, 3.0];
-    let result = arr.iter().sum();
+    let result = arr.iter().copied().sum();
     assert result matches { Some(v) && v == 7.0 };
 }
 
 test "min and max of f64" {
     let arr: List<f64> = [3.14, 1.41, 2.72];
-    assert arr.iter().min() matches { Some(v) && v == 1.41 };
-    assert arr.iter().max() matches { Some(v) && v == 3.14 };
+    assert arr.iter().copied().min() matches { Some(v) && v == 1.41 };
+    assert arr.iter().copied().max() matches { Some(v) && v == 3.14 };
 }
 
 test "map doubles elements" {
     let arr: List<i32> = [1, 2, 3, 4, 5];
-    let doubled = arr.iter().map(|x: i32| x * 2).collect();
+    let doubled = arr.iter().copied().map(|x: i32| x * 2).collect();
     assert doubled.len() == 5;
     assert doubled[0] == 2;
     assert doubled[1] == 4;
@@ -283,7 +283,7 @@ test "map doubles elements" {
 
 test "map squares elements" {
     let arr: List<i32> = [1, 2, 3, 4, 5];
-    let squared = arr.iter().map(|x: i32| x * x).collect();
+    let squared = arr.iter().copied().map(|x: i32| x * x).collect();
     assert squared[0] == 1;
     assert squared[1] == 4;
     assert squared[2] == 9;
@@ -293,13 +293,13 @@ test "map squares elements" {
 
 test "map on empty array" {
     let arr: List<i32> = [];
-    let result = arr.iter().map(|x: i32| x * 2).collect();
+    let result = arr.iter().copied().map(|x: i32| x * 2).collect();
     assert result.len() == 0;
 }
 
 test "filter even numbers" {
     let arr: List<i32> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-    let evens = arr.iter().filter(|x: i32| x % 2 == 0).collect();
+    let evens = arr.iter().copied().filter(|x: i32| x % 2 == 0).collect();
     assert evens.len() == 5;
     assert evens[0] == 2;
     assert evens[1] == 4;
@@ -310,7 +310,7 @@ test "filter even numbers" {
 
 test "filter greater than threshold" {
     let arr: List<i32> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-    let large = arr.iter().filter(|x: i32| x > 5).collect();
+    let large = arr.iter().copied().filter(|x: i32| x > 5).collect();
     assert large.len() == 5;
     assert large[0] == 6;
     assert large[4] == 10;
@@ -318,37 +318,37 @@ test "filter greater than threshold" {
 
 test "filter on empty array" {
     let arr: List<i32> = [];
-    let result = arr.iter().filter(|x: i32| x > 0).collect();
+    let result = arr.iter().copied().filter(|x: i32| x > 0).collect();
     assert result.len() == 0;
 }
 
 test "fold sum" {
     let arr: List<i32> = [1, 2, 3, 4, 5];
-    let sum = arr.iter().fold(0, |acc: i32, x: i32| acc + x);
+    let sum = arr.iter().copied().fold(0, |acc: i32, x: i32| acc + x);
     assert sum == 15;
 }
 
 test "fold product" {
     let arr: List<i32> = [1, 2, 3, 4, 5];
-    let product = arr.iter().fold(1, |acc: i32, x: i32| acc * x);
+    let product = arr.iter().copied().fold(1, |acc: i32, x: i32| acc * x);
     assert product == 120;
 }
 
 test "fold count" {
     let arr: List<i32> = [1, 2, 3, 4, 5];
-    let count = arr.iter().fold(0, |acc: i32, _x: i32| acc + 1);
+    let count = arr.iter().copied().fold(0, |acc: i32, _x: i32| acc + 1);
     assert count == 5;
 }
 
 test "fold on empty array" {
     let arr: List<i32> = [];
-    let result = arr.iter().fold(42, |acc: i32, x: i32| acc + x);
+    let result = arr.iter().copied().fold(42, |acc: i32, x: i32| acc + x);
     assert result == 42;
 }
 
 test "collect roundtrip" {
     let arr: List<i32> = [1, 2, 3, 4, 5];
-    let collected = arr.iter().collect();
+    let collected = arr.iter().copied().collect();
     assert collected.len() == 5;
     assert collected[0] == 1;
     assert collected[4] == 5;
@@ -356,13 +356,13 @@ test "collect roundtrip" {
 
 test "collect empty" {
     let arr: List<i32> = [];
-    let collected = arr.iter().collect();
+    let collected = arr.iter().copied().collect();
     assert collected.len() == 0;
 }
 
 test "enumerate yields index-value pairs" {
     let arr: List<String> = ["a", "b", "c"];
-    let mut iter = arr.iter().enumerate();
+    let mut iter = arr.iter().copied().enumerate();
 
     let first = iter.next();
     assert first matches { Some(pair) && pair.0 == 0 };
@@ -378,7 +378,7 @@ test "enumerate yields index-value pairs" {
 
 test "filter then map chain" {
     let arr: List<i32> = [1, 2, 3, 4, 5];
-    let result = arr.iter().filter(|x: i32| x > 2).map(|x: i32| x * 10).collect();
+    let result = arr.iter().copied().filter(|x: i32| x > 2).map(|x: i32| x * 10).collect();
     assert result.len() == 3;
     assert result[0] == 30;
     assert result[1] == 40;
@@ -387,10 +387,10 @@ test "filter then map chain" {
 
 test "count elements" {
     let arr: List<i32> = [1, 2, 3, 4, 5];
-    assert arr.iter().count() == 5;
+    assert arr.iter().copied().count() == 5;
 }
 
 test "count empty" {
     let arr: List<i32> = [];
-    assert arr.iter().count() == 0;
+    assert arr.iter().copied().count() == 0;
 }

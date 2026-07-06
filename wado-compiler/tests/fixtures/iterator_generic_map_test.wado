@@ -18,7 +18,7 @@ impl<I: Iterator, U> Iterator for GenericMapIter<I, U> {
 
 test "generic map iterator doubles values" {
     let arr: List<i32> = [1, 2, 3];
-    let mut iter = GenericMapIter { inner: arr.iter(), f: |x: i32| x * 2 };
+    let mut iter = GenericMapIter { inner: arr.iter().copied(), f: |x: i32| x * 2 };
     assert iter.next() matches { Some(2) };
     assert iter.next() matches { Some(4) };
     assert iter.next() matches { Some(6) };
@@ -27,7 +27,7 @@ test "generic map iterator doubles values" {
 
 test "generic map iterator type conversion" {
     let arr: List<i32> = [65, 66, 67];
-    let mut iter = GenericMapIter { inner: arr.iter(), f: |x: i32| char::from_u32_unchecked(x as u32) };
+    let mut iter = GenericMapIter { inner: arr.iter().copied(), f: |x: i32| char::from_u32_unchecked(x as u32) };
     assert iter.next() matches { Some('A') };
     assert iter.next() matches { Some('B') };
     assert iter.next() matches { Some('C') };

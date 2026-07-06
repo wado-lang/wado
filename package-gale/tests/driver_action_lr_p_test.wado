@@ -1,0 +1,23 @@
+//! Stage C `$_p` on a left-recursive rule: `$_p` reads the precedence threshold
+//! the invocation was entered with, threaded as the `min_prec` parameter. The
+//! entry invocation runs at `min_prec == 0`; a right operand is a recursive
+//! invocation entered at the operator's precedence.
+
+use lp from "./grammars/wado_lr_p.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/action_lr_p",
+        },
+    };
+
+test "$_p reads the invocation's precedence threshold" {
+    let one = lp::parse(&"5");
+    assert one.ok(), "clean parse of a single atom";
+    assert one.output == "_p=0 v=5 ", `output: '{one.output}'`;
+
+    let add = lp::parse(&"5 + 3");
+    assert add.ok(), "clean parse of a sum";
+    assert add.output == "_p=0 _p=2 v=8 ", `output: '{add.output}'`;
+}
