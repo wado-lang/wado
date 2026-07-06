@@ -8,7 +8,8 @@
 //! Two source forms feed the same index:
 //!
 //! - A `[dependencies]` table entry ([`fetch_component_dependencies`]) —
-//!   resolved through `wado.lock`, keyed by the bare coordinate.
+//!   lock-pinned via [`wado_lsp::host::registry_component_needs`], keyed by the
+//!   manifest specifier.
 //! - A single-file inline `use … from "ns:pkg@ver" with { registry }` clause
 //!   ([`fetch_inline_component_dependencies`]) — no lock, an exact pin, keyed by
 //!   the verbatim specifier.
@@ -23,12 +24,35 @@ use crate::oci;
 use crate::registry::FilesystemProvider;
 
 /// Resolve and fetch every registry `[dependencies]` entry into the component
-/// cache, returning `(specifier, absolute local .wasm path)` pairs. The
-/// specifier is the manifest key the loader looks up — the bare coordinate for
-/// a direct `ns:pkg` entry, or the `lib:nick` for an alias (whose `package`
-/// gives the fetched coordinate). Path dependencies (which compile from source)
-/// and non-registry sources are ignored.
+/// cache, returning `(specifier, absolute local .wasm path)` pairs keyed by the
+/// manifest key the loader looks up (`ns:pkg` or a `lib:nick` alias).
+///
+/// Lock-first: when every registry dep is pinned in `wado.lock`, the version and
+/// cache path come from the lock and only a cold-cache entry is pulled — a warm,
+/// locked project fetches nothing over the network and matches the version the
+/// language server resolves. A lockless (or partially locked) project falls back
+/// to a full registry resolution, which cannot be offline or reproducible anyway.
 pub async fn fetch_component_dependencies(
+    manifest: &Manifest,
+    manifest_dir: &std::path::Path,
+) -> Result<Vec<(String, String)>, String> {
+    let needs = wado_lsp::host::registry_component_needs(manifest, manifest_dir);
+    if !needs.iter().all(Result::is_ok) {
+        return fetch_via_resolve(manifest, manifest_dir).await;
+    }
+    let mut out = Vec::new();
+    for need in needs.into_iter().flatten() {
+        let abs = pull_component(&need.registry_url, &need.coordinate, &need.version).await?;
+        out.push((need.name, abs));
+    }
+    Ok(out)
+}
+
+/// Fallback for a project whose `wado.lock` does not pin every registry dep:
+/// resolve the graph live (a network version listing, highest matching version)
+/// and pull each component. Keyed by the manifest specifier so a `lib:` alias
+/// resolves under its nickname.
+async fn fetch_via_resolve(
     manifest: &Manifest,
     manifest_dir: &std::path::Path,
 ) -> Result<Vec<(String, String)>, String> {
@@ -42,10 +66,6 @@ pub async fn fetch_component_dependencies(
         let (registry_url, coordinate, _name) = crate::fetch::split_registry_id(&package.id)
             .ok_or_else(|| format!("unexpected lock id {:?}", package.id))?;
         let abs = pull_component(registry_url, coordinate, &package.version).await?;
-        // A registry dependency is a leaf (no transitive Wado deps), so the
-        // loader only ever imports it by the consuming manifest's key. Map its
-        // coordinate back to that key so a `lib:` alias resolves under its
-        // nickname.
         let specifier = manifest_key_for_coordinate(manifest, coordinate).unwrap_or(coordinate);
         out.push((specifier.to_string(), abs));
     }
@@ -66,22 +86,46 @@ fn manifest_key_for_coordinate<'a>(manifest: &'a Manifest, coordinate: &str) -> 
         })
 }
 
-/// Resolve and fetch every inline `use … from "ns:pkg@ver" with { registry }`
-/// clause in `source` (single-file mode; the manifest, when present, supplies a
-/// default registry and enforces the inline-vs-`[dependencies]` exclusivity).
-/// Returns `(verbatim specifier, absolute local .wasm path)` pairs — keyed by
-/// the specifier the loader looks up, so a `@ver` pin round-trips.
-pub async fn fetch_inline_component_dependencies(
+/// A single-file inline component resolution, split into the imports resolved to
+/// a cache path and those that could not be (keyed by the verbatim specifier the
+/// loader looks up, so a `@ver` pin round-trips).
+pub struct InlineResolution {
+    pub resolved: Vec<(String, String)>,
+    pub unresolved: Vec<(String, String)>,
+}
+
+/// Resolve every inline `use … from "ns:pkg@ver" with { registry }` clause in
+/// `source` (single-file mode; the manifest, when present, supplies a default
+/// registry and enforces the inline-vs-`[dependencies]` exclusivity). Each
+/// clause carries an exact pin, so a present cache file resolves offline; a cold
+/// cache is pulled when `fetch_missing`, otherwise reported `unresolved` with a
+/// `wado fetch` hint (matching the manifest registry path).
+pub async fn resolve_inline_component_dependencies(
     source: &str,
     manifest: Option<&Manifest>,
-) -> Result<Vec<(String, String)>, String> {
+    fetch_missing: bool,
+) -> Result<InlineResolution, String> {
     let deps = collect_inline_deps(source, manifest)?;
-    let mut out = Vec::new();
+    let mut resolved = Vec::new();
+    let mut unresolved = Vec::new();
     for dep in deps {
-        let abs = pull_component(&dep.registry_url, &dep.coordinate, &dep.version).await?;
-        out.push((dep.specifier, abs));
+        let path = crate::cache::component_path(&dep.registry_url, &dep.coordinate, &dep.version)?;
+        if path.is_file() {
+            resolved.push((dep.specifier, path.display().to_string()));
+        } else if fetch_missing {
+            let abs = pull_component(&dep.registry_url, &dep.coordinate, &dep.version).await?;
+            resolved.push((dep.specifier, abs));
+        } else {
+            unresolved.push((
+                dep.specifier,
+                format!("{:?} is not cached; run `wado fetch`", dep.coordinate),
+            ));
+        }
     }
-    Ok(out)
+    Ok(InlineResolution {
+        resolved,
+        unresolved,
+    })
 }
 
 /// An inline registry component source declared on a `use … from` clause.
@@ -246,17 +290,12 @@ async fn pull_component(
         let bytes = oci::pull_component(&reference)
             .await
             .map_err(|e| format!("fetching {coordinate}@{version}: {e}"))?;
-        if let Some(dir) = out_path.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| format!("creating {}: {e}", dir.display()))?;
-        }
-        std::fs::write(&out_path, &bytes)
+        crate::cache::write_atomic(&out_path, &bytes)
             .map_err(|e| format!("writing {}: {e}", out_path.display()))?;
     }
-    Ok(out_path
-        .canonicalize()
-        .unwrap_or(out_path)
-        .display()
-        .to_string())
+    // The cache path is already absolute (rooted at $WADO_ROOT/$HOME); no
+    // canonicalize needed, which also avoids a syscall on the warm-cache path.
+    Ok(out_path.display().to_string())
 }
 
 #[cfg(test)]

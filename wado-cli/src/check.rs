@@ -129,6 +129,7 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
         manifest_pair.as_ref(),
         &base_path,
         &source,
+        false,
     )
     .await
     .map_err(CliExit::error)?;

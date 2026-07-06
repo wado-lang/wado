@@ -184,10 +184,8 @@ pub async fn fetch_build_dependencies(resolved: &[ResolvedBuildDep]) -> Result<u
                 dep.coordinate, dep.version
             )
         })?;
-        if let Some(dir) = out.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| format!("creating {}: {e}", dir.display()))?;
-        }
-        std::fs::write(&out, &bytes).map_err(|e| format!("writing {}: {e}", out.display()))?;
+        crate::cache::write_atomic(&out, &bytes)
+            .map_err(|e| format!("writing {}: {e}", out.display()))?;
     }
     Ok(resolved.len())
 }

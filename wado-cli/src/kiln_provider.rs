@@ -801,10 +801,7 @@ impl CliGeneratorProvider {
         let Ok(cache_path) = crate::cache::generator_path(registry_url, coordinate, version) else {
             return;
         };
-        if let Some(dir) = cache_path.parent() {
-            let _ = std::fs::create_dir_all(dir);
-        }
-        let _ = std::fs::write(&cache_path, wasm);
+        let _ = crate::cache::write_atomic(&cache_path, wasm);
     }
 
     /// Compile (or read from cache) a generator at a manifest-root-relative

@@ -552,6 +552,7 @@ pub async fn try_compile_with_kiln_cache(
         manifest_pair.as_ref(),
         &base_path,
         &source,
+        true,
     )
     .await
     {
@@ -625,31 +626,39 @@ pub(crate) fn attach_manifest_deps(
     }
 }
 
-/// Like [`attach_manifest_deps`], plus fetching registry dependencies as
-/// prebuilt components and adding them to the index so `use { X } from "ns:pkg"`
-/// resolves across the CM boundary. Two sources feed the component map: a
-/// manifest `[dependencies]` table entry (resolved via `wado.lock`) and a
-/// single-file inline `use … from "ns:pkg@ver" with { registry }` clause parsed
-/// from `entry_source`. Async because the fetch hits the registry (offline on a
-/// warm cache); shared by `compile`/`run`, `check`, and `query` so every entry
-/// point resolves component imports identically. A fetch failure aborts.
+/// Like [`attach_manifest_deps`], plus resolving registry dependencies as
+/// prebuilt components so `use { X } from "ns:pkg"` resolves across the CM
+/// boundary. Two sources feed the component map: a manifest `[dependencies]`
+/// table entry (lock-pinned) and a single-file inline
+/// `use … from "ns:pkg@ver" with { registry }` clause parsed from `entry_source`.
+///
+/// `fetch_missing` chooses the acquisition mode: the build tier (`compile` /
+/// `run`) passes `true` to pull a cold cache; the analysis tier (`check` /
+/// `query`, mirroring the LSP) passes `false` to stay offline — a cold cache
+/// lands in `unresolved` with a `wado fetch` hint instead of hitting the network
+/// or aborting. A warm, locked project is offline either way.
 pub(crate) async fn attach_manifest_and_component_deps(
     base_host: FilesystemCompilerHost,
     project: Option<&manifest::ProjectManifest>,
     base_path: &Path,
     entry_source: &str,
+    fetch_missing: bool,
 ) -> Result<FilesystemCompilerHost, String> {
-    let index = manifest_and_component_index(project, base_path, entry_source).await?;
+    let index =
+        manifest_and_component_index(project, base_path, entry_source, fetch_missing).await?;
     Ok(base_host.with_dependency_index(index))
 }
 
-/// Build the [`DependencyIndex`] for `project` (path deps) plus its fetched
-/// registry/inline component deps. Decoupled from the host so each caller
-/// applies it to its own (`compile` verbose, `query` silent).
+/// Build the [`DependencyIndex`] for `project` (path deps + offline registry
+/// resolution via the shared `dependency_index_from`), then either fetch the
+/// cold entries or leave them `unresolved`, per `fetch_missing`. Decoupled from
+/// the host so each caller applies it to its own (`compile` verbose, `query`
+/// silent).
 async fn manifest_and_component_index(
     project: Option<&manifest::ProjectManifest>,
     base_path: &Path,
     entry_source: &str,
+    fetch_missing: bool,
 ) -> Result<wado_compiler::DependencyIndex, String> {
     let mut index = match project {
         Some(project) => {
@@ -658,7 +667,10 @@ async fn manifest_and_component_index(
         None => wado_compiler::DependencyIndex::default(),
     };
 
-    if let Some(project) = project {
+    // The offline pass above already placed warm manifest registry deps in
+    // `components` and cold ones in `unresolved`. On the build tier, upgrade the
+    // cold ones by pulling them (lock-pinned) and clearing the stale hint.
+    if fetch_missing && let Some(project) = project {
         let has_registry_dep = project
             .manifest
             .dependencies
@@ -670,14 +682,22 @@ async fn manifest_and_component_index(
                 &project.root,
             )
             .await?;
-            index.components.extend(components);
+            for (name, path) in components {
+                index.unresolved.swap_remove(&name);
+                index.components.insert(name, path);
+            }
         }
     }
 
     let manifest = project.map(|p| &p.manifest);
-    let inline =
-        crate::dep_component::fetch_inline_component_dependencies(entry_source, manifest).await?;
-    index.components.extend(inline);
+    let inline = crate::dep_component::resolve_inline_component_dependencies(
+        entry_source,
+        manifest,
+        fetch_missing,
+    )
+    .await?;
+    index.components.extend(inline.resolved);
+    index.unresolved.extend(inline.unresolved);
 
     Ok(index)
 }

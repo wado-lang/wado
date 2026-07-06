@@ -14,20 +14,18 @@
 //! generator of the same package share the tree without colliding.
 //!
 //! The path *layout* lives in [`wado_manifest::cache`] — pure, portable string
-//! logic the language server also reads offline. This module adds the `root`
-//! (which needs the environment) and the concrete `PathBuf`s.
+//! logic — and the `root` in [`wado_lsp::host::cache_root`], so the CLI (which
+//! fetches) and the language server (which reads offline) resolve one identical
+//! path. This module adds the concrete `PathBuf`s and the atomic writer.
 
-use std::path::PathBuf;
+use std::io;
+use std::path::{Path, PathBuf};
 
-/// The dependency cache root: `$WADO_ROOT`, else `~/wado`.
+/// The dependency cache root: `$WADO_ROOT`, else `~/wado`. Shares the resolver
+/// with the language server so both agree on where the cache lives.
 pub fn root() -> Result<PathBuf, String> {
-    if let Some(root) = std::env::var_os("WADO_ROOT").filter(|v| !v.is_empty()) {
-        return Ok(PathBuf::from(root));
-    }
-    let home = std::env::var_os("HOME")
-        .filter(|v| !v.is_empty())
-        .ok_or_else(|| "cannot locate the home directory; set WADO_ROOT".to_string())?;
-    Ok(PathBuf::from(home).join("wado"))
+    wado_lsp::host::cache_root()
+        .ok_or_else(|| "cannot locate the home directory; set WADO_ROOT".to_string())
 }
 
 /// The cached component path for a registry coordinate at a version, under the
@@ -71,6 +69,27 @@ fn relative_under_root(
     )
     .ok_or_else(|| format!("cannot cache {coordinate}@{version} from {registry_url:?}"))?;
     Ok(root()?.join(relative))
+}
+
+/// Write `bytes` to `path` atomically: create the parent dir, write a sibling
+/// temp file, then rename into place. A crash or a concurrent writer can only
+/// leave a stray temp file, never a half-written `component.wasm` that the
+/// `is_file()` cache check would then trust forever.
+pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    // The pid keeps concurrent writers (different processes) from clobbering one
+    // another's temp file; the rename is the single atomic publish step.
+    let tmp = path.with_extension(format!("tmp-{}", std::process::id()));
+    std::fs::write(&tmp, bytes)?;
+    match std::fs::rename(&tmp, path) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            let _ = std::fs::remove_file(&tmp);
+            Err(e)
+        }
+    }
 }
 
 #[cfg(test)]

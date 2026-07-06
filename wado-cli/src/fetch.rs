@@ -10,7 +10,6 @@
 //! same cache ahead of the build.
 
 use std::fmt::Write as _;
-use std::fs;
 
 use crate::args::{self, CliExit};
 use crate::manifest::discover;
@@ -67,11 +66,7 @@ pub async fn run(_opts: FetchOptions) -> Result<(), CliExit> {
             let bytes = oci::pull_component(&reference).await.map_err(|e| {
                 CliExit::error(format!("fetching {coordinate}@{}: {e}", package.version))
             })?;
-            if let Some(dir) = out.parent() {
-                fs::create_dir_all(dir)
-                    .map_err(|e| CliExit::error(format!("creating {}: {e}", dir.display())))?;
-            }
-            fs::write(&out, &bytes)
+            crate::cache::write_atomic(&out, &bytes)
                 .map_err(|e| CliExit::error(format!("writing {}: {e}", out.display())))?;
         }
         eprintln!(
