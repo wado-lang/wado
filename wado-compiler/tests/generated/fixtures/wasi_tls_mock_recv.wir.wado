@@ -224,10 +224,7 @@ fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/run"() with Stdout, Con
     let tx_26: i32;
     let collected: ref "core:prelude//List<u8>";
     let bytes_36: ref "core:prelude/slice.wado//ArraySlice<u8>";
-    let end_39: i32;
-    let end_42: i32;
-    let bytes_44: ref Array<u8>;
-    let len: i32;
+    let bytes_48: ref Array<u8>;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -261,15 +258,14 @@ fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/run"() with Stdout, Con
         };
     };
     "wasi/stream-drop-readable"(tls_rx);
-    collected = "core:prelude/slice.wado/ArrayIter<u8>::collect"(end_39 = __b.used; struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: __b.repr, index: 0, end: end_39 });
+    collected = "core:prelude/slice.wado/ArrayIter<u8>::collect"(struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: __b.repr, index: 0, end: __b.used });
     __match_20 = __inline_String__from_utf8_slice_11: block -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>" {
-        end_42 = collected.used;
-        bytes_36 = struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: collected.repr, start: 0, end: end_42 };
+        bytes_36 = struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: collected.repr, start: 0, end: collected.used };
         if @unlikely("core:prelude/string.wado/String::is_valid_utf8"(bytes_36) == 0) {
             cold_path;
             break __inline_String__from_utf8_slice_11: struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8"), used: 13 } };
         }
-        break __inline_String__from_utf8_slice_11: struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: ref.as_non_null(bytes_44 = "core:prelude/slice.wado/ArraySlice<u8>::to_array"(bytes_36); len = bytes_36.end - bytes_36.start; struct.new "core:prelude/string.wado//String" { repr: bytes_44, used: len }) };
+        break __inline_String__from_utf8_slice_11: struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: ref.as_non_null(bytes_48 = "core:prelude/slice.wado/ArraySlice<u8>::to_array"(bytes_36); struct.new "core:prelude/string.wado//String" { repr: bytes_48, used: bytes_36.end - bytes_36.start }) };
     };
     if @likely(ref.test "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok"(__match_20)) {
         s = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok"(__match_20).payload_0;
@@ -323,7 +319,6 @@ fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Connector
 
 fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Error_to_debug_string"(self) with Error {
     let __outptr: i32;
-    let __lifted_result_2: ref "core:prelude/string.wado//String";
     let ptr: i32;
     let len_4: i32;
     let arr: ref Array<u8>;
@@ -332,9 +327,8 @@ fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Error_to_
     ptr = builtin::load_i32(__outptr);
     len_4 = builtin::load_i32(__outptr + 4);
     arr = "core:rt/memory_to_gc_array"(ptr, len_4);
-    __lifted_result_2 = struct.new "core:prelude/string.wado//String" { repr: arr, used: len_4 };
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return __lifted_result_2;
+    return struct.new "core:prelude/string.wado//String" { repr: arr, used: len_4 };
 }
 
 fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_lift__Connector_connect"(__outptr) {
@@ -393,14 +387,11 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
     let b0: u8;
     let b1_4: u8;
-    let code_5: u32;
     let b1_6: u8;
     let b2_7: u8;
-    let code_8: u32;
     let b1_9: u8;
     let b2_10: u8;
     let b3: u8;
-    let code_12: u32;
     b0 = builtin::array_get<u8>(bytes.repr, bytes.start + start);
     if @likely(b0 <u 128) {
         return b0, 1, 1;
@@ -423,8 +414,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 1, 0;
         }
-        code_5 = ((b0 & 31) << 6) | (b1_4 & 63);
-        return code_5, 2, 1;
+        return ((b0 & 31) << 6) | (b1_4 & 63), 2, 1;
     }
     if @likely(b0 <u 240) {
         if @unlikely((start + 1) >= len) {
@@ -465,8 +455,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 2, 0;
         }
-        code_8 = (((b0 & 15) << 12) | ((b1_6 & 63) << 6)) | (b2_7 & 63);
-        return code_8, 3, 1;
+        return (((b0 & 15) << 12) | ((b1_6 & 63) << 6)) | (b2_7 & 63), 3, 1;
     }
     if @likely(b0 <u 245) {
         if @unlikely((start + 1) >= len) {
@@ -520,8 +509,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 3, 0;
         }
-        code_12 = ((((b0 & 7) << 18) | ((b1_9 & 63) << 12)) | ((b2_10 & 63) << 6)) | (b3 & 63);
-        return code_12, 4, 1;
+        return ((((b0 & 7) << 18) | ((b1_9 & 63) << 12)) | ((b2_10 & 63) << 6)) | (b3 & 63), 4, 1;
     }
     cold_path;
     return 0, 1, 0;

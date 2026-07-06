@@ -300,8 +300,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 
 fn "core:prelude/string.wado/String^Add::add"(self, other) {
     let result: ref "core:prelude/string.wado//String";
-    let capacity: i32;
-    result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity(self.used + other.used)), used: 0 };
+    result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self.used + other.used), used: 0 };
     "core:prelude/string.wado/String::push_str"(result, self);
     "core:prelude/string.wado/String::push_str"(result, other);
     return result;

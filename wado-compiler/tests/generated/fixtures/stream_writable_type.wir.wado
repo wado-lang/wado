@@ -72,7 +72,6 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/stream_writable_type.wado/run"() with Stdout {
-    let tx_1: i32;
     let packed: i64;
     let rx: i32;
     let tx_5: i32;
@@ -84,7 +83,7 @@ fn "wado-compiler/tests/fixtures/stream_writable_type.wado/run"() with Stdout {
     };
     rx = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_5 = builtin::i32_wrap_i64(packed >> 32_i64);
-    "wasi/stream-drop-writable"(local.tee tx_1(tx_5));
+    "wasi/stream-drop-writable"(tx_5);
     "wasi/stream-drop-readable"(rx);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("StreamWritable type exists"), used: 26 });
 }

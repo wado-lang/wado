@@ -197,8 +197,7 @@ fn "wado-compiler/tests/fixtures/wasi_cli.wado/__cm_binding__Environment_get_env
     b0: block {
         l1: loop {
             break_if b0 __i >= __count;
-            __elem_addr = __base + (__i * 16);
-            ptr_9 = builtin::load_i32(__elem_addr + 0);
+            ptr_9 = builtin::load_i32(local.tee __elem_addr(__base + (__i * 16)) + 0);
             len_10 = builtin::load_i32((__elem_addr + 0) + 4);
             arr_11 = "core:rt/memory_to_gc_array"(ptr_9, len_10);
             __lifted_result_6 = struct.new "core:prelude/string.wado//String" { repr: arr_11, used: len_10 };

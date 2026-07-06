@@ -158,7 +158,6 @@ global mut global:__modules_initialized: bool = 0;
 fn "wado-compiler/tests/fixtures/key_value_literal_immutable.wado/run"() with Stdout {
     let m: ref "wado-compiler/tests/fixtures/key_value_literal_immutable.wado//FrozenMap<i32>";
     let __v0_2: i32;
-    let m2: ref "wado-compiler/tests/fixtures/key_value_literal_immutable.wado//FrozenMap<i32>";
     let __v0_15: i32;
     let __local_17: ref "core:prelude/string.wado//String";
     let __local_18: ref "core:prelude/format.wado//Formatter";
@@ -181,6 +180,7 @@ fn "wado-compiler/tests/fixtures/key_value_literal_immutable.wado/run"() with St
     let key_65: ref "core:prelude/string.wado//String";
     let v_68: ref "core:prelude//List<core:prelude/string.wado/String>";
     let v_69: ref "core:prelude//List<i32>";
+    let __sroa_m2_keys: ref "core:prelude//List<core:prelude/string.wado/String>";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -254,8 +254,11 @@ condition: v == 30
     key_65 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 };
     "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__b_53, key_65);
     "core:prelude/list.wado/List<i32>::push"(__b_54, 2);
-    m2 = struct.new "wado-compiler/tests/fixtures/key_value_literal_immutable.wado//FrozenMap<i32>" { keys: ref.as_non_null(v_68 = __b_53; struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude/string.wado//String">(/*via $value_copy$T26*/ v_68.repr)), used: v_68.used }), values: ref.as_non_null(v_69 = __b_54; struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(builtin::array_clone<i32>(v_69.repr)), used: v_69.used }) };
-    __v0_15 = m2.keys.used;
+    v_68 = __b_53;
+    __sroa_m2_keys = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude/string.wado//String">(/*via $value_copy$T26*/ v_68.repr)), used: v_68.used };
+    v_69 = __b_54;
+    drop(struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(builtin::array_clone<i32>(v_69.repr)), used: v_69.used });
+    __v0_15 = __sroa_m2_keys.used;
     if @unlikely(__v0_15 != 2) {
         cold_path;
         "core:rt/panic"(__local_25 = "core:prelude/string.wado/String::with_capacity"(126); "core:prelude/string.wado/String::push_str"(__local_25, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_25, 114); "core:prelude/string.wado/String::push"(__local_25, 117); "core:prelude/string.wado/String::push"(__local_25, 110); "core:prelude/string.wado/String::push"(__local_25, 32); "core:prelude/string.wado/String::push"(__local_25, 97); "core:prelude/string.wado/String::push"(__local_25, 116); "core:prelude/string.wado/String::push"(__local_25, 32); "core:prelude/string.wado/String::push_str"(__local_25, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/key_value_literal_immutable.wado"), used: 61 }); "core:prelude/string.wado/String::push"(__local_25, 58); __local_26 = "core:prelude/format.wado/Formatter::new"(__local_25); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 71 }, __local_26); "core:prelude/string.wado/String::push_str"(__local_25, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("

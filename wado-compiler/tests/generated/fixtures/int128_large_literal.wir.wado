@@ -453,13 +453,11 @@ fn "core:prelude/int128.wado/u128::get_bit"(self, i) {
 
 fn "core:prelude/int128.wado/u128::set_bit"(self, i) {
     let shift: i64;
-    let s: i64;
     shift = builtin::i64_extend_i32_s(i);
     if i < 64 {
         return struct.new "core:prelude/int128.wado//u128" { low: self.low | (1_i64 << shift), high: self.high };
     } else {
-        s = builtin::i64_extend_i32_s(i - 64);
-        return struct.new "core:prelude/int128.wado//u128" { low: self.low, high: self.high | (1_i64 << s) };
+        return struct.new "core:prelude/int128.wado//u128" { low: self.low, high: self.high | (1_i64 << builtin::i64_extend_i32_s(i - 64)) };
     }
 }
 
@@ -559,22 +557,18 @@ fn "core:prelude/int128.wado/u128^Sub::sub"(self, other) {
 }
 
 fn "core:prelude/int128.wado/u128^Shl::shl"(self, rhs) {
-    let s_3: u64;
     let s_4: u64;
-    let inv_s: u64;
     if rhs >= 128 {
         return struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 };
     }
     if rhs >= 64 {
-        s_3 = builtin::i64_extend_i32_s(rhs - 64);
-        return struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: self.low << s_3 };
+        return struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: self.low << builtin::i64_extend_i32_s(rhs - 64) };
     }
     if rhs == 0 {
         return self;
     }
     s_4 = builtin::i64_extend_i32_s(rhs);
-    inv_s = builtin::i64_extend_i32_s(64 - rhs);
-    return struct.new "core:prelude/int128.wado//u128" { low: self.low << s_4, high: (self.high << s_4) | (self.low >>u inv_s) };
+    return struct.new "core:prelude/int128.wado//u128" { low: self.low << s_4, high: (self.high << s_4) | (self.low >>u builtin::i64_extend_i32_s(64 - rhs)) };
 }
 
 fn "core:prelude/int128.wado/i128^Sub::sub"(self, other) {

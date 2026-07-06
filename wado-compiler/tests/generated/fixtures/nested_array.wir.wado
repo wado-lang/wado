@@ -253,9 +253,6 @@ fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_3deep_iterate_te
     let __local_5_113: ref "core:prelude/string.wado//String";
     let __local_6_114: ref "core:prelude/format.wado//Formatter";
     let self_115: i32;
-    let end_120: i32;
-    let end_124: i32;
-    let end_128: i32;
     __b_0 = struct.new "core:prelude//List<core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>>" { repr: array.new_fixed<ref "core:prelude//List<core:prelude/list.wado/List<i32>>">(__b_1 = struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude//List<i32>">(__b_2 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 }; __b_2, __b_3 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(3), used: 1 }; __b_3), used: 2 }; __b_1, __b_4 = struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude//List<i32>">(__b_5 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(4, 5, 6), used: 3 }; __b_5), used: 1 }; __b_4), used: 2 };
     "core:cli/println"(__local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_15 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_14 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_88(__v1_70 = __b_0.used; if @unlikely(0 >= __v1_70) {
         cold_path;
@@ -296,22 +293,19 @@ condition: index < self.used
         unreachable;
     }; builtin::array_get<i32>(self_108.repr, 2)), __local_17); __local_16);
     total = 0;
-    end_120 = __b_0.used;
-    __iter_8 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>>" { repr: __b_0.repr, index: 0, end: end_120 };
+    __iter_8 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>>" { repr: __b_0.repr, index: 0, end: __b_0.used };
     b6: block {
         l7: loop {
             __match_20 = "core:prelude/slice.wado/ArrayIter<core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>>^Iterator::next"(__iter_8);
             if ref.is_null(__match_20) == 0 {
                 plane = ref.as_non_null(__match_20);
-                end_124 = plane.used;
-                __iter_10 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/list.wado/List<i32>>" { repr: plane.repr, index: 0, end: end_124 };
+                __iter_10 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/list.wado/List<i32>>" { repr: plane.repr, index: 0, end: plane.used };
                 b9: block {
                     l10: loop {
                         __local_21 = "core:prelude/slice.wado/ArrayIter<core:prelude/list.wado/List<i32>>^Iterator::next"(__iter_10);
                         if ref.is_null(__local_21) == 0 {
                             row = ref.as_non_null(__local_21);
-                            end_128 = row.used;
-                            __iter_12 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: row.repr, index: 0, end: end_128 };
+                            __iter_12 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: row.repr, index: 0, end: row.used };
                             b12: block {
                                 l13: loop {
                                     let __sroa___local_22_discriminant: i32;
@@ -362,7 +356,6 @@ fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_iterate_test"() 
     let __local_5_55: ref "core:prelude/string.wado//String";
     let __local_6_56: ref "core:prelude/format.wado//Formatter";
     let self_57: i32;
-    let end_66: i32;
     __b_0 = struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude//List<i32>">(__b_1 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20), used: 2 }; __b_1, __b_2 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(30, 40), used: 2 }; __b_2), used: 2 };
     __v1_40 = 2;
     if @unlikely(0 >= __v1_40) {
@@ -387,8 +380,7 @@ condition: index < self.used
             __match_14 = "core:prelude/slice.wado/ArrayIter<core:prelude/list.wado/List<i32>>^Iterator::next"(__iter_6);
             if ref.is_null(__match_14) == 0 {
                 row = ref.as_non_null(__match_14);
-                end_66 = row.used;
-                __iter_8 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: row.repr, index: 0, end: end_66 };
+                __iter_8 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: row.repr, index: 0, end: row.used };
                 b20: block {
                     l21: loop {
                         let __sroa___local_15_discriminant: i32;
@@ -962,8 +954,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 
 fn "core:prelude/string.wado/String^Add::add"(self, other) {
     let result: ref "core:prelude/string.wado//String";
-    let capacity: i32;
-    result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity(self.used + other.used)), used: 0 };
+    result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self.used + other.used), used: 0 };
     "core:prelude/string.wado/String::push_str"(result, self);
     "core:prelude/string.wado/String::push_str"(result, other);
     return result;

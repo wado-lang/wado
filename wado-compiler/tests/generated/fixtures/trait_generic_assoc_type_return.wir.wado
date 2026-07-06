@@ -306,7 +306,6 @@ fn "core:prelude/intparse.wado/parse_signed_prefix_range"(s, start, end) {
     let first: u8;
     let is_negative: bool;
     let has_sign: bool;
-    let value_start: i32;
     if (if (if (if start >= 0 -> i32 {
         end <= s.used;
     } else {
@@ -335,8 +334,7 @@ fn "core:prelude/intparse.wado/parse_signed_prefix_range"(s, start, end) {
     }) {
         return 1, ref.null none, 1;
     }
-    value_start = select i32(has_sign, start + 1, start);
-    return 0, struct.new "tuple//[bool, i32]" { 0: is_negative, 1: value_start }, 0;
+    return 0, struct.new "tuple//[bool, i32]" { 0: is_negative, 1: select i32(has_sign, start + 1, start) }, 0;
 }
 
 fn "core:prelude/intparse.wado/parse_i64_radix_range"(s, start, end, radix, max, min_abs) {

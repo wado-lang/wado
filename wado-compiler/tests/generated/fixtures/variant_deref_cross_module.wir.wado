@@ -227,7 +227,6 @@ fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process"(elem, 
     let alt: ref "./sub/variant_deref_helper.wado//Alt";
     let lab: ref "./sub/variant_deref_helper.wado//LabelElem";
     let __local_15: ref null "./sub/variant_deref_helper.wado//Alt";
-    let end: i32;
     if ref.test "./sub/variant_deref_helper.wado//Elem::TokenRef"(elem) {
         name_2 = ref.cast "./sub/variant_deref_helper.wado//Elem::TokenRef"(elem).payload_0;
         "core:prelude/string.wado/String::push_str"(out, name_2);
@@ -254,8 +253,7 @@ fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process"(elem, 
     }
     if ref.test "./sub/variant_deref_helper.wado//Elem::Group"(elem) {
         alts = ref.cast "./sub/variant_deref_helper.wado//Elem::Group"(elem).payload_0;
-        end = alts.used;
-        __iter_7 = struct.new "core:prelude/slice.wado//ArrayIter<./sub/variant_deref_helper.wado/Alt>" { repr: alts.repr, index: 0, end: end };
+        __iter_7 = struct.new "core:prelude/slice.wado//ArrayIter<./sub/variant_deref_helper.wado/Alt>" { repr: alts.repr, index: 0, end: alts.used };
         b5: block {
             l6: loop {
                 __local_15 = "core:prelude/slice.wado/ArrayIter<./sub/variant_deref_helper.wado/Alt>^Iterator::next"(__iter_7);
@@ -282,9 +280,7 @@ fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process"(elem, 
 fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process_all"(alt, out) {
     let __iter_2: ref "core:prelude/slice.wado//ArrayIter<./sub/variant_deref_helper.wado/Elem>";
     let __match_4: ref null "./sub/variant_deref_helper.wado//Elem";
-    let end: i32;
-    end = alt.elements.used;
-    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<./sub/variant_deref_helper.wado/Elem>" { repr: alt.elements.repr, index: 0, end: end };
+    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<./sub/variant_deref_helper.wado/Elem>" { repr: alt.elements.repr, index: 0, end: alt.elements.used };
     b9: block {
         l10: loop {
             __match_4 = "core:prelude/slice.wado/ArrayIter<./sub/variant_deref_helper.wado/Elem>^Iterator::next"(__iter_2);

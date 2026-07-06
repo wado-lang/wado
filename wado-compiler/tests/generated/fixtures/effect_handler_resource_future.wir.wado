@@ -338,8 +338,6 @@ fn "wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__effect_di
     let __local_1: ref "wado-compiler/tests/fixtures/effect_handler_resource_future.wado//__Dispatch_Future<i32>";
     let __local_2: ref "tuple//[Future<i32>, FutureWritable<i32>]";
     let packed: i64;
-    let rx: i32;
-    let tx: i32;
     __saved = global:__effect_Future<i32>;
     if ref.is_null(__saved) == 0 {
         __local_1 = ref.as_non_null(__saved);
@@ -352,7 +350,7 @@ fn "wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__effect_di
         global:__effect_Future<i32> = __saved;
         return __local_2;
     } else {
-        return rx = builtin::i32_wrap_i64(local.tee packed("wasi/future-new:s32"())), tx = builtin::i32_wrap_i64(packed >> 32_i64), struct.new "tuple//[Future<i32>, FutureWritable<i32>]" { 0: rx, 1: tx };
+        return struct.new "tuple//[Future<i32>, FutureWritable<i32>]" { 0: builtin::i32_wrap_i64(local.tee packed("wasi/future-new:s32"())), 1: builtin::i32_wrap_i64(packed >> 32_i64) };
     }
 }
 

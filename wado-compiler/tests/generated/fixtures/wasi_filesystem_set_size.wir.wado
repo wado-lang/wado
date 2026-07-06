@@ -428,7 +428,6 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/read_all"(file) w
     let chunk: ref "core:prelude//List<u8>";
     let __iter_6: ref "core:prelude/slice.wado//ArrayIter<u8>";
     let __pattern_temp_0: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";
-    let end: i32;
     __pattern_temp_0 = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_read_via_stream"(file, 0_i64);
     read_stream = __pattern_temp_0.0;
     read_future = __pattern_temp_0.1;
@@ -437,8 +436,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/read_all"(file) w
         l1: loop {
             chunk = "core:rt/cm_stream_read_u8"(read_stream, 4096);
             break_if b0 chunk.used == 0;
-            end = chunk.used;
-            __iter_6 = struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: chunk.repr, index: 0, end: end };
+            __iter_6 = struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: chunk.repr, index: 0, end: chunk.used };
             b2: block {
                 l3: loop {
                     let __sroa___match_9_discriminant: i32;

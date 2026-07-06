@@ -379,7 +379,6 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
     let __v1: i32;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    let end: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -453,8 +452,7 @@ condition: index < self.used
     found_newdir = 0;
     entry_count = 0;
     entries = "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_stream_read_DirectoryEntry"(dir_stream, 100);
-    end = entries.used;
-    __iter_14 = struct.new "core:prelude/slice.wado//ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>" { repr: entries.repr, index: 0, end: end };
+    __iter_14 = struct.new "core:prelude/slice.wado//ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>" { repr: entries.repr, index: 0, end: entries.used };
     b10: block {
         l11: loop {
             __match_29 = "core:prelude/slice.wado/ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>^Iterator::next"(__iter_14);

@@ -314,7 +314,6 @@ fn "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/collect_lits"(elem, s
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref null "core:prelude//List<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/Elem>";
     let before: i32;
-    let end: i32;
     if ref.test "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado//Elem::Lit"(elem) {
         text = ref.cast "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado//Elem::Lit"(elem).payload_0;
         if "core:collections/TreeMap<core:prelude/string.wado/String,()>::find_index"(seen, text) >= 0 == 0 {
@@ -327,8 +326,7 @@ fn "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/collect_lits"(elem, s
     }
     if ref.test "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado//Elem::Group"(elem) {
         alts = ref.cast "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado//Elem::Group"(elem).payload_0;
-        end = alts.used;
-        __iter_5 = struct.new "core:prelude/slice.wado//ArrayRefIter<core:prelude/list.wado/List<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/Elem>>" { repr: alts.repr, index: 0, end: end };
+        __iter_5 = struct.new "core:prelude/slice.wado//ArrayRefIter<core:prelude/list.wado/List<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/Elem>>" { repr: alts.repr, index: 0, end: alts.used };
         b3: block {
             l4: loop {
                 __local_9 = "core:prelude/slice.wado/ArrayRefIter<core:prelude/list.wado/List<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/Elem>>^Iterator::next"(__iter_5);
@@ -354,9 +352,7 @@ fn "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/collect_lits_from_ele
     let __iter_3: ref "core:prelude/slice.wado//ArrayRefIter<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/Elem>";
     let elem: ref "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/Elem>";
     let __match_5: ref null "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/Elem>";
-    let end: i32;
-    end = elems.used;
-    __iter_3 = struct.new "core:prelude/slice.wado//ArrayRefIter<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/Elem>" { repr: elems.repr, index: 0, end: end };
+    __iter_3 = struct.new "core:prelude/slice.wado//ArrayRefIter<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/Elem>" { repr: elems.repr, index: 0, end: elems.used };
     b7: block {
         l8: loop {
             __match_5 = "core:prelude/slice.wado/ArrayRefIter<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/Elem>^Iterator::next"(__iter_3);

@@ -552,14 +552,10 @@ fn "core:prelude/int128.wado/u128^Sub::sub"(self, other) {
 }
 
 fn "core:prelude/int128.wado/u128^Mul::mul"(self, other) {
-    let p1_low: u64;
-    let p2_low: u64;
     let __mv_lo_1: i64;
     let __mv_hi_1: i64;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = i64.mul_wide_u(self.low, other.low);
-    p1_low = self.low * other.high;
-    p2_low = self.high * other.low;
-    return struct.new "core:prelude/int128.wado//u128" { low: __mv_lo_1, high: (__mv_hi_1 + p1_low) + p2_low };
+    return struct.new "core:prelude/int128.wado//u128" { low: __mv_lo_1, high: (__mv_hi_1 + (self.low * other.high)) + (self.high * other.low) };
 }
 
 fn "core:prelude/int128.wado/i128^Add::add"(self, other) {
@@ -577,14 +573,10 @@ fn "core:prelude/int128.wado/i128^Sub::sub"(self, other) {
 }
 
 fn "core:prelude/int128.wado/i128^Mul::mul"(self, other) {
-    let p1_low: u64;
-    let p2_low: u64;
     let __mv_lo_1: i64;
     let __mv_hi_1: i64;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = i64.mul_wide_u(self.low, other.low);
-    p1_low = self.low * other.high;
-    p2_low = self.high * other.low;
-    return struct.new "core:prelude/int128.wado//i128" { low: __mv_lo_1, high: (__mv_hi_1 + p1_low) + p2_low };
+    return struct.new "core:prelude/int128.wado//i128" { low: __mv_lo_1, high: (__mv_hi_1 + (self.low * other.high)) + (self.high * other.low) };
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {

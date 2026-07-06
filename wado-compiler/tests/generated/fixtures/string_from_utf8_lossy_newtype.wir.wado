@@ -309,14 +309,11 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
 fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
     let b0: u8;
     let b1_4: u8;
-    let code_5: u32;
     let b1_6: u8;
     let b2_7: u8;
-    let code_8: u32;
     let b1_9: u8;
     let b2_10: u8;
     let b3: u8;
-    let code_12: u32;
     b0 = builtin::array_get<u8>(bytes.repr, bytes.start + start);
     if @likely(b0 <u 128) {
         return b0, 1, 1;
@@ -339,8 +336,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 1, 0;
         }
-        code_5 = ((b0 & 31) << 6) | (b1_4 & 63);
-        return code_5, 2, 1;
+        return ((b0 & 31) << 6) | (b1_4 & 63), 2, 1;
     }
     if @likely(b0 <u 240) {
         if @unlikely((start + 1) >= len) {
@@ -381,8 +377,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 2, 0;
         }
-        code_8 = (((b0 & 15) << 12) | ((b1_6 & 63) << 6)) | (b2_7 & 63);
-        return code_8, 3, 1;
+        return (((b0 & 15) << 12) | ((b1_6 & 63) << 6)) | (b2_7 & 63), 3, 1;
     }
     if @likely(b0 <u 245) {
         if @unlikely((start + 1) >= len) {
@@ -436,8 +431,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 3, 0;
         }
-        code_12 = ((((b0 & 7) << 18) | ((b1_9 & 63) << 12)) | ((b2_10 & 63) << 6)) | (b3 & 63);
-        return code_12, 4, 1;
+        return ((((b0 & 7) << 18) | ((b1_9 & 63) << 12)) | ((b2_10 & 63) << 6)) | (b3 & 63), 4, 1;
     }
     cold_path;
     return 0, 1, 0;
@@ -927,16 +921,12 @@ fn "core:prelude/string.wado/String::from_utf8_lossy<wado-compiler/tests/fixture
     let builder: ref "core:prelude/string.wado//String";
     let i: i32;
     let bytes_13: ref Array<u8>;
-    let len_14: i32;
-    let end_17: i32;
-    let end_20: i32;
-    collected = "core:prelude/slice.wado/ArrayIter<u8>::collect"(end_17 = bytes.used; struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: bytes.repr, index: 0, end: end_17 });
-    slice = "wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/$value_copy$T26"(end_20 = collected.used; struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: collected.repr, start: 0, end: end_20 });
+    collected = "core:prelude/slice.wado/ArrayIter<u8>::collect"(struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: bytes.repr, index: 0, end: bytes.used });
+    slice = "wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/$value_copy$T26"(struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: collected.repr, start: 0, end: collected.used });
     __fused___inline_String__from_utf8_slice_2: block {
         break_if __fused___inline_String__from_utf8_slice_2 @unlikely("core:prelude/string.wado/String::is_valid_utf8"(slice) == 0);
         bytes_13 = "core:prelude/slice.wado/ArraySlice<u8>::to_array"(slice);
-        len_14 = slice.end - slice.start;
-        __fused_payload_3 = struct.new "core:prelude/string.wado//String" { repr: bytes_13, used: len_14 };
+        __fused_payload_3 = struct.new "core:prelude/string.wado//String" { repr: bytes_13, used: slice.end - slice.start };
         return __fused_payload_3;
     };
     cold_path;

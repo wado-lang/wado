@@ -271,7 +271,6 @@ import fn wasi/future-write:s32 from "wasi/future-write:s32";
 global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/cm_future_partial_use_destructure.wado/handle"(request) {
-    let tx_2: i32;
     let headers: i32;
     let response: i32;
     let __task_ret: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
@@ -398,19 +397,18 @@ fn "wado-compiler/tests/fixtures/cm_future_partial_use_destructure.wado/handle"(
     let __local_158: i32;
     let __pattern_temp_2: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let packed_162: i64;
-    let tx_164: i32;
     let packed_165: i64;
     let rx_166: i32;
     let tx_167: i32;
+    let __sroa___pattern_temp_0_1: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    drop(builtin::i32_wrap_i64(local.tee packed_162("wasi/future-new:s32"())));
-    tx_164 = builtin::i32_wrap_i64(packed_162 >> 32_i64);
-    "wado-compiler/tests/fixtures/cm_future_partial_use_destructure.wado/__cm_future_write_i32"(local.tee tx_2(tx_164), 42);
+    __sroa___pattern_temp_0_1 = builtin::i32_wrap_i64(local.tee packed_162("wasi/future-new:s32"()) >> 32_i64);
+    "wado-compiler/tests/fixtures/cm_future_partial_use_destructure.wado/__cm_future_write_i32"(__sroa___pattern_temp_0_1, 42);
     rx_166 = builtin::i32_wrap_i64(local.tee packed_165("wasi/future-new"()));
     tx_167 = builtin::i32_wrap_i64(packed_165 >> 32_i64);
     __pattern_temp_2 = "wado-compiler/tests/fixtures/cm_future_partial_use_destructure.wado/__cm_binding__Response_new"(local.tee headers("wado-compiler/tests/fixtures/cm_future_partial_use_destructure.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, rx_166);

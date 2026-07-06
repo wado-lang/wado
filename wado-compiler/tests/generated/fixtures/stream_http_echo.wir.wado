@@ -460,22 +460,21 @@ fn "wado-compiler/tests/fixtures/stream_http_echo.wado/handle"(request) {
     let __pattern_temp_4: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let __match_173: ref null "core:prelude//List<u8>";
     let packed_174: i64;
-    let rx_175: i32;
     let packed_181: i64;
     let rx_182: i32;
     let tx_183: i32;
     let packed_184: i64;
     let rx_185: i32;
     let tx_186: i32;
-    let end: i32;
+    let __sroa___pattern_temp_0_0: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    rx_175 = builtin::i32_wrap_i64(local.tee packed_174("wasi/future-new:transmission-http"()));
-    __pattern_temp_1 = "wado-compiler/tests/fixtures/stream_http_echo.wado/__cm_binding__Request_consume_body"(request, rx_175);
+    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed_174("wasi/future-new:transmission-http"()));
+    __pattern_temp_1 = "wado-compiler/tests/fixtures/stream_http_echo.wado/__cm_binding__Request_consume_body"(request, __sroa___pattern_temp_0_0);
     body_stream = __pattern_temp_1.0;
     __b = struct.new "core:prelude//List<core:prelude/list.wado/List<u8>>" { repr: builtin::array_new<ref "core:prelude//List<u8>">(0), used: 0 };
     b0: block {
@@ -784,8 +783,7 @@ fn "wado-compiler/tests/fixtures/stream_http_echo.wado/handle"(request) {
         }
         "wasi/task-return:handle"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
-    end = __b.used;
-    __iter_15 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/list.wado/List<u8>>" { repr: __b.repr, index: 0, end: end };
+    __iter_15 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/list.wado/List<u8>>" { repr: __b.repr, index: 0, end: __b.used };
     b63: block {
         l64: loop {
             __match_173 = "core:prelude/slice.wado/ArrayIter<core:prelude/list.wado/List<u8>>^Iterator::next"(__iter_15);

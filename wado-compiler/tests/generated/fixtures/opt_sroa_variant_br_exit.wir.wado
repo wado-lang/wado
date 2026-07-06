@@ -259,8 +259,6 @@ fn "core:prelude/fpfmt.wado/unpack64"(f) {
     let raw_exp: i32;
     let m_9: u64;
     let s: u64;
-    let m_12: u64;
-    let e_13: i32;
     raw_mantissa = local.tee bits(builtin::i64_reinterpret_f64(f)) & 4503599627370495_i64;
     raw_exp = builtin::i32_wrap_i64((bits >>u 52_i64) & 2047_i64);
     if raw_exp == 0 {
@@ -271,9 +269,7 @@ fn "core:prelude/fpfmt.wado/unpack64"(f) {
         s = builtin::i64_extend_i32_s(64 - (64 - builtin::i32_wrap_i64(builtin::i64_clz(m_9))));
         return m_9 << s, -1085 - builtin::i32_wrap_i64(s);
     }
-    m_12 = -9223372036854775808_i64 | (raw_mantissa << 11_i64);
-    e_13 = (raw_exp - 1) + -1085;
-    return m_12, e_13;
+    return -9223372036854775808_i64 | (raw_mantissa << 11_i64), (raw_exp - 1) + -1085;
 }
 
 fn "core:prelude/fpfmt.wado/unpack32"(f) {
@@ -282,8 +278,6 @@ fn "core:prelude/fpfmt.wado/unpack32"(f) {
     let raw_exp: i32;
     let m_9: u64;
     let s: u64;
-    let m_12: u64;
-    let e_13: i32;
     raw_mantissa = builtin::i64_extend_i32_u(local.tee bits(builtin::i32_reinterpret_f32(f)) & 8388607);
     raw_exp = (bits >>u 23) & 255;
     if raw_exp == 0 {
@@ -294,9 +288,7 @@ fn "core:prelude/fpfmt.wado/unpack32"(f) {
         s = builtin::i64_extend_i32_s(64 - (64 - builtin::i32_wrap_i64(builtin::i64_clz(m_9))));
         return m_9 << s, -189 - builtin::i32_wrap_i64(s);
     }
-    m_12 = -9223372036854775808_i64 | (raw_mantissa << 40_i64);
-    e_13 = (raw_exp - 1) + -189;
-    return m_12, e_13;
+    return -9223372036854775808_i64 | (raw_mantissa << 40_i64), (raw_exp - 1) + -189;
 }
 
 fn "core:prelude/fpfmt.wado/unrounded_div"(u, d) {
@@ -1220,11 +1212,10 @@ fn "core:json/scanned_to_f64"(n) {
 fn "core:json/core/json/from_bytes<f32,core:prelude/string.wado/String>"(input) {
     let de: ref "core:json//JsonDeserializer";
     let v_4: f32;
-    let end: i32;
     let __qm_v_13: f64;
     let __qm_e_14: ref "core:serde//DeserializeError";
     let v_15: f64;
-    de = struct.new "core:json//JsonDeserializer" { input: ref.as_non_null(end = input.used; struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: end }), pos: 0 };
+    de = struct.new "core:json//JsonDeserializer" { input: struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: input.used }, pos: 0 };
     v_4 = builtin::f32_demote_f64(local.tee v_15(let __sroa___match_scrut_0_discriminant: i32; let __sroa___match_scrut_0_case0_payload_0: f64; let __sroa___match_scrut_0_case1_payload_0: ref null "core:serde//DeserializeError"; multivalue_bind [__sroa___match_scrut_0_discriminant, __sroa___match_scrut_0_case0_payload_0, __sroa___match_scrut_0_case1_payload_0] = "core:json/JsonDeserializer::parse_f64_direct"(de); (if @likely(__sroa___match_scrut_0_discriminant == 0) -> f64 {
         local.tee __qm_v_13(__sroa___match_scrut_0_case0_payload_0);
     } else {

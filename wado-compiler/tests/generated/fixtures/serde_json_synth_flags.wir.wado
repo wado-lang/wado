@@ -774,14 +774,11 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
 fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
     let b0: u8;
     let b1_4: u8;
-    let code_5: u32;
     let b1_6: u8;
     let b2_7: u8;
-    let code_8: u32;
     let b1_9: u8;
     let b2_10: u8;
     let b3: u8;
-    let code_12: u32;
     b0 = builtin::array_get<u8>(bytes.repr, bytes.start + start);
     if @likely(b0 <u 128) {
         return b0, 1, 1;
@@ -804,8 +801,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 1, 0;
         }
-        code_5 = ((b0 & 31) << 6) | (b1_4 & 63);
-        return code_5, 2, 1;
+        return ((b0 & 31) << 6) | (b1_4 & 63), 2, 1;
     }
     if @likely(b0 <u 240) {
         if @unlikely((start + 1) >= len) {
@@ -846,8 +842,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 2, 0;
         }
-        code_8 = (((b0 & 15) << 12) | ((b1_6 & 63) << 6)) | (b2_7 & 63);
-        return code_8, 3, 1;
+        return (((b0 & 15) << 12) | ((b1_6 & 63) << 6)) | (b2_7 & 63), 3, 1;
     }
     if @likely(b0 <u 245) {
         if @unlikely((start + 1) >= len) {
@@ -901,8 +896,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 3, 0;
         }
-        code_12 = ((((b0 & 7) << 18) | ((b1_9 & 63) << 12)) | ((b2_10 & 63) << 6)) | (b3 & 63);
-        return code_12, 4, 1;
+        return ((((b0 & 7) << 18) | ((b1_9 & 63) << 12)) | ((b2_10 & 63) << 6)) | (b3 & 63), 4, 1;
     }
     cold_path;
     return 0, 1, 0;
@@ -1077,8 +1071,7 @@ fn "core:json/core/json/from_bytes<wado-compiler/tests/fixtures/serde_json_synth
     let __qm_v: u32;
     let __qm_e: ref "core:serde//DeserializeError";
     let v: u32;
-    let end: i32;
-    de = struct.new "core:json//JsonDeserializer" { input: ref.as_non_null(end = input.used; struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: end }), pos: 0 };
+    de = struct.new "core:json//JsonDeserializer" { input: struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: input.used }, pos: 0 };
     let __sroa___match_scrut_0_discriminant: i32;
     let __sroa___match_scrut_0_case0_payload_0: u32;
     let __sroa___match_scrut_0_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -1539,8 +1532,7 @@ fn "core:json/JsonDeserializer::take_scanned_run"(self, start, end, all_ascii) {
     let s: ref "core:prelude/string.wado//String";
     let __qm_e: ref "core:serde//DeserializeError";
     let __match_7: ref null "core:serde//DeserializeError";
-    let capacity: i32;
-    s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity(end - start)), used: 0 };
+    s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(end - start), used: 0 };
     __match_7 = "core:json/JsonDeserializer::append_scanned_run"(self, s, start, end, all_ascii);
     if @likely(ref.is_null(__match_7)) {
     } else {

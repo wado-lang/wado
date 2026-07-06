@@ -1609,7 +1609,6 @@ fn "wado-compiler/tests/fixtures/cm_component_import_catalog.wado/__cm_binding__
 fn "wado-compiler/tests/fixtures/cm_component_import_catalog.wado/__cm_binding__CmCatalog_id_string"(v) with CmCatalog {
     let __v_packed: i64;
     let __outptr: i32;
-    let __lifted_result_3: ref "core:prelude/string.wado//String";
     let ptr: i32;
     let len_5: i32;
     let arr: ref Array<u8>;
@@ -1619,9 +1618,8 @@ fn "wado-compiler/tests/fixtures/cm_component_import_catalog.wado/__cm_binding__
     ptr = builtin::load_i32(__outptr);
     len_5 = builtin::load_i32(__outptr + 4);
     arr = "core:rt/memory_to_gc_array"(ptr, len_5);
-    __lifted_result_3 = struct.new "core:prelude/string.wado//String" { repr: arr, used: len_5 };
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return __lifted_result_3;
+    return struct.new "core:prelude/string.wado//String" { repr: arr, used: len_5 };
 }
 
 fn "wado-compiler/tests/fixtures/cm_component_import_catalog.wado/__cm_binding__CmCatalog_id_enum"(v) with CmCatalog {
@@ -2375,8 +2373,7 @@ condition: index < self.used
     b107: block {
         l108: loop {
             break_if b107 __i >= __count;
-            __elem_addr = __base + (__i * 12);
-            ptr = builtin::load_i32(__elem_addr + 0);
+            ptr = builtin::load_i32(local.tee __elem_addr(__base + (__i * 12)) + 0);
             len_28 = builtin::load_i32((__elem_addr + 0) + 4);
             arr = "core:rt/memory_to_gc_array"(ptr, len_28);
             __lifted_result_14 = struct.new "core:prelude/string.wado//String" { repr: arr, used: len_28 };
@@ -2747,8 +2744,6 @@ fn "core:prelude/fpfmt.wado/unpack64"(f) {
     let raw_exp: i32;
     let m_9: u64;
     let s: u64;
-    let m_12: u64;
-    let e_13: i32;
     raw_mantissa = local.tee bits(builtin::i64_reinterpret_f64(f)) & 4503599627370495_i64;
     raw_exp = builtin::i32_wrap_i64((bits >>u 52_i64) & 2047_i64);
     if raw_exp == 0 {
@@ -2759,9 +2754,7 @@ fn "core:prelude/fpfmt.wado/unpack64"(f) {
         s = builtin::i64_extend_i32_s(64 - (64 - builtin::i32_wrap_i64(builtin::i64_clz(m_9))));
         return m_9 << s, -1085 - builtin::i32_wrap_i64(s);
     }
-    m_12 = -9223372036854775808_i64 | (raw_mantissa << 11_i64);
-    e_13 = (raw_exp - 1) + -1085;
-    return m_12, e_13;
+    return -9223372036854775808_i64 | (raw_mantissa << 11_i64), (raw_exp - 1) + -1085;
 }
 
 fn "core:prelude/fpfmt.wado/unpack32"(f) {
@@ -2770,8 +2763,6 @@ fn "core:prelude/fpfmt.wado/unpack32"(f) {
     let raw_exp: i32;
     let m_9: u64;
     let s: u64;
-    let m_12: u64;
-    let e_13: i32;
     raw_mantissa = builtin::i64_extend_i32_u(local.tee bits(builtin::i32_reinterpret_f32(f)) & 8388607);
     raw_exp = (bits >>u 23) & 255;
     if raw_exp == 0 {
@@ -2782,9 +2773,7 @@ fn "core:prelude/fpfmt.wado/unpack32"(f) {
         s = builtin::i64_extend_i32_s(64 - (64 - builtin::i32_wrap_i64(builtin::i64_clz(m_9))));
         return m_9 << s, -189 - builtin::i32_wrap_i64(s);
     }
-    m_12 = -9223372036854775808_i64 | (raw_mantissa << 40_i64);
-    e_13 = (raw_exp - 1) + -189;
-    return m_12, e_13;
+    return -9223372036854775808_i64 | (raw_mantissa << 40_i64), (raw_exp - 1) + -189;
 }
 
 fn "core:prelude/fpfmt.wado/unrounded_div"(u, d) {

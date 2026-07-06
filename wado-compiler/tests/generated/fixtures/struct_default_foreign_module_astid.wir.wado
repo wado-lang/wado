@@ -350,8 +350,6 @@ fn "core:prelude/fpfmt.wado/unpack64"(f) {
     let raw_exp: i32;
     let m_9: u64;
     let s: u64;
-    let m_12: u64;
-    let e_13: i32;
     raw_mantissa = local.tee bits(builtin::i64_reinterpret_f64(f)) & 4503599627370495_i64;
     raw_exp = builtin::i32_wrap_i64((bits >>u 52_i64) & 2047_i64);
     if raw_exp == 0 {
@@ -362,9 +360,7 @@ fn "core:prelude/fpfmt.wado/unpack64"(f) {
         s = builtin::i64_extend_i32_s(64 - (64 - builtin::i32_wrap_i64(builtin::i64_clz(m_9))));
         return m_9 << s, -1085 - builtin::i32_wrap_i64(s);
     }
-    m_12 = -9223372036854775808_i64 | (raw_mantissa << 11_i64);
-    e_13 = (raw_exp - 1) + -1085;
-    return m_12, e_13;
+    return -9223372036854775808_i64 | (raw_mantissa << 11_i64), (raw_exp - 1) + -1085;
 }
 
 fn "core:prelude/fpfmt.wado/unrounded_div"(u, d) {

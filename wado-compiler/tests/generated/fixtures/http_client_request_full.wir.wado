@@ -799,7 +799,6 @@ fn "wado-compiler/tests/fixtures/http_client_request_full.wado/handle"(request) 
     let rx_236: i32;
     let tx_237: i32;
     let packed_238: i64;
-    let rx_239: i32;
     let collected: ref "core:prelude//List<u8>";
     let packed_244: i64;
     let rx_245: i32;
@@ -807,8 +806,7 @@ fn "wado-compiler/tests/fixtures/http_client_request_full.wado/handle"(request) 
     let packed_247: i64;
     let rx_248: i32;
     let tx_249: i32;
-    let end_254: i32;
-    let end_258: i32;
+    let __sroa___pattern_temp_2_0: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -978,8 +976,8 @@ condition: p == \"/upstream\"
         "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("send failed"), used: 11 });
         unreachable;
     });
-    rx_239 = builtin::i32_wrap_i64(local.tee packed_238("wasi/future-new:transmission-http"()));
-    __pattern_temp_3 = "wado-compiler/tests/fixtures/http_client_request_full.wado/__cm_binding__Response_consume_body"(upstream, rx_239);
+    __sroa___pattern_temp_2_0 = builtin::i32_wrap_i64(local.tee packed_238("wasi/future-new:transmission-http"()));
+    __pattern_temp_3 = "wado-compiler/tests/fixtures/http_client_request_full.wado/__cm_binding__Response_consume_body"(upstream, __sroa___pattern_temp_2_0);
     body_stream = __pattern_temp_3.0;
     body = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     b18: block {
@@ -988,8 +986,8 @@ condition: p == \"/upstream\"
             break_if b18 chunk.used == 0;
             let __sroa___match_scrut_15_discriminant: i32;
             let __sroa___match_scrut_15_payload_0: ref null "core:prelude/string.wado//String";
-            collected = "core:prelude/slice.wado/ArrayIter<u8>::collect"(end_254 = chunk.used; struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: chunk.repr, index: 0, end: end_254 });
-            multivalue_bind [__sroa___match_scrut_15_discriminant, __sroa___match_scrut_15_payload_0] = "core:prelude/string.wado/String::from_utf8_slice"(end_258 = collected.used; struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: collected.repr, start: 0, end: end_258 });
+            collected = "core:prelude/slice.wado/ArrayIter<u8>::collect"(struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: chunk.repr, index: 0, end: chunk.used });
+            multivalue_bind [__sroa___match_scrut_15_discriminant, __sroa___match_scrut_15_payload_0] = "core:prelude/string.wado/String::from_utf8_slice"(struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: collected.repr, start: 0, end: collected.used });
             text = (if @likely(__sroa___match_scrut_15_discriminant == 0) -> ref "core:prelude/string.wado//String" {
                 s = ref.as_non_null(__sroa___match_scrut_15_payload_0);
                 s;
@@ -2174,14 +2172,11 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
 fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
     let b0: u8;
     let b1_4: u8;
-    let code_5: u32;
     let b1_6: u8;
     let b2_7: u8;
-    let code_8: u32;
     let b1_9: u8;
     let b2_10: u8;
     let b3: u8;
-    let code_12: u32;
     b0 = builtin::array_get<u8>(bytes.repr, bytes.start + start);
     if @likely(b0 <u 128) {
         return b0, 1, 1;
@@ -2204,8 +2199,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 1, 0;
         }
-        code_5 = ((b0 & 31) << 6) | (b1_4 & 63);
-        return code_5, 2, 1;
+        return ((b0 & 31) << 6) | (b1_4 & 63), 2, 1;
     }
     if @likely(b0 <u 240) {
         if @unlikely((start + 1) >= len) {
@@ -2246,8 +2240,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 2, 0;
         }
-        code_8 = (((b0 & 15) << 12) | ((b1_6 & 63) << 6)) | (b2_7 & 63);
-        return code_8, 3, 1;
+        return (((b0 & 15) << 12) | ((b1_6 & 63) << 6)) | (b2_7 & 63), 3, 1;
     }
     if @likely(b0 <u 245) {
         if @unlikely((start + 1) >= len) {
@@ -2301,8 +2294,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 3, 0;
         }
-        code_12 = ((((b0 & 7) << 18) | ((b1_9 & 63) << 12)) | ((b2_10 & 63) << 6)) | (b3 & 63);
-        return code_12, 4, 1;
+        return ((((b0 & 7) << 18) | ((b1_9 & 63) << 12)) | ((b2_10 & 63) << 6)) | (b3 & 63), 4, 1;
     }
     cold_path;
     return 0, 1, 0;
@@ -2639,8 +2631,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 
 fn "core:prelude/string.wado/String^Add::add"(self, other) {
     let result: ref "core:prelude/string.wado//String";
-    let capacity: i32;
-    result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity(self.used + other.used)), used: 0 };
+    result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self.used + other.used), used: 0 };
     "core:prelude/string.wado/String::push_str"(result, self);
     "core:prelude/string.wado/String::push_str"(result, other);
     return result;
@@ -2758,12 +2749,11 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 
 fn "core:prelude/string.wado/String::from_utf8_slice"(bytes) {
     let bytes_2: ref Array<u8>;
-    let len: i32;
     if @unlikely("core:prelude/string.wado/String::is_valid_utf8"(bytes) == 0) {
         cold_path;
         return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8"), used: 13 };
     }
-    return 0, ref.as_non_null(bytes_2 = "core:prelude/slice.wado/ArraySlice<u8>::to_array"(bytes); len = bytes.end - bytes.start; struct.new "core:prelude/string.wado//String" { repr: bytes_2, used: len });
+    return 0, ref.as_non_null(bytes_2 = "core:prelude/slice.wado/ArraySlice<u8>::to_array"(bytes); struct.new "core:prelude/string.wado//String" { repr: bytes_2, used: bytes.end - bytes.start });
 }
 
 fn "core:prelude/string.wado/String::is_valid_utf8"(bytes) {

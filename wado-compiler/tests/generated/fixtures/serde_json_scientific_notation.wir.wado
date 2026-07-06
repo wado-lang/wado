@@ -1288,8 +1288,6 @@ fn "core:prelude/fpfmt.wado/unpack64"(f) {
     let raw_exp: i32;
     let m_9: u64;
     let s: u64;
-    let m_12: u64;
-    let e_13: i32;
     raw_mantissa = local.tee bits(builtin::i64_reinterpret_f64(f)) & 4503599627370495_i64;
     raw_exp = builtin::i32_wrap_i64((bits >>u 52_i64) & 2047_i64);
     if raw_exp == 0 {
@@ -1300,9 +1298,7 @@ fn "core:prelude/fpfmt.wado/unpack64"(f) {
         s = builtin::i64_extend_i32_s(64 - (64 - builtin::i32_wrap_i64(builtin::i64_clz(m_9))));
         return m_9 << s, -1085 - builtin::i32_wrap_i64(s);
     }
-    m_12 = -9223372036854775808_i64 | (raw_mantissa << 11_i64);
-    e_13 = (raw_exp - 1) + -1085;
-    return m_12, e_13;
+    return -9223372036854775808_i64 | (raw_mantissa << 11_i64), (raw_exp - 1) + -1085;
 }
 
 fn "core:prelude/fpfmt.wado/unpack32"(f) {
@@ -1311,8 +1307,6 @@ fn "core:prelude/fpfmt.wado/unpack32"(f) {
     let raw_exp: i32;
     let m_9: u64;
     let s: u64;
-    let m_12: u64;
-    let e_13: i32;
     raw_mantissa = builtin::i64_extend_i32_u(local.tee bits(builtin::i32_reinterpret_f32(f)) & 8388607);
     raw_exp = (bits >>u 23) & 255;
     if raw_exp == 0 {
@@ -1323,9 +1317,7 @@ fn "core:prelude/fpfmt.wado/unpack32"(f) {
         s = builtin::i64_extend_i32_s(64 - (64 - builtin::i32_wrap_i64(builtin::i64_clz(m_9))));
         return m_9 << s, -189 - builtin::i32_wrap_i64(s);
     }
-    m_12 = -9223372036854775808_i64 | (raw_mantissa << 40_i64);
-    e_13 = (raw_exp - 1) + -189;
-    return m_12, e_13;
+    return -9223372036854775808_i64 | (raw_mantissa << 40_i64), (raw_exp - 1) + -189;
 }
 
 fn "core:prelude/fpfmt.wado/unrounded_div"(u, d) {
@@ -2506,7 +2498,6 @@ fn "core:prelude/intparse.wado/parse_signed_prefix_range"(s, start, end) {
     let first: u8;
     let is_negative: bool;
     let has_sign: bool;
-    let value_start: i32;
     if (if (if (if start >= 0 -> i32 {
         end <= s.used;
     } else {
@@ -2535,8 +2526,7 @@ fn "core:prelude/intparse.wado/parse_signed_prefix_range"(s, start, end) {
     }) {
         return 1, ref.null none, 1;
     }
-    value_start = select i32(has_sign, start + 1, start);
-    return 0, struct.new "tuple//[bool, i32]" { 0: is_negative, 1: value_start }, 0;
+    return 0, struct.new "tuple//[bool, i32]" { 0: is_negative, 1: select i32(has_sign, start + 1, start) }, 0;
 }
 
 fn "core:prelude/intparse.wado/parse_unsigned_prefix_range"(s, start, end) {
@@ -2755,14 +2745,11 @@ fn "core:prelude/primitive.wado/fmt_float_special"(f, is_neg, kind, zero_repr) {
 fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
     let b0: u8;
     let b1_4: u8;
-    let code_5: u32;
     let b1_6: u8;
     let b2_7: u8;
-    let code_8: u32;
     let b1_9: u8;
     let b2_10: u8;
     let b3: u8;
-    let code_12: u32;
     b0 = builtin::array_get<u8>(bytes.repr, bytes.start + start);
     if @likely(b0 <u 128) {
         return b0, 1, 1;
@@ -2785,8 +2772,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 1, 0;
         }
-        code_5 = ((b0 & 31) << 6) | (b1_4 & 63);
-        return code_5, 2, 1;
+        return ((b0 & 31) << 6) | (b1_4 & 63), 2, 1;
     }
     if @likely(b0 <u 240) {
         if @unlikely((start + 1) >= len) {
@@ -2827,8 +2813,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 2, 0;
         }
-        code_8 = (((b0 & 15) << 12) | ((b1_6 & 63) << 6)) | (b2_7 & 63);
-        return code_8, 3, 1;
+        return (((b0 & 15) << 12) | ((b1_6 & 63) << 6)) | (b2_7 & 63), 3, 1;
     }
     if @likely(b0 <u 245) {
         if @unlikely((start + 1) >= len) {
@@ -2882,8 +2867,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 3, 0;
         }
-        code_12 = ((((b0 & 7) << 18) | ((b1_9 & 63) << 12)) | ((b2_10 & 63) << 6)) | (b3 & 63);
-        return code_12, 4, 1;
+        return ((((b0 & 7) << 18) | ((b1_9 & 63) << 12)) | ((b2_10 & 63) << 6)) | (b3 & 63), 4, 1;
     }
     cold_path;
     return 0, 1, 0;
@@ -3171,8 +3155,7 @@ fn "core:json/core/json/from_bytes<i32,core:prelude/string.wado/String>"(input) 
     let __qm_v: i32;
     let __qm_e: ref "core:serde//DeserializeError";
     let v: i32;
-    let end: i32;
-    de = struct.new "core:json//JsonDeserializer" { input: ref.as_non_null(end = input.used; struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: end }), pos: 0 };
+    de = struct.new "core:json//JsonDeserializer" { input: struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: input.used }, pos: 0 };
     let __sroa___match_scrut_0_discriminant: i32;
     let __sroa___match_scrut_0_case0_payload_0: i32;
     let __sroa___match_scrut_0_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -3197,8 +3180,7 @@ fn "core:json/core/json/from_bytes<i64,core:prelude/string.wado/String>"(input) 
     let __qm_v: i64;
     let __qm_e: ref "core:serde//DeserializeError";
     let v: i64;
-    let end: i32;
-    de = struct.new "core:json//JsonDeserializer" { input: ref.as_non_null(end = input.used; struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: end }), pos: 0 };
+    de = struct.new "core:json//JsonDeserializer" { input: struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: input.used }, pos: 0 };
     let __sroa___match_scrut_0_discriminant: i32;
     let __sroa___match_scrut_0_case0_payload_0: i64;
     let __sroa___match_scrut_0_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -3223,8 +3205,7 @@ fn "core:json/core/json/from_bytes<u32,core:prelude/string.wado/String>"(input) 
     let __qm_v: u32;
     let __qm_e: ref "core:serde//DeserializeError";
     let v: u32;
-    let end: i32;
-    de = struct.new "core:json//JsonDeserializer" { input: ref.as_non_null(end = input.used; struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: end }), pos: 0 };
+    de = struct.new "core:json//JsonDeserializer" { input: struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: input.used }, pos: 0 };
     let __sroa___match_scrut_0_discriminant: i32;
     let __sroa___match_scrut_0_case0_payload_0: u32;
     let __sroa___match_scrut_0_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -3249,8 +3230,7 @@ fn "core:json/core/json/from_bytes<u64,core:prelude/string.wado/String>"(input) 
     let __qm_v: u64;
     let __qm_e: ref "core:serde//DeserializeError";
     let v: u64;
-    let end: i32;
-    de = struct.new "core:json//JsonDeserializer" { input: ref.as_non_null(end = input.used; struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: end }), pos: 0 };
+    de = struct.new "core:json//JsonDeserializer" { input: struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: input.used }, pos: 0 };
     let __sroa___match_scrut_0_discriminant: i32;
     let __sroa___match_scrut_0_case0_payload_0: u64;
     let __sroa___match_scrut_0_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -3275,8 +3255,7 @@ fn "core:json/core/json/from_bytes<f64,core:prelude/string.wado/String>"(input) 
     let __qm_v: f64;
     let __qm_e: ref "core:serde//DeserializeError";
     let v: f64;
-    let end: i32;
-    de = struct.new "core:json//JsonDeserializer" { input: ref.as_non_null(end = input.used; struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: end }), pos: 0 };
+    de = struct.new "core:json//JsonDeserializer" { input: struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: input.used }, pos: 0 };
     let __sroa___match_scrut_0_discriminant: i32;
     let __sroa___match_scrut_0_case0_payload_0: f64;
     let __sroa___match_scrut_0_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -3299,11 +3278,10 @@ fn "core:json/core/json/from_bytes<f64,core:prelude/string.wado/String>"(input) 
 fn "core:json/core/json/from_bytes<f32,core:prelude/string.wado/String>"(input) {
     let de: ref "core:json//JsonDeserializer";
     let v_4: f32;
-    let end: i32;
     let __qm_v_13: f64;
     let __qm_e_14: ref "core:serde//DeserializeError";
     let v_15: f64;
-    de = struct.new "core:json//JsonDeserializer" { input: ref.as_non_null(end = input.used; struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: end }), pos: 0 };
+    de = struct.new "core:json//JsonDeserializer" { input: struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: input.used }, pos: 0 };
     v_4 = builtin::f32_demote_f64(local.tee v_15(let __sroa___match_scrut_0_discriminant: i32; let __sroa___match_scrut_0_case0_payload_0: f64; let __sroa___match_scrut_0_case1_payload_0: ref null "core:serde//DeserializeError"; multivalue_bind [__sroa___match_scrut_0_discriminant, __sroa___match_scrut_0_case0_payload_0, __sroa___match_scrut_0_case1_payload_0] = "core:json/JsonDeserializer::parse_f64_direct"(de); (if @likely(__sroa___match_scrut_0_discriminant == 0) -> f64 {
         local.tee __qm_v_13(__sroa___match_scrut_0_case0_payload_0);
     } else {
@@ -3954,8 +3932,7 @@ fn "core:json/JsonDeserializer::take_scanned_run"(self, start, end, all_ascii) {
     let s: ref "core:prelude/string.wado//String";
     let __qm_e: ref "core:serde//DeserializeError";
     let __match_7: ref null "core:serde//DeserializeError";
-    let capacity: i32;
-    s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity(end - start)), used: 0 };
+    s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(end - start), used: 0 };
     __match_7 = "core:json/JsonDeserializer::append_scanned_run"(self, s, start, end, all_ascii);
     if @likely(ref.is_null(__match_7)) {
     } else {

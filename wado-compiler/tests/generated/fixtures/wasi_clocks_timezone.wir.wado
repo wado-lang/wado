@@ -252,7 +252,6 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_binding__Timezon
 
 fn "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_binding__Timezone_to_debug_string"() with Timezone {
     let __outptr: i32;
-    let __lifted_result_1: ref "core:prelude/string.wado//String";
     let ptr: i32;
     let len_3: i32;
     let arr: ref Array<u8>;
@@ -260,9 +259,8 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_binding__Timezon
     ptr = builtin::load_i32(__outptr);
     len_3 = builtin::load_i32(__outptr + 4);
     arr = "core:rt/memory_to_gc_array"(ptr, len_3);
-    __lifted_result_1 = struct.new "core:prelude/string.wado//String" { repr: arr, used: len_3 };
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return __lifted_result_1;
+    return struct.new "core:prelude/string.wado//String" { repr: arr, used: len_3 };
 }
 
 fn "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_binding__Timezone_iana_id"() with Timezone {

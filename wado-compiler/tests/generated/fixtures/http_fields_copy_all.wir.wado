@@ -933,8 +933,7 @@ fn "wado-compiler/tests/fixtures/http_fields_copy_all.wado/__cm_binding__Fields_
     b69: block {
         l70: loop {
             break_if b69 __i_5 >= __count_3;
-            __elem_addr = __base_2 + (__i_5 * 16);
-            ptr = builtin::load_i32(__elem_addr + 0);
+            ptr = builtin::load_i32(local.tee __elem_addr(__base_2 + (__i_5 * 16)) + 0);
             len_15 = builtin::load_i32((__elem_addr + 0) + 4);
             arr = "core:rt/memory_to_gc_array"(ptr, len_15);
             __lifted_result_7 = struct.new "core:prelude/string.wado//String" { repr: arr, used: len_15 };

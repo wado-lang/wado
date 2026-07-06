@@ -220,7 +220,6 @@ fn "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/run"() wit
     let dir: i32;
     let dir_stream: i32;
     let _done: i32;
-    let entries: ref "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>";
     let found_hello: bool;
     let __iter_6: ref "core:prelude/slice.wado//ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>";
     let entry: ref "wasi:filesystem/types.wado//DirectoryEntry";
@@ -230,7 +229,8 @@ fn "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/run"() wit
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let v: ref "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>";
-    let end: i32;
+    let __sroa_entries_repr: ref "Array<wasi:filesystem/types.wado/DirectoryEntry>";
+    let __sroa_entries_used: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -256,10 +256,10 @@ condition: index < self.used
     } else {
         "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_stream_read_DirectoryEntry"(dir_stream, 0);
     });
-    entries = struct.new "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>" { repr: ref.as_non_null(builtin::array_clone<ref "wasi:filesystem/types.wado//DirectoryEntry">(v.repr)), used: v.used };
+    __sroa_entries_repr = builtin::array_clone<ref "wasi:filesystem/types.wado//DirectoryEntry">(v.repr);
+    __sroa_entries_used = v.used;
     found_hello = 0;
-    end = entries.used;
-    __iter_6 = struct.new "core:prelude/slice.wado//ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>" { repr: entries.repr, index: 0, end: end };
+    __iter_6 = struct.new "core:prelude/slice.wado//ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>" { repr: __sroa_entries_repr, index: 0, end: __sroa_entries_used };
     b3: block {
         l4: loop {
             __match_9 = "core:prelude/slice.wado/ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>^Iterator::next"(__iter_6);

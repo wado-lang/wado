@@ -136,7 +136,6 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/stream_read_multiple.wado/run"() with Stdout {
-    let tx_1: i32;
     let reads: i32;
     let chunk: ref "core:prelude//List<u8>";
     let __local_6: ref "core:prelude/string.wado//String";
@@ -152,7 +151,7 @@ fn "wado-compiler/tests/fixtures/stream_read_multiple.wado/run"() with Stdout {
     };
     rx_10 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_11 = builtin::i32_wrap_i64(packed >> 32_i64);
-    "wasi/stream-drop-writable"(local.tee tx_1(tx_11));
+    "wasi/stream-drop-writable"(tx_11);
     reads = 0;
     b0: block {
         l1: loop {

@@ -522,14 +522,11 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
 fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
     let b0: u8;
     let b1_4: u8;
-    let code_5: u32;
     let b1_6: u8;
     let b2_7: u8;
-    let code_8: u32;
     let b1_9: u8;
     let b2_10: u8;
     let b3: u8;
-    let code_12: u32;
     b0 = builtin::array_get<u8>(bytes.repr, bytes.start + start);
     if @likely(b0 <u 128) {
         return b0, 1, 1;
@@ -552,8 +549,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 1, 0;
         }
-        code_5 = ((b0 & 31) << 6) | (b1_4 & 63);
-        return code_5, 2, 1;
+        return ((b0 & 31) << 6) | (b1_4 & 63), 2, 1;
     }
     if @likely(b0 <u 240) {
         if @unlikely((start + 1) >= len) {
@@ -594,8 +590,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 2, 0;
         }
-        code_8 = (((b0 & 15) << 12) | ((b1_6 & 63) << 6)) | (b2_7 & 63);
-        return code_8, 3, 1;
+        return (((b0 & 15) << 12) | ((b1_6 & 63) << 6)) | (b2_7 & 63), 3, 1;
     }
     if @likely(b0 <u 245) {
         if @unlikely((start + 1) >= len) {
@@ -649,8 +644,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 3, 0;
         }
-        code_12 = ((((b0 & 7) << 18) | ((b1_9 & 63) << 12)) | ((b2_10 & 63) << 6)) | (b3 & 63);
-        return code_12, 4, 1;
+        return ((((b0 & 7) << 18) | ((b1_9 & 63) << 12)) | ((b2_10 & 63) << 6)) | (b3 & 63), 4, 1;
     }
     cold_path;
     return 0, 1, 0;
@@ -847,8 +841,7 @@ fn "core:cbor/core/cbor/from_bytes<wado-compiler/tests/fixtures/cbor_struct_deco
     let __qm_v: ref "wado-compiler/tests/fixtures/cbor_struct_decode.wado//Point";
     let __qm_e: ref "core:serde//DeserializeError";
     let v: ref "wado-compiler/tests/fixtures/cbor_struct_decode.wado//Point";
-    let end: i32;
-    de = struct.new "core:cbor//CborDeserializer" { input: ref.as_non_null(end = input.used; struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: end }), pos: 0, depth: 0, strict: strict };
+    de = struct.new "core:cbor//CborDeserializer" { input: struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: input.used }, pos: 0, depth: 0, strict: strict };
     let __sroa___match_scrut_0_discriminant: i32;
     let __sroa___match_scrut_0_case0_payload_0: ref null "wado-compiler/tests/fixtures/cbor_struct_decode.wado//Point";
     let __sroa___match_scrut_0_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -932,8 +925,7 @@ fn "core:prelude/string.wado/String::with_capacity"(capacity) {
 }
 
 fn "core:prelude/string.wado/String::as_bytes"(self) {
-    let end: i32;
-    return end = self.used, struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: self.repr, start: 0, end: end };
+    return struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: self.repr, start: 0, end: self.used };
 }
 
 fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
@@ -1242,7 +1234,6 @@ fn "core:cbor/CborDeserializer::read_definite_text"(self, len) {
     let slice: ref "core:prelude/slice.wado//ArraySlice<u8>";
     let v: ref "core:prelude/string.wado//String";
     let bytes_9: ref Array<u8>;
-    let len_10: i32;
     if @unlikely(len >u builtin::i64_extend_i32_s((self.input.end - self.input.start) - self.pos)) {
         cold_path;
         return 1, ref.null none, ref.as_non_null("core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s(self.pos)));
@@ -1256,8 +1247,7 @@ fn "core:cbor/CborDeserializer::read_definite_text"(self, len) {
         return 1, ref.null none, ref.as_non_null("core:serde/DeserializeError::malformed"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8 in text string"), used: 28 }, builtin::i64_extend_i32_s(self.pos)));
     }
     bytes_9 = "core:prelude/slice.wado/ArraySlice<u8>::to_array"(slice);
-    len_10 = slice.end - slice.start;
-    v = struct.new "core:prelude/string.wado//String" { repr: bytes_9, used: len_10 };
+    v = struct.new "core:prelude/string.wado//String" { repr: bytes_9, used: slice.end - slice.start };
     self.pos = self.pos + n;
     return 0, v, ref.null none;
 }
@@ -1504,11 +1494,6 @@ fn "core:cbor/CborDeserializer::read_signed_i128"(self) {
     let __qm_e_12: ref "core:serde//DeserializeError";
     let mag_13: ref "core:prelude/int128.wado//u128";
     let __pattern_temp_0: ref "tuple//[u8, u8, u64, bool]";
-    let low_17: u64;
-    let low_21: u64;
-    let high_22: i64;
-    let low_25: u64;
-    let high_26: i64;
     i128_max = global:core::cbor::I128_MAX_AS_U128;
     block {
         l149: loop {
@@ -1529,7 +1514,7 @@ fn "core:cbor/CborDeserializer::read_signed_i128"(self) {
             if major == 0 {
                 return 0, struct.new "core:prelude/int128.wado//i128" { low: arg, high: 0_i64 }, ref.null none;
             } else if major == 1 {
-                return 0, ref.as_non_null(struct.new "core:prelude/int128.wado//i128" { low: local.tee low_17(arg ^ -1_i64), high: -1_i64 }), ref.null none;
+                return 0, struct.new "core:prelude/int128.wado//i128" { low: arg ^ -1_i64, high: -1_i64 }, ref.null none;
             } else if major == 6 {
                 continue_if l149 @likely("core:cbor/is_passthrough_tag"(arg));
                 if @unlikely(arg == 2_i64) {
@@ -1546,7 +1531,7 @@ fn "core:cbor/CborDeserializer::read_signed_i128"(self) {
                         return 1, ref.null none, __qm_e_9;
                     });
                     if @likely("core:prelude/int128.wado/u128^Ord::cmp"(mag_10, i128_max) != 2) {
-                        return 0, ref.as_non_null(low_21 = mag_10.low; high_22 = mag_10.high; struct.new "core:prelude/int128.wado//i128" { low: low_21, high: high_22 }), ref.null none;
+                        return 0, struct.new "core:prelude/int128.wado//i128" { low: mag_10.low, high: mag_10.high }, ref.null none;
                     }
                     cold_path;
                     return 1, ref.null none, ref.as_non_null("core:serde/DeserializeError::overflow"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bignum exceeds i128"), used: 19 }, builtin::i64_extend_i32_s(self.pos)));
@@ -1565,7 +1550,7 @@ fn "core:cbor/CborDeserializer::read_signed_i128"(self) {
                         return 1, ref.null none, __qm_e_12;
                     });
                     if @likely("core:prelude/int128.wado/u128^Ord::cmp"(mag_13, i128_max) != 2) {
-                        return 0, ref.as_non_null(low_25 = mag_13.low ^ -1_i64; high_26 = mag_13.high ^ -1_i64; struct.new "core:prelude/int128.wado//i128" { low: low_25, high: high_26 }), ref.null none;
+                        return 0, struct.new "core:prelude/int128.wado//i128" { low: mag_13.low ^ -1_i64, high: mag_13.high ^ -1_i64 }, ref.null none;
                     }
                     cold_path;
                     return 1, ref.null none, ref.as_non_null("core:serde/DeserializeError::overflow"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bignum exceeds i128"), used: 19 }, builtin::i64_extend_i32_s(self.pos)));
@@ -2078,7 +2063,6 @@ fn "core:cbor/CborDeserializer^Deserializer::begin_container"(self, want_major, 
     let arg: u64;
     let indef: bool;
     let __qm_e_10: ref "core:serde//DeserializeError";
-    let remaining: i64;
     let __pattern_temp_0: ref "tuple//[u8, u8, u64, bool]";
     let __match_13: ref null "core:serde//DeserializeError";
     block {
@@ -2121,12 +2105,11 @@ fn "core:cbor/CborDeserializer^Deserializer::begin_container"(self, want_major, 
                 cold_path;
                 return 1, ref.null none, __qm_e_10;
             }
-            remaining = (if indef -> i64 {
+            return 0, struct.new "tuple//[i64, bool]" { 0: (if indef -> i64 {
                 -1_i64;
             } else {
                 arg;
-            });
-            return 0, struct.new "tuple//[i64, bool]" { 0: remaining, 1: indef }, ref.null none;
+            }), 1: indef }, ref.null none;
             continue l235;
         };
     };
@@ -2135,8 +2118,6 @@ fn "core:cbor/CborDeserializer^Deserializer::begin_container"(self, want_major, 
 fn "core:cbor/CborDeserializer^Deserializer::begin_struct"(self, name, num_fields) {
     let __qm_v: ref "tuple//[i64, bool]";
     let __qm_e: ref "core:serde//DeserializeError";
-    let remaining: i64;
-    let indef: bool;
     let __pattern_temp_0: ref "tuple//[i64, bool]";
     let __sroa___match_scrut_0_discriminant: i32;
     let __sroa___match_scrut_0_case0_payload_0: ref null "tuple//[i64, bool]";
@@ -2150,9 +2131,7 @@ fn "core:cbor/CborDeserializer^Deserializer::begin_struct"(self, name, num_field
         cold_path;
         return 1, ref.null none, __qm_e;
     });
-    remaining = __pattern_temp_0.0;
-    indef = __pattern_temp_0.1;
-    return 0, struct.new "core:cbor//CborStructAccess" { de: self, remaining: remaining, indef: indef }, ref.null none;
+    return 0, struct.new "core:cbor//CborStructAccess" { de: self, remaining: __pattern_temp_0.0, indef: __pattern_temp_0.1 }, ref.null none;
 }
 
 fn "core:serde/DeserializeError::unexpected_type"(msg, offset) {
@@ -2486,11 +2465,10 @@ fn "core:prelude/list.wado/List<u8>::grow_to"(self, min_capacity) {
 fn "core:cbor/CborStructSerializer^SerializeStruct::field<i32>"(self, name, value) {
     let r: ref null "core:serde//SerializeError";
     let buf_5: ref "core:prelude//List<u8>";
-    let end: i32;
     let __sroa_ser_buf: ref "core:prelude//List<u8>";
     buf_5 = self.buf;
     "core:cbor/write_head"(buf_5, 3, builtin::i64_extend_i32_s(name.used));
-    "core:prelude/list.wado/List<u8>::extend_from_slice"(buf_5, end = name.used; struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: name.repr, start: 0, end: end });
+    "core:prelude/list.wado/List<u8>::extend_from_slice"(buf_5, struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: name.repr, start: 0, end: name.used });
     __sroa_ser_buf = self.buf;
     "core:cbor/write_int_i64"(__sroa_ser_buf, builtin::i64_extend_i32_s(value));
     r = ref.null none;

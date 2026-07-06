@@ -107,11 +107,9 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/scalarize_chain.wado/transform"(p) {
-    let a: i32;
-    let b: i32;
-    a = p.x + 1;
-    b = p.y + 2;
-    return a * 2, b * 3;
+    let inner: ref "wado-compiler/tests/fixtures/scalarize_chain.wado//Pair";
+    inner = struct.new "wado-compiler/tests/fixtures/scalarize_chain.wado//Pair" { x: p.x + 1, y: p.y + 2 };
+    return inner.x * 2, inner.y * 3;
 }
 
 fn "wado-compiler/tests/fixtures/scalarize_chain.wado/run"() with Stdout {

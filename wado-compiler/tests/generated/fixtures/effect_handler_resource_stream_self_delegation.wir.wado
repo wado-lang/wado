@@ -431,8 +431,6 @@ fn "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.
     let __local_1: ref "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Dispatch_Stream<u8>";
     let __local_2: ref "tuple//[Stream<u8>, StreamWritable<u8>]";
     let packed: i64;
-    let rx: i32;
-    let tx: i32;
     __saved = global:__effect_Stream<u8>;
     if ref.is_null(__saved) == 0 {
         __local_1 = ref.as_non_null(__saved);
@@ -445,7 +443,7 @@ fn "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.
         global:__effect_Stream<u8> = __saved;
         return __local_2;
     } else {
-        return rx = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"())), tx = builtin::i32_wrap_i64(packed >> 32_i64), struct.new "tuple//[Stream<u8>, StreamWritable<u8>]" { 0: rx, 1: tx };
+        return struct.new "tuple//[Stream<u8>, StreamWritable<u8>]" { 0: builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"())), 1: builtin::i32_wrap_i64(packed >> 32_i64) };
     }
 }
 
@@ -868,10 +866,8 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 
 fn "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/BaseStream^StreamWritable<u8>::write"(self, this, data) {
     let __iter_3: ref "core:prelude/slice.wado//ArrayIter<u8>";
-    let end: i32;
     let _licm_buf_10: ref "core:prelude//List<u8>";
-    end = data.used;
-    __iter_3 = struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: data.repr, index: 0, end: end };
+    __iter_3 = struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: data.repr, index: 0, end: data.used };
     _licm_buf_10 = self.buf;
     b38: block {
         l39: loop {

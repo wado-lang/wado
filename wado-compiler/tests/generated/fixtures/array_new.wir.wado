@@ -250,7 +250,6 @@ fn "wado-compiler/tests/fixtures/array_new.wado/array_new_data_f64"() with Stdou
     let __v1_296: i32;
     let __local_5_298: ref "core:prelude/string.wado//String";
     let __local_6_299: ref "core:prelude/format.wado//Formatter";
-    let end: i32;
     let f_309: ref "core:prelude/format.wado//Formatter";
     let f_314: ref "core:prelude/format.wado//Formatter";
     let f_316: ref "core:prelude/format.wado//Formatter";
@@ -303,8 +302,7 @@ condition: a[127] == 128.0
         unreachable;
     }
     sum = 0;
-    end = __b.used;
-    __iter_9 = struct.new "core:prelude/slice.wado//ArrayIter<f64>" { repr: __b.repr, index: 0, end: end };
+    __iter_9 = struct.new "core:prelude/slice.wado//ArrayIter<f64>" { repr: __b.repr, index: 0, end: __b.used };
     b5: block {
         l6: loop {
             let __sroa___match_23_discriminant: i32;
@@ -369,7 +367,6 @@ fn "wado-compiler/tests/fixtures/array_new.wado/array_new_data_i32"() with Stdou
     let __v1_309: i32;
     let __local_5_311: ref "core:prelude/string.wado//String";
     let __local_6_312: ref "core:prelude/format.wado//Formatter";
-    let end: i32;
     let f_322: ref "core:prelude/format.wado//Formatter";
     let f_328: ref "core:prelude/format.wado//Formatter";
     let f_333: ref "core:prelude/format.wado//Formatter";
@@ -440,8 +437,7 @@ condition: a[127] == 1280
         unreachable;
     }
     sum = 0;
-    end = __b.used;
-    __iter_11 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: __b.repr, index: 0, end: end };
+    __iter_11 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: __b.repr, index: 0, end: __b.used };
     b18: block {
         l19: loop {
             let __sroa___match_27_discriminant: i32;
@@ -763,8 +759,6 @@ fn "core:prelude/fpfmt.wado/unpack64"(f) {
     let raw_exp: i32;
     let m_9: u64;
     let s: u64;
-    let m_12: u64;
-    let e_13: i32;
     raw_mantissa = local.tee bits(builtin::i64_reinterpret_f64(f)) & 4503599627370495_i64;
     raw_exp = builtin::i32_wrap_i64((bits >>u 52_i64) & 2047_i64);
     if raw_exp == 0 {
@@ -775,9 +769,7 @@ fn "core:prelude/fpfmt.wado/unpack64"(f) {
         s = builtin::i64_extend_i32_s(64 - (64 - builtin::i32_wrap_i64(builtin::i64_clz(m_9))));
         return m_9 << s, -1085 - builtin::i32_wrap_i64(s);
     }
-    m_12 = -9223372036854775808_i64 | (raw_mantissa << 11_i64);
-    e_13 = (raw_exp - 1) + -1085;
-    return m_12, e_13;
+    return -9223372036854775808_i64 | (raw_mantissa << 11_i64), (raw_exp - 1) + -1085;
 }
 
 fn "core:prelude/fpfmt.wado/unrounded_div"(u, d) {
