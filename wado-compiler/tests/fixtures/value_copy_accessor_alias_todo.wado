@@ -1,0 +1,34 @@
+#![TODO]
+// TODO(wado-lang/wado#1527, pre-existing): an indexed-element read
+// (`container[i]`, lowered to the
+// `index_value` accessor) is treated as a *fresh* value by the value-copy
+// inserter (`lower::plan::value_copy::analyze::is_fresh_value` classifies every
+// `Call` / `MethodCall` result as fresh), so no defensive copy is inserted. The
+// accessor returns storage aliased into the container, so binding, passing, or
+// storing the result aliases the container's element — violating value
+// semantics ("every value is deeply copied when assigned or passed").
+//
+// Repro below: `let mut x = outer[0]` aliases `outer`'s element; mutating `x`
+// in place then corrupts `outer[0]`. Fails identically on `origin/main`, so it
+// is orthogonal to the value-copy-on-escape / call-argument-elision work — it
+// needs its own fix on the *insertion* side.
+//
+// Proper fix: an accessor that returns a projection of a reference parameter
+// (`index_value(self: &List, i) -> T { return self.repr[i] }`) leaks an alias
+// to the caller, so either the callee must copy on return or the caller must
+// copy the result. The cleanest framing reuses the return channel of the
+// interprocedural escape analysis (`optimize::escape`): a call whose result
+// aliases an argument/receiver is not fresh and must be wrapped. When that lands
+// on the insertion side, `value_copy_elide`'s call-argument stripping must keep
+// treating a bare `None` source root as non-fresh (already hardened via
+// `is_fresh_rvalue`) so it does not re-strip the newly inserted copies.
+
+test "indexed element bound to a local must be an independent copy" {
+    let mut outer: List<List<i32>> = [[1, 2]];
+    let mut x = outer[0];
+    x[0] = 999;
+    assert outer[0][0] == 1;
+}
+
+__DATA__
+{"test": {}}

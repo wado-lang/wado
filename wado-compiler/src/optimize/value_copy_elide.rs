@@ -280,18 +280,22 @@ fn is_value_copy_call(body: &Body, expr: ExprId, value_copy_ids: &IndexSet<FuncI
     }
 }
 
-/// Find the root local that `arg` reads from, descending through pure
-/// projections that share storage with their inner expression. Returns `None`
-/// for non-projection expressions (calls, literals, constructors): those
-/// produce fresh GC values that cannot be aliased from outside, so elision is
-/// always safe regardless of surrounding state.
+/// Find the root local that `arg` reads from, descending through projections
+/// and indexing that share storage with the container they read from. Returns
+/// `None` when no local root is reachable — a call result, a constant, or a
+/// bare literal. `None` does *not* by itself mean "fresh": an accessor call such
+/// as `container.index_value(i)` also returns `None` yet aliases the container's
+/// element, so callers must not treat a `None` root as uniquely owned (see
+/// [`is_fresh_rvalue`]).
 fn arg_source_root(body: &Body, expr: ExprId) -> Option<u32> {
     match &body.exprs[expr].kind {
         ExprKind::Local { index, .. } => Some(*index),
         ExprKind::FieldAccess { expr: inner, .. }
         | ExprKind::VariantPayload { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::Unary { expr: inner, .. } => {
+        | ExprKind::Unary { expr: inner, .. }
+        // An indexed element shares the container's storage.
+        | ExprKind::Index { expr: inner, .. } => {
             inner.as_expr().and_then(|e| arg_source_root(body, e))
         }
         _ => None,
@@ -553,31 +557,71 @@ impl ValueCopyElideRule<'_> {
             let Some(arg) = call_arg(body, e) else {
                 continue;
             };
-            if arg
-                .as_expr()
-                .is_some_and(|ae| reads_through_deref(body, ae))
-            {
+            // A promoted constant argument is uniquely owned — copying it is a
+            // no-op, safe for any callee.
+            let Some(ae) = arg.as_expr() else {
+                out.push(e);
+                continue;
+            };
+            if reads_through_deref(body, ae) {
                 continue;
             }
-            match arg.as_expr().and_then(|ae| arg_source_root(body, ae)) {
-                // Fresh rvalue: the copy is a no-op regardless of the callee.
-                None => out.push(e),
-                Some(root) => {
-                    // Move: `root` is a parameter used only here, so this copy is
-                    // its last use of a value the frame uniquely owns.
-                    let is_move = root < self.n_params
-                        && self.usage.get(&root).map(|u| u.occurrences).unwrap_or(0) == 1;
-                    // Confined: a non-`mut`, non-escaping parameter with no
-                    // sibling `&mut` aliasing the same root.
-                    let is_confined = !a.is_mut
-                        && !self.escape.param_escapes(func_id, param_offset + i)
-                        && !mut_roots.contains(&root);
-                    if is_move || is_confined {
-                        out.push(e);
-                    }
-                }
+            let root = arg_source_root(body, ae);
+            // Fresh: a genuinely fresh value (a constructor / packed constant)
+            // is uniquely owned, so the copy is a no-op regardless of the callee.
+            // A bare `None` root is *not* enough — an accessor result like
+            // `container[i]` also has no local root yet aliases element storage —
+            // so unrecognized sources fall to the escape-aware checks below.
+            let is_fresh = is_fresh_rvalue(body, ae, self.value_copy_ids);
+            // Move: `root` is a parameter used only here, so this copy is its
+            // last use of a value the frame uniquely owns.
+            let is_move = root.is_some_and(|r| {
+                r < self.n_params && self.usage.get(&r).map(|u| u.occurrences).unwrap_or(0) == 1
+            });
+            // Confined: a non-`mut`, non-escaping parameter, with no sibling
+            // `&mut` able to mutate the shared value. With a known root, guard
+            // that root; with an unknown root, any `&mut` sibling could alias it.
+            let no_mut_alias = match root {
+                Some(r) => !mut_roots.contains(&r),
+                None => mut_roots.is_empty(),
+            };
+            let is_confined =
+                !a.is_mut && !self.escape.param_escapes(func_id, param_offset + i) && no_mut_alias;
+            if is_fresh || is_move || is_confined {
+                out.push(e);
             }
         }
+    }
+}
+
+/// Whether `e` produces a genuinely fresh, uniquely owned value: a constructor
+/// or packed constant whose sub-values are themselves constants, fresh
+/// constructors, or `$value_copy$T` clones. Such a value shares storage with
+/// nothing else, so a copy of it is a no-op. A `Local`, projection, accessor
+/// call (`container[i]`), or ordinary call is NOT fresh — it may return storage
+/// aliased elsewhere.
+fn is_fresh_rvalue(body: &Body, e: ExprId, value_copy_ids: &IndexSet<FuncId>) -> bool {
+    match &body.exprs[e].kind {
+        ExprKind::PackedArray(_) | ExprKind::EnumConstruct { .. } => true,
+        ExprKind::StructLiteral { fields, .. } => fields
+            .iter()
+            .all(|f| operand_is_fresh(body, f.value, value_copy_ids)),
+        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
+            .iter()
+            .all(|el| operand_is_fresh(body, *el, value_copy_ids)),
+        ExprKind::VariantConstruct { payload, .. } => {
+            payload.is_none_or(|p| operand_is_fresh(body, p, value_copy_ids))
+        }
+        // A `$value_copy$T(..)` call yields a fresh deep clone.
+        ExprKind::Call { .. } => is_value_copy_call(body, e, value_copy_ids),
+        _ => false,
+    }
+}
+
+fn operand_is_fresh(body: &Body, op: Operand, value_copy_ids: &IndexSet<FuncId>) -> bool {
+    match op.as_expr() {
+        None => true,
+        Some(e) => is_fresh_rvalue(body, e, value_copy_ids),
     }
 }
 
