@@ -81,6 +81,11 @@ pub(super) fn run_peephole(
     let push_rule = resolve_ctx(project).map(ShortPushStrRule::new);
     // `$value_copy$T` helper ids, for the pre-inline value-copy-elision rule.
     let value_copy_ids = project.value_copy_func_ids();
+    // Interprocedural parameter-escape bits, so the elision rule can strip a
+    // call-argument copy whose callee parameter is provably confined. Computed
+    // once (pre-inline only, where the rule runs) from the whole package.
+    let escape_map = (pre_inline && !value_copy_ids.is_empty())
+        .then(|| super::escape::analyze_param_escape(project, &value_copy_ids));
     // Environment-free constant folding shares the session. It needs the
     // program-wide CTFE callee map and the type table; the per-function `env`
     // stays empty so only literal arithmetic and pure CTFE fold here, leaving
@@ -108,7 +113,12 @@ pub(super) fn run_peephole(
         let value_copy_usage = (pre_inline && !func.is_value_copy() && !value_copy_ids.is_empty())
             .then(|| func.body.as_ref().map(|b| build_usage(b, &type_table)))
             .flatten();
-        let value_copy_rule = value_copy_usage.map(|u| ValueCopyElideRule::new(&value_copy_ids, u));
+        let n_params = func.params.len() as u32;
+        let value_copy_rule = value_copy_usage
+            .zip(escape_map.as_ref())
+            .map(|(u, escape)| {
+                ValueCopyElideRule::new(&value_copy_ids, escape, &type_table, n_params, u)
+            });
         // Reference elimination runs post-inline only (it cleans up the ref
         // bindings inlining exposes). Its maps are built from the pristine
         // post-inline body.

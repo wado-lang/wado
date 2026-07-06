@@ -668,46 +668,45 @@ impl FunctionTranslator<'_, '_> {
         // Any other type falls through to the default single-statement lowering.
         // `(field_name, field_index, field_type)` for each write-back.
         let inner_resolved = self.base.type_table.borrow().get(inner_type_id).clone();
-        let fields: Vec<(String, u32, tir::TypeId)> = match inner_resolved {
-            crate::tir::ResolvedType::Struct {
-                name,
-                module_source,
-                ..
-            } => self
-                .base
+        let fields: Vec<(String, u32, tir::TypeId)> = if let crate::tir::ResolvedType::Struct {
+            name,
+            module_source,
+            ..
+        } = inner_resolved
+        {
+            self.base
                 .struct_fields_map
                 .get(&(name, module_source))?
                 .iter()
                 .map(|f| (f.name.clone(), f.index, f.type_id))
-                .collect(),
-            _ => {
-                let (list_elem, tuple_elems) = {
-                    let tt = self.base.type_table.borrow();
-                    (tt.as_list(inner_type_id), tt.as_tuple(inner_type_id))
-                };
-                if let Some(elem) = list_elem {
-                    let repr_ty = self.base.type_table.borrow_mut().make_builtin_array(elem);
-                    vec![
-                        (
-                            SeqField::Backing.field_name().to_string(),
-                            SeqField::Backing.index(),
-                            repr_ty,
-                        ),
-                        (
-                            SeqField::Len.field_name().to_string(),
-                            SeqField::Len.index(),
-                            crate::tir::TypeTable::I32,
-                        ),
-                    ]
-                } else if let Some(elems) = tuple_elems {
-                    elems
-                        .into_iter()
-                        .enumerate()
-                        .map(|(i, ty)| (i.to_string(), i as u32, ty))
-                        .collect()
-                } else {
-                    return None;
-                }
+                .collect()
+        } else {
+            let (list_elem, tuple_elems) = {
+                let tt = self.base.type_table.borrow();
+                (tt.as_list(inner_type_id), tt.as_tuple(inner_type_id))
+            };
+            if let Some(elem) = list_elem {
+                let repr_ty = self.base.type_table.borrow_mut().make_builtin_array(elem);
+                vec![
+                    (
+                        SeqField::Backing.field_name().to_string(),
+                        SeqField::Backing.index(),
+                        repr_ty,
+                    ),
+                    (
+                        SeqField::Len.field_name().to_string(),
+                        SeqField::Len.index(),
+                        crate::tir::TypeTable::I32,
+                    ),
+                ]
+            } else if let Some(elems) = tuple_elems {
+                elems
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, ty)| (i.to_string(), i as u32, ty))
+                    .collect()
+            } else {
+                return None;
             }
         };
         if fields.is_empty() {
@@ -1398,7 +1397,10 @@ impl FunctionTranslator<'_, '_> {
                     .collect(),
             },
             TirExprKind::TupleLiteral { elements } => ExprKind::TupleLiteral {
-                elements: elements.iter().map(|e| self.convert_operand(e)).collect(),
+                elements: elements
+                    .iter()
+                    .map(|e| self.convert_literal_element(e))
+                    .collect(),
             },
             TirExprKind::TupleSpread { .. } => unreachable!(
                 "TirExprKind::TupleSpread should be expanded by monomorphize before lower::translate runs"
@@ -1648,8 +1650,20 @@ impl FunctionTranslator<'_, '_> {
     fn convert_struct_field(&self, field: &TirStructField) -> ArenaStructField {
         ArenaStructField {
             name: field.name.clone(),
-            value: self.convert_operand(&field.value),
+            value: self.convert_literal_element(&field.value),
             field_index: field.field_index,
+        }
+    }
+
+    /// Convert a value stored into an aggregate literal (a struct field or tuple
+    /// element), deep-copying it when it names an existing value — building a
+    /// literal from a variable must not share the variable's interior.
+    fn convert_literal_element(&self, value: &TirExpr) -> Operand {
+        let converted = self.convert_operand(value);
+        if self.should_wrap_value_copy(value) {
+            self.wrap_value_copy_operand(converted, value.type_id)
+        } else {
+            converted
         }
     }
 
@@ -1746,13 +1760,15 @@ impl FunctionTranslator<'_, '_> {
     }
 
     fn convert_call_arg(&self, arg: &CallArg) -> ArenaCallArg {
-        // `is_mut` value-semantic args get a defensive
-        // `$value_copy$T` wrap; specialised-callee fn-param `Local`
-        // args get a `ClosureToCanonical` wrap. They don't interact:
-        // the value-copy predicate matches on the raw TIR, the
-        // specialised wrap on the converted NIR (always non-value-
-        // semantic).
-        let needs_value_copy = arg.is_mut && self.should_wrap_value_copy(&arg.expr);
+        // Every by-value argument gets a defensive `$value_copy$T` wrap —
+        // value semantics deep-copies a value passed to a function.
+        // `should_wrap_value_copy` excludes references (`&T` / `&mut T`), fresh
+        // values, and non-copy types, so a `&mut` arg is passed through.
+        // Specialised-callee fn-param `Local` args get a `ClosureToCanonical`
+        // wrap; the two don't interact: the value-copy predicate matches on the
+        // raw TIR, the specialised wrap on the converted (non-value-semantic)
+        // NIR.
+        let needs_value_copy = self.should_wrap_value_copy(&arg.expr);
         let value_type = arg.expr.type_id;
         let converted = self.convert_specialized_arg_operand(&arg.expr);
         let expr = if needs_value_copy {

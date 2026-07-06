@@ -89,10 +89,12 @@ impl TirRefVisitor for SeedWalker<'_> {
         self.record_array_clone_element(expr);
         match &expr.kind {
             TirExprKind::Call { args, .. } | TirExprKind::MethodCall { args, .. } => {
+                // Every by-value argument is copied — value semantics: passing
+                // a value to a function deep-copies it. `should_wrap` already
+                // excludes references (`&T` / `&mut T`), fresh values, and
+                // non-copy types, so a `&mut` arg is not copied.
                 for arg in args {
-                    if arg.is_mut {
-                        self.record_if_wrap(&arg.expr);
-                    }
+                    self.record_if_wrap(&arg.expr);
                 }
             }
             TirExprKind::IndirectCall { args, .. } => {
@@ -116,6 +118,18 @@ impl TirRefVisitor for SeedWalker<'_> {
                 );
                 if replaces_whole_value {
                     self.record_if_wrap(value);
+                }
+            }
+            // An aggregate literal stores each element / field by value, so a
+            // non-fresh aggregate element is deep-copied into the fresh literal.
+            TirExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    self.record_if_wrap(&field.value);
+                }
+            }
+            TirExprKind::TupleLiteral { elements } => {
+                for element in elements {
+                    self.record_if_wrap(element);
                 }
             }
             _ => {}

@@ -1,8 +1,17 @@
-//! Strip the `$value_copy$T<id>` wrapper from `let x = $value_copy$T(arg)`
-//! bindings whose target is observably read-only — the resulting `let x = arg`
-//! aliases `arg`'s data exactly when the synthesized helper would have
-//! returned a fresh struct, but the alias is unobservable because nothing
-//! mutates `x` or the source root that `arg` reads from.
+//! Strip the `$value_copy$T<id>` wrapper wherever the fresh clone it produces is
+//! unobservable, so the binding / argument aliases the source instead. Two
+//! families of site are handled:
+//!
+//! - Binding positions — `let x = $value_copy$T(arg)` (and the analogous
+//!   single-assignment and read-only aggregate-literal forms): safe when both
+//!   `x` and `arg`'s source root are observably read-only, so the alias is never
+//!   mutated.
+//! - Call-argument positions — `f(…, $value_copy$T(arg), …)`: safe when the
+//!   copy is a no-op (a fresh rvalue), a move (a parameter used only here), or
+//!   the callee parameter is confined — non-`mut` and non-escaping per the
+//!   interprocedural [`super::escape`] analysis. This recovers the elision the
+//!   blanket by-value-argument copy would otherwise defeat (println / CM glue,
+//!   `SequenceLiteralBuilder::push_literal`, …).
 //!
 //! Runs once after `synthesize_value_copy_funcs`, recovering the freshness
 //! elision that the former WIR-level `value_copy` instruction performed
@@ -29,6 +38,8 @@ use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId
 use crate::nir_engine::{Engine, Rule};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
+use super::escape::EscapeMap;
+
 /// Strips `$value_copy$T(arg)` wrappers off observably read-only bindings, run
 /// as a rule inside the unified peephole session (formerly the standalone
 /// `nir/value_copy_elide` pass). `usage` is the same whole-function map
@@ -41,16 +52,25 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 /// worklist re-examines the unwrapped value.
 pub(super) struct ValueCopyElideRule<'a> {
     value_copy_ids: &'a IndexSet<FuncId>,
+    escape: &'a EscapeMap,
+    type_table: &'a TypeTable,
+    n_params: u32,
     usage: IndexMap<u32, LocalUsage>,
 }
 
 impl<'a> ValueCopyElideRule<'a> {
     pub(super) fn new(
         value_copy_ids: &'a IndexSet<FuncId>,
+        escape: &'a EscapeMap,
+        type_table: &'a TypeTable,
+        n_params: u32,
         usage: IndexMap<u32, LocalUsage>,
     ) -> Self {
         Self {
             value_copy_ids,
+            escape,
+            type_table,
+            n_params,
             usage,
         }
     }
@@ -71,30 +91,32 @@ impl Rule for ValueCopyElideRule<'_> {
         let stmts = engine.body.blocks[block].stmts.clone();
         let mut changed = false;
         for stmt in stmts {
-            let Some(value) = eligible_value(engine.body, stmt, self.value_copy_ids, usage) else {
-                continue;
-            };
-            // `value` is `$value_copy$T(arg)`; replace it with `arg` so the
-            // binding aliases the source. The call returns `arg`'s own type, so
-            // `value`'s type/span are unchanged — matching the old `*value = arg`.
-            let ExprKind::Call { args, .. } = &engine.body.exprs[value].kind else {
-                continue;
-            };
-            let Some(arg) = args.first().map(|a| a.expr) else {
-                continue;
-            };
-            // A promoted `Operand::Value` arg (a constant — copying it is a no-op)
-            // redirects directly; otherwise adopt the skeleton arg's kind.
-            match arg.as_expr() {
-                Some(ae) => {
-                    let arg_kind = engine.body.exprs[ae].kind.clone();
-                    engine.replace_expr_kind(value, arg_kind);
+            let mut targets = collect_strippable(engine.body, stmt, self.value_copy_ids, usage);
+            self.collect_call_arg_copies(engine.body, NodeRef::Stmt(stmt), &mut targets);
+            for value in targets {
+                // `value` is `$value_copy$T(arg)`; replace it with `arg` so the
+                // binding aliases the source. The call returns `arg`'s own type,
+                // so `value`'s type/span are unchanged.
+                let ExprKind::Call { args, .. } = &engine.body.exprs[value].kind else {
+                    continue;
+                };
+                let Some(arg) = args.first().map(|a| a.expr) else {
+                    continue;
+                };
+                // A promoted `Operand::Value` arg (a constant — copying it is a
+                // no-op) redirects directly; otherwise adopt the skeleton arg's
+                // kind.
+                match arg.as_expr() {
+                    Some(ae) => {
+                        let arg_kind = engine.body.exprs[ae].kind.clone();
+                        engine.replace_expr_kind(value, arg_kind);
+                    }
+                    None => {
+                        engine.redirect_expr(value, arg);
+                    }
                 }
-                None => {
-                    engine.redirect_expr(value, arg);
-                }
+                changed = true;
             }
-            changed = true;
         }
         changed
     }
@@ -111,6 +133,10 @@ pub(super) struct LocalUsage {
     /// == 1) — those behave like a `Let` and are eligible to strip.
     assign_count: u32,
     has_field_mutation: bool,
+    /// Count of every `Local` occurrence (reads and assignment targets). A
+    /// count of 1 means the local is mentioned exactly once, so a copy of it at
+    /// that single site is its last use — a move.
+    occurrences: u32,
 }
 
 impl LocalUsage {
@@ -152,6 +178,9 @@ fn classify_expr(
     type_table: &TypeTable,
     usage: &mut IndexMap<u32, LocalUsage>,
 ) {
+    if let ExprKind::Local { index, .. } = &body.exprs[id].kind {
+        usage.entry(*index).or_default().occurrences += 1;
+    }
     match &body.exprs[id].kind {
         ExprKind::Assign { target, .. } => match &body.exprs[*target].kind {
             ExprKind::Local { index, .. } => {
@@ -286,32 +315,39 @@ fn reads_through_deref(body: &Body, expr: ExprId) -> bool {
         }
         ExprKind::FieldAccess { expr: inner, .. }
         | ExprKind::VariantPayload { expr: inner, .. }
-        | ExprKind::Cast { expr: inner, .. } => {
-            inner.as_expr().is_some_and(|e| reads_through_deref(body, e))
-        }
+        | ExprKind::Cast { expr: inner, .. } => inner
+            .as_expr()
+            .is_some_and(|e| reads_through_deref(body, e)),
         _ => false,
     }
 }
 
-/// Check whether `value` is a `$value_copy$T(arg)` call whose wrapper can be
-/// safely stripped given the binding target's local index and the
-/// function-wide usage map.
-fn elision_safe(
-    body: &Body,
+/// Whether the local `target_index` is read-only enough to alias a source into:
+/// at most `assign_limit` reassignments and no field mutation. The alias a strip
+/// creates is unobservable only when this holds for both ends (the binding side
+/// here, the source side in [`copy_source_strippable`]).
+fn is_target_read_only(
     target_index: u32,
-    target_assign_limit: u32,
+    assign_limit: u32,
+    usage: &IndexMap<u32, LocalUsage>,
+) -> bool {
+    match usage.get(&target_index) {
+        Some(u) => u.assign_count <= assign_limit && !u.has_field_mutation,
+        None => true,
+    }
+}
+
+/// Whether `value` is a `$value_copy$T(arg)` call whose *source* side is safe to
+/// alias: the arg does not read through a reference deref (wado-lang/wado#1522),
+/// and its source root local is never mutated. The binding/consumer side is
+/// checked separately by the caller.
+fn copy_source_strippable(
+    body: &Body,
     value: ExprId,
     value_copy_ids: &IndexSet<FuncId>,
     usage: &IndexMap<u32, LocalUsage>,
 ) -> bool {
     if !is_value_copy_call(body, value, value_copy_ids) {
-        return false;
-    }
-    let target_ok = match usage.get(&target_index) {
-        Some(u) => u.assign_count <= target_assign_limit && !u.has_field_mutation,
-        None => true,
-    };
-    if !target_ok {
         return false;
     }
     let ExprKind::Call { args, .. } = &body.exprs[value].kind else {
@@ -320,8 +356,6 @@ fn elision_safe(
     let Some(arg) = args.first() else {
         return false;
     };
-    // A copy sourced through a reference deref aliases a pointee whose mutations
-    // the local-usage oracle cannot see (wado-lang/wado#1522).
     if arg
         .expr
         .as_expr()
@@ -339,18 +373,67 @@ fn elision_safe(
     }
 }
 
+/// Check whether `value` is a `$value_copy$T(arg)` call whose wrapper can be
+/// safely stripped given the binding target's local index and the
+/// function-wide usage map.
+fn elision_safe(
+    body: &Body,
+    target_index: u32,
+    target_assign_limit: u32,
+    value: ExprId,
+    value_copy_ids: &IndexSet<FuncId>,
+    usage: &IndexMap<u32, LocalUsage>,
+) -> bool {
+    is_target_read_only(target_index, target_assign_limit, usage)
+        && copy_source_strippable(body, value, value_copy_ids, usage)
+}
+
+/// Collect `$value_copy$T(arg)` calls that sit directly in an aggregate literal
+/// (`Struct { f: copy(arg) }` / `[copy(arg), …]`), descending through nested
+/// literals. Each collected copy stores its source into a field/element of the
+/// literal; the caller only descends here when the literal's binding local is
+/// read-only, so those fields are never mutated and aliasing the (also read-only)
+/// source is unobservable. Non-literal, non-copy positions (e.g. a nested call)
+/// are not descended — a value crossing a call boundary can escape mutably.
+fn collect_literal_element_copies(
+    body: &Body,
+    expr: ExprId,
+    value_copy_ids: &IndexSet<FuncId>,
+    usage: &IndexMap<u32, LocalUsage>,
+    out: &mut Vec<ExprId>,
+) {
+    match &body.exprs[expr].kind {
+        ExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                if let Some(fe) = field.value.as_expr() {
+                    collect_literal_element_copies(body, fe, value_copy_ids, usage, out);
+                }
+            }
+        }
+        ExprKind::TupleLiteral { elements } => {
+            for element in elements {
+                if let Some(ee) = element.as_expr() {
+                    collect_literal_element_copies(body, ee, value_copy_ids, usage, out);
+                }
+            }
+        }
+        _ if copy_source_strippable(body, expr, value_copy_ids, usage) => out.push(expr),
+        _ => {}
+    }
+}
+
 /// Replace the `$value_copy$T(arg)` call at `value` with its single argument,
 /// in place. The call returns the argument's own type, so keeping `value`'s
 /// `type_id` / `span` matches the old `*value = arg` rewrite; the orphaned
 /// Return the `$value_copy$T(arg)` call expression of `stmt` when `stmt` binds /
 /// assigns a read-only local to such a call (and is thus safe to unwrap). The
 /// caller performs the unwrap via the engine edit API.
-fn eligible_value(
+fn collect_strippable(
     body: &Body,
     stmt: StmtId,
     value_copy_ids: &IndexSet<FuncId>,
     usage: &IndexMap<u32, LocalUsage>,
-) -> Option<ExprId> {
+) -> Vec<ExprId> {
     match &body.stmts[stmt].kind {
         // `let x = $value_copy$T(arg)` — Let establishes a fresh binding, so
         // any subsequent assignment to `x` invalidates the snapshot; require
@@ -362,15 +445,27 @@ fn eligible_value(
             skip_value_copy,
             ..
         } => {
-            if let Some(ve) = value.as_expr()
-                && !*is_mut
-                && !*skip_value_copy
-                && elision_safe(body, *local_index, 0, ve, value_copy_ids, usage)
-            {
-                Some(ve)
-            } else {
-                None
+            let Some(ve) = value.as_expr() else {
+                return vec![];
+            };
+            if *is_mut || *skip_value_copy {
+                return vec![];
             }
+            // `let x = $value_copy$T(arg)` — strip when both x and the source
+            // are read-only.
+            if elision_safe(body, *local_index, 0, ve, value_copy_ids, usage) {
+                return vec![ve];
+            }
+            // `let c = Struct { f: $value_copy$T(arg), … }` — when the container
+            // `c` is never reassigned or field-mutated its fields never change,
+            // so the copies stored into them may be elided (source-side check
+            // per copy).
+            if is_target_read_only(*local_index, 0, usage) {
+                let mut out = Vec::new();
+                collect_literal_element_copies(body, ve, value_copy_ids, usage, &mut out);
+                return out;
+            }
+            vec![]
         }
         // `x = $value_copy$T(arg)` top-level — the Assign *is* the binding.
         // Allow elision when this is the only assignment (`assign_count == 1`).
@@ -380,11 +475,117 @@ fn eligible_value(
                 && let Some(ve) = value.as_expr()
                 && elision_safe(body, *index, 1, ve, value_copy_ids, usage)
             {
-                Some(ve)
+                vec![ve]
             } else {
-                None
+                vec![]
             }
         }
-        _ => None,
+        _ => vec![],
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Call-argument wrapper stripping
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Walk `node`'s subtree collecting `$value_copy$T(arg)` calls in call-argument
+/// positions whose wrapper is safe to strip: the callee only ever observes a
+/// transient, read-only alias. Two independent grounds each make that so:
+///
+/// - the argument is a *fresh* rvalue (no source root) — copying a uniquely
+///   owned value is a no-op, safe for any parameter, mutable or escaping; or
+/// - the callee parameter is non-`mut` (read-only inside the callee) *and*
+///   non-escaping (no alias of it outlives the call, per [`EscapeMap`]), with no
+///   sibling `&mut` argument able to mutate the shared source during the call; or
+/// - the source is a *move* — a parameter mentioned exactly once (this copy is
+///   its last use). A parameter is the frame's private, unaliased copy, so
+///   handing it to the callee instead of a clone is observably identical even
+///   when the callee escapes it.
+///
+/// A deref-sourced argument is never stripped (wado-lang/wado#1522): the pointee
+/// has no local identity the usage oracle tracks.
+impl ValueCopyElideRule<'_> {
+    fn collect_call_arg_copies(&self, body: &Body, node: NodeRef, out: &mut Vec<ExprId>) {
+        let mut stack = vec![node];
+        while let Some(n) = stack.pop() {
+            if let NodeRef::Expr(e) = n {
+                match &body.exprs[e].kind {
+                    ExprKind::Call { func_id, args, .. } => {
+                        self.scan_call_args(body, *func_id, 0, args, out);
+                    }
+                    // A method's parameter 0 is `self`; the i-th argument is
+                    // absolute parameter i + 1.
+                    ExprKind::MethodCall { func_id, args, .. } => {
+                        self.scan_call_args(body, *func_id, 1, args, out);
+                    }
+                    _ => {}
+                }
+            }
+            body.for_each_child(n, |c| stack.push(c));
+        }
+    }
+
+    fn scan_call_args(
+        &self,
+        body: &Body,
+        func_id: FuncId,
+        param_offset: usize,
+        args: &[crate::nir_arena::ArenaCallArg],
+        out: &mut Vec<ExprId>,
+    ) {
+        // Source roots a sibling `&mut` argument may mutate while the call runs.
+        // A `mut` by-value parameter takes its own copy, so it cannot; only a
+        // `&mut` reference argument reaches the caller's value.
+        let mut_roots: Vec<u32> = args
+            .iter()
+            .filter_map(|a| {
+                let e = a.expr.as_expr()?;
+                is_mut_ref_type(body.exprs[e].type_id, self.type_table)
+                    .then(|| arg_source_root(body, e))
+                    .flatten()
+            })
+            .collect();
+        for (i, a) in args.iter().enumerate() {
+            let Some(e) = a.expr.as_expr() else { continue };
+            if !is_value_copy_call(body, e, self.value_copy_ids) {
+                continue;
+            }
+            let Some(arg) = call_arg(body, e) else {
+                continue;
+            };
+            if arg
+                .as_expr()
+                .is_some_and(|ae| reads_through_deref(body, ae))
+            {
+                continue;
+            }
+            match arg.as_expr().and_then(|ae| arg_source_root(body, ae)) {
+                // Fresh rvalue: the copy is a no-op regardless of the callee.
+                None => out.push(e),
+                Some(root) => {
+                    // Move: `root` is a parameter used only here, so this copy is
+                    // its last use of a value the frame uniquely owns.
+                    let is_move = root < self.n_params
+                        && self.usage.get(&root).map(|u| u.occurrences).unwrap_or(0) == 1;
+                    // Confined: a non-`mut`, non-escaping parameter with no
+                    // sibling `&mut` aliasing the same root.
+                    let is_confined = !a.is_mut
+                        && !self.escape.param_escapes(func_id, param_offset + i)
+                        && !mut_roots.contains(&root);
+                    if is_move || is_confined {
+                        out.push(e);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The single argument operand of a `$value_copy$T(arg)` call.
+fn call_arg(body: &Body, value_copy: ExprId) -> Option<Operand> {
+    if let ExprKind::Call { args, .. } = &body.exprs[value_copy].kind {
+        args.first().map(|a| a.expr)
+    } else {
+        None
     }
 }

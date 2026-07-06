@@ -275,8 +275,16 @@ fn build_copy_return_expr(
     ) {
         return None;
     }
+    // Two same-named structs from distinct modules mangle to the same name
+    // (`mangle_type_name` intentionally does not module-qualify structs), so the
+    // copy body must be built from *this* type's module, not the first match.
+    let module = match resolved {
+        ResolvedType::Struct { module_source, .. }
+        | ResolvedType::GenericInstance { module_source, .. } => Some(module_source.clone()),
+        _ => None,
+    };
     let mangled = type_table.borrow().mangle_type_name(type_id);
-    if let Some(struct_def) = lookup_struct(project, &mangled)
+    if let Some(struct_def) = lookup_struct(project, &mangled, module.as_ref())
         && !struct_has_recursive_variant(type_id, type_table, project)
     {
         return Some(build_struct_copy(
@@ -335,8 +343,26 @@ fn single_return_block(value: TirExpr, span: Span) -> TirBlock {
     )
 }
 
-fn lookup_struct<'a>(project: &'a FlatPackage, mangled_name: &str) -> Option<&'a TirStruct> {
-    project.structs.iter().find(|s| s.name == mangled_name)
+/// Find the `TirStruct` for a mangled name. When several structs share the name
+/// (same-named types from distinct modules), `module` disambiguates; a unique
+/// name resolves without it, preserving behaviour for the common case.
+fn lookup_struct<'a>(
+    project: &'a FlatPackage,
+    mangled_name: &str,
+    module: Option<&ModuleSource>,
+) -> Option<&'a TirStruct> {
+    let mut named = project.structs.iter().filter(|s| s.name == mangled_name);
+    let first = named.next()?;
+    if named.next().is_none() {
+        return Some(first);
+    }
+    match module {
+        Some(m) => project
+            .structs
+            .iter()
+            .find(|s| s.name == mangled_name && &s.module_source == m),
+        None => Some(first),
+    }
 }
 
 #[allow(dead_code)]
@@ -421,7 +447,7 @@ fn contains_variant_recursive(
                 }
             }
             let mangled = type_table.borrow().mangle_type_name(type_id);
-            if let Some(struct_def) = lookup_struct(project, &mangled) {
+            if let Some(struct_def) = lookup_struct(project, &mangled, Some(&module_source)) {
                 let mut substitution = crate::hashmap::IndexMap::default();
                 for (idx, ty) in type_args.iter().enumerate() {
                     substitution.insert(idx as u32, *ty);
@@ -437,9 +463,9 @@ fn contains_variant_recursive(
             }
             false
         }
-        ResolvedType::Struct { .. } => {
+        ResolvedType::Struct { module_source, .. } => {
             let mangled = type_table.borrow().mangle_type_name(type_id);
-            if let Some(struct_def) = lookup_struct(project, &mangled) {
+            if let Some(struct_def) = lookup_struct(project, &mangled, Some(&module_source)) {
                 for field in &struct_def.fields {
                     if contains_variant_recursive(
                         field.type_id,
@@ -517,7 +543,7 @@ fn is_synth_safe_element(
             // A concrete monomorphised struct entry is the strongest
             // signal — without it WIR has no `Ref` to point at.
             let mangled = type_table.borrow().mangle_type_name(elem_type);
-            if lookup_struct(project, &mangled).is_some() {
+            if lookup_struct(project, &mangled, Some(&module_source)).is_some() {
                 return true;
             }
             // Generic-variant instances (`Option<T>` / `Result<T, E>` /
