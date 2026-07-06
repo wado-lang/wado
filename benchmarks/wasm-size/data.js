@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783288661026,
+  "lastUpdate": 1783299240570,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -38381,6 +38381,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/27bcc18c694be55e9c9c6b06c1b444b521d77687"
         },
         "date": 1783288660491,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8446,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17049,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 284894,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c3fe22d76a30600c8e6028f9acf2cb22c4e85286",
+          "message": "Merge pull request #1525 from wado-lang/claude/dependency-management-plan-24lwmj\n\nfeat(cli): dependency-management commands and Kiln typed-options redesign",
+          "timestamp": "2026-07-06T09:43:56+09:00",
+          "tree_id": "1312424d12a785b835e254cb1639c282d076370d",
+          "url": "https://github.com/wado-lang/wado/commit/c3fe22d76a30600c8e6028f9acf2cb22c4e85286"
+        },
+        "date": 1783299239958,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
