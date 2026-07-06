@@ -342,7 +342,7 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
 /// Emit each context-free gated predicate as a standalone effect-free fn
 /// `fn pred_<id>(p: &Parser) -> bool { return <body>; }`. Registered during the
 /// per-rule marking pass; a `&Parser` receiver keeps it read-only (the same fn
-/// the ATN callback will call). No-op when none were registered.
+/// the ATN disabled-seed prune calls). No-op when none were registered.
 fn gen_predicate_fns(w: &mut CodeWriter, ctx: &GenContext) {
     for let entry of ctx.predicate_fns() {
         let mut f = FnSpec::new(&pred_fn_name(entry.0));
