@@ -143,26 +143,15 @@ fn emit_print(
 /// Java primitive / `String` type text to its Wado type, or `None` if outside
 /// the subset (a loud error — the subset grows on demand).
 pub fn map_java_type(ty: &String) -> Option<String> {
-    let t = ty.trim();
-    if t == "int" || t == "short" || t == "byte" {
-        return Option::Some("i32");
-    }
-    if t == "long" {
-        return Option::Some("i64");
-    }
-    if t == "boolean" {
-        return Option::Some("bool");
-    }
-    if t == "String" {
-        return Option::Some("String");
-    }
-    if t == "double" {
-        return Option::Some("f64");
-    }
-    if t == "float" {
-        return Option::Some("f32");
-    }
-    return null;
+    return match ty.trim() {
+        "int" | "short" | "byte" => Option::Some("i32"),
+        "long" => Option::Some("i64"),
+        "float" => Option::Some("f32"),
+        "double" => Option::Some("f64"),
+        "boolean" => Option::Some("bool"),
+        "String" => Option::Some("String"),
+        _ => null,
+    };
 }
 
 pub fn emit_expr(
