@@ -194,6 +194,14 @@ impl String {
         return self.repr;
     }
 
+    /// Internal: Mutable view of the backing byte array (stdlib use only).
+    /// Returns a reference so in-place writes reach the buffer; a by-value
+    /// `Array<u8>` would be deep-copied and detach the alias. Caller must
+    /// respect `len()` boundary.
+    pub fn internal_raw_bytes_mut(&mut self) -> &mut Array<u8> {
+        return &mut self.repr;
+    }
+
     /// Internal: Create String from raw UTF-8 bytes (stdlib use only)
     /// The bytes must be valid UTF-8. No validation is performed.
     pub fn internal_from_utf8_raw(bytes: Array<u8>, len: i32) -> String {
