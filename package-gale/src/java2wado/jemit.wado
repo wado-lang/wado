@@ -144,7 +144,9 @@ fn emit_print(
 /// the subset (a loud error — the subset grows on demand).
 pub fn map_java_type(ty: &String) -> Option<String> {
     return match ty.trim() {
-        "int" | "short" | "byte" => Option::Some("i32"),
+        "int" => Option::Some("i32"),
+        "short" => Option::Some("i16"),
+        "byte" => Option::Some("i8"),
         "long" => Option::Some("i64"),
         "float" => Option::Some("f32"),
         "double" => Option::Some("f64"),
