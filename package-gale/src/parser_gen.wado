@@ -751,13 +751,16 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_acti
         w.end();
         w.blank();
 
+        // `$X.int` mirrors ANTLR's `Integer.parseInt`: a 32-bit value, so
+        // `token_int` returns `i32` (matching a `returns [int v]` field, which
+        // java2wado maps to `i32`).
         let mut fint = FnSpec::new("token_int");
         fint.set_receiver(&"&self");
         fint.add_param(&"i", &"i32");
-        fint.set_return_type(&"i64");
+        fint.set_return_type(&"i32");
         fint.emit_begin(w);
         w.line(&"let sp = self.tokens.span_at(i);");
-        w.line(&"let mut acc: i64 = 0;");
+        w.line(&"let mut acc: i32 = 0;");
         w.line(&"let mut neg = false;");
         w.line(&"let mut j = sp.start;");
         w.begin(&"if j < sp.end && self.tokens.chars[j] == '-'");
@@ -767,7 +770,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_acti
         w.begin(&"while j < sp.end");
         w.line(&"let c = self.tokens.chars[j];");
         w.begin(&"if c >= '0' && c <= '9'");
-        w.line(&"acc = acc * 10 + (c as i32 - '0' as i32) as i64;");
+        w.line(&"acc = acc * 10 + (c as i32 - '0' as i32);");
         w.end();
         w.line(&"j += 1;");
         w.end();
@@ -3161,7 +3164,7 @@ fn gen_parse_fn_named(
                     // the inner fn so overlap-group dispatch keeps value
                     // continuity; the helper mutates its own copy and returns it.
                     if rule_emits_vals(ctx, rule) {
-                        f.add_param(&"vals", &vals_struct_name(rule));
+                        add_seeded_vals_param(&mut f, rule);
                     }
                     f.set_return_type(&rule_result_type_for(rule, ctx));
                     f.emit_begin(w);
@@ -3214,7 +3217,7 @@ fn gen_parse_fn_named(
         // primary alt's action (`$v` sees the `@init` seed). Placed before the
         // defaulted `min_prec` so it stays a required positional argument.
         if rule_emits_vals(ctx, rule) {
-            f.add_param(&"vals", &vals_struct_name(rule));
+            add_seeded_vals_param(&mut f, rule);
         }
         // The atom carries `min_prec` so a non-greedy `??` inside it predicts
         // against the rule's invocation precedence (`atn_optional_enter_cond`
@@ -3901,6 +3904,20 @@ fn gen_predicate_gated_dispatch(
 /// The `, vals` a multi-alt dispatch forwards to an `_alt_<n>` helper so the
 /// seeded value channel (rule args + `@init`) reaches the chosen alternative,
 /// or `""` when the rule has no channel.
+/// Add the seeded `vals` parameter with a default (`<Rule>Vals {}`). Callers
+/// still pass it positionally; the default keeps the signature valid when a
+/// defaulted `follow` parameter precedes it (non-default params cannot follow
+/// default ones). The vals struct is default-constructible by construction (its
+/// fields are all defaultable — that is the value-channel eligibility check).
+fn add_seeded_vals_param(f: &mut FnSpec, rule: &ParserRule) {
+    let vname = vals_struct_name(rule);
+    f.add_param_spec(ParamSpec {
+        name: "vals",
+        type_str: vname,
+        default_value: Option::Some(`{vname} \{\}`),
+    });
+}
+
 fn alt_vals_arg(ctx: &GenContext) -> String {
     if current_rule_emits_vals(ctx) {
         return String::from(", vals");

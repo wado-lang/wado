@@ -8,6 +8,7 @@ use {
     ParserRule,
     Grammar,
     ActionLanguage,
+    AttrDecl,
     LexerRule,
     LexerAlternative,
     LexerElement,
@@ -15,6 +16,7 @@ use {
     Element,
     NamedAction,
 } from "./ir.wado";
+use { map_java_type } from "./java2wado/jemit.wado";
 use { translate_wado_action, PARSER_HANDLE } from "./action_translate.wado";
 use { translate_java_expr, translate_java_stmts, JEnv } from "./java2wado/jemit.wado";
 use { translate_java_members, java_member_method_names, MemberDecls } from "./java2wado/jmembers.wado";
@@ -223,6 +225,30 @@ fn lexer_element_has_actions(elem: &LexerElement) -> bool {
 /// Whether codegen emits the action machinery: the language is emittable AND the
 /// grammar has action content. Gates `emit_actions` and the ctx-tree token table
 /// so an actionless grammar stays byte-identical to before Stage C.
+/// Translate `returns` / `locals` / arg attribute types from the host language
+/// to Wado (`int` → `i32`, `boolean` → `bool`, …) so the value-channel vals
+/// struct emits valid Wado field types and `wado_type_default` recognises them.
+/// A no-op for non-Java grammars and for types already Wado (or unmapped, e.g.
+/// `List<String>`), which pass through unchanged.
+pub fn translate_attr_types(grammar: &mut Grammar) {
+    if !(grammar.action_language matches { Java }) {
+        return;
+    }
+    for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
+        translate_decl_types(&mut grammar.parser_rules[i].args);
+        translate_decl_types(&mut grammar.parser_rules[i].returns_decls);
+        translate_decl_types(&mut grammar.parser_rules[i].locals_decls);
+    }
+}
+
+fn translate_decl_types(decls: &mut List<AttrDecl>) {
+    for let mut i = 0; i < decls.len(); i += 1 {
+        if let Some(w) = map_java_type(&decls[i].type_text) {
+            decls[i].type_text = w;
+        }
+    }
+}
+
 pub fn should_emit_actions(grammar: &Grammar) -> bool {
     return action_language_is_emittable(grammar) && grammar_has_actions(grammar);
 }

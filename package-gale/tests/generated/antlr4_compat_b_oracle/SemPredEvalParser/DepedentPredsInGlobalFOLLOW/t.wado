@@ -1553,9 +1553,9 @@ impl Parser {
         return self.tokens.kind_at(i);
     }
 
-    fn token_int(&self, i: i32) -> i64 {
+    fn token_int(&self, i: i32) -> i32 {
         let sp = self.tokens.span_at(i);
-        let mut acc: i64 = 0;
+        let mut acc: i32 = 0;
         let mut neg = false;
         let mut j = sp.start;
         if j < sp.end && self.tokens.chars[j] == '-' {
@@ -1565,7 +1565,7 @@ impl Parser {
         while j < sp.end {
             let c = self.tokens.chars[j];
             if c >= '0' && c <= '9' {
-                acc = acc * 10 + (c as i32 - '0' as i32) as i64;
+                acc = acc * 10 + (c as i32 - '0' as i32);
             }
             j += 1;
         }
@@ -1844,6 +1844,14 @@ impl Parser {
     fn pred(&mut self, v: bool) -> bool { self.emit(`eval={v}\n`); return v; }
 }
 
+struct AVals {
+    i: i32 = 0,
+}
+
+struct BVals {
+    i: i32 = 0,
+}
+
 fn scan_s(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_a(tokens, pos, 0);
@@ -1901,7 +1909,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn _parse_s__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
-    let a = _parse_a(p);
+    let a = _parse_a(p, 99);
     return;
 }
 
@@ -1916,43 +1924,61 @@ fn _parse_s(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_a__inner(p: &mut Parser) -> () {
+fn _parse_a__inner(p: &mut Parser, i: i32 = 0) -> AVals {
     let start = p.peek_start();
+    let mut vals = AVals {};
+    vals.i = i;
     let e = _parse_e(p);
+    if !p.speculating {
+        if !(p.pred(vals.i == 99)) {
+            p.no_viable("failed semantic predicate", p.peek_span(), []);
+            return vals;
+        }
+    }
     if !p.speculating {
         p.emit(`parse\n`);
     }
     let bang = p.expect(TK_LIT_BANG, &EMPTY_SYNC);
-    return;
+    return vals;
 }
 
-fn _parse_a(p: &mut Parser) -> () {
-    if p.recovering { return; }
+fn _parse_a(p: &mut Parser, i: i32 = 0) -> AVals {
+    if p.recovering { return AVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_A, _start);
-    _parse_a__inner(p);
+    let __vals = _parse_a__inner(p, i);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("a");
     }
+    return __vals;
 }
 
-fn _parse_b__inner(p: &mut Parser) -> () {
+fn _parse_b__inner(p: &mut Parser, i: i32 = 0) -> BVals {
     let start = p.peek_start();
+    let mut vals = BVals {};
+    vals.i = i;
     let e = _parse_e(p);
+    if !p.speculating {
+        if !(p.pred(vals.i == 99)) {
+            p.no_viable("failed semantic predicate", p.peek_span(), []);
+            return vals;
+        }
+    }
     let id = p.expect(TK_ID, &EMPTY_SYNC);
-    return;
+    return vals;
 }
 
-fn _parse_b(p: &mut Parser) -> () {
-    if p.recovering { return; }
+fn _parse_b(p: &mut Parser, i: i32 = 0) -> BVals {
+    if p.recovering { return BVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_B, _start);
-    _parse_b__inner(p);
+    let __vals = _parse_b__inner(p, i);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("b");
     }
+    return __vals;
 }
 
 fn _parse_e__inner(p: &mut Parser) -> () {
@@ -2010,11 +2036,11 @@ pub fn parse_s(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 }
 
 pub fn parse_a(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_a(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_a(p); });
 }
 
 pub fn parse_b(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_b(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_b(p); });
 }
 
 pub fn parse_e(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {

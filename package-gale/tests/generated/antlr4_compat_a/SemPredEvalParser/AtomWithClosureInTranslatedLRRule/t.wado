@@ -1562,9 +1562,9 @@ impl Parser {
         return self.tokens.kind_at(i);
     }
 
-    fn token_int(&self, i: i32) -> i64 {
+    fn token_int(&self, i: i32) -> i32 {
         let sp = self.tokens.span_at(i);
-        let mut acc: i64 = 0;
+        let mut acc: i32 = 0;
         let mut neg = false;
         let mut j = sp.start;
         if j < sp.end && self.tokens.chars[j] == '-' {
@@ -1574,7 +1574,7 @@ impl Parser {
         while j < sp.end {
             let c = self.tokens.chars[j];
             if c >= '0' && c <= '9' {
-                acc = acc * 10 + (c as i32 - '0' as i32) as i64;
+                acc = acc * 10 + (c as i32 - '0' as i32);
             }
             j += 1;
         }
@@ -1849,6 +1849,10 @@ impl Parser {
     }
 }
 
+struct EVals {
+    _p: i32 = 0,
+}
+
 fn scan_start(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_e(tokens, pos, &FOLLOW_MASK_0, 0);
@@ -1905,7 +1909,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
 
 fn _parse_start__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let e = _parse_e(p, &FOLLOW_MASK_0);
+    let e = _parse_e(p, &FOLLOW_MASK_0, 0);
     let eof = p.expect(TK_EOF, &EMPTY_SYNC);
     return;
 }
@@ -1921,8 +1925,10 @@ fn _parse_start(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () 
     }
 }
 
-fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, _p: i32 = 0) -> EVals {
     let start = p.peek_start();
+    let mut vals = EVals {};
+    vals._p = _p;
     let grp_kind = p.peek_kind();
     if grp_kind == TK_LIT_A {
         let lit_a = p.expect(TK_LIT_A, &EMPTY_SYNC);
@@ -1969,20 +1975,21 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
         }
         if rep_scan_pos < 0 { break; }
         let plus = p.expect(TK_LIT_PLUS, &SYNC_0);
-        let e = _parse_e(p, follow);
+        let e = _parse_e(p, follow, 4);
     }
-    return;
+    return vals;
 }
 
-fn _parse_e(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    if p.recovering { return; }
+fn _parse_e(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, _p: i32 = 0) -> EVals {
+    if p.recovering { return EVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_E, _start);
-    _parse_e__inner(p, follow);
+    let __vals = _parse_e__inner(p, follow, _p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("e");
     }
+    return __vals;
 }
 
 fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
@@ -2011,7 +2018,7 @@ pub fn parse_start(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 }
 
 pub fn parse_e(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_e(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_e(p); });
 }
 
 fn _ctx_token_names() -> List<String> {

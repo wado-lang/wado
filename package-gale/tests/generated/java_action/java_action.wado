@@ -1496,9 +1496,9 @@ impl Parser {
         return self.tokens.kind_at(i);
     }
 
-    fn token_int(&self, i: i32) -> i64 {
+    fn token_int(&self, i: i32) -> i32 {
         let sp = self.tokens.span_at(i);
-        let mut acc: i64 = 0;
+        let mut acc: i32 = 0;
         let mut neg = false;
         let mut j = sp.start;
         if j < sp.end && self.tokens.chars[j] == '-' {
@@ -1508,7 +1508,7 @@ impl Parser {
         while j < sp.end {
             let c = self.tokens.chars[j];
             if c >= '0' && c <= '9' {
-                acc = acc * 10 + (c as i32 - '0' as i32) as i64;
+                acc = acc * 10 + (c as i32 - '0' as i32);
             }
             j += 1;
         }

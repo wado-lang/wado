@@ -1629,9 +1629,9 @@ impl Parser {
         return self.tokens.kind_at(i);
     }
 
-    fn token_int(&self, i: i32) -> i64 {
+    fn token_int(&self, i: i32) -> i32 {
         let sp = self.tokens.span_at(i);
-        let mut acc: i64 = 0;
+        let mut acc: i32 = 0;
         let mut neg = false;
         let mut j = sp.start;
         if j < sp.end && self.tokens.chars[j] == '-' {
@@ -1641,7 +1641,7 @@ impl Parser {
         while j < sp.end {
             let c = self.tokens.chars[j];
             if c >= '0' && c <= '9' {
-                acc = acc * 10 + (c as i32 - '0' as i32) as i64;
+                acc = acc * 10 + (c as i32 - '0' as i32);
             }
             j += 1;
         }
@@ -1916,6 +1916,10 @@ impl Parser {
     }
 }
 
+struct EVals {
+    v: i32 = 0,
+}
+
 fn scan_s(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_e(tokens, pos, 0);
@@ -2060,39 +2064,50 @@ fn _parse_s(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
+fn _parse_e__inner_atom(p: &mut Parser, vals: EVals = EVals {}, min_prec: i32 = 0) -> EVals {
     let start = p.peek_start();
+    let mut vals = vals;
     let kind = p.peek_kind();
     if kind == TK_INT {
         p.b.set_alt(2);
         let int = p.expect(TK_INT, &EMPTY_SYNC);
-        return;
+        if !p.speculating {
+            vals.v = p.token_int(int);
+        }
+        return vals;
     }
     if kind == TK_LIT_LPAREN {
         p.b.set_alt(3);
         let lparen = p.expect(TK_LIT_LPAREN, &SYNC_0);
         let x = _parse_e(p);
         let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
-        return;
+        if !p.speculating {
+            vals.v = x.v;
+        }
+        return vals;
     }
     if kind == TK_ID {
         p.b.set_alt(6);
         let id = p.expect(TK_ID, &EMPTY_SYNC);
-        return;
+        if !p.speculating {
+            vals.v = 3;
+        }
+        return vals;
     }
     p.no_viable(
         "expected e",
         p.peek_span(),
         ["TK_INT", "TK_LIT_LPAREN", "TK_ID"],
     );
-    return;
+    return vals;
 }
 
-fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
+fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> EVals {
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_E, _start);
-    _parse_e__inner_atom(p, min_prec);
+    let vals = EVals {};
+    let mut _lr_acc = _parse_e__inner_atom(p, vals, min_prec);
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }
@@ -2104,9 +2119,15 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
                 p.b.set_alt(0);
+                let a = _lr_acc;
+                let mut vals = EVals {};
                 let op = p.expect(TK_LIT_STAR, &EMPTY_SYNC);
                 let b = _parse_e(p, 5);
+                if !p.speculating {
+                    vals.v = a.v * b.v;
+                }
                 p.b.finish_node(p.last_end());
+                _lr_acc = vals;
             } else {
                 break;
             }
@@ -2117,9 +2138,15 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
                 p.b.set_alt(1);
+                let a = _lr_acc;
+                let mut vals = EVals {};
                 let plus = p.expect(TK_LIT_PLUS, &EMPTY_SYNC);
                 let b = _parse_e(p, 4);
+                if !p.speculating {
+                    vals.v = a.v + b.v;
+                }
                 p.b.finish_node(p.last_end());
+                _lr_acc = vals;
             } else {
                 break;
             }
@@ -2130,8 +2157,14 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
                 p.b.set_alt(4);
+                let x = _lr_acc;
+                let mut vals = EVals {};
                 let lit_plusplus = p.expect(TK_LIT_PLUSPLUS, &EMPTY_SYNC);
+                if !p.speculating {
+                    vals.v = x.v + 1;
+                }
                 p.b.finish_node(p.last_end());
+                _lr_acc = vals;
             } else {
                 break;
             }
@@ -2142,8 +2175,11 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
                 p.b.set_alt(5);
+                let e = _lr_acc;
+                let mut vals = EVals {};
                 let lit_minusminus = p.expect(TK_LIT_MINUSMINUS, &EMPTY_SYNC);
                 p.b.finish_node(p.last_end());
+                _lr_acc = vals;
             } else {
                 break;
             }
@@ -2151,15 +2187,16 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
             break;
         }
     }
-    return;
+    return _lr_acc;
 }
 
-fn _parse_e(p: &mut Parser, min_prec: i32 = 0) -> () {
-    if p.recovering { return; }
-    _parse_e__inner(p, min_prec);
+fn _parse_e(p: &mut Parser, min_prec: i32 = 0) -> EVals {
+    if p.recovering { return EVals {}; }
+    let __vals = _parse_e__inner(p, min_prec);
     if p.recovering {
         p.push_rule_stack("e");
     }
+    return __vals;
 }
 
 fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
@@ -2188,7 +2225,7 @@ pub fn parse_s(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 }
 
 pub fn parse_e(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_e(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_e(p); });
 }
 
 fn _ctx_token_names() -> List<String> {

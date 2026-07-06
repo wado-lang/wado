@@ -2659,9 +2659,9 @@ impl Parser {
         return self.tokens.kind_at(i);
     }
 
-    fn token_int(&self, i: i32) -> i64 {
+    fn token_int(&self, i: i32) -> i32 {
         let sp = self.tokens.span_at(i);
-        let mut acc: i64 = 0;
+        let mut acc: i32 = 0;
         let mut neg = false;
         let mut j = sp.start;
         if j < sp.end && self.tokens.chars[j] == '-' {
@@ -2671,7 +2671,7 @@ impl Parser {
         while j < sp.end {
             let c = self.tokens.chars[j];
             if c >= '0' && c <= '9' {
-                acc = acc * 10 + (c as i32 - '0' as i32) as i64;
+                acc = acc * 10 + (c as i32 - '0' as i32);
             }
             j += 1;
         }
@@ -3402,7 +3402,7 @@ fn _parse_ctxkeep(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_ck__inner_alt_1(p: &mut Parser, vals: CkVals) -> CkVals {
+fn _parse_ck__inner_alt_1(p: &mut Parser, vals: CkVals = CkVals {}) -> CkVals {
     let start = p.peek_start();
     let mut vals = vals;
     let lit_a = p.expect(TK_LIT_A, &SYNC_0);
@@ -3425,7 +3425,7 @@ fn _parse_ck__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_ck__inner_alt_0(p: &mut Parser, vals: CkVals) -> CkVals {
+fn _parse_ck__inner_alt_0(p: &mut Parser, vals: CkVals = CkVals {}) -> CkVals {
     let start = p.peek_start();
     let mut vals = vals;
     let lit_a = p.expect(TK_LIT_A, &SYNC_0);
@@ -3514,7 +3514,7 @@ fn _parse_ctxdrop(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_cd__inner_alt_1(p: &mut Parser, vals: CdVals) -> CdVals {
+fn _parse_cd__inner_alt_1(p: &mut Parser, vals: CdVals = CdVals {}) -> CdVals {
     let start = p.peek_start();
     let mut vals = vals;
     let lit_a = p.expect(TK_LIT_A, &SYNC_0);
@@ -3537,7 +3537,7 @@ fn _parse_cd__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_cd__inner_alt_0(p: &mut Parser, vals: CdVals) -> CdVals {
+fn _parse_cd__inner_alt_0(p: &mut Parser, vals: CdVals = CdVals {}) -> CdVals {
     let start = p.peek_start();
     let mut vals = vals;
     let lit_a = p.expect(TK_LIT_A, &SYNC_0);

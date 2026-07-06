@@ -11,7 +11,7 @@ options { language = Wado; }
 
 s : x=e { p.emit(`={$x.v}`); } ;
 
-e returns [i64 v]
+e returns [i32 v]
   : l=e '*' r=e { $v = $l.v * $r.v; }
   | l=e '+' r=e { $v = $l.v + $r.v; }
   | n=INT { $v = $n.int; }

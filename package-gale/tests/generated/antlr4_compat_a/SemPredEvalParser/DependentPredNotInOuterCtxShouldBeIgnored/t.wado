@@ -1560,9 +1560,9 @@ impl Parser {
         return self.tokens.kind_at(i);
     }
 
-    fn token_int(&self, i: i32) -> i64 {
+    fn token_int(&self, i: i32) -> i32 {
         let sp = self.tokens.span_at(i);
-        let mut acc: i64 = 0;
+        let mut acc: i32 = 0;
         let mut neg = false;
         let mut j = sp.start;
         if j < sp.end && self.tokens.chars[j] == '-' {
@@ -1572,7 +1572,7 @@ impl Parser {
         while j < sp.end {
             let c = self.tokens.chars[j];
             if c >= '0' && c <= '9' {
-                acc = acc * 10 + (c as i32 - '0' as i32) as i64;
+                acc = acc * 10 + (c as i32 - '0' as i32);
             }
             j += 1;
         }
@@ -1847,6 +1847,14 @@ impl Parser {
     }
 }
 
+struct BVals {
+    i: i32 = 0,
+}
+
+struct AVals {
+    i: i32 = 0,
+}
+
 fn scan_s(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
@@ -1895,14 +1903,14 @@ fn scan_a(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn _parse_s__inner_alt_0(p: &mut Parser) -> () {
     let start = p.peek_start();
-    let b = _parse_b(p);
+    let b = _parse_b(p, 2);
     let semicolon = p.expect(TK_LIT_SEMI, &EMPTY_SYNC);
     return;
 }
 
 fn _parse_s__inner_alt_1(p: &mut Parser) -> () {
     let start = p.peek_start();
-    let b = _parse_b(p);
+    let b = _parse_b(p, 2);
     let dot = p.expect(TK_LIT_DOT, &EMPTY_SYNC);
     return;
 }
@@ -1937,97 +1945,78 @@ fn _parse_s(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_b__inner(p: &mut Parser) -> () {
+fn _parse_b__inner(p: &mut Parser, i: i32 = 0) -> BVals {
     let start = p.peek_start();
-    let a = _parse_a(p);
-    return;
+    let mut vals = BVals {};
+    vals.i = i;
+    let a = _parse_a(p, i);
+    return vals;
 }
 
-fn _parse_b(p: &mut Parser) -> () {
-    if p.recovering { return; }
+fn _parse_b(p: &mut Parser, i: i32 = 0) -> BVals {
+    if p.recovering { return BVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_B, _start);
-    _parse_b__inner(p);
+    let __vals = _parse_b__inner(p, i);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("b");
     }
+    return __vals;
 }
 
-fn _parse_a__inner_alt_0(p: &mut Parser) -> () {
+fn _parse_a__inner_alt_0(p: &mut Parser, vals: AVals = AVals {}) -> AVals {
     let start = p.peek_start();
+    let mut vals = vals;
     let id = p.expect(TK_ID, &EMPTY_SYNC);
     if !p.speculating {
         p.emit(`alt 1\n`);
     }
-    return;
+    return vals;
 }
 
-fn _parse_a__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn _parse_a__inner_alt_1(p: &mut Parser) -> () {
+fn _parse_a__inner_alt_1(p: &mut Parser, vals: AVals = AVals {}) -> AVals {
     let start = p.peek_start();
+    let mut vals = vals;
     let id = p.expect(TK_ID, &EMPTY_SYNC);
     if !p.speculating {
         p.emit(`alt 2\n`);
     }
-    return;
+    return vals;
 }
 
-fn _parse_a__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn _parse_a__inner(p: &mut Parser) -> () {
+fn _parse_a__inner(p: &mut Parser, i: i32 = 0) -> AVals {
+    let mut vals = AVals {};
+    vals.i = i;
     let kind = p.peek_kind();
     if kind == TK_ID {
-        let _sd_tokens = &p.kinds;
-        let _sd_pos = p.pos;
-        let _sd_p_0 = _parse_a__inner_scan_0(_sd_tokens, _sd_pos);
-        let _sd_p_1 = _parse_a__inner_scan_1(_sd_tokens, _sd_pos);
-        let mut _sd_best_i: i32 = -1;
-        let mut _sd_best_p: i32 = -1;
-        if _sd_p_0 > _sd_best_p {
-            _sd_best_p = _sd_p_0;
-            _sd_best_i = 0;
+        if (vals.i == 1) {
+            return _parse_a__inner_alt_0(p, vals);
+        } else if (vals.i == 2) {
+            return _parse_a__inner_alt_1(p, vals);
+        } else {
+            p.no_viable("no viable alternative", p.peek_span(), []);
+            return vals;
         }
-        if _sd_p_1 > _sd_best_p {
-            _sd_best_p = _sd_p_1;
-            _sd_best_i = 1;
-        }
-        if _sd_best_i == 0 {
-            return _parse_a__inner_alt_0(p);
-        }
-        if _sd_best_i == 1 {
-            return _parse_a__inner_alt_1(p);
-        }
-        return _parse_a__inner_alt_1(p);
     }
     p.no_viable(
         "expected a",
         p.peek_span(),
         ["TK_ID"],
     );
-    return;
+    return vals;
 }
 
-fn _parse_a(p: &mut Parser) -> () {
-    if p.recovering { return; }
+fn _parse_a(p: &mut Parser, i: i32 = 0) -> AVals {
+    if p.recovering { return AVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_A, _start);
-    _parse_a__inner(p);
+    let __vals = _parse_a__inner(p, i);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("a");
     }
+    return __vals;
 }
 
 fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
@@ -2056,11 +2045,11 @@ pub fn parse_s(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 }
 
 pub fn parse_b(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_b(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_b(p); });
 }
 
 pub fn parse_a(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_a(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_a(p); });
 }
 
 fn _ctx_token_names() -> List<String> {
