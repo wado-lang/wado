@@ -2,17 +2,18 @@
 //   - wado-lang:cm-catalog — a library component fetched from an OCI registry
 //     by `wado fetch` and imported here as a local wasm asset.
 //   - gale — a Kiln generator that turns `Calc.g4` into a parser at compile
-//     time. Referenced by local path (`../../../package-gale`) for now;
-//     consuming the *published* gale generator from the registry is not wired
-//     yet (see README).
+//     time. Consumed from the registry via the `[build-dependencies]` entry
+//     `wado-lang:gale` (the published `core:kiln/generator` world).
 
 use { println, Stdout } from "core:cli";
 use { CmCatalog } from "../build/cm-catalog.wasm" with { type: "wasm" };
 use calc from "./Calc.g4"
     with {
         generator: {
-            module: "../../../package-gale",
-            options: { highlight: false },
+            module: "wado-lang:gale",
+            // A registry generator's options come from its component WIT, which
+            // carries no field defaults — so every field is supplied explicitly.
+            options: { highlight: false, trace: false },
         },
     };
 

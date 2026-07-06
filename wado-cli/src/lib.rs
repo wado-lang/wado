@@ -22,6 +22,7 @@ pub mod kiln_driver;
 pub mod kiln_metadata;
 pub mod kiln_provider;
 pub mod kiln_runtime;
+pub mod kiln_wit;
 pub mod lsp;
 pub mod manifest;
 pub mod metadata_embed;

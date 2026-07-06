@@ -12,10 +12,14 @@ dependency:
 
 ## Registry vs local, today
 
-cm-catalog is consumed from the registry (`[dependencies]` + `wado fetch`). gale
-is referenced by **local path** (`module: "../../../package-gale"`) because
-consuming a _published_ Kiln generator from the registry is not wired yet — see
-[Consuming a registry generator](#consuming-a-registry-generator-not-yet).
+Both dependencies are consumed from the OCI registry:
+
+- cm-catalog is a `[dependencies]` **library**, pulled by `wado fetch` and
+  imported as a local wasm asset.
+- gale is a `[build-dependencies]` **generator** (`module: "wado-lang:gale"`).
+  `wado compile` resolves the coordinate against the registry, pulls the
+  `core:kiln/generator` component at its world sub-path, and reads its options
+  shape back from the component WIT. No local `package-gale` checkout is needed.
 
 ## Run
 
@@ -62,37 +66,43 @@ unauthenticated pulls. After publishing, `wado update` resolves
 `wado-lang:cm-catalog` against the OCI registry and `wado fetch` downloads the
 component into `build/`.
 
-## Consuming a registry generator (not yet)
+## Consuming a registry generator
 
-gale is already published as a Kiln generator at
-`ghcr.io/wado-lang/gale/core-kiln-generator` (the `core:kiln/generator` world of
-the `wado-lang:gale` package). The goal is to consume it from the registry the
-same way cm-catalog is:
+gale is published as a Kiln generator at `ghcr.io/wado-lang/gale/core-kiln-generator`
+(the `core:kiln/generator` world of the `wado-lang:gale` package), declared here as:
 
 ```toml
-# wado.toml — not wired yet
 [build-dependencies]
-"wado-lang:gale" = { version = "^0.1.0" }
+"wado-lang:gale" = { version = "^0.0.9" }
 ```
 
 ```wado
-use calc from "./Calc.g4" with { generator: { module: "wado-lang:gale" } };
+use calc from "./Calc.g4"
+    with { generator: { module: "wado-lang:gale", options: { highlight: false, trace: false } } };
 ```
 
-Three gaps block this today (tracked in
-[the dependency-management plan](../../docs/dependency-management-implementation-plan.md)):
+On compile, `GeneratorModule::Spec("wado-lang:gale")` resolves the coordinate
+against `[build-dependencies]`, picks the highest published version matching the
+requirement, pulls the component from the generator world sub-path into
+`build/kiln/generators/` (cached; a published version is immutable), and recovers
+its options descriptor from the component WIT. The generator then runs as a
+prebuilt component through the same driver path as a source generator.
 
-1. Fetch the generator at its world sub-path. `wado fetch` pulls the bare
-   repository (`<ns>/<pkg>`); a generator lives at `<ns>/<pkg>/core-kiln-generator`.
-2. Run a _prebuilt_ generator component. The Kiln pipeline compiles a generator
-   from source (`GeneratorModule::LocalPath`); a fetched component would need a
-   "run these component bytes" path, and `GeneratorModule::Spec("ns:name@ver")`
-   is currently deferred.
-3. Recover the generator's options descriptor from the component. Kiln encodes
-   `options: { … }` against a schema extracted from the generator source; a
-   prebuilt component must carry (or omit) that descriptor.
+### Options and defaults
 
-A related rough edge: a bare `[build-dependencies]` key (`"gale"`) is the only
-form the `module: "gale"` build-dep lookup resolves, yet the manifest validator
-deprecates bare keys in favor of coordinates / `lib:` nicknames — which the
-lookup does not accept. Reconciling the two is part of closing gap 2.
+A registry generator's options shape comes from its component WIT, and a WIT
+`record` has no notion of a field default — so **every non-`option<T>` field is
+required** at the consuming site (`{ highlight: false, trace: false }` above,
+even though `trace` defaults to `false` in gale's source). Source-level defaults
+do not cross the registry boundary; supply each field explicitly.
+
+### Remaining follow-ups
+
+Tracked in
+[the dependency-management plan](../../docs/dependency-management-implementation-plan.md):
+
+- The generator is resolved/pulled lazily by the compiler, so it is **not** yet
+  recorded in `wado.lock` (no integrity pin) and `wado fetch` does not pre-pull
+  it. Folding `[build-dependencies]` into the lock/fetch path is a follow-up.
+- Carrying source-level option defaults across the boundary (so an omitted field
+  falls back to the generator's default) needs the component to encode them.

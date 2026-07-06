@@ -160,7 +160,12 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
             .unwrap_or_else(crate::compile::empty_manifest);
         crate::compile::rewrite_build_dep_modules(&mut inline, &manifest, &manifest_root);
         crate::compile::rewrite_local_dir_modules(&mut inline, &manifest_root);
-        let provider = CliGeneratorProvider::new(manifest_root.clone());
+        let provider = CliGeneratorProvider::new(manifest_root.clone()).with_registry_context(
+            crate::kiln_provider::RegistryContext {
+                build_dependencies: manifest.build_dependencies.clone(),
+                registries: manifest.registries.clone(),
+            },
+        );
         // Schemas are anchored at the manifest root; load them relative to it.
         let kiln_host = host.rebased(manifest_root.clone());
         let mut outcome = crate::kiln_driver::check_pipeline(

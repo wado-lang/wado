@@ -599,21 +599,23 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 }
 
 #[test]
-fn spec_module_surfaces_unsupported() {
+fn spec_module_without_build_dependency_surfaces_unsupported() {
     let tmp = unique_tmp("kiln-compile-spec");
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).unwrap();
 
+    // A `module: "ns:name"` spec resolves against `[build-dependencies]`; a
+    // provider with an empty registry context (no such entry) cannot resolve it.
     let provider = CliGeneratorProvider::new(tmp.clone());
     let module = GeneratorModule::Spec("example:proto-codegen@1.2.3".to_string());
     let err = runtime()
         .block_on(async { provider.resolve(&module).await })
-        .expect_err("spec module should fail until registry support lands");
+        .expect_err("a spec with no matching build-dependency cannot resolve");
     match err {
         ProviderError::Unsupported { message } => {
             assert!(
-                message.contains("registry") || message.contains("package spec"),
-                "expected spec-module unsupported message, got: {message}"
+                message.contains("[build-dependencies]"),
+                "expected a build-dependency-missing message, got: {message}"
             );
         }
         _ => panic!("expected ProviderError::Unsupported, got {err:?}"),

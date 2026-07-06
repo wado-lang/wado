@@ -662,7 +662,12 @@ pub(crate) async fn maybe_run_pipeline(
     let mut inline = inline;
     rewrite_build_dep_modules(&mut inline, &manifest, &manifest_root);
     rewrite_local_dir_modules(&mut inline, &manifest_root);
-    let provider = CliGeneratorProvider::new(manifest_root.clone()).with_no_cache(no_cache);
+    let provider = CliGeneratorProvider::new(manifest_root.clone())
+        .with_no_cache(no_cache)
+        .with_registry_context(crate::kiln_provider::RegistryContext {
+            build_dependencies: manifest.build_dependencies.clone(),
+            registries: manifest.registries.clone(),
+        });
     // Kiln paths (`from`, `inputs`, `output_dir`) are anchored at the manifest
     // root, so schemas must be loaded relative to it — not the entry file's
     // directory, where the main compile host is based.

@@ -319,11 +319,27 @@ The redesign replaces the options-blob subsystem with typed WIT arguments:
       the signature is per-generator; shared `kiln-host` linking is unchanged.
 - [ ] Cache key: canonically encode the validated options value as the key
       function only (no wire blob).
-- [ ] `GeneratorModule::Spec` resolution: resolve coordinate against
-      `[build-dependencies]`, fetch the component at its world sub-path into
-      `build/`, read its options type from the WIT, return a `ResolvedGenerator`.
-- [ ] Republish gale under the new world; validate `example/hello-packages`
-      against the registry.
+- [x] `GeneratorModule::Spec` resolution (`kiln_provider::resolve_spec`): resolve
+      the coordinate against `[build-dependencies]` + `[registries]`, pick the
+      highest published version matching the requirement, pull the component from
+      its `core-kiln-generator` world sub-path (versions listed on the sub-path
+      repository — public on GHCR while the bare repo may not be), and recover
+      the options descriptor from the component WIT (`kiln_wit`). Cached under
+      `build/kiln/generators/` keyed by the spec; a warm cache skips the registry
+      round-trip. WIT records carry no field defaults, so a registry generator's
+      options fields are all required (no source-level defaults across the
+      boundary).
+- [x] Republish gale under the new world (0.0.9) and validate
+      `example/hello-packages` against the registry: `module: "wado-lang:gale"`
+      compiles and runs end to end (`calc::parse("1 + 2 * 3")`).
+- [ ] Fold `[build-dependencies]` into the resolve/lock/fetch path so a registry
+      generator is version-pinned in `wado.lock` (integrity) and `wado fetch`
+      pre-pulls it — today `resolve_spec` fetches lazily at compile time.
+- [ ] Carry source-level option defaults across the registry boundary (encode
+      them in the component) so an omitted field falls back to the default.
+- [ ] Reconcile the `[build-dependencies]` bare-key form (`module: "gale"` →
+      `BuildDep`) with the coordinate form now that `module: "ns:name"` → `Spec`
+      resolves against the registry.
 
 ## Milestones
 
