@@ -185,16 +185,26 @@ else the canonical ABI). This is the key modeling decision Phase 4 must settle:
 dependency needs its own representation (the cached `.wasm` + its WIT), distinct
 from source deps.
 
-- [ ] Represent a prebuilt-component dependency distinctly from a source
-      dependency (path deps stay source; registry deps are components).
-- [ ] Map a registry dependency key to its cached component + WIT so `use { … }
-      from "ns:pkg"` type-checks against the component's exported interface.
+- [x] Represent a prebuilt-component dependency distinctly from a source
+      dependency: `DependencyIndex.components` (coordinate/specifier → cached
+      `.wasm`) sits beside `resolved` (path/source deps), and the loader resolves
+      a component import to a `ModuleSource::Wasm` composed across the CM boundary.
+- [x] Map a registry dependency key to its cached component so `use { … } from
+      "ns:pkg"` type-checks against the component's exported interface (WIT
+      decoded from the component itself, WEP 2026-06-26).
+- [x] Every entry point resolves component imports, not just `build`/`run`:
+      `check` and `query` fetch through the shared resolver (offline on a warm
+      cache); the `wado lsp` server reads the warm `~/wado/` cache offline via
+      `dependency_index_from` (cold cache → an `unresolved` `wado fetch` hint).
+      Fixed a latent bug where the Engine's `DiagnosticCollector` dropped the
+      host's dependency index entirely (path deps included).
 - [ ] Version-aware routing: `resolve_import(from, spec)` resolves against the
       importing package's own deps, so semver-incompatible versions of one
       package become distinct dependency ids (WEP "Transitive Version
       Isolation"). Natural for components (CM instances are type-isolated).
-- [ ] E2E: a fixture project depending on `wado-lang:cm-catalog` builds and runs
-      against ghcr (`wado build` / `wado run`).
+- [x] E2E: `example/hello-packages` depends on `wado-lang:cm-catalog` and builds
+      and runs against ghcr (`wado run`), round-tripping values through the
+      composed component.
 
 ### Phase 5 — Dependency-editing CLI
 
