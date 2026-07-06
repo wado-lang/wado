@@ -62,6 +62,30 @@ r : x=ID ;
     assert res.is_err(), "invalid token member must be an error";
 }
 
+test "resolve_attrs: $rule resolves to its label binding when the element is labeled (q=e)" {
+    let g = parse("grammar T;
+s : q=e { print($e.v); } ;
+e returns [int v] : ID ;
+").unwrap();
+    let refs = resolve_attrs(&" print($e.v); ", &g.parser_rules[0], &g.parser_rules).unwrap();
+    assert refs.len() == 1;
+    assert refs[0].target matches { RuleLabel }, "e resolves through the label q=e";
+    assert refs[0].name == "q", `binding name should be the label q: {refs[0].name}`;
+    assert refs[0].rule_name == "e", `rule_name: {refs[0].rule_name}`;
+    if let Some(m) = &refs[0].member {
+        assert *m == "v", `member: {*m}`;
+    }
+}
+
+test "resolve_attrs: $rule stays ambiguous (unresolved) with two labeled refs to the same rule" {
+    let g = parse("grammar T;
+s : a=e '+' b=e { print($e.v); } ;
+e returns [int v] : ID ;
+").unwrap();
+    let res = resolve_attrs(&" print($e.v); ", &g.parser_rules[0], &g.parser_rules);
+    assert res.is_err(), "ambiguous $e (two labeled refs) must not silently resolve";
+}
+
 test "resolve_attrs errors on an unknown rule member" {
     let g = parse("grammar T;
 r : e ;

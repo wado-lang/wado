@@ -61,6 +61,11 @@ pub struct AttrEnv {
     attrs: List<String>,
     token_refs: List<String>,
     rule_refs: List<String>,
+    /// `underlying_rule → label` aliases: a labeled rule reference (`q=e`) is
+    /// also reachable by its rule name (`$e`), so `$e` resolves to the label's
+    /// storage. Registered only when the rule name has a single labeled
+    /// occurrence and no unlabeled one, matching ANTLR erroring on ambiguity.
+    label_aliases: List<[String, String]>,
 }
 
 /// Resolve every attribute reference in `body` against `rule`'s environment.
@@ -79,8 +84,9 @@ pub fn resolve_attrs(body: &String, rule: &ParserRule, rules: &List<ParserRule>)
 }
 
 fn resolve_one(r: &AttrRef, env: &AttrEnv, rules: &List<ParserRule>) -> Result<ResolvedAttr, String> {
+    let lookup = alias_target(env, &r.name);
     for let lab of &env.labels {
-        if lab.name == r.name {
+        if lab.name == lookup {
             let target = if lab.list {
                 AttrTarget::ListLabel;
             } else if lab.is_token {
@@ -89,7 +95,7 @@ fn resolve_one(r: &AttrRef, env: &AttrEnv, rules: &List<ParserRule>) -> Result<R
                 AttrTarget::RuleLabel;
             };
             check_member(r, &target, &lab.rule_name, rules)?;
-            return ok_attr(r, target, &lab.rule_name);
+            return ok_attr_named(r, &lookup, target, &lab.rule_name);
         }
     }
     if contains(&env.attrs, &r.name) {
@@ -112,14 +118,33 @@ fn resolve_one(r: &AttrRef, env: &AttrEnv, rules: &List<ParserRule>) -> Result<R
 }
 
 fn ok_attr(r: &AttrRef, target: AttrTarget, rule_name: &String) -> Result<ResolvedAttr, String> {
+    return ok_attr_named(r, &r.name, target, rule_name);
+}
+
+/// Like `ok_attr` but with an explicit binding `name` (the fragment span still
+/// comes from `r`). Used when `$e` aliases a labeled ref `q=e`: the binding name
+/// is the label (`q`), the rewritten span the original `$e`.
+fn ok_attr_named(r: &AttrRef, name: &String, target: AttrTarget, rule_name: &String) -> Result<ResolvedAttr, String> {
     return Result::Ok(ResolvedAttr {
         target,
-        name: r.name,
+        name: *name,
         member: r.member,
         rule_name: *rule_name,
         start: r.start,
         end: r.end,
     });
+}
+
+/// Map a reference name through the label-alias table: a labeled rule ref
+/// `q=e` makes `$e` resolve to the label `q`. Returns the name unchanged when
+/// it is not an alias.
+fn alias_target(env: &AttrEnv, name: &String) -> String {
+    for let a of &env.label_aliases {
+        if a.0 == *name {
+            return a.1;
+        }
+    }
+    return *name;
 }
 
 /// Validate `r.member` against what `target` legally exposes. A token-like
@@ -213,7 +238,37 @@ pub fn build_attr_env(rule: &ParserRule) -> AttrEnv {
             collect_env_element(e, &mut labels, &mut token_refs, &mut rule_refs);
         }
     }
-    return AttrEnv { labels, attrs, token_refs, rule_refs };
+    let label_aliases = build_label_aliases(&labels, &rule_refs);
+    return AttrEnv { labels, attrs, token_refs, rule_refs, label_aliases };
+}
+
+/// Build the `underlying_rule → label` alias table so `$e` resolves to a
+/// labeled `q=e`. Registered only when the rule name has exactly one labeled
+/// occurrence and no unlabeled reference; an ambiguous `$e` (two labeled refs,
+/// or a mix of labeled and unlabeled) stays unresolved, a loud error as ANTLR
+/// reports.
+fn build_label_aliases(labels: &List<LabelInfo>, rule_refs: &List<String>) -> List<[String, String]> {
+    let mut aliases: List<[String, String]> = [];
+    for let lab of labels {
+        if lab.is_token || lab.list || lab.rule_name == "" {
+            continue;
+        }
+        if count_labeled_rule(labels, &lab.rule_name) != 1 || contains(rule_refs, &lab.rule_name) {
+            continue;
+        }
+        aliases.push([lab.rule_name, lab.name]);
+    }
+    return aliases;
+}
+
+fn count_labeled_rule(labels: &List<LabelInfo>, rule_name: &String) -> i32 {
+    let mut n = 0;
+    for let lab of labels {
+        if !lab.is_token && !lab.list && lab.rule_name == *rule_name {
+            n += 1;
+        }
+    }
+    return n;
 }
 
 fn collect_env_element(
