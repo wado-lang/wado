@@ -313,6 +313,15 @@ test "java members: field declarations become struct fields" {
     assert m.methods.is_empty(), "no methods expected";
 }
 
+test "java members: numeric widths map by Java width (int=i32, long=i64, float=f32, double=f64)" {
+    let lang = ActionLanguage::Java;
+    let m = translate_members(&lang, &"long l = 0; float f = 0; double d = 0;", &"T").unwrap();
+    assert m.fields.len() == 3, `fields: {m.fields.len()}`;
+    assert m.fields[0].ty == "i64", `long: {m.fields[0].ty}`;
+    assert m.fields[1].ty == "f32", `float: {m.fields[1].ty}`;
+    assert m.fields[2].ty == "f64", `double: {m.fields[2].ty}`;
+}
+
 test "java members: method with a param, print, and return" {
     let lang = ActionLanguage::Java;
     let m = translate_members(
