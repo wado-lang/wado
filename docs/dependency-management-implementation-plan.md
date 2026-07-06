@@ -223,9 +223,12 @@ conflict errors, once real registries make multi-constraint graphs common.
   generator source"). Done for registry library components:
   `use { X } from "ns:pkg@ver" with { registry }` fetches the prebuilt
   component inline (exact pin, no lock), keyed by the verbatim specifier;
-  an inline `with` for a coordinate also in `[dependencies]` is rejected as
-  mutually exclusive. `with { git = … }` and `lib:` inline sources are still
-  pending.
+  an inline `with` for a specifier also in `[dependencies]` is rejected as
+  mutually exclusive. A `lib:nick` alias fetches the coordinate named by
+  `with { package }` while keeping the nickname as the loader's lookup key,
+  in both single-file (`with { package, registry, version }`) and manifest
+  (a `lib:nick` `[dependencies]` entry) mode. `with { git = … }` inline
+  sources are still pending.
 - [ ] Workspace publish/resolve edge cases beyond what `publish` covers.
 - [ ] `wado.lock` integrity extensibility (algorithm prefix already in schema).
 

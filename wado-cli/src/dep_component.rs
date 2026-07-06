@@ -27,9 +27,11 @@ use crate::registry::FilesystemProvider;
 const DEPS_CACHE_DIR: &str = "build/deps";
 
 /// Resolve and fetch every registry `[dependencies]` entry into the component
-/// cache, returning `(coordinate "ns:pkg", absolute local .wasm path)` pairs.
-/// Path dependencies (which compile from source) and non-registry sources are
-/// ignored. The pairs are merged into the compiler's dependency index.
+/// cache, returning `(specifier, absolute local .wasm path)` pairs. The
+/// specifier is the manifest key the loader looks up — the bare coordinate for
+/// a direct `ns:pkg` entry, or the `lib:nick` for an alias (whose `package`
+/// gives the fetched coordinate). Path dependencies (which compile from source)
+/// and non-registry sources are ignored.
 pub async fn fetch_component_dependencies(
     manifest: &Manifest,
     manifest_dir: &Path,
@@ -46,9 +48,28 @@ pub async fn fetch_component_dependencies(
             .ok_or_else(|| format!("unexpected lock id {:?}", package.id))?;
         let abs = pull_component_into(registry_url, coordinate, name, &package.version, &deps_dir)
             .await?;
-        out.push((coordinate.to_string(), abs));
+        // A registry dependency is a leaf (no transitive Wado deps), so the
+        // loader only ever imports it by the consuming manifest's key. Map its
+        // coordinate back to that key so a `lib:` alias resolves under its
+        // nickname.
+        let specifier = manifest_key_for_coordinate(manifest, coordinate).unwrap_or(coordinate);
+        out.push((specifier.to_string(), abs));
     }
     Ok(out)
+}
+
+/// The `[dependencies]` key backing a registry `coordinate` (the bare
+/// coordinate itself, or a `lib:nick` whose `package` is that coordinate).
+fn manifest_key_for_coordinate<'a>(manifest: &'a Manifest, coordinate: &str) -> Option<&'a str> {
+    manifest
+        .dependencies
+        .iter()
+        .find_map(|(key, dep)| match &dep.source {
+            wado_manifest::DependencySource::Registry { package, .. } if package == coordinate => {
+                Some(key.as_str())
+            }
+            _ => None,
+        })
 }
 
 /// Resolve and fetch every inline `use … from "ns:pkg@ver" with { registry }`
@@ -112,55 +133,78 @@ fn collect_inline_deps(
     Ok(out)
 }
 
-/// Classify one `use` clause. Returns `None` for a non-coordinate source, or a
-/// coordinate with no inline source (manifest-resolved or a resolution-time
-/// error); `Some` for an inline registry source; `Err` for a malformed one.
+/// Classify one `use` clause. Returns `None` for a bundled/relative/remote
+/// source, or a coordinate with no inline source (manifest-resolved or a
+/// resolution-time error); `Some` for an inline registry source; `Err` for a
+/// malformed one.
+///
+/// An open coordinate `ns:pkg` fetches itself; a `lib:nick` alias fetches the
+/// coordinate named by `with { package }` while keeping `lib:nick` as the
+/// loader's lookup key.
 fn parse_inline_dep(
     use_decl: &wado_compiler::ast::UseDecl,
     manifest: Option<&Manifest>,
 ) -> Result<Option<InlineDep>, String> {
     let specifier = use_decl.source.clone();
-    let Some((coordinate, spec_version)) = split_open_coordinate(&specifier) else {
+    let Some((namespace, head, spec_version)) = classify_specifier(&specifier) else {
         return Ok(None);
     };
-    let coordinate = coordinate.to_string();
+    let is_alias = namespace == "lib";
+    let head = head.to_string();
     let spec_version = spec_version.map(str::to_string);
     let attrs = use_decl.attributes.as_ref();
     let inline_registry = attrs.and_then(wado_compiler::ast::ImportAttributes::registry);
     let inline_version = attrs.and_then(wado_compiler::ast::ImportAttributes::version);
+    let inline_package = attrs.and_then(wado_compiler::ast::ImportAttributes::package);
 
-    // A bare coordinate with no inline source is resolved through the manifest
-    // (or is a resolution-time error in single-file mode) — not our concern.
-    if spec_version.is_none() && inline_registry.is_none() && inline_version.is_none() {
+    // No inline source (`package` is a source marker for an alias) → resolved
+    // through the manifest, or a resolution-time error — not our concern.
+    if spec_version.is_none()
+        && inline_registry.is_none()
+        && inline_version.is_none()
+        && inline_package.is_none()
+    {
         return Ok(None);
     }
 
-    let in_manifest = manifest.is_some_and(|m| m.dependencies.contains_key(coordinate.as_str()));
-    if in_manifest {
+    if manifest.is_some_and(|m| m.dependencies.contains_key(head.as_str())) {
         return Err(format!(
-            "dependency {coordinate:?}: an inline `with` and a [dependencies] entry \
+            "dependency {head:?}: an inline `with` and a [dependencies] entry \
              are mutually exclusive"
         ));
     }
+
+    let coordinate = if is_alias {
+        inline_package.ok_or_else(|| {
+            format!("dependency {head:?}: a `lib:` alias needs `with {{ package: \"ns:pkg\" }}`")
+        })?
+    } else if inline_package.is_some() {
+        return Err(format!(
+            "dependency {head:?}: `package` aliasing is forbidden under an open namespace \
+             (use a `lib:` specifier)"
+        ));
+    } else {
+        head.clone()
+    };
 
     let version = match (spec_version.as_deref(), inline_version.as_deref()) {
         (Some(v), None) | (None, Some(v)) => v.to_string(),
         (Some(_), Some(_)) => {
             return Err(format!(
-                "dependency {coordinate:?}: version given both in the specifier (`@…`) \
+                "dependency {head:?}: version given both in the specifier (`@…`) \
                  and in `with {{ version }}` — use one"
             ));
         }
         (None, None) => {
             return Err(format!(
-                "dependency {coordinate:?} needs a version (pin it as `{coordinate}@<version>` \
-                 or `with {{ version: \"<version>\" }}`)"
+                "dependency {head:?} needs a version \
+                 (pin it as `@<version>` or `with {{ version: \"<version>\" }}`)"
             ));
         }
     };
     if semver::Version::parse(&version).is_err() {
         return Err(format!(
-            "dependency {coordinate:?}: version {version:?} must be exact \
+            "dependency {head:?}: version {version:?} must be exact \
              (single-file has no lock to resolve a range)"
         ));
     }
@@ -168,10 +212,7 @@ fn parse_inline_dep(
     let registry_url = inline_registry
         .or_else(|| manifest.and_then(|m| m.registries.get("default").cloned()))
         .ok_or_else(|| {
-            format!(
-                "dependency {coordinate:?} needs a registry \
-                 (add `with {{ registry: \"oci://…\" }}`)"
-            )
+            format!("dependency {head:?} needs a registry (add `with {{ registry: \"oci://…\" }}`)")
         })?;
 
     let name = coordinate
@@ -187,10 +228,12 @@ fn parse_inline_dep(
     }))
 }
 
-/// Split an open-namespace coordinate specifier into `(coordinate, version)`.
-/// Returns `None` for reserved namespaces (`core`/`wasi`/`lib`), paths, and
-/// remote URLs — anything that is not an external registry coordinate.
-fn split_open_coordinate(spec: &str) -> Option<(&str, Option<&str>)> {
+/// Split a specifier into `(namespace, head, version)`, where `head` is the
+/// specifier without any `@ver` pin. Returns `None` for bundled namespaces
+/// (`core`/`wasi`), paths, and remote URLs — anything not resolved from a
+/// registry. `lib:` is included: it is reserved but registry-resolvable via an
+/// alias.
+fn classify_specifier(spec: &str) -> Option<(&str, &str, Option<&str>)> {
     if spec.starts_with("./")
         || spec.starts_with("../")
         || spec.starts_with("http://")
@@ -198,15 +241,15 @@ fn split_open_coordinate(spec: &str) -> Option<(&str, Option<&str>)> {
     {
         return None;
     }
-    let (coordinate, version) = match spec.split_once('@') {
-        Some((c, v)) if c.contains(':') => (c, Some(v)),
+    let (head, version) = match spec.split_once('@') {
+        Some((h, v)) if h.contains(':') => (h, Some(v)),
         _ => (spec, None),
     };
-    let (namespace, _pkg) = coordinate.split_once(':')?;
-    if matches!(namespace, "core" | "wasi" | "lib") {
+    let (namespace, _rest) = head.split_once(':')?;
+    if matches!(namespace, "core" | "wasi") {
         return None;
     }
-    Some((coordinate, version))
+    Some((namespace, head, version))
 }
 
 /// Pull `coordinate` @ `version` from `registry_url` into `deps_dir`, returning
@@ -262,20 +305,23 @@ mod tests {
     }
 
     #[test]
-    fn skips_reserved_and_relative_specifiers() {
-        assert!(split_open_coordinate("core:cli").is_none());
-        assert!(split_open_coordinate("wasi:filesystem").is_none());
-        assert!(split_open_coordinate("lib:router").is_none());
-        assert!(split_open_coordinate("./utils.wado").is_none());
-        assert!(split_open_coordinate("https://example.com/x.wado").is_none());
+    fn skips_bundled_and_relative_specifiers() {
+        assert!(classify_specifier("core:cli").is_none());
+        assert!(classify_specifier("wasi:filesystem").is_none());
+        assert!(classify_specifier("./utils.wado").is_none());
+        assert!(classify_specifier("https://example.com/x.wado").is_none());
     }
 
     #[test]
-    fn splits_coordinate_and_version() {
-        assert_eq!(split_open_coordinate("ns:pkg"), Some(("ns:pkg", None)));
+    fn classifies_coordinate_and_alias() {
+        assert_eq!(classify_specifier("ns:pkg"), Some(("ns", "ns:pkg", None)));
         assert_eq!(
-            split_open_coordinate("ns:pkg@1.2.3"),
-            Some(("ns:pkg", Some("1.2.3")))
+            classify_specifier("ns:pkg@1.2.3"),
+            Some(("ns", "ns:pkg", Some("1.2.3")))
+        );
+        assert_eq!(
+            classify_specifier("lib:foo"),
+            Some(("lib", "lib:foo", None))
         );
     }
 
@@ -377,5 +423,40 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(dep.registry_url, "oci://ghcr.io/acme");
+    }
+
+    #[test]
+    fn lib_alias_resolves_to_its_package() {
+        let dep = only(
+            r#"use { X } from "lib:foo"
+               with { package: "ns:pkg", registry: "oci://ghcr.io", version: "1.2.3" };"#,
+            None,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(dep.specifier, "lib:foo");
+        assert_eq!(dep.coordinate, "ns:pkg");
+        assert_eq!(dep.name, "pkg");
+        assert_eq!(dep.version, "1.2.3");
+    }
+
+    #[test]
+    fn lib_alias_needs_a_package() {
+        let err = only(
+            r#"use { X } from "lib:foo" with { registry: "oci://ghcr.io", version: "1.2.3" };"#,
+            None,
+        )
+        .unwrap_err();
+        assert!(err.contains("needs `with { package"), "{err}");
+    }
+
+    #[test]
+    fn open_coordinate_rejects_package_aliasing() {
+        let err = only(
+            r#"use { X } from "ns:pkg@1.2.3" with { package: "other:pkg", registry: "oci://ghcr.io" };"#,
+            None,
+        )
+        .unwrap_err();
+        assert!(err.contains("forbidden under an open namespace"), "{err}");
     }
 }

@@ -1523,6 +1523,13 @@ impl ImportAttributes {
         self.get_str("registry")
     }
 
+    /// Real coordinate a `lib:` alias resolves to, for a single-file dependency
+    /// source (`with { package: "ns:pkg" }`).
+    #[must_use]
+    pub fn package(&self) -> Option<String> {
+        self.get_str("package")
+    }
+
     #[must_use]
     pub fn type_hint(&self) -> Option<String> {
         self.get_str("type")
