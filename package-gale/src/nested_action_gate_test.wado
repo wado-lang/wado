@@ -1,0 +1,71 @@
+//! An action / predicate nested inside a group (not on a rule's top-level
+//! alternative) must not be silently dropped. Two paths used to lose it:
+//! `grammar_has_actions` only inspected top-level `alt.actions`, so a grammar
+//! whose only action sits inside a group left `emit_actions` off (the whole
+//! action pipeline, including the `warn_unhandled_actions` safety net, never
+//! ran); and `empty_alt_group_as_optional` folded `( {p}? | A )` to an
+//! Optional before action ids were assigned, dropping the empty alt's
+//! predicate. Either way the body vanished with no diagnostic — against the
+//! "loud, never silent" contract. These tests pin the loud behavior.
+
+use { parse } from "./g4/parser.wado";
+use { generate, GenerateOptions } from "./codegen.wado";
+use { Diagnostic, DiagnosticKind } from "./gir.wado";
+
+global OPTS: GenerateOptions = GenerateOptions { highlight: false };
+
+fn gen_diagnostics(src: &String) -> List<Diagnostic> {
+    let mut g = parse(*src).unwrap();
+    return generate(&mut g, &OPTS).diagnostics;
+}
+
+fn has_unsupported_action(diags: &List<Diagnostic>) -> bool {
+    for let d of diags {
+        if d.kind matches { UnsupportedAction } {
+            return true;
+        }
+    }
+    return false;
+}
+
+test "nested-group predicate surfaces a loud diagnostic, not a silent drop" {
+    let diags = gen_diagnostics(&"grammar T;
+options { language = Wado; }
+r : ( {false}? A | B ) ;
+A : 'a' ;
+B : 'b' ;
+");
+    assert has_unsupported_action(&diags),
+        "a predicate nested in a group must raise UnsupportedAction, not vanish";
+}
+
+test "empty-alt predicate surfaces a loud diagnostic, not a silent drop" {
+    let diags = gen_diagnostics(&"grammar T;
+options { language = Wado; }
+r : ( {false}? | A ) A ;
+A : 'a' ;
+");
+    assert has_unsupported_action(&diags),
+        "an empty-alt predicate `( {p}? | A )` must raise UnsupportedAction, not be folded away";
+}
+
+fn gen_source(src: &String) -> String {
+    let mut g = parse(*src).unwrap();
+    return generate(&mut g, &OPTS).source;
+}
+
+test "lexer nested-group predicate is emitted, not silently dropped" {
+    // `KW`'s only action is a predicate inside a group. With `grammar_has_actions`
+    // blind to nested lexer actions, `emit_actions` stayed off and the predicate
+    // vanished (`try_KW` matched any `[a-z]+`). It must reach the generated
+    // lexer — its literal (`zzq`, chosen so no runtime word contains it) appears
+    // only when the predicate is emitted.
+    let src = gen_source(&"lexer grammar L;
+options { language = Wado; }
+KW : ([a-z]+ { $text == \"zzq\" }? | 'dog') ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+");
+    assert src.contains("zzq"),
+        "a predicate nested in a lexer group must be emitted, not silently dropped";
+}

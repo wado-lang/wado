@@ -1318,77 +1318,6 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
     }
     return [lo + 1, pos - line_starts[lo]];
 }
-//! Runtime FOLLOW-continuation gate for tail-greedy loops. Emitted into a
-//! generated parser only when lowering constructed a caller-FOLLOW gate
-//! (`GenContext::emit_follow`); gate-free grammars carry none of this.
-
-/// `follow` is the caller's deterministic K-prefix continuation:
-/// `follow[d]` is the set of token kinds that may appear at input depth
-/// `d` if control belongs to the caller rather than to another iteration
-/// of the loop. An empty `follow` (the common, non-repair case) disables
-/// the gate. The loop yields to the caller — breaking `*`/`+` or skipping
-/// `?` — exactly when EVERY non-empty depth-set matches the upcoming
-/// input, i.e. when the next tokens are unambiguously the caller's
-/// continuation.
-///
-/// Threaded as a defaulted `&EMPTY_FOLLOW` argument through the generated
-/// `parse_*` / `scan_*` functions; repair call sites pass a `FOLLOW_MASK_*`
-/// constant (or forward their own `follow`). This replaces the previous
-/// per-(rule, mask) cloned `__follow_<id>` variants: the mask is data
-/// carried at runtime, not code baked into a specialised function.
-///
-/// `eof_kind` is the token kind reported past the end of the stream, so a
-/// caller continuation ending in EOF gates correctly. `tokens` is the bare
-/// `kinds` array (`&p.kinds` on the parse side, the scan `kinds` array on the
-/// scan side) — gating only reads token kinds, and a flat `&Array<i32>` keeps
-/// scan frames a slot smaller than the `List` wrapper or `&TokenStream`
-/// would, which matters for deeply recursive scan grammars.
-pub global EMPTY_FOLLOW: List<List<i32>> = [];
-
-/// Prepend a static local prefix to an inherited FOLLOW continuation.
-/// Used for the `FollowArg::Combined` case: a callee at the current
-/// rule's tail whose preceding local suffix is nullable, so its
-/// continuation is `prefix` (the optional local elements' per-depth
-/// first sets) followed by the caller's own `follow`. Bounded by
-/// `FOLLOW_MASK_MAX_K` so the result stays small; the only
-/// allocating point on a repaired path (the common Static/Forward
-/// cases pass a reference directly).
-pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
-    let mut combined: List<List<i32>> = [];
-    for let depth of prefix {
-        combined.push(*depth);
-    }
-    for let depth of follow {
-        combined.push(*depth);
-    }
-    return combined;
-}
-
-pub fn follow_yields(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
-    if follow.is_empty() {
-        return false;
-    }
-    for let mut d = 0; d < follow.len(); d += 1 {
-        let set = &follow[d];
-        if set.is_empty() {
-            // No constraint at this depth — a vacuous match, keep going.
-            continue;
-        }
-        let idx = pos + d;
-        let kind = if idx < tokens.len() { tokens[idx] } else { eof_kind };
-        let mut hit = false;
-        for let t of set {
-            if kind == *t {
-                hit = true;
-                break;
-            }
-        }
-        if !hit {
-            return false;
-        }
-    }
-    return true;
-}
 pub enum TokenKind {
     ELSE,
     ID,
@@ -1578,12 +1507,88 @@ struct Parser {
     max_errors: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
+    output: String,
 }
 
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], output: "" };
+    }
+
+    fn emit(&mut self, s: String) {
+        self.output.push_str(&s);
+    }
+
+    fn token_text(&self, i: i32) -> String {
+        return self.tokens.token_text(i);
+    }
+
+    fn token_kind(&self, i: i32) -> i32 {
+        return self.tokens.kind_at(i);
+    }
+
+    fn token_int(&self, i: i32) -> i64 {
+        let sp = self.tokens.span_at(i);
+        let mut acc: i64 = 0;
+        let mut neg = false;
+        let mut j = sp.start;
+        if j < sp.end && self.tokens.chars[j] == '-' {
+            neg = true;
+            j += 1;
+        }
+        while j < sp.end {
+            let c = self.tokens.chars[j];
+            if c >= '0' && c <= '9' {
+                acc = acc * 10 + (c as i32 - '0' as i32) as i64;
+            }
+            j += 1;
+        }
+        return if neg { -acc } else { acc };
+    }
+
+    fn token_line(&self, i: i32) -> i32 {
+        return line_col(self.tokens.chars, self.tokens.span_at(i).start).0;
+    }
+
+    fn token_col(&self, i: i32) -> i32 {
+        return line_col(self.tokens.chars, self.tokens.span_at(i).start).1;
+    }
+
+    fn token_start(&self, i: i32) -> i32 {
+        return self.tokens.starts[i];
+    }
+
+    fn la(&self, k: i32) -> i32 {
+        return self.peek_at(k - 1);
+    }
+
+    fn lt(&self, k: i32) -> i32 {
+        let idx = self.pos + k - 1;
+        if idx >= self.tokens.len() { return self.tokens.len() - 1; }
+        if idx < 0 { return 0; }
+        return idx;
+    }
+
+    fn text_span(&self, start: i32, end: i32) -> String {
+        let mut out = String::new();
+        let hi = if end < self.tokens.chars.len() { end } else { self.tokens.chars.len() };
+        for let mut i = start; i < hi; i += 1 {
+            out.push(self.tokens.chars[i]);
+        }
+        return out;
+    }
+
+    fn input_text(&self) -> String {
+        return self.text_span(0, self.tokens.chars.len());
+    }
+
+    fn rule_string_tree(&self) -> String {
+        return self.b.render_open(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+    }
+
+    fn rule_string_tree_final(&self) -> String {
+        return self.b.render_last_finished(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -1806,16 +1811,16 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_s(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_stmt(tokens, pos, &FOLLOW_MASK_0, 0);
+    pos = scan_stmt(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_stmt(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_stmt(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1823,7 +1828,7 @@ fn scan_stmt(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
         if alt_kind == TK_LIT_IF {
             pos = start;
             try_0: {
-                pos = scan_if_stmt(tokens, pos, follow, 0);
+                pos = scan_if_stmt(tokens, pos, 0);
                 if pos < 0 { break try_0; }
                 break scan_alts;
             }
@@ -1843,54 +1848,59 @@ fn scan_stmt(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
     return pos;
 }
 
-fn scan_if_stmt(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_if_stmt(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_IF { return -1; }
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
-    pos = scan_stmt(tokens, pos, follow, 0);
+    pos = scan_stmt(tokens, pos, 0);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos] == TK_LIT_ELSE && !(follow_yields(tokens, pos, follow, TK_EOF)) {
-        let sp = pos;
-        sg_0_done: {
-            sg_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_ELSE { break sg_0; }
+    let gp_0 = pos;
+    let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if sgk_0 == TK_LIT_ELSE {
+        sg_0: {
+            pos = gp_0;
+            sg_0_0: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_ELSE { break sg_0_0; }
                 pos += 1;
-                pos = scan_stmt(tokens, pos, follow, 0);
-                if pos < 0 { break sg_0; }
-                break sg_0_done;
+                pos = scan_stmt(tokens, pos, 0);
+                if pos < 0 { break sg_0_0; }
+                break sg_0;
             }
-            pos = -1;
+            pos = gp_0;
+            sg_0_1: {
+                break sg_0;
+            }
+            pos = gp_0;
         }
-        if pos < 0 { pos = sp; }
     }
     return pos;
 }
 
-fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_s__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
-    let stmt = _parse_stmt(p, &FOLLOW_MASK_0);
+    let stmt = _parse_stmt(p);
     let eof = p.expect(TK_EOF, &EMPTY_SYNC);
     return;
 }
 
-fn _parse_s(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_s(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_S, _start);
-    _parse_s__inner(p, follow);
+    _parse_s__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("s");
     }
 }
 
-fn _parse_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_stmt__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_LIT_IF {
-        let if_stmt = _parse_if_stmt(p, follow);
+        let if_stmt = _parse_if_stmt(p);
         return;
     }
     if kind == TK_ID {
@@ -1905,34 +1915,36 @@ fn _parse_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     return;
 }
 
-fn _parse_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_stmt(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_STMT, _start);
-    _parse_stmt__inner(p, follow);
+    _parse_stmt__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("stmt");
     }
 }
 
-fn _parse_if_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_if_stmt__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     let lit_if = p.expect(TK_LIT_IF, &SYNC_0);
     let id = p.expect(TK_ID, &SYNC_1);
-    let stmt = _parse_stmt(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_ELSE) {
+    let stmt = _parse_stmt(p);
+    let grp_kind = p.peek_kind();
+    if grp_kind == TK_LIT_ELSE {
         let lit_else = p.expect(TK_LIT_ELSE, &SYNC_1);
-        let stmt = _parse_stmt(p, follow);
+        let stmt = _parse_stmt(p);
+    } else if true {
     }
     return;
 }
 
-fn _parse_if_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_if_stmt(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_IFSTMT, _start);
-    _parse_if_stmt__inner(p, follow);
+    _parse_if_stmt__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("ifStmt");
@@ -1953,7 +1965,7 @@ fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> 
             p.diagnostics.push(d);
         }
     }
-    return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics, output: p.output };
 }
 
 pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
@@ -1971,6 +1983,16 @@ pub fn parse_stmt(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 pub fn parse_if_stmt(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_if_stmt(p));
 }
+
+fn _ctx_token_names() -> List<String> {
+    let mut v: List<String> = List::with_capacity(7);
+    for let mut k = 0; k < 7; k += 1 {
+        v.push(token_kind_name(k));
+    }
+    return v;
+}
+
+global CTX_TOKEN_NAMES: List<String> = _ctx_token_names();
 
 pub fn to_string_tree(result: &ParseResult) -> String {
     let mut token_names: List<String> = List::with_capacity(7);
@@ -2002,6 +2024,4 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_ID];
 global SYNC_1: List<i32> = [TK_ID, TK_LIT_IF];
-
-global FOLLOW_MASK_0: List<List<i32>> = [[TK_EOF]];
 
