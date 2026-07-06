@@ -1516,6 +1516,13 @@ impl ImportAttributes {
         self.get_str("integrity")
     }
 
+    /// Inline registry override for a single-file dependency source
+    /// (`with { registry: "oci://…" }`).
+    #[must_use]
+    pub fn registry(&self) -> Option<String> {
+        self.get_str("registry")
+    }
+
     #[must_use]
     pub fn type_hint(&self) -> Option<String> {
         self.get_str("type")

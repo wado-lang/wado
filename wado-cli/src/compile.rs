@@ -548,7 +548,8 @@ pub async fn try_compile_with_kiln_cache(
         None => base_host,
     };
     let host =
-        attach_manifest_and_component_deps(base_host, manifest_pair.as_ref(), &base_path).await?;
+        attach_manifest_and_component_deps(base_host, manifest_pair.as_ref(), &base_path, &source)
+            .await?;
 
     let pipeline_outcome =
         match maybe_run_pipeline(path, &host, flags.no_cache, manifest_pair).await {
@@ -611,39 +612,69 @@ pub(crate) fn attach_manifest_deps(
     }
 }
 
-/// Like [`attach_manifest_deps`], plus fetching registry `[dependencies]` as
+/// Like [`attach_manifest_deps`], plus fetching registry dependencies as
 /// prebuilt components and adding them to the index so `use { X } from "ns:pkg"`
-/// resolves across the CM boundary. Async because the fetch hits the registry;
-/// used by the compile/run path (`check`/`query` stay on the sync path-dep
-/// index). A fetch failure aborts the compile.
+/// resolves across the CM boundary. Two sources feed the component map: a
+/// manifest `[dependencies]` table entry (resolved via `wado.lock`) and a
+/// single-file inline `use … from "ns:pkg@ver" with { registry }` clause parsed
+/// from `entry_source`. Async because the fetch hits the registry; used by the
+/// compile/run path (`check`/`query` stay on the sync path-dep index). A fetch
+/// failure aborts the compile.
 async fn attach_manifest_and_component_deps(
     base_host: FilesystemCompilerHost,
     project: Option<&manifest::ProjectManifest>,
     base_path: &Path,
+    entry_source: &str,
 ) -> Result<FilesystemCompilerHost, wado_compiler::CompileFailure> {
-    let Some(project) = project else {
-        return Ok(base_host);
+    let mut index = match project {
+        Some(project) => {
+            wado_lsp::host::dependency_index_from(&project.manifest, &project.root, base_path)
+        }
+        None => wado_compiler::DependencyIndex::default(),
     };
-    let mut index =
-        wado_lsp::host::dependency_index_from(&project.manifest, &project.root, base_path);
-    let has_registry_dep = project
-        .manifest
-        .dependencies
-        .values()
-        .any(|d| matches!(d.source, wado_manifest::DependencySource::Registry { .. }));
-    if has_registry_dep {
-        match crate::dep_component::fetch_component_dependencies(&project.manifest, &project.root)
+
+    let abort = || wado_compiler::CompileFailure {
+        is_todo_module: false,
+    };
+
+    if let Some(project) = project {
+        let has_registry_dep = project
+            .manifest
+            .dependencies
+            .values()
+            .any(|d| matches!(d.source, wado_manifest::DependencySource::Registry { .. }));
+        if has_registry_dep {
+            match crate::dep_component::fetch_component_dependencies(
+                &project.manifest,
+                &project.root,
+            )
             .await
-        {
-            Ok(components) => index.components = components.into_iter().collect(),
-            Err(e) => {
-                eprintln!("Error fetching component dependencies: {e}");
-                return Err(wado_compiler::CompileFailure {
-                    is_todo_module: false,
-                });
+            {
+                Ok(components) => index.components.extend(components),
+                Err(e) => {
+                    eprintln!("Error fetching component dependencies: {e}");
+                    return Err(abort());
+                }
             }
         }
     }
+
+    let manifest = project.map(|p| &p.manifest);
+    let cache_dir = project.map_or(base_path, |p| p.root.as_path());
+    match crate::dep_component::fetch_inline_component_dependencies(
+        entry_source,
+        manifest,
+        cache_dir,
+    )
+    .await
+    {
+        Ok(components) => index.components.extend(components),
+        Err(e) => {
+            eprintln!("Error fetching component dependencies: {e}");
+            return Err(abort());
+        }
+    }
+
     Ok(base_host.with_dependency_index(index))
 }
 

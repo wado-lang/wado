@@ -217,11 +217,15 @@ conflict errors, once real registries make multi-constraint graphs common.
 ### Phase 8 — Remaining WEP surface
 
 - [~] Single-file `with { … }` inline dependency source (no `wado.toml`). Done
-      for Kiln generators: `generator: { module, version, registry }` supplies a
-      registry generator's source inline, so a single `.wado` file consumes a
-      published generator with no manifest (Kiln WEP "Single-file mode: inline
-      generator source"). Regular `use ... from "lib:x" with { git = … }`
-      dependency sources are still pending.
+  for Kiln generators: `generator: { module, version, registry }` supplies a
+  registry generator's source inline, so a single `.wado` file consumes a
+  published generator with no manifest (Kiln WEP "Single-file mode: inline
+  generator source"). Done for registry library components:
+  `use { X } from "ns:pkg@ver" with { registry }` fetches the prebuilt
+  component inline (exact pin, no lock), keyed by the verbatim specifier;
+  an inline `with` for a coordinate also in `[dependencies]` is rejected as
+  mutually exclusive. `with { git = … }` and `lib:` inline sources are still
+  pending.
 - [ ] Workspace publish/resolve edge cases beyond what `publish` covers.
 - [ ] `wado.lock` integrity extensibility (algorithm prefix already in schema).
 
