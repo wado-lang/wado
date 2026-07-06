@@ -1037,6 +1037,11 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     /// Wasm asset imports queued by `load_implicit_modules` (sync method);
     /// drained by `load_all` after that runs so the async fetch can happen.
     pending_implicit_wasm_imports: Vec<(ModuleSource, WasmAssetKind, crate::ast::UseDecl)>,
+    /// Registry-component imports discovered during `collect_imports`: a
+    /// coordinate `use { X } from "ns:pkg"` resolved to an already-materialized
+    /// [`ModuleSource::Wasm`] via the dependency index. Drained like
+    /// `pending_implicit_wasm_imports`, but from the resolved source directly.
+    pending_component_imports: Vec<(ModuleSource, WasmAssetKind)>,
     /// The entry module source (for dedup when sub-modules import back to entry)
     entry_module_source: Option<ModuleSource>,
     /// Canonical name of the entry module (e.g., "./`cross_module_type_identity.wado`")
@@ -1067,6 +1072,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             wasm_assets: IndexMap::default(),
             loaded_wasm_namespaces: IndexSet::default(),
             pending_implicit_wasm_imports: Vec::new(),
+            pending_component_imports: Vec::new(),
             entry_module_source: None,
             entry_canonical_name: None,
             entry_dir: String::new(),
@@ -1245,6 +1251,13 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             self.handle_wasm_import(&from_ms, kind, &use_decl).await?;
         }
 
+        // Load registry-component dependencies resolved from a coordinate `use`
+        // (already-materialized `.wasm` paths from the dependency index).
+        let components = std::mem::take(&mut self.pending_component_imports);
+        for (source, kind) in components {
+            self.handle_wasm_source(source, kind).await?;
+        }
+
         // Collect and load files referenced by #include_str / #include_bytes
         let included_files = {
             let _span = self.logger.span("load/included_files");
@@ -1283,6 +1296,13 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     continue;
                 }
                 let resolved = self.resolve_import(from_module_source, &use_decl.source)?;
+                // A coordinate resolving to a prebuilt component (registry
+                // dependency) loads across the CM boundary, not as Wado source.
+                if let ModuleSource::Wasm { kind, .. } = &resolved {
+                    let kind = *kind;
+                    self.pending_component_imports.push((resolved, kind));
+                    continue;
+                }
                 if matches!(&resolved, ModuleSource::Local { path } if is_non_wado_schema(path))
                     && use_decl
                         .attributes
@@ -1318,6 +1338,18 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // named form's items are resolved against the synthesized Wado
         // module produced below.
 
+        self.handle_wasm_source(source, kind).await
+    }
+
+    /// Load a wasm asset from an already-resolved [`ModuleSource::Wasm`] — the
+    /// shared body of [`Self::handle_wasm_import`], reused for a registry
+    /// component dependency whose `.wasm` path is resolved from the dependency
+    /// index rather than a `with { type: "wasm" }` clause.
+    async fn handle_wasm_source(
+        &mut self,
+        source: ModuleSource,
+        kind: WasmAssetKind,
+    ) -> Result<(), LoadError> {
         let namespace = source
             .wasm_canonical_namespace()
             .expect("ModuleSource::Wasm always yields a namespace");
@@ -1633,6 +1665,12 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         if !matches!(from_module_source, ModuleSource::Dependency { .. }) {
             if let Some(dep) = self.interner.resolve_dependency(import_source) {
                 return Ok(dep);
+            }
+            // A registry dependency is a prebuilt component: resolve to a
+            // `Wasm` source pointing at its fetched `.wasm`, imported across the
+            // CM boundary like a `with { type: "wasm" }` asset.
+            if let Some(component) = self.interner.resolve_component_dependency(import_source) {
+                return Ok(component);
             }
             // Declared but unresolvable (e.g. missing `[package].lib`): report
             // why, instead of a generic "invalid module path".

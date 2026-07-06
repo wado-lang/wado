@@ -3,12 +3,11 @@
 //! Resolves the dependency graph (like `wado update`, but without rewriting the
 //! lock) and pulls each registry package's Component Model artifact.
 //!
-//! Bridge note: a registry dependency is a prebuilt component, but the compiler
-//! cannot yet resolve a `use … from "ns:pkg"` import to a fetched component
-//! (Phase 4). Until then a project imports the component as a local wasm asset
-//! (`from "./build/<name>.wasm" with { type: "wasm" }`), so `fetch` writes each
-//! component to `<root>/build/<name>.wasm`. Once import resolution lands, this
-//! moves to the shared `~/wado` cache.
+//! A registry dependency is a prebuilt component. At compile time the compiler
+//! resolves `use … from "ns:pkg"` to a fetched component and composes it in
+//! (see `dep_component`, which caches under `<root>/build/deps/`). `wado fetch`
+//! is a warm-the-cache convenience that pulls every component ahead of the
+//! build, writing each to `<root>/build/<name>.wasm`.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -123,7 +122,7 @@ async fn fetch_generators(
 
 /// Split a registry lock id `registry+<url>/<ns>:<pkg>` into its registry URL,
 /// `ns:pkg` coordinate, and bare package name. Non-registry ids yield `None`.
-fn split_registry_id(id: &str) -> Option<(&str, &str, &str)> {
+pub(crate) fn split_registry_id(id: &str) -> Option<(&str, &str, &str)> {
     let rest = id.strip_prefix("registry+")?;
     let (registry_url, coordinate) = rest.rsplit_once('/')?;
     let (_namespace, name) = coordinate.split_once(':')?;

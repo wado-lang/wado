@@ -1,12 +1,13 @@
 // A tour of package dependencies:
 //   - wado-lang:cm-catalog — a library component fetched from an OCI registry
-//     by `wado fetch` and imported here as a local wasm asset.
+//     and imported directly by its coordinate, resolved across the Component
+//     Model boundary (the compiler fetches the component and composes it in).
 //   - gale — a Kiln generator that turns `Calc.g4` into a parser at compile
 //     time. Consumed from the registry via the `[build-dependencies]` entry
 //     `wado-lang:gale` (the published `core:kiln/generator` world).
 
 use { println, Stdout } from "core:cli";
-use { CmCatalog } from "../build/cm-catalog.wasm" with { type: "wasm" };
+use { CmCatalog } from "wado-lang:cm-catalog";
 use calc from "./Calc.g4"
     with {
         generator: {

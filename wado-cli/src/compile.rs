@@ -547,7 +547,8 @@ pub async fn try_compile_with_kiln_cache(
         Some(cache) => base_host.with_shared_kiln_cache(cache),
         None => base_host,
     };
-    let host = attach_manifest_deps(base_host, manifest_pair.as_ref(), &base_path);
+    let host =
+        attach_manifest_and_component_deps(base_host, manifest_pair.as_ref(), &base_path).await?;
 
     let pipeline_outcome =
         match maybe_run_pipeline(path, &host, flags.no_cache, manifest_pair).await {
@@ -608,6 +609,42 @@ pub(crate) fn attach_manifest_deps(
         )),
         None => host,
     }
+}
+
+/// Like [`attach_manifest_deps`], plus fetching registry `[dependencies]` as
+/// prebuilt components and adding them to the index so `use { X } from "ns:pkg"`
+/// resolves across the CM boundary. Async because the fetch hits the registry;
+/// used by the compile/run path (`check`/`query` stay on the sync path-dep
+/// index). A fetch failure aborts the compile.
+async fn attach_manifest_and_component_deps(
+    base_host: FilesystemCompilerHost,
+    project: Option<&manifest::ProjectManifest>,
+    base_path: &Path,
+) -> Result<FilesystemCompilerHost, wado_compiler::CompileFailure> {
+    let Some(project) = project else {
+        return Ok(base_host);
+    };
+    let mut index =
+        wado_lsp::host::dependency_index_from(&project.manifest, &project.root, base_path);
+    let has_registry_dep = project
+        .manifest
+        .dependencies
+        .values()
+        .any(|d| matches!(d.source, wado_manifest::DependencySource::Registry { .. }));
+    if has_registry_dep {
+        match crate::dep_component::fetch_component_dependencies(&project.manifest, &project.root)
+            .await
+        {
+            Ok(components) => index.components = components.into_iter().collect(),
+            Err(e) => {
+                eprintln!("Error fetching component dependencies: {e}");
+                return Err(wado_compiler::CompileFailure {
+                    is_todo_module: false,
+                });
+            }
+        }
+    }
+    Ok(base_host.with_dependency_index(index))
 }
 
 /// Collect inline `with { generator: { ... } }` clauses from `entry_file`
