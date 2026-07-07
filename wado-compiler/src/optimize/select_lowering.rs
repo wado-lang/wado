@@ -75,11 +75,9 @@ impl Rule for SelectLoweringRule<'_> {
         if result_type == TypeTable::UNIT {
             return false;
         }
-        // Branchless `select` is a win only for scalars. An identity-carrying
-        // result (an aggregate or reference) would make the `select` return one
-        // of its operands, aliasing that arm's live storage — so a later mutation
-        // of the source would corrupt the bound value. Leave such an `if` alone;
-        // the normal lowering deep-copies the chosen arm.
+        // A `select` returns one of its operands. For a deep-copied result that
+        // aliases the chosen arm's live storage, so lower only scalar results;
+        // the normal `if` lowering copies the arm.
         if needs_value_copy(result_type, self.type_table) {
             return false;
         }

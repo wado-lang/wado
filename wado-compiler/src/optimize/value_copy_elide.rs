@@ -340,9 +340,8 @@ fn is_value_copy_call(body: &Body, expr: ExprId, value_copy_ids: &IndexSet<FuncI
 /// `None` when no local root is reachable — a call result, a constant, or a
 /// bare literal. `None` does *not* by itself mean "fresh": an accessor call such
 /// as `container.index_value(i)` also returns `None` yet aliases the container's
-/// element. Callers gate on it accordingly — the call-argument path confirms
-/// freshness through `EscapeMap::rvalue_is_fresh`; the binding path additionally
-/// refuses composite value expressions via `yields_subexpression`.
+/// element, so callers pair it with a freshness gate (`EscapeMap::rvalue_is_fresh`
+/// or `yields_subexpression`).
 fn arg_source_root(body: &Body, expr: ExprId) -> Option<u32> {
     match &body.exprs[expr].kind {
         ExprKind::Local { index, .. } => Some(*index),
@@ -416,42 +415,26 @@ fn copy_source_strippable(
     let Some(arg) = args.first() else {
         return false;
     };
-    if arg
-        .expr
-        .as_expr()
-        .is_some_and(|e| reads_through_deref(body, e))
-    {
+    let src = arg.expr.as_expr();
+    if src.is_some_and(|e| reads_through_deref(body, e)) {
         return false;
     }
-    // A promoted `Operand::Value` arg is a constant — uniquely owned, no root.
-    match arg.expr.as_expr().and_then(|e| arg_source_root(body, e)) {
+    match src.and_then(|e| arg_source_root(body, e)) {
         Some(root) => match usage.get(&root) {
             Some(u) => !u.is_assigned() && !u.has_field_mutation,
             None => true,
         },
-        // No local root. A composite value expression yields the value of one of
-        // its sub-expressions, which may be a live local it aliases rather than
-        // uniquely owns, so its copy must stay. Every other rootless source (a
-        // promoted constant, a global read, a fresh construction, a fresh-returning
-        // call) is safe to alias.
-        None => !arg
-            .expr
-            .as_expr()
-            .is_some_and(|e| yields_subexpression(body, e)),
+        None => src.is_none_or(|e| !yields_subexpression(body, e)),
     }
 }
 
-/// Whether `e` selects its value from one of several arms (`if` / `match`),
-/// which may be a live local it aliases rather than uniquely owns — so a
-/// read-only binding of such a rootless source must keep its copy. A `block` /
-/// labeled-block is excluded: its value is its single tail/break expression,
-/// whose own freshness is already recovered (a fresh tail is const-promoted and
-/// elided; blocking it would keep redundant copies of constant literals).
+/// Whether `e` takes its value from one of several arms (`if` / `match`) that
+/// may be a live local, so a read-only binding of this rootless source must keep
+/// its copy rather than alias the arm. A `block` / labeled-block is excluded: a
+/// fresh single tail value is const-promoted and elided, so blocking it would
+/// only keep redundant copies of constants.
 fn yields_subexpression(body: &Body, e: ExprId) -> bool {
-    matches!(
-        body.exprs[e].kind,
-        ExprKind::If { .. } | ExprKind::Match { .. }
-    )
+    matches!(body.exprs[e].kind, ExprKind::If { .. } | ExprKind::Match { .. })
 }
 
 /// Check whether `value` is a `$value_copy$T(arg)` call whose wrapper can be
@@ -664,10 +647,8 @@ impl ValueCopyElideRule<'_> {
                 continue;
             }
             let root = arg_source_root(body, ae);
-            // A fresh, uniquely owned arg is a no-op copy regardless of the
-            // callee, but `collect_fresh_copies` already collects those (via the
-            // stronger interprocedural `escape.rvalue_is_fresh`), so this scan
-            // only needs the two escape-aware grounds.
+            // A fresh arg is stripped by `collect_fresh_copies` instead; this scan
+            // needs only the two escape-aware grounds.
             //
             // Move: `root` is a parameter used only here, so this copy is its
             // last use of a value the frame uniquely owns.

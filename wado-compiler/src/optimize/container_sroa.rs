@@ -736,9 +736,8 @@ fn recognize_init_operand(
 }
 
 /// Strip a single `$value_copy$T(inner)` wrapper, returning its inner
-/// expression, or `None` when `e` is not a one-argument value-copy call. The one
-/// place that recognizes the wrapper shape, shared by every SROA site that sees
-/// through a value copy.
+/// expression, or `None` when `e` is not a one-argument value-copy call. Shared
+/// by every SROA site that sees through a value copy.
 fn strip_one_value_copy(
     body: &Body,
     e: ExprId,
@@ -747,7 +746,11 @@ fn strip_one_value_copy(
     let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
         return None;
     };
-    (value_copy_ids.contains(func_id) && args.len() == 1).then(|| args[0].expr.as_expr())?
+    if value_copy_ids.contains(func_id) && args.len() == 1 {
+        args[0].expr.as_expr()
+    } else {
+        None
+    }
 }
 
 /// Peel `$value_copy$T(inner)` wrappers, returning the innermost expression. A
