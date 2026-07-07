@@ -674,8 +674,10 @@ fn function_result_is_fresh(
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Stmt(s) = node
-            && let StmtKind::Return { value: Some(op) } | StmtKind::Break { value: Some(op), .. } =
-                &body.stmts[s].kind
+            && let StmtKind::Return { value: Some(op) }
+            | StmtKind::Break {
+                value: Some(op), ..
+            } = &body.stmts[s].kind
             && !operand_is_fresh(body, *op, fresh_locals, type_table, array_get, call_fresh)
         {
             return false;
@@ -737,9 +739,8 @@ fn expr_is_fresh(
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
             .iter()
             .all(|el| operand_is_fresh(body, *el, fresh, type_table, array_get, call_fresh)),
-        ExprKind::VariantConstruct { payload, .. } => {
-            payload.is_none_or(|p| operand_is_fresh(body, p, fresh, type_table, array_get, call_fresh))
-        }
+        ExprKind::VariantConstruct { payload, .. } => payload
+            .is_none_or(|p| operand_is_fresh(body, p, fresh, type_table, array_get, call_fresh)),
         // The array element read aliases its container only when the element
         // carries identity; a primitive element is returned by value. The
         // concrete element type is this call expression's own type.
@@ -749,12 +750,15 @@ fn expr_is_fresh(
             !carries_identity(body.exprs[e].type_id, type_table)
         }
         // The callee's result aliases no argument (or it is a copy helper).
-        ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => call_fresh(*func_id),
+        ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => {
+            call_fresh(*func_id)
+        }
         // A match yields fresh iff every value-producing arm does. When the
         // scrutinee is fresh, an arm's pattern bindings destructure unaliased
         // data and are fresh too.
         ExprKind::Match { expr: scrut, arms } => {
-            let scrut_fresh = operand_is_fresh(body, *scrut, fresh, type_table, array_get, call_fresh);
+            let scrut_fresh =
+                operand_is_fresh(body, *scrut, fresh, type_table, array_get, call_fresh);
             arms.iter().all(|arm| {
                 // A diverging arm (`=> return …`) is `Never`-typed, yields no value.
                 if arm
@@ -768,7 +772,9 @@ fn expr_is_fresh(
                 if scrut_fresh {
                     collect_pattern_bindings(body, arm.pattern, &mut arm_fresh);
                 }
-                operand_is_fresh(body, arm.body, &arm_fresh, type_table, array_get, call_fresh)
+                operand_is_fresh(
+                    body, arm.body, &arm_fresh, type_table, array_get, call_fresh,
+                )
             })
         }
         _ => false,
