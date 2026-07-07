@@ -155,33 +155,22 @@ pub(super) fn analyze_param_escape(
         }
     }
 
-    // The element-read builtin whose result aliases its container; every other
-    // builtin allocates or computes a fresh result.
-    let mut array_get = IndexSet::default();
+    // Least fixpoint over "the function returns a fresh value": a copy helper
+    // clones; a builtin is fresh unless it reads storage aliased into a
+    // reference argument (see `builtin_result_is_fresh`); a body function is
+    // fresh when every return operand is fresh given the freshness of the callees
+    // it returns. Start with the always-fresh callees and grow.
+    let mut fresh_result: IndexSet<FuncId> = IndexSet::default();
     for func in &project.functions {
         let func = func.borrow();
-        if let Some(id) = func.id
-            && kinds.get(&id) == Some(&Kind::Builtin)
-            && func.name == "array_get"
-        {
-            array_get.insert(id);
-        }
-    }
-
-    // Least fixpoint over "the function returns a fresh value": a copy helper
-    // clones; a builtin allocates (except `array_get`); a body function is fresh
-    // when every return operand is fresh given the freshness of the callees it
-    // returns. Start with the always-fresh callees and grow.
-    let mut fresh_result: IndexSet<FuncId> = IndexSet::default();
-    for (&id, &kind) in &kinds {
-        match kind {
-            Kind::ValueCopy => {
-                fresh_result.insert(id);
-            }
-            Kind::Builtin if !array_get.contains(&id) => {
-                fresh_result.insert(id);
-            }
-            _ => {}
+        let Some(id) = func.id else { continue };
+        let fresh = match kinds.get(&id) {
+            Some(Kind::ValueCopy) => true,
+            Some(Kind::Builtin) => builtin_result_is_fresh(&func.name),
+            _ => false,
+        };
+        if fresh {
+            fresh_result.insert(id);
         }
     }
     let mut changed = true;
@@ -692,8 +681,10 @@ fn operand_is_fresh(
 /// construction, a copy clone, a call whose result aliases no argument, a `fresh`
 /// local, or a match all of whose arms yield fresh values. `fresh` grows through
 /// a match with a fresh scrutinee, whose pattern bindings destructure unaliased
-/// data. Projections, deref, cast, and unrecognized shapes are not fresh —
-/// mirrors `lower::plan::value_copy::analyze::is_fresh_in_context` at NIR level.
+/// data. Projections, deref, cast, blocks, and unrecognized shapes stay
+/// conservative (not fresh) — this is the NIR recovery counterpart of
+/// `lower::plan::value_copy::analyze::is_fresh_in_context`, using the
+/// interprocedural `call_fresh` the insertion side lacks.
 fn expr_is_fresh(
     body: &Body,
     e: ExprId,
@@ -773,6 +764,18 @@ fn collect_pattern_bindings(body: &Body, pat: crate::nir_arena::PatId, out: &mut
 fn union(mut a: Taint, b: Taint) -> Taint {
     a.extend(b);
     a
+}
+
+/// Whether a bodyless builtin returns a genuinely fresh value. A builtin has no
+/// body to analyze, so its aliasing is modelled here. Almost every builtin
+/// allocates or computes a fresh result; the sole exception is the array element
+/// read, whose result is storage aliased into its container argument. A
+/// primitive-element read is technically fresh (the element is returned by
+/// value), but a primitive never carries a `value_copy` to strip, so there is
+/// nothing to gain from distinguishing it — and a builtin's `return_type` is the
+/// unsubstituted generic `T`, so the element type is not available here anyway.
+fn builtin_result_is_fresh(name: &str) -> bool {
+    name != "array_get"
 }
 
 /// Whether a value of `type_id` can carry another value's identity: an
