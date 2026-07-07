@@ -117,9 +117,10 @@ pub(super) fn run_peephole(
         // set.
         let value_copy_usage = (pre_inline && !func.is_value_copy() && !value_copy_ids.is_empty())
             .then(|| {
-                func.body.as_ref().zip(receiver_mut.as_ref()).map(|(b, rm)| {
-                    build_usage(b, &type_table, rm)
-                })
+                func.body
+                    .as_ref()
+                    .zip(receiver_mut.as_ref())
+                    .map(|(b, rm)| build_usage(b, &type_table, rm))
             })
             .flatten();
         let n_params = func.params.len() as u32;

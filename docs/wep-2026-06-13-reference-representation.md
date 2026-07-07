@@ -207,7 +207,7 @@ fix to conform; none should be preserved.
       type in the `analyze` walker and re-requesting the copy explicitly at the
       expansion site (`skip_value_copy = false` lets `value_copy_elide` drop it
       again when the source is unmutated, so `*xs = []`/literal cases stay free).
-      Note: a *separate* pre-existing gap remains — a tuple literal does not copy
+      Note: a _separate_ pre-existing gap remains — a tuple literal does not copy
       its element variables (`a = [inner, 1]; inner[0] = 9` mutates `a.0`), which
       is tuple-literal construction, not deref-assign, and is out of scope here.
 

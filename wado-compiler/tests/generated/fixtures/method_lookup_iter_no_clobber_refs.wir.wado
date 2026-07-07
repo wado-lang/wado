@@ -213,18 +213,16 @@ fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
 }
 
 fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }
@@ -399,8 +397,10 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 fn "wado-compiler/tests/fixtures/method_lookup_iter_no_clobber_refs.wado/P::sum_excluded"(self, excluded) {
     let total: i32;
     let __iter_3: ref "core:prelude/slice.wado//ArrayIter<i32>";
+    let v: ref "core:prelude/slice.wado//ArrayIter<i32>";
     total = 0;
-    __iter_3 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: excluded.repr, index: 0, end: excluded.used };
+    v = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: excluded.repr, index: 0, end: excluded.used };
+    __iter_3 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: v.repr, index: 0, end: v.end };
     b22: block {
         l23: loop {
             let __sroa___match_5_discriminant: i32;

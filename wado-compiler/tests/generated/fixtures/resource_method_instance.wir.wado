@@ -153,6 +153,7 @@ fn "wado-compiler/tests/fixtures/resource_method_instance.wado/__cm_binding__Tcp
     let ptr: i32;
     let len_9: i32;
     let arr: ref Array<u8>;
+    let bytes: ref Array<u8>;
     __outptr = "mem/realloc"(0, 0, 4, 20);
     "wasi/wasi:sockets/TcpSocket::create"(address_family, __outptr);
     __disc_2 = builtin::load_u8(__outptr);
@@ -194,7 +195,7 @@ fn "wado-compiler/tests/fixtures/resource_method_instance.wado/__cm_binding__Tcp
             __disc_6 = builtin::load_u8((__outptr + 4) + 4);
             __option_result = ref.null none;
             if __disc_6 != 0 {
-                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_9 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_9); struct.new "core:prelude/string.wado//String" { repr: arr, used: len_9 });
+                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_9 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_9); bytes = builtin::array_clone<u8>(arr); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(bytes)), used: len_9 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
             }
             __vresult = struct.new "wasi:sockets/types.wado//ErrorCode::Other" { discriminant: 14, payload_0: __option_result };
@@ -217,18 +218,16 @@ fn "wado-compiler/tests/fixtures/resource_method_instance.wado/__cm_export__run"
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }

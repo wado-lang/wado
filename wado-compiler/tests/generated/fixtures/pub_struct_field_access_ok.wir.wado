@@ -103,23 +103,23 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:__modules_initialized: bool = 0;
-global mut global:__const_obj_0: ref null "./sub/pub_struct_field_module.wado//Config" = ref.null none;
 
 fn "wado-compiler/tests/fixtures/pub_struct_field_access_ok.wado/run"() with Stdout {
+    let c_0: ref "./sub/pub_struct_field_module.wado//Config";
     let s: i32;
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
-    let name: ref "core:prelude/string.wado//String";
+    let __sroa_name_repr: ref Array<u8>;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-    global:__const_obj_0 = struct.new "./sub/pub_struct_field_module.wado//Config" { name: name, secret: 42 };
-    "core:cli/println"(global:__const_obj_0.name);
-    s = global:__const_obj_0.secret;
+    __sroa_name_repr = array.new_data<u8>("hello");
+    c_0 = struct.new "./sub/pub_struct_field_module.wado//Config" { name: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__sroa_name_repr)), used: 5 }, secret: 42 };
+    "core:cli/println"(c_0.name);
+    s = c_0.secret;
     "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(s, __local_3); __local_2);
 }
 
@@ -139,18 +139,16 @@ fn "wado-compiler/tests/fixtures/pub_struct_field_access_ok.wado/__cm_export__ru
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }

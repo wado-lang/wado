@@ -107,16 +107,16 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:__modules_initialized: bool = 0;
-global mut global:__const_obj_0: ref null "./sub/wasm_name_conflict_method_mod_b.wado//ContainerB" = ref.null none;
 
 fn "wado-compiler/tests/fixtures/wasm_name_conflict_method.wado/run"() with Stdout {
+    let cb: ref "./sub/wasm_name_conflict_method_mod_b.wado//ContainerB";
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let self_14: i32;
-    let n: ref "core:prelude/string.wado//String";
-    let self_18: ref "./sub/wasm_name_conflict_method_mod_b.wado//Config";
+    let self_19: ref "./sub/wasm_name_conflict_method_mod_b.wado//Config";
+    let __sroa_n_repr: ref Array<u8>;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -124,10 +124,10 @@ fn "wado-compiler/tests/fixtures/wasm_name_conflict_method.wado/run"() with Stdo
         global:__modules_initialized = 1;
     };
     "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 }; "core:prelude/string.wado/String::push"(__local_4, 97); "core:prelude/string.wado/String::push"(__local_4, 58); "core:prelude/string.wado/String::push"(__local_4, 32); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; self_14 = 42; "core:prelude/primitive.wado/i32::fmt_decimal"(42, __local_5); __local_4);
-    n = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-    global:__const_obj_0 = struct.new "./sub/wasm_name_conflict_method_mod_b.wado//ContainerB" { config: struct.new "./sub/wasm_name_conflict_method_mod_b.wado//Config" { name: n, count: 7 } };
-    self_18 = global:__const_obj_0.config;
-    "core:cli/println"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 }; "core:prelude/string.wado/String::push"(__local_6, 98); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, self_18.name); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; "core:prelude/primitive.wado/i32::fmt_decimal"(self_18.count, __local_7); __local_6);
+    __sroa_n_repr = array.new_data<u8>("hello");
+    cb = struct.new "./sub/wasm_name_conflict_method_mod_b.wado//ContainerB" { config: struct.new "./sub/wasm_name_conflict_method_mod_b.wado//Config" { name: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__sroa_n_repr)), used: 5 }, count: 7 } };
+    self_19 = cb.config;
+    "core:cli/println"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 }; "core:prelude/string.wado/String::push"(__local_6, 98); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, self_19.name); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; "core:prelude/primitive.wado/i32::fmt_decimal"(self_19.count, __local_7); __local_6);
 }
 
 fn "wado-compiler/tests/fixtures/wasm_name_conflict_method.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -146,18 +146,16 @@ fn "wado-compiler/tests/fixtures/wasm_name_conflict_method.wado/__cm_export__run
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }

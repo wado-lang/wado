@@ -363,18 +363,16 @@ fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
 }
 
 fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }
@@ -687,16 +685,18 @@ fn "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_3::__c
 
 fn "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_4::__call"(self) {
     let __iter_0: ref "core:prelude/slice.wado//ArrayIter<i32>";
-    let _licm___capture_1_8: ref "core:prelude/types.wado//Box<i32>";
-    __iter_0 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: self.__capture_0.repr, index: 0, end: self.__capture_0.used };
-    _licm___capture_1_8 = self.__capture_1;
+    let v: ref "core:prelude/slice.wado//ArrayIter<i32>";
+    let _licm___capture_1_9: ref "core:prelude/types.wado//Box<i32>";
+    v = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: self.__capture_0.repr, index: 0, end: self.__capture_0.used };
+    __iter_0 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: v.repr, index: 0, end: v.end };
+    _licm___capture_1_9 = self.__capture_1;
     b49: block {
         l50: loop {
             let __sroa___match_3_discriminant: i32;
             let __sroa___match_3_payload_0: i32;
             multivalue_bind [__sroa___match_3_discriminant, __sroa___match_3_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(__iter_0);
             if __sroa___match_3_discriminant == 0 {
-                _licm___capture_1_8.value = _licm___capture_1_8.value + __sroa___match_3_payload_0;
+                _licm___capture_1_9.value = _licm___capture_1_9.value + __sroa___match_3_payload_0;
             } else {
                 break b49;
             }

@@ -160,16 +160,18 @@ fn "wado-compiler/tests/fixtures/opt_sroa_variant_return_embedded_err_return.wad
     let have_a: bool;
     let __iter_4: ref "core:prelude/slice.wado//ArrayRefIter<wado-compiler/tests/fixtures/opt_sroa_variant_return_embedded_err_return.wado/Tree>";
     let child: ref "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/opt_sroa_variant_return_embedded_err_return.wado/Tree>";
-    let v: i64;
+    let v_6: i64;
     let __qm_v: i64;
     let __qm_e: ref "core:prelude/string.wado//String";
     let x: i64;
     let __match_10: ref null "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/opt_sroa_variant_return_embedded_err_return.wado/Tree>";
     let __local_11: ref "wado-compiler/tests/fixtures/opt_sroa_variant_return_embedded_err_return.wado//Tree";
+    let v_12: ref "core:prelude/slice.wado//ArrayRefIter<wado-compiler/tests/fixtures/opt_sroa_variant_return_embedded_err_return.wado/Tree>";
     a = 0_i64;
     b = 0_i64;
     have_a = 0;
-    __iter_4 = struct.new "core:prelude/slice.wado//ArrayRefIter<wado-compiler/tests/fixtures/opt_sroa_variant_return_embedded_err_return.wado/Tree>" { repr: nodes.repr, index: 0, end: nodes.used };
+    v_12 = struct.new "core:prelude/slice.wado//ArrayRefIter<wado-compiler/tests/fixtures/opt_sroa_variant_return_embedded_err_return.wado/Tree>" { repr: nodes.repr, index: 0, end: nodes.used };
+    __iter_4 = struct.new "core:prelude/slice.wado//ArrayRefIter<wado-compiler/tests/fixtures/opt_sroa_variant_return_embedded_err_return.wado/Tree>" { repr: v_12.repr, index: 0, end: v_12.end };
     b1: block {
         l2: loop {
             __match_10 = "core:prelude/slice.wado/ArrayRefIter<wado-compiler/tests/fixtures/opt_sroa_variant_return_embedded_err_return.wado/Tree>^Iterator::next"(__iter_4);
@@ -177,11 +179,11 @@ fn "wado-compiler/tests/fixtures/opt_sroa_variant_return_embedded_err_return.wad
                 child = ref.as_non_null(__match_10);
                 __local_11 = child.value;
                 if ref.test "wado-compiler/tests/fixtures/opt_sroa_variant_return_embedded_err_return.wado//Tree::Leaf"(__local_11) {
-                    v = ref.cast "wado-compiler/tests/fixtures/opt_sroa_variant_return_embedded_err_return.wado//Tree::Leaf"(__local_11).payload_0;
+                    v_6 = ref.cast "wado-compiler/tests/fixtures/opt_sroa_variant_return_embedded_err_return.wado//Tree::Leaf"(__local_11).payload_0;
                     let __sroa___match_scrut_2_discriminant: i32;
                     let __sroa___match_scrut_2_case0_payload_0: i64;
                     let __sroa___match_scrut_2_case1_payload_0: ref null "core:prelude/string.wado//String";
-                    multivalue_bind [__sroa___match_scrut_2_discriminant, __sroa___match_scrut_2_case0_payload_0, __sroa___match_scrut_2_case1_payload_0] = "wado-compiler/tests/fixtures/opt_sroa_variant_return_embedded_err_return.wado/checked"(v);
+                    multivalue_bind [__sroa___match_scrut_2_discriminant, __sroa___match_scrut_2_case0_payload_0, __sroa___match_scrut_2_case1_payload_0] = "wado-compiler/tests/fixtures/opt_sroa_variant_return_embedded_err_return.wado/checked"(v_6);
                     x = (if @likely(__sroa___match_scrut_2_discriminant == 0) -> i64 {
                         local.tee __qm_v(__sroa___match_scrut_2_case0_payload_0);
                     } else {
@@ -321,18 +323,16 @@ fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
 }
 
 fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }

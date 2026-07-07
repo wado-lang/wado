@@ -229,12 +229,12 @@ fn "wado-compiler/tests/fixtures/for_merged.wado/__test_3_for_let_pattern"() {
     let __local_11: ref "core:prelude/format.wado//Formatter";
     let __local_12: ref "core:prelude/string.wado//String";
     let __local_13: ref "core:prelude/format.wado//Formatter";
-    let self_24: ref "core:prelude/slice.wado//ArrayRefIter<i32>";
-    let repr_26: ref Array<i32>;
+    let self_25: ref "core:prelude/slice.wado//ArrayRefIter<i32>";
+    let repr_27: ref Array<i32>;
     __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
-    self_24 = struct.new "core:prelude/slice.wado//ArrayRefIter<i32>" { repr: __b.repr, index: 0, end: 3 };
-    repr_26 = self_24.repr;
-    iter = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr_26, index: 0, end: 3 };
+    self_25 = struct.new "core:prelude/slice.wado//ArrayRefIter<i32>" { repr: __b.repr, index: 0, end: 3 };
+    repr_27 = self_25.repr;
+    iter = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr_27, index: 0, end: 3 };
     count = 0;
     sum = 0;
     b9: block {
@@ -364,18 +364,16 @@ fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
 }
 
 fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }

@@ -165,18 +165,16 @@ fn "wado-compiler/tests/fixtures/variadic_for_of_generic_method.wado/__cm_export
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }
@@ -246,18 +244,16 @@ fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
 }
 
 fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }
@@ -529,16 +525,18 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 }
 
 fn "wado-compiler/tests/fixtures/variadic_for_of_generic_method.wado/[]<i32,bool>^Addable::value"(self) {
+    let __tuple_2: ref "tuple//[i32, bool]";
     let __sroa_acc_total: i32;
     let __sroa_v_value: bool;
     __sroa_acc_total = 0;
-    __sroa_acc_total = 0 + self.0;
-    __sroa_v_value = self.1;
-    return local.tee __sroa_acc_total(__sroa_acc_total + __inline_bool_Addable__value_3: block -> i32 {
+    __tuple_2 = struct.new "tuple//[i32, bool]" { 0: self.0, 1: self.1 };
+    __sroa_acc_total = 0 + __tuple_2.0;
+    __sroa_v_value = __tuple_2.1;
+    return local.tee __sroa_acc_total(__sroa_acc_total + __inline_bool_Addable__value_4: block -> i32 {
         if __sroa_v_value {
-            break __inline_bool_Addable__value_3: 1;
+            break __inline_bool_Addable__value_4: 1;
         }
-        break __inline_bool_Addable__value_3: 0;
+        break __inline_bool_Addable__value_4: 0;
     });
 }
 

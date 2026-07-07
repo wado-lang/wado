@@ -91,8 +91,8 @@ fn "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__cm_bind
 }
 
 fn "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__cm_export__run"() {
-    let sql: ref "core:prelude/string.wado//String";
     let f: ref "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado//__Closure_2";
+    let __sroa_sql_repr: ref Array<u8>;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -105,26 +105,24 @@ fn "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__cm_expo
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    sql = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("select 1"), used: 8 };
-    f = struct.new "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado//__Closure_2" { __capture_0: sql };
+    __sroa_sql_repr = array.new_data<u8>("select 1");
+    f = struct.new "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado//__Closure_2" { __capture_0: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__sroa_sql_repr)), used: 8 } };
     "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__Closure_2::__call"(f);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
     "wasi/task-return"(0);
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }
@@ -155,18 +153,16 @@ fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
 }
 
 fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }

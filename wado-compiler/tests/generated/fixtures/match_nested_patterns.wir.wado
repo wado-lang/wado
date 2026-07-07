@@ -911,12 +911,12 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/while_let_nested"() 
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let __match_8: ref null "tuple//[i32, i32]";
-    let self_16: ref "core:prelude/slice.wado//ArrayRefIter<[i32,i32]>";
-    let repr_18: ref Array<[i32,i32]>;
+    let self_17: ref "core:prelude/slice.wado//ArrayRefIter<[i32,i32]>";
+    let repr_19: ref Array<[i32,i32]>;
     __b = struct.new "core:prelude//List<[i32,i32]>" { repr: array.new_fixed<ref "tuple//[i32, i32]">(struct.new "tuple//[i32, i32]" { 0: 1, 1: 2 }, struct.new "tuple//[i32, i32]" { 0: 3, 1: 4 }), used: 2 };
-    self_16 = struct.new "core:prelude/slice.wado//ArrayRefIter<[i32,i32]>" { repr: __b.repr, index: 0, end: 2 };
-    repr_18 = self_16.repr;
-    iter = struct.new "core:prelude/slice.wado//ArrayIter<[i32,i32]>" { repr: repr_18, index: 0, end: 2 };
+    self_17 = struct.new "core:prelude/slice.wado//ArrayRefIter<[i32,i32]>" { repr: __b.repr, index: 0, end: 2 };
+    repr_19 = self_17.repr;
+    iter = struct.new "core:prelude/slice.wado//ArrayIter<[i32,i32]>" { repr: repr_19, index: 0, end: 2 };
     sum = 0;
     b52: block {
         l53: loop {
@@ -1002,8 +1002,10 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/for_of_with_nested_m
     let __local_10: ref "core:prelude/string.wado//String";
     let __local_11: ref "core:prelude/format.wado//Formatter";
     let __match_12: ref null "tuple//[wado-compiler/tests/fixtures/match_nested_patterns.wado/Color, i32]";
+    let v: ref "core:prelude/slice.wado//ArrayIter<[wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32]>";
     __b = struct.new "core:prelude//List<[wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32]>" { repr: array.new_fixed<ref "tuple//[wado-compiler/tests/fixtures/match_nested_patterns.wado/Color, i32]">(struct.new "tuple//[wado-compiler/tests/fixtures/match_nested_patterns.wado/Color, i32]" { 0: 0, 1: 1 }, struct.new "tuple//[wado-compiler/tests/fixtures/match_nested_patterns.wado/Color, i32]" { 0: 1, 1: 2 }, struct.new "tuple//[wado-compiler/tests/fixtures/match_nested_patterns.wado/Color, i32]" { 0: 2, 1: 3 }), used: 3 };
-    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<[wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32]>" { repr: __b.repr, index: 0, end: 3 };
+    v = struct.new "core:prelude/slice.wado//ArrayIter<[wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32]>" { repr: __b.repr, index: 0, end: 3 };
+    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<[wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32]>" { repr: v.repr, index: 0, end: 3 };
     b61: block {
         l62: loop {
             __match_12 = "core:prelude/slice.wado/ArrayIter<[wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32]>^Iterator::next"(__iter_2);
@@ -1278,18 +1280,16 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/__cm_export__run"() 
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }
@@ -2048,18 +2048,16 @@ fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
 }
 
 fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }

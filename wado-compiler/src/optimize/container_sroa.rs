@@ -1158,7 +1158,8 @@ impl WhitelistChecker<'_> {
                                 .unwrap_or(ElementLayout::Tuple);
                             let all_scalar =
                                 self.all_scalar_of.get(&rec_local).copied().unwrap_or(false);
-                            if self.check_source_operand(body, arg_ops[0], arity, &layout, all_scalar)
+                            if self
+                                .check_source_operand(body, arg_ops[0], arity, &layout, all_scalar)
                             {
                                 self.record_use(rec_local, ListMethodKind::ElementWriter);
                             } else {
@@ -1190,7 +1191,8 @@ impl WhitelistChecker<'_> {
                             self.visit_operand(body, arg_ops[0]);
                             let all_scalar =
                                 self.all_scalar_of.get(&rec_local).copied().unwrap_or(false);
-                            if self.check_source_operand(body, arg_ops[1], arity, &layout, all_scalar)
+                            if self
+                                .check_source_operand(body, arg_ops[1], arity, &layout, all_scalar)
                             {
                                 self.record_use(rec_local, ListMethodKind::IndexWriter);
                             } else {
@@ -1423,8 +1425,13 @@ impl Rewriter<'_, '_> {
         match (kind, arg_ids.len()) {
             // Case 1: v.ElementWriter(source) — e.g. push
             (Some(ListMethodKind::ElementWriter), 1) => {
-                let per_field =
-                    self.decompose_source(engine, arg_ids[0].as_expr()?, arity, &layout, all_scalar)?;
+                let per_field = self.decompose_source(
+                    engine,
+                    arg_ids[0].as_expr()?,
+                    arity,
+                    &layout,
+                    all_scalar,
+                )?;
                 let sig = sig_key_of_id(ctx.sig, func_id)?;
                 let mut out = Vec::with_capacity(arity);
                 for (k, elem_expr) in per_field.into_iter().enumerate() {
@@ -1510,7 +1517,13 @@ impl Rewriter<'_, '_> {
             && args.len() == 1
             && let Some(inner) = args[0].expr.as_expr()
         {
-            return self.decompose_source(engine, inner, expected_arity, expected_layout, src_all_scalar);
+            return self.decompose_source(
+                engine,
+                inner,
+                expected_arity,
+                expected_layout,
+                src_all_scalar,
+            );
         }
         // Classify the source shape from a read-only inspection first.
         enum Source {

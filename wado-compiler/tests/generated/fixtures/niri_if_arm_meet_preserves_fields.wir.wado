@@ -152,7 +152,7 @@ fn "wado-compiler/tests/fixtures/niri_if_arm_meet_preserves_fields.wado/check_ar
     let repr: ref Array<u16>;
     repr = builtin::array_new<u16>(16);
     builtin::array_fill<u16>(repr, 0, 0, 16);
-    arr = struct.new "core:prelude//List<u16>" { repr: repr, used: 16 };
+    arr = struct.new "core:prelude//List<u16>" { repr: ref.as_non_null(builtin::array_clone<u16>(ref.as_non_null(builtin::array_clone<u16>(repr)))), used: 16 };
     if flag {
         "core:prelude/list.wado/List<u16>::push"(arr, 99);
     }
@@ -208,18 +208,16 @@ fn "wado-compiler/tests/fixtures/niri_if_arm_meet_preserves_fields.wado/__cm_exp
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }

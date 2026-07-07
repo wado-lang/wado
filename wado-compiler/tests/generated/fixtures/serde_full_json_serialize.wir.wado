@@ -322,18 +322,16 @@ fn "wado-compiler/tests/fixtures/serde_full_json_serialize.wado/__cm_export__run
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }
@@ -1092,18 +1090,16 @@ fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
 }
 
 fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }
@@ -1840,8 +1836,9 @@ fn "wado-compiler/tests/fixtures/serde_full_json_serialize.wado/List<core:prelud
     let __local_7: ref null "core:prelude/string.wado//String";
     let self_11: ref "core:prelude/string.wado//String";
     let s_12: ref "core:prelude/string.wado//String";
-    let self_20: ref "core:prelude/string.wado//String";
-    let s_21: ref "core:prelude/string.wado//String";
+    let v_14: ref "core:prelude/slice.wado//ArrayRefIter<core:prelude/string.wado/String>";
+    let self_21: ref "core:prelude/string.wado//String";
+    let s_22: ref "core:prelude/string.wado//String";
     self_11 = s.buf;
     s_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(91), used: 1 };
     "core:prelude/string.wado/String::push_str"(self_11, s_12);
@@ -1849,7 +1846,8 @@ fn "wado-compiler/tests/fixtures/serde_full_json_serialize.wado/List<core:prelud
     if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_full_json_serialize.wado/JsonSeqSerializer,wado-compiler/tests/fixtures/serde_full_json_serialize.wado/SerializeError>::Ok"(seq_2) {
         __local_6 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_full_json_serialize.wado/JsonSeqSerializer,wado-compiler/tests/fixtures/serde_full_json_serialize.wado/SerializeError>::Ok"(seq_2).payload_0;
         seq_3 = struct.new "wado-compiler/tests/fixtures/serde_full_json_serialize.wado//JsonSeqSerializer" { w: __local_6.w, count: __local_6.count };
-        __iter_4 = struct.new "core:prelude/slice.wado//ArrayRefIter<core:prelude/string.wado/String>" { repr: self.repr, index: 0, end: self.used };
+        v_14 = struct.new "core:prelude/slice.wado//ArrayRefIter<core:prelude/string.wado/String>" { repr: self.repr, index: 0, end: self.used };
+        __iter_4 = struct.new "core:prelude/slice.wado//ArrayRefIter<core:prelude/string.wado/String>" { repr: v_14.repr, index: 0, end: v_14.end };
         b186: block {
             l187: loop {
                 __local_7 = "core:prelude/slice.wado/ArrayRefIter<core:prelude/string.wado/String>^Iterator::next"(__iter_4);
@@ -1862,7 +1860,7 @@ fn "wado-compiler/tests/fixtures/serde_full_json_serialize.wado/List<core:prelud
                 continue l187;
             };
         };
-        return self_20 = seq_3.w.buf, s_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(93), used: 1 }, "core:prelude/string.wado/String::push_str"(self_20, s_21), ref.null none;
+        return self_21 = seq_3.w.buf, s_22 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(93), used: 1 }, "core:prelude/string.wado/String::push_str"(self_21, s_22), ref.null none;
     } else {
     }
     return struct.new "wado-compiler/tests/fixtures/serde_full_json_serialize.wado//SerializeError" { message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("begin_seq failed"), used: 16 } };

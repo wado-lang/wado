@@ -119,13 +119,14 @@ fn "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/make_inne
     if v < 0 {
         return 1, ref.null none, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative"), used: 8 };
     }
-    return 0, struct.new "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado//Inner" { value: v, name: ref.as_non_null(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }; "core:prelude/string.wado/String::push"(__local_1, 105); "core:prelude/string.wado/String::push"(__local_1, 116); "core:prelude/string.wado/String::push"(__local_1, 101); "core:prelude/string.wado/String::push"(__local_1, 109); "core:prelude/string.wado/String::push"(__local_1, 95); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; "core:prelude/primitive.wado/i32::fmt_decimal"(v, __local_2); __local_1) }, ref.null none;
+    return 0, struct.new "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado//Inner" { value: v, name: ref.as_non_null(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }; "core:prelude/string.wado/String::push"(__local_1, 105); "core:prelude/string.wado/String::push"(__local_1, 116); "core:prelude/string.wado/String::push"(__local_1, 101); "core:prelude/string.wado/String::push"(__local_1, 109); "core:prelude/string.wado/String::push"(__local_1, 95); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; "core:prelude/primitive.wado/i32::fmt_decimal"(v, __local_2); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_1.repr)), used: __local_1.used }) }, ref.null none;
 }
 
 fn "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/make_outer"(v) {
     let i: ref "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado//Inner";
     let e: ref "core:prelude/string.wado//String";
     let inner: ref "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado//Inner";
+    let v_5: ref "core:prelude/string.wado//String";
     let __sroa___match_scrut_0_discriminant: i32;
     let __sroa___match_scrut_0_case0_payload_0: ref null "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado//Inner";
     let __sroa___match_scrut_0_case1_payload_0: ref null "core:prelude/string.wado//String";
@@ -137,7 +138,7 @@ fn "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/make_oute
         e = ref.as_non_null(__sroa___match_scrut_0_case1_payload_0);
         return 1, ref.null none, e;
     });
-    return 0, struct.new "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado//Outer" { inner: inner, tag: v * 10 }, ref.null none;
+    return 0, struct.new "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado//Outer" { inner: struct.new "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado//Inner" { value: inner.value, name: ref.as_non_null(v_5 = inner.name; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v_5.repr)), used: v_5.used }) }, tag: v * 10 }, ref.null none;
 }
 
 fn "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/run"() with Stdout {
@@ -189,18 +190,16 @@ fn "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/__cm_expo
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }

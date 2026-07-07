@@ -59,7 +59,7 @@ type "functype//wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/
 
 type "functype//wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/__cm_export__run" = fn();  // TypeId(19)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/$value_copy$T29" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(20)
+type "functype//wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/$value_copy$T30" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(20)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(21)
 
@@ -140,7 +140,7 @@ fn "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/shout_first"
     let __v1_13: i32;
     let __local_5_15: ref "core:prelude/string.wado//String";
     let __local_6_16: ref "core:prelude/format.wado//Formatter";
-    x = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude/string.wado//String">(/*via $value_copy$T29*/ words.repr)), used: words.used };
+    x = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude/string.wado//String">(/*via $value_copy$T30*/ words.repr)), used: words.used };
     "core:prelude/string.wado/String::push"(__v1_6 = x.used; if @unlikely(0 >= __v1_6) {
         cold_path;
         "core:rt/panic"(__local_5_8 = "core:prelude/string.wado/String::with_capacity"(173); "core:prelude/string.wado/String::push_str"(__local_5_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("List::index_value"), used: 17 }); "core:prelude/string.wado/String::push"(__local_5_8, 32); "core:prelude/string.wado/String::push"(__local_5_8, 97); "core:prelude/string.wado/String::push"(__local_5_8, 116); "core:prelude/string.wado/String::push"(__local_5_8, 32); "core:prelude/string.wado/String::push_str"(__local_5_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/list.wado"), used: 22 }); "core:prelude/string.wado/String::push"(__local_5_8, 58); __local_6_9 = "core:prelude/format.wado/Formatter::new"(__local_5_8); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 333 }, __local_6_9); "core:prelude/string.wado/String::push"(__local_5_8, 58); "core:prelude/string.wado/String::push"(__local_5_8, 32); "core:prelude/string.wado/String::push_str"(__local_5_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 }); "core:prelude/string.wado/String::push_str"(__local_5_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
@@ -187,23 +187,21 @@ fn "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/__cm_export_
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/$value_copy$T29"(v) {
+fn "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/$value_copy$T30"(v) {
     return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used };
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }
@@ -273,18 +271,16 @@ fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
 }
 
 fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }

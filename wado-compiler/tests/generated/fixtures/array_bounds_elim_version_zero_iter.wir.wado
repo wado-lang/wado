@@ -178,8 +178,10 @@ condition: index < self.used
 fn "wado-compiler/tests/fixtures/array_bounds_elim_version_zero_iter.wado/total"(xs) {
     let sum: i32;
     let __iter_2: ref "core:prelude/slice.wado//ArrayIter<i32>";
+    let v: ref "core:prelude/slice.wado//ArrayIter<i32>";
     sum = 0;
-    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: xs.repr, index: 0, end: xs.used };
+    v = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: xs.repr, index: 0, end: xs.used };
+    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: v.repr, index: 0, end: v.end };
     b5: block {
         l6: loop {
             let __sroa___match_4_discriminant: i32;
@@ -203,8 +205,8 @@ fn "wado-compiler/tests/fixtures/array_bounds_elim_version_zero_iter.wado/run"()
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
     let repr: ref Array<i32>;
-    let self_12: i32;
-    let self_18: i32;
+    let self_14: i32;
+    let self_20: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -213,11 +215,11 @@ fn "wado-compiler/tests/fixtures/array_bounds_elim_version_zero_iter.wado/run"()
     };
     repr = builtin::array_new<i32>(4);
     builtin::array_fill<i32>(repr, 0, 0, 4);
-    xs = struct.new "core:prelude//List<i32>" { repr: repr, used: 4 };
+    xs = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(builtin::array_clone<i32>(ref.as_non_null(builtin::array_clone<i32>(repr)))), used: 4 };
     "wado-compiler/tests/fixtures/array_bounds_elim_version_zero_iter.wado/fill_to"(xs, -1);
-    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_12("wado-compiler/tests/fixtures/array_bounds_elim_version_zero_iter.wado/total"(xs)), __local_2); __local_1);
+    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_14("wado-compiler/tests/fixtures/array_bounds_elim_version_zero_iter.wado/total"(xs)), __local_2); __local_1);
     "wado-compiler/tests/fixtures/array_bounds_elim_version_zero_iter.wado/fill_to"(xs, 3);
-    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_18("wado-compiler/tests/fixtures/array_bounds_elim_version_zero_iter.wado/total"(xs)), __local_4); __local_3);
+    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_20("wado-compiler/tests/fixtures/array_bounds_elim_version_zero_iter.wado/total"(xs)), __local_4); __local_3);
 }
 
 fn "wado-compiler/tests/fixtures/array_bounds_elim_version_zero_iter.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -236,18 +238,16 @@ fn "wado-compiler/tests/fixtures/array_bounds_elim_version_zero_iter.wado/__cm_e
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }
@@ -317,18 +317,16 @@ fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
 }
 
 fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }

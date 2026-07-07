@@ -127,8 +127,9 @@ fn "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/run"() w
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let __match_7: ref null "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point";
-    let f_22: ref "core:prelude/format.wado//Formatter";
-    let f_27: ref "core:prelude/format.wado//Formatter";
+    let v: ref "core:prelude/slice.wado//ArrayIter<wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Point>";
+    let f_23: ref "core:prelude/format.wado//Formatter";
+    let f_28: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -136,7 +137,8 @@ fn "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/run"() w
         global:__modules_initialized = 1;
     };
     __b = struct.new "core:prelude//List<wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Point>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point">(struct.new "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point" { x: 1, y: 2 }, struct.new "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point" { x: 3, y: 4 }), used: 2 };
-    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Point>" { repr: __b.repr, index: 0, end: 2 };
+    v = struct.new "core:prelude/slice.wado//ArrayIter<wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Point>" { repr: __b.repr, index: 0, end: 2 };
+    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Point>" { repr: v.repr, index: 0, end: 2 };
     b0: block {
         l1: loop {
             __match_7 = "core:prelude/slice.wado/ArrayIter<wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Point>^Iterator::next"(__iter_2);
@@ -145,7 +147,7 @@ fn "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/run"() w
                 __variant_payload_1 = ref.as_non_null(__match_7);
                 x = __variant_payload_1.x;
                 y = __variant_payload_1.y;
-                "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; f_22 = __local_6; "core:prelude/primitive.wado/i32::fmt_decimal"(x, f_22); "core:prelude/string.wado/String::push"(__local_5, 32); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; f_27 = __local_6; "core:prelude/primitive.wado/i32::fmt_decimal"(y, f_27); __local_5);
+                "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; f_23 = __local_6; "core:prelude/primitive.wado/i32::fmt_decimal"(x, f_23); "core:prelude/string.wado/String::push"(__local_5, 32); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; f_28 = __local_6; "core:prelude/primitive.wado/i32::fmt_decimal"(y, f_28); __local_5);
             } else {
                 break b0;
             }
@@ -170,18 +172,16 @@ fn "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/__cm_exp
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }

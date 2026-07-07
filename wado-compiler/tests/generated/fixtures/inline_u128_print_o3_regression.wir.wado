@@ -176,18 +176,16 @@ fn "wado-compiler/tests/fixtures/inline_u128_print_o3_regression.wado/$value_cop
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }
@@ -257,18 +255,16 @@ fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
 }
 
 fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }
@@ -360,7 +356,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
         unreachable;
     }
     if "core:prelude/int128.wado/u128^Ord::cmp"(self, divisor) == 0 {
-        return struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }, self;
+        return struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }, ref.as_non_null("wado-compiler/tests/fixtures/inline_u128_print_o3_regression.wado/$value_copy$T96"(self));
     }
     if (if self.low == divisor.low -> i32 {
         self.high == divisor.high;
@@ -375,20 +371,20 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
     b19: block {
         l20: loop {
             break_if b19 i < 0;
-            remainder = "core:prelude/int128.wado/u128^Shl::shl"(remainder, 1);
+            remainder = "wado-compiler/tests/fixtures/inline_u128_print_o3_regression.wado/$value_copy$T96"("core:prelude/int128.wado/u128^Shl::shl"(remainder, 1));
             bit = "core:prelude/int128.wado/u128::get_bit"(self, i);
             if bit {
-                remainder = struct.new "core:prelude/int128.wado//u128" { low: remainder.low | 1_i64, high: remainder.high | 0_i64 };
+                remainder = "wado-compiler/tests/fixtures/inline_u128_print_o3_regression.wado/$value_copy$T96"(struct.new "core:prelude/int128.wado//u128" { low: remainder.low | 1_i64, high: remainder.high | 0_i64 });
             }
             if "core:prelude/int128.wado/u128^Ord::cmp"(remainder, divisor) != 0 {
-                remainder = "core:prelude/int128.wado/u128^Sub::sub"(remainder, divisor);
+                remainder = "wado-compiler/tests/fixtures/inline_u128_print_o3_regression.wado/$value_copy$T96"("core:prelude/int128.wado/u128^Sub::sub"(remainder, divisor));
                 quotient = "core:prelude/int128.wado/u128::set_bit"(quotient, i);
             }
             i = i - 1;
             continue l20;
         };
     };
-    return quotient, remainder;
+    return ref.as_non_null("wado-compiler/tests/fixtures/inline_u128_print_o3_regression.wado/$value_copy$T96"(quotient)), ref.as_non_null("wado-compiler/tests/fixtures/inline_u128_print_o3_regression.wado/$value_copy$T96"(remainder));
 }
 
 fn "core:prelude/int128.wado/u128::get_bit"(self, i) {

@@ -125,6 +125,7 @@ fn "wado-compiler/tests/fixtures/array_tuple_unit.wado/run"() with Stdout {
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let __match_6: ref null "tuple//[i32, ()]";
+    let v: ref "core:prelude/slice.wado//ArrayIter<[i32,()]>";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -132,7 +133,8 @@ fn "wado-compiler/tests/fixtures/array_tuple_unit.wado/run"() with Stdout {
         global:__modules_initialized = 1;
     };
     __b = struct.new "core:prelude//List<[i32,()]>" { repr: array.new_fixed<ref "tuple//[i32, ()]">(struct.new "tuple//[i32, ()]" { 0: 1 }, struct.new "tuple//[i32, ()]" { 0: 2 }, struct.new "tuple//[i32, ()]" { 0: 3 }), used: 3 };
-    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<[i32,()]>" { repr: __b.repr, index: 0, end: 3 };
+    v = struct.new "core:prelude/slice.wado//ArrayIter<[i32,()]>" { repr: __b.repr, index: 0, end: 3 };
+    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<[i32,()]>" { repr: v.repr, index: 0, end: 3 };
     b0: block {
         l1: loop {
             __match_6 = "core:prelude/slice.wado/ArrayIter<[i32,()]>^Iterator::next"(__iter_2);
@@ -163,18 +165,16 @@ fn "wado-compiler/tests/fixtures/array_tuple_unit.wado/__cm_export__run"() {
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }
