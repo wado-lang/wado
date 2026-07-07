@@ -434,7 +434,10 @@ fn copy_source_strippable(
 /// fresh single tail value is const-promoted and elided, so blocking it would
 /// only keep redundant copies of constants.
 fn yields_subexpression(body: &Body, e: ExprId) -> bool {
-    matches!(body.exprs[e].kind, ExprKind::If { .. } | ExprKind::Match { .. })
+    matches!(
+        body.exprs[e].kind,
+        ExprKind::If { .. } | ExprKind::Match { .. }
+    )
 }
 
 /// Check whether `value` is a `$value_copy$T(arg)` call whose wrapper can be

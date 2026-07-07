@@ -11009,7 +11009,7 @@ pub fn String::push_bytes_unchecked(self: &mut String, bytes: List<u8>) {
         core::builtin::cold_path();
         self.String::grow(new_used);
     }
-    "core::builtin::core/builtin/array_copy<u8>"(&mut self.repr, self.used, &bytes."List<u8>::internal_raw_data"(), 0, n);
+    "core::builtin::core/builtin/array_copy<u8>"(&mut self.repr, self.used, bytes."List<u8>::internal_raw_data_ref"(), 0, n);
     self.used = new_used;
 }
 
@@ -12598,7 +12598,7 @@ pub fn "StrSplitIter^Iterator::next"(self: &mut StrSplitIter) -> Option<String> 
             }
             j = (j + 1);
         }
-        if matched {
+        if (matched && (self.sep_len > 0)) {
             let len: i32 = (i - self.pos);
             let mut part: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
             "core::builtin::core/builtin/array_copy<u8>"(&mut part, 0, self.repr, self.pos, len);
@@ -12838,7 +12838,7 @@ pub fn "StrSplitNIter^Iterator::next"(self: &mut StrSplitNIter) -> Option<String
             }
             j = (j + 1);
         }
-        if matched {
+        if (matched && (self.sep_len > 0)) {
             let len: i32 = (i - self.pos);
             let mut part: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
             "core::builtin::core/builtin/array_copy<u8>"(&mut part, 0, self.repr, self.pos, len);
@@ -15221,7 +15221,7 @@ fn cm_lower_list_u8(data: &Array<u8>, len: i32) -> i64 {
     return (ptr as i64 | (len as i64 << 32));
 }
 
-fn cm_lower_array_u8(arr: &List<u8>) -> i64 {
+fn cm_lower_array_u8(arr: List<u8>) -> i64 {
     let len: i32 = arr."List<u8>::len"();
     return core::rt::cm_lower_list_u8(arr."List<u8>::internal_raw_data_ref"(), len);
 }
@@ -15306,7 +15306,7 @@ fn cm_stream_read_raw_free(ptr: i32, byte_count: i32, element_align: i32) {
 }
 
 fn cm_stream_write_u8(handle: i32, data: List<u8>) {
-    let packed: i64 = core::rt::cm_lower_array_u8(&data);
+    let packed: i64 = core::rt::cm_lower_array_u8("$value_copy$T22"(data));
     let ptr: i32 = packed as i32;
     let len: i32 = (packed >> 32) as i32;
     core::rt::cm_stream_write_drain(handle, ptr, len, 1);
@@ -21196,10 +21196,6 @@ fn "List<u8>::internal_from_raw"(repr: Array<u8>, used: i32) -> List<u8> {
     return List<u8> { repr: "$value_copy$T20"(repr), used: used };
 }
 
-fn "List<u8>::internal_raw_data_ref"(self: &List<u8>) -> &Array<u8> {
-    return &self.repr;
-}
-
 pub fn "Array<u8>^InspectAlt::inspect_alt"(self: &Array<u8>, f: &mut Formatter) {
     "core::prelude/array.wado::core/prelude/array.wado/write_seq_inspect_alt<u8>"(self, core::builtin::array_len(self), f, true, f.Formatter::resolved_seq_limit());
 }
@@ -21334,8 +21330,8 @@ pub fn "ArraySlice<u8>::len"(self: &ArraySlice<u8>) -> i32 {
     return (self.end - self.start);
 }
 
-fn "List<u8>::internal_raw_data"(self: &List<u8>) -> Array<u8> {
-    return self.repr;
+fn "List<u8>::internal_raw_data_ref"(self: &List<u8>) -> &Array<u8> {
+    return &self.repr;
 }
 
 pub fn "List<u8>::len"(self: &List<u8>) -> i32 {
