@@ -1268,7 +1268,7 @@ impl FunctionTranslator<'_, '_> {
 
     /// Build the qualified global name.
     fn make_global_name(&self, module_source: &ModuleSource, name: &str) -> String {
-        if module_source.is_entry_point() {
+        if module_source == &self.ctx.package.entry_module_source {
             format!("global:{name}")
         } else {
             let module_path = module_source.to_path();

@@ -5,6 +5,14 @@
 
 Base64 encoding and decoding (RFC 4648).
 
+## Synopsis
+
+```wado
+let encoded = encode(&b"Hello, Wado!");
+assert encoded == "SGVsbG8sIFdhZG8h";
+assert decode(&encoded) matches { Some(round) && encode(&round) == encoded };
+```
+
 ## Functions
 
 ### `pub fn encode<S: AsByteSlice>(data: &S) -> String`

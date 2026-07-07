@@ -42,6 +42,12 @@ pub trait Digest {
     fn finalize(&mut self) -> ByteList;
 }
 
+#[synopsis]
+test {
+    let digest = sha256(&"wado");
+    assert digest.to_hex() == "fe3d12dc082eed509c3869ed16f0c209f2fbaeee3a41aa09f0033798efd67052";
+}
+
 // SHA-256 round constants: the first 32 bits of the fractional parts of the
 // cube roots of the first 64 primes (FIPS 180-4, section 4.2.2).
 global K: List<u32> = [

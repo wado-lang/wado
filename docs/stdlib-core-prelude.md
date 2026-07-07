@@ -5,6 +5,23 @@
 
 Auto-imported in every module. Disable with `#![no_prelude]`.
 
+## Synopsis
+
+```wado
+let mut greeting = String::new();
+greeting.push_str(&"Hello, ");
+greeting.push_str(&"Wado!");
+assert greeting == "Hello, Wado!";
+
+let primes = [2, 3, 5, 7] as List<i32>;
+assert primes.len() == 4;
+assert primes.get(1) matches { Some(v) && v == 3 };
+assert primes.get(9) matches { None };
+
+let decoded = String::from_utf8([87, 97, 100, 111] as List<u8>);
+assert decoded matches { Ok(s) && s == "Wado" };
+```
+
 ## Functions
 
 ### `pub fn panic(message: String) -> !`
