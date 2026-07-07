@@ -41,9 +41,9 @@ array Array<[core:prelude/string.wado/String,i32]> (mut ref "tuple//[core:prelud
 
 array Array<for_of_2.wado/Point> (mut ref "for_of_2.wado//Point");  // TypeId(8)
 
-array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(9)
+array Array<i32> (mut i32);  // TypeId(9)
 
-array Array<i32> (mut i32);  // TypeId(10)
+array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(10)
 
 struct core:prelude/slice.wado//ArrayIter<[i32,i32]> {  // TypeId(11)
     mut repr: ref Array<[i32,i32]>,
@@ -63,14 +63,14 @@ struct core:prelude/slice.wado//ArrayIter<for_of_2.wado/Point> {  // TypeId(13)
     mut end: i32,
 }
 
-struct core:prelude/slice.wado//ArrayIter<core:prelude/string.wado/String> {  // TypeId(14)
-    mut repr: ref "Array<core:prelude/string.wado/String>",
+struct core:prelude/slice.wado//ArrayIter<i32> {  // TypeId(14)
+    mut repr: ref Array<i32>,
     mut index: i32,
     mut end: i32,
 }
 
-struct core:prelude/slice.wado//ArrayIter<i32> {  // TypeId(15)
-    mut repr: ref Array<i32>,
+struct core:prelude/slice.wado//ArrayIter<core:prelude/string.wado/String> {  // TypeId(15)
+    mut repr: ref "Array<core:prelude/string.wado/String>",
     mut index: i32,
     mut end: i32,
 }
@@ -788,16 +788,6 @@ fn "core:prelude/slice.wado/ArrayIter<for_of_2.wado/Point>^Iterator::next"(self)
     return item;
 }
 
-fn "core:prelude/slice.wado/ArrayIter<core:prelude/string.wado/String>^Iterator::next"(self) {
-    let item: ref "core:prelude/string.wado//String";
-    if self.index >= self.end {
-        return ref.null none;
-    }
-    item = builtin::array_get<ref "core:prelude/string.wado//String">(self.repr, self.index);
-    self.index = self.index + 1;
-    return item;
-}
-
 fn "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self) {
     let item: i32;
     if self.index >= self.end {
@@ -806,6 +796,16 @@ fn "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self) {
     item = builtin::array_get<i32>(self.repr, self.index);
     self.index = self.index + 1;
     return 0, item;
+}
+
+fn "core:prelude/slice.wado/ArrayIter<core:prelude/string.wado/String>^Iterator::next"(self) {
+    let item: ref "core:prelude/string.wado//String";
+    if self.index >= self.end {
+        return ref.null none;
+    }
+    item = builtin::array_get<ref "core:prelude/string.wado//String">(self.repr, self.index);
+    self.index = self.index + 1;
+    return item;
 }
 
 export fn "for_of_2.wado/__cm_export__run" as "run"

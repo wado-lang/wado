@@ -45,6 +45,13 @@ use {
     DeserializeErrorKind,
 } from "core:serde";
 
+#[synopsis]
+test {
+    let bytes = to_bytes(&[1, 2, 3]).unwrap();
+    let back: List<i32> = from_bytes(bytes).unwrap();
+    assert back == [1, 2, 3];
+}
+
 global SERIALIZE_BUFFER_CAPACITY: i32 = 64;
 
 // Major types (RFC 8949 §3): the high 3 bits of the initial byte.

@@ -36,17 +36,17 @@ type "functype//wasi/wasi:random/Insecure::get_insecure_random_u64" = fn() -> i6
 
 type "functype//wasi/wasi:random/Random::get_random_u64" = fn() -> i64;  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/wasi_random.wado/run" = fn();  // TypeId(14)
+type "functype//wasi_random.wado/run" = fn();  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/wasi_random.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(15)
+type "functype//wasi_random.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/wasi_random.wado/__cm_binding__Random_get_random_u64" = fn() -> u64;  // TypeId(16)
+type "functype//wasi_random.wado/__cm_binding__Random_get_random_u64" = fn() -> u64;  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/wasi_random.wado/__cm_binding__Insecure_get_insecure_random_u64" = fn() -> u64;  // TypeId(17)
+type "functype//wasi_random.wado/__cm_binding__Insecure_get_insecure_random_u64" = fn() -> u64;  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/wasi_random.wado/__cm_binding__InsecureSeed_get_insecure_seed" = fn() -> ref "tuple//[u64, u64]";  // TypeId(18)
+type "functype//wasi_random.wado/__cm_binding__InsecureSeed_get_insecure_seed" = fn() -> ref "tuple//[u64, u64]";  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/wasi_random.wado/__cm_export__run" = fn();  // TypeId(19)
+type "functype//wasi_random.wado/__cm_export__run" = fn();  // TypeId(19)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(20)
 
@@ -86,9 +86,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:wado-compiler/tests/fixtures/wasi_random.wado::__modules_initialized: bool = 0;
+global mut global:wasi_random.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
+fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
     let r1: u64;
     let r2: u64;
     let ir1: u64;
@@ -97,13 +97,13 @@ fn "wado-compiler/tests/fixtures/wasi_random.wado/run"() with Stdout, Random, In
     let seed_low: u64;
     let seed_high: u64;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/wasi_random.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wasi_random.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/wasi_random.wado::__modules_initialized = 1;
+        global:wasi_random.wado::__modules_initialized = 1;
     };
-    r1 = "wado-compiler/tests/fixtures/wasi_random.wado/__cm_binding__Random_get_random_u64"();
-    r2 = "wado-compiler/tests/fixtures/wasi_random.wado/__cm_binding__Random_get_random_u64"();
+    r1 = "wasi_random.wado/__cm_binding__Random_get_random_u64"();
+    r2 = "wasi_random.wado/__cm_binding__Random_get_random_u64"();
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: random u64 works"), used: 22 });
     if (if r1 != 0_i64 -> i32 {
         1;
@@ -119,15 +119,15 @@ fn "wado-compiler/tests/fixtures/wasi_random.wado/run"() with Stdout, Random, In
     } else {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: random u64 values same (unlikely but valid)"), used: 49 });
     }
-    ir1 = "wado-compiler/tests/fixtures/wasi_random.wado/__cm_binding__Insecure_get_insecure_random_u64"();
-    ir2 = "wado-compiler/tests/fixtures/wasi_random.wado/__cm_binding__Insecure_get_insecure_random_u64"();
+    ir1 = "wasi_random.wado/__cm_binding__Insecure_get_insecure_random_u64"();
+    ir2 = "wasi_random.wado/__cm_binding__Insecure_get_insecure_random_u64"();
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: insecure random u64 works"), used: 31 });
     if ir1 != ir2 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: insecure random u64 values differ"), used: 39 });
     } else {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: insecure random u64 values same (unlikely but valid)"), used: 58 });
     }
-    seed = "wado-compiler/tests/fixtures/wasi_random.wado/__cm_binding__InsecureSeed_get_insecure_seed"();
+    seed = "wasi_random.wado/__cm_binding__InsecureSeed_get_insecure_seed"();
     seed_low = seed.0;
     seed_high = seed.1;
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: insecure seed works"), used: 25 });
@@ -143,19 +143,19 @@ fn "wado-compiler/tests/fixtures/wasi_random.wado/run"() with Stdout, Random, In
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all random tests passed"), used: 23 });
 }
 
-fn "wado-compiler/tests/fixtures/wasi_random.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "wasi_random.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/wasi_random.wado/__cm_binding__Random_get_random_u64"() with Random {
+fn "wasi_random.wado/__cm_binding__Random_get_random_u64"() with Random {
     return "wasi/wasi:random/Random::get_random_u64"();
 }
 
-fn "wado-compiler/tests/fixtures/wasi_random.wado/__cm_binding__Insecure_get_insecure_random_u64"() with Insecure {
+fn "wasi_random.wado/__cm_binding__Insecure_get_insecure_random_u64"() with Insecure {
     return "wasi/wasi:random/Insecure::get_insecure_random_u64"();
 }
 
-fn "wado-compiler/tests/fixtures/wasi_random.wado/__cm_binding__InsecureSeed_get_insecure_seed"() with InsecureSeed {
+fn "wasi_random.wado/__cm_binding__InsecureSeed_get_insecure_seed"() with InsecureSeed {
     let __outptr: i32;
     let __lifted_result_1: i64;
     let __lifted_result_2: i64;
@@ -166,14 +166,14 @@ fn "wado-compiler/tests/fixtures/wasi_random.wado/__cm_binding__InsecureSeed_get
     return struct.new "tuple//[u64, u64]" { 0: __lifted_result_1, 1: __lifted_result_2 };
 }
 
-fn "wado-compiler/tests/fixtures/wasi_random.wado/__cm_export__run"() {
+fn "wasi_random.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/wasi_random.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wasi_random.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/wasi_random.wado::__modules_initialized = 1;
+        global:wasi_random.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/wasi_random.wado/run"();
+    "wasi_random.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -201,7 +201,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/wasi_random.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "wasi_random.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -275,4 +275,4 @@ fn "core:rt/cm_stream_write_raw_u8"(handle, data, len) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-export fn "wado-compiler/tests/fixtures/wasi_random.wado/__cm_export__run" as "run"
+export fn "wasi_random.wado/__cm_export__run" as "run"

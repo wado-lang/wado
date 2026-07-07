@@ -24,7 +24,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado//Counter {  // TypeId(4)
+struct opt_hfs_mixed_ref_sync.wado//Counter {  // TypeId(4)
     mut x: i32,
     mut y: i32,
 }
@@ -47,13 +47,13 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado/read_counter" = fn(ref "wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado//Counter") -> i32;  // TypeId(14)
+type "functype//opt_hfs_mixed_ref_sync.wado/read_counter" = fn(ref "opt_hfs_mixed_ref_sync.wado//Counter") -> i32;  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado/scale_x" = fn(ref "wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado//Counter", i32);  // TypeId(15)
+type "functype//opt_hfs_mixed_ref_sync.wado/scale_x" = fn(ref "opt_hfs_mixed_ref_sync.wado//Counter", i32);  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado/run" = fn();  // TypeId(16)
+type "functype//opt_hfs_mixed_ref_sync.wado/run" = fn();  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado/__cm_export__run" = fn();  // TypeId(17)
+type "functype//opt_hfs_mixed_ref_sync.wado/__cm_export__run" = fn();  // TypeId(17)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(18)
 
@@ -118,18 +118,18 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado::__modules_initialized: bool = 0;
+global mut global:opt_hfs_mixed_ref_sync.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado/read_counter"(c) {
+fn "opt_hfs_mixed_ref_sync.wado/read_counter"(c) {
     return c.x + c.y;
 }
 
-fn "wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado/scale_x"(c, factor) {
+fn "opt_hfs_mixed_ref_sync.wado/scale_x"(c, factor) {
     c.x = c.x * factor;
 }
 
-fn "wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado/run"() {
-    let c: ref "wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado//Counter";
+fn "opt_hfs_mixed_ref_sync.wado/run"() {
+    let c: ref "opt_hfs_mixed_ref_sync.wado//Counter";
     let total: i32;
     let i: i32;
     let __v0_5: i32;
@@ -139,12 +139,12 @@ fn "wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado/run"() {
     let __local_10: ref "core:prelude/format.wado//Formatter";
     let __hfs_x_11: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:opt_hfs_mixed_ref_sync.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado::__modules_initialized = 1;
+        global:opt_hfs_mixed_ref_sync.wado::__modules_initialized = 1;
     };
-    c = struct.new "wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado//Counter" { x: 1, y: 100 };
+    c = struct.new "opt_hfs_mixed_ref_sync.wado//Counter" { x: 1, y: 100 };
     total = 0;
     i = 0;
     __hfs_x_11 = 1;
@@ -154,8 +154,8 @@ fn "wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado/run"() {
             __hfs_x_11 = __hfs_x_11 + 1;
             total = local.tee total(total + __hfs_x_11) + __hfs_x_11;
             c.x = __hfs_x_11;
-            total = total + "wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado/read_counter"(c);
-            "wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado/scale_x"(c, 2);
+            total = total + "opt_hfs_mixed_ref_sync.wado/read_counter"(c);
+            "opt_hfs_mixed_ref_sync.wado/scale_x"(c, 2);
             __hfs_x_11 = c.x;
             total = total + __hfs_x_11;
             i = i + 1;
@@ -164,7 +164,7 @@ fn "wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado/run"() {
     };
     if @unlikely(total != 390) {
         cold_path;
-        "core:rt/panic"(__local_7 = "core:prelude/string.wado/String::with_capacity"(122); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_7, 114); "core:prelude/string.wado/String::push"(__local_7, 117); "core:prelude/string.wado/String::push"(__local_7, 110); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push"(__local_7, 97); "core:prelude/string.wado/String::push"(__local_7, 116); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado"), used: 56 }); "core:prelude/string.wado/String::push"(__local_7, 58); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 36 }, __local_8); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_7 = "core:prelude/string.wado/String::with_capacity"(122); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_7, 114); "core:prelude/string.wado/String::push"(__local_7, 117); "core:prelude/string.wado/String::push"(__local_7, 110); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push"(__local_7, 97); "core:prelude/string.wado/String::push"(__local_7, 116); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_hfs_mixed_ref_sync.wado"), used: 56 }); "core:prelude/string.wado/String::push"(__local_7, 58); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 36 }, __local_8); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: total == 390
 "), used: 25 }); "core:prelude/string.wado/String::push"(__local_7, 116); "core:prelude/string.wado/String::push"(__local_7, 111); "core:prelude/string.wado/String::push"(__local_7, 116); "core:prelude/string.wado/String::push"(__local_7, 97); "core:prelude/string.wado/String::push"(__local_7, 108); "core:prelude/string.wado/String::push"(__local_7, 58); "core:prelude/string.wado/String::push"(__local_7, 32); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: total }, __local_8); "core:prelude/string.wado/String::push"(__local_7, 10); __local_7);
         unreachable;
@@ -172,21 +172,21 @@ condition: total == 390
     __v0_5 = c.x;
     if @unlikely(__v0_5 != 22) {
         cold_path;
-        "core:rt/panic"(__local_9 = "core:prelude/string.wado/String::with_capacity"(117); "core:prelude/string.wado/String::push_str"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_9, 114); "core:prelude/string.wado/String::push"(__local_9, 117); "core:prelude/string.wado/String::push"(__local_9, 110); "core:prelude/string.wado/String::push"(__local_9, 32); "core:prelude/string.wado/String::push"(__local_9, 97); "core:prelude/string.wado/String::push"(__local_9, 116); "core:prelude/string.wado/String::push"(__local_9, 32); "core:prelude/string.wado/String::push_str"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado"), used: 56 }); "core:prelude/string.wado/String::push"(__local_9, 58); __local_10 = "core:prelude/format.wado/Formatter::new"(__local_9); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 37 }, __local_10); "core:prelude/string.wado/String::push_str"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_9 = "core:prelude/string.wado/String::with_capacity"(117); "core:prelude/string.wado/String::push_str"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_9, 114); "core:prelude/string.wado/String::push"(__local_9, 117); "core:prelude/string.wado/String::push"(__local_9, 110); "core:prelude/string.wado/String::push"(__local_9, 32); "core:prelude/string.wado/String::push"(__local_9, 97); "core:prelude/string.wado/String::push"(__local_9, 116); "core:prelude/string.wado/String::push"(__local_9, 32); "core:prelude/string.wado/String::push_str"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_hfs_mixed_ref_sync.wado"), used: 56 }); "core:prelude/string.wado/String::push"(__local_9, 58); __local_10 = "core:prelude/format.wado/Formatter::new"(__local_9); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 37 }, __local_10); "core:prelude/string.wado/String::push_str"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: c.x == 22
 "), used: 22 }); "core:prelude/string.wado/String::push"(__local_9, 99); "core:prelude/string.wado/String::push"(__local_9, 46); "core:prelude/string.wado/String::push"(__local_9, 120); "core:prelude/string.wado/String::push"(__local_9, 58); "core:prelude/string.wado/String::push"(__local_9, 32); __local_10 = "core:prelude/format.wado/Formatter::new"(__local_9); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_5 }, __local_10); "core:prelude/string.wado/String::push"(__local_9, 10); __local_9);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado/__cm_export__run"() {
+fn "opt_hfs_mixed_ref_sync.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:opt_hfs_mixed_ref_sync.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado::__modules_initialized = 1;
+        global:opt_hfs_mixed_ref_sync.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado/run"();
+    "opt_hfs_mixed_ref_sync.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -525,4 +525,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado/__cm_export__run" as "run"
+export fn "opt_hfs_mixed_ref_sync.wado/__cm_export__run" as "run"

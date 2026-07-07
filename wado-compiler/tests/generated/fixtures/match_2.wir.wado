@@ -29,40 +29,40 @@ struct tuple//[f64, f64] {  // TypeId(4)
     mut 1: f64,
 }
 
-variant wado-compiler/tests/fixtures/match_2.wado//MTupleShape {  // TypeId(5)
+variant match_2.wado//MTupleShape {  // TypeId(5)
     Circle(f64),
     Rectangle(ref "tuple//[f64, f64]"),
     MTuplePoint,
 }
 
-struct wado-compiler/tests/fixtures/match_2.wado//MTupleShape::Circle {  // TypeId(6)
+struct match_2.wado//MTupleShape::Circle {  // TypeId(6)
     discriminant: i32,
     payload_0: f64,
 }
 
-struct wado-compiler/tests/fixtures/match_2.wado//MTupleShape::Rectangle {  // TypeId(7)
+struct match_2.wado//MTupleShape::Rectangle {  // TypeId(7)
     discriminant: i32,
     payload_0: ref "tuple//[f64, f64]",
 }
 
-variant wado-compiler/tests/fixtures/match_2.wado//MWildColor {  // TypeId(8)
+variant match_2.wado//MWildColor {  // TypeId(8)
     Red,
     Green,
     Blue,
 }
 
-variant wado-compiler/tests/fixtures/match_2.wado//MGuardShape {  // TypeId(9)
+variant match_2.wado//MGuardShape {  // TypeId(9)
     Circle(f64),
     Rectangle(ref "tuple//[f64, f64]"),
     MGuardPoint,
 }
 
-struct wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle {  // TypeId(10)
+struct match_2.wado//MGuardShape::Circle {  // TypeId(10)
     discriminant: i32,
     payload_0: f64,
 }
 
-struct wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Rectangle {  // TypeId(11)
+struct match_2.wado//MGuardShape::Rectangle {  // TypeId(11)
     discriminant: i32,
     payload_0: ref "tuple//[f64, f64]",
 }
@@ -86,7 +86,7 @@ struct core:prelude//List<u64> {  // TypeId(15)
 
 enum core:prelude/fpfmt.wado//enum:SpecialKind { NotSpecial = 0, Zero = 1, Inf = 2, NaN = 3 };  // TypeId(16)
 
-enum wado-compiler/tests/fixtures/match_2.wado//enum:MExhDir { North = 0, South = 1, East = 2, West = 3 };  // TypeId(17)
+enum match_2.wado//enum:MExhDir { North = 0, South = 1, East = 2, West = 3 };  // TypeId(17)
 
 enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(18)
 
@@ -108,25 +108,25 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(27)
 
-type "functype//wado-compiler/tests/fixtures/match_2.wado/describe_br" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(28)
+type "functype//match_2.wado/describe_br" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(28)
 
-type "functype//wado-compiler/tests/fixtures/match_2.wado/match_guard_basic" = fn();  // TypeId(29)
+type "functype//match_2.wado/match_guard_basic" = fn();  // TypeId(29)
 
-type "functype//wado-compiler/tests/fixtures/match_2.wado/match_guard_custom_variant" = fn();  // TypeId(30)
+type "functype//match_2.wado/match_guard_custom_variant" = fn();  // TypeId(30)
 
-type "functype//wado-compiler/tests/fixtures/match_2.wado/match_guard_variant" = fn();  // TypeId(31)
+type "functype//match_2.wado/match_guard_variant" = fn();  // TypeId(31)
 
-type "functype//wado-compiler/tests/fixtures/match_2.wado/dir_name" = fn("wado-compiler/tests/fixtures/match_2.wado//enum:MExhDir") -> ref "core:prelude/string.wado//String";  // TypeId(32)
+type "functype//match_2.wado/dir_name" = fn("match_2.wado//enum:MExhDir") -> ref "core:prelude/string.wado//String";  // TypeId(32)
 
-type "functype//wado-compiler/tests/fixtures/match_2.wado/match_exhaustive" = fn();  // TypeId(33)
+type "functype//match_2.wado/match_exhaustive" = fn();  // TypeId(33)
 
-type "functype//wado-compiler/tests/fixtures/match_2.wado/match_wildcard" = fn();  // TypeId(34)
+type "functype//match_2.wado/match_wildcard" = fn();  // TypeId(34)
 
-type "functype//wado-compiler/tests/fixtures/match_2.wado/match_variant_tuple_payload" = fn();  // TypeId(35)
+type "functype//match_2.wado/match_variant_tuple_payload" = fn();  // TypeId(35)
 
-type "functype//wado-compiler/tests/fixtures/match_2.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(36)
+type "functype//match_2.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(36)
 
-type "functype//wado-compiler/tests/fixtures/match_2.wado/__cm_export__run" = fn();  // TypeId(37)
+type "functype//match_2.wado/__cm_export__run" = fn();  // TypeId(37)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(38)
 
@@ -235,9 +235,9 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global global:core:prelude/fpfmt.wado::POW10: ref null "core:prelude//List<u64>" = struct.new "core:prelude//List<u64>" { repr: ref.as_non_null(array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64)), used: 20 };
-global mut global:wado-compiler/tests/fixtures/match_2.wado::__modules_initialized: bool = 0;
+global mut global:match_2.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/match_2.wado/describe_br"(n) {
+fn "match_2.wado/describe_br"(n) {
     return b0: block -> ref "core:prelude/string.wado//String" {
         b1: block {
             b2: block {
@@ -286,7 +286,7 @@ fn "wado-compiler/tests/fixtures/match_2.wado/describe_br"(n) {
     };
 }
 
-fn "wado-compiler/tests/fixtures/match_2.wado/match_guard_basic"() with Stdout {
+fn "match_2.wado/match_guard_basic"() with Stdout {
     let result: ref "core:prelude/string.wado//String";
     let result2: ref "core:prelude/string.wado//String";
     result = block -> ref "core:prelude/string.wado//String" {
@@ -311,29 +311,29 @@ fn "wado-compiler/tests/fixtures/match_2.wado/match_guard_basic"() with Stdout {
     "core:cli/println"(result2);
 }
 
-fn "wado-compiler/tests/fixtures/match_2.wado/match_guard_custom_variant"() with Stdout {
-    let s1: ref "wado-compiler/tests/fixtures/match_2.wado//MGuardShape";
-    let s2: ref "wado-compiler/tests/fixtures/match_2.wado//MGuardShape";
-    let s3: ref "wado-compiler/tests/fixtures/match_2.wado//MGuardShape";
+fn "match_2.wado/match_guard_custom_variant"() with Stdout {
+    let s1: ref "match_2.wado//MGuardShape";
+    let s2: ref "match_2.wado//MGuardShape";
+    let s3: ref "match_2.wado//MGuardShape";
     let r_3: f64;
     let desc1: ref "core:prelude/string.wado//String";
     let r_5: f64;
     let desc2: ref "core:prelude/string.wado//String";
     let r_7: f64;
     let desc3: ref "core:prelude/string.wado//String";
-    s1 = struct.new "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle" { discriminant: 0, payload_0: 5 };
-    s2 = struct.new "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle" { discriminant: 0, payload_0: 0.5 };
-    s3 = struct.new "wado-compiler/tests/fixtures/match_2.wado//MGuardShape" { 2 };
-    desc1 = (if (if ref.test "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle"(s1) -> i32 {
-        r_3 = ref.cast "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle"(s1).payload_0;
+    s1 = struct.new "match_2.wado//MGuardShape::Circle" { discriminant: 0, payload_0: 5 };
+    s2 = struct.new "match_2.wado//MGuardShape::Circle" { discriminant: 0, payload_0: 0.5 };
+    s3 = struct.new "match_2.wado//MGuardShape" { 2 };
+    desc1 = (if (if ref.test "match_2.wado//MGuardShape::Circle"(s1) -> i32 {
+        r_3 = ref.cast "match_2.wado//MGuardShape::Circle"(s1).payload_0;
         r_3 > 1;
     } else {
         0;
     }) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("big circle"), used: 10 };
-    } else if ref.test "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle"(s1) -> ref "core:prelude/string.wado//String" {
+    } else if ref.test "match_2.wado//MGuardShape::Circle"(s1) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("small circle"), used: 12 };
-    } else if ref.test "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Rectangle"(s1) -> ref "core:prelude/string.wado//String" {
+    } else if ref.test "match_2.wado//MGuardShape::Rectangle"(s1) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rectangle"), used: 9 };
     } else {
         block -> ref "core:prelude/string.wado//String" {
@@ -341,16 +341,16 @@ fn "wado-compiler/tests/fixtures/match_2.wado/match_guard_custom_variant"() with
         };
     });
     "core:cli/println"(desc1);
-    desc2 = (if (if ref.test "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle"(s2) -> i32 {
-        r_5 = ref.cast "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle"(s2).payload_0;
+    desc2 = (if (if ref.test "match_2.wado//MGuardShape::Circle"(s2) -> i32 {
+        r_5 = ref.cast "match_2.wado//MGuardShape::Circle"(s2).payload_0;
         r_5 > 1;
     } else {
         0;
     }) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("big circle"), used: 10 };
-    } else if ref.test "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle"(s2) -> ref "core:prelude/string.wado//String" {
+    } else if ref.test "match_2.wado//MGuardShape::Circle"(s2) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("small circle"), used: 12 };
-    } else if ref.test "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Rectangle"(s2) -> ref "core:prelude/string.wado//String" {
+    } else if ref.test "match_2.wado//MGuardShape::Rectangle"(s2) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rectangle"), used: 9 };
     } else {
         block -> ref "core:prelude/string.wado//String" {
@@ -358,16 +358,16 @@ fn "wado-compiler/tests/fixtures/match_2.wado/match_guard_custom_variant"() with
         };
     });
     "core:cli/println"(desc2);
-    desc3 = (if (if ref.test "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle"(s3) -> i32 {
-        r_7 = ref.cast "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle"(s3).payload_0;
+    desc3 = (if (if ref.test "match_2.wado//MGuardShape::Circle"(s3) -> i32 {
+        r_7 = ref.cast "match_2.wado//MGuardShape::Circle"(s3).payload_0;
         r_7 > 1;
     } else {
         0;
     }) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("big circle"), used: 10 };
-    } else if ref.test "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle"(s3) -> ref "core:prelude/string.wado//String" {
+    } else if ref.test "match_2.wado//MGuardShape::Circle"(s3) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("small circle"), used: 12 };
-    } else if ref.test "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Rectangle"(s3) -> ref "core:prelude/string.wado//String" {
+    } else if ref.test "match_2.wado//MGuardShape::Rectangle"(s3) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rectangle"), used: 9 };
     } else if @likely(s3.discriminant == 2) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("point"), used: 5 };
@@ -377,7 +377,7 @@ fn "wado-compiler/tests/fixtures/match_2.wado/match_guard_custom_variant"() with
     "core:cli/println"(desc3);
 }
 
-fn "wado-compiler/tests/fixtures/match_2.wado/match_guard_variant"() with Stdout {
+fn "match_2.wado/match_guard_variant"() with Stdout {
     let opt1: ref "core:prelude/types.wado//Option<i32>";
     let opt2: ref "core:prelude/types.wado//Option<i32>";
     let x_3: i32;
@@ -437,7 +437,7 @@ fn "wado-compiler/tests/fixtures/match_2.wado/match_guard_variant"() with Stdout
     "core:cli/println"(msg3);
 }
 
-fn "wado-compiler/tests/fixtures/match_2.wado/dir_name"(d) {
+fn "match_2.wado/dir_name"(d) {
     return (if d == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("north"), used: 5 };
     } else if d == 1 -> ref "core:prelude/string.wado//String" {
@@ -449,14 +449,14 @@ fn "wado-compiler/tests/fixtures/match_2.wado/dir_name"(d) {
     });
 }
 
-fn "wado-compiler/tests/fixtures/match_2.wado/match_exhaustive"() with Stdout {
+fn "match_2.wado/match_exhaustive"() with Stdout {
     let x: i32;
     let val: i32;
     let name: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    "core:cli/println"("wado-compiler/tests/fixtures/match_2.wado/dir_name"(0));
-    "core:cli/println"("wado-compiler/tests/fixtures/match_2.wado/dir_name"(3));
+    "core:cli/println"("match_2.wado/dir_name"(0));
+    "core:cli/println"("match_2.wado/dir_name"(3));
     let __match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
     __match_scrut_0 = struct.new "core:prelude/types.wado//Option<i32>" { 1 };
     val = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0) -> i32 {
@@ -471,12 +471,12 @@ fn "wado-compiler/tests/fixtures/match_2.wado/match_exhaustive"() with Stdout {
     "core:cli/println"(name);
 }
 
-fn "wado-compiler/tests/fixtures/match_2.wado/match_wildcard"() with Stdout {
-    let blue: ref "wado-compiler/tests/fixtures/match_2.wado//MWildColor";
+fn "match_2.wado/match_wildcard"() with Stdout {
+    let blue: ref "match_2.wado//MWildColor";
     let name1: ref "core:prelude/string.wado//String";
     let name2: ref "core:prelude/string.wado//String";
     let name3: ref "core:prelude/string.wado//String";
-    blue = struct.new "wado-compiler/tests/fixtures/match_2.wado//MWildColor" { 2 };
+    blue = struct.new "match_2.wado//MWildColor" { 2 };
     name1 = block -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 101, 100), used: 3 };
     };
@@ -495,21 +495,21 @@ fn "wado-compiler/tests/fixtures/match_2.wado/match_wildcard"() with Stdout {
     "core:cli/println"(name3);
 }
 
-fn "wado-compiler/tests/fixtures/match_2.wado/match_variant_tuple_payload"() with Stdout {
-    let rect: ref "wado-compiler/tests/fixtures/match_2.wado//MTupleShape";
+fn "match_2.wado/match_variant_tuple_payload"() with Stdout {
+    let rect: ref "match_2.wado//MTupleShape";
     let r: f64;
     let w: f64;
     let h: f64;
     let area: f64;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    rect = struct.new "wado-compiler/tests/fixtures/match_2.wado//MTupleShape::Rectangle" { discriminant: 1, payload_0: struct.new "tuple//[f64, f64]" { 0: 3, 1: 4 } };
-    area = (if ref.test "wado-compiler/tests/fixtures/match_2.wado//MTupleShape::Circle"(rect) -> f64 {
-        r = ref.cast "wado-compiler/tests/fixtures/match_2.wado//MTupleShape::Circle"(rect).payload_0;
+    rect = struct.new "match_2.wado//MTupleShape::Rectangle" { discriminant: 1, payload_0: struct.new "tuple//[f64, f64]" { 0: 3, 1: 4 } };
+    area = (if ref.test "match_2.wado//MTupleShape::Circle"(rect) -> f64 {
+        r = ref.cast "match_2.wado//MTupleShape::Circle"(rect).payload_0;
         (3.14159 * r) * r;
-    } else if ref.test "wado-compiler/tests/fixtures/match_2.wado//MTupleShape::Rectangle"(rect) -> f64 {
+    } else if ref.test "match_2.wado//MTupleShape::Rectangle"(rect) -> f64 {
         let __variant_payload_1: ref "tuple//[f64, f64]";
-        __variant_payload_1 = ref.cast "wado-compiler/tests/fixtures/match_2.wado//MTupleShape::Rectangle"(rect).payload_0;
+        __variant_payload_1 = ref.cast "match_2.wado//MTupleShape::Rectangle"(rect).payload_0;
         w = __variant_payload_1.0;
         h = __variant_payload_1.1;
         w * h;
@@ -519,39 +519,39 @@ fn "wado-compiler/tests/fixtures/match_2.wado/match_variant_tuple_payload"() wit
     "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Rectangle area: "), used: 16 }); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; "core:prelude/primitive.wado/f64::fmt_into"(area, __local_6); __local_5);
 }
 
-fn "wado-compiler/tests/fixtures/match_2.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "match_2.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/match_2.wado/__cm_export__run"() {
+fn "match_2.wado/__cm_export__run"() {
     let i: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/match_2.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:match_2.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/match_2.wado::__modules_initialized = 1;
+        global:match_2.wado::__modules_initialized = 1;
     };
     __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:wado-compiler/tests/fixtures/match_2.wado::__modules_initialized);
+        break_if __inline___initialize_modules_2 @likely(global:match_2.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/match_2.wado::__modules_initialized = 1;
+        global:match_2.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/match_2.wado/match_guard_basic"();
-    "wado-compiler/tests/fixtures/match_2.wado/match_guard_custom_variant"();
-    "wado-compiler/tests/fixtures/match_2.wado/match_guard_variant"();
-    "wado-compiler/tests/fixtures/match_2.wado/match_exhaustive"();
-    "wado-compiler/tests/fixtures/match_2.wado/match_wildcard"();
+    "match_2.wado/match_guard_basic"();
+    "match_2.wado/match_guard_custom_variant"();
+    "match_2.wado/match_guard_variant"();
+    "match_2.wado/match_exhaustive"();
+    "match_2.wado/match_wildcard"();
     i = 0;
     b56: block {
         l57: loop {
             break_if b56 i > 10;
-            "core:cli/println"("wado-compiler/tests/fixtures/match_2.wado/describe_br"(i));
+            "core:cli/println"("match_2.wado/describe_br"(i));
             i = i + 1;
             continue l57;
         };
     };
-    "wado-compiler/tests/fixtures/match_2.wado/match_variant_tuple_payload"();
+    "match_2.wado/match_variant_tuple_payload"();
     "wasi/task-return"(0);
 }
 
@@ -579,7 +579,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/match_2.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "match_2.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -1805,4 +1805,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/match_2.wado/__cm_export__run" as "run"
+export fn "match_2.wado/__cm_export__run" as "run"

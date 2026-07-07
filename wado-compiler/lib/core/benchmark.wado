@@ -42,6 +42,20 @@
 use { println, Stdout } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
 
+#[synopsis]
+test {
+    let mut bench = Benchmark { name: "sum" };
+    bench.target_ms = 0;
+    let total = bench.run("1..=100", || {
+        let mut n = 0;
+        for let i of 1..=100 {
+            n += i;
+        }
+        return n;
+    });
+    assert total == 5050;
+}
+
 /// A benchmark run. The driver prints a header on the first measurement,
 /// then a labeled line per `run()` phase reporting throughput (work per
 /// second) with the per-iteration time retained alongside it.

@@ -51,11 +51,11 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/stream_read_multiple.wado/run" = fn();  // TypeId(16)
+type "functype//stream_read_multiple.wado/run" = fn();  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/stream_read_multiple.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(17)
+type "functype//stream_read_multiple.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/stream_read_multiple.wado/__cm_export__run" = fn();  // TypeId(18)
+type "functype//stream_read_multiple.wado/__cm_export__run" = fn();  // TypeId(18)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(19)
 
@@ -133,9 +133,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:wado-compiler/tests/fixtures/stream_read_multiple.wado::__modules_initialized: bool = 0;
+global mut global:stream_read_multiple.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/stream_read_multiple.wado/run"() with Stdout {
+fn "stream_read_multiple.wado/run"() with Stdout {
     let reads: i32;
     let chunk: ref "core:prelude//List<u8>";
     let __local_6: ref "core:prelude/string.wado//String";
@@ -144,10 +144,10 @@ fn "wado-compiler/tests/fixtures/stream_read_multiple.wado/run"() with Stdout {
     let rx_10: i32;
     let tx_11: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/stream_read_multiple.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:stream_read_multiple.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/stream_read_multiple.wado::__modules_initialized = 1;
+        global:stream_read_multiple.wado::__modules_initialized = 1;
     };
     rx_10 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_11 = builtin::i32_wrap_i64(packed >> 32_i64);
@@ -163,7 +163,7 @@ fn "wado-compiler/tests/fixtures/stream_read_multiple.wado/run"() with Stdout {
     };
     if @unlikely((reads == 0) == 0) {
         cold_path;
-        "core:rt/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(120); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_6, 114); "core:prelude/string.wado/String::push"(__local_6, 117); "core:prelude/string.wado/String::push"(__local_6, 110); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/stream_read_multiple.wado"), used: 54 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 21 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(120); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_6, 114); "core:prelude/string.wado/String::push"(__local_6, 117); "core:prelude/string.wado/String::push"(__local_6, 110); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("stream_read_multiple.wado"), used: 54 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 21 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: reads == 0
 "), used: 23 }); "core:prelude/string.wado/String::push"(__local_6, 114); "core:prelude/string.wado/String::push"(__local_6, 101); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 100); "core:prelude/string.wado/String::push"(__local_6, 115); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: reads }, __local_7); "core:prelude/string.wado/String::push"(__local_6, 10); __local_6);
         unreachable;
@@ -172,18 +172,18 @@ condition: reads == 0
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("multi-read ok"), used: 13 });
 }
 
-fn "wado-compiler/tests/fixtures/stream_read_multiple.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "stream_read_multiple.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/stream_read_multiple.wado/__cm_export__run"() {
+fn "stream_read_multiple.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/stream_read_multiple.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:stream_read_multiple.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/stream_read_multiple.wado::__modules_initialized = 1;
+        global:stream_read_multiple.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/stream_read_multiple.wado/run"();
+    "stream_read_multiple.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -211,7 +211,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/stream_read_multiple.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "stream_read_multiple.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -583,4 +583,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/stream_read_multiple.wado/__cm_export__run" as "run"
+export fn "stream_read_multiple.wado/__cm_export__run" as "run"

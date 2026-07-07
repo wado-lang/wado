@@ -75,6 +75,22 @@ use {
 
 use { args } from "core:cli";
 
+struct Options {
+    #[serde(positional)]
+    input: String,
+    verbose: bool = false,
+    jobs: i32 = 1,
+}
+impl Deserialize for Options;
+
+#[synopsis]
+test {
+    let opts = parse::<Options>(["in.txt", "--verbose", "--jobs", "4"]).unwrap();
+    assert opts.input == "in.txt";
+    assert opts.verbose;
+    assert opts.jobs == 4;
+}
+
 /// Error categories surfaced by `core:args`.
 pub enum ArgsErrorKind {
     UnknownOption,

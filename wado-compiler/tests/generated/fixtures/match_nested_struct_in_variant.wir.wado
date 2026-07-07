@@ -20,7 +20,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado//Point {  // TypeId(3)
+struct match_nested_struct_in_variant.wado//Point {  // TypeId(3)
     mut x: i32,
     mut y: i32,
 }
@@ -43,11 +43,11 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado/run" = fn();  // TypeId(13)
+type "functype//match_nested_struct_in_variant.wado/run" = fn();  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(14)
+type "functype//match_nested_struct_in_variant.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado/__cm_export__run" = fn();  // TypeId(15)
+type "functype//match_nested_struct_in_variant.wado/__cm_export__run" = fn();  // TypeId(15)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(16)
 
@@ -102,10 +102,10 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado::__modules_initialized: bool = 0;
+global mut global:match_nested_struct_in_variant.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado/run"() with Stdout {
-    let opt: ref null "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado//Point";
+fn "match_nested_struct_in_variant.wado/run"() with Stdout {
+    let opt: ref null "match_nested_struct_in_variant.wado//Point";
     let x: i32;
     let y: i32;
     let result: ref "core:prelude/string.wado//String";
@@ -114,14 +114,14 @@ fn "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado/run"() with
     let f_9: ref "core:prelude/format.wado//Formatter";
     let f_14: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:match_nested_struct_in_variant.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado::__modules_initialized = 1;
+        global:match_nested_struct_in_variant.wado::__modules_initialized = 1;
     };
-    opt = struct.new "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado//Point" { x: 5, y: 10 };
+    opt = struct.new "match_nested_struct_in_variant.wado//Point" { x: 5, y: 10 };
     result = (if ref.is_null(opt) == 0 -> ref "core:prelude/string.wado//String" {
-        let __variant_payload_1: ref "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado//Point";
+        let __variant_payload_1: ref "match_nested_struct_in_variant.wado//Point";
         __variant_payload_1 = ref.as_non_null(opt);
         x = __variant_payload_1.x;
         y = __variant_payload_1.y;
@@ -147,18 +147,18 @@ fn "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado/run"() with
     "core:cli/println"(result);
 }
 
-fn "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "match_nested_struct_in_variant.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado/__cm_export__run"() {
+fn "match_nested_struct_in_variant.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:match_nested_struct_in_variant.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado::__modules_initialized = 1;
+        global:match_nested_struct_in_variant.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado/run"();
+    "match_nested_struct_in_variant.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -186,7 +186,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "match_nested_struct_in_variant.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -476,4 +476,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado/__cm_export__run" as "run"
+export fn "match_nested_struct_in_variant.wado/__cm_export__run" as "run"

@@ -25,9 +25,9 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//wado-compiler/tests/fixtures/test_todo.wado/__cm_export____test_todo_0_not_yet_implemented_feature" = fn();  // TypeId(10)
+type "functype//test_todo.wado/__cm_export____test_todo_0_not_yet_implemented_feature" = fn();  // TypeId(10)
 
-type "functype//wado-compiler/tests/fixtures/test_todo.wado/__cm_export____test_todo_1" = fn();  // TypeId(11)
+type "functype//test_todo.wado/__cm_export____test_todo_1" = fn();  // TypeId(11)
 
 type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(12)
 
@@ -68,26 +68,26 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:wado-compiler/tests/fixtures/test_todo.wado::__modules_initialized: bool = 0;
+global mut global:test_todo.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/test_todo.wado/__cm_export____test_todo_0_not_yet_implemented_feature"() {
+fn "test_todo.wado/__cm_export____test_todo_0_not_yet_implemented_feature"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/test_todo.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:test_todo.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/test_todo.wado::__modules_initialized = 1;
+        global:test_todo.wado::__modules_initialized = 1;
     };
     "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("TODO: this feature is not yet implemented"), used: 41 });
     unreachable;
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/test_todo.wado/__cm_export____test_todo_1"() {
+fn "test_todo.wado/__cm_export____test_todo_1"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/test_todo.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:test_todo.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/test_todo.wado::__modules_initialized = 1;
+        global:test_todo.wado::__modules_initialized = 1;
     };
     "core:rt/unreachable"();
     unreachable;
@@ -201,5 +201,5 @@ fn "core:rt/cm_stream_write_raw_u8"(handle, data, len) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-export fn "wado-compiler/tests/fixtures/test_todo.wado/__cm_export____test_todo_0_not_yet_implemented_feature" as "__test_todo_0_not_yet_implemented_feature"
-export fn "wado-compiler/tests/fixtures/test_todo.wado/__cm_export____test_todo_1" as "__test_todo_1"
+export fn "test_todo.wado/__cm_export____test_todo_0_not_yet_implemented_feature" as "__test_todo_0_not_yet_implemented_feature"
+export fn "test_todo.wado/__cm_export____test_todo_1" as "__test_todo_1"

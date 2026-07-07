@@ -65,11 +65,11 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/match_variant_import.wado/run" = fn();  // TypeId(19)
+type "functype//match_variant_import.wado/run" = fn();  // TypeId(19)
 
-type "functype//wado-compiler/tests/fixtures/match_variant_import.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(20)
+type "functype//match_variant_import.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(20)
 
-type "functype//wado-compiler/tests/fixtures/match_variant_import.wado/__cm_export__run" = fn();  // TypeId(21)
+type "functype//match_variant_import.wado/__cm_export__run" = fn();  // TypeId(21)
 
 type "functype//./match_variant_import_module.wado/apply_padding" = fn(ref "core:prelude/string.wado//String", ref "./match_variant_import_module.wado//FormatSpec") -> ref "core:prelude/string.wado//String";  // TypeId(22)
 
@@ -182,32 +182,32 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global global:core:prelude/fpfmt.wado::POW10: ref null "core:prelude//List<u64>" = struct.new "core:prelude//List<u64>" { repr: ref.as_non_null(array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64)), used: 20 };
-global mut global:wado-compiler/tests/fixtures/match_variant_import.wado::__modules_initialized: bool = 0;
+global mut global:match_variant_import.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/match_variant_import.wado/run"() with Stdout {
+fn "match_variant_import.wado/run"() with Stdout {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/match_variant_import.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:match_variant_import.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/match_variant_import.wado::__modules_initialized = 1;
+        global:match_variant_import.wado::__modules_initialized = 1;
     };
     "core:cli/println"("./match_variant_import_module.wado/f64_to_string_fill"(42, 8, 95, struct.new "./match_variant_import_module.wado//Align" { 2 }));
     "core:cli/println"("./match_variant_import_module.wado/f64_to_string_fill"(42, 8, 95, struct.new "./match_variant_import_module.wado//Align" { 0 }));
     "core:cli/println"("./match_variant_import_module.wado/f64_to_string_fill"(42, 8, 95, struct.new "./match_variant_import_module.wado//Align" { 1 }));
 }
 
-fn "wado-compiler/tests/fixtures/match_variant_import.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "match_variant_import.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/match_variant_import.wado/__cm_export__run"() {
+fn "match_variant_import.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/match_variant_import.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:match_variant_import.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/match_variant_import.wado::__modules_initialized = 1;
+        global:match_variant_import.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/match_variant_import.wado/run"();
+    "match_variant_import.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -318,7 +318,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/match_variant_import.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "match_variant_import.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -1544,4 +1544,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/match_variant_import.wado/__cm_export__run" as "run"
+export fn "match_variant_import.wado/__cm_export__run" as "run"

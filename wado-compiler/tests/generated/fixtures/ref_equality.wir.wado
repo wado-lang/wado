@@ -24,7 +24,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct wado-compiler/tests/fixtures/ref_equality.wado//Point {  // TypeId(4)
+struct ref_equality.wado//Point {  // TypeId(4)
     mut x: i32,
     mut y: i32,
 }
@@ -47,21 +47,21 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/ref_equality.wado/__test_0_same_reference_is_equal" = fn();  // TypeId(14)
+type "functype//ref_equality.wado/__test_0_same_reference_is_equal" = fn();  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/ref_equality.wado/__test_1_different_references_are_not_equal" = fn();  // TypeId(15)
+type "functype//ref_equality.wado/__test_1_different_references_are_not_equal" = fn();  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/ref_equality.wado/__test_2_mut_ref_equality" = fn();  // TypeId(16)
+type "functype//ref_equality.wado/__test_2_mut_ref_equality" = fn();  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/ref_equality.wado/__cm_export____test_0_same_reference_is_equal" = fn();  // TypeId(17)
+type "functype//ref_equality.wado/__cm_export____test_0_same_reference_is_equal" = fn();  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/ref_equality.wado/__cm_export____test_1_different_references_are_not_equal" = fn();  // TypeId(18)
+type "functype//ref_equality.wado/__cm_export____test_1_different_references_are_not_equal" = fn();  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/ref_equality.wado/__cm_export____test_2_mut_ref_equality" = fn();  // TypeId(19)
+type "functype//ref_equality.wado/__cm_export____test_2_mut_ref_equality" = fn();  // TypeId(19)
 
-type "functype//wado-compiler/tests/fixtures/ref_equality.wado/__cm_export____test_3_primitive_ref_equality" = fn();  // TypeId(20)
+type "functype//ref_equality.wado/__cm_export____test_3_primitive_ref_equality" = fn();  // TypeId(20)
 
-type "functype//wado-compiler/tests/fixtures/ref_equality.wado/__cm_export____test_4_primitive_ref_inequality" = fn();  // TypeId(21)
+type "functype//ref_equality.wado/__cm_export____test_4_primitive_ref_inequality" = fn();  // TypeId(21)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(22)
 
@@ -99,7 +99,7 @@ type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelud
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(39)
 
-type "functype//wado-compiler/tests/fixtures/ref_equality.wado/Point^Inspect::inspect" = fn(ref "wado-compiler/tests/fixtures/ref_equality.wado//Point", ref "core:prelude/format.wado//Formatter");  // TypeId(40)
+type "functype//ref_equality.wado/Point^Inspect::inspect" = fn(ref "ref_equality.wado//Point", ref "core:prelude/format.wado//Formatter");  // TypeId(40)
 
 type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(41)
 
@@ -109,9 +109,9 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/format.wado/&i32^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(44)
 
-type "functype//core:prelude/format.wado/&mut wado-compiler/tests/fixtures/ref_equality.wado/Point^Inspect::inspect" = fn(ref "wado-compiler/tests/fixtures/ref_equality.wado//Point", ref "core:prelude/format.wado//Formatter");  // TypeId(45)
+type "functype//core:prelude/format.wado/&mut ref_equality.wado/Point^Inspect::inspect" = fn(ref "ref_equality.wado//Point", ref "core:prelude/format.wado//Formatter");  // TypeId(45)
 
-type "functype//core:prelude/format.wado/&wado-compiler/tests/fixtures/ref_equality.wado/Point^Inspect::inspect" = fn(ref "wado-compiler/tests/fixtures/ref_equality.wado//Point", ref "core:prelude/format.wado//Formatter");  // TypeId(46)
+type "functype//core:prelude/format.wado/&ref_equality.wado/Point^Inspect::inspect" = fn(ref "ref_equality.wado//Point", ref "core:prelude/format.wado//Formatter");  // TypeId(46)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(47)
 
@@ -132,99 +132,99 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:wado-compiler/tests/fixtures/ref_equality.wado::__modules_initialized: bool = 0;
+global mut global:ref_equality.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/ref_equality.wado/__test_0_same_reference_is_equal"() {
-    let p: ref "wado-compiler/tests/fixtures/ref_equality.wado//Point";
+fn "ref_equality.wado/__test_0_same_reference_is_equal"() {
+    let p: ref "ref_equality.wado//Point";
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
-    p = struct.new "wado-compiler/tests/fixtures/ref_equality.wado//Point" { x: 1, y: 2 };
+    p = struct.new "ref_equality.wado//Point" { x: 1, y: 2 };
     if @unlikely(ref.eq(p, p) == 0) {
         cold_path;
-        "core:rt/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(136); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_same_reference_is_equal"), used: 32 }); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/ref_equality.wado"), used: 46 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 11 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(136); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_same_reference_is_equal"), used: 32 }); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ref_equality.wado"), used: 46 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 11 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: r1 == r2
-"), used: 21 }); "core:prelude/string.wado/String::push"(__local_6, 114); "core:prelude/string.wado/String::push"(__local_6, 49); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/format.wado/&wado-compiler/tests/fixtures/ref_equality.wado/Point^Inspect::inspect"(p, __local_7); "core:prelude/string.wado/String::push"(__local_6, 10); "core:prelude/string.wado/String::push"(__local_6, 114); "core:prelude/string.wado/String::push"(__local_6, 50); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/format.wado/&wado-compiler/tests/fixtures/ref_equality.wado/Point^Inspect::inspect"(p, __local_7); "core:prelude/string.wado/String::push"(__local_6, 10); __local_6);
+"), used: 21 }); "core:prelude/string.wado/String::push"(__local_6, 114); "core:prelude/string.wado/String::push"(__local_6, 49); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/format.wado/&ref_equality.wado/Point^Inspect::inspect"(p, __local_7); "core:prelude/string.wado/String::push"(__local_6, 10); "core:prelude/string.wado/String::push"(__local_6, 114); "core:prelude/string.wado/String::push"(__local_6, 50); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/format.wado/&ref_equality.wado/Point^Inspect::inspect"(p, __local_7); "core:prelude/string.wado/String::push"(__local_6, 10); __local_6);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/ref_equality.wado/__test_1_different_references_are_not_equal"() {
-    let p1: ref "wado-compiler/tests/fixtures/ref_equality.wado//Point";
-    let p2: ref "wado-compiler/tests/fixtures/ref_equality.wado//Point";
+fn "ref_equality.wado/__test_1_different_references_are_not_equal"() {
+    let p1: ref "ref_equality.wado//Point";
+    let p2: ref "ref_equality.wado//Point";
     let __local_7: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/format.wado//Formatter";
-    p1 = struct.new "wado-compiler/tests/fixtures/ref_equality.wado//Point" { x: 1, y: 2 };
-    p2 = struct.new "wado-compiler/tests/fixtures/ref_equality.wado//Point" { x: 1, y: 2 };
+    p1 = struct.new "ref_equality.wado//Point" { x: 1, y: 2 };
+    p2 = struct.new "ref_equality.wado//Point" { x: 1, y: 2 };
     if @unlikely((ref.eq(p1, p2) == 0) == 0) {
         cold_path;
-        "core:rt/panic"(__local_7 = "core:prelude/string.wado/String::with_capacity"(136); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_different_references_are_not_equal"), used: 43 }); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push"(__local_7, 97); "core:prelude/string.wado/String::push"(__local_7, 116); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/ref_equality.wado"), used: 46 }); "core:prelude/string.wado/String::push"(__local_7, 58); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 19 }, __local_8); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_7 = "core:prelude/string.wado/String::with_capacity"(136); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_different_references_are_not_equal"), used: 43 }); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push"(__local_7, 97); "core:prelude/string.wado/String::push"(__local_7, 116); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ref_equality.wado"), used: 46 }); "core:prelude/string.wado/String::push"(__local_7, 58); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 19 }, __local_8); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: r1 != r2
-"), used: 21 }); "core:prelude/string.wado/String::push"(__local_7, 114); "core:prelude/string.wado/String::push"(__local_7, 49); "core:prelude/string.wado/String::push"(__local_7, 58); "core:prelude/string.wado/String::push"(__local_7, 32); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/format.wado/&wado-compiler/tests/fixtures/ref_equality.wado/Point^Inspect::inspect"(p1, __local_8); "core:prelude/string.wado/String::push"(__local_7, 10); "core:prelude/string.wado/String::push"(__local_7, 114); "core:prelude/string.wado/String::push"(__local_7, 50); "core:prelude/string.wado/String::push"(__local_7, 58); "core:prelude/string.wado/String::push"(__local_7, 32); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/format.wado/&wado-compiler/tests/fixtures/ref_equality.wado/Point^Inspect::inspect"(p2, __local_8); "core:prelude/string.wado/String::push"(__local_7, 10); __local_7);
+"), used: 21 }); "core:prelude/string.wado/String::push"(__local_7, 114); "core:prelude/string.wado/String::push"(__local_7, 49); "core:prelude/string.wado/String::push"(__local_7, 58); "core:prelude/string.wado/String::push"(__local_7, 32); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/format.wado/&ref_equality.wado/Point^Inspect::inspect"(p1, __local_8); "core:prelude/string.wado/String::push"(__local_7, 10); "core:prelude/string.wado/String::push"(__local_7, 114); "core:prelude/string.wado/String::push"(__local_7, 50); "core:prelude/string.wado/String::push"(__local_7, 58); "core:prelude/string.wado/String::push"(__local_7, 32); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/format.wado/&ref_equality.wado/Point^Inspect::inspect"(p2, __local_8); "core:prelude/string.wado/String::push"(__local_7, 10); __local_7);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/ref_equality.wado/__test_2_mut_ref_equality"() {
-    let p: ref "wado-compiler/tests/fixtures/ref_equality.wado//Point";
+fn "ref_equality.wado/__test_2_mut_ref_equality"() {
+    let p: ref "ref_equality.wado//Point";
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
-    p = struct.new "wado-compiler/tests/fixtures/ref_equality.wado//Point" { x: 1, y: 2 };
+    p = struct.new "ref_equality.wado//Point" { x: 1, y: 2 };
     if @unlikely(ref.eq(p, p) == 0) {
         cold_path;
-        "core:rt/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(136); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_2_mut_ref_equality"), used: 25 }); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/ref_equality.wado"), used: 46 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 26 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(136); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_2_mut_ref_equality"), used: 25 }); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ref_equality.wado"), used: 46 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 26 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: r1 == r2
-"), used: 21 }); "core:prelude/string.wado/String::push"(__local_6, 114); "core:prelude/string.wado/String::push"(__local_6, 49); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/format.wado/&mut wado-compiler/tests/fixtures/ref_equality.wado/Point^Inspect::inspect"(p, __local_7); "core:prelude/string.wado/String::push"(__local_6, 10); "core:prelude/string.wado/String::push"(__local_6, 114); "core:prelude/string.wado/String::push"(__local_6, 50); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/format.wado/&mut wado-compiler/tests/fixtures/ref_equality.wado/Point^Inspect::inspect"(p, __local_7); "core:prelude/string.wado/String::push"(__local_6, 10); __local_6);
+"), used: 21 }); "core:prelude/string.wado/String::push"(__local_6, 114); "core:prelude/string.wado/String::push"(__local_6, 49); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/format.wado/&mut ref_equality.wado/Point^Inspect::inspect"(p, __local_7); "core:prelude/string.wado/String::push"(__local_6, 10); "core:prelude/string.wado/String::push"(__local_6, 114); "core:prelude/string.wado/String::push"(__local_6, 50); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/format.wado/&mut ref_equality.wado/Point^Inspect::inspect"(p, __local_7); "core:prelude/string.wado/String::push"(__local_6, 10); __local_6);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/ref_equality.wado/__cm_export____test_0_same_reference_is_equal"() {
+fn "ref_equality.wado/__cm_export____test_0_same_reference_is_equal"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/ref_equality.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:ref_equality.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/ref_equality.wado::__modules_initialized = 1;
+        global:ref_equality.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/ref_equality.wado/__test_0_same_reference_is_equal"();
+    "ref_equality.wado/__test_0_same_reference_is_equal"();
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/ref_equality.wado/__cm_export____test_1_different_references_are_not_equal"() {
+fn "ref_equality.wado/__cm_export____test_1_different_references_are_not_equal"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/ref_equality.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:ref_equality.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/ref_equality.wado::__modules_initialized = 1;
+        global:ref_equality.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/ref_equality.wado/__test_1_different_references_are_not_equal"();
+    "ref_equality.wado/__test_1_different_references_are_not_equal"();
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/ref_equality.wado/__cm_export____test_2_mut_ref_equality"() {
+fn "ref_equality.wado/__cm_export____test_2_mut_ref_equality"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/ref_equality.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:ref_equality.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/ref_equality.wado::__modules_initialized = 1;
+        global:ref_equality.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/ref_equality.wado/__test_2_mut_ref_equality"();
+    "ref_equality.wado/__test_2_mut_ref_equality"();
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/ref_equality.wado/__cm_export____test_3_primitive_ref_equality"() {
+fn "ref_equality.wado/__cm_export____test_3_primitive_ref_equality"() {
     let x: ref "core:prelude/types.wado//Box<i32>";
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/ref_equality.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:ref_equality.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/ref_equality.wado::__modules_initialized = 1;
+        global:ref_equality.wado::__modules_initialized = 1;
     };
     x = struct.new "core:prelude/types.wado//Box<i32>" { value: 42 };
     if @unlikely(ref.eq(x, x) == 0) {
         cold_path;
-        "core:rt/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(136); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_3_primitive_ref_equality"), used: 31 }); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/ref_equality.wado"), used: 46 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 33 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(136); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_3_primitive_ref_equality"), used: 31 }); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ref_equality.wado"), used: 46 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 33 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: r1 == r2
 "), used: 21 }); "core:prelude/string.wado/String::push"(__local_6, 114); "core:prelude/string.wado/String::push"(__local_6, 49); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/format.wado/&i32^Inspect::inspect"(x, __local_7); "core:prelude/string.wado/String::push"(__local_6, 10); "core:prelude/string.wado/String::push"(__local_6, 114); "core:prelude/string.wado/String::push"(__local_6, 50); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/format.wado/&i32^Inspect::inspect"(x, __local_7); "core:prelude/string.wado/String::push"(__local_6, 10); __local_6);
         unreachable;
@@ -232,22 +232,22 @@ condition: r1 == r2
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/ref_equality.wado/__cm_export____test_4_primitive_ref_inequality"() {
+fn "ref_equality.wado/__cm_export____test_4_primitive_ref_inequality"() {
     let x: ref "core:prelude/types.wado//Box<i32>";
     let y: ref "core:prelude/types.wado//Box<i32>";
     let __local_7: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/ref_equality.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:ref_equality.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/ref_equality.wado::__modules_initialized = 1;
+        global:ref_equality.wado::__modules_initialized = 1;
     };
     x = struct.new "core:prelude/types.wado//Box<i32>" { value: 42 };
     y = struct.new "core:prelude/types.wado//Box<i32>" { value: 42 };
     if @unlikely((ref.eq(x, y) == 0) == 0) {
         cold_path;
-        "core:rt/panic"(__local_7 = "core:prelude/string.wado/String::with_capacity"(136); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_4_primitive_ref_inequality"), used: 33 }); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push"(__local_7, 97); "core:prelude/string.wado/String::push"(__local_7, 116); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/ref_equality.wado"), used: 46 }); "core:prelude/string.wado/String::push"(__local_7, 58); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 41 }, __local_8); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_7 = "core:prelude/string.wado/String::with_capacity"(136); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_4_primitive_ref_inequality"), used: 33 }); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push"(__local_7, 97); "core:prelude/string.wado/String::push"(__local_7, 116); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ref_equality.wado"), used: 46 }); "core:prelude/string.wado/String::push"(__local_7, 58); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 41 }, __local_8); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: r1 != r2
 "), used: 21 }); "core:prelude/string.wado/String::push"(__local_7, 114); "core:prelude/string.wado/String::push"(__local_7, 49); "core:prelude/string.wado/String::push"(__local_7, 58); "core:prelude/string.wado/String::push"(__local_7, 32); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/format.wado/&i32^Inspect::inspect"(x, __local_8); "core:prelude/string.wado/String::push"(__local_7, 10); "core:prelude/string.wado/String::push"(__local_7, 114); "core:prelude/string.wado/String::push"(__local_7, 50); "core:prelude/string.wado/String::push"(__local_7, 58); "core:prelude/string.wado/String::push"(__local_7, 32); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/format.wado/&i32^Inspect::inspect"(y, __local_8); "core:prelude/string.wado/String::push"(__local_7, 10); __local_7);
         unreachable;
@@ -487,7 +487,7 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     }
 }
 
-fn "wado-compiler/tests/fixtures/ref_equality.wado/Point^Inspect::inspect"(self, f) {
+fn "ref_equality.wado/Point^Inspect::inspect"(self, f) {
     let s_3: ref "core:prelude/string.wado//String";
     let s_5: ref "core:prelude/string.wado//String";
     let s_11: ref "core:prelude/string.wado//String";
@@ -613,22 +613,22 @@ fn "core:prelude/format.wado/&i32^Inspect::inspect"(self, f) {
     "core:prelude/primitive.wado/i32::fmt_decimal"(self.value, f);
 }
 
-fn "core:prelude/format.wado/&mut wado-compiler/tests/fixtures/ref_equality.wado/Point^Inspect::inspect"(self, f) {
+fn "core:prelude/format.wado/&mut ref_equality.wado/Point^Inspect::inspect"(self, f) {
     let s: ref "core:prelude/string.wado//String";
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("&mut "), used: 5 };
     "core:prelude/string.wado/String::push_str"(f.buf, s);
-    "wado-compiler/tests/fixtures/ref_equality.wado/Point^Inspect::inspect"(self, f);
+    "ref_equality.wado/Point^Inspect::inspect"(self, f);
 }
 
-fn "core:prelude/format.wado/&wado-compiler/tests/fixtures/ref_equality.wado/Point^Inspect::inspect"(self, f) {
+fn "core:prelude/format.wado/&ref_equality.wado/Point^Inspect::inspect"(self, f) {
     let s: ref "core:prelude/string.wado//String";
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(38), used: 1 };
     "core:prelude/string.wado/String::push_str"(f.buf, s);
-    "wado-compiler/tests/fixtures/ref_equality.wado/Point^Inspect::inspect"(self, f);
+    "ref_equality.wado/Point^Inspect::inspect"(self, f);
 }
 
-export fn "wado-compiler/tests/fixtures/ref_equality.wado/__cm_export____test_0_same_reference_is_equal" as "__test_0_same_reference_is_equal"
-export fn "wado-compiler/tests/fixtures/ref_equality.wado/__cm_export____test_1_different_references_are_not_equal" as "__test_1_different_references_are_not_equal"
-export fn "wado-compiler/tests/fixtures/ref_equality.wado/__cm_export____test_2_mut_ref_equality" as "__test_2_mut_ref_equality"
-export fn "wado-compiler/tests/fixtures/ref_equality.wado/__cm_export____test_3_primitive_ref_equality" as "__test_3_primitive_ref_equality"
-export fn "wado-compiler/tests/fixtures/ref_equality.wado/__cm_export____test_4_primitive_ref_inequality" as "__test_4_primitive_ref_inequality"
+export fn "ref_equality.wado/__cm_export____test_0_same_reference_is_equal" as "__test_0_same_reference_is_equal"
+export fn "ref_equality.wado/__cm_export____test_1_different_references_are_not_equal" as "__test_1_different_references_are_not_equal"
+export fn "ref_equality.wado/__cm_export____test_2_mut_ref_equality" as "__test_2_mut_ref_equality"
+export fn "ref_equality.wado/__cm_export____test_3_primitive_ref_equality" as "__test_3_primitive_ref_equality"
+export fn "ref_equality.wado/__cm_export____test_4_primitive_ref_inequality" as "__test_4_primitive_ref_inequality"

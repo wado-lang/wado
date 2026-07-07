@@ -24,15 +24,15 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-variant wado-compiler/tests/fixtures/match_variant_import_module.wado//Align {  // TypeId(4)
+variant match_variant_import_module.wado//Align {  // TypeId(4)
     Left,
     Center,
     Right,
 }
 
-struct wado-compiler/tests/fixtures/match_variant_import_module.wado//FormatSpec {  // TypeId(5)
+struct match_variant_import_module.wado//FormatSpec {  // TypeId(5)
     mut fill: char,
-    mut align: ref "wado-compiler/tests/fixtures/match_variant_import_module.wado//Align",
+    mut align: ref "match_variant_import_module.wado//Align",
     mut width: i32,
 }
 
@@ -65,13 +65,13 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/match_variant_import_module.wado/apply_padding" = fn(ref "core:prelude/string.wado//String", ref "wado-compiler/tests/fixtures/match_variant_import_module.wado//FormatSpec") -> ref "core:prelude/string.wado//String";  // TypeId(19)
+type "functype//match_variant_import_module.wado/apply_padding" = fn(ref "core:prelude/string.wado//String", ref "match_variant_import_module.wado//FormatSpec") -> ref "core:prelude/string.wado//String";  // TypeId(19)
 
-type "functype//wado-compiler/tests/fixtures/match_variant_import_module.wado/f64_to_string_fill" = fn(f64, i32, char, ref "wado-compiler/tests/fixtures/match_variant_import_module.wado//Align") -> ref "core:prelude/string.wado//String";  // TypeId(20)
+type "functype//match_variant_import_module.wado/f64_to_string_fill" = fn(f64, i32, char, ref "match_variant_import_module.wado//Align") -> ref "core:prelude/string.wado//String";  // TypeId(20)
 
-type "functype//wado-compiler/tests/fixtures/match_variant_import_module.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(21)
+type "functype//match_variant_import_module.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(21)
 
-type "functype//wado-compiler/tests/fixtures/match_variant_import_module.wado/__cm_export__run" = fn();  // TypeId(22)
+type "functype//match_variant_import_module.wado/__cm_export__run" = fn();  // TypeId(22)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(23)
 
@@ -180,9 +180,9 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global global:core:prelude/fpfmt.wado::POW10: ref null "core:prelude//List<u64>" = struct.new "core:prelude//List<u64>" { repr: ref.as_non_null(array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64)), used: 20 };
-global mut global:wado-compiler/tests/fixtures/match_variant_import_module.wado::__modules_initialized: bool = 0;
+global mut global:match_variant_import_module.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/match_variant_import_module.wado/apply_padding"(s, spec) {
+fn "match_variant_import_module.wado/apply_padding"(s, spec) {
     let width: i32;
     let fill: char;
     let pad_len: i32;
@@ -204,7 +204,7 @@ fn "wado-compiler/tests/fixtures/match_variant_import_module.wado/apply_padding"
     fill = spec.fill;
     pad_len = width - s.used;
     result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(width), used: 0 };
-    return let __match_scrut_0: ref "wado-compiler/tests/fixtures/match_variant_import_module.wado//Align", __match_scrut_0 = spec.align, (if __match_scrut_0.discriminant == 0 -> ref "core:prelude/string.wado//String" {
+    return let __match_scrut_0: ref "match_variant_import_module.wado//Align", __match_scrut_0 = spec.align, (if __match_scrut_0.discriminant == 0 -> ref "core:prelude/string.wado//String" {
         "core:prelude/string.wado/String::push_str"(result, s);
         i_6 = 0;
         b3: block {
@@ -254,35 +254,35 @@ fn "wado-compiler/tests/fixtures/match_variant_import_module.wado/apply_padding"
     });
 }
 
-fn "wado-compiler/tests/fixtures/match_variant_import_module.wado/f64_to_string_fill"(value, width, fill, align) {
-    let spec: ref "wado-compiler/tests/fixtures/match_variant_import_module.wado//FormatSpec";
+fn "match_variant_import_module.wado/f64_to_string_fill"(value, width, fill, align) {
+    let spec: ref "match_variant_import_module.wado//FormatSpec";
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
     __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 };
     "core:prelude/primitive.wado/f64::fmt_into"(value, __local_7);
-    spec = struct.new "wado-compiler/tests/fixtures/match_variant_import_module.wado//FormatSpec" { fill: fill, align: align, width: width };
-    return "wado-compiler/tests/fixtures/match_variant_import_module.wado/apply_padding"(__local_6, spec);
+    spec = struct.new "match_variant_import_module.wado//FormatSpec" { fill: fill, align: align, width: width };
+    return "match_variant_import_module.wado/apply_padding"(__local_6, spec);
 }
 
-fn "wado-compiler/tests/fixtures/match_variant_import_module.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "match_variant_import_module.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/match_variant_import_module.wado/__cm_export__run"() {
+fn "match_variant_import_module.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/match_variant_import_module.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:match_variant_import_module.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/match_variant_import_module.wado::__modules_initialized = 1;
+        global:match_variant_import_module.wado::__modules_initialized = 1;
     };
     __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:wado-compiler/tests/fixtures/match_variant_import_module.wado::__modules_initialized);
+        break_if __inline___initialize_modules_2 @likely(global:match_variant_import_module.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/match_variant_import_module.wado::__modules_initialized = 1;
+        global:match_variant_import_module.wado::__modules_initialized = 1;
     };
-    "core:cli/println"("wado-compiler/tests/fixtures/match_variant_import_module.wado/f64_to_string_fill"(42, 8, 95, struct.new "wado-compiler/tests/fixtures/match_variant_import_module.wado//Align" { 2 }));
+    "core:cli/println"("match_variant_import_module.wado/f64_to_string_fill"(42, 8, 95, struct.new "match_variant_import_module.wado//Align" { 2 }));
     "wasi/task-return"(0);
 }
 
@@ -310,7 +310,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/match_variant_import_module.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "match_variant_import_module.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -1536,4 +1536,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/match_variant_import_module.wado/__cm_export__run" as "run"
+export fn "match_variant_import_module.wado/__cm_export__run" as "run"

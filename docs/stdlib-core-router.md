@@ -26,6 +26,19 @@ substring allocations for scalar fields.
 
 See `docs/wep-2026-05-06-core-router.md`.
 
+## Synopsis
+
+```wado
+let mut routes = Router::<i32>::new();
+routes.get("/health", 1);
+routes.get("/users/:id", 2);
+assert routes.match_path(Method::Get, &"/health").unwrap().handler == 1;
+
+let hit = routes.match_path(Method::Get, &"/users/42").unwrap();
+assert hit.handler == 2;
+assert hit.params.get("id") matches { Some(v) && v == "42" };
+```
+
 ## Structs
 
 ### `pub struct PathParams`

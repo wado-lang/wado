@@ -50,13 +50,13 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/helper" = fn(ref "core:prelude/string.wado//String", ref "core:prelude//List<[core:prelude/string.wado/String,i32]>") -> ref "core:prelude/string.wado//String";  // TypeId(15)
+type "functype//temporary_mut_array_arg.wado/helper" = fn(ref "core:prelude/string.wado//String", ref "core:prelude//List<[core:prelude/string.wado/String,i32]>") -> ref "core:prelude/string.wado//String";  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/run" = fn();  // TypeId(16)
+type "functype//temporary_mut_array_arg.wado/run" = fn();  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(17)
+type "functype//temporary_mut_array_arg.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/__cm_export__run" = fn();  // TypeId(18)
+type "functype//temporary_mut_array_arg.wado/__cm_export__run" = fn();  // TypeId(18)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(19)
 
@@ -119,9 +119,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:wado-compiler/tests/fixtures/temporary_mut_array_arg.wado::__modules_initialized: bool = 0;
+global mut global:temporary_mut_array_arg.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/helper"(name, counts) {
+fn "temporary_mut_array_arg.wado/helper"(name, counts) {
     let i: i32;
     let prev: i32;
     let __local_4: ref "core:prelude/string.wado//String";
@@ -149,31 +149,31 @@ fn "wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/helper"(name, coun
     return name;
 }
 
-fn "wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/run"() with Stdout {
+fn "temporary_mut_array_arg.wado/run"() with Stdout {
     let __b: ref "core:prelude//List<[core:prelude/string.wado/String,i32]>";
     let result: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/temporary_mut_array_arg.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:temporary_mut_array_arg.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/temporary_mut_array_arg.wado::__modules_initialized = 1;
+        global:temporary_mut_array_arg.wado::__modules_initialized = 1;
     };
-    result = "wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/helper"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 111, 111), used: 3 }, __b = struct.new "core:prelude//List<[core:prelude/string.wado/String,i32]>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, i32]">(0), used: 0 }; __b);
+    result = "temporary_mut_array_arg.wado/helper"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 111, 111), used: 3 }, __b = struct.new "core:prelude//List<[core:prelude/string.wado/String,i32]>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, i32]">(0), used: 0 }; __b);
     "core:cli/println"(result);
 }
 
-fn "wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "temporary_mut_array_arg.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/__cm_export__run"() {
+fn "temporary_mut_array_arg.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/temporary_mut_array_arg.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:temporary_mut_array_arg.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/temporary_mut_array_arg.wado::__modules_initialized = 1;
+        global:temporary_mut_array_arg.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/run"();
+    "temporary_mut_array_arg.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -201,7 +201,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "temporary_mut_array_arg.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -538,4 +538,4 @@ fn "core:prelude/list.wado/List<[core:prelude/string.wado/String,i32]>::grow"(se
     self.repr = new_repr;
 }
 
-export fn "wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/__cm_export__run" as "run"
+export fn "temporary_mut_array_arg.wado/__cm_export__run" as "run"

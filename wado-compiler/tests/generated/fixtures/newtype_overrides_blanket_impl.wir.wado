@@ -25,9 +25,9 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//wado-compiler/tests/fixtures/newtype_overrides_blanket_impl.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(10)
+type "functype//newtype_overrides_blanket_impl.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(10)
 
-type "functype//wado-compiler/tests/fixtures/newtype_overrides_blanket_impl.wado/__cm_export__run" = fn();  // TypeId(11)
+type "functype//newtype_overrides_blanket_impl.wado/__cm_export__run" = fn();  // TypeId(11)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(12)
 
@@ -64,24 +64,24 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:wado-compiler/tests/fixtures/newtype_overrides_blanket_impl.wado::__modules_initialized: bool = 0;
+global mut global:newtype_overrides_blanket_impl.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/newtype_overrides_blanket_impl.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "newtype_overrides_blanket_impl.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/newtype_overrides_blanket_impl.wado/__cm_export__run"() {
+fn "newtype_overrides_blanket_impl.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/newtype_overrides_blanket_impl.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:newtype_overrides_blanket_impl.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/newtype_overrides_blanket_impl.wado::__modules_initialized = 1;
+        global:newtype_overrides_blanket_impl.wado::__modules_initialized = 1;
     };
     __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:wado-compiler/tests/fixtures/newtype_overrides_blanket_impl.wado::__modules_initialized);
+        break_if __inline___initialize_modules_2 @likely(global:newtype_overrides_blanket_impl.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/newtype_overrides_blanket_impl.wado::__modules_initialized = 1;
+        global:newtype_overrides_blanket_impl.wado::__modules_initialized = 1;
     };
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("newtype"), used: 7 });
     "wasi/task-return"(0);
@@ -111,7 +111,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/newtype_overrides_blanket_impl.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "newtype_overrides_blanket_impl.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -185,4 +185,4 @@ fn "core:rt/cm_stream_write_raw_u8"(handle, data, len) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-export fn "wado-compiler/tests/fixtures/newtype_overrides_blanket_impl.wado/__cm_export__run" as "run"
+export fn "newtype_overrides_blanket_impl.wado/__cm_export__run" as "run"

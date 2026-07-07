@@ -42,6 +42,21 @@ let compressed = b.run("compress", || zlib_compress(&data));
 let _ = b.run("decompress", || inflate_zlib(&compressed).unwrap());
 ```
 
+## Synopsis
+
+```wado
+let mut bench = Benchmark { name: "sum" };
+bench.target_ms = 0;
+let total = bench.run("1..=100", || {
+    let mut n = 0;
+    for let i of 1..=100 {
+        n += i;
+    }
+    return n;
+});
+assert total == 5050;
+```
+
 ## Functions
 
 ### `pub fn format_rate(total_work: f64, elapsed_ns: u64, unit: String) -> String`

@@ -57,11 +57,11 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/wasm_import_user_wat.wado/run" = fn();  // TypeId(19)
+type "functype//wasm_import_user_wat.wado/run" = fn();  // TypeId(19)
 
-type "functype//wado-compiler/tests/fixtures/wasm_import_user_wat.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(20)
+type "functype//wasm_import_user_wat.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(20)
 
-type "functype//wado-compiler/tests/fixtures/wasm_import_user_wat.wado/__cm_export__run" = fn();  // TypeId(21)
+type "functype//wasm_import_user_wat.wado/__cm_export__run" = fn();  // TypeId(21)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(22)
 
@@ -172,36 +172,36 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global global:core:prelude/fpfmt.wado::POW10: ref null "core:prelude//List<u64>" = struct.new "core:prelude//List<u64>" { repr: ref.as_non_null(array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64)), used: 20 };
-global mut global:wado-compiler/tests/fixtures/wasm_import_user_wat.wado::__modules_initialized: bool = 0;
+global mut global:wasm_import_user_wat.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/wasm_import_user_wat.wado/run"() with Stdout {
+fn "wasm_import_user_wat.wado/run"() with Stdout {
     let __local_0: ref "core:prelude/string.wado//String";
     let __local_1: ref "core:prelude/format.wado//Formatter";
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let self_8: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/wasm_import_user_wat.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wasm_import_user_wat.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/wasm_import_user_wat.wado::__modules_initialized = 1;
+        global:wasm_import_user_wat.wado::__modules_initialized = 1;
     };
     "core:cli/println"(__local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("add_one(41) = "), used: 14 }); __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_0 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_8("wasm:./sub/wasm_import_user.wat/add_one"(41)), __local_1); __local_0);
     "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("twice(1.5) = "), used: 13 }); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/f64::fmt_into"("wasm:./sub/wasm_import_user.wat/twice"(1.5), __local_3); __local_2);
 }
 
-fn "wado-compiler/tests/fixtures/wasm_import_user_wat.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "wasm_import_user_wat.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/wasm_import_user_wat.wado/__cm_export__run"() {
+fn "wasm_import_user_wat.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/wasm_import_user_wat.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wasm_import_user_wat.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/wasm_import_user_wat.wado::__modules_initialized = 1;
+        global:wasm_import_user_wat.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/wasm_import_user_wat.wado/run"();
+    "wasm_import_user_wat.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -229,7 +229,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/wasm_import_user_wat.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "wasm_import_user_wat.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -1455,4 +1455,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/wasm_import_user_wat.wado/__cm_export__run" as "run"
+export fn "wasm_import_user_wat.wado/__cm_export__run" as "run"

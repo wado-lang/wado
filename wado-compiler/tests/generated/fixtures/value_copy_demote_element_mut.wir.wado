@@ -51,15 +51,15 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/shout_first" = fn(ref "core:prelude//List<core:prelude/string.wado/String>") -> ref "core:prelude/string.wado//String";  // TypeId(16)
+type "functype//value_copy_demote_element_mut.wado/shout_first" = fn(ref "core:prelude//List<core:prelude/string.wado/String>") -> ref "core:prelude/string.wado//String";  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/run" = fn();  // TypeId(17)
+type "functype//value_copy_demote_element_mut.wado/run" = fn();  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(18)
+type "functype//value_copy_demote_element_mut.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/__cm_export__run" = fn();  // TypeId(19)
+type "functype//value_copy_demote_element_mut.wado/__cm_export__run" = fn();  // TypeId(19)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/$value_copy$T29" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(20)
+type "functype//value_copy_demote_element_mut.wado/$value_copy$T29" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(20)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(21)
 
@@ -129,10 +129,10 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado::__modules_initialized: bool = 0;
-global global:wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado::__const_obj_0: ref null "core:prelude//List<core:prelude/string.wado/String>" = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(104, 105)), used: 2 }, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(121, 111)), used: 2 })), used: 2 };
+global mut global:value_copy_demote_element_mut.wado::__modules_initialized: bool = 0;
+global global:value_copy_demote_element_mut.wado::__const_obj_0: ref null "core:prelude//List<core:prelude/string.wado/String>" = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(104, 105)), used: 2 }, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(121, 111)), used: 2 })), used: 2 };
 
-fn "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/shout_first"(words) {
+fn "value_copy_demote_element_mut.wado/shout_first"(words) {
     let x: ref "core:prelude//List<core:prelude/string.wado/String>";
     let __v1_6: i32;
     let __local_5_8: ref "core:prelude/string.wado//String";
@@ -157,37 +157,37 @@ condition: index < self.used
     }, builtin::array_get<ref "core:prelude/string.wado//String">(x.repr, 0);
 }
 
-fn "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/run"() with Stdout {
+fn "value_copy_demote_element_mut.wado/run"() with Stdout {
     let s: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/string.wado//String";
     let __v1: i32;
     let __cond: bool;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:value_copy_demote_element_mut.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado::__modules_initialized = 1;
+        global:value_copy_demote_element_mut.wado::__modules_initialized = 1;
     };
-    s = "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/shout_first"(global:wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado::__const_obj_0);
-    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_3, s); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, __v1 = global:wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado::__const_obj_0.used; __cond = 1; builtin::array_get<ref "core:prelude/string.wado//String">(global:wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado::__const_obj_0.repr, 0)); __local_3);
+    s = "value_copy_demote_element_mut.wado/shout_first"(global:value_copy_demote_element_mut.wado::__const_obj_0);
+    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_3, s); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, __v1 = global:value_copy_demote_element_mut.wado::__const_obj_0.used; __cond = 1; builtin::array_get<ref "core:prelude/string.wado//String">(global:value_copy_demote_element_mut.wado::__const_obj_0.repr, 0)); __local_3);
 }
 
-fn "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "value_copy_demote_element_mut.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/__cm_export__run"() {
+fn "value_copy_demote_element_mut.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:value_copy_demote_element_mut.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado::__modules_initialized = 1;
+        global:value_copy_demote_element_mut.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/run"();
+    "value_copy_demote_element_mut.wado/run"();
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/$value_copy$T29"(v) {
+fn "value_copy_demote_element_mut.wado/$value_copy$T29"(v) {
     return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used };
 }
 
@@ -215,7 +215,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "value_copy_demote_element_mut.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -555,4 +555,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/__cm_export__run" as "run"
+export fn "value_copy_demote_element_mut.wado/__cm_export__run" as "run"

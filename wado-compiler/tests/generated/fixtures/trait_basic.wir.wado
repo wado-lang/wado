@@ -9,7 +9,7 @@ struct core:prelude/string.wado//String {  // TypeId(1)
     mut used: i32,
 }
 
-struct wado-compiler/tests/fixtures/trait_basic.wado//Person {  // TypeId(2)
+struct trait_basic.wado//Person {  // TypeId(2)
     mut name: ref "core:prelude/string.wado//String",
 }
 
@@ -29,9 +29,9 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
 
-type "functype//wado-compiler/tests/fixtures/trait_basic.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(11)
+type "functype//trait_basic.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//wado-compiler/tests/fixtures/trait_basic.wado/__cm_export__run" = fn();  // TypeId(12)
+type "functype//trait_basic.wado/__cm_export__run" = fn();  // TypeId(12)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(13)
 
@@ -55,7 +55,7 @@ type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelud
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(23)
 
-type "functype//wado-compiler/tests/fixtures/trait_basic.wado/Person^Greet::greet" = fn(ref "wado-compiler/tests/fixtures/trait_basic.wado//Person") -> ref "core:prelude/string.wado//String";  // TypeId(24)
+type "functype//trait_basic.wado/Person^Greet::greet" = fn(ref "trait_basic.wado//Person") -> ref "core:prelude/string.wado//String";  // TypeId(24)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(25)
 
@@ -76,28 +76,28 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:wado-compiler/tests/fixtures/trait_basic.wado::__modules_initialized: bool = 0;
+global mut global:trait_basic.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/trait_basic.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "trait_basic.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/trait_basic.wado/__cm_export__run"() {
-    let p: ref "wado-compiler/tests/fixtures/trait_basic.wado//Person";
+fn "trait_basic.wado/__cm_export__run"() {
+    let p: ref "trait_basic.wado//Person";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/trait_basic.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:trait_basic.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/trait_basic.wado::__modules_initialized = 1;
+        global:trait_basic.wado::__modules_initialized = 1;
     };
     __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:wado-compiler/tests/fixtures/trait_basic.wado::__modules_initialized);
+        break_if __inline___initialize_modules_2 @likely(global:trait_basic.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/trait_basic.wado::__modules_initialized = 1;
+        global:trait_basic.wado::__modules_initialized = 1;
     };
-    p = struct.new "wado-compiler/tests/fixtures/trait_basic.wado//Person" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 } };
-    "core:cli/println"("wado-compiler/tests/fixtures/trait_basic.wado/Person^Greet::greet"(p));
+    p = struct.new "trait_basic.wado//Person" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 } };
+    "core:cli/println"("trait_basic.wado/Person^Greet::greet"(p));
     "wasi/task-return"(0);
 }
 
@@ -125,7 +125,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/trait_basic.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "trait_basic.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -256,9 +256,9 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     }
 }
 
-fn "wado-compiler/tests/fixtures/trait_basic.wado/Person^Greet::greet"(self) {
+fn "trait_basic.wado/Person^Greet::greet"(self) {
     let __local_1: ref "core:prelude/string.wado//String";
     return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }, "core:prelude/string.wado/String::push"(__local_1, 72), "core:prelude/string.wado/String::push"(__local_1, 101), "core:prelude/string.wado/String::push"(__local_1, 108), "core:prelude/string.wado/String::push"(__local_1, 108), "core:prelude/string.wado/String::push"(__local_1, 111), "core:prelude/string.wado/String::push"(__local_1, 44), "core:prelude/string.wado/String::push"(__local_1, 32), "core:prelude/string.wado/String::push_str"(__local_1, self.name), "core:prelude/string.wado/String::push"(__local_1, 33), __local_1;
 }
 
-export fn "wado-compiler/tests/fixtures/trait_basic.wado/__cm_export__run" as "run"
+export fn "trait_basic.wado/__cm_export__run" as "run"

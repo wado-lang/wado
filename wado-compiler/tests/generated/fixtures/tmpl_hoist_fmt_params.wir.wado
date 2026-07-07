@@ -53,11 +53,11 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/tmpl_hoist_fmt_params.wado/run" = fn();  // TypeId(17)
+type "functype//tmpl_hoist_fmt_params.wado/run" = fn();  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/tmpl_hoist_fmt_params.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(18)
+type "functype//tmpl_hoist_fmt_params.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/tmpl_hoist_fmt_params.wado/__cm_export__run" = fn();  // TypeId(19)
+type "functype//tmpl_hoist_fmt_params.wado/__cm_export__run" = fn();  // TypeId(19)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(20)
 
@@ -166,9 +166,9 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global global:core:prelude/fpfmt.wado::POW10: ref null "core:prelude//List<u64>" = struct.new "core:prelude//List<u64>" { repr: ref.as_non_null(array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64)), used: 20 };
-global mut global:wado-compiler/tests/fixtures/tmpl_hoist_fmt_params.wado::__modules_initialized: bool = 0;
+global mut global:tmpl_hoist_fmt_params.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/tmpl_hoist_fmt_params.wado/run"() with Stdout {
+fn "tmpl_hoist_fmt_params.wado/run"() with Stdout {
     let total: i32;
     let i_1: i32;
     let total2: i32;
@@ -201,10 +201,10 @@ fn "wado-compiler/tests/fixtures/tmpl_hoist_fmt_params.wado/run"() with Stdout {
     let __fmt_buf_101: ref "core:prelude/format.wado//Formatter";
     let __fmt_buf_102: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/tmpl_hoist_fmt_params.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:tmpl_hoist_fmt_params.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/tmpl_hoist_fmt_params.wado::__modules_initialized = 1;
+        global:tmpl_hoist_fmt_params.wado::__modules_initialized = 1;
     };
     total = 0;
     i_1 = 0;
@@ -294,18 +294,18 @@ fn "wado-compiler/tests/fixtures/tmpl_hoist_fmt_params.wado/run"() with Stdout {
     "core:cli/println"(__local_28 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_28, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("zeroprec="), used: 9 }); __local_29 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_28 }; "core:prelude/primitive.wado/i32::fmt_decimal"(total4, __local_29); __local_28);
 }
 
-fn "wado-compiler/tests/fixtures/tmpl_hoist_fmt_params.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "tmpl_hoist_fmt_params.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/tmpl_hoist_fmt_params.wado/__cm_export__run"() {
+fn "tmpl_hoist_fmt_params.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/tmpl_hoist_fmt_params.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:tmpl_hoist_fmt_params.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/tmpl_hoist_fmt_params.wado::__modules_initialized = 1;
+        global:tmpl_hoist_fmt_params.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/tmpl_hoist_fmt_params.wado/run"();
+    "tmpl_hoist_fmt_params.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -333,7 +333,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/tmpl_hoist_fmt_params.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "tmpl_hoist_fmt_params.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -1559,4 +1559,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/tmpl_hoist_fmt_params.wado/__cm_export__run" as "run"
+export fn "tmpl_hoist_fmt_params.wado/__cm_export__run" as "run"

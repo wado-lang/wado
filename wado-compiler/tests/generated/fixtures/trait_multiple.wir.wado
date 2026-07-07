@@ -24,11 +24,11 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct wado-compiler/tests/fixtures/trait_multiple.wado//Dog {  // TypeId(4)
+struct trait_multiple.wado//Dog {  // TypeId(4)
     mut name: ref "core:prelude/string.wado//String",
 }
 
-struct wado-compiler/tests/fixtures/trait_multiple.wado//Cat {  // TypeId(5)
+struct trait_multiple.wado//Cat {  // TypeId(5)
     mut name: ref "core:prelude/string.wado//String",
 }
 
@@ -61,13 +61,13 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/trait_multiple.wado/trait_multiple_impls" = fn();  // TypeId(19)
+type "functype//trait_multiple.wado/trait_multiple_impls" = fn();  // TypeId(19)
 
-type "functype//wado-compiler/tests/fixtures/trait_multiple.wado/trait_multiple_methods" = fn();  // TypeId(20)
+type "functype//trait_multiple.wado/trait_multiple_methods" = fn();  // TypeId(20)
 
-type "functype//wado-compiler/tests/fixtures/trait_multiple.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(21)
+type "functype//trait_multiple.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(21)
 
-type "functype//wado-compiler/tests/fixtures/trait_multiple.wado/__cm_export__run" = fn();  // TypeId(22)
+type "functype//trait_multiple.wado/__cm_export__run" = fn();  // TypeId(22)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(23)
 
@@ -147,9 +147,9 @@ type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelud
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(61)
 
-type "functype//wado-compiler/tests/fixtures/trait_multiple.wado/Cat^Describe::describe" = fn(ref "wado-compiler/tests/fixtures/trait_multiple.wado//Cat") -> ref "core:prelude/string.wado//String";  // TypeId(62)
+type "functype//trait_multiple.wado/Cat^Describe::describe" = fn(ref "trait_multiple.wado//Cat") -> ref "core:prelude/string.wado//String";  // TypeId(62)
 
-type "functype//wado-compiler/tests/fixtures/trait_multiple.wado/Dog^Describe::describe" = fn(ref "wado-compiler/tests/fixtures/trait_multiple.wado//Dog") -> ref "core:prelude/string.wado//String";  // TypeId(63)
+type "functype//trait_multiple.wado/Dog^Describe::describe" = fn(ref "trait_multiple.wado//Dog") -> ref "core:prelude/string.wado//String";  // TypeId(63)
 
 type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(64)
 
@@ -180,18 +180,18 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global global:core:prelude/fpfmt.wado::POW10: ref null "core:prelude//List<u64>" = struct.new "core:prelude//List<u64>" { repr: ref.as_non_null(array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64)), used: 20 };
-global mut global:wado-compiler/tests/fixtures/trait_multiple.wado::__modules_initialized: bool = 0;
-global mut global:wado-compiler/tests/fixtures/trait_multiple.wado::__const_obj_0: ref null "wado-compiler/tests/fixtures/trait_multiple.wado//Cat" = ref.null none;
-global mut global:wado-compiler/tests/fixtures/trait_multiple.wado::__const_obj_1: ref null "wado-compiler/tests/fixtures/trait_multiple.wado//Dog" = ref.null none;
+global mut global:trait_multiple.wado::__modules_initialized: bool = 0;
+global mut global:trait_multiple.wado::__const_obj_0: ref null "trait_multiple.wado//Cat" = ref.null none;
+global mut global:trait_multiple.wado::__const_obj_1: ref null "trait_multiple.wado//Dog" = ref.null none;
 
-fn "wado-compiler/tests/fixtures/trait_multiple.wado/trait_multiple_impls"() with Stdout {
-    global:wado-compiler/tests/fixtures/trait_multiple.wado::__const_obj_0 = struct.new "wado-compiler/tests/fixtures/trait_multiple.wado//Cat" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Whiskers"), used: 8 } };
-    global:wado-compiler/tests/fixtures/trait_multiple.wado::__const_obj_1 = struct.new "wado-compiler/tests/fixtures/trait_multiple.wado//Dog" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Buddy"), used: 5 } };
-    "core:cli/println"("wado-compiler/tests/fixtures/trait_multiple.wado/Cat^Describe::describe"(global:wado-compiler/tests/fixtures/trait_multiple.wado::__const_obj_0));
-    "core:cli/println"("wado-compiler/tests/fixtures/trait_multiple.wado/Dog^Describe::describe"(global:wado-compiler/tests/fixtures/trait_multiple.wado::__const_obj_1));
+fn "trait_multiple.wado/trait_multiple_impls"() with Stdout {
+    global:trait_multiple.wado::__const_obj_0 = struct.new "trait_multiple.wado//Cat" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Whiskers"), used: 8 } };
+    global:trait_multiple.wado::__const_obj_1 = struct.new "trait_multiple.wado//Dog" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Buddy"), used: 5 } };
+    "core:cli/println"("trait_multiple.wado/Cat^Describe::describe"(global:trait_multiple.wado::__const_obj_0));
+    "core:cli/println"("trait_multiple.wado/Dog^Describe::describe"(global:trait_multiple.wado::__const_obj_1));
 }
 
-fn "wado-compiler/tests/fixtures/trait_multiple.wado/trait_multiple_methods"() with Stdout {
+fn "trait_multiple.wado/trait_multiple_methods"() with Stdout {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     let __local_3: ref "core:prelude/string.wado//String";
@@ -201,25 +201,25 @@ fn "wado-compiler/tests/fixtures/trait_multiple.wado/trait_multiple_methods"() w
     "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Perimeter: "), used: 11 }); __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:prelude/primitive.wado/f64::fmt_into"(14, __local_4); __local_3);
 }
 
-fn "wado-compiler/tests/fixtures/trait_multiple.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "trait_multiple.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/trait_multiple.wado/__cm_export__run"() {
+fn "trait_multiple.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/trait_multiple.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:trait_multiple.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/trait_multiple.wado::__modules_initialized = 1;
+        global:trait_multiple.wado::__modules_initialized = 1;
     };
     __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:wado-compiler/tests/fixtures/trait_multiple.wado::__modules_initialized);
+        break_if __inline___initialize_modules_2 @likely(global:trait_multiple.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/trait_multiple.wado::__modules_initialized = 1;
+        global:trait_multiple.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/trait_multiple.wado/trait_multiple_impls"();
-    "wado-compiler/tests/fixtures/trait_multiple.wado/trait_multiple_methods"();
+    "trait_multiple.wado/trait_multiple_impls"();
+    "trait_multiple.wado/trait_multiple_methods"();
     "wasi/task-return"(0);
 }
 
@@ -247,7 +247,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/trait_multiple.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "trait_multiple.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -1279,12 +1279,12 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     }
 }
 
-fn "wado-compiler/tests/fixtures/trait_multiple.wado/Cat^Describe::describe"(self) {
+fn "trait_multiple.wado/Cat^Describe::describe"(self) {
     let __local_1: ref "core:prelude/string.wado//String";
     return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(28), used: 0 }, "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("A cat named "), used: 12 }), "core:prelude/string.wado/String::push_str"(__local_1, self.name), __local_1;
 }
 
-fn "wado-compiler/tests/fixtures/trait_multiple.wado/Dog^Describe::describe"(self) {
+fn "trait_multiple.wado/Dog^Describe::describe"(self) {
     let __local_1: ref "core:prelude/string.wado//String";
     return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(28), used: 0 }, "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("A dog named "), used: 12 }), "core:prelude/string.wado/String::push_str"(__local_1, self.name), __local_1;
 }
@@ -1483,4 +1483,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/trait_multiple.wado/__cm_export__run" as "run"
+export fn "trait_multiple.wado/__cm_export__run" as "run"

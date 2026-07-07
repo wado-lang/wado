@@ -38,6 +38,14 @@ let epoch = Instant { seconds: 0, nanoseconds: 0 };
 let zoned = ZonedDateTime { instant: epoch, time_zone: "UTC" };
 ```
 
+## Synopsis
+
+```wado
+let epoch = Instant::from_epoch_seconds(0);
+assert `{epoch}` == "1970-01-01T00:00:00Z";
+assert epoch < Instant::from_epoch_seconds(1_000_000_000);
+```
+
 ## Structs
 
 ### `pub struct Instant`

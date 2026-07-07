@@ -324,6 +324,18 @@ struct "ArrayIter<u8>" {
     end: i32,
 }
 
+struct "ArrayIter<core:prelude/string.wado/String>" {
+    repr: &Array<String>,
+    index: i32,
+    end: i32,
+}
+
+struct "ArraySlice<core:prelude/string.wado/String>" {
+    repr: &Array<String>,
+    start: i32,
+    end: i32,
+}
+
 struct "ArraySlice<u8>" {
     repr: &Array<u8>,
     start: i32,
@@ -1985,6 +1997,41 @@ pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::
     self."Fn<2,[I::Item,J::Item]>^Display::fmt"(f);
 }
 
+fn __test_0() {
+    core::cli::println(String { repr: packed"Hello, Wado!", used: 12 });
+    __for_of_0: {
+        let mut __iter_0: ArrayIter<core:prelude/string.wado/String> = core::cli::args()."List<core:prelude/string.wado/String>^IntoIterator::into_iter"();
+        loop {
+            let __match_5: Option<String> = __iter_0."ArrayIter<core:prelude/string.wado/String>^Iterator::next"();
+            match __match_5 {
+                Some(arg) => {
+                    core::cli::println(__tmpl: {
+                        let mut __r: String = "core::prelude/string.wado::String::with_capacity"(21);
+                        __r.String::push_str(&String { repr: packed"arg: ", used: 5 });
+                        __r.String::push_str(&arg);
+                        break __tmpl: __r;
+                    });
+                },
+                _ => {
+                    break;
+                },
+            };
+        }
+    }
+    let __match_6: Option<String> = core::cli::env(String { repr: packed"HOME", used: 4 });
+    match __match_6 {
+        Some(home) => {
+            core::cli::println(__tmpl: {
+                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(21);
+                __r.String::push_str(&String { repr: packed"HOME=", used: 5 });
+                __r.String::push_str(&home);
+                break __tmpl: __r;
+            });
+        },
+        _ => (),
+    };
+}
+
 pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool) {
     let bytes: Array<u8> = message.String::internal_raw_bytes();
     let len: i32 = message.String::len();
@@ -2780,7 +2827,7 @@ fn __test_0() {
             });
         }
     }
-    let primes: List<i32> = "$value_copy$T136"(__seq_lit: {
+    let primes: List<i32> = "$value_copy$T141"(__seq_lit: {
         let mut __b: List<i32> = "core::prelude/list.wado::List<i32>^SequenceLiteralBuilder::new_literal"(4);
         __b."List<i32>^SequenceLiteralBuilder::push_literal"(2);
         __b."List<i32>^SequenceLiteralBuilder::push_literal"(3);
@@ -13679,7 +13726,7 @@ pub fn "StrCharIndicesIter^Iterator::for_each"(self: &mut StrCharIndicesIter, f:
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                f("$value_copy$T334"(item));
+                f("$value_copy$T339"(item));
             },
             _ => {
                 break;
@@ -13693,7 +13740,7 @@ pub fn "StrCharIndicesIter^Iterator::find"(self: &mut StrCharIndicesIter, pred: 
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T334"(item)) {
+                if pred("$value_copy$T339"(item)) {
                     return Option<[i32, char]>::Some(item);
                 }
             },
@@ -13710,7 +13757,7 @@ pub fn "StrCharIndicesIter^Iterator::any"(self: &mut StrCharIndicesIter, pred: f
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T334"(item)) {
+                if pred("$value_copy$T339"(item)) {
                     return true;
                 }
             },
@@ -13727,7 +13774,7 @@ pub fn "StrCharIndicesIter^Iterator::all"(self: &mut StrCharIndicesIter, pred: f
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if !pred("$value_copy$T334"(item)) {
+                if !pred("$value_copy$T339"(item)) {
                     return false;
                 }
             },
@@ -13780,7 +13827,7 @@ pub fn "StrCharIndicesIter^Iterator::position"(self: &mut StrCharIndicesIter, pr
         let __match_4: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_4 {
             Some(item) => {
-                if pred("$value_copy$T334"(item)) {
+                if pred("$value_copy$T339"(item)) {
                     return Option<i32>::Some(idx);
                 }
                 idx = (idx + 1);
@@ -13797,12 +13844,12 @@ pub fn "StrCharIndicesIter^Iterator::reduce"(self: &mut StrCharIndicesIter, f: f
     let __match_5: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
     match __match_5 {
         Some(first) => {
-            let mut acc: [i32, char] = "$value_copy$T334"(first);
+            let mut acc: [i32, char] = "$value_copy$T339"(first);
             loop {
                 let __match_6: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
                 match __match_6 {
                     Some(item) => {
-                        acc = f("$value_copy$T334"(acc), "$value_copy$T334"(item));
+                        acc = f("$value_copy$T339"(acc), "$value_copy$T339"(item));
                     },
                     _ => {
                         break;
@@ -21642,6 +21689,23 @@ fn "core/builtin/array_copy<u8>"(dst: &mut Array<u8>, dst_offset: i32, src: &Arr
 
 fn "core/builtin/array_new<u8>"(len: i32) -> Array<u8>;
 
+fn "ArrayIter<core:prelude/string.wado/String>^Iterator::next"(self: &mut ArrayIter<core:prelude/string.wado/String>) -> Option<String> {
+    if (self.index >= self.end) {
+        return %0;
+    }
+    let item: String = core::builtin::array_get::<String>(self.repr, self.index);
+    self.index = (self.index + 1);
+    return Option<String>::Some(item);
+}
+
+fn "List<core:prelude/string.wado/String>^IntoIterator::into_iter"(self: &List<String>) -> ArrayIter<core:prelude/string.wado/String> {
+    return "core::prelude/slice.wado::ArrayIter<core:prelude/string.wado/String>::internal_new"(&self.repr, 0, self.used);
+}
+
+pub fn "ArrayIter<core:prelude/string.wado/String>::internal_new"(repr: &Array<String>, index: i32, end: i32) -> ArrayIter<core:prelude/string.wado/String> with stores[repr] {
+    return ArrayIter<core:prelude/string.wado/String> { repr: repr, index: index, end: end };
+}
+
 fn "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>^IndexValue<i32>::index_value"(self: &Array<[String, String]>, index: i32) -> [String, String] {
     return core::builtin::array_get::<[String, String]>(self, index);
 }
@@ -21985,7 +22049,7 @@ fn "$value_copy$T26"(v: [f64, f64]) -> [f64, f64] {
     return [f64,f64] { 0: v.0, 1: v.1 };
 }
 
-fn "$value_copy$T334"(v: [i32, char]) -> [i32, char] {
+fn "$value_copy$T339"(v: [i32, char]) -> [i32, char] {
     return [i32,char] { 0: v.0, 1: v.1 };
 }
 
@@ -21997,7 +22061,7 @@ fn "$value_copy$T106"(v: u128) -> u128 {
     return u128 { low: v.low, high: v.high };
 }
 
-fn "$value_copy$T136"(v: List<i32>) -> List<i32> {
+fn "$value_copy$T141"(v: List<i32>) -> List<i32> {
     return List<i32> { repr: core::builtin::array_clone::<i32>(&v.repr), used: v.used };
 }
 

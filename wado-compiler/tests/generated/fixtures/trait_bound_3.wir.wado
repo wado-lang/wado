@@ -20,7 +20,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct wado-compiler/tests/fixtures/trait_bound_3.wado//Player {  // TypeId(3)
+struct trait_bound_3.wado//Player {  // TypeId(3)
     mut player_name: ref "core:prelude/string.wado//String",
     mut player_score: i32,
 }
@@ -43,13 +43,13 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/trait_bound_3.wado/trait_bound_method_on_type_param_chain" = fn();  // TypeId(13)
+type "functype//trait_bound_3.wado/trait_bound_method_on_type_param_chain" = fn();  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/trait_bound_3.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(14)
+type "functype//trait_bound_3.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/trait_bound_3.wado/__cm_export__run" = fn();  // TypeId(15)
+type "functype//trait_bound_3.wado/__cm_export__run" = fn();  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/trait_bound_3.wado/describe<wado-compiler/tests/fixtures/trait_bound_3.wado/Player>" = fn(ref "wado-compiler/tests/fixtures/trait_bound_3.wado//Player") -> ref "core:prelude/string.wado//String";  // TypeId(16)
+type "functype//trait_bound_3.wado/describe<trait_bound_3.wado/Player>" = fn(ref "trait_bound_3.wado//Player") -> ref "core:prelude/string.wado//String";  // TypeId(16)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(17)
 
@@ -104,9 +104,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:wado-compiler/tests/fixtures/trait_bound_3.wado::__modules_initialized: bool = 0;
+global mut global:trait_bound_3.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/trait_bound_3.wado/trait_bound_method_on_type_param_chain"() with Stdout {
+fn "trait_bound_3.wado/trait_bound_method_on_type_param_chain"() with Stdout {
     let __local_0: ref "core:prelude/string.wado//String";
     let __local_1: ref "core:prelude/format.wado//Formatter";
     let __local_2: ref "core:prelude/string.wado//String";
@@ -115,31 +115,31 @@ fn "wado-compiler/tests/fixtures/trait_bound_3.wado/trait_bound_method_on_type_p
     "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(1, __local_3); __local_2);
 }
 
-fn "wado-compiler/tests/fixtures/trait_bound_3.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "trait_bound_3.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/trait_bound_3.wado/__cm_export__run"() {
-    let p: ref "wado-compiler/tests/fixtures/trait_bound_3.wado//Player";
+fn "trait_bound_3.wado/__cm_export__run"() {
+    let p: ref "trait_bound_3.wado//Player";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/trait_bound_3.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:trait_bound_3.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/trait_bound_3.wado::__modules_initialized = 1;
+        global:trait_bound_3.wado::__modules_initialized = 1;
     };
     __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:wado-compiler/tests/fixtures/trait_bound_3.wado::__modules_initialized);
+        break_if __inline___initialize_modules_2 @likely(global:trait_bound_3.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/trait_bound_3.wado::__modules_initialized = 1;
+        global:trait_bound_3.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/trait_bound_3.wado/trait_bound_method_on_type_param_chain"();
-    p = struct.new "wado-compiler/tests/fixtures/trait_bound_3.wado//Player" { player_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 }, player_score: 100 };
-    "core:cli/println"("wado-compiler/tests/fixtures/trait_bound_3.wado/describe<wado-compiler/tests/fixtures/trait_bound_3.wado/Player>"(p));
+    "trait_bound_3.wado/trait_bound_method_on_type_param_chain"();
+    p = struct.new "trait_bound_3.wado//Player" { player_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 }, player_score: 100 };
+    "core:cli/println"("trait_bound_3.wado/describe<trait_bound_3.wado/Player>"(p));
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/trait_bound_3.wado/describe<wado-compiler/tests/fixtures/trait_bound_3.wado/Player>"(x) {
+fn "trait_bound_3.wado/describe<trait_bound_3.wado/Player>"(x) {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }, "core:prelude/string.wado/String::push_str"(__local_1, x.player_name), "core:prelude/string.wado/String::push"(__local_1, 58), "core:prelude/string.wado/String::push"(__local_1, 32), __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }, "core:prelude/primitive.wado/i32::fmt_decimal"(x.player_score, __local_2), __local_1;
@@ -169,7 +169,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/trait_bound_3.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "trait_bound_3.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -459,4 +459,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/trait_bound_3.wado/__cm_export__run" as "run"
+export fn "trait_bound_3.wado/__cm_export__run" as "run"

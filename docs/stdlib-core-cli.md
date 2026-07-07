@@ -5,6 +5,18 @@
 
 CLI helpers: `println`, `eprintln`, `args`, `env`, `exit`, etc.
 
+## Synopsis
+
+```wado
+println("Hello, Wado!");
+for let arg of args() {
+    println(`arg: {arg}`);
+}
+if let Some(home) = env("HOME") {
+    println(`HOME={home}`);
+}
+```
+
 ## Functions
 
 ### `pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool)`

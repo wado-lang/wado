@@ -50,13 +50,13 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/tuple_for_of_ref.wado/total" = fn(ref "tuple//[i32, bool, i32]") -> i32;  // TypeId(15)
+type "functype//tuple_for_of_ref.wado/total" = fn(ref "tuple//[i32, bool, i32]") -> i32;  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/tuple_for_of_ref.wado/run" = fn();  // TypeId(16)
+type "functype//tuple_for_of_ref.wado/run" = fn();  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/tuple_for_of_ref.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(17)
+type "functype//tuple_for_of_ref.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/tuple_for_of_ref.wado/__cm_export__run" = fn();  // TypeId(18)
+type "functype//tuple_for_of_ref.wado/__cm_export__run" = fn();  // TypeId(18)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(19)
 
@@ -126,10 +126,10 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:wado-compiler/tests/fixtures/tuple_for_of_ref.wado::__modules_initialized: bool = 0;
-global global:wado-compiler/tests/fixtures/tuple_for_of_ref.wado::__const_obj_0: ref null "tuple//[i32, bool, i32]" = struct.new "tuple//[i32, bool, i32]" { 0: 10, 1: 1, 2: 20 };
+global mut global:tuple_for_of_ref.wado::__modules_initialized: bool = 0;
+global global:tuple_for_of_ref.wado::__const_obj_0: ref null "tuple//[i32, bool, i32]" = struct.new "tuple//[i32, bool, i32]" { 0: 10, 1: 1, 2: 20 };
 
-fn "wado-compiler/tests/fixtures/tuple_for_of_ref.wado/total"(t) {
+fn "tuple_for_of_ref.wado/total"(t) {
     let sum: i32;
     let __sroa_v_value: bool;
     sum = 0;
@@ -143,20 +143,20 @@ fn "wado-compiler/tests/fixtures/tuple_for_of_ref.wado/total"(t) {
     }) + t.2);
 }
 
-fn "wado-compiler/tests/fixtures/tuple_for_of_ref.wado/run"() with Stdout {
+fn "tuple_for_of_ref.wado/run"() with Stdout {
     let __v0_1: i32;
     let __local_21: ref "core:prelude/string.wado//String";
     let __local_22: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/tuple_for_of_ref.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:tuple_for_of_ref.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/tuple_for_of_ref.wado::__modules_initialized = 1;
+        global:tuple_for_of_ref.wado::__modules_initialized = 1;
     };
-    __v0_1 = "wado-compiler/tests/fixtures/tuple_for_of_ref.wado/total"(global:wado-compiler/tests/fixtures/tuple_for_of_ref.wado::__const_obj_0);
+    __v0_1 = "tuple_for_of_ref.wado/total"(global:tuple_for_of_ref.wado::__const_obj_0);
     if @unlikely(__v0_1 != 31) {
         cold_path;
-        "core:rt/panic"(__local_21 = "core:prelude/string.wado/String::with_capacity"(129); "core:prelude/string.wado/String::push_str"(__local_21, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_21, 114); "core:prelude/string.wado/String::push"(__local_21, 117); "core:prelude/string.wado/String::push"(__local_21, 110); "core:prelude/string.wado/String::push"(__local_21, 32); "core:prelude/string.wado/String::push"(__local_21, 97); "core:prelude/string.wado/String::push"(__local_21, 116); "core:prelude/string.wado/String::push"(__local_21, 32); "core:prelude/string.wado/String::push_str"(__local_21, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/tuple_for_of_ref.wado"), used: 50 }); "core:prelude/string.wado/String::push"(__local_21, 58); __local_22 = "core:prelude/format.wado/Formatter::new"(__local_21); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 34 }, __local_22); "core:prelude/string.wado/String::push_str"(__local_21, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_21 = "core:prelude/string.wado/String::with_capacity"(129); "core:prelude/string.wado/String::push_str"(__local_21, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_21, 114); "core:prelude/string.wado/String::push"(__local_21, 117); "core:prelude/string.wado/String::push"(__local_21, 110); "core:prelude/string.wado/String::push"(__local_21, 32); "core:prelude/string.wado/String::push"(__local_21, 97); "core:prelude/string.wado/String::push"(__local_21, 116); "core:prelude/string.wado/String::push"(__local_21, 32); "core:prelude/string.wado/String::push_str"(__local_21, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("tuple_for_of_ref.wado"), used: 50 }); "core:prelude/string.wado/String::push"(__local_21, 58); __local_22 = "core:prelude/format.wado/Formatter::new"(__local_21); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 34 }, __local_22); "core:prelude/string.wado/String::push_str"(__local_21, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: total(&t) == 31
 "), used: 28 }); "core:prelude/string.wado/String::push_str"(__local_21, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("total(&t): "), used: 11 }); __local_22 = "core:prelude/format.wado/Formatter::new"(__local_21); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_1 }, __local_22); "core:prelude/string.wado/String::push"(__local_21, 10); __local_21);
         unreachable;
@@ -164,18 +164,18 @@ condition: total(&t) == 31
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
 }
 
-fn "wado-compiler/tests/fixtures/tuple_for_of_ref.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "tuple_for_of_ref.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/tuple_for_of_ref.wado/__cm_export__run"() {
+fn "tuple_for_of_ref.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/tuple_for_of_ref.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:tuple_for_of_ref.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/tuple_for_of_ref.wado::__modules_initialized = 1;
+        global:tuple_for_of_ref.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/tuple_for_of_ref.wado/run"();
+    "tuple_for_of_ref.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -203,7 +203,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/tuple_for_of_ref.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "tuple_for_of_ref.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -543,4 +543,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/tuple_for_of_ref.wado/__cm_export__run" as "run"
+export fn "tuple_for_of_ref.wado/__cm_export__run" as "run"

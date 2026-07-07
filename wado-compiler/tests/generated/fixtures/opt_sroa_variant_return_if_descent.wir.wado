@@ -42,9 +42,9 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/opt_sroa_variant_return_if_descent.wado/run_all" = fn() -> i32;  // TypeId(13)
+type "functype//opt_sroa_variant_return_if_descent.wado/run_all" = fn() -> i32;  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/opt_sroa_variant_return_if_descent.wado/__cm_export__run" = fn();  // TypeId(14)
+type "functype//opt_sroa_variant_return_if_descent.wado/__cm_export__run" = fn();  // TypeId(14)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(15)
 
@@ -96,9 +96,9 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(38)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(39)
 
-type "functype//wado-compiler/tests/fixtures/opt_sroa_variant_return_if_descent.wado/leaf" = fn(i32) -> [i32, i32, ref null "core:prelude/string.wado//String"];  // TypeId(40)
+type "functype//opt_sroa_variant_return_if_descent.wado/leaf" = fn(i32) -> [i32, i32, ref null "core:prelude/string.wado//String"];  // TypeId(40)
 
-type "functype//wado-compiler/tests/fixtures/opt_sroa_variant_return_if_descent.wado/dispatch" = fn(bool, i32) -> [i32, i32, ref null "core:prelude/string.wado//String"];  // TypeId(41)
+type "functype//opt_sroa_variant_return_if_descent.wado/dispatch" = fn(bool, i32) -> [i32, i32, ref null "core:prelude/string.wado//String"];  // TypeId(41)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -113,22 +113,22 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:wado-compiler/tests/fixtures/opt_sroa_variant_return_if_descent.wado::__modules_initialized: bool = 0;
+global mut global:opt_sroa_variant_return_if_descent.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/opt_sroa_variant_return_if_descent.wado/leaf"(x) {
+fn "opt_sroa_variant_return_if_descent.wado/leaf"(x) {
     if x < 0 {
         return 1, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative"), used: 8 };
     }
     return 0, x + 1, ref.null none;
 }
 
-fn "wado-compiler/tests/fixtures/opt_sroa_variant_return_if_descent.wado/dispatch"(use_leaf, x) {
+fn "opt_sroa_variant_return_if_descent.wado/dispatch"(use_leaf, x) {
     let e: ref "core:prelude/string.wado//String";
     if use_leaf {
         let __sroa___local_4_discriminant: i32;
         let __sroa___local_4_case0_payload_0: i32;
         let __sroa___local_4_case1_payload_0: ref null "core:prelude/string.wado//String";
-        multivalue_bind [__sroa___local_4_discriminant, __sroa___local_4_case0_payload_0, __sroa___local_4_case1_payload_0] = "wado-compiler/tests/fixtures/opt_sroa_variant_return_if_descent.wado/leaf"(x);
+        multivalue_bind [__sroa___local_4_discriminant, __sroa___local_4_case0_payload_0, __sroa___local_4_case1_payload_0] = "opt_sroa_variant_return_if_descent.wado/leaf"(x);
         if __sroa___local_4_discriminant == 0 {
             return 0, __sroa___local_4_case0_payload_0 * 10, ref.null none;
         } else {
@@ -140,7 +140,7 @@ fn "wado-compiler/tests/fixtures/opt_sroa_variant_return_if_descent.wado/dispatc
     }
 }
 
-fn "wado-compiler/tests/fixtures/opt_sroa_variant_return_if_descent.wado/run_all"() {
+fn "opt_sroa_variant_return_if_descent.wado/run_all"() {
     let v_0: i32;
     let a: i32;
     let v_2: i32;
@@ -150,7 +150,7 @@ fn "wado-compiler/tests/fixtures/opt_sroa_variant_return_if_descent.wado/run_all
     let __sroa___match_scrut_0_discriminant: i32;
     let __sroa___match_scrut_0_case0_payload_0: i32;
     let __sroa___match_scrut_0_case1_payload_0: ref null "core:prelude/string.wado//String";
-    multivalue_bind [__sroa___match_scrut_0_discriminant, __sroa___match_scrut_0_case0_payload_0, __sroa___match_scrut_0_case1_payload_0] = "wado-compiler/tests/fixtures/opt_sroa_variant_return_if_descent.wado/dispatch"(1, 5);
+    multivalue_bind [__sroa___match_scrut_0_discriminant, __sroa___match_scrut_0_case0_payload_0, __sroa___match_scrut_0_case1_payload_0] = "opt_sroa_variant_return_if_descent.wado/dispatch"(1, 5);
     a = (if __sroa___match_scrut_0_discriminant == 0 -> i32 {
         local.tee v_0(__sroa___match_scrut_0_case0_payload_0);
     } else {
@@ -159,7 +159,7 @@ fn "wado-compiler/tests/fixtures/opt_sroa_variant_return_if_descent.wado/run_all
     let __sroa___match_scrut_1_discriminant: i32;
     let __sroa___match_scrut_1_case0_payload_0: i32;
     let __sroa___match_scrut_1_case1_payload_0: ref null "core:prelude/string.wado//String";
-    multivalue_bind [__sroa___match_scrut_1_discriminant, __sroa___match_scrut_1_case0_payload_0, __sroa___match_scrut_1_case1_payload_0] = "wado-compiler/tests/fixtures/opt_sroa_variant_return_if_descent.wado/dispatch"(0, 0);
+    multivalue_bind [__sroa___match_scrut_1_discriminant, __sroa___match_scrut_1_case0_payload_0, __sroa___match_scrut_1_case1_payload_0] = "opt_sroa_variant_return_if_descent.wado/dispatch"(0, 0);
     b = (if __sroa___match_scrut_1_discriminant == 0 -> i32 {
         local.tee v_2(__sroa___match_scrut_1_case0_payload_0);
     } else {
@@ -168,7 +168,7 @@ fn "wado-compiler/tests/fixtures/opt_sroa_variant_return_if_descent.wado/run_all
     let __sroa___match_scrut_2_discriminant: i32;
     let __sroa___match_scrut_2_case0_payload_0: i32;
     let __sroa___match_scrut_2_case1_payload_0: ref null "core:prelude/string.wado//String";
-    multivalue_bind [__sroa___match_scrut_2_discriminant, __sroa___match_scrut_2_case0_payload_0, __sroa___match_scrut_2_case1_payload_0] = "wado-compiler/tests/fixtures/opt_sroa_variant_return_if_descent.wado/dispatch"(1, -1);
+    multivalue_bind [__sroa___match_scrut_2_discriminant, __sroa___match_scrut_2_case0_payload_0, __sroa___match_scrut_2_case1_payload_0] = "opt_sroa_variant_return_if_descent.wado/dispatch"(1, -1);
     c = (if __sroa___match_scrut_2_discriminant == 0 -> i32 {
         local.tee v_4(__sroa___match_scrut_2_case0_payload_0);
     } else {
@@ -177,26 +177,26 @@ fn "wado-compiler/tests/fixtures/opt_sroa_variant_return_if_descent.wado/run_all
     return (a + b) + c;
 }
 
-fn "wado-compiler/tests/fixtures/opt_sroa_variant_return_if_descent.wado/__cm_export__run"() {
+fn "opt_sroa_variant_return_if_descent.wado/__cm_export__run"() {
     let __v0: i32;
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/opt_sroa_variant_return_if_descent.wado::__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:opt_sroa_variant_return_if_descent.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/opt_sroa_variant_return_if_descent.wado::__modules_initialized = 1;
+        global:opt_sroa_variant_return_if_descent.wado::__modules_initialized = 1;
     };
     __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:wado-compiler/tests/fixtures/opt_sroa_variant_return_if_descent.wado::__modules_initialized);
+        break_if __inline___initialize_modules_2 @likely(global:opt_sroa_variant_return_if_descent.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wado-compiler/tests/fixtures/opt_sroa_variant_return_if_descent.wado::__modules_initialized = 1;
+        global:opt_sroa_variant_return_if_descent.wado::__modules_initialized = 1;
     };
-    __v0 = "wado-compiler/tests/fixtures/opt_sroa_variant_return_if_descent.wado/run_all"();
+    __v0 = "opt_sroa_variant_return_if_descent.wado/run_all"();
     if @unlikely(__v0 != -41) {
         cold_path;
-        "core:rt/panic"(__local_2 = "core:prelude/string.wado/String::with_capacity"(130); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_2, 114); "core:prelude/string.wado/String::push"(__local_2, 117); "core:prelude/string.wado/String::push"(__local_2, 110); "core:prelude/string.wado/String::push"(__local_2, 32); "core:prelude/string.wado/String::push"(__local_2, 97); "core:prelude/string.wado/String::push"(__local_2, 116); "core:prelude/string.wado/String::push"(__local_2, 32); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_variant_return_if_descent.wado"), used: 68 }); "core:prelude/string.wado/String::push"(__local_2, 58); __local_3 = "core:prelude/format.wado/Formatter::new"(__local_2); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 48 }, __local_3); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_2 = "core:prelude/string.wado/String::with_capacity"(130); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_2, 114); "core:prelude/string.wado/String::push"(__local_2, 117); "core:prelude/string.wado/String::push"(__local_2, 110); "core:prelude/string.wado/String::push"(__local_2, 32); "core:prelude/string.wado/String::push"(__local_2, 97); "core:prelude/string.wado/String::push"(__local_2, 116); "core:prelude/string.wado/String::push"(__local_2, 32); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_sroa_variant_return_if_descent.wado"), used: 68 }); "core:prelude/string.wado/String::push"(__local_2, 58); __local_3 = "core:prelude/format.wado/Formatter::new"(__local_2); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 48 }, __local_3); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: run_all() == -41
 "), used: 29 }); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("run_all(): "), used: 11 }); __local_3 = "core:prelude/format.wado/Formatter::new"(__local_2); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0 }, __local_3); "core:prelude/string.wado/String::push"(__local_2, 10); __local_2);
         unreachable;
@@ -539,4 +539,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/opt_sroa_variant_return_if_descent.wado/__cm_export__run" as "run"
+export fn "opt_sroa_variant_return_if_descent.wado/__cm_export__run" as "run"
