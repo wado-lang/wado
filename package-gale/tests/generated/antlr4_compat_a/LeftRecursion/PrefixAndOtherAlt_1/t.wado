@@ -1938,6 +1938,9 @@ fn _parse_s__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     let expr = _parse_expr(p);
     let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    if !p.speculating {
+        p.emit(`{p.rule_string_tree()}\n`);
+    }
     return;
 }
 

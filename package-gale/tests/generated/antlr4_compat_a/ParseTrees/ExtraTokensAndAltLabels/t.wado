@@ -1867,6 +1867,9 @@ fn _parse_s__inner(p: &mut Parser) -> () {
     let lit_dollarlbrace = p.expect(TK_LIT_DOLLARLBRACE, &SYNC_0);
     let v = _parse_v(p);
     let rbrace = p.expect(TK_LIT_RBRACE, &EMPTY_SYNC);
+    if !p.speculating {
+        p.emit(`{p.rule_string_tree()}\n`);
+    }
     return;
 }
 

@@ -1944,6 +1944,9 @@ fn _parse_file___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
     let para = _parse_para(p, &FOLLOW_MASK_0);
     let para_2 = _parse_para(p, &FOLLOW_MASK_1);
     let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    if !p.speculating {
+        p.emit(`{p.rule_string_tree()}\n`);
+    }
     return;
 }
 

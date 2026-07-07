@@ -1824,6 +1824,9 @@ fn _parse_r__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     let a = _parse_a(p);
     let b = _parse_b(p);
+    if !p.speculating {
+        p.emit(`{p.rule_string_tree()}\n`);
+    }
     return;
 }
 

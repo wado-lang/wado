@@ -1985,6 +1985,9 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 fn _parse_s__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     let e = _parse_e(p);
+    if !p.speculating {
+        p.emit(`{p.rule_string_tree()}\n`);
+    }
     return;
 }
 

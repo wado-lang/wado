@@ -1847,6 +1847,9 @@ fn scan_a(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 fn _parse_s__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     let a = _parse_a(p);
+    if !p.speculating {
+        p.emit(`{p.rule_string_tree()}\n`);
+    }
     return;
 }
 

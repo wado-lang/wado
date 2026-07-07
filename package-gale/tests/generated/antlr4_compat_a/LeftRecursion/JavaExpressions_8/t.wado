@@ -4563,6 +4563,9 @@ fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
     p.atn_ret_pending = 12;
     let e = _parse_e(p, &FOLLOW_MASK_0);
     let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    if !p.speculating {
+        p.emit(`{p.rule_string_tree()}\n`);
+    }
     return;
 }
 

@@ -1981,6 +1981,9 @@ fn _parse_file___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
         let semicolon = p.expect(TK_SEMICOLON, &EMPTY_SYNC);
     }
     let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    if !p.speculating {
+        p.emit(`{p.rule_string_tree()}\n`);
+    }
     return;
 }
 
