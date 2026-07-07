@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783372389716,
+  "lastUpdate": 1783384018283,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -38513,6 +38513,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6ed772f3c79a10f9f9ea0af585ef2e732981427c"
         },
         "date": 1783372389008,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15734,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 263813,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "adf5c41cc68bb75b49215429c1b022ca30c21528",
+          "message": "Merge pull request #1528 from wado-lang/gfx/update-npm-packages\n\nchore: update package-lock.json (including typesctipt@7-rc",
+          "timestamp": "2026-07-07T09:19:10+09:00",
+          "tree_id": "c9c5fbc5131ddc31ea290619ebf7164cc394071b",
+          "url": "https://github.com/wado-lang/wado/commit/adf5c41cc68bb75b49215429c1b022ca30c21528"
+        },
+        "date": 1783384017730,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
