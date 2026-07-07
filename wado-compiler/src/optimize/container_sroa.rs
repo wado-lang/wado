@@ -242,6 +242,11 @@ struct Candidate {
     /// Element types of the container (for tuples: the tuple element types;
     /// for structs: the struct field types in declaration order).
     element_types: Vec<TypeId>,
+    /// Whether every field is a scalar (carries no identity, needs no value
+    /// copy). Only then may a slot copy `v[i] = $value_copy$T(v[j])` be seen
+    /// through: the decomposition becomes per-field scalar copies. With an
+    /// identity-carrying field the wrapper is load-bearing and must block SROA.
+    all_scalar: bool,
     /// How the element is laid out: tuple or user struct. Determines which
     /// literal shape (`TupleLiteral` vs `StructLiteral`) is accepted as a
     /// decomposable source, and is carried into the rewrite for consistent
@@ -303,6 +308,7 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
     // shifts the function's call edges, which only costs propagation precision,
     // not correctness.
     let type_table_rc = project.type_table.clone();
+    let value_copy_ids = project.value_copy_func_ids();
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::ContainerSroa, len, |fid| {
@@ -320,6 +326,7 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
             sig: &method_sig,
             struct_index: &struct_index,
             type_table_rc: type_table_rc.clone(),
+            value_copy_ids: &value_copy_ids,
             applied: Cell::new(false),
         };
         let NirFunction { body, locals, .. } = &mut *func;
@@ -344,6 +351,10 @@ pub(super) struct ContainerSroaRule<'a> {
     /// during the local-allocation step. Borrowed through the `Rc` to avoid
     /// holding a long mutable borrow across the rewrite.
     type_table_rc: std::rc::Rc<std::cell::RefCell<TypeTable>>,
+    /// The `$value_copy$T` helper ids. A slot copy `v[i] = $value_copy$T(v[j])`
+    /// of an all-scalar element decomposes to per-field scalar copies, so the
+    /// wrapper is seen through during decomposition.
+    value_copy_ids: &'a IndexSet<crate::nir::FuncId>,
     /// Whole-function rewrite: only run once per session.
     applied: Cell<bool>,
 }
@@ -449,7 +460,13 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
     // Step 1: collect candidates. Immutable borrow of type_table.
     let candidates = {
         let type_table = rule.type_table_rc.borrow();
-        collect_candidates(engine.body, &type_table, rule.struct_index, rule.sig)
+        collect_candidates(
+            engine.body,
+            &type_table,
+            rule.struct_index,
+            rule.sig,
+            rule.value_copy_ids,
+        )
     };
     if candidates.is_empty() {
         return false;
@@ -459,7 +476,8 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
     // Also track which `ListMethodKind`s were observed on each whitelisted use,
     // so step 3 can demand only the monomorphizations that will actually be
     // emitted per field (rather than unconditionally requiring all four kinds).
-    let (safe_indices, used_kinds_map) = compute_safe_set(engine.body, &candidates, rule.sig);
+    let (safe_indices, used_kinds_map) =
+        compute_safe_set(engine.body, &candidates, rule.sig, rule.value_copy_ids);
     if safe_indices.is_empty() {
         return false;
     }
@@ -505,6 +523,7 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
                 c.local_index,
                 CandidateRewriteInfo {
                     element_types: c.element_types.clone(),
+                    all_scalar: c.all_scalar,
                     layout: c.layout.clone(),
                     is_mut: c.is_mut,
                     span: c.span,
@@ -524,6 +543,7 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
         candidate_data: &candidate_data,
         catalog: rule.catalog,
         sig: rule.sig,
+        value_copy_ids: rule.value_copy_ids,
     };
     let root = engine.body.root;
     Rewriter { ctx: &ctx }.rewrite_block(engine, root);
@@ -534,6 +554,7 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
 /// Data carried from analysis into rewrite for each decomposed candidate.
 struct CandidateRewriteInfo {
     element_types: Vec<TypeId>,
+    all_scalar: bool,
     layout: ElementLayout,
     is_mut: bool,
     span: Span,
@@ -547,6 +568,7 @@ struct RewriteCtx<'a> {
     candidate_data: &'a IndexMap<u32, CandidateRewriteInfo>,
     catalog: &'a MethodCatalog,
     sig: &'a MethodSig,
+    value_copy_ids: &'a IndexSet<crate::nir::FuncId>,
 }
 
 /// Returns true if every `ListMethodKind` the rewrite might use is available
@@ -618,6 +640,7 @@ fn collect_candidates(
     type_table: &TypeTable,
     struct_index: &StructIndex<'_>,
     sig: &MethodSig,
+    value_copy_ids: &IndexSet<crate::nir::FuncId>,
 ) -> Vec<Candidate> {
     let mut out = Vec::new();
     for s in &body.blocks[body.root].stmts {
@@ -644,14 +667,18 @@ fn collect_candidates(
             continue;
         }
         // Initializer must be one of the recognized forms.
-        let Some(init) = recognize_init_operand(body, *value, sig) else {
+        let Some(init) = recognize_init_operand(body, *value, sig, value_copy_ids) else {
             continue;
         };
+        let all_scalar = element_types
+            .iter()
+            .all(|t| !crate::lower::plan::value_copy::needs_value_copy(*t, type_table));
         out.push(Candidate {
             local_index: *local_index,
             local_name: name.clone(),
             is_mut: *is_mut,
             element_types,
+            all_scalar,
             layout,
             span: body.stmts[*s].span,
             init,
@@ -698,8 +725,32 @@ fn element_layout_of(
     None
 }
 
-fn recognize_init_operand(body: &Body, op: Operand, sig: &MethodSig) -> Option<CandidateInit> {
-    op.as_expr().and_then(|e| recognize_init(body, e, sig))
+fn recognize_init_operand(
+    body: &Body,
+    op: Operand,
+    sig: &MethodSig,
+    value_copy_ids: &IndexSet<crate::nir::FuncId>,
+) -> Option<CandidateInit> {
+    op.as_expr()
+        .and_then(|e| recognize_init(body, e, sig, value_copy_ids))
+}
+
+/// Peel `$value_copy$T(inner)` wrappers, returning the innermost expression. A
+/// value copy of a fresh value (a constructor result) is a no-op.
+fn peel_value_copy(
+    body: &Body,
+    e: ExprId,
+    value_copy_ids: &IndexSet<crate::nir::FuncId>,
+) -> ExprId {
+    let mut cur = e;
+    while let ExprKind::Call { func_id, args, .. } = &body.exprs[cur].kind
+        && value_copy_ids.contains(func_id)
+        && args.len() == 1
+        && let Some(inner) = args[0].expr.as_expr()
+    {
+        cur = inner;
+    }
+    cur
 }
 
 /// Recognize the supported initializer form for container-SROA candidates.
@@ -717,8 +768,18 @@ fn recognize_init_operand(body: &Body, op: Operand, sig: &MethodSig) -> Option<C
 ///    fall through to form (1) on the inner constructor call. Neither the
 ///    label string nor the builder method name is inspected — only the
 ///    shape of the wrapper.
-fn recognize_init(body: &Body, value: ExprId, sig: &MethodSig) -> Option<CandidateInit> {
+fn recognize_init(
+    body: &Body,
+    value: ExprId,
+    sig: &MethodSig,
+    value_copy_ids: &IndexSet<crate::nir::FuncId>,
+) -> Option<CandidateInit> {
+    // The constructor result is fresh, so a `$value_copy$T` wrapping the whole
+    // initializer (inserted for the by-value binding) is a no-op — see through
+    // it to reach the `Constructor` call.
+    let value = peel_value_copy(body, value, value_copy_ids);
     let inner = unwrap_builder_labeled_block(body, value).unwrap_or(value);
+    let inner = peel_value_copy(body, inner, value_copy_ids);
     let ExprKind::Call { func_id, args, .. } = &body.exprs[inner].kind else {
         return None;
     };
@@ -826,14 +887,19 @@ fn compute_safe_set(
     body: &Body,
     candidates: &[Candidate],
     sig: &MethodSig,
+    value_copy_ids: &IndexSet<crate::nir::FuncId>,
 ) -> (IndexSet<u32>, IndexMap<u32, IndexSet<ListMethodKind>>) {
     // Map candidate local → element arity (for push/index_assign/index_value arity checks).
     let mut arity_of: IndexMap<u32, usize> = IndexMap::default();
     // Map candidate local → element layout (for verifying literal shape matches).
     let mut layout_of: IndexMap<u32, ElementLayout> = IndexMap::default();
+    // Map candidate local → whether its element is all-scalar (gates the
+    // `$value_copy$T` see-through in `check_source`).
+    let mut all_scalar_of: IndexMap<u32, bool> = IndexMap::default();
     for c in candidates {
         arity_of.insert(c.local_index, c.element_types.len());
         layout_of.insert(c.local_index, c.layout.clone());
+        all_scalar_of.insert(c.local_index, c.all_scalar);
     }
 
     // Iterate to fixpoint: start with all candidates safe, then remove any that
@@ -845,6 +911,8 @@ fn compute_safe_set(
             safe: &safe,
             arity_of: &arity_of,
             layout_of: &layout_of,
+            all_scalar_of: &all_scalar_of,
+            value_copy_ids,
             sig,
             escaped: IndexSet::default(),
             used_kinds: IndexMap::default(),
@@ -864,6 +932,8 @@ struct WhitelistChecker<'a> {
     safe: &'a IndexSet<u32>,
     arity_of: &'a IndexMap<u32, usize>,
     layout_of: &'a IndexMap<u32, ElementLayout>,
+    all_scalar_of: &'a IndexMap<u32, bool>,
+    value_copy_ids: &'a IndexSet<crate::nir::FuncId>,
     sig: &'a MethodSig,
     escaped: IndexSet<u32>,
     /// Per-candidate set of `ListMethodKind`s observed on whitelisted uses.
@@ -918,21 +988,38 @@ impl WhitelistChecker<'_> {
         op: Operand,
         expected_arity: usize,
         expected_layout: &ElementLayout,
+        src_all_scalar: bool,
     ) -> bool {
         match op.as_expr() {
-            Some(e) => self.check_source(body, e, expected_arity, expected_layout),
+            Some(e) => self.check_source(body, e, expected_arity, expected_layout, src_all_scalar),
             None => false,
         }
     }
 
     /// Check an expression used as a value-source for `push`/`index_assign`.
+    /// `src_all_scalar` says the destination element is all-scalar, which is the
+    /// precondition for seeing through a `$value_copy$T` wrapper.
     fn check_source(
         &mut self,
         body: &Body,
         e: ExprId,
         expected_arity: usize,
         expected_layout: &ElementLayout,
+        src_all_scalar: bool,
     ) -> bool {
+        // See through a defensive slot copy `v[i] = $value_copy$T(src)` when the
+        // element is all-scalar: after decomposition each field is copied by
+        // value, so the struct-level clone is redundant. For an identity-carrying
+        // field the copy is load-bearing, so leave it (this arm doesn't fire) and
+        // SROA conservatively bails on the candidate.
+        if src_all_scalar
+            && let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind
+            && self.value_copy_ids.contains(func_id)
+            && args.len() == 1
+            && let Some(inner) = args[0].expr.as_expr()
+        {
+            return self.check_source(body, inner, expected_arity, expected_layout, src_all_scalar);
+        }
         match &body.exprs[e].kind {
             // Direct tuple literal `[e0, e1, ...]` (heap or multi-value form).
             ExprKind::TupleLiteral { elements } => {
@@ -1069,7 +1156,10 @@ impl WhitelistChecker<'_> {
                                 .get(&rec_local)
                                 .cloned()
                                 .unwrap_or(ElementLayout::Tuple);
-                            if self.check_source_operand(body, arg_ops[0], arity, &layout) {
+                            let all_scalar =
+                                self.all_scalar_of.get(&rec_local).copied().unwrap_or(false);
+                            if self.check_source_operand(body, arg_ops[0], arity, &layout, all_scalar)
+                            {
                                 self.record_use(rec_local, ListMethodKind::ElementWriter);
                             } else {
                                 self.mark(rec_local);
@@ -1098,7 +1188,10 @@ impl WhitelistChecker<'_> {
                             }
                             // index argument visited normally
                             self.visit_operand(body, arg_ops[0]);
-                            if self.check_source_operand(body, arg_ops[1], arity, &layout) {
+                            let all_scalar =
+                                self.all_scalar_of.get(&rec_local).copied().unwrap_or(false);
+                            if self.check_source_operand(body, arg_ops[1], arity, &layout, all_scalar)
+                            {
                                 self.record_use(rec_local, ListMethodKind::IndexWriter);
                             } else {
                                 self.mark(rec_local);
@@ -1324,13 +1417,14 @@ impl Rewriter<'_, '_> {
         let arity = info.element_types.len();
         let layout = info.layout.clone();
         let element_types = info.element_types.clone();
+        let all_scalar = info.all_scalar;
 
         let kind = list_method_kind(func_id, ctx.sig);
         match (kind, arg_ids.len()) {
             // Case 1: v.ElementWriter(source) — e.g. push
             (Some(ListMethodKind::ElementWriter), 1) => {
                 let per_field =
-                    self.decompose_source(engine, arg_ids[0].as_expr()?, arity, &layout)?;
+                    self.decompose_source(engine, arg_ids[0].as_expr()?, arity, &layout, all_scalar)?;
                 let sig = sig_key_of_id(ctx.sig, func_id)?;
                 let mut out = Vec::with_capacity(arity);
                 for (k, elem_expr) in per_field.into_iter().enumerate() {
@@ -1360,7 +1454,8 @@ impl Rewriter<'_, '_> {
                 if !is_duplicable_operand(engine.body, idx) {
                     return None;
                 }
-                let per_field = self.decompose_source(engine, src.as_expr()?, arity, &layout)?;
+                let per_field =
+                    self.decompose_source(engine, src.as_expr()?, arity, &layout, all_scalar)?;
                 let sig = sig_key_of_id(ctx.sig, func_id)?;
                 let mut out = Vec::with_capacity(arity);
                 for (k, elem_expr) in per_field.into_iter().enumerate() {
@@ -1395,14 +1490,28 @@ impl Rewriter<'_, '_> {
     }
 
     /// Decompose a source expression into N per-field value operands.
+    /// `src_all_scalar` mirrors the analysis-side gate: only then is a
+    /// `$value_copy$T` wrapper seen through (the per-field scalar assignments
+    /// realize the value copy).
     fn decompose_source(
         &self,
         engine: &mut Engine,
         expr: ExprId,
         expected_arity: usize,
         expected_layout: &ElementLayout,
+        src_all_scalar: bool,
     ) -> Option<Vec<Operand>> {
         let ctx = self.ctx;
+        // See through a defensive slot copy `$value_copy$T(src)` — matches
+        // `check_source`. The wrapped element read is decomposed instead.
+        if src_all_scalar
+            && let ExprKind::Call { func_id, args, .. } = &engine.body.exprs[expr].kind
+            && ctx.value_copy_ids.contains(func_id)
+            && args.len() == 1
+            && let Some(inner) = args[0].expr.as_expr()
+        {
+            return self.decompose_source(engine, inner, expected_arity, expected_layout, src_all_scalar);
+        }
         // Classify the source shape from a read-only inspection first.
         enum Source {
             Tuple(Vec<Operand>),
