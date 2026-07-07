@@ -14,7 +14,7 @@ use crate::oci;
 /// Parse an image tag into a semver [`Version`], stripping an optional leading
 /// letter prefix (`v1.2.3`, `release1.2.3`) as the manifest WEP's git-tag rule
 /// does. Tags that are not semver (e.g. `latest`) yield `None` and are ignored.
-fn parse_version_tag(tag: &str) -> Option<Version> {
+pub(crate) fn parse_version_tag(tag: &str) -> Option<Version> {
     if let Ok(version) = Version::parse(tag) {
         return Some(version);
     }

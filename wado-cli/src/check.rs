@@ -121,12 +121,18 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
+    let source = std::fs::read_to_string(path)
+        .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
     let manifest_pair = crate::compile::load_nearest_manifest(path);
-    let host = crate::compile::attach_manifest_deps(
+    let host = crate::compile::attach_manifest_and_component_deps(
         FilesystemCompilerHost::with_log_level(base_path.clone(), opts.log_level),
         manifest_pair.as_ref(),
         &base_path,
-    );
+        &source,
+        false,
+    )
+    .await
+    .map_err(CliExit::error)?;
 
     let manifest_root = manifest_pair
         .as_ref()
@@ -160,7 +166,13 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
             .unwrap_or_else(crate::compile::empty_manifest);
         crate::compile::rewrite_build_dep_modules(&mut inline, &manifest, &manifest_root);
         crate::compile::rewrite_local_dir_modules(&mut inline, &manifest_root);
-        let provider = CliGeneratorProvider::new(manifest_root.clone());
+        let provider = CliGeneratorProvider::new(manifest_root.clone()).with_registry_context(
+            crate::kiln_provider::RegistryContext {
+                build_dependencies: manifest.build_dependencies.clone(),
+                registries: manifest.registries.clone(),
+                locked_versions: crate::build_dep::locked_generator_versions(&manifest_root),
+            },
+        );
         // Schemas are anchored at the manifest root; load them relative to it.
         let kiln_host = host.rebased(manifest_root.clone());
         let mut outcome = crate::kiln_driver::check_pipeline(

@@ -686,6 +686,28 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
             .push(diagnostic.clone());
         self.inner.emit_diagnostic(diagnostic);
     }
+
+    // Delegate every non-diagnostic capability to the wrapped host — the
+    // collector only intercepts diagnostics. Falling back to the trait defaults
+    // here would silently drop the host's dependency index (path *and* component
+    // deps), so `use { … } from "<dep>"` would fail to resolve on the LSP path.
+    fn dependency_index(&self) -> wado_compiler::DependencyIndex {
+        self.inner.dependency_index()
+    }
+
+    fn env_var(&self, name: &str) -> Option<String> {
+        self.inner.env_var(name)
+    }
+
+    fn run_generator(
+        &self,
+        component_wasm: &[u8],
+        request: wado_compiler::GeneratorRequest,
+    ) -> impl std::future::Future<
+        Output = Result<wado_compiler::GeneratorResponse, wado_compiler::GeneratorRunnerError>,
+    > + Send {
+        self.inner.run_generator(component_wasm, request)
+    }
 }
 
 /// Drive the compiler frontend's three stages — `parse`, `load`,

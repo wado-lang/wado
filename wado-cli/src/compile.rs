@@ -547,7 +547,23 @@ pub async fn try_compile_with_kiln_cache(
         Some(cache) => base_host.with_shared_kiln_cache(cache),
         None => base_host,
     };
-    let host = attach_manifest_deps(base_host, manifest_pair.as_ref(), &base_path);
+    let host = match attach_manifest_and_component_deps(
+        base_host,
+        manifest_pair.as_ref(),
+        &base_path,
+        &source,
+        true,
+    )
+    .await
+    {
+        Ok(host) => host,
+        Err(e) => {
+            eprintln!("Error fetching component dependencies: {e}");
+            return Err(wado_compiler::CompileFailure {
+                is_todo_module: false,
+            });
+        }
+    };
 
     let pipeline_outcome =
         match maybe_run_pipeline(path, &host, flags.no_cache, manifest_pair).await {
@@ -610,6 +626,82 @@ pub(crate) fn attach_manifest_deps(
     }
 }
 
+/// Like [`attach_manifest_deps`], plus resolving registry dependencies as
+/// prebuilt components so `use { X } from "ns:pkg"` resolves across the CM
+/// boundary. Two sources feed the component map: a manifest `[dependencies]`
+/// table entry (lock-pinned) and a single-file inline
+/// `use … from "ns:pkg@ver" with { registry }` clause parsed from `entry_source`.
+///
+/// `fetch_missing` chooses the acquisition mode: the build tier (`compile` /
+/// `run`) passes `true` to pull a cold cache; the analysis tier (`check` /
+/// `query`, mirroring the LSP) passes `false` to stay offline — a cold cache
+/// lands in `unresolved` with a `wado fetch` hint instead of hitting the network
+/// or aborting. A warm, locked project is offline either way.
+pub(crate) async fn attach_manifest_and_component_deps(
+    base_host: FilesystemCompilerHost,
+    project: Option<&manifest::ProjectManifest>,
+    base_path: &Path,
+    entry_source: &str,
+    fetch_missing: bool,
+) -> Result<FilesystemCompilerHost, String> {
+    let index =
+        manifest_and_component_index(project, base_path, entry_source, fetch_missing).await?;
+    Ok(base_host.with_dependency_index(index))
+}
+
+/// Build the [`DependencyIndex`] for `project` (path deps + offline registry
+/// resolution via the shared `dependency_index_from`), then either fetch the
+/// cold entries or leave them `unresolved`, per `fetch_missing`. Decoupled from
+/// the host so each caller applies it to its own (`compile` verbose, `query`
+/// silent).
+async fn manifest_and_component_index(
+    project: Option<&manifest::ProjectManifest>,
+    base_path: &Path,
+    entry_source: &str,
+    fetch_missing: bool,
+) -> Result<wado_compiler::DependencyIndex, String> {
+    let mut index = match project {
+        Some(project) => {
+            wado_lsp::host::dependency_index_from(&project.manifest, &project.root, base_path)
+        }
+        None => wado_compiler::DependencyIndex::default(),
+    };
+
+    // The offline pass above already placed warm manifest registry deps in
+    // `components` and cold ones in `unresolved`. On the build tier, upgrade the
+    // cold ones by pulling them (lock-pinned) and clearing the stale hint.
+    if fetch_missing && let Some(project) = project {
+        let has_registry_dep = project
+            .manifest
+            .dependencies
+            .values()
+            .any(|d| matches!(d.source, wado_manifest::DependencySource::Registry { .. }));
+        if has_registry_dep {
+            let components = crate::dep_component::fetch_component_dependencies(
+                &project.manifest,
+                &project.root,
+            )
+            .await?;
+            for (name, path) in components {
+                index.unresolved.swap_remove(&name);
+                index.components.insert(name, path);
+            }
+        }
+    }
+
+    let manifest = project.map(|p| &p.manifest);
+    let inline = crate::dep_component::resolve_inline_component_dependencies(
+        entry_source,
+        manifest,
+        fetch_missing,
+    )
+    .await?;
+    index.components.extend(inline.resolved);
+    index.unresolved.extend(inline.unresolved);
+
+    Ok(index)
+}
+
 /// Collect inline `with { generator: { ... } }` clauses from `entry_file`
 /// (and any sibling manifest's directory if one is found), then drive the
 /// Kiln pipeline via [`run_pipeline`]. Returns `Ok(PipelineOutcome::default())`
@@ -662,7 +754,13 @@ pub(crate) async fn maybe_run_pipeline(
     let mut inline = inline;
     rewrite_build_dep_modules(&mut inline, &manifest, &manifest_root);
     rewrite_local_dir_modules(&mut inline, &manifest_root);
-    let provider = CliGeneratorProvider::new(manifest_root.clone()).with_no_cache(no_cache);
+    let provider = CliGeneratorProvider::new(manifest_root.clone())
+        .with_no_cache(no_cache)
+        .with_registry_context(crate::kiln_provider::RegistryContext {
+            build_dependencies: manifest.build_dependencies.clone(),
+            registries: manifest.registries.clone(),
+            locked_versions: crate::build_dep::locked_generator_versions(&manifest_root),
+        });
     // Kiln paths (`from`, `inputs`, `output_dir`) are anchored at the manifest
     // root, so schemas must be loaded relative to it — not the entry file's
     // directory, where the main compile host is based.
@@ -686,14 +784,15 @@ pub(crate) async fn maybe_run_pipeline(
     Ok(outcome)
 }
 
-/// Rewrite each inline invocation whose `module` is a bare
-/// `[build-dependencies]` name (`module: "gale"`) into a concrete
-/// `LocalPath` pointing at the dependency package's
-/// `[world]."core:kiln/generator"` entry. This resolves build-dep
-/// generators once, off the already-loaded manifest, so the rest of the
-/// pipeline (cache key, generator identity, provider) sees a path-addressed
-/// module. Unresolvable names are left as `BuildDep` for the provider to
-/// report.
+/// Rewrite each inline invocation whose `module` is a `[build-dependencies]`
+/// specifier (`module: "wado-lang:gale"`, `module: "lib:gale"`) that resolves to
+/// a *path* dependency into a concrete `LocalPath` pointing at the dependency
+/// package's `[world]."core:kiln/generator"` entry. This dispatches the
+/// specifier on its declared source once, off the already-loaded manifest: a
+/// path build-dependency compiles from source (like any path dep), so the rest
+/// of the pipeline (cache key, generator identity, provider) sees a
+/// path-addressed module; a registry build-dependency is left as `Spec` for the
+/// provider to pull as a prebuilt component.
 pub(crate) fn rewrite_build_dep_modules(
     inline: &mut [wado_compiler::kiln::Invocation],
     manifest: &wado_manifest::Manifest,
@@ -701,10 +800,11 @@ pub(crate) fn rewrite_build_dep_modules(
 ) {
     use wado_compiler::kiln::GeneratorModule;
     for inv in inline.iter_mut() {
-        let GeneratorModule::BuildDep(name) = &inv.module else {
+        let GeneratorModule::Spec(spec) = &inv.module else {
             continue;
         };
-        if let Some(local) = build_dep_generator_local_path(name, manifest, manifest_root) {
+        let key = crate::build_dep::spec_key(&spec.spec);
+        if let Some(local) = build_dep_generator_local_path(key, manifest, manifest_root) {
             inv.module = GeneratorModule::LocalPath(local);
         }
     }
@@ -714,8 +814,8 @@ pub(crate) fn rewrite_build_dep_modules(
 /// at a *directory* (a generator package) into a `LocalPath` pointing at
 /// that package's `[world]."core:kiln/generator"` entry file. This collapses
 /// `module: "../pkg"` onto the same path-addressed identity — and therefore
-/// the same cache key — as `module: "../pkg/src/generator.wado"` and the
-/// `[build-dependencies]` name form, all of which resolve to one entry file.
+/// the same cache key — as `module: "../pkg/src/generator.wado"` and a path
+/// `[build-dependencies]` specifier, all of which resolve to one entry file.
 /// Resolved off the filesystem before the pipeline runs, mirroring
 /// [`rewrite_build_dep_modules`]. A directory without a resolvable generator
 /// world entry is left untouched for the provider to report.
@@ -746,11 +846,11 @@ pub(crate) fn rewrite_local_dir_modules(
 /// entry>`. `None` when the dependency is absent, not a path dep, or declares
 /// no `core:kiln/generator` world.
 fn build_dep_generator_local_path(
-    name: &str,
+    key: &str,
     manifest: &wado_manifest::Manifest,
     manifest_root: &Path,
 ) -> Option<wado_compiler::kiln::InvocationPath> {
-    let dep = manifest.build_dependencies.get(name)?;
+    let dep = manifest.build_dependencies.get(key)?;
     let DependencySource::Path { path, .. } = &dep.source else {
         return None;
     };

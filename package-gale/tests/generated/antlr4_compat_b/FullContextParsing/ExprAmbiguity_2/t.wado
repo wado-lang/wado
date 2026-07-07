@@ -343,6 +343,26 @@ impl TokenStream {
             self.push_text(out, self.triv_starts[j], self.triv_ends[j]);
         }
     }
+
+    /// `$text` for a rule spanning tokens `[start_tok, end_tok]`: the token
+    /// texts with each token's leading *hidden-channel* trivia interleaved
+    /// (`triv_chans != 0`), matching ANTLR's `TokenStream.getText(interval)`.
+    /// `skip` trivia (channel 0, removed from the stream) is excluded, and so is
+    /// the start token's own leading trivia (the interval begins at the token).
+    pub fn rule_text(&self, start_tok: i32, end_tok: i32) -> String {
+        let mut out = String::new();
+        for let mut i = start_tok; i <= end_tok; i += 1 {
+            if i > start_tok {
+                for let mut j = self.triv_lo[i]; j < self.triv_hi[i]; j += 1 {
+                    if self.triv_chans[j] != 0 {
+                        self.push_text(&mut out, self.triv_starts[j], self.triv_ends[j]);
+                    }
+                }
+            }
+            self.push_token_text(&mut out, i);
+        }
+        return out;
+    }
 }
 
 
@@ -1587,9 +1607,9 @@ impl Parser {
         return self.tokens.kind_at(i);
     }
 
-    fn token_int(&self, i: i32) -> i64 {
+    fn token_int(&self, i: i32) -> i32 {
         let sp = self.tokens.span_at(i);
-        let mut acc: i64 = 0;
+        let mut acc: i32 = 0;
         let mut neg = false;
         let mut j = sp.start;
         if j < sp.end && self.tokens.chars[j] == '-' {
@@ -1599,7 +1619,7 @@ impl Parser {
         while j < sp.end {
             let c = self.tokens.chars[j];
             if c >= '0' && c <= '9' {
-                acc = acc * 10 + (c as i32 - '0' as i32) as i64;
+                acc = acc * 10 + (c as i32 - '0' as i32);
             }
             j += 1;
         }
@@ -1636,6 +1656,10 @@ impl Parser {
             out.push(self.tokens.chars[i]);
         }
         return out;
+    }
+
+    fn rule_text(&self, start_tok: i32) -> String {
+        return self.tokens.rule_text(start_tok, self.pos - 1);
     }
 
     fn input_text(&self) -> String {
@@ -1870,6 +1894,10 @@ impl Parser {
     }
 }
 
+struct ExprVals {
+    _p: i32 = 0,
+}
+
 fn scan_s(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_expr(tokens, pos, follow, 0);
@@ -1911,7 +1939,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
 
 fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let expr = _parse_expr(p, follow);
+    let expr = _parse_expr(p, follow, 0);
     return;
 }
 
@@ -1926,8 +1954,10 @@ fn _parse_s(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     }
 }
 
-fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, _p: i32 = 0) -> ExprVals {
     let start = p.peek_start();
+    let mut vals = ExprVals {};
+    vals._p = _p;
     let id = p.expect(TK_ID, &SYNC_0);
     loop {
         if p.recovering { break; }
@@ -1965,24 +1995,25 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         if rep_scan_pos < 0 { break; }
         if p.peek_kind() == TK_LIT_STAR {
             let star = p.expect(TK_LIT_STAR, &SYNC_1);
-            let expr = _parse_expr(p, follow);
+            let expr = _parse_expr(p, follow, 6);
         } else {
             let plus = p.expect(TK_LIT_PLUS, &SYNC_1);
-            let expr = _parse_expr(p, follow);
+            let expr = _parse_expr(p, follow, 5);
         }
     }
-    return;
+    return vals;
 }
 
-fn _parse_expr(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    if p.recovering { return; }
+fn _parse_expr(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, _p: i32 = 0) -> ExprVals {
+    if p.recovering { return ExprVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_EXPR, _start);
-    _parse_expr__inner(p, follow);
+    let __vals = _parse_expr__inner(p, follow, _p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("expr");
     }
+    return __vals;
 }
 
 fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
@@ -2011,7 +2042,7 @@ pub fn parse_s(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 }
 
 pub fn parse_expr(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_expr(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_expr(p); });
 }
 
 fn _ctx_token_names() -> List<String> {

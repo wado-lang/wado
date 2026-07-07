@@ -99,7 +99,7 @@ test "java: a declared @members method resolves; an undeclared sibling does not"
 
 test "java predicate: negated equals is parenthesized" {
     let out = java_pred(&"!getText().equals(\"+\")", &"a : ID ;", false);
-    assert out == "!(p.rule_text() == \"+\")", `out: '{out}'`;
+    assert out == "!(p.rule_text(_rule_start_tok) == \"+\")", `out: '{out}'`;
 }
 
 test "java members: method name is snake_cased at definition to match calls" {
@@ -223,6 +223,11 @@ test "java action: println with a concat arg" {
     assert out == "p.emit(`ID {p.token_text(id)}\\n`);", `out: '{out}'`;
 }
 
+test "java action: ctx.toStringTree(this) drops the redundant parser arg" {
+    let out = java_action(&"System.out.println($ctx.toStringTree(this));", &"s : e EOF ; e : ID ;", false);
+    assert out == "p.emit(`{p.rule_string_tree()}\\n`);", `out: '{out}'`;
+}
+
 test "java action: assignment to the value channel" {
     let out = java_action(
         &"$v = $a.v + $b.v;",
@@ -311,6 +316,17 @@ test "java members: field declarations become struct fields" {
     assert m.fields[0].name == "enumKeyword" && m.fields[0].ty == "bool" && m.fields[0].init == "true", `f0: {m.fields[0].name}:{m.fields[0].ty}={m.fields[0].init}`;
     assert m.fields[1].name == "i" && m.fields[1].ty == "i32" && m.fields[1].init == "0", `f1: {m.fields[1].name}:{m.fields[1].ty}={m.fields[1].init}`;
     assert m.methods.is_empty(), "no methods expected";
+}
+
+test "java members: numeric types map by exact Java width (byte=i8, short=i16, long=i64, float=f32, double=f64)" {
+    let lang = ActionLanguage::Java;
+    let m = translate_members(&lang, &"byte b = 0; short s = 0; long l = 0; float f = 0; double d = 0;", &"T").unwrap();
+    assert m.fields.len() == 5, `fields: {m.fields.len()}`;
+    assert m.fields[0].ty == "i8", `byte: {m.fields[0].ty}`;
+    assert m.fields[1].ty == "i16", `short: {m.fields[1].ty}`;
+    assert m.fields[2].ty == "i64", `long: {m.fields[2].ty}`;
+    assert m.fields[3].ty == "f32", `float: {m.fields[3].ty}`;
+    assert m.fields[4].ty == "f64", `double: {m.fields[4].ty}`;
 }
 
 test "java members: method with a param, print, and return" {

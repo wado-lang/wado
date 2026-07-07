@@ -445,8 +445,14 @@ pub trait CompilerHost: Send + Sync {
 #[derive(Debug, Clone, Default)]
 pub struct DependencyIndex {
     /// name → entry-module path (the dependency's `[package].lib`), relative
-    /// to the host base.
+    /// to the host base. These are *source* (path) dependencies, compiled into
+    /// the consuming component.
     pub resolved: crate::hashmap::IndexMap<String, String>,
+    /// name → local `.wasm` path of a *prebuilt component* dependency (a
+    /// registry dependency fetched by the CLI), relative to the host base.
+    /// Imported across the Component Model boundary, like a
+    /// `with { type: "wasm" }` asset, rather than compiled from source.
+    pub components: crate::hashmap::IndexMap<String, String>,
     /// name → human-readable reason a *declared* dependency could not be
     /// resolved (e.g. its package declares no `[package].lib`). Surfaced at
     /// the `use` site instead of a generic "invalid module path".

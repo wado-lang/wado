@@ -4201,6 +4201,7 @@ pub struct TirTest {
     /// Per-test timeout in milliseconds (from `#[timeout_ms(N)]` attribute).
     /// `None` means use the default timeout (1 second).
     pub timeout_ms: Option<u64>,
+    pub is_synopsis: bool,
 }
 
 #[derive(Debug, Clone)]

@@ -104,25 +104,42 @@ fn check_value(
 ) -> Option<CanonicalValue> {
     match (ty, supplied) {
         (OptionsType::Bool, AttrValue::Bool(b)) => Some(CanonicalValue::Bool(*b)),
-        (OptionsType::I32 | OptionsType::I64, AttrValue::Int(n)) => {
-            let bounded = if matches!(ty, OptionsType::I32) {
-                if !(i64::from(i32::MIN)..=i64::from(i32::MAX)).contains(n) {
-                    push_mismatch(diagnostics, path, ty, supplied);
-                    return None;
-                }
-                *n
-            } else {
-                *n
+        (
+            OptionsType::I8 | OptionsType::I16 | OptionsType::I32 | OptionsType::I64,
+            AttrValue::Int(n),
+        ) => {
+            let bounds = match ty {
+                OptionsType::I8 => Some((i64::from(i8::MIN), i64::from(i8::MAX))),
+                OptionsType::I16 => Some((i64::from(i16::MIN), i64::from(i16::MAX))),
+                OptionsType::I32 => Some((i64::from(i32::MIN), i64::from(i32::MAX))),
+                _ => None,
             };
-            Some(CanonicalValue::I64(bounded))
+            if let Some((lo, hi)) = bounds
+                && !(lo..=hi).contains(n)
+            {
+                push_mismatch(diagnostics, path, ty, supplied);
+                return None;
+            }
+            Some(CanonicalValue::I64(*n))
         }
-        (OptionsType::U32 | OptionsType::U64, AttrValue::Int(n)) => {
+        (
+            OptionsType::U8 | OptionsType::U16 | OptionsType::U32 | OptionsType::U64,
+            AttrValue::Int(n),
+        ) => {
             if *n < 0 {
                 push_mismatch(diagnostics, path, ty, supplied);
                 return None;
             }
             let v = *n as u64;
-            if matches!(ty, OptionsType::U32) && v > u64::from(u32::MAX) {
+            let max = match ty {
+                OptionsType::U8 => Some(u64::from(u8::MAX)),
+                OptionsType::U16 => Some(u64::from(u16::MAX)),
+                OptionsType::U32 => Some(u64::from(u32::MAX)),
+                _ => None,
+            };
+            if let Some(max) = max
+                && v > max
+            {
                 push_mismatch(diagnostics, path, ty, supplied);
                 return None;
             }

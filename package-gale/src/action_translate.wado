@@ -62,8 +62,24 @@ pub fn resolve_attr_ref(
     return translate_wado_action(rule, rules, ref_text, vals_in_scope, bindings, handle);
 }
 
+/// The single source of truth for the `$ctx.toStringTree` special: a `ctx`
+/// reference with the `toStringTree` member.
+fn is_ctx_to_string_tree_ref(name: &String, member: &Option<String>) -> bool {
+    return *name == "ctx" && (*member) matches { Some("toStringTree") };
+}
+
 fn is_ctx_to_string_tree(r: &ResolvedAttr) -> bool {
-    return r.target matches { ParserSpecial } && r.name == "ctx" && r.member matches { Some("toStringTree") };
+    return r.target matches { ParserSpecial } && is_ctx_to_string_tree_ref(&r.name, &r.member);
+}
+
+/// Whether `ref_text` is exactly the `$ctx.toStringTree` special. Its Wado form
+/// is a nullary call (`rule_string_tree()`), so a host action's trailing
+/// `(...)` / `(this)` — the parser argument ANTLR's `toStringTree(this)` needs
+/// but Gale does not — is redundant and swallowed. Shared with java2wado, whose
+/// `$`-attr lexer captures `$ctx.toStringTree` as the call target.
+pub fn ref_is_ctx_to_string_tree(ref_text: &String) -> bool {
+    let refs = find_attr_refs(ref_text);
+    return refs.len() == 1 && is_ctx_to_string_tree_ref(&refs[0].name, &refs[0].member);
 }
 
 /// Extend past an immediately-following call `(...)` (skipping leading spaces),
@@ -214,7 +230,7 @@ fn action_attr_expr(
 fn parser_special_expr(r: &ResolvedAttr, is_lr: bool, handle: &String) -> Result<String, String> {
     return match r.name {
         "text" && r.member matches { None } => Result::Ok(
-            `{*handle}.text_span({*handle}.token_start({RULE_START_TOK_LOCAL}), {*handle}.last_end())`,
+            `{*handle}.rule_text({RULE_START_TOK_LOCAL})`,
         ),
         "start" => token_member_of(&RULE_START_TOK_LOCAL, &r.member, handle),
         "stop" => token_member_of(&`({*handle}.pos - 1)`, &r.member, handle),

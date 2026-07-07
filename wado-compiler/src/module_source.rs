@@ -178,6 +178,14 @@ impl ModuleSourceInterner {
         Some(self.dependency(&path))
     }
 
+    /// Resolve a coordinate to a *prebuilt component* dependency's `ModuleSource`
+    /// (a registry dependency fetched as a `.wasm`), imported across the CM
+    /// boundary like a `with { type: "wasm" }` asset.
+    pub fn resolve_component_dependency(&mut self, name: &str) -> Option<ModuleSource> {
+        let path = self.dependencies.components.get(name)?.clone();
+        Some(self.wasm(&path, WasmAssetKind::Wasm))
+    }
+
     /// The reason a *declared* dependency could not be resolved, if any.
     #[must_use]
     pub fn unresolved_dependency(&self, name: &str) -> Option<&str> {

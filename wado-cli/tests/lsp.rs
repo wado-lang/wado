@@ -2254,13 +2254,13 @@ export fn generate(req: Request) -> Result<Response, Error> {
     std::fs::create_dir_all(app.join("src")).unwrap();
     std::fs::write(
         app.join("wado.toml"),
-        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"src/main.wado\"\n\n[build-dependencies]\ngen = { path = \"../gen\" }\n",
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"src/main.wado\"\n\n[build-dependencies]\n\"lib:gen\" = { path = \"../gen\" }\n",
     )
     .unwrap();
     std::fs::write(app.join("src/schema.idl"), "anything\n").unwrap();
     std::fs::write(
         app.join("src/main.wado"),
-        "use { println, Stdout } from \"core:cli\";\nuse { greeting } from \"./schema.idl\" with {\n    generator: { module: \"gen\" },\n};\n\nexport fn run() with Stdout {\n    println(greeting());\n}\n",
+        "use { println, Stdout } from \"core:cli\";\nuse { greeting } from \"./schema.idl\" with {\n    generator: { module: \"lib:gen\" },\n};\n\nexport fn run() with Stdout {\n    println(greeting());\n}\n",
     )
     .unwrap();
     app

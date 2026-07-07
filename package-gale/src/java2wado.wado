@@ -4,7 +4,19 @@
 //! reuses the identity translator (`action_translate.wado`) for `$`-leaves. A
 //! body outside the supported subset is a loud diagnostic, never a silent no-op.
 
-use { ParserRule, Grammar, ActionLanguage, LexerRule, Alternative, NamedAction } from "./ir.wado";
+use {
+    ParserRule,
+    Grammar,
+    ActionLanguage,
+    AttrDecl,
+    LexerRule,
+    LexerAlternative,
+    LexerElement,
+    Alternative,
+    Element,
+    NamedAction,
+} from "./ir.wado";
+use { map_java_type } from "./java2wado/jemit.wado";
 use { translate_wado_action, PARSER_HANDLE } from "./action_translate.wado";
 use { translate_java_expr, translate_java_stmts, JEnv } from "./java2wado/jemit.wado";
 use { translate_java_members, java_member_method_names, MemberDecls } from "./java2wado/jmembers.wado";
@@ -94,7 +106,7 @@ pub fn collect_member_method_names(grammar: &Grammar) -> List<String> {
 
 /// Whether the grammar declares `options { superClass = ... }`. Its actions call
 /// a hand-written base class outside the `.g4` that Gale cannot see — Phase 4,
-/// carved out of the Java emit-actions rollout. See `java2wado.md`.
+/// carved out of the Java emit-actions rollout. See `action.md`.
 pub fn grammar_has_superclass(grammar: &Grammar) -> bool {
     for let o of &grammar.options {
         if o.name == "superClass" {
@@ -128,14 +140,14 @@ fn grammar_has_actions(grammar: &Grammar) -> bool {
             return true;
         }
         for let alt of &r.alternatives {
-            if !alt.actions.is_empty() {
+            if alt_has_actions(alt) {
                 return true;
             }
         }
     }
     for let lr of &grammar.lexer_rules {
         for let alt of &lr.body {
-            if !alt.actions.is_empty() {
+            if lexer_alt_has_actions(alt) {
                 return true;
             }
         }
@@ -143,9 +155,110 @@ fn grammar_has_actions(grammar: &Grammar) -> bool {
     return false;
 }
 
+/// Whether an alternative carries any action / predicate, including ones nested
+/// inside its group elements. A top-level-only check misses a grammar whose
+/// only action sits in a group (`r : ( {p}? A | B )`), leaving `emit_actions`
+/// off so the whole action pipeline — including the `warn_unhandled_actions`
+/// safety net — never runs and the body vanishes with no diagnostic.
+fn alt_has_actions(alt: &Alternative) -> bool {
+    if !alt.actions.is_empty() {
+        return true;
+    }
+    for let e of &alt.elements {
+        if element_has_actions(e) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn element_has_actions(elem: &Element) -> bool {
+    match *elem {
+        Group(g) => {
+            for let alt of &g.alternatives {
+                if alt_has_actions(alt) {
+                    return true;
+                }
+            }
+        },
+        Repeat(rep) => {
+            return element_has_actions(&rep.element);
+        },
+        Label(lab) => {
+            return element_has_actions(&lab.element);
+        },
+        Not(n) => {
+            return element_has_actions(&n.element);
+        },
+        _ => {
+        },
+    }
+    return false;
+}
+
+/// Lexer analog of `alt_has_actions`: a lexer predicate / action can sit inside
+/// a group (`KW : ([a-z]+ {p}? | 'dog')`), so a top-level-only check misses it
+/// and leaves `emit_actions` off, dropping the predicate silently.
+fn lexer_alt_has_actions(alt: &LexerAlternative) -> bool {
+    if !alt.actions.is_empty() {
+        return true;
+    }
+    for let e of &alt.elements {
+        if lexer_element_has_actions(e) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn lexer_element_has_actions(elem: &LexerElement) -> bool {
+    match *elem {
+        Group(alts) => {
+            for let alt of &alts {
+                if lexer_alt_has_actions(alt) {
+                    return true;
+                }
+            }
+        },
+        Repeat(rep) => {
+            return lexer_element_has_actions(&rep.element);
+        },
+        Not(n) => {
+            return lexer_element_has_actions(&n.element);
+        },
+        _ => {
+        },
+    }
+    return false;
+}
+
 /// Whether codegen emits the action machinery: the language is emittable AND the
 /// grammar has action content. Gates `emit_actions` and the ctx-tree token table
 /// so an actionless grammar stays byte-identical to before Stage C.
+/// Translate `returns` / `locals` / arg attribute types from the host language
+/// to Wado (`int` → `i32`, `boolean` → `bool`, …) so the value-channel vals
+/// struct emits valid Wado field types and `wado_type_default` recognises them.
+/// A no-op for non-Java grammars and for types already Wado (or unmapped, e.g.
+/// `List<String>`), which pass through unchanged.
+pub fn translate_attr_types(grammar: &mut Grammar) {
+    if !grammar.action_language matches { Java } {
+        return;
+    }
+    for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
+        translate_decl_types(&mut grammar.parser_rules[i].args);
+        translate_decl_types(&mut grammar.parser_rules[i].returns_decls);
+        translate_decl_types(&mut grammar.parser_rules[i].locals_decls);
+    }
+}
+
+fn translate_decl_types(decls: &mut List<AttrDecl>) {
+    for let mut i = 0; i < decls.len(); i += 1 {
+        if let Some(w) = map_java_type(&decls[i].type_text) {
+            decls[i].type_text = w;
+        }
+    }
+}
+
 pub fn should_emit_actions(grammar: &Grammar) -> bool {
     return action_language_is_emittable(grammar) && grammar_has_actions(grammar);
 }

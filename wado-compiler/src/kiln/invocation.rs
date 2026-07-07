@@ -70,13 +70,70 @@ impl fmt::Display for DeclSite {
 /// Comes from the `module: "..."` string at the inline `with` clause.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GeneratorModule {
-    /// `"ns:name@version"`, with optional `/<submodule>` suffix.
-    Spec(String),
+    /// A `[build-dependencies]` specifier — an open coordinate
+    /// (`"ns:name[@version]"`) or a `"lib:nickname"` indirection, with an
+    /// optional `/<submodule>` suffix. Resolved by the host against
+    /// `[build-dependencies]`, dispatching on the matched entry's source: a
+    /// path entry is rewritten to [`GeneratorModule::LocalPath`] (compiled from
+    /// source) before it reaches the provider; a registry entry is pulled as a
+    /// prebuilt component. Bare names are rejected at lowering.
+    Spec(GeneratorSpec),
     /// Resolved local path, already joined against the consuming file's directory.
     LocalPath(InvocationPath),
-    /// A bare `[build-dependencies]` key (`module: "gale"`). Resolved by the
-    /// host to the dependency package's `core:kiln/generator` world entry.
-    BuildDep(String),
+}
+
+/// A `[build-dependencies]` specifier plus any inline registry source supplied
+/// at the `use` site for single-file mode (no `wado.toml`). The compiler stores
+/// the fields opaquely; the host resolves them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GeneratorSpec {
+    /// The specifier string (`ns:name[@ver]`, `lib:nick`, with an optional
+    /// `/submodule` suffix).
+    pub spec: String,
+    /// Inline semver requirement (`generator.version`); single-file only.
+    pub version: Option<String>,
+    /// Inline registry URL (`generator.registry`); single-file only.
+    pub registry: Option<String>,
+}
+
+impl From<&str> for GeneratorSpec {
+    /// A plain specifier with no inline source (the common case).
+    fn from(spec: &str) -> Self {
+        Self {
+            spec: spec.to_string(),
+            version: None,
+            registry: None,
+        }
+    }
+}
+
+impl From<String> for GeneratorSpec {
+    fn from(spec: String) -> Self {
+        Self {
+            spec,
+            version: None,
+            registry: None,
+        }
+    }
+}
+
+impl GeneratorSpec {
+    /// A stable identity string. With no inline source it is just the specifier
+    /// (so the common case keeps a clean `ns:name@ver` identity); an inline
+    /// registry/version is folded in so two clauses with the same specifier but
+    /// a different inline source resolve to distinct generators.
+    #[must_use]
+    pub fn identity(&self) -> String {
+        match (&self.version, &self.registry) {
+            (None, None) => self.spec.clone(),
+            (v, r) => format!(
+                "{}|{}|{}",
+                self.spec,
+                v.as_deref().unwrap_or(""),
+                r.as_deref().unwrap_or(""),
+            ),
+        }
+    }
 }
 
 /// Compiler-internal canonical form of a Kiln generator invocation.
@@ -189,7 +246,7 @@ mod tests {
                 module: "a.wado".to_string(),
                 synthetic_id: "kiln-aaaa".to_string(),
             },
-            module: GeneratorModule::Spec("ns:x@1.0.0".to_string()),
+            module: GeneratorModule::Spec("ns:x@1.0.0".into()),
             from: InvocationPath::normalize("s.proto"),
             source: InvocationPath::normalize("./s.proto"),
             inputs: vec![],

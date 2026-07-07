@@ -1052,15 +1052,17 @@ pub struct TestMetadata {
     pub expect_trap: bool,
     pub is_todo: bool,
     pub timeout_ms: Option<u64>,
+    pub is_synopsis: bool,
 }
 
 impl TestDecl {
-    /// Resolve this test's `#[expect_trap]` / `#[TODO]` / `#[timeout_ms(..)]`
-    /// attributes. `module_is_todo` folds in a module-level `#[TODO]`.
+    /// Resolve this test's `#[expect_trap]` / `#[TODO]` / `#[timeout_ms(..)]` /
+    /// `#[synopsis]` attributes. `module_is_todo` folds in a module-level `#[TODO]`.
     pub fn metadata(&self, module_is_todo: bool) -> TestMetadata {
         TestMetadata {
             expect_trap: self.attributes.iter().any(|a| a.name == "expect_trap"),
             is_todo: module_is_todo || self.attributes.iter().any(|a| a.name == "TODO"),
+            is_synopsis: self.attributes.iter().any(|a| a.name == "synopsis"),
             timeout_ms: self.attributes.iter().find_map(|a| {
                 if a.name == "timeout_ms" {
                     a.args
@@ -1514,6 +1516,20 @@ impl ImportAttributes {
     #[must_use]
     pub fn integrity(&self) -> Option<String> {
         self.get_str("integrity")
+    }
+
+    /// Inline registry override for a single-file dependency source
+    /// (`with { registry: "oci://…" }`).
+    #[must_use]
+    pub fn registry(&self) -> Option<String> {
+        self.get_str("registry")
+    }
+
+    /// Real coordinate a `lib:` alias resolves to, for a single-file dependency
+    /// source (`with { package: "ns:pkg" }`).
+    #[must_use]
+    pub fn package(&self) -> Option<String> {
+        self.get_str("package")
     }
 
     #[must_use]

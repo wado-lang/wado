@@ -150,3 +150,17 @@
 
 [stage_b_oracle_todo]
 "ParserErrors/LL1ErrorInfo" = "Error recovery: ANTLR4's recovered tree pulls `acClass` up as a bare token (single-token insertion), while Gale produces a proper empty-rule `(acClass)` node. Error-recovery shape differences are the same gap as `ParseTrees/ExtraToken` / `NoViableAlt` / `Sync`; flip together when error recovery lands."
+
+# Stage C — action-print output-compare (result.output vs descriptor [output]).
+# These execute action bodies but do not yet match; each names the gap.
+[stage_c_todo]
+"Sets/CharSetLiteral" = "action nested in a repeat group (`(A {print})+`) is not executed yet, so result.output is empty; action-in-repeat execution is a follow-up."
+"Sets/UnicodeEscapedSMPRangeSetMismatch" = "the printed `$text` includes the actual SMP code points Gale matched, while the descriptor [output] elides them; non-ASCII action-print divergence, same family as the Unicode oracle-encoding skips."
+"SemPredEvalParser/ToLeftWithVaryingPredicate" = "member-state-dependent predicate (`i` mutated across iterations) is evaluated with different timing than ANTLR, so the printed values differ."
+"FullContextParsing/AmbiguityNoLoop" = "full-context prediction reaches the action at a different point than ANTLR, so the printed output diverges."
+"FullContextParsing/LoopsSimulateTailRecursion" = "full-context prediction reaches the action at a different point than ANTLR, so the printed output diverges."
+"ParseTrees/ExtraTokensAndAltLabels" = "error-recovery path prints differently from ANTLR; flips with error-recovery output alignment."
+"ParserErrors/LL1ErrorInfo" = "error-recovery path prints differently from ANTLR; flips with error-recovery output alignment."
+"ParserExec/BuildParseTree_FALSE" = "action-print output does not yet match ANTLR (action executed on a not-yet-supported code path or evaluated with different timing)."
+"ParserExec/LabelAliasingAcrossLabeledAlternatives" = "action-print output does not yet match ANTLR (action executed on a not-yet-supported code path or evaluated with different timing)."
+"LeftRecursion/MultipleAlternativesWithCommonLabel_4" = "common alt label across LR alternatives with a return value the print reads; label-to-vals wiring incomplete for this shape."

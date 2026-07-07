@@ -278,9 +278,8 @@ where
 #[must_use]
 pub fn generator_identity(module: &GeneratorModule) -> String {
     match module {
-        GeneratorModule::Spec(s) => s.clone(),
+        GeneratorModule::Spec(s) => s.identity(),
         GeneratorModule::LocalPath(p) => format!("local:{}", p.as_str()),
-        GeneratorModule::BuildDep(s) => format!("builddep:{s}"),
     }
 }
 
@@ -390,7 +389,7 @@ mod tests {
 
     #[test]
     fn generator_identity_for_spec_is_verbatim() {
-        let m = GeneratorModule::Spec("ns:proto@1.0.0".to_string());
+        let m = GeneratorModule::Spec("ns:proto@1.0.0".into());
         assert_eq!(generator_identity(&m), "ns:proto@1.0.0");
     }
 
@@ -433,7 +432,7 @@ mod tests {
                 module: "src/main.wado".to_string(),
                 synthetic_id: "kiln-proto".to_string(),
             },
-            module: GeneratorModule::Spec("ns:p@1.0.0".to_string()),
+            module: GeneratorModule::Spec("ns:p@1.0.0".into()),
             from: InvocationPath::normalize("schema.proto"),
             source: InvocationPath::normalize("./schema.proto"),
             inputs: vec![InvocationPath::normalize("dep.proto")],
