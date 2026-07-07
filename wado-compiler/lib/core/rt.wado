@@ -89,11 +89,11 @@ internal fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_
     let len = message.len();
     if add_newline {
         let mut new_repr: Array<u8> = builtin::array_new(len + 1);
-        builtin::array_copy(&mut new_repr, 0, &bytes, 0, len);
+        builtin::array_copy(&mut new_repr, 0, bytes, 0, len);
         builtin::array_set_u8(&mut new_repr, len, 10);
         tx.write_raw(new_repr, len + 1);
     } else {
-        tx.write_raw(bytes, len);
+        tx.write_raw(*bytes, len);
     }
     tx.drop();
 }
@@ -181,7 +181,7 @@ internal fn cm_lower_string(s: String) -> i64 {
     let len = s.len();
     let bytes = s.internal_raw_bytes();
     let ptr = builtin::realloc(0, 0, 1, len);
-    gc_array_to_memory(&bytes, ptr, len);
+    gc_array_to_memory(bytes, ptr, len);
     return ptr as i64 | len as i64 << 32;
 }
 

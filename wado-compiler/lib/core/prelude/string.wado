@@ -188,10 +188,11 @@ impl String {
         self.repr[index] = value;
     }
 
-    /// Internal: Get raw bytes array (stdlib use only)
-    /// Returns the underlying byte array. Caller must respect `len()` boundary.
-    pub fn internal_raw_bytes(&self) -> Array<u8> {
-        return self.repr;
+    /// Internal: Shared view of the backing byte array (stdlib use only).
+    /// Returns a reference so reads scan the buffer without copying. Caller must
+    /// respect `len()` boundary.
+    pub fn internal_raw_bytes(&self) -> &Array<u8> {
+        return &self.repr;
     }
 
     /// Internal: Mutable view of the backing byte array (stdlib use only).
@@ -294,7 +295,7 @@ impl String {
             self.grow(new_used);
         }
 
-        builtin::array_copy(&mut self.repr, self.used, &other.internal_raw_bytes(), 0, other_len);
+        builtin::array_copy(&mut self.repr, self.used, other.internal_raw_bytes(), 0, other_len);
         self.used = new_used;
     }
 
@@ -333,7 +334,7 @@ impl String {
             builtin::cold_path();
             self.grow(new_used);
         }
-        builtin::array_copy(&mut self.repr, self.used, &s.internal_raw_bytes(), start, n);
+        builtin::array_copy(&mut self.repr, self.used, s.internal_raw_bytes(), start, n);
         self.used = new_used;
     }
 
@@ -374,7 +375,7 @@ impl Eq for String {
         if len_a != other.len() {
             return false;
         }
-        return String::eq_bytes(&self.internal_raw_bytes(), &other.internal_raw_bytes(), len_a);
+        return String::eq_bytes(self.internal_raw_bytes(), other.internal_raw_bytes(), len_a);
     }
 
     fn eq_bytes(a: &Array<u8>, b: &Array<u8>, len: i32) -> bool {
@@ -429,7 +430,7 @@ impl Ord for String {
 /// Iterator over UTF-8 bytes of a String.
 /// Yields each byte as u8.
 internal struct StrUtf8ByteIter {
-    repr: Array<u8>,
+    repr: &Array<u8>,
     used: i32,
     index: i32,
 }
@@ -454,7 +455,7 @@ impl Iterator for StrUtf8ByteIter {
 /// Iterator over Unicode scalar values (chars) of a String.
 /// Decodes UTF-8 and yields each character.
 internal struct StrCharIter {
-    repr: Array<u8>,
+    repr: &Array<u8>,
     used: i32,
     byte_index: i32,
 }
@@ -511,7 +512,7 @@ impl String {
     /// Returns an iterator over the UTF-8 bytes of the string.
     pub fn bytes(&self) -> StrUtf8ByteIter {
         return StrUtf8ByteIter {
-            repr: self.repr,
+            repr: &self.repr,
             used: self.used,
             index: 0,
         };
@@ -520,7 +521,7 @@ impl String {
     /// Returns an iterator over the Unicode scalar values (chars) of the string.
     pub fn chars(&self) -> StrCharIter {
         return StrCharIter {
-            repr: self.repr,
+            repr: &self.repr,
             used: self.used,
             byte_index: 0,
         };
@@ -1096,7 +1097,7 @@ impl String {
         // Shift bytes right
         builtin::array_copy(&mut self.repr, byte_index + s_len, &self.repr, byte_index, self.used - byte_index);
         // Copy inserted string
-        builtin::array_copy(&mut self.repr, byte_index, &s.internal_raw_bytes(), 0, s_len);
+        builtin::array_copy(&mut self.repr, byte_index, s.internal_raw_bytes(), 0, s_len);
         self.used = new_used;
     }
 
@@ -1204,7 +1205,7 @@ impl String {
                     if new_used > result.repr.len() {
                         result.grow(new_used);
                     }
-                    builtin::array_copy(&mut result.repr, result.used, &to_repr, 0, to_len);
+                    builtin::array_copy(&mut result.repr, result.used, to_repr, 0, to_len);
                     result.used = new_used;
                 }
                 pos += from_len;
@@ -1352,10 +1353,10 @@ impl From<char> for String {
 
 /// Iterator over substrings split by a separator.
 internal struct StrSplitIter {
-    repr: Array<u8>,
+    repr: &Array<u8>,
     used: i32,
     pos: i32,
-    sep_repr: Array<u8>,
+    sep_repr: &Array<u8>,
     sep_len: i32,
     finished: bool,
 }
@@ -1381,7 +1382,7 @@ impl Iterator for StrSplitIter {
             if matched {
                 let len = i - self.pos;
                 let mut part: Array<u8> = builtin::array_new(len);
-                builtin::array_copy(&mut part, 0, &self.repr, self.pos, len);
+                builtin::array_copy(&mut part, 0, self.repr, self.pos, len);
                 self.pos = i + self.sep_len;
                 return Option::Some(String::internal_from_utf8_raw(part, len));
             }
@@ -1390,7 +1391,7 @@ impl Iterator for StrSplitIter {
         // No more separators; return the remaining part
         let len = self.used - self.pos;
         let mut part: Array<u8> = builtin::array_new(len);
-        builtin::array_copy(&mut part, 0, &self.repr, self.pos, len);
+        builtin::array_copy(&mut part, 0, self.repr, self.pos, len);
         self.finished = true;
         return Option::Some(String::internal_from_utf8_raw(part, len));
     }
@@ -1398,10 +1399,10 @@ impl Iterator for StrSplitIter {
 
 /// Iterator over substrings split by a separator, limited to `n` parts.
 internal struct StrSplitNIter {
-    repr: Array<u8>,
+    repr: &Array<u8>,
     used: i32,
     pos: i32,
-    sep_repr: Array<u8>,
+    sep_repr: &Array<u8>,
     sep_len: i32,
     remaining: i32,
     finished: bool,
@@ -1418,7 +1419,7 @@ impl Iterator for StrSplitNIter {
         if self.remaining <= 1 {
             let len = self.used - self.pos;
             let mut part: Array<u8> = builtin::array_new(len);
-            builtin::array_copy(&mut part, 0, &self.repr, self.pos, len);
+            builtin::array_copy(&mut part, 0, self.repr, self.pos, len);
             self.finished = true;
             return Option::Some(String::internal_from_utf8_raw(part, len));
         }
@@ -1436,7 +1437,7 @@ impl Iterator for StrSplitNIter {
             if matched {
                 let len = i - self.pos;
                 let mut part: Array<u8> = builtin::array_new(len);
-                builtin::array_copy(&mut part, 0, &self.repr, self.pos, len);
+                builtin::array_copy(&mut part, 0, self.repr, self.pos, len);
                 self.pos = i + self.sep_len;
                 self.remaining -= 1;
                 return Option::Some(String::internal_from_utf8_raw(part, len));
@@ -1446,7 +1447,7 @@ impl Iterator for StrSplitNIter {
         // No more separators; return remaining
         let len = self.used - self.pos;
         let mut part: Array<u8> = builtin::array_new(len);
-        builtin::array_copy(&mut part, 0, &self.repr, self.pos, len);
+        builtin::array_copy(&mut part, 0, self.repr, self.pos, len);
         self.finished = true;
         return Option::Some(String::internal_from_utf8_raw(part, len));
     }
@@ -1454,7 +1455,7 @@ impl Iterator for StrSplitNIter {
 
 /// Iterator over whitespace-separated substrings.
 internal struct StrSplitWhitespaceIter {
-    repr: Array<u8>,
+    repr: &Array<u8>,
     used: i32,
     pos: i32,
 }
@@ -1481,14 +1482,14 @@ impl Iterator for StrSplitWhitespaceIter {
         }
         let len = self.pos - start;
         let mut part: Array<u8> = builtin::array_new(len);
-        builtin::array_copy(&mut part, 0, &self.repr, start, len);
+        builtin::array_copy(&mut part, 0, self.repr, start, len);
         return Option::Some(String::internal_from_utf8_raw(part, len));
     }
 }
 
 /// Iterator over lines of a string.
 internal struct StrLinesIter {
-    repr: Array<u8>,
+    repr: &Array<u8>,
     used: i32,
     pos: i32,
     finished: bool,
@@ -1512,14 +1513,14 @@ impl Iterator for StrLinesIter {
             if b == 0x0A {
                 let len = self.pos - start;
                 let mut part: Array<u8> = builtin::array_new(len);
-                builtin::array_copy(&mut part, 0, &self.repr, start, len);
+                builtin::array_copy(&mut part, 0, self.repr, start, len);
                 self.pos += 1;  // skip \n
                 return Option::Some(String::internal_from_utf8_raw(part, len));
             }
             if b == 0x0D {
                 let len = self.pos - start;
                 let mut part: Array<u8> = builtin::array_new(len);
-                builtin::array_copy(&mut part, 0, &self.repr, start, len);
+                builtin::array_copy(&mut part, 0, self.repr, start, len);
                 self.pos += 1;  // skip \r
                 if self.pos < self.used && self.repr[self.pos] == 0x0A {
                     self.pos += 1;  // skip \n after \r
@@ -1532,7 +1533,7 @@ impl Iterator for StrLinesIter {
         let len = self.pos - start;
         if len > 0 {
             let mut part: Array<u8> = builtin::array_new(len);
-            builtin::array_copy(&mut part, 0, &self.repr, start, len);
+            builtin::array_copy(&mut part, 0, self.repr, start, len);
             self.finished = true;
             return Option::Some(String::internal_from_utf8_raw(part, len));
         }
@@ -1543,7 +1544,7 @@ impl Iterator for StrLinesIter {
 
 /// Iterator over characters with their byte indices.
 internal struct StrCharIndicesIter {
-    repr: Array<u8>,
+    repr: &Array<u8>,
     used: i32,
     byte_index: i32,
 }
@@ -1588,10 +1589,10 @@ impl String {
     /// Returns an iterator over substrings split by the given separator.
     pub fn split(&self, sep: String) -> StrSplitIter {
         return StrSplitIter {
-            repr: self.repr,
+            repr: &self.repr,
             used: self.used,
             pos: 0,
-            sep_repr: sep.internal_raw_bytes(),
+            sep_repr: &sep.repr,
             sep_len: sep.len(),
             finished: false,
         };
@@ -1600,10 +1601,10 @@ impl String {
     /// Returns an iterator over at most `n` substrings split by the given separator.
     pub fn splitn(&self, n: i32, sep: String) -> StrSplitNIter {
         return StrSplitNIter {
-            repr: self.repr,
+            repr: &self.repr,
             used: self.used,
             pos: 0,
-            sep_repr: sep.internal_raw_bytes(),
+            sep_repr: &sep.repr,
             sep_len: sep.len(),
             remaining: n,
             finished: n <= 0,
@@ -1613,7 +1614,7 @@ impl String {
     /// Returns an iterator over whitespace-separated substrings.
     pub fn split_whitespace(&self) -> StrSplitWhitespaceIter {
         return StrSplitWhitespaceIter {
-            repr: self.repr,
+            repr: &self.repr,
             used: self.used,
             pos: 0,
         };
@@ -1622,7 +1623,7 @@ impl String {
     /// Returns an iterator over the lines of this string.
     pub fn lines(&self) -> StrLinesIter {
         return StrLinesIter {
-            repr: self.repr,
+            repr: &self.repr,
             used: self.used,
             pos: 0,
             finished: false,
@@ -1632,7 +1633,7 @@ impl String {
     /// Returns an iterator over characters with their byte indices.
     pub fn char_indices(&self) -> StrCharIndicesIter {
         return StrCharIndicesIter {
-            repr: self.repr,
+            repr: &self.repr,
             used: self.used,
             byte_index: 0,
         };
