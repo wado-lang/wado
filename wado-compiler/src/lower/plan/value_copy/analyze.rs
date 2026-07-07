@@ -183,6 +183,18 @@ fn is_fresh_in_context(
         // element storage aliased into the container (wado-lang/wado#1527). The
         // conservative copy is recovered by `value_copy_elide` for calls the
         // interprocedural escape analysis proves return a fresh value.
+        //
+        // A core builtin is the exception: it allocates or computes a fresh
+        // result — except the array element read, which aliases its container.
+        // Recognizing this at insertion keeps the fold from wrapping the fresh
+        // `array_clone` a value-copy helper emits in a redundant second copy
+        // (helper bodies are skipped by the elide recovery). Mirrors
+        // `optimize::escape::builtin_result_is_fresh`.
+        TirExprKind::Call { func, .. }
+            if func.module_source.is_core_builtin() && func.name != "array_get" =>
+        {
+            true
+        }
         TirExprKind::VariantConstruct { .. } | TirExprKind::EnumConstruct { .. } => true,
         TirExprKind::Local { index, .. } => fresh_locals.contains(index),
         TirExprKind::Unary {
