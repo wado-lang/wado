@@ -71,7 +71,7 @@ struct StrSplitIter {
     repr: &Array<u8>,
     used: i32,
     pos: i32,
-    sep_repr: &Array<u8>,
+    sep_repr: Array<u8>,
     sep_len: i32,
     finished: bool,
 }
@@ -80,7 +80,7 @@ struct StrSplitNIter {
     repr: &Array<u8>,
     used: i32,
     pos: i32,
-    sep_repr: &Array<u8>,
+    sep_repr: Array<u8>,
     sep_len: i32,
     remaining: i32,
     finished: bool,
@@ -10920,6 +10920,10 @@ fn String::internal_raw_bytes_mut(self: &mut String) -> &mut Array<u8> {
     return &mut self.repr;
 }
 
+fn String::internal_into_raw_bytes(s: String) -> Array<u8> {
+    return s.repr;
+}
+
 fn String::internal_from_utf8_raw(bytes: Array<u8>, len: i32) -> String {
     return String { repr: "$value_copy$T20"(bytes), used: len };
 }
@@ -11530,11 +11534,11 @@ pub fn "StrCharIter^Iterator::skip"(self: &StrCharIter, n: i32) -> IterSkip<core
     return IterSkip<core:prelude/string.wado/StrCharIter> { inner: "$value_copy$T64"(*self), remaining: n };
 }
 
-pub fn String::bytes(self: &String) -> StrUtf8ByteIter {
+pub fn String::bytes(self: &String) -> StrUtf8ByteIter with stores[self] {
     return StrUtf8ByteIter { repr: &self.repr, used: self.used, index: 0 };
 }
 
-pub fn String::chars(self: &String) -> StrCharIter {
+pub fn String::chars(self: &String) -> StrCharIter with stores[self] {
     return StrCharIter { repr: &self.repr, used: self.used, byte_index: 0 };
 }
 
@@ -11649,7 +11653,7 @@ pub fn String::truncate(self: &mut String, byte_len: i32) {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "$value_copy$T71"("core::prelude/format.wado::Formatter::new"(&mut __r));
-                Box<i32> { value: 634 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 642 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"negative length", used: 15 });
                 __r.String::push_str(&String { repr: packed"\ncondition: byte_len >= 0\n", used: 26 });
@@ -11674,7 +11678,7 @@ pub fn String::truncate(self: &mut String, byte_len: i32) {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "$value_copy$T71"("core::prelude/format.wado::Formatter::new"(&mut __r));
-                Box<i32> { value: 635 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 643 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"not on a UTF-8 character boundary", used: 33 });
                 __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(byte_len)\n", used: 44 });
@@ -11955,7 +11959,7 @@ pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "$value_copy$T71"("core::prelude/format.wado::Formatter::new"(&mut __r));
-                Box<i32> { value: 876 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 884 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"byte range out of bounds", used: 24 });
                 __r.String::push_str(&String { repr: packed"\ncondition: 0 <= start && start <= end && end <= self.used\n", used: 59 });
@@ -12013,7 +12017,7 @@ pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "$value_copy$T71"("core::prelude/format.wado::Formatter::new"(&mut __r));
-                Box<i32> { value: 877 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 885 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"byte range not on UTF-8 character boundaries", used: 44 });
                 __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(start) && self.is_char_boundary(end)\n", used: 71 });
@@ -12244,7 +12248,7 @@ pub fn String::insert(self: &mut String, byte_index: i32, ch: char) {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "$value_copy$T71"("core::prelude/format.wado::Formatter::new"(&mut __r));
-                Box<i32> { value: 1038 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 1046 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"insert index not on UTF-8 character boundary", used: 44 });
                 __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(byte_index)\n", used: 46 });
@@ -12303,7 +12307,7 @@ pub fn String::insert_str(self: &mut String, byte_index: i32, s: String) {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "$value_copy$T71"("core::prelude/format.wado::Formatter::new"(&mut __r));
-                Box<i32> { value: 1079 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 1087 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"insert_str index not on UTF-8 character boundary", used: 48 });
                 __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(byte_index)\n", used: 46 });
@@ -12350,7 +12354,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "$value_copy$T71"("core::prelude/format.wado::Formatter::new"(&mut __r));
-                Box<i32> { value: 1107 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 1115 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"index out of bounds", used: 19 });
                 __r.String::push_str(&String { repr: packed"\ncondition: byte_index >= 0 && byte_index < self.used\n", used: 54 });
@@ -12391,7 +12395,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "$value_copy$T71"("core::prelude/format.wado::Formatter::new"(&mut __r));
-                Box<i32> { value: 1108 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 1116 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"remove index not on UTF-8 character boundary", used: 44 });
                 __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(byte_index)\n", used: 46 });
@@ -13725,23 +13729,25 @@ pub fn "StrCharIndicesIter^Iterator::skip"(self: &StrCharIndicesIter, n: i32) ->
     return IterSkip<core:prelude/string.wado/StrCharIndicesIter> { inner: "$value_copy$T69"(*self), remaining: n };
 }
 
-pub fn String::split(self: &String, sep: String) -> StrSplitIter {
-    return StrSplitIter { repr: &self.repr, used: self.used, pos: 0, sep_repr: &sep.repr, sep_len: sep.String::len(), finished: false };
+pub fn String::split(self: &String, sep: String) -> StrSplitIter with stores[self] {
+    let sep_len: i32 = sep.String::len();
+    return StrSplitIter { repr: &self.repr, used: self.used, pos: 0, sep_repr: "$value_copy$T20"("core::prelude/string.wado::String::internal_into_raw_bytes"("$value_copy$T28"(sep))), sep_len: sep_len, finished: false };
 }
 
-pub fn String::splitn(self: &String, n: i32, sep: String) -> StrSplitNIter {
-    return StrSplitNIter { repr: &self.repr, used: self.used, pos: 0, sep_repr: &sep.repr, sep_len: sep.String::len(), remaining: n, finished: (n <= 0) };
+pub fn String::splitn(self: &String, n: i32, sep: String) -> StrSplitNIter with stores[self] {
+    let sep_len: i32 = sep.String::len();
+    return StrSplitNIter { repr: &self.repr, used: self.used, pos: 0, sep_repr: "$value_copy$T20"("core::prelude/string.wado::String::internal_into_raw_bytes"("$value_copy$T28"(sep))), sep_len: sep_len, remaining: n, finished: (n <= 0) };
 }
 
-pub fn String::split_whitespace(self: &String) -> StrSplitWhitespaceIter {
+pub fn String::split_whitespace(self: &String) -> StrSplitWhitespaceIter with stores[self] {
     return StrSplitWhitespaceIter { repr: &self.repr, used: self.used, pos: 0 };
 }
 
-pub fn String::lines(self: &String) -> StrLinesIter {
+pub fn String::lines(self: &String) -> StrLinesIter with stores[self] {
     return StrLinesIter { repr: &self.repr, used: self.used, pos: 0, finished: false };
 }
 
-pub fn String::char_indices(self: &String) -> StrCharIndicesIter {
+pub fn String::char_indices(self: &String) -> StrCharIndicesIter with stores[self] {
     return StrCharIndicesIter { repr: &self.repr, used: self.used, byte_index: 0 };
 }
 
@@ -13796,7 +13802,7 @@ pub fn "StrSplitIter^Inspect::inspect"(self: &StrSplitIter, f: &mut Formatter) {
     Box<i32> { value: self.pos }."i32^Inspect::inspect"(f);
     f.Formatter::write_str(&String { repr: packed", ", used: 2 });
     f.Formatter::write_str(&String { repr: packed"sep_repr: ", used: 10 });
-    self.sep_repr."&Array<u8>^Inspect::inspect"(f);
+    self.sep_repr."Array<u8>^Inspect::inspect"(f);
     f.Formatter::write_str(&String { repr: packed", ", used: 2 });
     f.Formatter::write_str(&String { repr: packed"sep_len: ", used: 9 });
     Box<i32> { value: self.sep_len }."i32^Inspect::inspect"(f);
@@ -13818,7 +13824,7 @@ pub fn "StrSplitNIter^Inspect::inspect"(self: &StrSplitNIter, f: &mut Formatter)
     Box<i32> { value: self.pos }."i32^Inspect::inspect"(f);
     f.Formatter::write_str(&String { repr: packed", ", used: 2 });
     f.Formatter::write_str(&String { repr: packed"sep_repr: ", used: 10 });
-    self.sep_repr."&Array<u8>^Inspect::inspect"(f);
+    self.sep_repr."Array<u8>^Inspect::inspect"(f);
     f.Formatter::write_str(&String { repr: packed", ", used: 2 });
     f.Formatter::write_str(&String { repr: packed"sep_len: ", used: 9 });
     Box<i32> { value: self.sep_len }."i32^Inspect::inspect"(f);
@@ -14003,7 +14009,7 @@ pub fn "StrSplitIter^InspectAlt::inspect_alt"(self: &StrSplitIter, f: &mut Forma
     f.Formatter::write_str(&String { repr: packed",", used: 1 });
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&String { repr: packed"sep_repr: ", used: 10 });
-    self.sep_repr."&Array<u8>^InspectAlt::inspect_alt"(f);
+    self.sep_repr."Array<u8>^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&String { repr: packed",", used: 1 });
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&String { repr: packed"sep_len: ", used: 9 });
@@ -14032,7 +14038,7 @@ pub fn "StrSplitNIter^InspectAlt::inspect_alt"(self: &StrSplitNIter, f: &mut For
     f.Formatter::write_str(&String { repr: packed",", used: 1 });
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&String { repr: packed"sep_repr: ", used: 10 });
-    self.sep_repr."&Array<u8>^InspectAlt::inspect_alt"(f);
+    self.sep_repr."Array<u8>^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&String { repr: packed",", used: 1 });
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&String { repr: packed"sep_len: ", used: 9 });
@@ -15215,10 +15221,9 @@ fn cm_lower_list_u8(data: &Array<u8>, len: i32) -> i64 {
     return (ptr as i64 | (len as i64 << 32));
 }
 
-fn cm_lower_array_u8(arr: List<u8>) -> i64 {
-    let data: Array<u8> = "$value_copy$T20"(arr."List<u8>::internal_raw_data"());
+fn cm_lower_array_u8(arr: &List<u8>) -> i64 {
     let len: i32 = arr."List<u8>::len"();
-    return core::rt::cm_lower_list_u8(&data, len);
+    return core::rt::cm_lower_list_u8(arr."List<u8>::internal_raw_data_ref"(), len);
 }
 
 fn write_escaped_string(s: String, f: &mut Formatter) {
@@ -15301,7 +15306,7 @@ fn cm_stream_read_raw_free(ptr: i32, byte_count: i32, element_align: i32) {
 }
 
 fn cm_stream_write_u8(handle: i32, data: List<u8>) {
-    let packed: i64 = core::rt::cm_lower_array_u8("$value_copy$T22"(data));
+    let packed: i64 = core::rt::cm_lower_array_u8(&data);
     let ptr: i32 = packed as i32;
     let len: i32 = (packed >> 32) as i32;
     core::rt::cm_stream_write_drain(handle, ptr, len, 1);
@@ -21191,6 +21196,14 @@ fn "List<u8>::internal_from_raw"(repr: Array<u8>, used: i32) -> List<u8> {
     return List<u8> { repr: "$value_copy$T20"(repr), used: used };
 }
 
+fn "List<u8>::internal_raw_data_ref"(self: &List<u8>) -> &Array<u8> {
+    return &self.repr;
+}
+
+pub fn "Array<u8>^InspectAlt::inspect_alt"(self: &Array<u8>, f: &mut Formatter) {
+    "core::prelude/array.wado::core/prelude/array.wado/write_seq_inspect_alt<u8>"(self, core::builtin::array_len(self), f, true, f.Formatter::resolved_seq_limit());
+}
+
 pub fn "&Array<u8>^InspectAlt::inspect_alt"(self: &&Array<u8>, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"&", used: 1 });
     let inner: &Array<u8> = *self;
@@ -21411,7 +21424,7 @@ fn "List<u64>^IndexValue<i32>::index_value"(self: &List<u64>, index: i32) -> u64
                 __r.String::push_str(&String { repr: packed"core:prelude/list.wado", used: 22 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "$value_copy$T71"("core::prelude/format.wado::Formatter::new"(&mut __r));
-                Box<i32> { value: 333 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 340 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"index out of bounds", used: 19 });
                 __r.String::push_str(&String { repr: packed"\ncondition: index < self.used\n", used: 30 });
@@ -21493,7 +21506,7 @@ fn "List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>^Inde
                 __r.String::push_str(&String { repr: packed"core:prelude/list.wado", used: 22 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "$value_copy$T71"("core::prelude/format.wado::Formatter::new"(&mut __r));
-                Box<i32> { value: 333 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 340 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"index out of bounds", used: 19 });
                 __r.String::push_str(&String { repr: packed"\ncondition: index < self.used\n", used: 30 });
@@ -21653,8 +21666,36 @@ pub fn "Array<[i32,char]>::len"(self: &Array<[i32, char]>) -> i32 {
     return core::builtin::array_len(self);
 }
 
-pub fn "Array<u8>^InspectAlt::inspect_alt"(self: &Array<u8>, f: &mut Formatter) {
-    "core::prelude/array.wado::core/prelude/array.wado/write_seq_inspect_alt<u8>"(self, core::builtin::array_len(self), f, true, f.Formatter::resolved_seq_limit());
+fn "core/prelude/array.wado/write_seq_inspect_alt<u8>"(repr: &Array<u8>, len: i32, f: &mut Formatter, marker: bool, limit: i32) {
+    if (len == 0) {
+        f.Formatter::write_str(&String { repr: packed"[]", used: 2 });
+        return;
+    }
+    f.Formatter::open_brace(String { repr: packed"[", used: 1 });
+    let mut shown: i32 = 0;
+    let mut truncated: bool = false;
+    let mut i: i32 = 0;
+    loop {
+        if !(i < len) {
+            break;
+        }
+        __for_0_body: {
+            if ((limit >= 0) && (shown >= limit)) {
+                truncated = true;
+                break;
+            }
+            f.Formatter::write_newline_indent();
+            Box<u8> { value: repr."Array<u8>^IndexValue<i32>::index_value"(i) }."u8^InspectAlt::inspect_alt"(f);
+            f.Formatter::write_char(',');
+            shown = (shown + 1);
+        }
+        i = (i + 1);
+    }
+    if (marker && truncated) {
+        f.Formatter::write_newline_indent();
+        f.Formatter::write_str(&String { repr: packed"...", used: 3 });
+    }
+    f.Formatter::close_brace(String { repr: packed"]", used: 1 });
 }
 
 fn "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>^IndexAssign<i32>::index_assign"(self: &mut Array<[String, String]>, index: i32, value: [String, String]) with stores[value] {
@@ -21701,38 +21742,6 @@ pub fn "List<u64>::grow"(self: &mut List<u64>) {
 
 pub fn "Array<u64>::len"(self: &Array<u64>) -> i32 {
     return core::builtin::array_len(self);
-}
-
-fn "core/prelude/array.wado/write_seq_inspect_alt<u8>"(repr: &Array<u8>, len: i32, f: &mut Formatter, marker: bool, limit: i32) {
-    if (len == 0) {
-        f.Formatter::write_str(&String { repr: packed"[]", used: 2 });
-        return;
-    }
-    f.Formatter::open_brace(String { repr: packed"[", used: 1 });
-    let mut shown: i32 = 0;
-    let mut truncated: bool = false;
-    let mut i: i32 = 0;
-    loop {
-        if !(i < len) {
-            break;
-        }
-        __for_0_body: {
-            if ((limit >= 0) && (shown >= limit)) {
-                truncated = true;
-                break;
-            }
-            f.Formatter::write_newline_indent();
-            Box<u8> { value: repr."Array<u8>^IndexValue<i32>::index_value"(i) }."u8^InspectAlt::inspect_alt"(f);
-            f.Formatter::write_char(',');
-            shown = (shown + 1);
-        }
-        i = (i + 1);
-    }
-    if (marker && truncated) {
-        f.Formatter::write_newline_indent();
-        f.Formatter::write_str(&String { repr: packed"...", used: 3 });
-    }
-    f.Formatter::close_brace(String { repr: packed"]", used: 1 });
 }
 
 pub fn __initialize_module() {
@@ -21844,11 +21853,11 @@ fn "$value_copy$T67"(v: StrSplitWhitespaceIter) -> StrSplitWhitespaceIter {
 }
 
 fn "$value_copy$T66"(v: StrSplitNIter) -> StrSplitNIter {
-    return StrSplitNIter { repr: v.repr, used: v.used, pos: v.pos, sep_repr: v.sep_repr, sep_len: v.sep_len, remaining: v.remaining, finished: v.finished };
+    return StrSplitNIter { repr: v.repr, used: v.used, pos: v.pos, sep_repr: core::builtin::array_clone::<u8>(&v.sep_repr), sep_len: v.sep_len, remaining: v.remaining, finished: v.finished };
 }
 
 fn "$value_copy$T65"(v: StrSplitIter) -> StrSplitIter {
-    return StrSplitIter { repr: v.repr, used: v.used, pos: v.pos, sep_repr: v.sep_repr, sep_len: v.sep_len, finished: v.finished };
+    return StrSplitIter { repr: v.repr, used: v.used, pos: v.pos, sep_repr: core::builtin::array_clone::<u8>(&v.sep_repr), sep_len: v.sep_len, finished: v.finished };
 }
 
 fn "$value_copy$T119"(v: List<String>) -> List<String> {

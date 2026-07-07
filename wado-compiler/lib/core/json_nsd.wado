@@ -567,7 +567,8 @@ pub fn to_bytes<T: Serialize>(value: &T) -> Result<List<u8>, SerializeError> {
     let mut buf: String = "";
     let mut ser = NsdSerializer { buf: &mut buf };
     value.serialize::<NsdSerializer>(&mut ser)?;
-    return Result::Ok(List::<u8>::internal_from_raw(*buf.internal_raw_bytes(), buf.len()));
+    let len = buf.len();
+    return Result::Ok(List::<u8>::internal_from_raw(String::internal_into_raw_bytes(buf), len));
 }
 
 /// Serializes a value to a JSON NSD string. Convenience over `to_bytes` for

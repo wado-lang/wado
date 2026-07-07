@@ -118,10 +118,11 @@ fn "wado-compiler/tests/fixtures/match_nested_three_level.wado/run"() with Stdou
     let result: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
-    let f_11: ref "core:prelude/format.wado//Formatter";
-    let f_16: ref "core:prelude/format.wado//Formatter";
-    let f_21: ref "core:prelude/format.wado//Formatter";
-    let f_26: ref "core:prelude/format.wado//Formatter";
+    let v: ref "core:prelude/string.wado//String";
+    let f_12: ref "core:prelude/format.wado//Formatter";
+    let f_17: ref "core:prelude/format.wado//Formatter";
+    let f_22: ref "core:prelude/format.wado//Formatter";
+    let f_27: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -129,7 +130,7 @@ fn "wado-compiler/tests/fixtures/match_nested_three_level.wado/run"() with Stdou
         global:__modules_initialized = 1;
     };
     data = struct.new "tuple//[wado-compiler/tests/fixtures/match_nested_three_level.wado/Point, wado-compiler/tests/fixtures/match_nested_three_level.wado/Point]" { 0: struct.new "wado-compiler/tests/fixtures/match_nested_three_level.wado//Point" { x: 1, y: 2 }, 1: struct.new "wado-compiler/tests/fixtures/match_nested_three_level.wado//Point" { x: 3, y: 4 } };
-    result = (if ref.is_null(data) == 0 -> ref "core:prelude/string.wado//String" {
+    v = (if ref.is_null(data) == 0 -> ref "core:prelude/string.wado//String" {
         let __variant_payload_1: ref "tuple//[wado-compiler/tests/fixtures/match_nested_three_level.wado/Point, wado-compiler/tests/fixtures/match_nested_three_level.wado/Point]";
         __variant_payload_1 = ref.as_non_null(data);
         let __tuple_elem_2: ref "wado-compiler/tests/fixtures/match_nested_three_level.wado//Point";
@@ -143,28 +144,29 @@ fn "wado-compiler/tests/fixtures/match_nested_three_level.wado/run"() with Stdou
         __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(72), used: 0 };
         "core:prelude/string.wado/String::push"(__local_6, 40);
         __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 };
-        f_11 = __local_7;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(x1, f_11);
+        f_12 = __local_7;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(x1, f_12);
         "core:prelude/string.wado/String::push"(__local_6, 44);
         __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 };
-        f_16 = __local_7;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(y1, f_16);
+        f_17 = __local_7;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(y1, f_17);
         "core:prelude/string.wado/String::push"(__local_6, 41);
         "core:prelude/string.wado/String::push"(__local_6, 45);
         "core:prelude/string.wado/String::push"(__local_6, 62);
         "core:prelude/string.wado/String::push"(__local_6, 40);
         __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 };
-        f_21 = __local_7;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(x2, f_21);
+        f_22 = __local_7;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(x2, f_22);
         "core:prelude/string.wado/String::push"(__local_6, 44);
         __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 };
-        f_26 = __local_7;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(y2, f_26);
+        f_27 = __local_7;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(y2, f_27);
         "core:prelude/string.wado/String::push"(__local_6, 41);
         __local_6;
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 110, 101), used: 4 };
     });
+    result = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used };
     "core:cli/println"(result);
 }
 

@@ -241,18 +241,19 @@ fn "wado-compiler/tests/fixtures/match_comprehensive.wado/match_variant_comprehe
     let __local_12: ref "core:prelude/string.wado//String";
     let __local_13: ref "core:prelude/format.wado//Formatter";
     let __match_14: ref null "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree";
-    let v: ref "core:prelude/slice.wado//ArrayIter<wado-compiler/tests/fixtures/match_comprehensive.wado/Tree>";
-    let f_46: ref "core:prelude/format.wado//Formatter";
-    let f_51: ref "core:prelude/format.wado//Formatter";
+    let v_26: ref "core:prelude/slice.wado//ArrayIter<wado-compiler/tests/fixtures/match_comprehensive.wado/Tree>";
+    let v_31: ref "core:prelude/string.wado//String";
+    let f_47: ref "core:prelude/format.wado//Formatter";
+    let f_52: ref "core:prelude/format.wado//Formatter";
     __b = struct.new "core:prelude//List<wado-compiler/tests/fixtures/match_comprehensive.wado/Tree>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree">(struct.new "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree::Leaf" { discriminant: 0, payload_0: 1 }, struct.new "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree::Node" { discriminant: 1, payload_0: struct.new "tuple//[i32, i32]" { 0: 10, 1: 20 } }, struct.new "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree" { 2 }, struct.new "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree::Leaf" { discriminant: 0, payload_0: 99 }), used: 4 };
-    v = struct.new "core:prelude/slice.wado//ArrayIter<wado-compiler/tests/fixtures/match_comprehensive.wado/Tree>" { repr: __b.repr, index: 0, end: 4 };
-    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<wado-compiler/tests/fixtures/match_comprehensive.wado/Tree>" { repr: v.repr, index: 0, end: 4 };
+    v_26 = struct.new "core:prelude/slice.wado//ArrayIter<wado-compiler/tests/fixtures/match_comprehensive.wado/Tree>" { repr: __b.repr, index: 0, end: 4 };
+    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<wado-compiler/tests/fixtures/match_comprehensive.wado/Tree>" { repr: v_26.repr, index: 0, end: 4 };
     b6: block {
         l7: loop {
             __match_14 = "core:prelude/slice.wado/ArrayIter<wado-compiler/tests/fixtures/match_comprehensive.wado/Tree>^Iterator::next"(__iter_2);
             if ref.is_null(__match_14) == 0 {
                 tree = ref.as_non_null(__match_14);
-                desc = (if (if ref.test "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree::Leaf"(tree) -> i32 {
+                v_31 = (if (if ref.test "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree::Leaf"(tree) -> i32 {
                     n_4 = ref.cast "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree::Leaf"(tree).payload_0;
                     n_4 < 10;
                 } else {
@@ -285,12 +286,12 @@ fn "wado-compiler/tests/fixtures/match_comprehensive.wado/match_variant_comprehe
                     "core:prelude/string.wado/String::push"(__local_12, 101);
                     "core:prelude/string.wado/String::push"(__local_12, 40);
                     __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_12 };
-                    f_46 = __local_13;
-                    "core:prelude/primitive.wado/i32::fmt_decimal"(pair.0, f_46);
+                    f_47 = __local_13;
+                    "core:prelude/primitive.wado/i32::fmt_decimal"(pair.0, f_47);
                     "core:prelude/string.wado/String::push"(__local_12, 44);
                     __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_12 };
-                    f_51 = __local_13;
-                    "core:prelude/primitive.wado/i32::fmt_decimal"(pair.1, f_51);
+                    f_52 = __local_13;
+                    "core:prelude/primitive.wado/i32::fmt_decimal"(pair.1, f_52);
                     "core:prelude/string.wado/String::push"(__local_12, 41);
                     __local_12;
                 } else if @likely(tree.discriminant == 2) -> ref "core:prelude/string.wado//String" {
@@ -298,6 +299,7 @@ fn "wado-compiler/tests/fixtures/match_comprehensive.wado/match_variant_comprehe
                 } else {
                     unreachable;
                 });
+                desc = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v_31.repr)), used: v_31.used };
                 "core:cli/println"(desc);
             } else {
                 break b6;

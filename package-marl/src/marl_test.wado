@@ -14,6 +14,11 @@ test "render rejects seven hashes as a heading" {
     assert render(&"####### too deep") == "<p>####### too deep</p>";
 }
 
+test "render accepts up to three leading spaces before a heading" {
+    assert render(&"   # Title") == "<h1>Title</h1>";
+    assert render(&"  ## Sub") == "<h2>Sub</h2>";
+}
+
 test "render requires a space after the hashes" {
     assert render(&"#notitle") == "<p>#notitle</p>";
 }

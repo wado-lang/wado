@@ -26,6 +26,7 @@ fn "wado-compiler/tests/fixtures/hfs_match_arm_local_hoisted_out_of_loop.wado/bu
     let result: ref "wado-compiler/tests/fixtures/hfs_match_arm_local_hoisted_out_of_loop.wado//S";
     let i: i32;
     let s: ref "wado-compiler/tests/fixtures/hfs_match_arm_local_hoisted_out_of_loop.wado//S";
+    let v: ref "wado-compiler/tests/fixtures/hfs_match_arm_local_hoisted_out_of_loop.wado//S";
     result = struct.new "wado-compiler/tests/fixtures/hfs_match_arm_local_hoisted_out_of_loop.wado//S" { a: 0 };
     i = 0;
     b0: block {
@@ -36,7 +37,8 @@ fn "wado-compiler/tests/fixtures/hfs_match_arm_local_hoisted_out_of_loop.wado/bu
             s.a = 2;
             s.a = 3;
             s.a = 4;
-            result = s;
+            v = s;
+            result = struct.new "wado-compiler/tests/fixtures/hfs_match_arm_local_hoisted_out_of_loop.wado//S" { a: v.a };
             i = i + 1;
             continue l1;
         };

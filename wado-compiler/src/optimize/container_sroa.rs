@@ -735,6 +735,21 @@ fn recognize_init_operand(
         .and_then(|e| recognize_init(body, e, sig, value_copy_ids))
 }
 
+/// Strip a single `$value_copy$T(inner)` wrapper, returning its inner
+/// expression, or `None` when `e` is not a one-argument value-copy call. The one
+/// place that recognizes the wrapper shape, shared by every SROA site that sees
+/// through a value copy.
+fn strip_one_value_copy(
+    body: &Body,
+    e: ExprId,
+    value_copy_ids: &IndexSet<crate::nir::FuncId>,
+) -> Option<ExprId> {
+    let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
+        return None;
+    };
+    (value_copy_ids.contains(func_id) && args.len() == 1).then(|| args[0].expr.as_expr())?
+}
+
 /// Peel `$value_copy$T(inner)` wrappers, returning the innermost expression. A
 /// value copy of a fresh value (a constructor result) is a no-op.
 fn peel_value_copy(
@@ -743,11 +758,7 @@ fn peel_value_copy(
     value_copy_ids: &IndexSet<crate::nir::FuncId>,
 ) -> ExprId {
     let mut cur = e;
-    while let ExprKind::Call { func_id, args, .. } = &body.exprs[cur].kind
-        && value_copy_ids.contains(func_id)
-        && args.len() == 1
-        && let Some(inner) = args[0].expr.as_expr()
-    {
+    while let Some(inner) = strip_one_value_copy(body, cur, value_copy_ids) {
         cur = inner;
     }
     cur
@@ -1012,12 +1023,7 @@ impl WhitelistChecker<'_> {
         // value, so the struct-level clone is redundant. For an identity-carrying
         // field the copy is load-bearing, so leave it (this arm doesn't fire) and
         // SROA conservatively bails on the candidate.
-        if src_all_scalar
-            && let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind
-            && self.value_copy_ids.contains(func_id)
-            && args.len() == 1
-            && let Some(inner) = args[0].expr.as_expr()
-        {
+        if src_all_scalar && let Some(inner) = strip_one_value_copy(body, e, self.value_copy_ids) {
             return self.check_source(body, inner, expected_arity, expected_layout, src_all_scalar);
         }
         match &body.exprs[e].kind {
@@ -1512,10 +1518,7 @@ impl Rewriter<'_, '_> {
         // See through a defensive slot copy `$value_copy$T(src)` — matches
         // `check_source`. The wrapped element read is decomposed instead.
         if src_all_scalar
-            && let ExprKind::Call { func_id, args, .. } = &engine.body.exprs[expr].kind
-            && ctx.value_copy_ids.contains(func_id)
-            && args.len() == 1
-            && let Some(inner) = args[0].expr.as_expr()
+            && let Some(inner) = strip_one_value_copy(engine.body, expr, ctx.value_copy_ids)
         {
             return self.decompose_source(
                 engine,

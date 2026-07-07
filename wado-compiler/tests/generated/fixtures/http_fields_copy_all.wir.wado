@@ -871,14 +871,12 @@ fn "wado-compiler/tests/fixtures/http_fields_copy_all.wado/__cm_binding__Fields_
     let __vresult: ref "wasi:http/types.wado//HeaderError";
     let __disc_10: i32;
     let __option_result: ref null "core:prelude/string.wado//String";
-    let data: ref Array<u8>;
     let ptr: i32;
-    let len_18: i32;
-    let arr_19: ref Array<u8>;
+    let len_17: i32;
+    let arr_18: ref Array<u8>;
     let bytes: ref Array<u8>;
     __name_packed = "core:rt/cm_lower_string"(name);
-    data = value.repr;
-    __value_packed = "core:rt/cm_lower_list_u8"(data, value.used);
+    __value_packed = "core:rt/cm_lower_list_u8"(value.repr, value.used);
     __outptr = "mem/realloc"(0, 0, 4, 20);
     "wasi/wasi:http/Fields::append"(self, builtin::i32_wrap_i64(__name_packed), builtin::i32_wrap_i64(__name_packed >> 32_i64), builtin::i32_wrap_i64(__value_packed), builtin::i32_wrap_i64(__value_packed >> 32_i64), __outptr);
     __disc_6 = builtin::load_u8(__outptr);
@@ -900,7 +898,7 @@ fn "wado-compiler/tests/fixtures/http_fields_copy_all.wado/__cm_binding__Fields_
             __disc_10 = builtin::load_u8((__outptr + 4) + 4);
             __option_result = ref.null none;
             if __disc_10 != 0 {
-                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_18 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr_19 = "core:rt/memory_to_gc_array"(ptr, len_18); bytes = builtin::array_clone<u8>(arr_19); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(bytes)), used: len_18 });
+                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_17 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr_18 = "core:rt/memory_to_gc_array"(ptr, len_17); bytes = builtin::array_clone<u8>(arr_18); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(bytes)), used: len_17 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
             }
             __vresult = struct.new "wasi:http/types.wado//HeaderError::Other" { discriminant: 4, payload_0: __option_result };

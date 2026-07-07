@@ -27,11 +27,15 @@
 //! can alias a source (aggregates and references) carry taint; a primitive
 //! projection like `s.used` carries none.
 //!
-//! Builtins retain nothing, so their reference and by-value arguments stay
-//! confined — except a store builtin (`array_set<T>`, …), which writes a
-//! by-value aggregate element into a `&mut` aggregate the caller still holds
-//! (a side escape). Their result is tainted by every argument, covering identity
-//! builtins (`ref.as_non_null`, `array.new_fixed`).
+//! Builtins have no body, so as a *callee* they are absent from `funcs` and the
+//! missing-entry rule reports every parameter as escaping — the confinement
+//! strip is conservatively skipped for a builtin call. The store-vs-non-store
+//! distinction lives instead in [`builtin_side`], which models a builtin's taint
+//! contribution when it is *called* inside an analyzed body: a store builtin
+//! (`array_set<T>`, …) writes a by-value aggregate element into a `&mut`
+//! aggregate the caller still holds (a side escape), and the result is tainted
+//! by every argument, covering identity builtins (`ref.as_non_null`,
+//! `array.new_fixed`).
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::needs_value_copy;

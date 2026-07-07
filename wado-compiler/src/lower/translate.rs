@@ -666,7 +666,6 @@ impl FunctionTranslator<'_, '_> {
         //   - a tuple (`[A, B, …]`): also an in-place `GenericInstance`, with
         //     positional fields `0..n` typed by the tuple's element types.
         // Any other type falls through to the default single-statement lowering.
-        // `(field_name, field_index, field_type)` for each write-back.
         let inner_resolved = self.base.type_table.borrow().get(inner_type_id).clone();
         let fields: Vec<(String, u32, tir::TypeId)> = if let crate::tir::ResolvedType::Struct {
             name,

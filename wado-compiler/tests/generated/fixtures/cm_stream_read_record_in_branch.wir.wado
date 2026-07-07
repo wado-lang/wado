@@ -218,7 +218,6 @@ fn "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/run"() wit
     let dir: i32;
     let dir_stream: i32;
     let _done: i32;
-    let entries: ref "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>";
     let found_hello: bool;
     let __iter_6: ref "core:prelude/slice.wado//ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>";
     let entry: ref "wasi:filesystem/types.wado//DirectoryEntry";
@@ -227,8 +226,10 @@ fn "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/run"() wit
     let __v1: i32;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    let v: ref "core:prelude/slice.wado//ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>";
+    let v_18: ref "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>";
     let len_a: i32;
+    let __sroa_entries_repr: ref "Array<wasi:filesystem/types.wado/DirectoryEntry>";
+    let __sroa_entries_used: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -242,32 +243,33 @@ fn "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/run"() wit
     }
     __pattern_temp_0 = "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_binding__Descriptor_read_directory"(local.tee dir(__v1 = dirs.used; if @unlikely(0 >= __v1) {
         cold_path;
-        "core:rt/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(173); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("List::index_value"), used: 17 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/list.wado"), used: 22 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 333 }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(173); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("List::index_value"), used: 17 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/list.wado"), used: 22 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 340 }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: index < self.used
 "), used: 30 }); "core:prelude/string.wado/String::push"(__local_5, 105); "core:prelude/string.wado/String::push"(__local_5, 110); "core:prelude/string.wado/String::push"(__local_5, 100); "core:prelude/string.wado/String::push"(__local_5, 101); "core:prelude/string.wado/String::push"(__local_5, 120); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("self.used: "), used: 11 }); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v1 }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); __local_5);
         unreachable;
     }; builtin::array_get<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(dirs.repr, 0).0));
     dir_stream = __pattern_temp_0.0;
     _done = __pattern_temp_0.1;
-    entries = (if dirs.used > 0 -> ref "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>" {
+    v_18 = (if dirs.used > 0 -> ref "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>" {
         "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_stream_read_DirectoryEntry"(dir_stream, 100);
     } else {
         "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_stream_read_DirectoryEntry"(dir_stream, 0);
     });
+    __sroa_entries_repr = builtin::array_clone<ref "wasi:filesystem/types.wado//DirectoryEntry">(v_18.repr);
+    __sroa_entries_used = v_18.used;
     found_hello = 0;
-    v = struct.new "core:prelude/slice.wado//ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>" { repr: entries.repr, index: 0, end: entries.used };
-    __iter_6 = struct.new "core:prelude/slice.wado//ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>" { repr: v.repr, index: 0, end: v.end };
+    __iter_6 = struct.new "core:prelude/slice.wado//ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>" { repr: __sroa_entries_repr, index: 0, end: __sroa_entries_used };
     b3: block {
         l4: loop {
             __match_9 = "core:prelude/slice.wado/ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>^Iterator::next"(__iter_6);
             if ref.is_null(__match_9) == 0 {
                 entry = ref.as_non_null(__match_9);
-                if __inline_String_Eq__eq_7: block -> bool {
+                if __inline_String_Eq__eq_8: block -> bool {
                     len_a = entry.name.used;
                     if len_a != 9 {
-                        break __inline_String_Eq__eq_7: 0;
+                        break __inline_String_Eq__eq_8: 0;
                     }
-                    break __inline_String_Eq__eq_7: "core:prelude/string.wado/String^Eq::eq_bytes"(entry.name.repr, array.new_data<u8>("hello.txt"), len_a);
+                    break __inline_String_Eq__eq_8: "core:prelude/string.wado/String^Eq::eq_bytes"(entry.name.repr, array.new_data<u8>("hello.txt"), len_a);
                 } {
                     found_hello = 1;
                 }

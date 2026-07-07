@@ -79,6 +79,13 @@ impl List<T> {
         return self.repr;
     }
 
+    /// Internal: Shared view of the backing array without copying (stdlib use
+    /// only). Unlike `internal_raw_data`, which returns an owned copy, this hands
+    /// back a reference for read-only scans. Caller must respect `len()`.
+    internal fn internal_raw_data_ref(&self) -> &Array<T> {
+        return &self.repr;
+    }
+
     internal fn internal_from_raw(repr: Array<T>, used: i32) -> List<T> {
         return List { repr, used };
     }

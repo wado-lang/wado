@@ -203,6 +203,14 @@ impl String {
         return &mut self.repr;
     }
 
+    /// Internal: Consume `s`, moving out its backing byte array without copying
+    /// (stdlib use only). Unlike `internal_raw_bytes`, which returns a shared
+    /// reference that a caller must deep-copy to own, this transfers ownership of
+    /// the buffer directly. Caller must respect `len()` boundary.
+    internal fn internal_into_raw_bytes(s: String) -> Array<u8> {
+        return s.repr;
+    }
+
     /// Internal: Create String from raw UTF-8 bytes (stdlib use only)
     /// The bytes must be valid UTF-8. No validation is performed.
     internal fn internal_from_utf8_raw(bytes: Array<u8>, len: i32) -> String {
@@ -510,7 +518,7 @@ impl Iterator for StrCharIter {
 
 impl String {
     /// Returns an iterator over the UTF-8 bytes of the string.
-    pub fn bytes(&self) -> StrUtf8ByteIter {
+    pub fn bytes(&self) -> StrUtf8ByteIter with stores[self] {
         return StrUtf8ByteIter {
             repr: &self.repr,
             used: self.used,
@@ -519,7 +527,7 @@ impl String {
     }
 
     /// Returns an iterator over the Unicode scalar values (chars) of the string.
-    pub fn chars(&self) -> StrCharIter {
+    pub fn chars(&self) -> StrCharIter with stores[self] {
         return StrCharIter {
             repr: &self.repr,
             used: self.used,
@@ -1356,7 +1364,7 @@ internal struct StrSplitIter {
     repr: &Array<u8>,
     used: i32,
     pos: i32,
-    sep_repr: &Array<u8>,
+    sep_repr: Array<u8>,
     sep_len: i32,
     finished: bool,
 }
@@ -1402,7 +1410,7 @@ internal struct StrSplitNIter {
     repr: &Array<u8>,
     used: i32,
     pos: i32,
-    sep_repr: &Array<u8>,
+    sep_repr: Array<u8>,
     sep_len: i32,
     remaining: i32,
     finished: bool,
@@ -1587,32 +1595,34 @@ impl Iterator for StrCharIndicesIter {
 
 impl String {
     /// Returns an iterator over substrings split by the given separator.
-    pub fn split(&self, sep: String) -> StrSplitIter {
+    pub fn split(&self, sep: String) -> StrSplitIter with stores[self] {
+        let sep_len = sep.len();
         return StrSplitIter {
             repr: &self.repr,
             used: self.used,
             pos: 0,
-            sep_repr: &sep.repr,
-            sep_len: sep.len(),
+            sep_repr: String::internal_into_raw_bytes(sep),
+            sep_len,
             finished: false,
         };
     }
 
     /// Returns an iterator over at most `n` substrings split by the given separator.
-    pub fn splitn(&self, n: i32, sep: String) -> StrSplitNIter {
+    pub fn splitn(&self, n: i32, sep: String) -> StrSplitNIter with stores[self] {
+        let sep_len = sep.len();
         return StrSplitNIter {
             repr: &self.repr,
             used: self.used,
             pos: 0,
-            sep_repr: &sep.repr,
-            sep_len: sep.len(),
+            sep_repr: String::internal_into_raw_bytes(sep),
+            sep_len,
             remaining: n,
             finished: n <= 0,
         };
     }
 
     /// Returns an iterator over whitespace-separated substrings.
-    pub fn split_whitespace(&self) -> StrSplitWhitespaceIter {
+    pub fn split_whitespace(&self) -> StrSplitWhitespaceIter with stores[self] {
         return StrSplitWhitespaceIter {
             repr: &self.repr,
             used: self.used,
@@ -1621,7 +1631,7 @@ impl String {
     }
 
     /// Returns an iterator over the lines of this string.
-    pub fn lines(&self) -> StrLinesIter {
+    pub fn lines(&self) -> StrLinesIter with stores[self] {
         return StrLinesIter {
             repr: &self.repr,
             used: self.used,
@@ -1631,7 +1641,7 @@ impl String {
     }
 
     /// Returns an iterator over characters with their byte indices.
-    pub fn char_indices(&self) -> StrCharIndicesIter {
+    pub fn char_indices(&self) -> StrCharIndicesIter with stores[self] {
         return StrCharIndicesIter {
             repr: &self.repr,
             used: self.used,

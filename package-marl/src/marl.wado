@@ -35,10 +35,10 @@ fn render_blocks(lines: &List<String>, start: i32, end: i32) -> String {
             i = render_fenced_code(lines, i, end, ch, fence_len, &info, &mut out);
             continue;
         }
-        let level = heading_level(line);
+        let level = heading_level(&chars);
         if level > 0 {
             flush_paragraph(&mut out, &mut para);
-            let content = heading_content(line, level);
+            let content = heading_content(&chars, level);
             out.push(`<h{level}>{render_inline(&content)}</h{level}>`);
             i += 1;
             continue;
@@ -130,36 +130,25 @@ fn is_blank(line: &String) -> bool {
     return line.trim().len() == 0;
 }
 
-fn heading_level(line: &String) -> i32 {
+fn heading_level(chars: &List<char>) -> i32 {
+    let len = chars.len();
+    let mut p = skip_indent(chars, len);
     let mut hashes = 0;
-    let mut saw_non_hash = false;
-    let mut next_is_space = false;
-    for let c of line.chars() {
-        if c == '#' && !saw_non_hash {
-            hashes += 1;
-        } else {
-            saw_non_hash = true;
-            next_is_space = c matches { ' ' | '\t' };
-            break;
-        }
+    while p < len && chars[p] == '#' {
+        hashes += 1;
+        p += 1;
     }
-    if 1 <= hashes <= 6 && (!saw_non_hash || next_is_space) {
+    let next_is_space = p >= len || is_indent(chars[p]);
+    if 1 <= hashes <= 6 && next_is_space {
         return hashes;
     }
     return 0;
 }
 
-fn heading_content(line: &String, level: i32) -> String {
-    let mut raw = String::new();
-    let mut skipped = 0;
-    for let c of line.chars() {
-        if skipped < level {
-            skipped += 1;
-            continue;
-        }
-        raw.push(c);
-    }
-    return strip_atx_closing(&raw.trim());
+fn heading_content(chars: &List<char>, level: i32) -> String {
+    let len = chars.len();
+    let start = skip_indent(chars, len) + level;
+    return strip_atx_closing(&slice_chars(chars, start, len).trim());
 }
 
 fn strip_atx_closing(s: &String) -> String {

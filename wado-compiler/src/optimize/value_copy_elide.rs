@@ -340,8 +340,8 @@ fn is_value_copy_call(body: &Body, expr: ExprId, value_copy_ids: &IndexSet<FuncI
 /// `None` when no local root is reachable — a call result, a constant, or a
 /// bare literal. `None` does *not* by itself mean "fresh": an accessor call such
 /// as `container.index_value(i)` also returns `None` yet aliases the container's
-/// element, so callers must not treat a `None` root as uniquely owned (see
-/// [`is_fresh_rvalue`]).
+/// element, so callers must not treat a `None` root as uniquely owned — they
+/// confirm freshness through `EscapeMap::rvalue_is_fresh`.
 fn arg_source_root(body: &Body, expr: ExprId) -> Option<u32> {
     match &body.exprs[expr].kind {
         ExprKind::Local { index, .. } => Some(*index),
@@ -428,7 +428,16 @@ fn copy_source_strippable(
             Some(u) => !u.is_assigned() && !u.has_field_mutation,
             None => true,
         },
-        None => true,
+        // No local root. An `if` / `match` value returns one of its arms, which
+        // may be a live local it aliases rather than uniquely owns, so its copy
+        // must stay. Every other rootless source (a promoted constant, a global
+        // read, a fresh construction, a fresh-returning call) is safe to alias.
+        None => !arg.expr.as_expr().is_some_and(|e| {
+            matches!(
+                body.exprs[e].kind,
+                ExprKind::If { .. } | ExprKind::Match { .. }
+            )
+        }),
     }
 }
 
@@ -642,12 +651,11 @@ impl ValueCopyElideRule<'_> {
                 continue;
             }
             let root = arg_source_root(body, ae);
-            // Fresh: a genuinely fresh value (a constructor / packed constant)
-            // is uniquely owned, so the copy is a no-op regardless of the callee.
-            // A bare `None` root is *not* enough — an accessor result like
-            // `container[i]` also has no local root yet aliases element storage —
-            // so unrecognized sources fall to the escape-aware checks below.
-            let is_fresh = is_fresh_rvalue(body, ae, self.value_copy_ids);
+            // A fresh, uniquely owned arg is a no-op copy regardless of the
+            // callee, but `collect_fresh_copies` already collects those (via the
+            // stronger interprocedural `escape.rvalue_is_fresh`), so this scan
+            // only needs the two escape-aware grounds.
+            //
             // Move: `root` is a parameter used only here, so this copy is its
             // last use of a value the frame uniquely owns.
             let is_move = root.is_some_and(|r| {
@@ -662,41 +670,10 @@ impl ValueCopyElideRule<'_> {
             };
             let is_confined =
                 !a.is_mut && !self.escape.param_escapes(func_id, param_offset + i) && no_mut_alias;
-            if is_fresh || is_move || is_confined {
+            if is_move || is_confined {
                 out.push(e);
             }
         }
-    }
-}
-
-/// Whether `e` produces a genuinely fresh, uniquely owned value: a constructor
-/// or packed constant whose sub-values are themselves constants, fresh
-/// constructors, or `$value_copy$T` clones. Such a value shares storage with
-/// nothing else, so a copy of it is a no-op. A `Local`, projection, accessor
-/// call (`container[i]`), or ordinary call is NOT fresh — it may return storage
-/// aliased elsewhere.
-fn is_fresh_rvalue(body: &Body, e: ExprId, value_copy_ids: &IndexSet<FuncId>) -> bool {
-    match &body.exprs[e].kind {
-        ExprKind::PackedArray(_) | ExprKind::EnumConstruct { .. } => true,
-        ExprKind::StructLiteral { fields, .. } => fields
-            .iter()
-            .all(|f| operand_is_fresh(body, f.value, value_copy_ids)),
-        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
-            .iter()
-            .all(|el| operand_is_fresh(body, *el, value_copy_ids)),
-        ExprKind::VariantConstruct { payload, .. } => {
-            payload.is_none_or(|p| operand_is_fresh(body, p, value_copy_ids))
-        }
-        // A `$value_copy$T(..)` call yields a fresh deep clone.
-        ExprKind::Call { .. } => is_value_copy_call(body, e, value_copy_ids),
-        _ => false,
-    }
-}
-
-fn operand_is_fresh(body: &Body, op: Operand, value_copy_ids: &IndexSet<FuncId>) -> bool {
-    match op.as_expr() {
-        None => true,
-        Some(e) => is_fresh_rvalue(body, e, value_copy_ids),
     }
 }
 

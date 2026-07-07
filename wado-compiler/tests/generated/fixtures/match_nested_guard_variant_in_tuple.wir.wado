@@ -128,6 +128,7 @@ fn "wado-compiler/tests/fixtures/match_nested_guard_variant_in_tuple.wado/run"()
     let __local_11: ref "core:prelude/types.wado//Option<i32>";
     let __local_12: ref "core:prelude/types.wado//Option<i32>";
     let __local_13: ref "core:prelude/types.wado//Option<i32>";
+    let v: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -135,7 +136,7 @@ fn "wado-compiler/tests/fixtures/match_nested_guard_variant_in_tuple.wado/run"()
         global:__modules_initialized = 1;
     };
     pair = struct.new "tuple//[core:prelude/types.wado/Option<i32>, core:prelude/types.wado/Option<i32>]" { 0: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 100 }, 1: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 5 } };
-    desc = (if __local_10 = pair.0; __local_11 = pair.1; (if (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__local_10) -> i32 {
+    v = (if __local_10 = pair.0; __local_11 = pair.1; (if (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__local_10) -> i32 {
         ref.test "core:prelude/types.wado//Option<i32>::Some"(__local_11);
     } else {
         0;
@@ -185,6 +186,7 @@ fn "wado-compiler/tests/fixtures/match_nested_guard_variant_in_tuple.wado/run"()
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
     });
+    desc = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used };
     "core:cli/println"(desc);
 }
 

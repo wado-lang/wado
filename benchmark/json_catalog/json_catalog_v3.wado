@@ -123,7 +123,7 @@ fn tok_end(t: u64) -> i32 {
 
 // Phase 1: tokenize
 fn tokenize(input: String) -> List<u64> {
-    let raw = *input.internal_raw_bytes();
+    let raw = input.internal_raw_bytes();
     let len = input.len();
     let mut pos = 0;
     let mut tape: List<u64> = List::with_capacity(len / 6);
@@ -137,7 +137,7 @@ fn tokenize(input: String) -> List<u64> {
     loop {
         // skip ws
         while pos < len {
-            let b = builtin::array_get_u8(&raw, pos) as i32;
+            let b = builtin::array_get_u8(raw, pos) as i32;
             if b > 32 {
                 break;
             }
@@ -151,7 +151,7 @@ fn tokenize(input: String) -> List<u64> {
             return tape;
         }
 
-        let b = builtin::array_get_u8(&raw, pos) as i32;
+        let b = builtin::array_get_u8(raw, pos) as i32;
         if b == '{' as i32 {
             tape.push(pack_token(TOK_OBJECT_START, pos, pos + 1));
             pos += 1;
@@ -194,7 +194,7 @@ fn tokenize(input: String) -> List<u64> {
             pos = s;
             // scan for closing " (handle escapes by skipping next byte after \)
             while pos < len {
-                let bb = builtin::array_get_u8(&raw, pos) as i32;
+                let bb = builtin::array_get_u8(raw, pos) as i32;
                 if bb == '"' as i32 {
                     break;
                 }
@@ -213,7 +213,7 @@ fn tokenize(input: String) -> List<u64> {
                 pos += 1;
             }
             while pos < len {
-                let bb = builtin::array_get_u8(&raw, pos) as i32;
+                let bb = builtin::array_get_u8(raw, pos) as i32;
                 if '0' as i32 <= bb <= '9' as i32
                     || bb == '.' as i32
                     || bb == 'e' as i32
