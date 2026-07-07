@@ -871,8 +871,7 @@ fn emit_stage_c_output_test_file(
         name: *name,
         attr: generator_attr(),
         doc_lines: [
-            triage_doc_line(&"stage_c"), "//",
-            "// Stage C claim: the generated parser's action-print output",
+            triage_doc_line(&"stage_c"), "//", "// Stage C claim: the generated parser's action-print output",
             "// (result.output, the p.emit buffer) equals the descriptor's [output].",
         ],
         output_subdir: "antlr4_compat_a",
@@ -1794,7 +1793,9 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
         `extract: stage B' — JVM-oracle candidates: {stage_b_oracle_pending} pending (handed to scripts/extract-antlr4-descriptors.sh post-processor)`,
     );
     println(`extract:           {stage_b_oracle_suppressed} suppressed via [stage_b_oracle_skip]`);
-    println(`extract: stage C — action-print output: emitted {stage_c_emitted} output-compare driver(s), {stage_c_todo} marked #[TODO]`);
+    println(
+        `extract: stage C — action-print output: emitted {stage_c_emitted} output-compare driver(s), {stage_c_todo} marked #[TODO]`,
+    );
     println(`extract: deferred — gaps blocked on missing infrastructure:`);
     println(
         `extract:           {deferred_composite} composite descriptors — need Kiln multi-grammar \`use\` support to resolve \`import S;\` against sibling \`<Name>.slaveN.g4\``,

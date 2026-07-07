@@ -194,15 +194,15 @@ Design: a real (small) Java parser, not regex rewriting. String concatenation (`
 
 API / type mapping is snake_case by default — an arbitrary `@members` / superClass method can only be case-converted — plus a small table of semantic redirects and fixed recognizer methods:
 
-| Java                                            | Wado                                   | kind              |
-| ----------------------------------------------- | -------------------------------------- | ----------------- |
-| `this.foo(args)` / `foo()`                      | `this.foo(args)` (snake_case)          | default           |
-| `System.out.println/print(x)`                   | `p.emit(...)` (`println` appends `\n`) | semantic redirect |
-| `x.equals(y)`                                    | `x == y`                               | semantic redirect |
-| `TParser.<TOKEN>`                               | `TK_<TOKEN>`                           | semantic redirect |
-| `getText()` / `_input.LA(k)` / `_input.getText()` | `rule_text()` / `la(k)` / `input_text()` | fixed rename    |
-| `$ctx.toStringTree(this)`                       | `rule_string_tree()` (via attr engine) | fixed rename      |
-| `int` / `boolean` / `String` / `void`           | `i32` / `bool` / `String` / `()`       | type map          |
+| Java                                              | Wado                                     | kind              |
+| ------------------------------------------------- | ---------------------------------------- | ----------------- |
+| `this.foo(args)` / `foo()`                        | `this.foo(args)` (snake_case)            | default           |
+| `System.out.println/print(x)`                     | `p.emit(...)` (`println` appends `\n`)   | semantic redirect |
+| `x.equals(y)`                                     | `x == y`                                 | semantic redirect |
+| `TParser.<TOKEN>`                                 | `TK_<TOKEN>`                             | semantic redirect |
+| `getText()` / `_input.LA(k)` / `_input.getText()` | `rule_text()` / `la(k)` / `input_text()` | fixed rename      |
+| `$ctx.toStringTree(this)`                         | `rule_string_tree()` (via attr engine)   | fixed rename      |
+| `int` / `boolean` / `String` / `void`             | `i32` / `bool` / `String` / `()`         | type map          |
 
 Anything outside the subset is a loud generation diagnostic carrying the fragment span — never a silent no-op; the subset grows on corpus demand. `@members` field declarations become fields on the generated `Parser` / `Lexer`, method declarations become methods (`this.` → `self.`).
 
@@ -315,4 +315,4 @@ Recovery invariants with actions present:
 - Effect-generic parse functions (user actions with real effects via handlers) — future extension.
 - Java numeric promotion: java2wado does not model Java's implicit numeric widening. `token_int` (`$X.int`, `.type`, `.line`, `.pos`, `.index`) is `i32`, so mixing it with a wider value-channel field — `returns [long v]` (`i64`), `[float x]` (`f32`), `[double d]` (`f64`) — mismatches Wado's strict widths in any context (`$v = $X.int`, `$v + $X.int`, `println($v + $X.int)`), since Wado has no implicit widening. No corpus grammar hits this (a wider field is normally paired with a wider source), and the failure is a loud generated-parser type error, not a silent miscompile. A proper fix threads Java's promotion rules through the java2wado emitter (cast at the point the promotion is required); an assignment-only cast would be a partial workaround that leaves the expression cases broken.
 - License hygiene: template-helper semantics and any oracle pinning stay jar-black-box only (documented in `src/g4/action_templates.wado`).
-- Retention gaps: (a) *(silent drop fixed)* `empty_alt_group_as_optional` used to fold a predicate-only empty branch `( {p}? | A )` into an Optional, dropping the gate before action ids were assigned — silently, since the body never reached `warn_unhandled_actions`. The fold now bails when the empty alt carries actions, so the group is retained and the predicate surfaces loudly (`UnsupportedAction`); executing it as a real skip gate (the lowering-structure change) is still deferred. This was corpus-live: `ParserExec/PredicatedIfIfElse`'s `('else' stmt | { _input.LA(1) != ELSE }?)` is the exact shape. The enabling root cause — `grammar_has_actions` inspecting only top-level `alt.actions`, so a grammar whose only action sits in a group left `emit_actions` off (the whole action pipeline, including the safety net, never ran) — is fixed too: it now recurses group elements on both the parser and lexer sides. (b) `gen_lexer_non_greedy_repeat` builds a synthesized suffix `LexerAlternative` from an element slice without carrying/re-basing the suffix's `AltAction` `before_index`.
+- Retention gaps: (a) _(silent drop fixed)_ `empty_alt_group_as_optional` used to fold a predicate-only empty branch `( {p}? | A )` into an Optional, dropping the gate before action ids were assigned — silently, since the body never reached `warn_unhandled_actions`. The fold now bails when the empty alt carries actions, so the group is retained and the predicate surfaces loudly (`UnsupportedAction`); executing it as a real skip gate (the lowering-structure change) is still deferred. This was corpus-live: `ParserExec/PredicatedIfIfElse`'s `('else' stmt | { _input.LA(1) != ELSE }?)` is the exact shape. The enabling root cause — `grammar_has_actions` inspecting only top-level `alt.actions`, so a grammar whose only action sits in a group left `emit_actions` off (the whole action pipeline, including the safety net, never ran) — is fixed too: it now recurses group elements on both the parser and lexer sides. (b) `gen_lexer_non_greedy_repeat` builds a synthesized suffix `LexerAlternative` from an element slice without carrying/re-basing the suffix's `AltAction` `before_index`.

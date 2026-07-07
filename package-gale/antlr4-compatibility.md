@@ -40,7 +40,7 @@ diverge.
 
 ### EOF in parse trees
 
-`toStringTree()` prints an explicitly-matched `EOF` as ` <EOF>`
+`toStringTree()` prints an explicitly-matched `EOF` as `<EOF>`
 (ANTLR4) but Gale's `to_string_tree()` omits it. This is **cosmetic
 only** — there is no capability gap:
 
@@ -57,12 +57,12 @@ only** — there is no capability gap:
 So the shape/navigation capability is identical; only the debug string
 diverges. Rather than reverse Gale's convention (which would re-baseline
 every driver test and the whole Stage B suite), both stages normalise the
-ANTLR side to Gale's shape: Stage B strips ` <EOF>` from the oracle tree
+ANTLR side to Gale's shape: Stage B strips `<EOF>` from the oracle tree
 (`strip_eof_marker`) and Stage C strips it from the descriptor `[output]`
 before the exact-match compare (`strip_tail_eof_marker`, whitespace-
 preserving so the trailing newline survives). The marker is only ever
 dropped in tail position (followed by closing parens / whitespace), so an
-` <EOF>` that is genuine token *text* mid-tree is left untouched.
+`<EOF>` that is genuine token _text_ mid-tree is left untouched.
 
 The contract is verified at three layered stages.
 
