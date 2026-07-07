@@ -1221,6 +1221,15 @@ test "panics on invalid input" {
 test "not yet implemented" {
     panic("TODO: implement this");
 }
+
+// Synopsis test: runs like any test, and `wado doc` renders its body as the
+// module's `## Synopsis` section. Module-scoped and conventionally unnamed.
+// Combinable with #[expect_trap], #[TODO], and #[timeout_ms].
+#[synopsis]
+test {
+    let p = Point { x: 3, y: 4 };
+    assert p.length() == 5.0;
+}
 ```
 
 ## Standard Library
