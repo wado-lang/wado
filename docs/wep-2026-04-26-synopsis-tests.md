@@ -238,12 +238,18 @@ synopsis. The body the reader sees is the whole synopsis.
 
 ## TODOs
 
-- [ ] Add `synopsis` to the recognised test-attribute set in the parser.
-- [ ] Record `is_synopsis` on `TirTest` (elaborator + TIR), accessible to
-      `wado doc`.
-- [ ] Change `wado test` file discovery to `**/*.wado`.
-- [ ] Render `## Synopsis` sections in `wado doc` (markdown, simple, json).
-- [ ] Add fixtures: single synopsis, multiple synopses, synopsis with
+- [x] Add `synopsis` to the recognised test-attribute set in the parser.
+      (Test attributes are not whitelisted; `#[synopsis]` parses and
+      type-checks as-is. Its semantics live in `TestDecl::metadata`.)
+- [x] Record `is_synopsis` on `TirTest` (elaborator + TIR). `wado doc` is
+      AST-based, so it reads synopsis bodies straight from the AST; the flag
+      keeps the test-attribute vocabulary complete for future consumers (LSP).
+- [x] Change `wado test` file discovery to `**/*.wado`.
+      (Delivered by the later Test Discovery WEP, 2026-05-02.)
+- [x] Render `## Synopsis` sections in `wado doc` (markdown, simple, json).
+- [x] Add fixtures: single synopsis, multiple synopses, synopsis with
       `#[expect_trap]`, synopsis with `#[TODO]`.
-- [ ] Update `docs/cheatsheet.md` with the `#[synopsis]` form.
-- [ ] Update the CLI subcommands doc to describe the discovery change.
+- [x] Update `docs/cheatsheet.md` with the `#[synopsis]` form.
+- [x] Update the CLI subcommands doc to describe the discovery change.
+      (The discovery change and its "compile-only files now surface errors"
+      note are documented by the Test Discovery WEP.)

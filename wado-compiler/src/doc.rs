@@ -20,6 +20,8 @@ pub struct DocModule {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub synopsis: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub traits: Vec<DocTrait>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub structs: Vec<DocStruct>,
@@ -189,8 +191,13 @@ pub struct DocFlagsMember {
 }
 
 /// Extract the public-API documentation of a module.
-pub fn extract_doc(module: &Module, trivia: &TriviaMap, module_name: &str) -> DocModule {
-    extract_doc_with(module, trivia, module_name, false)
+pub fn extract_doc(
+    module: &Module,
+    trivia: &TriviaMap,
+    source: &str,
+    module_name: &str,
+) -> DocModule {
+    extract_doc_with(module, trivia, source, module_name, false)
 }
 
 /// [`extract_doc`] with explicit visibility: `include_private` documents
@@ -199,10 +206,11 @@ pub fn extract_doc(module: &Module, trivia: &TriviaMap, module_name: &str) -> Do
 pub fn extract_doc_with(
     module: &Module,
     trivia: &TriviaMap,
+    source: &str,
     module_name: &str,
     include_private: bool,
 ) -> DocModule {
-    extract_doc_filtered(module, trivia, module_name, include_private, false)
+    extract_doc_filtered(module, trivia, source, module_name, include_private, false)
 }
 
 /// Like [`extract_doc_with`], but `include_internal` also admits top-level
@@ -212,11 +220,13 @@ pub fn extract_doc_with(
 pub fn extract_doc_filtered(
     module: &Module,
     trivia: &TriviaMap,
+    source: &str,
     module_name: &str,
     include_private: bool,
     include_internal: bool,
 ) -> DocModule {
     let module_doc = extract_module_doc(trivia, module);
+    let synopsis = collect_synopsis(module, source);
 
     let mut traits: Vec<DocTrait> = Vec::new();
     let mut structs: Vec<DocStruct> = Vec::new();
@@ -262,6 +272,7 @@ pub fn extract_doc_filtered(
     DocModule {
         name: module_name.to_string(),
         doc: module_doc,
+        synopsis,
         traits,
         structs,
         types,
@@ -274,6 +285,40 @@ pub fn extract_doc_filtered(
         functions,
         primitive_types: Vec::new(),
     }
+}
+
+fn collect_synopsis(module: &Module, source: &str) -> Vec<String> {
+    module
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Test(t) if t.attributes.iter().any(|a| a.name == "synopsis") => {
+                let span = t.body.span;
+                let inner = source.get(span.start + 1..span.end.saturating_sub(1))?;
+                Some(dedent_synopsis(inner))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+fn dedent_synopsis(body: &str) -> String {
+    let lines: Vec<&str> = body
+        .trim_matches(|c| c == '\n' || c == '\r')
+        .lines()
+        .collect();
+    let indent = lines
+        .iter()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| l.len() - l.trim_start().len())
+        .min()
+        .unwrap_or(0);
+    lines
+        .iter()
+        .map(|l| if l.len() >= indent { &l[indent..] } else { l })
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn build_doc_trait(t: &TraitDecl, trivia: &TriviaMap) -> DocTrait {
@@ -718,7 +763,13 @@ pub fn extract_stdlib_doc(module_name: &str) -> Option<DocModule> {
 pub fn extract_stdlib_doc_with(module_name: &str, include_private: bool) -> Option<DocModule> {
     let source = stdlib::get_stdlib_module(module_name)?;
     let parsed = parse_stdlib_for_doc(module_name, source);
-    let mut doc = extract_doc_with(&parsed.ast, &parsed.trivia, module_name, include_private);
+    let mut doc = extract_doc_with(
+        &parsed.ast,
+        &parsed.trivia,
+        source,
+        module_name,
+        include_private,
+    );
 
     // For modules with pub use re-exports, follow them to get the actual items
     let reexport_sources = collect_pub_use_sources(&parsed.ast);
@@ -732,6 +783,7 @@ pub fn extract_stdlib_doc_with(module_name: &str, include_private: bool) -> Opti
                 let sub_doc = extract_doc_filtered(
                     &sub_parsed.ast,
                     &sub_parsed.trivia,
+                    sub_source,
                     reexport_source,
                     false,
                     true,

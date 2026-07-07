@@ -256,6 +256,7 @@ fn load_doc(input: &str, include_private: bool) -> Result<DocModule, CliExit> {
     Ok(extract_doc_with(
         &parsed.ast,
         &parsed.trivia,
+        &source,
         module_name,
         include_private,
     ))
@@ -403,6 +404,70 @@ mod format_contract_tests {
         assert_dprint_stable(&out, "simple single");
     }
 
+    fn markdown_of(source: &str) -> String {
+        let parsed = wado_compiler::parse(source)
+            .into_fail_fast()
+            .expect("parse");
+        let doc = wado_compiler::doc::extract_doc(&parsed.ast, &parsed.trivia, source, "demo");
+        render_single(&doc, "markdown", "demo.wado", OutputFormat::Markdown)
+    }
+
+    #[test]
+    fn single_synopsis_renders_a_section() {
+        let out = markdown_of(
+            "//! Demo.\n\n#[synopsis]\ntest {\n    let x = 1;\n    assert x == 1;\n}\n",
+        );
+        assert!(out.contains("## Synopsis"), "missing heading:\n{out}");
+        assert!(
+            out.contains("```wado\nlet x = 1;\nassert x == 1;\n```"),
+            "body not dedented verbatim:\n{out}"
+        );
+    }
+
+    #[test]
+    fn multiple_synopses_render_in_source_order() {
+        let out = markdown_of(
+            "#[synopsis]\ntest {\n    let a = 1;\n}\n\n#[synopsis]\ntest {\n    let b = 2;\n}\n",
+        );
+        assert_eq!(
+            out.matches("## Synopsis").count(),
+            1,
+            "one heading expected:\n{out}"
+        );
+        let a = out.find("let a = 1;").expect("first body");
+        let b = out.find("let b = 2;").expect("second body");
+        assert!(a < b, "synopses must render in source order:\n{out}");
+    }
+
+    #[test]
+    fn synopsis_with_expect_trap_and_todo_still_renders() {
+        let out = markdown_of(
+            "#[synopsis]\n#[expect_trap]\ntest {\n    panic(\"boom\");\n}\n\n#[synopsis]\n#[TODO]\ntest {\n    let y = 3;\n}\n",
+        );
+        assert!(
+            out.contains("panic(\"boom\");"),
+            "expect_trap synopsis missing:\n{out}"
+        );
+        assert!(out.contains("let y = 3;"), "TODO synopsis missing:\n{out}");
+    }
+
+    #[test]
+    fn ordinary_test_produces_no_synopsis_section() {
+        let out = markdown_of("test {\n    let x = 1;\n}\n");
+        assert!(
+            !out.contains("## Synopsis"),
+            "plain test must not emit Synopsis:\n{out}"
+        );
+    }
+
+    #[test]
+    fn synopsis_output_is_dprint_stable() {
+        let out = markdown_of(
+            "//! Demo.\n\n#[synopsis]\ntest {\n    let x = 1;\n    assert x == 1;\n}\n",
+        );
+        assert_dprint_stable(&out, "markdown synopsis");
+    }
+
     #[test]
     fn combined_markdown_output_is_dprint_stable() {
         let inputs = ["core:cli".to_string(), "core:base64".to_string()];
@@ -464,6 +529,7 @@ fn render_markdown(doc: &DocModule, h_offset: usize) -> String {
         render_md_doc(&mut out, module_doc);
     }
 
+    render_md_synopsis_section(&mut out, doc, h2);
     render_md_globals_section(&mut out, doc, h2, h3);
     render_md_functions_section(&mut out, doc, h2, h3);
     render_md_traits_section(&mut out, doc, h2, h3, h4);
@@ -477,6 +543,16 @@ fn render_markdown(doc: &DocModule, h_offset: usize) -> String {
     render_md_flags_section(&mut out, doc, h2, h3, h4);
 
     out
+}
+
+fn render_md_synopsis_section(out: &mut String, doc: &DocModule, h2: &str) {
+    if doc.synopsis.is_empty() {
+        return;
+    }
+    writeln!(out, "\n{h2} Synopsis").unwrap();
+    for body in &doc.synopsis {
+        writeln!(out, "\n```wado\n{body}\n```").unwrap();
+    }
 }
 
 fn render_md_types_section(out: &mut String, doc: &DocModule, h2: &str, h3: &str) {
@@ -950,6 +1026,7 @@ fn render_simple(doc: &DocModule, h_offset: usize) -> String {
         out.push('\n');
     }
 
+    render_md_synopsis_section(&mut out, doc, h2);
     render_simple_globals_section(&mut out, doc, h2);
     render_simple_functions_section(&mut out, doc, h2);
     render_simple_traits_section(&mut out, doc, h2);

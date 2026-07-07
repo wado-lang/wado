@@ -1493,6 +1493,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             expect_trap,
             is_todo,
             timeout_ms,
+            is_synopsis,
         } = meta;
         let function_name =
             crate::name::test_function_name(&meta, test_index, test_decl.name.as_deref());
@@ -1543,6 +1544,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             expect_trap,
             is_todo,
             timeout_ms,
+            is_synopsis,
         };
 
         Some((tir_func, tir_test))

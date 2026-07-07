@@ -8,6 +8,12 @@
 
 use { println, Stdout } from "core:cli";
 
+#[synopsis]
+test {
+    let digest = sha256(&bytes_of(&"abc"));
+    assert to_hex(&digest) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+}
+
 // Round constants (cube roots of the first 64 primes).
 global K: List<u32> = [
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98,
