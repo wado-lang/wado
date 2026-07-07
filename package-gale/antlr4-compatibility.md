@@ -33,6 +33,37 @@ single forced answer — Gale rejects loudly instead of guessing. The
 canonical statement of this rule is the "Compatibility Principle" in
 [`AGENTS.md`](./AGENTS.md).
 
+The contract binds **capability**, not byte-for-byte output. Parse
+trees, token streams, and semantics must match ANTLR4; an incidental
+rendering difference that carries no structural meaning is allowed to
+diverge.
+
+### EOF in parse trees
+
+`toStringTree()` prints an explicitly-matched `EOF` as ` <EOF>`
+(ANTLR4) but Gale's `to_string_tree()` omits it. This is **cosmetic
+only** — there is no capability gap:
+
+- Gale stores EOF as a real tree node. A rule matching `EOF` appends the
+  token via `TreeBuilder.token` (`parser_gen.wado`, the `emit_consume_kind_return`
+  EOF branch), exactly as ANTLR4 makes it a `TerminalNode` child. Child
+  count, indexing, and listener/visitor walks observe the EOF node in
+  both.
+- Only the S-expression **rendering** differs: `to_string_tree`
+  (`runtime/tree.wado`) skips empty-text terminals (`is_empty_text`,
+  which EOF satisfies) when printing. The node is present; it just is not
+  drawn.
+
+So the shape/navigation capability is identical; only the debug string
+diverges. Rather than reverse Gale's convention (which would re-baseline
+every driver test and the whole Stage B suite), both stages normalise the
+ANTLR side to Gale's shape: Stage B strips ` <EOF>` from the oracle tree
+(`strip_eof_marker`) and Stage C strips it from the descriptor `[output]`
+before the exact-match compare (`strip_tail_eof_marker`, whitespace-
+preserving so the trailing newline survives). The marker is only ever
+dropped in tail position (followed by closing parens / whitespace), so an
+` <EOF>` that is genuine token *text* mid-tree is left untouched.
+
 The contract is verified at three layered stages.
 
 ## Stages of Compatibility
