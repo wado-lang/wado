@@ -50,9 +50,10 @@ struct LabelInfo {
     name: String,
     list: bool,
     is_token: bool,
-    /// For a single-value rule label, the referenced rule name (for member
-    /// validation against that rule's `returns`). Empty otherwise.
-    rule_name: String,
+    /// The referenced element's name: the rule name for a rule label (for member
+    /// validation against its `returns`) or the token name for a token label
+    /// (for the by-name alias). Empty when neither applies.
+    ref_name: String,
 }
 
 /// The attribute environment of one parser rule: the names it defines.
@@ -61,9 +62,9 @@ pub struct AttrEnv {
     attrs: List<String>,
     token_refs: List<String>,
     rule_refs: List<String>,
-    /// `underlying_rule → label` aliases: a labeled rule reference (`q=e`) is
-    /// also reachable by its rule name (`$e`), so `$e` resolves to the label's
-    /// storage. Registered only when the rule name has a single labeled
+    /// `underlying_name → label` aliases: a labeled ref (`q=e`, `x=ID`) is also
+    /// reachable by the referenced element's name (`$e`, `$ID`), resolving to the
+    /// label's storage. Registered only when that name has a single labeled
     /// occurrence and no unlabeled one, matching ANTLR erroring on ambiguity.
     label_aliases: List<[String, String]>,
 }
@@ -84,18 +85,11 @@ pub fn resolve_attrs(body: &String, rule: &ParserRule, rules: &List<ParserRule>)
 }
 
 fn resolve_one(r: &AttrRef, env: &AttrEnv, rules: &List<ParserRule>) -> Result<ResolvedAttr, String> {
-    let lookup = alias_target(env, &r.name);
     for let lab of &env.labels {
-        if lab.name == lookup {
-            let target = if lab.list {
-                AttrTarget::ListLabel;
-            } else if lab.is_token {
-                AttrTarget::TokenLabel;
-            } else {
-                AttrTarget::RuleLabel;
-            };
-            check_member(r, &target, &lab.rule_name, rules)?;
-            return ok_attr_named(r, &lookup, target, &lab.rule_name);
+        if lab.name == r.name {
+            let target = label_target(lab);
+            check_member(r, &target, &lab.ref_name, rules)?;
+            return ok_attr(r, target, &lab.ref_name);
         }
     }
     if contains(&env.attrs, &r.name) {
@@ -114,7 +108,30 @@ fn resolve_one(r: &AttrRef, env: &AttrEnv, rules: &List<ParserRule>) -> Result<R
         check_member(r, &AttrTarget::RuleRef, &r.name, rules)?;
         return ok_attr(r, AttrTarget::RuleRef, &r.name);
     }
+    // Fallback only: a labeled ref reachable by its underlying name (`$e` for
+    // `q=e`). Tried after direct resolution so it never shadows a same-named
+    // declared attribute or label.
+    let alias = alias_target(env, &r.name);
+    if alias != r.name {
+        for let lab of &env.labels {
+            if lab.name == alias {
+                let target = label_target(lab);
+                check_member(r, &target, &lab.ref_name, rules)?;
+                return ok_attr_named(r, &alias, target, &lab.ref_name);
+            }
+        }
+    }
     return Result::Err(`unresolved attribute reference '${r.name}'`);
+}
+
+fn label_target(lab: &LabelInfo) -> AttrTarget {
+    return if lab.list {
+        AttrTarget::ListLabel;
+    } else if lab.is_token {
+        AttrTarget::TokenLabel;
+    } else {
+        AttrTarget::RuleLabel;
+    };
 }
 
 fn ok_attr(r: &AttrRef, target: AttrTarget, rule_name: &String) -> Result<ResolvedAttr, String> {
@@ -135,9 +152,9 @@ fn ok_attr_named(r: &AttrRef, name: &String, target: AttrTarget, rule_name: &Str
     });
 }
 
-/// Map a reference name through the label-alias table: a labeled rule ref
-/// `q=e` makes `$e` resolve to the label `q`. Returns the name unchanged when
-/// it is not an alias.
+/// Map a reference name through the label-alias table: a labeled ref `q=e` /
+/// `x=ID` makes `$e` / `$ID` resolve to its label. Returns the name unchanged
+/// when it is not an alias.
 fn alias_target(env: &AttrEnv, name: &String) -> String {
     for let a of &env.label_aliases {
         if a.0 == *name {
@@ -238,33 +255,40 @@ pub fn build_attr_env(rule: &ParserRule) -> AttrEnv {
             collect_env_element(e, &mut labels, &mut token_refs, &mut rule_refs);
         }
     }
-    let label_aliases = build_label_aliases(&labels, &rule_refs);
+    let label_aliases = build_label_aliases(&labels, &rule_refs, &token_refs);
     return AttrEnv { labels, attrs, token_refs, rule_refs, label_aliases };
 }
 
-/// Build the `underlying_rule → label` alias table so `$e` resolves to a
-/// labeled `q=e`. Registered only when the rule name has exactly one labeled
-/// occurrence and no unlabeled reference; an ambiguous `$e` (two labeled refs,
-/// or a mix of labeled and unlabeled) stays unresolved, a loud error as ANTLR
-/// reports.
-fn build_label_aliases(labels: &List<LabelInfo>, rule_refs: &List<String>) -> List<[String, String]> {
+/// Build the `underlying_name → label` alias table so a labeled ref is also
+/// reachable by the referenced element's name: `$e` for `q=e`, `$ID` for
+/// `x=ID`. Registered only when that name has exactly one labeled occurrence
+/// and no unlabeled reference (of the same token/rule kind); an ambiguous
+/// reference stays unresolved, a loud error as ANTLR reports. The alias is a
+/// fallback (`resolve_one` tries direct resolution first), so it never shadows
+/// a same-named declared attribute or label.
+fn build_label_aliases(
+    labels: &List<LabelInfo>,
+    rule_refs: &List<String>,
+    token_refs: &List<String>,
+) -> List<[String, String]> {
     let mut aliases: List<[String, String]> = [];
     for let lab of labels {
-        if lab.is_token || lab.list || lab.rule_name == "" {
+        if lab.list || lab.ref_name == "" {
             continue;
         }
-        if count_labeled_rule(labels, &lab.rule_name) != 1 || contains(rule_refs, &lab.rule_name) {
+        let refs = if lab.is_token { token_refs } else { rule_refs };
+        if count_labeled_ref(labels, &lab.ref_name, lab.is_token) != 1 || contains(refs, &lab.ref_name) {
             continue;
         }
-        aliases.push([lab.rule_name, lab.name]);
+        aliases.push([lab.ref_name, lab.name]);
     }
     return aliases;
 }
 
-fn count_labeled_rule(labels: &List<LabelInfo>, rule_name: &String) -> i32 {
+fn count_labeled_ref(labels: &List<LabelInfo>, ref_name: &String, is_token: bool) -> i32 {
     let mut n = 0;
     for let lab of labels {
-        if !lab.is_token && !lab.list && lab.rule_name == *rule_name {
+        if !lab.list && lab.is_token == is_token && lab.ref_name == *ref_name {
             n += 1;
         }
     }
@@ -279,8 +303,8 @@ fn collect_env_element(
 ) {
     match *elem {
         Label(lab) => {
-            let [is_token, rule_name] = classify_labeled(&lab.element);
-            labels.push(LabelInfo { name: lab.name, list: lab.list, is_token, rule_name });
+            let [is_token, ref_name] = classify_labeled(&lab.element);
+            labels.push(LabelInfo { name: lab.name, list: lab.list, is_token, ref_name });
         },
         RuleRef(rr) => rule_refs.push(rr.name),
         TokenRef(tr) => token_refs.push(tr.name),
@@ -298,13 +322,15 @@ fn collect_env_element(
     }
 }
 
-/// Classify a labeled element as token-bound or rule-bound. A `TokenRef`
-/// or `Literal` is a token; a `RuleRef` is a rule (returning its name for
-/// member validation). Other shapes default to token-like (no rule members).
+/// Classify a labeled element as token-bound or rule-bound, returning
+/// `[is_token, ref_name]`. A `RuleRef` is a rule (its name backs member
+/// validation); a `TokenRef` is a token (its name backs the by-name alias); a
+/// `Literal` is a token with no addressable name. Other shapes default
+/// token-like.
 fn classify_labeled(elem: &Element) -> [bool, String] {
     return match *elem {
         RuleRef(rr) => [false, rr.name],
-        TokenRef(_) => [true, ""],
+        TokenRef(tr) => [true, tr.name],
         Literal(_) => [true, ""],
         Not(n) => classify_labeled(&n.element),
         _ => [true, ""],

@@ -1980,35 +1980,44 @@ fn strip_eof_marker(raw: &String) -> String {
     return strip_tail_eof_marker(&trimmed);
 }
 
-/// Drop a ` <EOF>` marker in tail position — i.e. followed by nothing but
-/// closing parens and trailing whitespace — so the tree matches Gale's
-/// `to_string_tree()` shape (which omits EOF). EOF can only ever be the last
-/// token of a parse, so this covers both the top-level trailing form
-/// `(s a <EOF>)` and the nested-at-end form `(s (t <EOF>))`. Any other
-/// ` <EOF>` occurrence is token *text* and must survive untouched (the Stage B
-/// normalizer's `<` / `>` rejection then auto-skips the descriptor instead of
-/// silently corrupting the pinned tree). Trailing whitespace is skipped over
-/// but preserved, so a Stage C `[output]` keeps its exact trailing newline
-/// (Stage B trims first, so it is unaffected).
+/// Drop a ` <EOF>` marker in tail position — i.e. followed by at least one
+/// closing paren (then only more closing parens and trailing whitespace) — so
+/// the tree matches Gale's `to_string_tree()` shape (which omits EOF). EOF can
+/// only ever be the last token of a parse, so this covers both the top-level
+/// trailing form `(s a <EOF>)` and the nested-at-end form `(s (t <EOF>))`. The
+/// closing-paren requirement is what distinguishes a tree tail from arbitrary
+/// action-print output that merely ends in ` <EOF>` (a non-tree Stage C
+/// `[output]` — `a b <EOF>`), which is left untouched; likewise any mid-tree
+/// ` <EOF>` that is token *text* (the Stage B normalizer's `<` / `>` rejection
+/// then auto-skips such descriptors instead of silently corrupting the pinned
+/// tree). Trailing whitespace is skipped over but preserved, so a Stage C
+/// `[output]` keeps its exact trailing newline (Stage B trims first, so it is
+/// unaffected).
 fn strip_tail_eof_marker(s: &String) -> String {
     let chars: List<char> = s.chars().collect();
     let mut end = chars.len();
-    while end > 0 && (chars[end - 1] == ')' || chars[end - 1].is_ascii_whitespace()) {
+    while end > 0 && chars[end - 1].is_ascii_whitespace() {
         end -= 1;
     }
-    // " <EOF>" is 6 chars; check chars[end-6 .. end] spell it.
-    if end < 6 {
+    let mut close = end;
+    while close > 0 && chars[close - 1] == ')' {
+        close -= 1;
+    }
+    // A tree tail has at least one closing paren after the marker; without one
+    // this is not a tree, so leave a trailing ` <EOF>` in place.
+    if close == end || close < 6 {
         return *s;
     }
+    // " <EOF>" is 6 chars; check chars[close-6 .. close] spell it.
     let marker: List<char> = [' ', '<', 'E', 'O', 'F', '>'];
     for let mut i = 0; i < 6; i += 1 {
-        if chars[end - 6 + i] != marker[i] {
+        if chars[close - 6 + i] != marker[i] {
             return *s;
         }
     }
     let mut out = String::with_capacity(s.len());
     for let mut i = 0; i < chars.len(); i += 1 {
-        if i < end - 6 || i >= end {
+        if i < close - 6 || i >= close {
             out.push(chars[i]);
         }
     }
@@ -2207,6 +2216,18 @@ test "strip_eof_marker: mid-tree marker untouched, tail marker stripped" {
     assert strip_eof_marker(&"(s a <EOF>)\n") == "(s a)";
     assert strip_eof_marker(&"(s (t <EOF>))") == "(s (t))";
     assert strip_eof_marker(&"(r <EOF> y)") == "(r <EOF> y)";
+}
+
+test "strip_tail_eof_marker: strips a tree tail while preserving the trailing newline" {
+    assert strip_tail_eof_marker(&"(s (e a) <EOF>)\n") == "(s (e a))\n";
+    assert strip_tail_eof_marker(&"(s (t <EOF>))\n") == "(s (t))\n";
+}
+
+test "strip_tail_eof_marker: leaves a non-tree ' <EOF>' (no closing paren) untouched" {
+    // A Stage C action-print ending in ' <EOF>' with only whitespace after it
+    // is not a tree tail; stripping it would spuriously diverge from Gale's output.
+    assert strip_tail_eof_marker(&"a b <EOF>\n") == "a b <EOF>\n";
+    assert strip_tail_eof_marker(&"a b <EOF>") == "a b <EOF>";
 }
 
 test "normalize: action $text echo is not a tree" {

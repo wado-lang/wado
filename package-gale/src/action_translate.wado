@@ -62,8 +62,14 @@ pub fn resolve_attr_ref(
     return translate_wado_action(rule, rules, ref_text, vals_in_scope, bindings, handle);
 }
 
+/// The single source of truth for the `$ctx.toStringTree` special: a `ctx`
+/// reference with the `toStringTree` member.
+fn is_ctx_to_string_tree_ref(name: &String, member: &Option<String>) -> bool {
+    return *name == "ctx" && (*member) matches { Some("toStringTree") };
+}
+
 fn is_ctx_to_string_tree(r: &ResolvedAttr) -> bool {
-    return r.target matches { ParserSpecial } && r.name == "ctx" && r.member matches { Some("toStringTree") };
+    return r.target matches { ParserSpecial } && is_ctx_to_string_tree_ref(&r.name, &r.member);
 }
 
 /// Whether `ref_text` is exactly the `$ctx.toStringTree` special. Its Wado form
@@ -73,7 +79,7 @@ fn is_ctx_to_string_tree(r: &ResolvedAttr) -> bool {
 /// `$`-attr lexer captures `$ctx.toStringTree` as the call target.
 pub fn ref_is_ctx_to_string_tree(ref_text: &String) -> bool {
     let refs = find_attr_refs(ref_text);
-    return refs.len() == 1 && refs[0].name == "ctx" && refs[0].member matches { Some("toStringTree") };
+    return refs.len() == 1 && is_ctx_to_string_tree_ref(&refs[0].name, &refs[0].member);
 }
 
 /// Extend past an immediately-following call `(...)` (skipping leading spaces),

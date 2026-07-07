@@ -99,7 +99,7 @@ test "java: a declared @members method resolves; an undeclared sibling does not"
 
 test "java predicate: negated equals is parenthesized" {
     let out = java_pred(&"!getText().equals(\"+\")", &"a : ID ;", false);
-    assert out == "!(p.rule_text() == \"+\")", `out: '{out}'`;
+    assert out == "!(p.rule_text(_rule_start_tok) == \"+\")", `out: '{out}'`;
 }
 
 test "java members: method name is snake_cased at definition to match calls" {
