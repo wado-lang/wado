@@ -123,7 +123,7 @@ fn tok_end(t: u64) -> i32 {
 
 // Phase 1: tokenize
 fn tokenize(input: String) -> List<u64> {
-    let raw = input.internal_raw_bytes();
+    let raw = *input.internal_raw_bytes();
     let len = input.len();
     let mut pos = 0;
     let mut tape: List<u64> = List::with_capacity(len / 6);
@@ -907,7 +907,7 @@ fn parse_counts_v3(json_data: String) -> CatalogCounts {
     let mut c = Cursor {
         tape,
         input: json_data,
-        repr: json_data.internal_raw_bytes(),
+        repr: *json_data.internal_raw_bytes(),
         idx: 0,
     };
     let catalog = c.parse_citm_catalog();
