@@ -1222,9 +1222,8 @@ test "not yet implemented" {
     panic("TODO: implement this");
 }
 
-// Synopsis test: runs like any test, and `wado doc` renders its body as the
-// module's `## Synopsis` section. Module-scoped and conventionally unnamed.
-// Combinable with #[expect_trap], #[TODO], and #[timeout_ms].
+// Synopsis test: runs like any test; `wado doc` renders its body as the
+// module's `## Synopsis` section.
 #[synopsis]
 test {
     let p = Point { x: 3, y: 4 };

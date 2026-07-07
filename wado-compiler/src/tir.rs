@@ -4201,8 +4201,6 @@ pub struct TirTest {
     /// Per-test timeout in milliseconds (from `#[timeout_ms(N)]` attribute).
     /// `None` means use the default timeout (1 second).
     pub timeout_ms: Option<u64>,
-    /// Whether this test carries `#[synopsis]` (from the attribute). The runner
-    /// does not branch on it; it marks the body for `wado doc`'s Synopsis section.
     pub is_synopsis: bool,
 }
 

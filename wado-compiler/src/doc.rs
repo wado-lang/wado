@@ -19,7 +19,6 @@ pub struct DocModule {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc: Option<String>,
-    /// `#[synopsis]` test bodies, verbatim and dedented, in source order.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub synopsis: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -288,9 +287,6 @@ pub fn extract_doc_filtered(
     }
 }
 
-/// Collect `#[synopsis]` test bodies in source order, each dedented so the
-/// inner code starts at column 0. The body text is taken verbatim from the
-/// source span between the test block's outermost `{` and `}`.
 fn collect_synopsis(module: &Module, source: &str) -> Vec<String> {
     module
         .items
@@ -306,8 +302,6 @@ fn collect_synopsis(module: &Module, source: &str) -> Vec<String> {
         .collect()
 }
 
-/// Normalise a synopsis body: drop the blank lines that hug the braces and
-/// strip the common leading indentation so the code starts at column 0.
 fn dedent_synopsis(body: &str) -> String {
     let lines: Vec<&str> = body
         .trim_matches(|c| c == '\n' || c == '\r')

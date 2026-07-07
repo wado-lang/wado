@@ -1052,8 +1052,6 @@ pub struct TestMetadata {
     pub expect_trap: bool,
     pub is_todo: bool,
     pub timeout_ms: Option<u64>,
-    /// Whether this test carries `#[synopsis]`. The test runs like any other
-    /// test; the flag only marks its body for `wado doc`'s Synopsis section.
     pub is_synopsis: bool,
 }
 
