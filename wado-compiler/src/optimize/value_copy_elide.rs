@@ -36,6 +36,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, NirUnaryOp};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
+use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::escape::EscapeMap;
@@ -78,8 +79,39 @@ impl<'a> ValueCopyElideRule<'a> {
 
 /// Build the per-function usage map a [`ValueCopyElideRule`] needs, from the
 /// pristine body before the engine session rewrites it.
-pub(super) fn build_usage(body: &Body, type_table: &TypeTable) -> IndexMap<u32, LocalUsage> {
-    analyze_usage(body, type_table)
+pub(super) fn build_usage(
+    body: &Body,
+    type_table: &TypeTable,
+    receiver_mut: &IndexMap<FuncId, bool>,
+) -> IndexMap<u32, LocalUsage> {
+    analyze_usage(body, type_table, receiver_mut)
+}
+
+/// Whether each function mutates its receiver, keyed by id: `true` when the
+/// first parameter is `&mut T`. A method call's receiver is auto-referenced to
+/// `T` regardless of the callee's `self` mode, so the receiver expression's
+/// type can't tell `&self` from `&mut self` — the callee signature is the only
+/// witness. Ids absent from the map are treated conservatively as mutating.
+pub(super) fn build_receiver_mut(
+    project: &NirPackage,
+    type_table: &TypeTable,
+) -> IndexMap<FuncId, bool> {
+    let mut map = IndexMap::default();
+    for func in &project.functions {
+        let func = func.borrow();
+        // Only bodied functions carry monomorphized parameter type ids valid in
+        // this table; bodyless callees stay absent (conservatively mutating).
+        if func.body.is_none() {
+            continue;
+        }
+        let Some(id) = func.id else { continue };
+        let mutates = func
+            .params
+            .first()
+            .is_some_and(|p| is_mut_ref_type(p.type_id, type_table));
+        map.insert(id, mutates);
+    }
+    map
 }
 
 impl Rule for ValueCopyElideRule<'_> {
@@ -167,12 +199,16 @@ impl LocalUsage {
 /// equivalent to the old tree walk for an accumulating analysis, and walking
 /// from the root rather than over every arena slot keeps dead nodes left by an
 /// earlier in-place pass from being counted.
-fn analyze_usage(body: &Body, type_table: &TypeTable) -> IndexMap<u32, LocalUsage> {
+fn analyze_usage(
+    body: &Body,
+    type_table: &TypeTable,
+    receiver_mut: &IndexMap<FuncId, bool>,
+) -> IndexMap<u32, LocalUsage> {
     let mut usage: IndexMap<u32, LocalUsage> = IndexMap::default();
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Expr(id) = node {
-            classify_expr(body, id, type_table, &mut usage);
+            classify_expr(body, id, type_table, receiver_mut, &mut usage);
         }
         body.for_each_child(node, |c| stack.push(c));
     }
@@ -185,6 +221,7 @@ fn classify_expr(
     body: &Body,
     id: ExprId,
     type_table: &TypeTable,
+    receiver_mut: &IndexMap<FuncId, bool>,
     usage: &mut IndexMap<u32, LocalUsage>,
 ) {
     if let ExprKind::Local { index, .. } = &body.exprs[id].kind {
@@ -217,11 +254,20 @@ fn classify_expr(
                 }
             }
         }
-        ExprKind::MethodCall { receiver, args, .. } => {
-            // Auto-ref: the receiver carries `T` even for `&mut self`
-            // methods, so be conservative and treat any local receiver as
-            // potentially field-mutated by the call.
-            if let Some(re) = receiver.as_expr() {
+        ExprKind::MethodCall {
+            receiver,
+            func_id,
+            args,
+            ..
+        } => {
+            // Auto-ref carries the receiver as `T` even for `&mut self`
+            // methods, so its expr type can't witness the `self` mode; consult
+            // the callee (unknown ids treated conservatively as mutating). A
+            // `&self` / by-value method never mutates the caller's receiver, so
+            // its receiver stays read-only and a binding copy of it can strip.
+            if receiver_mut.get(func_id).copied().unwrap_or(true)
+                && let Some(re) = receiver.as_expr()
+            {
                 mark_root_field_mutated(body, re, usage);
             }
             for arg in args {

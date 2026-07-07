@@ -55,7 +55,7 @@ use super::labeled_block_fusion::build_labeled_block_fusion;
 use super::match_to_switch::MatchToSwitchRule;
 use super::ref_elim::build_ref_elim;
 use super::string_push::{ShortPushStrRule, resolve_ctx};
-use super::value_copy_elide::{ValueCopyElideRule, build_usage};
+use super::value_copy_elide::{ValueCopyElideRule, build_receiver_mut, build_usage};
 
 /// Run the unified peephole rule set over every function body. Returns whether
 /// any rule fired. Gated: skips functions unchanged since this pass last ran.
@@ -91,6 +91,11 @@ pub(super) fn run_peephole(
     // stays empty so only literal arithmetic and pure CTFE fold here, leaving
     // the flow-sensitive folds to the standalone `const_folding` walker.
     let type_table = project.type_table.borrow();
+    // Per-callee receiver-mutation bits, so the value-copy usage analysis can
+    // keep a `&self`-only receiver read-only (its binding copy is then
+    // strippable). Built once (pre-inline only, where the elide rule runs).
+    let receiver_mut = (pre_inline && !value_copy_ids.is_empty())
+        .then(|| build_receiver_mut(project, &type_table));
     let callees = build_callee_map(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let const_fold_rule = ConstFoldRule::new(&type_table, &callees);
@@ -111,7 +116,11 @@ pub(super) fn run_peephole(
         // standalone pass's snapshot); the rule borrows the shared helper-type
         // set.
         let value_copy_usage = (pre_inline && !func.is_value_copy() && !value_copy_ids.is_empty())
-            .then(|| func.body.as_ref().map(|b| build_usage(b, &type_table)))
+            .then(|| {
+                func.body.as_ref().zip(receiver_mut.as_ref()).map(|(b, rm)| {
+                    build_usage(b, &type_table, rm)
+                })
+            })
             .flatten();
         let n_params = func.params.len() as u32;
         let value_copy_rule = value_copy_usage
