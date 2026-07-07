@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783395908788,
+  "lastUpdate": 1783421170767,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -38645,6 +38645,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/45c91268129cb3a069181dcf78418fa251385daa"
         },
         "date": 1783395908081,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15734,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 263813,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "88506a642d2134f507ff75ab6457d78b63f1b45b",
+          "message": "Merge pull request #1531 from wado-lang/claude/synopsis-test-impl-wgy3o7\n\nfeat(synopsis): add #[synopsis] test attribute and wado doc rendering",
+          "timestamp": "2026-07-07T19:37:27+09:00",
+          "tree_id": "7c2684aaa7ede6d6f867bfa93e0caa1eb684752b",
+          "url": "https://github.com/wado-lang/wado/commit/88506a642d2134f507ff75ab6457d78b63f1b45b"
+        },
+        "date": 1783421170047,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
