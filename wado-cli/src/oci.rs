@@ -95,7 +95,7 @@ pub async fn pull_component(reference: &Reference) -> anyhow::Result<Vec<u8>> {
         .into_iter()
         .next()
         .ok_or_else(|| anyhow::anyhow!("no {WASM_LAYER_MEDIA_TYPE} layer in {reference}"))?;
-    Ok(layer.data)
+    Ok(layer.data.to_vec())
 }
 
 fn client() -> Client {
