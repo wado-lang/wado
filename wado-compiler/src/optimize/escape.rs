@@ -59,6 +59,11 @@ pub(super) struct EscapeMap {
     /// argument, receiver, global, or capture, so a copy of the result is a
     /// no-op. Lets the elider recover the copies inserted for call results.
     fresh_result: IndexSet<FuncId>,
+    /// The array-element-read intrinsic. Its freshness is not a function-level
+    /// constant — the element aliases its container only when it carries identity
+    /// — so it is judged per call site from the concrete result type rather than
+    /// via `fresh_result`.
+    array_get: IndexSet<FuncId>,
 }
 
 impl EscapeMap {
@@ -87,9 +92,14 @@ impl EscapeMap {
     /// only constructions, copy clones, fresh-returning calls, and matches whose
     /// arms destructure a fresh scrutinee qualify.
     pub(super) fn rvalue_is_fresh(&self, body: &Body, e: ExprId, type_table: &TypeTable) -> bool {
-        expr_is_fresh(body, e, &IndexSet::default(), type_table, &|id| {
-            self.returns_fresh(id)
-        })
+        expr_is_fresh(
+            body,
+            e,
+            &IndexSet::default(),
+            type_table,
+            &self.array_get,
+            &|id| self.returns_fresh(id),
+        )
     }
 }
 
@@ -155,18 +165,32 @@ pub(super) fn analyze_param_escape(
         }
     }
 
+    // The array-element-read intrinsic: the one builtin whose result can alias
+    // its container argument. Whether it actually aliases depends on the concrete
+    // element type at each call site, so it is excluded from the function-level
+    // `fresh_result` and judged per call in `expr_is_fresh`.
+    let array_get: IndexSet<FuncId> = project
+        .functions
+        .iter()
+        .filter_map(|f| {
+            let f = f.borrow();
+            let id = f.id?;
+            (kinds.get(&id) == Some(&Kind::Builtin) && f.name == "array_get").then_some(id)
+        })
+        .collect();
+
     // Least fixpoint over "the function returns a fresh value": a copy helper
-    // clones; a builtin is fresh unless it reads storage aliased into a
-    // reference argument (see `builtin_result_is_fresh`); a body function is
-    // fresh when every return operand is fresh given the freshness of the callees
-    // it returns. Start with the always-fresh callees and grow.
+    // clones; a builtin allocates a fresh result (except the element read, judged
+    // per call site); a body function is fresh when every return operand is fresh
+    // given the freshness of the callees it returns. Start with the always-fresh
+    // callees and grow.
     let mut fresh_result: IndexSet<FuncId> = IndexSet::default();
     for func in &project.functions {
         let func = func.borrow();
         let Some(id) = func.id else { continue };
         let fresh = match kinds.get(&id) {
             Some(Kind::ValueCopy) => true,
-            Some(Kind::Builtin) => builtin_result_is_fresh(&func.name),
+            Some(Kind::Builtin) => !array_get.contains(&id),
             _ => false,
         };
         if fresh {
@@ -185,8 +209,14 @@ pub(super) fn analyze_param_escape(
                 continue;
             }
             let call_fresh = |c: FuncId| fresh_result.contains(&c);
-            let fl = compute_fresh_locals(body, func.params.len() as u32, &type_table, &call_fresh);
-            if function_result_is_fresh(body, &fl, &type_table, &call_fresh) {
+            let fl = compute_fresh_locals(
+                body,
+                func.params.len() as u32,
+                &type_table,
+                &array_get,
+                &call_fresh,
+            );
+            if function_result_is_fresh(body, &fl, &type_table, &array_get, &call_fresh) {
                 fresh_result.insert(id);
                 changed = true;
             }
@@ -196,6 +226,7 @@ pub(super) fn analyze_param_escape(
     EscapeMap {
         funcs,
         fresh_result,
+        array_get,
     }
 }
 
@@ -596,6 +627,7 @@ fn compute_fresh_locals(
     body: &Body,
     n_params: u32,
     type_table: &TypeTable,
+    array_get: &IndexSet<FuncId>,
     call_fresh: &dyn Fn(FuncId) -> bool,
 ) -> IndexSet<u32> {
     let mut bindings: IndexMap<u32, Vec<Operand>> = IndexMap::default();
@@ -620,7 +652,7 @@ fn compute_fresh_locals(
             if fresh.contains(&local)
                 && !values
                     .iter()
-                    .all(|v| operand_is_fresh(body, *v, &fresh, type_table, call_fresh))
+                    .all(|v| operand_is_fresh(body, *v, &fresh, type_table, array_get, call_fresh))
             {
                 fresh.swap_remove(&local);
                 changed = true;
@@ -636,6 +668,7 @@ fn function_result_is_fresh(
     body: &Body,
     fresh_locals: &IndexSet<u32>,
     type_table: &TypeTable,
+    array_get: &IndexSet<FuncId>,
     call_fresh: &dyn Fn(FuncId) -> bool,
 ) -> bool {
     let mut stack = vec![NodeRef::Block(body.root)];
@@ -643,7 +676,7 @@ fn function_result_is_fresh(
         if let NodeRef::Stmt(s) = node
             && let StmtKind::Return { value: Some(op) } | StmtKind::Break { value: Some(op), .. } =
                 &body.stmts[s].kind
-            && !operand_is_fresh(body, *op, fresh_locals, type_table, call_fresh)
+            && !operand_is_fresh(body, *op, fresh_locals, type_table, array_get, call_fresh)
         {
             return false;
         }
@@ -652,7 +685,7 @@ fn function_result_is_fresh(
     // A trailing bare expression is an implicit return.
     if let Some(&last) = body.blocks[body.root].stmts.last()
         && let StmtKind::Expr(op) = &body.stmts[last].kind
-        && !operand_is_fresh(body, *op, fresh_locals, type_table, call_fresh)
+        && !operand_is_fresh(body, *op, fresh_locals, type_table, array_get, call_fresh)
     {
         return false;
     }
@@ -668,13 +701,14 @@ fn operand_is_fresh(
     op: Operand,
     fresh: &IndexSet<u32>,
     type_table: &TypeTable,
+    array_get: &IndexSet<FuncId>,
     call_fresh: &dyn Fn(FuncId) -> bool,
 ) -> bool {
     let Some(e) = op.as_expr() else { return true };
     matches!(
         type_table.get(body.exprs[e].type_id),
         ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-    ) || expr_is_fresh(body, e, fresh, type_table, call_fresh)
+    ) || expr_is_fresh(body, e, fresh, type_table, array_get, call_fresh)
 }
 
 /// Whether `e`'s value shares storage with nothing outside `fresh`: a fresh
@@ -684,12 +718,14 @@ fn operand_is_fresh(
 /// data. Projections, deref, cast, blocks, and unrecognized shapes stay
 /// conservative (not fresh) — this is the NIR recovery counterpart of
 /// `lower::plan::value_copy::analyze::is_fresh_in_context`, using the
-/// interprocedural `call_fresh` the insertion side lacks.
+/// interprocedural `call_fresh` the insertion side lacks. The array element read
+/// is judged from its concrete result type at this call site (`array_get`).
 fn expr_is_fresh(
     body: &Body,
     e: ExprId,
     fresh: &IndexSet<u32>,
     type_table: &TypeTable,
+    array_get: &IndexSet<FuncId>,
     call_fresh: &dyn Fn(FuncId) -> bool,
 ) -> bool {
     match &body.exprs[e].kind {
@@ -697,12 +733,20 @@ fn expr_is_fresh(
         ExprKind::PackedArray(_) | ExprKind::EnumConstruct { .. } => true,
         ExprKind::StructLiteral { fields, .. } => fields
             .iter()
-            .all(|f| operand_is_fresh(body, f.value, fresh, type_table, call_fresh)),
+            .all(|f| operand_is_fresh(body, f.value, fresh, type_table, array_get, call_fresh)),
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
             .iter()
-            .all(|el| operand_is_fresh(body, *el, fresh, type_table, call_fresh)),
+            .all(|el| operand_is_fresh(body, *el, fresh, type_table, array_get, call_fresh)),
         ExprKind::VariantConstruct { payload, .. } => {
-            payload.is_none_or(|p| operand_is_fresh(body, p, fresh, type_table, call_fresh))
+            payload.is_none_or(|p| operand_is_fresh(body, p, fresh, type_table, array_get, call_fresh))
+        }
+        // The array element read aliases its container only when the element
+        // carries identity; a primitive element is returned by value. The
+        // concrete element type is this call expression's own type.
+        ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. }
+            if array_get.contains(func_id) =>
+        {
+            !carries_identity(body.exprs[e].type_id, type_table)
         }
         // The callee's result aliases no argument (or it is a copy helper).
         ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => call_fresh(*func_id),
@@ -710,7 +754,7 @@ fn expr_is_fresh(
         // scrutinee is fresh, an arm's pattern bindings destructure unaliased
         // data and are fresh too.
         ExprKind::Match { expr: scrut, arms } => {
-            let scrut_fresh = operand_is_fresh(body, *scrut, fresh, type_table, call_fresh);
+            let scrut_fresh = operand_is_fresh(body, *scrut, fresh, type_table, array_get, call_fresh);
             arms.iter().all(|arm| {
                 // A diverging arm (`=> return …`) is `Never`-typed, yields no value.
                 if arm
@@ -724,7 +768,7 @@ fn expr_is_fresh(
                 if scrut_fresh {
                     collect_pattern_bindings(body, arm.pattern, &mut arm_fresh);
                 }
-                operand_is_fresh(body, arm.body, &arm_fresh, type_table, call_fresh)
+                operand_is_fresh(body, arm.body, &arm_fresh, type_table, array_get, call_fresh)
             })
         }
         _ => false,
@@ -764,18 +808,6 @@ fn collect_pattern_bindings(body: &Body, pat: crate::nir_arena::PatId, out: &mut
 fn union(mut a: Taint, b: Taint) -> Taint {
     a.extend(b);
     a
-}
-
-/// Whether a bodyless builtin returns a genuinely fresh value. A builtin has no
-/// body to analyze, so its aliasing is modelled here. Almost every builtin
-/// allocates or computes a fresh result; the sole exception is the array element
-/// read, whose result is storage aliased into its container argument. A
-/// primitive-element read is technically fresh (the element is returned by
-/// value), but a primitive never carries a `value_copy` to strip, so there is
-/// nothing to gain from distinguishing it — and a builtin's `return_type` is the
-/// unsubstituted generic `T`, so the element type is not available here anyway.
-fn builtin_result_is_fresh(name: &str) -> bool {
-    name != "array_get"
 }
 
 /// Whether a value of `type_id` can carry another value's identity: an
