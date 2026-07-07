@@ -3364,11 +3364,11 @@ Append the bytes of `bytes` to this string in one bulk `array_copy`.
 
 - The resulting byte sequence must remain valid UTF-8.
 
-#### `pub fn bytes(&self) -> StrUtf8ByteIter`
+#### `pub fn bytes(&self) -> StrUtf8ByteIter with stores[self]`
 
 Returns an iterator over the UTF-8 bytes of the string.
 
-#### `pub fn chars(&self) -> StrCharIter`
+#### `pub fn chars(&self) -> StrCharIter with stores[self]`
 
 Returns an iterator over the Unicode scalar values (chars) of the string.
 
@@ -3635,23 +3635,23 @@ Accepts any `IntoIterator` whose item is `u8`: `List<u8>`, `StrUtf8ByteIter`, et
 The caller must ensure the bytes form valid UTF-8, otherwise the resulting
 String will contain invalid UTF-8, which may cause undefined behavior.
 
-#### `pub fn split(&self, sep: String) -> StrSplitIter`
+#### `pub fn split(&self, sep: String) -> StrSplitIter with stores[self]`
 
 Returns an iterator over substrings split by the given separator.
 
-#### `pub fn splitn(&self, n: i32, sep: String) -> StrSplitNIter`
+#### `pub fn splitn(&self, n: i32, sep: String) -> StrSplitNIter with stores[self]`
 
 Returns an iterator over at most `n` substrings split by the given separator.
 
-#### `pub fn split_whitespace(&self) -> StrSplitWhitespaceIter`
+#### `pub fn split_whitespace(&self) -> StrSplitWhitespaceIter with stores[self]`
 
 Returns an iterator over whitespace-separated substrings.
 
-#### `pub fn lines(&self) -> StrLinesIter`
+#### `pub fn lines(&self) -> StrLinesIter with stores[self]`
 
 Returns an iterator over the lines of this string.
 
-#### `pub fn char_indices(&self) -> StrCharIndicesIter`
+#### `pub fn char_indices(&self) -> StrCharIndicesIter with stores[self]`
 
 Returns an iterator over characters with their byte indices.
 
