@@ -22,15 +22,14 @@ pub use { log_stdout, log_stderr } from "core:rt";
 use { drop_cli_write_future } from "core:rt";
 /// Writes a string to a StreamWritable<u8> with an optional newline, then drops it.
 pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool) {
-    let bytes = message.internal_raw_bytes();
     let len = message.len();
     if add_newline {
         let mut new_repr: Array<u8> = builtin::array_new(len + 1);
-        builtin::array_copy(&mut new_repr, 0, bytes, 0, len);
+        builtin::array_copy(&mut new_repr, 0, message.internal_raw_bytes(), 0, len);
         builtin::array_set_u8(&mut new_repr, len, 10);
-        tx.write_raw(new_repr, len + 1);
+        tx.write_raw(&new_repr, len + 1);
     } else {
-        tx.write_raw(*bytes, len);
+        tx.write_raw(message.internal_raw_bytes(), len);
     }
     tx.drop();
 }
