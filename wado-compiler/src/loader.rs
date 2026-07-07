@@ -1811,23 +1811,36 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
     /// Scan all loaded modules for `#include_str`/`#include_bytes` and load referenced files.
     async fn load_included_files(&self) -> Result<IndexMap<[String; 2], Vec<u8>>, LoadError> {
-        // Collect (module_source, raw_path) pairs
+        // Collect (module_source, raw_path) pairs. The map key stays the
+        // module's `Display` (matching the elaborator's `included_files`
+        // lookup), but the include path resolves against the module's real
+        // filename via `diagnostic_filename`: an entry point's `Display` is its
+        // stable base name for symbol identity, which drops the directory a
+        // relative include needs.
         let mut pairs: IndexSet<[String; 2]> = IndexSet::default();
+        let mut resolve_path: IndexMap<String, String> = IndexMap::default();
         for (module_source, module) in &self.loaded {
             let ms_str = module_source.to_string();
             for raw_path in module.include_paths() {
+                resolve_path
+                    .entry(ms_str.clone())
+                    .or_insert_with(|| module_source.diagnostic_filename());
                 pairs.insert([ms_str.clone(), raw_path.clone()]);
             }
         }
         // Format the entry module source once so the per-include elaborator
         // can compare against it without allocating per call.
-        let entry_module_source = self.entry_module_source.as_ref().map(ToString::to_string);
+        let entry_module_source = self
+            .entry_module_source
+            .as_ref()
+            .map(ModuleSource::diagnostic_filename);
         let mut included = IndexMap::default();
         for pair in pairs {
             let [ref ms_str, ref raw_path] = pair;
-            // Resolve path relative to the module source's directory
+            // Resolve path relative to the module source's real directory.
+            let module_path = resolve_path.get(ms_str).map_or(ms_str.as_str(), String::as_str);
             let resolved =
-                resolve_include_path_impl(entry_module_source.as_deref(), ms_str, raw_path);
+                resolve_include_path_impl(entry_module_source.as_deref(), module_path, raw_path);
             let bytes = self
                 .host
                 .load_source(&resolved)
