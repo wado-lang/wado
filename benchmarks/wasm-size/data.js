@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783384018283,
+  "lastUpdate": 1783386970669,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -38557,6 +38557,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/adf5c41cc68bb75b49215429c1b022ca30c21528"
         },
         "date": 1783384017730,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15734,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 263813,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9bfbdf267a94093ed549a0fed7e7132ec8c159c4",
+          "message": "Merge pull request #1529 from wado-lang/claude/wado-vscode-npm-ci-fix-08895h\n\nfix(vscode): restore extension name `wado`",
+          "timestamp": "2026-07-07T10:07:00+09:00",
+          "tree_id": "892f2bc16c768bf214fa3828b5244e2498446e44",
+          "url": "https://github.com/wado-lang/wado/commit/9bfbdf267a94093ed549a0fed7e7132ec8c159c4"
+        },
+        "date": 1783386969964,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
