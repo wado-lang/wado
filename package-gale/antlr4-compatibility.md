@@ -6,7 +6,7 @@ The central reference for **how** Gale verifies it stays compatible with the ups
 - **The descriptor pipeline** — how the upstream `runtime-testsuite/` is turned into a Wado test suite.
 - **Triage** — how to read results, classify failures, and close gaps.
 
-Internal implementation knowledge (LL prediction architecture, soundness invariants, failed approaches) lives in [`AGENTS.md`](./AGENTS.md). Open work (remaining gaps, performance) lives in [`TODO.md`](./TODO.md). Live pass/fail numbers come from CI; this document does not snapshot them.
+Prediction and codegen design (LL prediction, soundness invariants, the ATN escalation) lives below; the failed approaches that shaped it are in [`AGENTS.md`](./AGENTS.md). Open work (remaining gaps, performance) lives in [`TODO.md`](./TODO.md). Live pass/fail numbers come from CI; this document does not snapshot them.
 
 ## The Compatibility Contract
 
@@ -285,6 +285,85 @@ parser is shared with Stage A (`antlr4_compat_a`). Landed for `Sets` and
 `SemPredEvalParser`; the remaining categories are a mechanical extractor
 re-run plus triage.
 
+## Prediction & codegen design
+
+Gale generates recursive-descent parsers with no backtracking — parser
+or lexer. Alternatives are disambiguated by static k-token lookahead; a
+decision static prediction cannot resolve routes to the runtime ATN
+simulator (next section), never a try-fail-retry loop.
+
+### Multi-alt dispatch — a longest-match tournament
+
+Multi-alt dispatch is a scan-side longest-match tournament: candidate
+alts are partitioned by their depth-0 first token, and within a partition
+every candidate is scanned from the same start, keeping the greatest
+successful end. This is not first-success-wins — that is unsound when
+alts share a prefix and tie on static length (`'mut'? IDENT` vs `path '('
+… ')'` on `N(n)`). An alt whose suffix is unscannable at a tournament
+site is a codegen-time panic; the fix is to file an issue, never to add
+backtracking.
+
+The lexer follows the same principle: a single-pass forward DFA with
+explicit accept-state tracking, never a remembered-position retry. When a
+greedy `+`/`*` inner can also match the suffix's first char (`'a'
+~('b')+ 'c'`), the emitter peeks the suffix each iteration and rewinds
+once to the latest legal suffix start. This narrow lookahead-aware path
+fires only when inner and suffix are all single-char-consuming; other
+shapes fall through to the plain greedy loop (sound because the inner
+cannot consume the suffix's first char there).
+
+### Static LL prediction — the runtime FOLLOW gate
+
+Gale's parser-side prediction is a static FOLLOW-based repair on top of
+SLL. A tail-greedy `Repeat` at a rule's tail can over-consume tokens that
+belong to the caller's continuation; the repair gates that loop on the
+caller's deterministic FOLLOW continuation, threaded as a runtime
+argument rather than baked into a specialised callee. At a tail-greedy
+`Repeat` the loop yields to the caller exactly when the next tokens match
+the caller's continuation at every depth. The parameter is pruned
+entirely when a grammar has no such gate — gate-free grammars carry no
+`follow` at all (it also costs a stack slot per recursive scan frame,
+which overflowed the wasm stack on a deep-recursion grammar). Because the
+mask is data threaded at runtime, each rule is emitted exactly once,
+with no per-(rule, mask) clones.
+
+The static FOLLOW + k-prefix path always has edges — a decidability
+limit, not a tuning gap. Beyond it, the runtime ATN simulator (next
+section) is the only complete answer.
+
+### Soundness invariants
+
+Four invariants any LL-related change must respect. Each was violated
+once and broke a real grammar; the guards live as inline conservatism at
+the relevant sites.
+
+1. Single-token tail-greedy inner. A multi-token-inner Repeat can
+   legitimately re-enter on its own first token at a deeper position
+   (HTMLParser's `htmlContent` re-enters on `TAG_OPEN`), so a 1-token
+   follow check would break it. The runtime gate is safe because it
+   checks the caller's continuation at every depth, distinguishing the
+   closing prefix from the iter prefix structurally.
+2. First-exact deep-nullable suffix. When a `RuleRef` site's suffix is
+   deep-nullable (`a b?`), the local mask may include the suffix's first
+   set only if every walked element is single-token-derived. Multi-element
+   alts over-count: CSS3's `(combinator simpleSelectorSequence ws)*` —
+   `combinator`'s first includes Space, but yielding Space at the
+   preceding `ws` strands the runtime on a lone Space.
+3. (Retired.) The old "variant emit reproduces the callee body
+   faithfully" invariant is moot under the runtime-FOLLOW design: each
+   rule is emitted exactly once.
+4. Wildcard alts collapse the overlap group and sort last. A wildcard alt
+   has empty FIRST yet effectively overlaps every token-consuming alt, so
+   it is merged into a single overlap group with the non-empty-FIRST
+   alts, the outer kind-check gate is suppressed, and wildcard alts are
+   scanned last. Without this, the parse side commits to the more specific
+   alt on a lookahead match even when its deeper structure cannot succeed
+   (`ParserExec/Wildcard`: `(assign | .)+ EOF` on `x=10; abc;`). Fixture
+   `tests/grammars/ll_wildcard_alt.g4`.
+
+The static-path failed approaches that led here (RuleRef expansion, LL(\*)
+static variant emit) are recorded in [`AGENTS.md`](./AGENTS.md).
+
 ## ATN-class prediction — the hybrid LR loop-entry decision
 
 Some descriptors (the `Performance/DropLoopEntryBranchInLRRule_*`
@@ -296,8 +375,7 @@ adaptive prediction. Matching that answer is a hard Stage A / Stage B
 contract obligation, but doing it ANTLR4's way naively is too slow for
 the very descriptor that needs it — so Gale uses a **hybrid**. This
 section records that design decision and its known approximation gaps;
-the implementation lives in `runtime/atn.wado` and is cross-referenced
-from [`AGENTS.md`](./AGENTS.md).
+the implementation lives in `runtime/atn.wado`.
 
 Why a runtime simulator at all: the static FOLLOW + K-prefix path always
 has edges — not a tuning gap but a decidability one. The lookahead
@@ -354,7 +432,7 @@ left-recursive rule are covered by fixtures (`lr_complement_op.g4`,
 runtime-precision shapes (a shared delimiter past a nullable
 continuation, two enter edges sharing a first lookahead token) fall back
 to the complete simulator rather than guess. The mechanism and the full
-edge list live in `runtime/atn.wado` and [`AGENTS.md`](./AGENTS.md).
+edge list live in `runtime/atn.wado`.
 
 ## Lexer ATN — recursive non-greedy wildcard rules
 
@@ -620,7 +698,7 @@ diagnostic environment variables (`WADO_TRACE`,
 
 ## See Also
 
-- [`AGENTS.md`](./AGENTS.md) — Gale internals: g4 parser conventions, LL prediction design, soundness invariants, failed approaches.
+- [`AGENTS.md`](./AGENTS.md) — dev-cycle essentials: compatibility principle, license hygiene, standing codegen rules, debugging tools, failed approaches.
 - [`TODO.md`](./TODO.md) — open compatibility / performance work.
 - [`docs/wep-2026-03-02-gale.md`](../docs/wep-2026-03-02-gale.md) — Gale's overall design rationale, including the long-term plan for Stage C (action-body translation).
 - `vendor/antlr4/doc/` — the upstream `antlr4` documentation (vendored as a shallow git submodule). Read this for the canonical semantics of any `.g4` construct.

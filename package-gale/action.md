@@ -186,6 +186,28 @@ trait ActionTranslator {
 
 Members (`@members` / `@parser::members` / `@lexer::members`): field declarations become fields on the generated `Parser` / `Lexer` struct (with translated initializers); method declarations become methods (`this.x` → `self.x`). `@header` is meaningful only under the identity translator (module-level Wado, e.g. imports); Java `@header` imports have no Wado meaning — warn and drop.
 
+## java2wado — Java action translation
+
+java2wado translates the Java subset in ANTLR action bodies to Wado, so `language = Java` grammars execute their actions. It is the identity translator's job plus a translation of the surrounding Java host code: the `$`-spans resolve to the _same_ Wado expressions over the _same_ value channel / runtime API, so nothing in the attribute layer changes. java2wado is a new front end that parses Java and re-emits Wado, filling the `$`-leaves through the shared `resolve_attr_ref`.
+
+Design: a real (small) Java parser, not regex rewriting. String concatenation (`"a" + $x`), operator precedence, and `this.`-rewriting cannot be done soundly by span substitution. Module layout mirrors `src/g4/` (lexer / parser split): `src/java2wado.wado` (facade + the `ActionLanguage` dispatcher), then `src/java2wado/{jlexer,jparser,jemit,jmembers}.wado`. `$`-refs lex as an opaque primary token.
+
+API / type mapping is snake_case by default — an arbitrary `@members` / superClass method can only be case-converted — plus a small table of semantic redirects and fixed recognizer methods:
+
+| Java                                            | Wado                                   | kind              |
+| ----------------------------------------------- | -------------------------------------- | ----------------- |
+| `this.foo(args)` / `foo()`                      | `this.foo(args)` (snake_case)          | default           |
+| `System.out.println/print(x)`                   | `p.emit(...)` (`println` appends `\n`) | semantic redirect |
+| `x.equals(y)`                                    | `x == y`                               | semantic redirect |
+| `TParser.<TOKEN>`                               | `TK_<TOKEN>`                           | semantic redirect |
+| `getText()` / `_input.LA(k)` / `_input.getText()` | `rule_text()` / `la(k)` / `input_text()` | fixed rename    |
+| `$ctx.toStringTree(this)`                       | `rule_string_tree()` (via attr engine) | fixed rename      |
+| `int` / `boolean` / `String` / `void`           | `i32` / `bool` / `String` / `()`       | type map          |
+
+Anything outside the subset is a loud generation diagnostic carrying the fragment span — never a silent no-op; the subset grows on corpus demand. `@members` field declarations become fields on the generated `Parser` / `Lexer`, method declarations become methods (`this.` → `self.`).
+
+The rollout is cover-then-flip with one carve-out. A Java grammar's actions were discarded (byte-identical to actionless); the plan covers the corpus Java subset, then flips Java emittable in one step (`action_language_is_emittable`). The single principled carve-out is `superClass` grammars: their actions call a hand-written base class outside the `.g4` that Gale cannot see, so translating it is the SuperClass-trait job (Phase 4), not a java2wado coverage gap. Non-superClass Java grammars — the whole descriptor corpus — flip unconditionally; any untranslatable fragment there is a loud error that forces coverage rather than hiding it.
+
 ## SuperClass trait
 
 `options { superClass = Foo }` generates `pub trait Foo` in the parser module. Method signatures are inferred from call sites: `{this.m()}?` → `fn m(&mut self, ...ctx) -> bool`, `{this.m();}` → `fn m(&mut self, ...ctx)`, where `...ctx` is a context handle exposing the runtime API above (lexer or parser view). Every corpus and real-world call is zero-argument; calls with arguments would need an explicit signature source (open — likely a sidecar or a Wado trait the user pre-declares).
@@ -269,7 +291,7 @@ Recovery invariants with actions present:
     - [x] The ATN parser predicate path. The ATN respects a gated predicate by **exclusion**: the caller pre-evaluates each gated alt's condition (alt-initial, so its context is in scope at the decision) and passes the false ones to the simulator, which skips seeding them (they can never win). This keeps the simulator a pure function of (ATN, tokens, disabled set) — plain data, unit-testable without a caller receiver — and mirrors the existing precedence-predicate prune.
       - [x] Simulator support: `atn_predict_with_stack` takes a defaulted `disabled_alts: &List<i32>` (`&ATN_NO_DISABLED`) and skips seeding any listed alt at the decision — the alt index is the seed's `alt`, which the dispatch maps back to the grammar alt. Byte-behavior-identical for every current call site (all use the default). Unit test `predict excludes a disabled alternative` (`atn_sim_test.wado`).
       - [x] Codegen wiring: `ambiguous_node_routes_via_atn` (shared by marking and `gen_prediction_code_inner`'s `route_via_atn`, so they cannot disagree) marks an ATN-routed (`AtEndConflict` + `emits_at_end_conflict_via_atn`) group's gated predicates as gated (suppressing the inline copy / unsupported warning), and `emit_atn_disabled_seed` emits each gated alt's `gate_condition_for` condition — `pred_<id>(p)` for a context-free body, `vals.<v>` for a context-dependent one, both in scope at the decision — as `if !(<cond>) { _atn_disabled.push(<alt>); }` before the `atn_predict_with_stack` call. When a seed is present, a `_atn_alt < 0` guard raises no-viable (all-excluded) instead of falling through to the last alt. Byte-identical for gate-free ATN grammars. Fixture `wado_atn_pred.g4`: `{false}?` (`rejects`) and `{$mode == 0}?` (`ctxdrop`) both force the shorter alt on `abcc`; `allfalse` fails no-viable.
-- [x] Phase 3 — java2wado for the corpus **parser** subset + members translation, wired into codegen ([`java2wado.md`](./java2wado.md)). A non-superClass `language = Java` grammar's parser actions / predicates / `@members` / ctx-cast LR idiom execute during the parse (`driver_java_{action,members,pred}_test`).
+- [x] Phase 3 — java2wado for the corpus **parser** subset + members translation, wired into codegen (see the java2wado section above). A non-superClass `language = Java` grammar's parser actions / predicates / `@members` / ctx-cast LR idiom execute during the parse (`driver_java_{action,members,pred}_test`).
   - [x] Stage C output-compare harness: the descriptor extractor emits a `stage_c/<Category>/<Name>_output_test.wado` for every Parser descriptor whose `[output]` is action-print text (rejected by `normalize_output_for_stage_b`), asserting `result.output == [output]` on the generated parser. Landed for `Sets` + `SemPredEvalParser` (41 pass; 6 `[stage_c_todo]` — nested-in-repeat actions, non-ASCII prints, context-dependent-pred divergences). Reuses the Stage A generated parser; `[stage_c_todo]` / `[stage_c_skip]` in `status.toml` triage the gaps. Running the remaining categories is mechanical follow-up.
 - [ ] Phase 4 — lexer actions / position-sensitive predicates + SuperClass trait (`tokenVocab` falls out).
 

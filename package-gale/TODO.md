@@ -2,8 +2,8 @@
 
 Open work towards full ANTLR4 compatibility and the performance budget it implies. Read this together with:
 
-- [`antlr4-compatibility.md`](./antlr4-compatibility.md) — the compatibility contract, stage layering, descriptor pipeline, and triage workflow.
-- [`AGENTS.md`](./AGENTS.md) — internal architecture (LL prediction design, soundness invariants) and failed approaches.
+- [`antlr4-compatibility.md`](./antlr4-compatibility.md) — the compatibility contract, prediction / codegen design, soundness invariants, descriptor pipeline, and triage workflow.
+- [`AGENTS.md`](./AGENTS.md) — dev-cycle essentials and the prediction failed approaches.
 - [`perf.md`](./perf.md) — runtime performance: benchmark state, live profile, what would move the needle, and measured perf dead-ends.
 
 This file lists what is **not yet done**. Closed work belongs in commit history.
@@ -57,7 +57,7 @@ All 17 `CompositeLexers` / `CompositeParsers` descriptors short-circuit on `pars
 
 ## Stage C — action / predicate execution
 
-**Status:** the **parser** half has landed (java2wado Phase 3, [`java2wado.md`](./java2wado.md)). A non-superClass `language = Java` grammar's parser actions, predicates, `@members`, and the ctx-cast LR value idiom are translated to Wado and execute during the parse (`driver_java_{action,members,pred}_test`). Remaining (Phase 4): **lexer** actions / position-sensitive lexer predicates, and the **SuperClass trait** for the real-world grammars below. A follow-up harness step will make the ANTLR descriptor `[output]` corpus codegen-and-compare (it is parse-only today), unblocking the `[output]` acceptance.
+**Status:** the **parser** half has landed (java2wado Phase 3; design in [`action.md`](./action.md)). A non-superClass `language = Java` grammar's parser actions, predicates, `@members`, and the ctx-cast LR value idiom are translated to Wado and execute during the parse (`driver_java_{action,members,pred}_test`). Remaining (Phase 4): **lexer** actions / position-sensitive lexer predicates, and the **SuperClass trait** for the real-world grammars below. A follow-up harness step will make the ANTLR descriptor `[output]` corpus codegen-and-compare (it is parse-only today), unblocking the `[output]` acceptance.
 
 Gale still **silently discards** action / predicate contents for the cases below the parser subset does not yet cover. The g4 parser accepts them, so grammars containing them (`ANTLRv4Lexer`, `RustLexer`, `RustParser`, `TypeScriptLexer`, `TypeScriptParser`) load cleanly — but the generated lexer/parser behaves as if every predicate were `true` and every action a no-op. That is wrong for:
 
@@ -68,7 +68,7 @@ All of these call `this.<method>()` against a hand-written `superClass` base tha
 
 Stage C is a hard prerequisite for treating Gale as a drop-in ANTLR4 replacement, for any lexer-level optimization (a fast tokenizer is meaningless if it tokenizes incorrectly), and for `Grammar.options.superClass` / `tokenVocab`. It also unblocks composite-descriptor `[output]` comparison and parser descriptors whose `[output]` is purely action-print stdout.
 
-Design lives in [`action.md`](./action.md) (draft); the java2wado translation plan is [`java2wado.md`](./java2wado.md). Original sketch:
+Design lives in [`action.md`](./action.md) (draft), including the java2wado translation plan. Original sketch:
 
 - Extend the IR so `OptionValue::Action` and per-alt action / predicate elements carry a language-tagged source fragment instead of a placeholder string.
 - Add a pluggable "action translator" interface; ship at minimum an identity translator for Wado-written action bodies.
@@ -90,8 +90,9 @@ Line numbers will drift; add a failing test before fixing.
 
 These are the highest-risk bugs: a static-prediction edge or a parse/scan
 asymmetry that can mis-parse valid input. Several need their own focused
-PR with full-corpus validation rather than a quick patch (the AGENTS.md
-"LL Prediction" notes the static path "will always have edges").
+PR with full-corpus validation rather than a quick patch (the
+`antlr4-compatibility.md` prediction design notes the static path always
+has edges).
 
 - [ ] SLL prediction under-approximates and emits incomplete Dispatch trees (valid input rejected, since codegen emits Dispatch with no else-fallback):
   - `sll_advance` collapses `+`/`*` repeats to "consumes exactly one token" (`a : X+ Y | X Z` mispredicts on `X X Y`). `src/prediction.wado:522-539`

@@ -9,9 +9,10 @@ three parts:
 - **Tried and didn't pan out** — measured dead-ends and non-levers, kept so we
   don't repeat them.
 
-Read with [`AGENTS.md`](./AGENTS.md) (architecture, LL-prediction design) and
-[`antlr4-compatibility.md`](./antlr4-compatibility.md). Design of the flat CST
-lives in [`resilient-parser.md`](./resilient-parser.md).
+Read with [`AGENTS.md`](./AGENTS.md) (dev-cycle essentials) and
+[`antlr4-compatibility.md`](./antlr4-compatibility.md) (prediction / codegen
+design). Design of the flat CST lives in
+[`resilient-parser.md`](./resilient-parser.md).
 
 **Performance-related TODO items live here, not in `TODO.md`.**
 
@@ -269,7 +270,7 @@ ATN literal is a measured problem.)
 These are ATN-class prediction gaps tracked for compatibility, but each is
 "Gale's static predictor commits where ANTLR4 defers" — relevant when reasoning
 about the scan/predict hot path. Full context in `TODO.md` ("Stage A gaps") and
-`AGENTS.md` (soundness invariants).
+`antlr4-compatibility.md` (prediction design, soundness invariants).
 
 - **LR operator-precedence chain** (`DropLoopEntryBranchInLRRule_4`):
   `scan_expr_lr_*` sees `and X` match and commits where ANTLR4 resolves the
