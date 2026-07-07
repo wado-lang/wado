@@ -1,0 +1,28 @@
+// Escape analysis: a template String whose bytes escape only through a fresh
+// deep copy IS safely hoisted. Storing `k{i}` as a map key copies the bytes
+// (value semantics: `key = String { repr: array_clone(buf.repr), used }`), so
+// the reused scratch buffer never aliases a stored key. The buffer is hoisted
+// (__tmpl_buf_ present) and each key stays independent — verified by the
+// per-key asserts below.
+use { println, Stdout } from "core:cli";
+use { TreeMap } from "core:collections";
+
+export fn run() with Stdout {
+    let mut map = TreeMap::<String, i32>::new();
+    for let mut i = 0; i < 5; i += 1 {
+        map[`k{i}`] = i;
+    }
+    assert map.len() == 5;
+    assert map["k0"] == 0;
+    assert map["k4"] == 4;
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_expect:O2": [
+        "__tmpl_buf_",
+        "array_clone<u8>(__tmpl_buf_"
+    ]
+}
