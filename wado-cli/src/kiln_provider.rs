@@ -732,9 +732,10 @@ impl CliGeneratorProvider {
             .map_err(|e| ProviderError::Internal {
                 message: format!("kiln: fetching generator {reference}: {e}"),
             })?;
-        let resolved = resolved_generator_from_wasm(wasm).map_err(|e| ProviderError::Internal {
-            message: format!("kiln: reading options of generator {reference}: {e}"),
-        })?;
+        let resolved =
+            resolved_generator_from_wasm(wasm.to_vec()).map_err(|e| ProviderError::Internal {
+                message: format!("kiln: reading options of generator {reference}: {e}"),
+            })?;
         self.write_spec_cache(&registry_url, package, &version, &resolved.wasm);
         Ok(resolved)
     }
