@@ -5,7 +5,7 @@
 //! resolves to nothing real is a loud error, not a silently broken emit.
 
 use { ParserRule } from "../ir.wado";
-use { resolve_attr_ref, rule_binding_for, rule_is_left_recursive, LR_ACC_LOCAL } from "../action_translate.wado";
+use { resolve_attr_ref, rule_binding_for, rule_is_left_recursive, ref_is_ctx_to_string_tree, LR_ACC_LOCAL } from "../action_translate.wado";
 use { to_snake_case } from "../ident.wado";
 use { JExpr, JMember, JCall, JCast, JStmt, JLocal, JAssign } from "./jparser.wado";
 use { tokenize_java } from "./jlexer.wado";
@@ -225,6 +225,14 @@ fn emit_call(
     if let Member(m) = &c.callee {
         if is_ctx_expr(&m.recv) {
             return emit_ctx_child(rule, m, &c.args, bindings);
+        }
+    }
+    // `$ctx.toStringTree(this)`: the `$`-attr lexer captures the whole
+    // `$ctx.toStringTree` as the call target, so the trailing `(this)` lands
+    // here. Its Wado form is nullary; drop the redundant parser argument.
+    if let Attr(t) = &c.callee {
+        if ref_is_ctx_to_string_tree(t) {
+            return resolve_attr_ref(rule, rules, t, vals_in_scope, bindings, &env.this_bind);
         }
     }
     let args_w = emit_args(rule, rules, &c.args, vals_in_scope, bindings, env)?;

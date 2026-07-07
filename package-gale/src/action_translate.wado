@@ -66,6 +66,16 @@ fn is_ctx_to_string_tree(r: &ResolvedAttr) -> bool {
     return r.target matches { ParserSpecial } && r.name == "ctx" && r.member matches { Some("toStringTree") };
 }
 
+/// Whether `ref_text` is exactly the `$ctx.toStringTree` special. Its Wado form
+/// is a nullary call (`rule_string_tree()`), so a host action's trailing
+/// `(...)` / `(this)` — the parser argument ANTLR's `toStringTree(this)` needs
+/// but Gale does not — is redundant and swallowed. Shared with java2wado, whose
+/// `$`-attr lexer captures `$ctx.toStringTree` as the call target.
+pub fn ref_is_ctx_to_string_tree(ref_text: &String) -> bool {
+    let refs = find_attr_refs(ref_text);
+    return refs.len() == 1 && refs[0].name == "ctx" && refs[0].member matches { Some("toStringTree") };
+}
+
 /// Extend past an immediately-following call `(...)` (skipping leading spaces),
 /// so `$ctx.toStringTree()` and `$ctx.toStringTree(this)` both reduce to a bare
 /// call. Bails (returns `end` unchanged) if a nested `$`-ref lives inside the

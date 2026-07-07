@@ -16,11 +16,9 @@ use t from "../../grammars/LeftRecursion/ReturnValueAndActionsList2_4.g4"
         },
     };
 
-// triage: LR-rule action / return-value / labeled-alt print not executed (or timed) as ANTLR does; LR value-channel + label execution gap.
-#[TODO]
 test "stage_c_output: LeftRecursion/ReturnValueAndActionsList2_4" {
     let input = "a*b,c,x*y>>r";
-    let expected = "(s (expr (expr (expr (expr (expr a) * (expr b)) , (expr c)) , (expr (expr x) * (expr y))) >> (expr r)) <EOF>)
+    let expected = "(s (expr (expr (expr (expr (expr a) * (expr b)) , (expr c)) , (expr (expr x) * (expr y))) >> (expr r)))
 ";
     let result = t::parse_s(&input);
     assert result.output == expected, `output:\n{result.output}\nexpected:\n{expected}`;

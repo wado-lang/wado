@@ -16,11 +16,9 @@ use t from "../../grammars/LeftRecursion/JavaExpressions_4.g4"
         },
     };
 
-// triage: LR-rule action / return-value / labeled-alt print not executed (or timed) as ANTLR does; LR value-channel + label execution gap.
-#[TODO]
 test "stage_c_output: LeftRecursion/JavaExpressions_4" {
     let input = "a >> b";
-    let expected = "(s (e (e a) >> (e b)) <EOF>)
+    let expected = "(s (e (e a) >> (e b)))
 ";
     let result = t::parse_s(&input);
     assert result.output == expected, `output:\n{result.output}\nexpected:\n{expected}`;

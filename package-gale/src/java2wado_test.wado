@@ -223,6 +223,11 @@ test "java action: println with a concat arg" {
     assert out == "p.emit(`ID {p.token_text(id)}\\n`);", `out: '{out}'`;
 }
 
+test "java action: ctx.toStringTree(this) drops the redundant parser arg" {
+    let out = java_action(&"System.out.println($ctx.toStringTree(this));", &"s : e EOF ; e : ID ;", false);
+    assert out == "p.emit(`{p.rule_string_tree()}\\n`);", `out: '{out}'`;
+}
+
 test "java action: assignment to the value channel" {
     let out = java_action(
         &"$v = $a.v + $b.v;",

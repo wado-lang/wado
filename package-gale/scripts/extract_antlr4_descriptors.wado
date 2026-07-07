@@ -880,9 +880,14 @@ fn emit_stage_c_output_test_file(
         test_label: "stage_c_output",
         triage: *triage,
     };
+    // Normalise the descriptor's tree-print `[output]` the same way Stage B
+    // normalises its oracle tree: drop a tail ` <EOF>` marker so the expected
+    // matches Gale's `to_string_tree()` shape (which omits EOF by design).
+    // A no-op for non-tree output (no ` <EOF>)` tail).
+    let expected = strip_tail_eof_marker(output);
     return emit_test_file(&spec, |w: &mut CodeWriter| {
         w.line(&`let input = "{escape_for_wado_str(input)}";`);
-        w.line(&`let expected = "{escape_for_wado_str(output)}";`);
+        w.line(&`let expected = "{escape_for_wado_str(&expected)}";`);
         w.line(&`let result = t::{parse_call_for_start(start)}(&input);`);
         w.line(&"assert result.output == expected, `output:\\n{result.output}\\nexpected:\\n{expected}`;");
     });
@@ -1976,17 +1981,19 @@ fn strip_eof_marker(raw: &String) -> String {
 }
 
 /// Drop a ` <EOF>` marker in tail position — i.e. followed by nothing but
-/// closing parens — so the tree matches Gale's `to_string_tree()` shape
-/// (which omits EOF). EOF can only ever be the last token of a parse, so
-/// this covers both the top-level trailing form `(s a <EOF>)` and the
-/// nested-at-end form `(s (t <EOF>))`. Any other ` <EOF>` occurrence is
-/// token *text* and must survive untouched (the Stage B normalizer's
-/// `<` / `>` rejection then auto-skips the descriptor instead of silently
-/// corrupting the pinned tree).
+/// closing parens and trailing whitespace — so the tree matches Gale's
+/// `to_string_tree()` shape (which omits EOF). EOF can only ever be the last
+/// token of a parse, so this covers both the top-level trailing form
+/// `(s a <EOF>)` and the nested-at-end form `(s (t <EOF>))`. Any other
+/// ` <EOF>` occurrence is token *text* and must survive untouched (the Stage B
+/// normalizer's `<` / `>` rejection then auto-skips the descriptor instead of
+/// silently corrupting the pinned tree). Trailing whitespace is skipped over
+/// but preserved, so a Stage C `[output]` keeps its exact trailing newline
+/// (Stage B trims first, so it is unaffected).
 fn strip_tail_eof_marker(s: &String) -> String {
     let chars: List<char> = s.chars().collect();
     let mut end = chars.len();
-    while end > 0 && chars[end - 1] == ')' {
+    while end > 0 && (chars[end - 1] == ')' || chars[end - 1].is_ascii_whitespace()) {
         end -= 1;
     }
     // " <EOF>" is 6 chars; check chars[end-6 .. end] spell it.
