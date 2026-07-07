@@ -14,14 +14,14 @@ import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import memory (1) from "mem/memory";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:wado-compiler/tests/fixtures/reexport_collision.wado::__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/reexport_collision.wado/__cm_export____test_0_re_exported_type_resolves_to_its_definer_despite_a_same_named_struct"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/reexport_collision.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/reexport_collision.wado::__modules_initialized = 1;
     };
     "wasi/task-return"(0);
 }

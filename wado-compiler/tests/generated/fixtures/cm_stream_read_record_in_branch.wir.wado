@@ -99,19 +99,19 @@ type "functype//wasi/wasi:filesystem/Preopens::get_directories" = fn(i32);  // T
 
 type "functype//wasi/wasi:filesystem/Descriptor::read_directory" = fn(i32, i32);  // TypeId(25)
 
-type "functype//wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/run" = fn();  // TypeId(26)
+type "functype//cm_stream_read_record_in_branch.wado/run" = fn();  // TypeId(26)
 
-type "functype//wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(27)
+type "functype//cm_stream_read_record_in_branch.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(27)
 
-type "functype//wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_binding__Stderr_write_via_stream" = fn(i32) -> i32;  // TypeId(28)
+type "functype//cm_stream_read_record_in_branch.wado/__cm_binding__Stderr_write_via_stream" = fn(i32) -> i32;  // TypeId(28)
 
-type "functype//wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_binding__Preopens_get_directories" = fn() -> ref "core:prelude//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>";  // TypeId(29)
+type "functype//cm_stream_read_record_in_branch.wado/__cm_binding__Preopens_get_directories" = fn() -> ref "core:prelude//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>";  // TypeId(29)
 
-type "functype//wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_binding__Descriptor_read_directory" = fn(i32) -> ref "tuple//[Stream<wasi:filesystem/types.wado/DirectoryEntry>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";  // TypeId(30)
+type "functype//cm_stream_read_record_in_branch.wado/__cm_binding__Descriptor_read_directory" = fn(i32) -> ref "tuple//[Stream<wasi:filesystem/types.wado/DirectoryEntry>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";  // TypeId(30)
 
-type "functype//wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_export__run" = fn();  // TypeId(31)
+type "functype//cm_stream_read_record_in_branch.wado/__cm_export__run" = fn();  // TypeId(31)
 
-type "functype//wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_stream_read_DirectoryEntry" = fn(i32, i32) -> ref "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>";  // TypeId(32)
+type "functype//cm_stream_read_record_in_branch.wado/__cm_stream_read_DirectoryEntry" = fn(i32, i32) -> ref "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>";  // TypeId(32)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(33)
 
@@ -213,9 +213,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:cm_stream_read_record_in_branch.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/run"() with Stdout, Stderr, Preopens {
+fn "cm_stream_read_record_in_branch.wado/run"() with Stdout, Stderr, Preopens {
     let dirs: ref "core:prelude//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>";
     let dir: i32;
     let dir_stream: i32;
@@ -232,17 +232,17 @@ fn "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/run"() wit
     let __sroa_entries_repr: ref "Array<wasi:filesystem/types.wado/DirectoryEntry>";
     let __sroa_entries_used: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:cm_stream_read_record_in_branch.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:cm_stream_read_record_in_branch.wado::__modules_initialized = 1;
     };
-    dirs = "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_binding__Preopens_get_directories"();
+    dirs = "cm_stream_read_record_in_branch.wado/__cm_binding__Preopens_get_directories"();
     if dirs.used == 0 {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no preopened directories available"), used: 34 });
         return;
     }
-    __pattern_temp_0 = "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_binding__Descriptor_read_directory"(local.tee dir(__v1 = dirs.used; if @unlikely(0 >= __v1) {
+    __pattern_temp_0 = "cm_stream_read_record_in_branch.wado/__cm_binding__Descriptor_read_directory"(local.tee dir(__v1 = dirs.used; if @unlikely(0 >= __v1) {
         cold_path;
         "core:rt/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(173); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("List::index_value"), used: 17 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/list.wado"), used: 22 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 333 }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: index < self.used
@@ -252,9 +252,9 @@ condition: index < self.used
     dir_stream = __pattern_temp_0.0;
     _done = __pattern_temp_0.1;
     v = (if dirs.used > 0 -> ref "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>" {
-        "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_stream_read_DirectoryEntry"(dir_stream, 100);
+        "cm_stream_read_record_in_branch.wado/__cm_stream_read_DirectoryEntry"(dir_stream, 100);
     } else {
-        "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_stream_read_DirectoryEntry"(dir_stream, 0);
+        "cm_stream_read_record_in_branch.wado/__cm_stream_read_DirectoryEntry"(dir_stream, 0);
     });
     __sroa_entries_repr = builtin::array_clone<ref "wasi:filesystem/types.wado//DirectoryEntry">(v.repr);
     __sroa_entries_used = v.used;
@@ -284,15 +284,15 @@ condition: index < self.used
     "wasi/resource-drop:descriptor"(dir);
 }
 
-fn "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "cm_stream_read_record_in_branch.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_binding__Stderr_write_via_stream"(data) with Stderr {
+fn "cm_stream_read_record_in_branch.wado/__cm_binding__Stderr_write_via_stream"(data) with Stderr {
     return "wasi/wasi:cli/Stderr::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_binding__Preopens_get_directories"() with Preopens {
+fn "cm_stream_read_record_in_branch.wado/__cm_binding__Preopens_get_directories"() with Preopens {
     let __outptr: i32;
     let __base: i32;
     let __count: i32;
@@ -329,7 +329,7 @@ fn "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_bindi
     return __result;
 }
 
-fn "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_binding__Descriptor_read_directory"(self) with Descriptor {
+fn "cm_stream_read_record_in_branch.wado/__cm_binding__Descriptor_read_directory"(self) with Descriptor {
     let __outptr: i32;
     let __lifted_result_2: i32;
     let __lifted_result_3: i32;
@@ -341,18 +341,18 @@ fn "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_bindi
     return struct.new "tuple//[Stream<wasi:filesystem/types.wado/DirectoryEntry>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]" { 0: __lifted_result_2, 1: __lifted_result_3 };
 }
 
-fn "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_export__run"() {
+fn "cm_stream_read_record_in_branch.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:cm_stream_read_record_in_branch.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:cm_stream_read_record_in_branch.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/run"();
+    "cm_stream_read_record_in_branch.wado/run"();
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_stream_read_DirectoryEntry"(handle, max) {
+fn "cm_stream_read_record_in_branch.wado/__cm_stream_read_DirectoryEntry"(handle, max) {
     let byte_count: i32;
     let ptr_3: i32;
     let result: i32;
@@ -446,7 +446,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "cm_stream_read_record_in_branch.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -458,7 +458,7 @@ fn "core:cli/eprintln"(message) with Stderr {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_binding__Stderr_write_via_stream"(rx_6);
+    handle = "cm_stream_read_record_in_branch.wado/__cm_binding__Stderr_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -893,4 +893,4 @@ fn "core:prelude/list.wado/List<wasi:filesystem/types.wado/DirectoryEntry>::grow
     self.repr = new_repr;
 }
 
-export fn "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_export__run" as "run"
+export fn "cm_stream_read_record_in_branch.wado/__cm_export__run" as "run"

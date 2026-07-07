@@ -145,20 +145,20 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
-global mut global:__const_obj_0: ref null "wado-compiler/tests/fixtures/serde_serialize_struct.wado//User" = ref.null none;
+global mut global:wado-compiler/tests/fixtures/serde_serialize_struct.wado::__modules_initialized: bool = 0;
+global mut global:wado-compiler/tests/fixtures/serde_serialize_struct.wado::__const_obj_0: ref null "wado-compiler/tests/fixtures/serde_serialize_struct.wado//User" = ref.null none;
 
 fn "wado-compiler/tests/fixtures/serde_serialize_struct.wado/run"() with Stdout {
     let ser: ref "wado-compiler/tests/fixtures/serde_serialize_struct.wado//JsonSerializer";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/serde_serialize_struct.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/serde_serialize_struct.wado::__modules_initialized = 1;
     };
-    global:__const_obj_0 = struct.new "wado-compiler/tests/fixtures/serde_serialize_struct.wado//User" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 }, age: 30, active: 1 };
+    global:wado-compiler/tests/fixtures/serde_serialize_struct.wado::__const_obj_0 = struct.new "wado-compiler/tests/fixtures/serde_serialize_struct.wado//User" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 }, age: 30, active: 1 };
     ser = struct.new "wado-compiler/tests/fixtures/serde_serialize_struct.wado//JsonSerializer" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
-    drop("wado-compiler/tests/fixtures/serde_serialize_struct.wado/User^Serialize::serialize<wado-compiler/tests/fixtures/serde_serialize_struct.wado/JsonSerializer>"(global:__const_obj_0, ser));
+    drop("wado-compiler/tests/fixtures/serde_serialize_struct.wado/User^Serialize::serialize<wado-compiler/tests/fixtures/serde_serialize_struct.wado/JsonSerializer>"(global:wado-compiler/tests/fixtures/serde_serialize_struct.wado::__const_obj_0, ser));
     "core:cli/println"(ser.buf);
 }
 
@@ -168,10 +168,10 @@ fn "wado-compiler/tests/fixtures/serde_serialize_struct.wado/__cm_binding__Stdou
 
 fn "wado-compiler/tests/fixtures/serde_serialize_struct.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/serde_serialize_struct.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/serde_serialize_struct.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/serde_serialize_struct.wado/run"();
     "wasi/task-return"(0);

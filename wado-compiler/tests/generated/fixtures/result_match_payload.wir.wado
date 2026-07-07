@@ -87,7 +87,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:wado-compiler/tests/fixtures/result_match_payload.wado::__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/result_match_payload.wado/run"() with Stdout {
     let ok_val: ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>";
@@ -103,10 +103,10 @@ fn "wado-compiler/tests/fixtures/result_match_payload.wado/run"() with Stdout {
     let __local_10: ref "core:prelude/string.wado//String";
     let __local_11: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/result_match_payload.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/result_match_payload.wado::__modules_initialized = 1;
     };
     ok_val = struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("success"), used: 7 } };
     err_val = struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("failure"), used: 7 } };
@@ -160,10 +160,10 @@ fn "wado-compiler/tests/fixtures/result_match_payload.wado/__cm_binding__Stdout_
 
 fn "wado-compiler/tests/fixtures/result_match_payload.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/result_match_payload.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/result_match_payload.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/result_match_payload.wado/run"();
     "wasi/task-return"(0);

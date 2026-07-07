@@ -169,16 +169,16 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
-global mut global:__const_obj_0: ref null "wado-compiler/tests/fixtures/trait_default.wado//Person" = ref.null none;
-global global:__const_obj_1: ref null "wado-compiler/tests/fixtures/trait_default.wado//Robot" = struct.new "wado-compiler/tests/fixtures/trait_default.wado//Robot" { id: 42 };
-global mut global:__const_obj_2: ref null "wado-compiler/tests/fixtures/trait_default.wado//Article" = ref.null none;
-global mut global:__const_obj_3: ref null "wado-compiler/tests/fixtures/trait_default.wado//Tweet" = ref.null none;
+global mut global:wado-compiler/tests/fixtures/trait_default.wado::__modules_initialized: bool = 0;
+global mut global:wado-compiler/tests/fixtures/trait_default.wado::__const_obj_0: ref null "wado-compiler/tests/fixtures/trait_default.wado//Person" = ref.null none;
+global global:wado-compiler/tests/fixtures/trait_default.wado::__const_obj_1: ref null "wado-compiler/tests/fixtures/trait_default.wado//Robot" = struct.new "wado-compiler/tests/fixtures/trait_default.wado//Robot" { id: 42 };
+global mut global:wado-compiler/tests/fixtures/trait_default.wado::__const_obj_2: ref null "wado-compiler/tests/fixtures/trait_default.wado//Article" = ref.null none;
+global mut global:wado-compiler/tests/fixtures/trait_default.wado::__const_obj_3: ref null "wado-compiler/tests/fixtures/trait_default.wado//Tweet" = ref.null none;
 
 fn "wado-compiler/tests/fixtures/trait_default.wado/trait_default_basic"() with Stdout {
-    global:__const_obj_0 = struct.new "wado-compiler/tests/fixtures/trait_default.wado//Person" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 } };
-    "core:cli/println"("wado-compiler/tests/fixtures/trait_default.wado/Person^Greet::greet"(global:__const_obj_0));
-    "core:cli/println"("wado-compiler/tests/fixtures/trait_default.wado/Robot^Greet::greet"(global:__const_obj_1));
+    global:wado-compiler/tests/fixtures/trait_default.wado::__const_obj_0 = struct.new "wado-compiler/tests/fixtures/trait_default.wado//Person" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 } };
+    "core:cli/println"("wado-compiler/tests/fixtures/trait_default.wado/Person^Greet::greet"(global:wado-compiler/tests/fixtures/trait_default.wado::__const_obj_0));
+    "core:cli/println"("wado-compiler/tests/fixtures/trait_default.wado/Robot^Greet::greet"(global:wado-compiler/tests/fixtures/trait_default.wado::__const_obj_1));
 }
 
 fn "wado-compiler/tests/fixtures/trait_default.wado/trait_default_calls_default"() with Stdout {
@@ -221,10 +221,10 @@ fn "wado-compiler/tests/fixtures/trait_default.wado/trait_default_count"() with 
 }
 
 fn "wado-compiler/tests/fixtures/trait_default.wado/trait_default_override"() with Stdout {
-    global:__const_obj_2 = struct.new "wado-compiler/tests/fixtures/trait_default.wado//Article" { headline: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Breaking News"), used: 13 }, content: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Something happened"), used: 18 } };
-    "core:cli/println"("wado-compiler/tests/fixtures/trait_default.wado/Article^Summary::summary"(global:__const_obj_2));
-    global:__const_obj_3 = struct.new "wado-compiler/tests/fixtures/trait_default.wado//Tweet" { text: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Hello world"), used: 11 } };
-    "core:cli/println"("wado-compiler/tests/fixtures/trait_default.wado/Tweet^Summary::summary"(global:__const_obj_3));
+    global:wado-compiler/tests/fixtures/trait_default.wado::__const_obj_2 = struct.new "wado-compiler/tests/fixtures/trait_default.wado//Article" { headline: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Breaking News"), used: 13 }, content: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Something happened"), used: 18 } };
+    "core:cli/println"("wado-compiler/tests/fixtures/trait_default.wado/Article^Summary::summary"(global:wado-compiler/tests/fixtures/trait_default.wado::__const_obj_2));
+    global:wado-compiler/tests/fixtures/trait_default.wado::__const_obj_3 = struct.new "wado-compiler/tests/fixtures/trait_default.wado//Tweet" { text: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Hello world"), used: 11 } };
+    "core:cli/println"("wado-compiler/tests/fixtures/trait_default.wado/Tweet^Summary::summary"(global:wado-compiler/tests/fixtures/trait_default.wado::__const_obj_3));
 }
 
 fn "wado-compiler/tests/fixtures/trait_default.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -233,16 +233,16 @@ fn "wado-compiler/tests/fixtures/trait_default.wado/__cm_binding__Stdout_write_v
 
 fn "wado-compiler/tests/fixtures/trait_default.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/trait_default.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/trait_default.wado::__modules_initialized = 1;
     };
     __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_2 @likely(global:wado-compiler/tests/fixtures/trait_default.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/trait_default.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/trait_default.wado/trait_default_basic"();
     "wado-compiler/tests/fixtures/trait_default.wado/trait_default_calls_default"();

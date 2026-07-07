@@ -158,7 +158,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:wado-compiler/tests/fixtures/wir_issue8_cross_module_variant.wado::__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/wir_issue8_cross_module_variant.wado/run"() with Stdout {
     let r: ref "./sub/wir_issue8_module.wado//Response<i32>";
@@ -175,10 +175,10 @@ fn "wado-compiler/tests/fixtures/wir_issue8_cross_module_variant.wado/run"() wit
     let __local_14: ref "core:prelude/string.wado//String";
     let __local_15: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/wir_issue8_cross_module_variant.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/wir_issue8_cross_module_variant.wado::__modules_initialized = 1;
     };
     r = struct.new "./sub/wir_issue8_module.wado//Response<i32>::Success" { discriminant: 0, payload_0: struct.new "./sub/wir_issue8_module.wado//Payload<i32>" { data: 42, tag: 1 } };
     if @likely(ref.test "./sub/wir_issue8_module.wado//Response<i32>::Success"(r)) {
@@ -227,10 +227,10 @@ fn "wado-compiler/tests/fixtures/wir_issue8_cross_module_variant.wado/__cm_bindi
 
 fn "wado-compiler/tests/fixtures/wir_issue8_cross_module_variant.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/wir_issue8_cross_module_variant.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/wir_issue8_cross_module_variant.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/wir_issue8_cross_module_variant.wado/run"();
     "wasi/task-return"(0);

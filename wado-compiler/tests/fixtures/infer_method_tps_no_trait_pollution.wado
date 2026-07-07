@@ -1,0 +1,28 @@
+// A trait that declares a return-only generic method (`get<T>`) must not
+// pollute method resolution of an unrelated concrete receiver's inherent
+// method of the same name. `List::get`'s element type is fixed by the
+// receiver `List<i32>`, so it has no method-level type parameter to infer.
+// Regression for the by-name trait-declaration scan in
+// `find_method_type_param_names`, which adopted `Producer::get<T>`'s `T`.
+trait Producer {
+    fn get<T: Default>(&self) -> Option<T>;
+}
+
+struct P {}
+impl Producer for P {
+    fn get<T: Default>(&self) -> Option<T> {
+        return Option::Some(T::default());
+    }
+}
+
+test "inherent get is not polluted by a same-named trait method" {
+    let primes = [2, 3, 5, 7] as List<i32>;
+    assert primes.get(1) matches { Some(v) && v == 3 };
+    assert primes.get(9) matches { None };
+}
+
+test "the trait method itself still resolves on its impl" {
+    let p = P {};
+    let v: Option<i32> = p.get();
+    assert v matches { Some(0) };
+}

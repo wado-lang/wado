@@ -247,8 +247,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
-global global:__const_obj_0: ref null "wado-compiler/tests/fixtures/static_method_in_generic_context.wado//Foo" = struct.new "wado-compiler/tests/fixtures/static_method_in_generic_context.wado//Foo" { value: 42 };
+global mut global:wado-compiler/tests/fixtures/static_method_in_generic_context.wado::__modules_initialized: bool = 0;
+global global:wado-compiler/tests/fixtures/static_method_in_generic_context.wado::__const_obj_0: ref null "wado-compiler/tests/fixtures/static_method_in_generic_context.wado//Foo" = struct.new "wado-compiler/tests/fixtures/static_method_in_generic_context.wado//Foo" { value: 42 };
 
 fn "wado-compiler/tests/fixtures/static_method_in_generic_context.wado/__test_0_roundtrip"() {
     let j: ref "core:prelude/string.wado//String";
@@ -263,7 +263,7 @@ fn "wado-compiler/tests/fixtures/static_method_in_generic_context.wado/__test_0_
     let __sroa_json_discriminant: i32;
     let __sroa_json_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_json_case1_payload_0: ref null "core:serde//SerializeError";
-    multivalue_bind [__sroa_json_discriminant, __sroa_json_case0_payload_0, __sroa_json_case1_payload_0] = "core:json/core/json/to_string<wado-compiler/tests/fixtures/static_method_in_generic_context.wado/Foo>"(global:__const_obj_0);
+    multivalue_bind [__sroa_json_discriminant, __sroa_json_case0_payload_0, __sroa_json_case1_payload_0] = "core:json/core/json/to_string<wado-compiler/tests/fixtures/static_method_in_generic_context.wado/Foo>"(global:wado-compiler/tests/fixtures/static_method_in_generic_context.wado::__const_obj_0);
     if @likely(__sroa_json_discriminant == 0) {
         j = ref.as_non_null(__sroa_json_case0_payload_0);
         __v1 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(34, 52, 50, 34), used: 4 };
@@ -301,11 +301,11 @@ condition: f.value == 42
 
 fn "wado-compiler/tests/fixtures/static_method_in_generic_context.wado/__cm_export____test_0_roundtrip"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/static_method_in_generic_context.wado::__modules_initialized);
         cold_path;
         "core:base64/__initialize_module"();
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/static_method_in_generic_context.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/static_method_in_generic_context.wado/__test_0_roundtrip"();
     "wasi/task-return"(0);

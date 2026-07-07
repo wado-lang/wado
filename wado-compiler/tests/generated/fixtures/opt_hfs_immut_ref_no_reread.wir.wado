@@ -118,7 +118,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:wado-compiler/tests/fixtures/opt_hfs_immut_ref_no_reread.wado::__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/opt_hfs_immut_ref_no_reread.wado/read_x"(c) {
     return c.x;
@@ -140,10 +140,10 @@ fn "wado-compiler/tests/fixtures/opt_hfs_immut_ref_no_reread.wado/run"() {
     let __local_10: ref "core:prelude/format.wado//Formatter";
     let __hfs_x_11: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/opt_hfs_immut_ref_no_reread.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/opt_hfs_immut_ref_no_reread.wado::__modules_initialized = 1;
     };
     c = struct.new "wado-compiler/tests/fixtures/opt_hfs_immut_ref_no_reread.wado//Counter" { x: 0, y: 0 };
     "wado-compiler/tests/fixtures/opt_hfs_immut_ref_no_reread.wado/reset"(c);
@@ -180,10 +180,10 @@ condition: c.x == 5
 
 fn "wado-compiler/tests/fixtures/opt_hfs_immut_ref_no_reread.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/opt_hfs_immut_ref_no_reread.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/opt_hfs_immut_ref_no_reread.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/opt_hfs_immut_ref_no_reread.wado/run"();
     "wasi/task-return"(0);

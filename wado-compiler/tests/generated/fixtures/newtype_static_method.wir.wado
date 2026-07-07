@@ -102,20 +102,20 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
-global global:__const_obj_0: ref null "wado-compiler/tests/fixtures/newtype_static_method.wado//Point" = struct.new "wado-compiler/tests/fixtures/newtype_static_method.wado//Point" { x: 0, y: 0 };
+global mut global:wado-compiler/tests/fixtures/newtype_static_method.wado::__modules_initialized: bool = 0;
+global global:wado-compiler/tests/fixtures/newtype_static_method.wado::__const_obj_0: ref null "wado-compiler/tests/fixtures/newtype_static_method.wado//Point" = struct.new "wado-compiler/tests/fixtures/newtype_static_method.wado//Point" { x: 0, y: 0 };
 
 fn "wado-compiler/tests/fixtures/newtype_static_method.wado/run"() with Stdout {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     let self_7: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/newtype_static_method.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/newtype_static_method.wado::__modules_initialized = 1;
     };
-    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_7(global:__const_obj_0.x), __local_2); __local_1);
+    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_7(global:wado-compiler/tests/fixtures/newtype_static_method.wado::__const_obj_0.x), __local_2); __local_1);
 }
 
 fn "wado-compiler/tests/fixtures/newtype_static_method.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -124,10 +124,10 @@ fn "wado-compiler/tests/fixtures/newtype_static_method.wado/__cm_binding__Stdout
 
 fn "wado-compiler/tests/fixtures/newtype_static_method.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/newtype_static_method.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/newtype_static_method.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/newtype_static_method.wado/run"();
     "wasi/task-return"(0);

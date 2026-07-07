@@ -59,7 +59,7 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:wado-compiler/tests/fixtures/wasi_newtype_literal.wado::__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_binding__MonotonicClock_wait_for"(how_long) with MonotonicClock {
     let __subtask_packed: i32;
@@ -72,10 +72,10 @@ fn "wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_lift__MonotonicC
 
 fn "wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_export____test_0_literal_coercion_to_duration_via_effect_fn"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/wasi_newtype_literal.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/wasi_newtype_literal.wado::__modules_initialized = 1;
     };
     "core:prelude/types.wado/AsyncCall<()>::wait"("wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_binding__MonotonicClock_wait_for"(0_i64));
     "wasi/task-return"(0);

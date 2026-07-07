@@ -57,11 +57,11 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(14)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/hfs_aliased_local_whole_read.wado/run" = fn();  // TypeId(16)
+type "functype//hfs_aliased_local_whole_read.wado/run" = fn();  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/hfs_aliased_local_whole_read.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(17)
+type "functype//hfs_aliased_local_whole_read.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/hfs_aliased_local_whole_read.wado/__cm_export__run" = fn();  // TypeId(18)
+type "functype//hfs_aliased_local_whole_read.wado/__cm_export__run" = fn();  // TypeId(18)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(19)
 
@@ -124,9 +124,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:hfs_aliased_local_whole_read.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/hfs_aliased_local_whole_read.wado/run"() with Stdout {
+fn "hfs_aliased_local_whole_read.wado/run"() with Stdout {
     let __b: ref "core:prelude//List<[bool,i32,core:prelude/string.wado/String]>";
     let __iter_2: ref "core:prelude/slice.wado//ArrayIter<[bool,i32,core:prelude/string.wado/String]>";
     let x: ref "tuple//[bool, i32, core:prelude/string.wado/String]";
@@ -136,10 +136,10 @@ fn "wado-compiler/tests/fixtures/hfs_aliased_local_whole_read.wado/run"() with S
     let f_17: ref "core:prelude/format.wado//Formatter";
     let f_22: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:hfs_aliased_local_whole_read.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:hfs_aliased_local_whole_read.wado::__modules_initialized = 1;
     };
     __b = struct.new "core:prelude//List<[bool,i32,core:prelude/string.wado/String]>" { repr: builtin::array_new<ref "tuple//[bool, i32, core:prelude/string.wado/String]">(0), used: 0 };
     "core:prelude/list.wado/List<[bool,i32,core:prelude/string.wado/String]>::push"(__b, struct.new "tuple//[bool, i32, core:prelude/string.wado/String]" { 0: 1, 1: 1, 2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 110, 101), used: 3 } });
@@ -164,18 +164,18 @@ fn "wado-compiler/tests/fixtures/hfs_aliased_local_whole_read.wado/run"() with S
     };
 }
 
-fn "wado-compiler/tests/fixtures/hfs_aliased_local_whole_read.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "hfs_aliased_local_whole_read.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/hfs_aliased_local_whole_read.wado/__cm_export__run"() {
+fn "hfs_aliased_local_whole_read.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:hfs_aliased_local_whole_read.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:hfs_aliased_local_whole_read.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/hfs_aliased_local_whole_read.wado/run"();
+    "hfs_aliased_local_whole_read.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -203,7 +203,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/hfs_aliased_local_whole_read.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "hfs_aliased_local_whole_read.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -557,4 +557,4 @@ fn "core:prelude/list.wado/List<[bool,i32,core:prelude/string.wado/String]>::gro
     self.repr = new_repr;
 }
 
-export fn "wado-compiler/tests/fixtures/hfs_aliased_local_whole_read.wado/__cm_export__run" as "run"
+export fn "hfs_aliased_local_whole_read.wado/__cm_export__run" as "run"

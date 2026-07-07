@@ -115,7 +115,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:wado-compiler/tests/fixtures/opt_sroa_variant_tail_call.wado::__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/opt_sroa_variant_tail_call.wado/parse_leaf"(s) {
     if s.used == 0 {
@@ -157,10 +157,10 @@ fn "wado-compiler/tests/fixtures/opt_sroa_variant_tail_call.wado/run"() {
     let __local_13: ref "core:prelude/string.wado//String";
     let __local_14: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/opt_sroa_variant_tail_call.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/opt_sroa_variant_tail_call.wado::__modules_initialized = 1;
     };
     __v0_0 = "wado-compiler/tests/fixtures/opt_sroa_variant_tail_call.wado/try_parse"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 });
     if @unlikely(__v0_0 != 5) {
@@ -203,10 +203,10 @@ condition: try_parse(long_s) == -1
 
 fn "wado-compiler/tests/fixtures/opt_sroa_variant_tail_call.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/opt_sroa_variant_tail_call.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/opt_sroa_variant_tail_call.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/opt_sroa_variant_tail_call.wado/run"();
     "wasi/task-return"(0);

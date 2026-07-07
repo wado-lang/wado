@@ -368,9 +368,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
-global global:__const_obj_0: ref null "wado-compiler/tests/fixtures/serde_json_rename.wado//ApiResponse" = struct.new "wado-compiler/tests/fixtures/serde_json_rename.wado//ApiResponse" { status_code: 200, response_data: ref.as_non_null(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(111, 107)), used: 2 }) };
-global mut global:__const_obj_1: ref null "wado-compiler/tests/fixtures/serde_json_rename.wado//ApiResponse" = ref.null none;
+global mut global:wado-compiler/tests/fixtures/serde_json_rename.wado::__modules_initialized: bool = 0;
+global global:wado-compiler/tests/fixtures/serde_json_rename.wado::__const_obj_0: ref null "wado-compiler/tests/fixtures/serde_json_rename.wado//ApiResponse" = struct.new "wado-compiler/tests/fixtures/serde_json_rename.wado//ApiResponse" { status_code: 200, response_data: ref.as_non_null(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(111, 107)), used: 2 }) };
+global mut global:wado-compiler/tests/fixtures/serde_json_rename.wado::__const_obj_1: ref null "wado-compiler/tests/fixtures/serde_json_rename.wado//ApiResponse" = ref.null none;
 
 fn "wado-compiler/tests/fixtures/serde_json_rename.wado/__test_0_serialize_with_rename"() {
     let s: ref "core:prelude/string.wado//String";
@@ -381,7 +381,7 @@ fn "wado-compiler/tests/fixtures/serde_json_rename.wado/__test_0_serialize_with_
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_r_case1_payload_0: ref null "core:serde//SerializeError";
-    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_json_rename.wado/ApiResponse>"(global:__const_obj_0);
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_json_rename.wado/ApiResponse>"(global:wado-compiler/tests/fixtures/serde_json_rename.wado::__const_obj_0);
     if @likely(__sroa_r_discriminant == 0) {
         s = ref.as_non_null(__sroa_r_case0_payload_0);
         __v1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"status_code\":200,\"data\":\"ok\"}"), used: 31 };
@@ -449,11 +449,11 @@ fn "wado-compiler/tests/fixtures/serde_json_rename.wado/__test_2_roundtrip_with_
     let __local_10: ref "core:prelude/format.wado//Formatter";
     let __local_11: ref "core:prelude/string.wado//String";
     let __local_12: ref "core:prelude/format.wado//Formatter";
-    global:__const_obj_1 = struct.new "wado-compiler/tests/fixtures/serde_json_rename.wado//ApiResponse" { status_code: 404, response_data: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not found"), used: 9 } };
+    global:wado-compiler/tests/fixtures/serde_json_rename.wado::__const_obj_1 = struct.new "wado-compiler/tests/fixtures/serde_json_rename.wado//ApiResponse" { status_code: 404, response_data: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not found"), used: 9 } };
     let __sroa_json_r_discriminant: i32;
     let __sroa_json_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_json_r_case1_payload_0: ref null "core:serde//SerializeError";
-    multivalue_bind [__sroa_json_r_discriminant, __sroa_json_r_case0_payload_0, __sroa_json_r_case1_payload_0] = "core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_json_rename.wado/ApiResponse>"(global:__const_obj_1);
+    multivalue_bind [__sroa_json_r_discriminant, __sroa_json_r_case0_payload_0, __sroa_json_r_case1_payload_0] = "core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_json_rename.wado/ApiResponse>"(global:wado-compiler/tests/fixtures/serde_json_rename.wado::__const_obj_1);
     if @likely(__sroa_json_r_discriminant == 0) {
         json = ref.as_non_null(__sroa_json_r_case0_payload_0);
         let __sroa_parsed_r_discriminant: i32;
@@ -491,11 +491,11 @@ condition: parsed.response_data == \"not found\"
 
 fn "wado-compiler/tests/fixtures/serde_json_rename.wado/__cm_export____test_0_serialize_with_rename"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/serde_json_rename.wado::__modules_initialized);
         cold_path;
         "core:base64/__initialize_module"();
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/serde_json_rename.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/serde_json_rename.wado/__test_0_serialize_with_rename"();
     "wasi/task-return"(0);
@@ -503,11 +503,11 @@ fn "wado-compiler/tests/fixtures/serde_json_rename.wado/__cm_export____test_0_se
 
 fn "wado-compiler/tests/fixtures/serde_json_rename.wado/__cm_export____test_1_deserialize_with_rename"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/serde_json_rename.wado::__modules_initialized);
         cold_path;
         "core:base64/__initialize_module"();
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/serde_json_rename.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/serde_json_rename.wado/__test_1_deserialize_with_rename"();
     "wasi/task-return"(0);
@@ -515,11 +515,11 @@ fn "wado-compiler/tests/fixtures/serde_json_rename.wado/__cm_export____test_1_de
 
 fn "wado-compiler/tests/fixtures/serde_json_rename.wado/__cm_export____test_2_roundtrip_with_rename"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/serde_json_rename.wado::__modules_initialized);
         cold_path;
         "core:base64/__initialize_module"();
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/serde_json_rename.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/serde_json_rename.wado/__test_2_roundtrip_with_rename"();
     "wasi/task-return"(0);

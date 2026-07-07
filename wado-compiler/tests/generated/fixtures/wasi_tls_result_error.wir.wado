@@ -116,16 +116,16 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:wado-compiler/tests/fixtures/wasi_tls_result_error.wado::__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/wasi_tls_result_error.wado/run"() with Stdout, Connector, Error {
     let conn: i32;
     let __match_1: ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/wasi_tls_result_error.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/wasi_tls_result_error.wado::__modules_initialized = 1;
     };
     __match_1 = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>::wait"("wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__cm_binding__Connector_connect"(local.tee conn("wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__cm_binding__Connector_new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("example.com"), used: 11 }));
     if __match_1.discriminant == 0 {
@@ -167,10 +167,10 @@ fn "wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__cm_lift__Connector
 
 fn "wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/wasi_tls_result_error.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/wasi_tls_result_error.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/wasi_tls_result_error.wado/run"();
     "wasi/task-return"(0);

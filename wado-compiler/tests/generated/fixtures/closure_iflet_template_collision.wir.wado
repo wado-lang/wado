@@ -9,7 +9,7 @@ struct core:prelude/string.wado//String {  // TypeId(1)
     mut used: i32,
 }
 
-struct wado-compiler/tests/fixtures/closure_iflet_template_collision.wado//__Closure_2 {  // TypeId(2)
+struct closure_iflet_template_collision.wado//__Closure_2 {  // TypeId(2)
     mut __capture_0: ref "core:prelude/string.wado//String",
 }
 
@@ -31,9 +31,9 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(12)
+type "functype//closure_iflet_template_collision.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__cm_export__run" = fn();  // TypeId(13)
+type "functype//closure_iflet_template_collision.wado/__cm_export__run" = fn();  // TypeId(13)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(14)
 
@@ -61,7 +61,7 @@ type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(26)
 
-type "functype//wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado//__Closure_2");  // TypeId(27)
+type "functype//closure_iflet_template_collision.wado/__Closure_2::__call" = fn(ref "closure_iflet_template_collision.wado//__Closure_2");  // TypeId(27)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(28)
 
@@ -83,31 +83,31 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
-global mut global:__const_obj_0: ref null "core:prelude/string.wado//String" = ref.null none;
+global mut global:closure_iflet_template_collision.wado::__modules_initialized: bool = 0;
+global mut global:closure_iflet_template_collision.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = ref.null none;
 
-fn "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "closure_iflet_template_collision.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__cm_export__run"() {
+fn "closure_iflet_template_collision.wado/__cm_export__run"() {
     let sql: ref "core:prelude/string.wado//String";
-    let f: ref "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado//__Closure_2";
+    let f: ref "closure_iflet_template_collision.wado//__Closure_2";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:closure_iflet_template_collision.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:closure_iflet_template_collision.wado::__modules_initialized = 1;
     };
     __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_2 @likely(global:closure_iflet_template_collision.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:closure_iflet_template_collision.wado::__modules_initialized = 1;
     };
     sql = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("select 1"), used: 8 };
-    f = struct.new "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado//__Closure_2" { __capture_0: sql };
-    "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__Closure_2::__call"(f);
+    f = struct.new "closure_iflet_template_collision.wado//__Closure_2" { __capture_0: sql };
+    "closure_iflet_template_collision.wado/__Closure_2::__call"(f);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
     "wasi/task-return"(0);
 }
@@ -136,7 +136,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "closure_iflet_template_collision.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -275,12 +275,12 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
     self.used = new_used;
 }
 
-fn "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__Closure_2::__call"(self) {
+fn "closure_iflet_template_collision.wado/__Closure_2::__call"(self) {
     let __local_3: ref "core:prelude/string.wado//String";
     __fused___inline_parse_0: block {
         if @unlikely(self.__capture_0.used == 0) {
-            global:__const_obj_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("empty"), used: 5 };
-            "core:rt/panic"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Parse error: "), used: 13 }); "core:prelude/string.wado/String::push_str"(__local_3, global:__const_obj_0); __local_3);
+            global:closure_iflet_template_collision.wado::__const_obj_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("empty"), used: 5 };
+            "core:rt/panic"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Parse error: "), used: 13 }); "core:prelude/string.wado/String::push_str"(__local_3, global:closure_iflet_template_collision.wado::__const_obj_0); __local_3);
             unreachable;
             break __fused___inline_parse_0;
         }
@@ -288,4 +288,4 @@ fn "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__Closure
     };
 }
 
-export fn "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__cm_export__run" as "run"
+export fn "closure_iflet_template_collision.wado/__cm_export__run" as "run"

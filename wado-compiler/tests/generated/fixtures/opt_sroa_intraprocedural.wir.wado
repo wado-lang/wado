@@ -130,7 +130,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:wado-compiler/tests/fixtures/opt_sroa_intraprocedural.wado::__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/opt_sroa_intraprocedural.wado/basic_sroa"() {
     return 30;
@@ -194,10 +194,10 @@ fn "wado-compiler/tests/fixtures/opt_sroa_intraprocedural.wado/run"() {
     let __local_29: ref "core:prelude/string.wado//String";
     let __local_30: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/opt_sroa_intraprocedural.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/opt_sroa_intraprocedural.wado::__modules_initialized = 1;
     };
     __v0_0 = "wado-compiler/tests/fixtures/opt_sroa_intraprocedural.wado/basic_sroa"();
     if @unlikely(__v0_0 != 30) {
@@ -262,10 +262,10 @@ condition: built.x + built.y == 20
 
 fn "wado-compiler/tests/fixtures/opt_sroa_intraprocedural.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/opt_sroa_intraprocedural.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/opt_sroa_intraprocedural.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/opt_sroa_intraprocedural.wado/run"();
     "wasi/task-return"(0);

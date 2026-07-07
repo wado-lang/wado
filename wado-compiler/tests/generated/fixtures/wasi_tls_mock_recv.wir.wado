@@ -16,18 +16,18 @@ struct tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:tls/typ
 
 struct wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado//__Closure_2 {  // TypeId(3)}
 
-struct core:prelude/slice.wado//ArrayIter<u8> {  // TypeId(4)
-    mut repr: ref Array<u8>,
-    mut index: i32,
-    mut end: i32,
-}
-
-struct core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>> {  // TypeId(5)
+struct core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>> {  // TypeId(4)
     mut __cm_packed: i32,
     mut __cm_outptr: i32,
     mut __cm_size: i32,
     mut __cm_align: i32,
     mut __cm_lift: ref struct,
+}
+
+struct core:prelude/slice.wado//ArrayIter<u8> {  // TypeId(5)
+    mut repr: ref Array<u8>,
+    mut index: i32,
+    mut end: i32,
 }
 
 struct core:prelude/slice.wado//ArraySlice<u8> {  // TypeId(6)
@@ -165,9 +165,9 @@ type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result
 
 type "functype//core:prelude/slice.wado/ArraySlice<u8>::to_array" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref Array<u8>;  // TypeId(60)
 
-type "functype//core:prelude/list.wado/List<u8>::grow_to" = fn(ref "core:prelude//List<u8>", i32);  // TypeId(61)
+type "functype//core:prelude/slice.wado/ArrayIter<u8>::collect" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> ref "core:prelude//List<u8>";  // TypeId(61)
 
-type "functype//core:prelude/slice.wado/ArrayIter<u8>::collect" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> ref "core:prelude//List<u8>";  // TypeId(62)
+type "functype//core:prelude/list.wado/List<u8>::grow_to" = fn(ref "core:prelude//List<u8>", i32);  // TypeId(62)
 
 type "functype//wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado//__Closure_2", i32) -> ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";  // TypeId(63)
 
@@ -203,7 +203,7 @@ import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado::__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/run"() with Stdout, Connector, Error {
     let conn: i32;
@@ -226,10 +226,10 @@ fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/run"() with Stdout, Con
     let bytes_36: ref "core:prelude/slice.wado//ArraySlice<u8>";
     let bytes_48: ref Array<u8>;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado::__modules_initialized = 1;
     };
     conn = "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Connector_new"();
     rx_22 = builtin::i32_wrap_i64(local.tee packed_21("wasi/stream-new"()));
@@ -346,10 +346,10 @@ fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_lift__Connector_co
 
 fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/run"();
     "wasi/task-return"(0);
@@ -785,6 +785,18 @@ fn "core:prelude/slice.wado/ArraySlice<u8>::to_array"(self) {
     return out;
 }
 
+fn "core:prelude/slice.wado/ArrayIter<u8>::collect"(self) {
+    let remaining: i32;
+    let repr_2: ref Array<u8>;
+    let a: i32;
+    repr_2 = builtin::array_new<u8>(local.tee remaining(a = self.end - self.index; select i32(a > 0, a, 0)));
+    if remaining > 0 {
+        builtin::array_copy<u8>(repr_2, 0, self.repr, self.index, remaining);
+    }
+    self.index = self.end;
+    return struct.new "core:prelude//List<u8>" { repr: repr_2, used: remaining };
+}
+
 fn "core:prelude/list.wado/List<u8>::grow_to"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
@@ -798,18 +810,6 @@ fn "core:prelude/list.wado/List<u8>::grow_to"(self, min_capacity) {
     new_repr = builtin::array_new<u8>(local.tee new_capacity(a_8 = capacity * 2; a_6 = select i32(a_8 > min_capacity, a_8, min_capacity); select i32(a_6 > 4, a_6, 4)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
-}
-
-fn "core:prelude/slice.wado/ArrayIter<u8>::collect"(self) {
-    let remaining: i32;
-    let repr_2: ref Array<u8>;
-    let a: i32;
-    repr_2 = builtin::array_new<u8>(local.tee remaining(a = self.end - self.index; select i32(a > 0, a, 0)));
-    if remaining > 0 {
-        builtin::array_copy<u8>(repr_2, 0, self.repr, self.index, remaining);
-    }
-    self.index = self.end;
-    return struct.new "core:prelude//List<u8>" { repr: repr_2, used: remaining };
 }
 
 fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__Closure_2::__call"(self, __outptr) {

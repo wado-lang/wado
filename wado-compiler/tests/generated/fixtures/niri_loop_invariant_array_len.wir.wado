@@ -101,7 +101,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:wado-compiler/tests/fixtures/niri_loop_invariant_array_len.wado::__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/niri_loop_invariant_array_len.wado/check_arr_len_loop_invariant"() {
     let acc: i32;
@@ -127,10 +127,10 @@ fn "wado-compiler/tests/fixtures/niri_loop_invariant_array_len.wado/run"() with 
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/niri_loop_invariant_array_len.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/niri_loop_invariant_array_len.wado::__modules_initialized = 1;
     };
     r = "wado-compiler/tests/fixtures/niri_loop_invariant_array_len.wado/check_arr_len_loop_invariant"();
     "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; "core:prelude/primitive.wado/i32::fmt_decimal"(r, __local_2); __local_1);
@@ -142,10 +142,10 @@ fn "wado-compiler/tests/fixtures/niri_loop_invariant_array_len.wado/__cm_binding
 
 fn "wado-compiler/tests/fixtures/niri_loop_invariant_array_len.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/niri_loop_invariant_array_len.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/niri_loop_invariant_array_len.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/niri_loop_invariant_array_len.wado/run"();
     "wasi/task-return"(0);

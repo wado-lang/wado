@@ -20,7 +20,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct wado-compiler/tests/fixtures/index_trait_multiple.wado//Point {  // TypeId(3)
+struct index_trait_multiple.wado//Point {  // TypeId(3)
     mut x: i32,
     mut y: i32,
 }
@@ -43,11 +43,11 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/index_trait_multiple.wado/run" = fn();  // TypeId(13)
+type "functype//index_trait_multiple.wado/run" = fn();  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/index_trait_multiple.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(14)
+type "functype//index_trait_multiple.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/index_trait_multiple.wado/__cm_export__run" = fn();  // TypeId(15)
+type "functype//index_trait_multiple.wado/__cm_export__run" = fn();  // TypeId(15)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(16)
 
@@ -79,7 +79,7 @@ type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelud
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(30)
 
-type "functype//wado-compiler/tests/fixtures/index_trait_multiple.wado/Point::move_by" = fn(ref "wado-compiler/tests/fixtures/index_trait_multiple.wado//Point", i32, i32);  // TypeId(31)
+type "functype//index_trait_multiple.wado/Point::move_by" = fn(ref "index_trait_multiple.wado//Point", i32, i32);  // TypeId(31)
 
 type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(32)
 
@@ -104,9 +104,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:index_trait_multiple.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/index_trait_multiple.wado/run"() with Stdout {
+fn "index_trait_multiple.wado/run"() with Stdout {
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let __local_6: ref "core:prelude/string.wado//String";
@@ -115,34 +115,34 @@ fn "wado-compiler/tests/fixtures/index_trait_multiple.wado/run"() with Stdout {
     let f_24: ref "core:prelude/format.wado//Formatter";
     let f_30: ref "core:prelude/format.wado//Formatter";
     let f_35: ref "core:prelude/format.wado//Formatter";
-    let __sroa_h2_point: ref "wado-compiler/tests/fixtures/index_trait_multiple.wado//Point";
-    let __sroa_h1_point: ref "wado-compiler/tests/fixtures/index_trait_multiple.wado//Point";
+    let __sroa_h2_point: ref "index_trait_multiple.wado//Point";
+    let __sroa_h1_point: ref "index_trait_multiple.wado//Point";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:index_trait_multiple.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:index_trait_multiple.wado::__modules_initialized = 1;
     };
-    __sroa_h1_point = struct.new "wado-compiler/tests/fixtures/index_trait_multiple.wado//Point" { x: 0, y: 0 };
-    __sroa_h2_point = struct.new "wado-compiler/tests/fixtures/index_trait_multiple.wado//Point" { x: 10, y: 10 };
-    "wado-compiler/tests/fixtures/index_trait_multiple.wado/Point::move_by"(__sroa_h1_point, 5, 5);
-    "wado-compiler/tests/fixtures/index_trait_multiple.wado/Point::move_by"(__sroa_h2_point, -3, -3);
+    __sroa_h1_point = struct.new "index_trait_multiple.wado//Point" { x: 0, y: 0 };
+    __sroa_h2_point = struct.new "index_trait_multiple.wado//Point" { x: 10, y: 10 };
+    "index_trait_multiple.wado/Point::move_by"(__sroa_h1_point, 5, 5);
+    "index_trait_multiple.wado/Point::move_by"(__sroa_h2_point, -3, -3);
     "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(40), used: 0 }; "core:prelude/string.wado/String::push"(__local_4, 104); "core:prelude/string.wado/String::push"(__local_4, 49); "core:prelude/string.wado/String::push"(__local_4, 58); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push"(__local_4, 40); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; f_19 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_h1_point.x, f_19); "core:prelude/string.wado/String::push"(__local_4, 44); "core:prelude/string.wado/String::push"(__local_4, 32); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; f_24 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_h1_point.y, f_24); "core:prelude/string.wado/String::push"(__local_4, 41); __local_4);
     "core:cli/println"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(40), used: 0 }; "core:prelude/string.wado/String::push"(__local_6, 104); "core:prelude/string.wado/String::push"(__local_6, 50); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 40); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; f_30 = __local_7; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_h2_point.x, f_30); "core:prelude/string.wado/String::push"(__local_6, 44); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; f_35 = __local_7; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_h2_point.y, f_35); "core:prelude/string.wado/String::push"(__local_6, 41); __local_6);
 }
 
-fn "wado-compiler/tests/fixtures/index_trait_multiple.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "index_trait_multiple.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/index_trait_multiple.wado/__cm_export__run"() {
+fn "index_trait_multiple.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:index_trait_multiple.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:index_trait_multiple.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/index_trait_multiple.wado/run"();
+    "index_trait_multiple.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -170,7 +170,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/index_trait_multiple.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "index_trait_multiple.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -365,7 +365,7 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     }
 }
 
-fn "wado-compiler/tests/fixtures/index_trait_multiple.wado/Point::move_by"(self, dx, dy) {
+fn "index_trait_multiple.wado/Point::move_by"(self, dx, dy) {
     self.x = self.x + dx;
     self.y = self.y + dy;
 }
@@ -465,4 +465,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/index_trait_multiple.wado/__cm_export__run" as "run"
+export fn "index_trait_multiple.wado/__cm_export__run" as "run"

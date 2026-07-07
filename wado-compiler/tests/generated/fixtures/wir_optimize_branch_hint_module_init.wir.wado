@@ -99,8 +99,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:SEED: i32 = 0;
-global mut global:__modules_initialized: bool = 0;
+global mut global:wado-compiler/tests/fixtures/wir_optimize_branch_hint_module_init.wado::SEED: i32 = 0;
+global mut global:wado-compiler/tests/fixtures/wir_optimize_branch_hint_module_init.wado::__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/wir_optimize_branch_hint_module_init.wado/compute_seed"() {
     return 41 + 1;
@@ -115,25 +115,25 @@ fn "wado-compiler/tests/fixtures/wir_optimize_branch_hint_module_init.wado/__cm_
     let __local_1: ref "core:prelude/format.wado//Formatter";
     let self_6: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/wir_optimize_branch_hint_module_init.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         "wado-compiler/tests/fixtures/wir_optimize_branch_hint_module_init.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/wir_optimize_branch_hint_module_init.wado::__modules_initialized = 1;
     };
     __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_2 @likely(global:wado-compiler/tests/fixtures/wir_optimize_branch_hint_module_init.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         "wado-compiler/tests/fixtures/wir_optimize_branch_hint_module_init.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/wir_optimize_branch_hint_module_init.wado::__modules_initialized = 1;
     };
-    "core:cli/println"(__local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_0 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_6(global:SEED), __local_1); __local_0);
+    "core:cli/println"(__local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_0 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_6(global:wado-compiler/tests/fixtures/wir_optimize_branch_hint_module_init.wado::SEED), __local_1); __local_0);
     "wasi/task-return"(0);
 }
 
 fn "wado-compiler/tests/fixtures/wir_optimize_branch_hint_module_init.wado/__initialize_module"() {
-    global:SEED = "wado-compiler/tests/fixtures/wir_optimize_branch_hint_module_init.wado/compute_seed"();
+    global:wado-compiler/tests/fixtures/wir_optimize_branch_hint_module_init.wado::SEED = "wado-compiler/tests/fixtures/wir_optimize_branch_hint_module_init.wado/compute_seed"();
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {

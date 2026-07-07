@@ -87,7 +87,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:wado-compiler/tests/fixtures/variant_struct_concat_module.wado::__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/variant_struct_concat_module.wado/format_str"(s, opts) {
     let pad: ref "core:prelude/string.wado//String";
@@ -106,10 +106,10 @@ fn "wado-compiler/tests/fixtures/variant_struct_concat_module.wado/run"() with S
     let s: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/variant_struct_concat_module.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/variant_struct_concat_module.wado::__modules_initialized = 1;
     };
     opts = struct.new "wado-compiler/tests/fixtures/variant_struct_concat_module.wado//Opts" { align: struct.new "wado-compiler/tests/fixtures/variant_struct_concat_module.wado//Align" { 1 }, width: 0 };
     s = "wado-compiler/tests/fixtures/variant_struct_concat_module.wado/format_str"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 }, opts);
@@ -122,10 +122,10 @@ fn "wado-compiler/tests/fixtures/variant_struct_concat_module.wado/__cm_binding_
 
 fn "wado-compiler/tests/fixtures/variant_struct_concat_module.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/variant_struct_concat_module.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/variant_struct_concat_module.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/variant_struct_concat_module.wado/run"();
     "wasi/task-return"(0);

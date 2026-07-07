@@ -98,7 +98,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado::__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado/check_char"(arr, pos, ch) {
     if (if pos >= arr.used -> i32 {
@@ -126,10 +126,10 @@ fn "wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado/run"() w
     let self_39: bool;
     let self_45: bool;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado::__modules_initialized = 1;
     };
     __b = struct.new "core:prelude//List<char>" { repr: array.new_fixed<char>(104, 101, 108, 108, 111), used: 5 };
     "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; self_27 = "wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado/check_char"(__b, 0, 104); "core:prelude/format.wado/Formatter::pad"(__local_3, (if self_27 -> ref "core:prelude/string.wado//String" {
@@ -160,10 +160,10 @@ fn "wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado/__cm_bin
 
 fn "wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado/run"();
     "wasi/task-return"(0);

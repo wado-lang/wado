@@ -122,7 +122,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:wado-compiler/tests/fixtures/opt_hfs_stores_ref_sync.wado::__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/opt_hfs_stores_ref_sync.wado/store_ref"(c) {
     return struct.new "wado-compiler/tests/fixtures/opt_hfs_stores_ref_sync.wado//Holder" { c: c };
@@ -147,10 +147,10 @@ fn "wado-compiler/tests/fixtures/opt_hfs_stores_ref_sync.wado/run"() {
     let __local_15: ref "core:prelude/format.wado//Formatter";
     let __hfs_x_16: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/opt_hfs_stores_ref_sync.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/opt_hfs_stores_ref_sync.wado::__modules_initialized = 1;
     };
     c = struct.new "wado-compiler/tests/fixtures/opt_hfs_stores_ref_sync.wado//Counter" { x: 0, y: 0 };
     total = 0;
@@ -196,10 +196,10 @@ condition: c.y == 50
 
 fn "wado-compiler/tests/fixtures/opt_hfs_stores_ref_sync.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/opt_hfs_stores_ref_sync.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/opt_hfs_stores_ref_sync.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/opt_hfs_stores_ref_sync.wado/run"();
     "wasi/task-return"(0);

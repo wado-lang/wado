@@ -160,9 +160,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
-global global:__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(98)), used: 1 };
-global global:__const_obj_1: ref null "core:prelude//List<u8>" = struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(array.new_fixed<u8>(65, 66, 67, 130)), used: 4 };
+global mut global:wado-compiler/tests/fixtures/ref_2.wado::__modules_initialized: bool = 0;
+global global:wado-compiler/tests/fixtures/ref_2.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(98)), used: 1 };
+global global:wado-compiler/tests/fixtures/ref_2.wado::__const_obj_1: ref null "core:prelude//List<u8>" = struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(array.new_fixed<u8>(65, 66, 67, 130)), used: 4 };
 
 fn "wado-compiler/tests/fixtures/ref_2.wado/double_all"(arr) {
     let i: i32;
@@ -339,8 +339,8 @@ fn "wado-compiler/tests/fixtures/ref_2.wado/ref_mut_string"() with Stdout {
     "wado-compiler/tests/fixtures/ref_2.wado/append_world"(msg);
     "core:cli/println"(msg);
     s_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
-    "core:prelude/string.wado/String::push_str"(s_1, global:__const_obj_0);
-    "core:prelude/string.wado/String::push_str"(s_1, global:__const_obj_0);
+    "core:prelude/string.wado/String::push_str"(s_1, global:wado-compiler/tests/fixtures/ref_2.wado::__const_obj_0);
+    "core:prelude/string.wado/String::push_str"(s_1, global:wado-compiler/tests/fixtures/ref_2.wado::__const_obj_0);
     "core:cli/println"(s_1);
 }
 
@@ -429,7 +429,7 @@ fn "wado-compiler/tests/fixtures/ref_2.wado/ref_mut_array_append_complex_test"()
     let _licm_used_44: i32;
     let _licm_repr_45: ref Array<u8>;
     __b_0 = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
-    "wado-compiler/tests/fixtures/ref_2.wado/process"(__b_0, global:__const_obj_1, 4);
+    "wado-compiler/tests/fixtures/ref_2.wado/process"(__b_0, global:wado-compiler/tests/fixtures/ref_2.wado::__const_obj_1, 4);
     "core:cli/println"(__local_5_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }; "core:prelude/string.wado/String::push"(__local_5_5, 108); "core:prelude/string.wado/String::push"(__local_5_5, 101); "core:prelude/string.wado/String::push"(__local_5_5, 110); "core:prelude/string.wado/String::push"(__local_5_5, 58); "core:prelude/string.wado/String::push"(__local_5_5, 32); __local_6_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5_5 }; "core:prelude/primitive.wado/i32::fmt_decimal"(__b_0.used, __local_6_6); __local_5_5);
     i = 0;
     _licm_used_44 = __b_0.used;
@@ -450,16 +450,16 @@ fn "wado-compiler/tests/fixtures/ref_2.wado/__cm_binding__Stdout_write_via_strea
 
 fn "wado-compiler/tests/fixtures/ref_2.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/ref_2.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/ref_2.wado::__modules_initialized = 1;
     };
     __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_2 @likely(global:wado-compiler/tests/fixtures/ref_2.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/ref_2.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/ref_2.wado/ref_mut_array_ops"();
     "wado-compiler/tests/fixtures/ref_2.wado/ref_mut_string"();

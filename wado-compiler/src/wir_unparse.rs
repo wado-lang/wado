@@ -12,11 +12,26 @@ use crate::wir::{
 
 /// Unparse a `WirPackage` into pseudo-Wado source code.
 ///
-/// `cwd` is the current working directory used to shorten entry-point paths.
-pub fn unparse_wir(module: &WirPackage, _cwd: Option<&str>) -> String {
+/// Symbol names embed the entry module's identity, which for an entry point is
+/// the filesystem path it was compiled from — absolute under the test harness,
+/// relative on the CLI. `entry_path` is that path; every occurrence is reduced
+/// to its final component so the rendered WIR is stable across invocations and
+/// machines. Functions, globals, and types all carry the same prefix, so a
+/// single substitution normalizes them together.
+pub fn unparse_wir(module: &WirPackage, entry_path: Option<&str>) -> String {
     let mut unparser = WirUnparser::new(&module.types, &module.data);
     unparser.unparse(module);
-    unparser.output
+    match entry_path {
+        Some(path) => {
+            let basename = path.rsplit(['/', '\\']).next().unwrap_or(path);
+            if basename == path {
+                unparser.output
+            } else {
+                unparser.output.replace(path, basename)
+            }
+        }
+        None => unparser.output,
+    }
 }
 
 /// Kind of a block-like construct for branch target resolution.

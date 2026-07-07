@@ -144,7 +144,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:wado-compiler/tests/fixtures/wasi_tls_mock_error.wado::__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/wasi_tls_mock_error.wado/run"() with Stdout, Connector, Error {
     let conn: i32;
@@ -158,10 +158,10 @@ fn "wado-compiler/tests/fixtures/wasi_tls_mock_error.wado/run"() with Stdout, Co
     let rx_20: i32;
     let tx_21: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/wasi_tls_mock_error.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/wasi_tls_mock_error.wado::__modules_initialized = 1;
     };
     conn = "wado-compiler/tests/fixtures/wasi_tls_mock_error.wado/__cm_binding__Connector_new"();
     rx_17 = builtin::i32_wrap_i64(local.tee packed_16("wasi/stream-new"()));
@@ -251,10 +251,10 @@ fn "wado-compiler/tests/fixtures/wasi_tls_mock_error.wado/__cm_lift__Connector_c
 
 fn "wado-compiler/tests/fixtures/wasi_tls_mock_error.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/wasi_tls_mock_error.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/wasi_tls_mock_error.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/wasi_tls_mock_error.wado/run"();
     "wasi/task-return"(0);

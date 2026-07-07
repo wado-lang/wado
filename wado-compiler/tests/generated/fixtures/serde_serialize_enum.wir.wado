@@ -90,17 +90,17 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:wado-compiler/tests/fixtures/serde_serialize_enum.wado::__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/serde_serialize_enum.wado/run"() with Stdout {
     let ser: ref "wado-compiler/tests/fixtures/serde_serialize_enum.wado//JsonSerializer";
     let c: "wado-compiler/tests/fixtures/serde_serialize_enum.wado//enum:Color";
     let c2: "wado-compiler/tests/fixtures/serde_serialize_enum.wado//enum:Color";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/serde_serialize_enum.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/serde_serialize_enum.wado::__modules_initialized = 1;
     };
     ser = struct.new "wado-compiler/tests/fixtures/serde_serialize_enum.wado//JsonSerializer" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
     drop("wado-compiler/tests/fixtures/serde_serialize_enum.wado/Color^Serialize::serialize<wado-compiler/tests/fixtures/serde_serialize_enum.wado/JsonSerializer>"(struct.new "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/serde_serialize_enum.wado/Color>" { value: local.tee c(0) }, ser));
@@ -116,10 +116,10 @@ fn "wado-compiler/tests/fixtures/serde_serialize_enum.wado/__cm_binding__Stdout_
 
 fn "wado-compiler/tests/fixtures/serde_serialize_enum.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/serde_serialize_enum.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/serde_serialize_enum.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/serde_serialize_enum.wado/run"();
     "wasi/task-return"(0);

@@ -249,17 +249,17 @@ type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  //
 
 type "functype//wasi/wasi:http/Response::set_status_code" = fn(i32, i32) -> i32;  // TypeId(48)
 
-type "functype//wado-compiler/tests/fixtures/httpbin_server_404.wado/handle" = fn(i32);  // TypeId(49)
+type "functype//httpbin_server_404.wado/handle" = fn(i32);  // TypeId(49)
 
-type "functype//wado-compiler/tests/fixtures/httpbin_server_404.wado/__cm_binding__Request_get_path_with_query" = fn(i32) -> ref null "core:prelude/string.wado//String";  // TypeId(50)
+type "functype//httpbin_server_404.wado/__cm_binding__Request_get_path_with_query" = fn(i32) -> ref null "core:prelude/string.wado//String";  // TypeId(50)
 
-type "functype//wado-compiler/tests/fixtures/httpbin_server_404.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(51)
+type "functype//httpbin_server_404.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(51)
 
-type "functype//wado-compiler/tests/fixtures/httpbin_server_404.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(52)
+type "functype//httpbin_server_404.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(52)
 
-type "functype//wado-compiler/tests/fixtures/httpbin_server_404.wado/__cm_binding__Response_set_status_code" = fn(i32, i32) -> ref "core:prelude/types.wado//Result<(),()>";  // TypeId(53)
+type "functype//httpbin_server_404.wado/__cm_binding__Response_set_status_code" = fn(i32, i32) -> ref "core:prelude/types.wado//Result<(),()>";  // TypeId(53)
 
-type "functype//wado-compiler/tests/fixtures/httpbin_server_404.wado/__cm_export__handle" = fn(i32);  // TypeId(54)
+type "functype//httpbin_server_404.wado/__cm_export__handle" = fn(i32);  // TypeId(54)
 
 type "functype//core:rt/memory_to_gc_array" = fn(i32, i32) -> ref Array<u8>;  // TypeId(55)
 
@@ -318,9 +318,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-write from "wasi/future-write";
 import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:httpbin_server_404.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/httpbin_server_404.wado/handle"(request) {
+fn "httpbin_server_404.wado/handle"(request) {
     let path: ref null "core:prelude/string.wado//String";
     let body_str: ref "core:prelude/string.wado//String";
     let status: u16;
@@ -457,12 +457,12 @@ fn "wado-compiler/tests/fixtures/httpbin_server_404.wado/handle"(request) {
     let rx_170: i32;
     let tx_171: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:httpbin_server_404.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:httpbin_server_404.wado::__modules_initialized = 1;
     };
-    path = "wado-compiler/tests/fixtures/httpbin_server_404.wado/__cm_binding__Request_get_path_with_query"(request);
+    path = "httpbin_server_404.wado/__cm_binding__Request_get_path_with_query"(request);
     if ref.is_null(path) == 0 {
         p = ref.as_non_null(path);
         if "core:prelude/string.wado/String^Eq::eq"(p, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(47), used: 1 }) {
@@ -483,8 +483,8 @@ fn "wado-compiler/tests/fixtures/httpbin_server_404.wado/handle"(request) {
     tx_168 = builtin::i32_wrap_i64(packed_166 >> 32_i64);
     rx_170 = builtin::i32_wrap_i64(local.tee packed_169("wasi/stream-new"()));
     tx_171 = builtin::i32_wrap_i64(packed_169 >> 32_i64);
-    __pattern_temp_2 = "wado-compiler/tests/fixtures/httpbin_server_404.wado/__cm_binding__Response_new"(local.tee headers("wado-compiler/tests/fixtures/httpbin_server_404.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: rx_170 }, rx_167);
-    drop("wado-compiler/tests/fixtures/httpbin_server_404.wado/__cm_binding__Response_set_status_code"(local.tee response(__pattern_temp_2.0), status));
+    __pattern_temp_2 = "httpbin_server_404.wado/__cm_binding__Response_new"(local.tee headers("httpbin_server_404.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: rx_170 }, rx_167);
+    drop("httpbin_server_404.wado/__cm_binding__Response_set_status_code"(local.tee response(__pattern_temp_2.0), status));
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __tv_1 = 0;
     __tv_2 = 0;
@@ -798,7 +798,7 @@ fn "wado-compiler/tests/fixtures/httpbin_server_404.wado/handle"(request) {
     "wasi/resource-drop:request"(request);
 }
 
-fn "wado-compiler/tests/fixtures/httpbin_server_404.wado/__cm_binding__Request_get_path_with_query"(self) with Request {
+fn "httpbin_server_404.wado/__cm_binding__Request_get_path_with_query"(self) with Request {
     let __outptr: i32;
     let __disc: i32;
     let __option_result: ref null "core:prelude/string.wado//String";
@@ -817,11 +817,11 @@ fn "wado-compiler/tests/fixtures/httpbin_server_404.wado/__cm_binding__Request_g
     return __option_result;
 }
 
-fn "wado-compiler/tests/fixtures/httpbin_server_404.wado/__cm_binding__Fields_new"() with Fields {
+fn "httpbin_server_404.wado/__cm_binding__Fields_new"() with Fields {
     return "wasi/wasi:http/Fields::new"();
 }
 
-fn "wado-compiler/tests/fixtures/httpbin_server_404.wado/__cm_binding__Response_new"(headers, contents, trailers) with Response {
+fn "httpbin_server_404.wado/__cm_binding__Response_new"(headers, contents, trailers) with Response {
     let __contents_disc: i32;
     let __contents_inner0: i32;
     let __local_6: i32;
@@ -842,7 +842,7 @@ fn "wado-compiler/tests/fixtures/httpbin_server_404.wado/__cm_binding__Response_
     return struct.new "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_8, 1: __lifted_result_9 };
 }
 
-fn "wado-compiler/tests/fixtures/httpbin_server_404.wado/__cm_binding__Response_set_status_code"(self, status_code) with Response {
+fn "httpbin_server_404.wado/__cm_binding__Response_set_status_code"(self, status_code) with Response {
     let __disc: i32;
     let __result_val: ref "core:prelude/types.wado//Result<(),()>";
     __disc = "wasi/wasi:http/Response::set_status_code"(self, status_code);
@@ -855,14 +855,14 @@ fn "wado-compiler/tests/fixtures/httpbin_server_404.wado/__cm_binding__Response_
     return __result_val;
 }
 
-fn "wado-compiler/tests/fixtures/httpbin_server_404.wado/__cm_export__handle"(request) {
+fn "httpbin_server_404.wado/__cm_export__handle"(request) {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:httpbin_server_404.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:httpbin_server_404.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/httpbin_server_404.wado/handle"(request);
+    "httpbin_server_404.wado/handle"(request);
 }
 
 fn "core:rt/memory_to_gc_array"(ptr, len) {
@@ -1034,4 +1034,4 @@ fn "core:prelude/list.wado/List<u8>::grow"(self) {
     self.repr = new_repr;
 }
 
-export fn "wado-compiler/tests/fixtures/httpbin_server_404.wado/__cm_export__handle" as "handle"
+export fn "httpbin_server_404.wado/__cm_export__handle" as "handle"

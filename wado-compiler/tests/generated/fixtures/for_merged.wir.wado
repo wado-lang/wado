@@ -61,21 +61,21 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(15)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/for_merged.wado/__test_0_c_style_loop" = fn();  // TypeId(17)
+type "functype//for_merged.wado/__test_0_c_style_loop" = fn();  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/for_merged.wado/__test_1_break" = fn();  // TypeId(18)
+type "functype//for_merged.wado/__test_1_break" = fn();  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/for_merged.wado/__test_2_continue" = fn();  // TypeId(19)
+type "functype//for_merged.wado/__test_2_continue" = fn();  // TypeId(19)
 
-type "functype//wado-compiler/tests/fixtures/for_merged.wado/__test_3_for_let_pattern" = fn();  // TypeId(20)
+type "functype//for_merged.wado/__test_3_for_let_pattern" = fn();  // TypeId(20)
 
-type "functype//wado-compiler/tests/fixtures/for_merged.wado/__cm_export____test_0_c_style_loop" = fn();  // TypeId(21)
+type "functype//for_merged.wado/__cm_export____test_0_c_style_loop" = fn();  // TypeId(21)
 
-type "functype//wado-compiler/tests/fixtures/for_merged.wado/__cm_export____test_1_break" = fn();  // TypeId(22)
+type "functype//for_merged.wado/__cm_export____test_1_break" = fn();  // TypeId(22)
 
-type "functype//wado-compiler/tests/fixtures/for_merged.wado/__cm_export____test_2_continue" = fn();  // TypeId(23)
+type "functype//for_merged.wado/__cm_export____test_2_continue" = fn();  // TypeId(23)
 
-type "functype//wado-compiler/tests/fixtures/for_merged.wado/__cm_export____test_3_for_let_pattern" = fn();  // TypeId(24)
+type "functype//for_merged.wado/__cm_export____test_3_for_let_pattern" = fn();  // TypeId(24)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(25)
 
@@ -142,9 +142,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:for_merged.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/for_merged.wado/__test_0_c_style_loop"() {
+fn "for_merged.wado/__test_0_c_style_loop"() {
     let count: i32;
     let i: i32;
     let __local_4: ref "core:prelude/string.wado//String";
@@ -161,14 +161,14 @@ fn "wado-compiler/tests/fixtures/for_merged.wado/__test_0_c_style_loop"() {
     };
     if @unlikely(count != 3) {
         cold_path;
-        "core:rt/panic"(__local_4 = "core:prelude/string.wado/String::with_capacity"(120); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_c_style_loop"), used: 21 }); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push"(__local_4, 97); "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/for_merged.wado"), used: 44 }); "core:prelude/string.wado/String::push"(__local_4, 58); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 6 }, __local_5); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_4 = "core:prelude/string.wado/String::with_capacity"(120); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_c_style_loop"), used: 21 }); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push"(__local_4, 97); "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("for_merged.wado"), used: 44 }); "core:prelude/string.wado/String::push"(__local_4, 58); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 6 }, __local_5); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: count == 3
 "), used: 23 }); "core:prelude/string.wado/String::push"(__local_4, 99); "core:prelude/string.wado/String::push"(__local_4, 111); "core:prelude/string.wado/String::push"(__local_4, 117); "core:prelude/string.wado/String::push"(__local_4, 110); "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 58); "core:prelude/string.wado/String::push"(__local_4, 32); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: count }, __local_5); "core:prelude/string.wado/String::push"(__local_4, 10); __local_4);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/for_merged.wado/__test_1_break"() {
+fn "for_merged.wado/__test_1_break"() {
     let count: i32;
     let i: i32;
     let __local_4: ref "core:prelude/string.wado//String";
@@ -186,14 +186,14 @@ fn "wado-compiler/tests/fixtures/for_merged.wado/__test_1_break"() {
     };
     if @unlikely(count != 3) {
         cold_path;
-        "core:rt/panic"(__local_4 = "core:prelude/string.wado/String::with_capacity"(120); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_break"), used: 14 }); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push"(__local_4, 97); "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/for_merged.wado"), used: 44 }); "core:prelude/string.wado/String::push"(__local_4, 58); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 17 }, __local_5); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_4 = "core:prelude/string.wado/String::with_capacity"(120); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_break"), used: 14 }); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push"(__local_4, 97); "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("for_merged.wado"), used: 44 }); "core:prelude/string.wado/String::push"(__local_4, 58); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 17 }, __local_5); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: count == 3
 "), used: 23 }); "core:prelude/string.wado/String::push"(__local_4, 99); "core:prelude/string.wado/String::push"(__local_4, 111); "core:prelude/string.wado/String::push"(__local_4, 117); "core:prelude/string.wado/String::push"(__local_4, 110); "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 58); "core:prelude/string.wado/String::push"(__local_4, 32); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: count }, __local_5); "core:prelude/string.wado/String::push"(__local_4, 10); __local_4);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/for_merged.wado/__test_2_continue"() {
+fn "for_merged.wado/__test_2_continue"() {
     let sum: i32;
     let i: i32;
     let __local_7: ref "core:prelude/string.wado//String";
@@ -213,14 +213,14 @@ fn "wado-compiler/tests/fixtures/for_merged.wado/__test_2_continue"() {
     };
     if @unlikely(sum != 8) {
         cold_path;
-        "core:rt/panic"(__local_7 = "core:prelude/string.wado/String::with_capacity"(212); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_2_continue"), used: 17 }); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push"(__local_7, 97); "core:prelude/string.wado/String::push"(__local_7, 116); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/for_merged.wado"), used: 44 }); "core:prelude/string.wado/String::push"(__local_7, 58); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 28 }, __local_8); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_7 = "core:prelude/string.wado/String::with_capacity"(212); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_2_continue"), used: 17 }); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push"(__local_7, 97); "core:prelude/string.wado/String::push"(__local_7, 116); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("for_merged.wado"), used: 44 }); "core:prelude/string.wado/String::push"(__local_7, 58); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 28 }, __local_8); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: sum == 0 + 1 + 3 + 4
 "), used: 33 }); "core:prelude/string.wado/String::push"(__local_7, 115); "core:prelude/string.wado/String::push"(__local_7, 117); "core:prelude/string.wado/String::push"(__local_7, 109); "core:prelude/string.wado/String::push"(__local_7, 58); "core:prelude/string.wado/String::push"(__local_7, 32); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: sum }, __local_8); "core:prelude/string.wado/String::push"(__local_7, 10); "core:prelude/string.wado/String::push"(__local_7, 48); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push"(__local_7, 43); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push"(__local_7, 49); "core:prelude/string.wado/String::push"(__local_7, 58); "core:prelude/string.wado/String::push"(__local_7, 32); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: 1 }, __local_8); "core:prelude/string.wado/String::push"(__local_7, 10); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("0 + 1 + 3: "), used: 11 }); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: 4 }, __local_8); "core:prelude/string.wado/String::push"(__local_7, 10); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("0 + 1 + 3 + 4: "), used: 15 }); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: 8 }, __local_8); "core:prelude/string.wado/String::push"(__local_7, 10); __local_7);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/for_merged.wado/__test_3_for_let_pattern"() {
+fn "for_merged.wado/__test_3_for_let_pattern"() {
     let __b: ref "core:prelude//List<i32>";
     let iter: ref "core:prelude/slice.wado//ArrayIter<i32>";
     let count: i32;
@@ -253,61 +253,61 @@ fn "wado-compiler/tests/fixtures/for_merged.wado/__test_3_for_let_pattern"() {
     };
     if @unlikely(count != 3) {
         cold_path;
-        "core:rt/panic"(__local_10 = "core:prelude/string.wado/String::with_capacity"(120); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_3_for_let_pattern"), used: 24 }); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push"(__local_10, 97); "core:prelude/string.wado/String::push"(__local_10, 116); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/for_merged.wado"), used: 44 }); "core:prelude/string.wado/String::push"(__local_10, 58); __local_11 = "core:prelude/format.wado/Formatter::new"(__local_10); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 39 }, __local_11); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_10 = "core:prelude/string.wado/String::with_capacity"(120); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_3_for_let_pattern"), used: 24 }); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push"(__local_10, 97); "core:prelude/string.wado/String::push"(__local_10, 116); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("for_merged.wado"), used: 44 }); "core:prelude/string.wado/String::push"(__local_10, 58); __local_11 = "core:prelude/format.wado/Formatter::new"(__local_10); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 39 }, __local_11); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: count == 3
 "), used: 23 }); "core:prelude/string.wado/String::push"(__local_10, 99); "core:prelude/string.wado/String::push"(__local_10, 111); "core:prelude/string.wado/String::push"(__local_10, 117); "core:prelude/string.wado/String::push"(__local_10, 110); "core:prelude/string.wado/String::push"(__local_10, 116); "core:prelude/string.wado/String::push"(__local_10, 58); "core:prelude/string.wado/String::push"(__local_10, 32); __local_11 = "core:prelude/format.wado/Formatter::new"(__local_10); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: count }, __local_11); "core:prelude/string.wado/String::push"(__local_10, 10); __local_10);
         unreachable;
     }
     if @unlikely(sum != 60) {
         cold_path;
-        "core:rt/panic"(__local_12 = "core:prelude/string.wado/String::with_capacity"(117); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_3_for_let_pattern"), used: 24 }); "core:prelude/string.wado/String::push"(__local_12, 32); "core:prelude/string.wado/String::push"(__local_12, 97); "core:prelude/string.wado/String::push"(__local_12, 116); "core:prelude/string.wado/String::push"(__local_12, 32); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/for_merged.wado"), used: 44 }); "core:prelude/string.wado/String::push"(__local_12, 58); __local_13 = "core:prelude/format.wado/Formatter::new"(__local_12); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 40 }, __local_13); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_12 = "core:prelude/string.wado/String::with_capacity"(117); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_3_for_let_pattern"), used: 24 }); "core:prelude/string.wado/String::push"(__local_12, 32); "core:prelude/string.wado/String::push"(__local_12, 97); "core:prelude/string.wado/String::push"(__local_12, 116); "core:prelude/string.wado/String::push"(__local_12, 32); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("for_merged.wado"), used: 44 }); "core:prelude/string.wado/String::push"(__local_12, 58); __local_13 = "core:prelude/format.wado/Formatter::new"(__local_12); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 40 }, __local_13); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: sum == 60
 "), used: 22 }); "core:prelude/string.wado/String::push"(__local_12, 115); "core:prelude/string.wado/String::push"(__local_12, 117); "core:prelude/string.wado/String::push"(__local_12, 109); "core:prelude/string.wado/String::push"(__local_12, 58); "core:prelude/string.wado/String::push"(__local_12, 32); __local_13 = "core:prelude/format.wado/Formatter::new"(__local_12); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: sum }, __local_13); "core:prelude/string.wado/String::push"(__local_12, 10); __local_12);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/for_merged.wado/__cm_export____test_0_c_style_loop"() {
+fn "for_merged.wado/__cm_export____test_0_c_style_loop"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:for_merged.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:for_merged.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/for_merged.wado/__test_0_c_style_loop"();
+    "for_merged.wado/__test_0_c_style_loop"();
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/for_merged.wado/__cm_export____test_1_break"() {
+fn "for_merged.wado/__cm_export____test_1_break"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:for_merged.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:for_merged.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/for_merged.wado/__test_1_break"();
+    "for_merged.wado/__test_1_break"();
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/for_merged.wado/__cm_export____test_2_continue"() {
+fn "for_merged.wado/__cm_export____test_2_continue"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:for_merged.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:for_merged.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/for_merged.wado/__test_2_continue"();
+    "for_merged.wado/__test_2_continue"();
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/for_merged.wado/__cm_export____test_3_for_let_pattern"() {
+fn "for_merged.wado/__cm_export____test_3_for_let_pattern"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:for_merged.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:for_merged.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/for_merged.wado/__test_3_for_let_pattern"();
+    "for_merged.wado/__test_3_for_let_pattern"();
     "wasi/task-return"(0);
 }
 
@@ -656,7 +656,7 @@ fn "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self) {
     return 0, item;
 }
 
-export fn "wado-compiler/tests/fixtures/for_merged.wado/__cm_export____test_0_c_style_loop" as "__test_0_c_style_loop"
-export fn "wado-compiler/tests/fixtures/for_merged.wado/__cm_export____test_1_break" as "__test_1_break"
-export fn "wado-compiler/tests/fixtures/for_merged.wado/__cm_export____test_2_continue" as "__test_2_continue"
-export fn "wado-compiler/tests/fixtures/for_merged.wado/__cm_export____test_3_for_let_pattern" as "__test_3_for_let_pattern"
+export fn "for_merged.wado/__cm_export____test_0_c_style_loop" as "__test_0_c_style_loop"
+export fn "for_merged.wado/__cm_export____test_1_break" as "__test_1_break"
+export fn "for_merged.wado/__cm_export____test_2_continue" as "__test_2_continue"
+export fn "for_merged.wado/__cm_export____test_3_for_let_pattern" as "__test_3_for_let_pattern"

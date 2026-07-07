@@ -71,16 +71,16 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:wado-compiler/tests/fixtures/monotonic_clock_now.wado::__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/monotonic_clock_now.wado/run"() with Stdout, MonotonicClock {
     let t1: u64;
     let t2: u64;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/monotonic_clock_now.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/monotonic_clock_now.wado::__modules_initialized = 1;
     };
     t1 = "wado-compiler/tests/fixtures/monotonic_clock_now.wado/__cm_binding__MonotonicClock_now"();
     t2 = "wado-compiler/tests/fixtures/monotonic_clock_now.wado/__cm_binding__MonotonicClock_now"();
@@ -101,10 +101,10 @@ fn "wado-compiler/tests/fixtures/monotonic_clock_now.wado/__cm_binding__Monotoni
 
 fn "wado-compiler/tests/fixtures/monotonic_clock_now.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/monotonic_clock_now.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/monotonic_clock_now.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/monotonic_clock_now.wado/run"();
     "wasi/task-return"(0);

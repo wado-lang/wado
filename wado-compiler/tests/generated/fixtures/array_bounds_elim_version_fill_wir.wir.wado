@@ -51,13 +51,13 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/array_bounds_elim_version_fill_wir.wado/fill_and_sum" = fn(ref "core:prelude//List<i32>", i32) -> i32;  // TypeId(16)
+type "functype//array_bounds_elim_version_fill_wir.wado/fill_and_sum" = fn(ref "core:prelude//List<i32>", i32) -> i32;  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/array_bounds_elim_version_fill_wir.wado/run" = fn();  // TypeId(17)
+type "functype//array_bounds_elim_version_fill_wir.wado/run" = fn();  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/array_bounds_elim_version_fill_wir.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(18)
+type "functype//array_bounds_elim_version_fill_wir.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/array_bounds_elim_version_fill_wir.wado/__cm_export__run" = fn();  // TypeId(19)
+type "functype//array_bounds_elim_version_fill_wir.wado/__cm_export__run" = fn();  // TypeId(19)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(20)
 
@@ -127,9 +127,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:array_bounds_elim_version_fill_wir.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/array_bounds_elim_version_fill_wir.wado/fill_and_sum"(xs, limit) {
+fn "array_bounds_elim_version_fill_wir.wado/fill_and_sum"(xs, limit) {
     let i: i32;
     let sum: i32;
     let n: i32;
@@ -201,36 +201,36 @@ condition: index < self.used
     return sum;
 }
 
-fn "wado-compiler/tests/fixtures/array_bounds_elim_version_fill_wir.wado/run"() with Stdout {
+fn "array_bounds_elim_version_fill_wir.wado/run"() with Stdout {
     let xs: ref "core:prelude//List<i32>";
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     let repr: ref Array<i32>;
     let self_10: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:array_bounds_elim_version_fill_wir.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:array_bounds_elim_version_fill_wir.wado::__modules_initialized = 1;
     };
     repr = builtin::array_new<i32>(11);
     builtin::array_fill<i32>(repr, 0, 0, 11);
     xs = struct.new "core:prelude//List<i32>" { repr: repr, used: 11 };
-    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_10("wado-compiler/tests/fixtures/array_bounds_elim_version_fill_wir.wado/fill_and_sum"(xs, 10)), __local_2); __local_1);
+    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_10("array_bounds_elim_version_fill_wir.wado/fill_and_sum"(xs, 10)), __local_2); __local_1);
 }
 
-fn "wado-compiler/tests/fixtures/array_bounds_elim_version_fill_wir.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "array_bounds_elim_version_fill_wir.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/array_bounds_elim_version_fill_wir.wado/__cm_export__run"() {
+fn "array_bounds_elim_version_fill_wir.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:array_bounds_elim_version_fill_wir.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:array_bounds_elim_version_fill_wir.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/array_bounds_elim_version_fill_wir.wado/run"();
+    "array_bounds_elim_version_fill_wir.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -258,7 +258,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/array_bounds_elim_version_fill_wir.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "array_bounds_elim_version_fill_wir.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -598,4 +598,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/array_bounds_elim_version_fill_wir.wado/__cm_export__run" as "run"
+export fn "array_bounds_elim_version_fill_wir.wado/__cm_export__run" as "run"

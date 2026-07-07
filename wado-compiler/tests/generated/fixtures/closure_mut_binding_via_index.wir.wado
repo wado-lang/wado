@@ -24,11 +24,11 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado//__Closure_3 {  // TypeId(4)
+struct closure_mut_binding_via_index.wado//__Closure_3 {  // TypeId(4)
     mut __capture_0: ref "core:prelude/types.wado//Box<i32>",
 }
 
-struct wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado//__Closure_2 {  // TypeId(5)
+struct closure_mut_binding_via_index.wado//__Closure_2 {  // TypeId(5)
     mut __capture_0: ref "core:prelude/types.wado//Box<i32>",
 }
 
@@ -57,13 +57,13 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(15)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado/__test_0_index__let_mut_allows_fn_mut_call" = fn();  // TypeId(17)
+type "functype//closure_mut_binding_via_index.wado/__test_0_index__let_mut_allows_fn_mut_call" = fn();  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado/__test_1_index_field__let_mut_on_the_array_allows_fn_mut_call" = fn();  // TypeId(18)
+type "functype//closure_mut_binding_via_index.wado/__test_1_index_field__let_mut_on_the_array_allows_fn_mut_call" = fn();  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado/__cm_export____test_0_index__let_mut_allows_fn_mut_call" = fn();  // TypeId(19)
+type "functype//closure_mut_binding_via_index.wado/__cm_export____test_0_index__let_mut_allows_fn_mut_call" = fn();  // TypeId(19)
 
-type "functype//wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado/__cm_export____test_1_index_field__let_mut_on_the_array_allows_fn_mut_call" = fn();  // TypeId(20)
+type "functype//closure_mut_binding_via_index.wado/__cm_export____test_1_index_field__let_mut_on_the_array_allows_fn_mut_call" = fn();  // TypeId(20)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(21)
 
@@ -109,9 +109,9 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(42)
 
-type "functype//wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado//__Closure_2");  // TypeId(43)
+type "functype//closure_mut_binding_via_index.wado/__Closure_2::__call" = fn(ref "closure_mut_binding_via_index.wado//__Closure_2");  // TypeId(43)
 
-type "functype//wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado/__Closure_3::__call" = fn(ref "wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado//__Closure_3");  // TypeId(44)
+type "functype//closure_mut_binding_via_index.wado/__Closure_3::__call" = fn(ref "closure_mut_binding_via_index.wado//__Closure_3");  // TypeId(44)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(45)
 
@@ -132,16 +132,16 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:closure_mut_binding_via_index.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado/__test_0_index__let_mut_allows_fn_mut_call"() {
+fn "closure_mut_binding_via_index.wado/__test_0_index__let_mut_allows_fn_mut_call"() {
     let count: ref "core:prelude/types.wado//Box<i32>";
     let inc: ref struct;
     let __v0: i32;
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
     count = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 };
-    inc = struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado//__Closure_2" { __capture_0: count }, func: ref.func "closure/wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado/__closure_wrapper_0" };
+    inc = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_mut_binding_via_index.wado//__Closure_2" { __capture_0: count }, func: ref.func "closure/closure_mut_binding_via_index.wado/__closure_wrapper_0" };
     let __indirect_call_0: ref "canonical//CanonicalClosure_0";
     __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(inc);
     call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env);
@@ -151,53 +151,53 @@ fn "wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado/__test_0_ind
     __v0 = count.value;
     if @unlikely(__v0 != 2) {
         cold_path;
-        "core:rt/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(120); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_index__let_mut_allows_fn_mut_call"), used: 42 }); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado"), used: 63 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 17 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(120); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_index__let_mut_allows_fn_mut_call"), used: 42 }); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_mut_binding_via_index.wado"), used: 63 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 17 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: count == 2
 "), used: 23 }); "core:prelude/string.wado/String::push"(__local_6, 99); "core:prelude/string.wado/String::push"(__local_6, 111); "core:prelude/string.wado/String::push"(__local_6, 117); "core:prelude/string.wado/String::push"(__local_6, 110); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0 }, __local_7); "core:prelude/string.wado/String::push"(__local_6, 10); __local_6);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado/__test_1_index_field__let_mut_on_the_array_allows_fn_mut_call"() {
+fn "closure_mut_binding_via_index.wado/__test_1_index_field__let_mut_on_the_array_allows_fn_mut_call"() {
     let count: ref "core:prelude/types.wado//Box<i32>";
     let inc: ref struct;
     let __v0: i32;
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
     count = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 };
-    inc = struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado//__Closure_3" { __capture_0: count }, func: ref.func "closure/wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado/__closure_wrapper_1" };
+    inc = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_mut_binding_via_index.wado//__Closure_3" { __capture_0: count }, func: ref.func "closure/closure_mut_binding_via_index.wado/__closure_wrapper_1" };
     let __indirect_call_0: ref "canonical//CanonicalClosure_0";
     __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(inc);
     call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env);
     __v0 = count.value;
     if @unlikely(__v0 != 1) {
         cold_path;
-        "core:rt/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(120); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_index_field__let_mut_on_the_array_allows_fn_mut_call"), used: 61 }); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado"), used: 63 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 27 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(120); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_index_field__let_mut_on_the_array_allows_fn_mut_call"), used: 61 }); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_mut_binding_via_index.wado"), used: 63 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 27 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: count == 1
 "), used: 23 }); "core:prelude/string.wado/String::push"(__local_6, 99); "core:prelude/string.wado/String::push"(__local_6, 111); "core:prelude/string.wado/String::push"(__local_6, 117); "core:prelude/string.wado/String::push"(__local_6, 110); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0 }, __local_7); "core:prelude/string.wado/String::push"(__local_6, 10); __local_6);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado/__cm_export____test_0_index__let_mut_allows_fn_mut_call"() {
+fn "closure_mut_binding_via_index.wado/__cm_export____test_0_index__let_mut_allows_fn_mut_call"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:closure_mut_binding_via_index.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:closure_mut_binding_via_index.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado/__test_0_index__let_mut_allows_fn_mut_call"();
+    "closure_mut_binding_via_index.wado/__test_0_index__let_mut_allows_fn_mut_call"();
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado/__cm_export____test_1_index_field__let_mut_on_the_array_allows_fn_mut_call"() {
+fn "closure_mut_binding_via_index.wado/__cm_export____test_1_index_field__let_mut_on_the_array_allows_fn_mut_call"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:closure_mut_binding_via_index.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:closure_mut_binding_via_index.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado/__test_1_index_field__let_mut_on_the_array_allows_fn_mut_call"();
+    "closure_mut_binding_via_index.wado/__test_1_index_field__let_mut_on_the_array_allows_fn_mut_call"();
     "wasi/task-return"(0);
 }
 
@@ -536,25 +536,25 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado/__Closure_2::__call"(self) {
+fn "closure_mut_binding_via_index.wado/__Closure_2::__call"(self) {
     self.__capture_0.value = self.__capture_0.value + 1;
 }
 
-fn "wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado/__Closure_3::__call"(self) {
+fn "closure_mut_binding_via_index.wado/__Closure_3::__call"(self) {
     self.__capture_0.value = self.__capture_0.value + 1;
 }
 
-fn "closure/wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado/__closure_wrapper_0"(__env) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado//__Closure_2";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado//__Closure_2"(__env);
-    "wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado/__Closure_2::__call"(__typed_env);
+fn "closure/closure_mut_binding_via_index.wado/__closure_wrapper_0"(__env) {
+    let __typed_env: ref "closure_mut_binding_via_index.wado//__Closure_2";
+    __typed_env = ref.cast "closure_mut_binding_via_index.wado//__Closure_2"(__env);
+    "closure_mut_binding_via_index.wado/__Closure_2::__call"(__typed_env);
 }
 
-fn "closure/wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado/__closure_wrapper_1"(__env) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado//__Closure_3";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado//__Closure_3"(__env);
-    "wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado/__Closure_3::__call"(__typed_env);
+fn "closure/closure_mut_binding_via_index.wado/__closure_wrapper_1"(__env) {
+    let __typed_env: ref "closure_mut_binding_via_index.wado//__Closure_3";
+    __typed_env = ref.cast "closure_mut_binding_via_index.wado//__Closure_3"(__env);
+    "closure_mut_binding_via_index.wado/__Closure_3::__call"(__typed_env);
 }
 
-export fn "wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado/__cm_export____test_0_index__let_mut_allows_fn_mut_call" as "__test_0_index__let_mut_allows_fn_mut_call"
-export fn "wado-compiler/tests/fixtures/closure_mut_binding_via_index.wado/__cm_export____test_1_index_field__let_mut_on_the_array_allows_fn_mut_call" as "__test_1_index_field__let_mut_on_the_array_allows_fn_mut_call"
+export fn "closure_mut_binding_via_index.wado/__cm_export____test_0_index__let_mut_allows_fn_mut_call" as "__test_0_index__let_mut_allows_fn_mut_call"
+export fn "closure_mut_binding_via_index.wado/__cm_export____test_1_index_field__let_mut_on_the_array_allows_fn_mut_call" as "__test_1_index_field__let_mut_on_the_array_allows_fn_mut_call"

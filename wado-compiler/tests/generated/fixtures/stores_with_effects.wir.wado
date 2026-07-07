@@ -128,8 +128,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
-global global:__const_obj_0: ref null "wado-compiler/tests/fixtures/stores_with_effects.wado//Data" = struct.new "wado-compiler/tests/fixtures/stores_with_effects.wado//Data" { value: 99 };
+global mut global:wado-compiler/tests/fixtures/stores_with_effects.wado::__modules_initialized: bool = 0;
+global global:wado-compiler/tests/fixtures/stores_with_effects.wado::__const_obj_0: ref null "wado-compiler/tests/fixtures/stores_with_effects.wado//Data" = struct.new "wado-compiler/tests/fixtures/stores_with_effects.wado//Data" { value: 99 };
 
 fn "wado-compiler/tests/fixtures/stores_with_effects.wado/store_and_log"(data) with Stdout {
     let __local_1: ref "core:prelude/string.wado//String";
@@ -144,12 +144,12 @@ fn "wado-compiler/tests/fixtures/stores_with_effects.wado/run"() with Stdout {
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/stores_with_effects.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/stores_with_effects.wado::__modules_initialized = 1;
     };
-    c = "wado-compiler/tests/fixtures/stores_with_effects.wado/store_and_log"(global:__const_obj_0);
+    c = "wado-compiler/tests/fixtures/stores_with_effects.wado/store_and_log"(global:wado-compiler/tests/fixtures/stores_with_effects.wado::__const_obj_0);
     __v0 = c.data.value;
     if @unlikely(__v0 != 99) {
         cold_path;
@@ -166,10 +166,10 @@ fn "wado-compiler/tests/fixtures/stores_with_effects.wado/__cm_binding__Stdout_w
 
 fn "wado-compiler/tests/fixtures/stores_with_effects.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/stores_with_effects.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/stores_with_effects.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/stores_with_effects.wado/run"();
     "wasi/task-return"(0);

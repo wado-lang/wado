@@ -49,9 +49,9 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/array_bounds_elim_oob_complex.wado/run" = fn();  // TypeId(15)
+type "functype//array_bounds_elim_oob_complex.wado/run" = fn();  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/array_bounds_elim_oob_complex.wado/__cm_export__run" = fn();  // TypeId(16)
+type "functype//array_bounds_elim_oob_complex.wado/__cm_export__run" = fn();  // TypeId(16)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(17)
 
@@ -120,18 +120,18 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:array_bounds_elim_oob_complex.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/array_bounds_elim_oob_complex.wado/run"() with Stdout {
+fn "array_bounds_elim_oob_complex.wado/run"() with Stdout {
     let __b: ref "core:prelude//List<i32>";
     let __v1: i32;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:array_bounds_elim_oob_complex.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:array_bounds_elim_oob_complex.wado::__modules_initialized = 1;
     };
     __b = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
     "core:prelude/list.wado/List<i32>::push"(__b, 1);
@@ -148,14 +148,14 @@ condition: index < self.used
     drop(builtin::array_get<i32>(__b.repr, 5));
 }
 
-fn "wado-compiler/tests/fixtures/array_bounds_elim_oob_complex.wado/__cm_export__run"() {
+fn "array_bounds_elim_oob_complex.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:array_bounds_elim_oob_complex.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:array_bounds_elim_oob_complex.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/array_bounds_elim_oob_complex.wado/run"();
+    "array_bounds_elim_oob_complex.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -516,4 +516,4 @@ fn "core:prelude/list.wado/List<i32>::grow"(self) {
     self.repr = new_repr;
 }
 
-export fn "wado-compiler/tests/fixtures/array_bounds_elim_oob_complex.wado/__cm_export__run" as "run"
+export fn "array_bounds_elim_oob_complex.wado/__cm_export__run" as "run"

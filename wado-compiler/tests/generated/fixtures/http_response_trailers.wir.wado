@@ -280,17 +280,17 @@ type "functype//wasi/wasi:http/Fields::append" = fn(i32, i32, i32, i32, i32, i32
 
 type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  // TypeId(54)
 
-type "functype//wado-compiler/tests/fixtures/http_response_trailers.wado/handle" = fn(i32);  // TypeId(55)
+type "functype//http_response_trailers.wado/handle" = fn(i32);  // TypeId(55)
 
-type "functype//wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(56)
+type "functype//http_response_trailers.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(56)
 
-type "functype//wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Fields_append" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude//List<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(57)
+type "functype//http_response_trailers.wado/__cm_binding__Fields_append" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude//List<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(57)
 
-type "functype//wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Fields_has" = fn(i32, ref "core:prelude/string.wado//String") -> bool;  // TypeId(58)
+type "functype//http_response_trailers.wado/__cm_binding__Fields_has" = fn(i32, ref "core:prelude/string.wado//String") -> bool;  // TypeId(58)
 
-type "functype//wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(59)
+type "functype//http_response_trailers.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(59)
 
-type "functype//wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_export__handle" = fn(i32);  // TypeId(60)
+type "functype//http_response_trailers.wado/__cm_export__handle" = fn(i32);  // TypeId(60)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(61)
 
@@ -385,9 +385,9 @@ import fn wasi/future-write from "wasi/future-write";
 import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:http_response_trailers.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/http_response_trailers.wado/handle"(request) {
+fn "http_response_trailers.wado/handle"(request) {
     let trailers: i32;
     let __v0_2: bool;
     let __v0_4: bool;
@@ -527,25 +527,25 @@ fn "wado-compiler/tests/fixtures/http_response_trailers.wado/handle"(request) {
     let rx_177: i32;
     let tx_178: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:http_response_trailers.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:http_response_trailers.wado::__modules_initialized = 1;
     };
-    drop("wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Fields_append"(local.tee trailers("wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-checksum"), used: 10 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("abc123"), used: 6, index: 0 })));
-    drop("wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Fields_append"(trailers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-request-id"), used: 12 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("req-001"), used: 7, index: 0 })));
-    __v0_2 = "wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Fields_has"(trailers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-checksum"), used: 10 });
+    drop("http_response_trailers.wado/__cm_binding__Fields_append"(local.tee trailers("http_response_trailers.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-checksum"), used: 10 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("abc123"), used: 6, index: 0 })));
+    drop("http_response_trailers.wado/__cm_binding__Fields_append"(trailers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-request-id"), used: 12 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("req-001"), used: 7, index: 0 })));
+    __v0_2 = "http_response_trailers.wado/__cm_binding__Fields_has"(trailers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-checksum"), used: 10 });
     if @unlikely(__v0_2 == 0) {
         cold_path;
-        "core:rt/panic"(__local_13 = "core:prelude/string.wado/String::with_capacity"(183); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_13, 104); "core:prelude/string.wado/String::push"(__local_13, 97); "core:prelude/string.wado/String::push"(__local_13, 110); "core:prelude/string.wado/String::push"(__local_13, 100); "core:prelude/string.wado/String::push"(__local_13, 108); "core:prelude/string.wado/String::push"(__local_13, 101); "core:prelude/string.wado/String::push"(__local_13, 32); "core:prelude/string.wado/String::push"(__local_13, 97); "core:prelude/string.wado/String::push"(__local_13, 116); "core:prelude/string.wado/String::push"(__local_13, 32); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http_response_trailers.wado"), used: 56 }); "core:prelude/string.wado/String::push"(__local_13, 58); __local_14 = "core:prelude/format.wado/Formatter::new"(__local_13); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 16 }, __local_14); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_13 = "core:prelude/string.wado/String::with_capacity"(183); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_13, 104); "core:prelude/string.wado/String::push"(__local_13, 97); "core:prelude/string.wado/String::push"(__local_13, 110); "core:prelude/string.wado/String::push"(__local_13, 100); "core:prelude/string.wado/String::push"(__local_13, 108); "core:prelude/string.wado/String::push"(__local_13, 101); "core:prelude/string.wado/String::push"(__local_13, 32); "core:prelude/string.wado/String::push"(__local_13, 97); "core:prelude/string.wado/String::push"(__local_13, 116); "core:prelude/string.wado/String::push"(__local_13, 32); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("http_response_trailers.wado"), used: 56 }); "core:prelude/string.wado/String::push"(__local_13, 58); __local_14 = "core:prelude/format.wado/Formatter::new"(__local_13); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 16 }, __local_14); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: trailers.has(\"x-checksum\" as FieldName)
 "), used: 52 }); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("trailers.has(\"x-checksum\" as FieldName): "), used: 41 }); __local_14 = "core:prelude/format.wado/Formatter::new"(__local_13); "core:prelude/primitive.wado/bool^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<bool>" { value: __v0_2 }, __local_14); "core:prelude/string.wado/String::push"(__local_13, 10); __local_13);
         unreachable;
     }
-    __v0_4 = "wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Fields_has"(trailers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-request-id"), used: 12 });
+    __v0_4 = "http_response_trailers.wado/__cm_binding__Fields_has"(trailers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-request-id"), used: 12 });
     if @unlikely(__v0_4 == 0) {
         cold_path;
-        "core:rt/panic"(__local_15 = "core:prelude/string.wado/String::with_capacity"(187); "core:prelude/string.wado/String::push_str"(__local_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_15, 104); "core:prelude/string.wado/String::push"(__local_15, 97); "core:prelude/string.wado/String::push"(__local_15, 110); "core:prelude/string.wado/String::push"(__local_15, 100); "core:prelude/string.wado/String::push"(__local_15, 108); "core:prelude/string.wado/String::push"(__local_15, 101); "core:prelude/string.wado/String::push"(__local_15, 32); "core:prelude/string.wado/String::push"(__local_15, 97); "core:prelude/string.wado/String::push"(__local_15, 116); "core:prelude/string.wado/String::push"(__local_15, 32); "core:prelude/string.wado/String::push_str"(__local_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http_response_trailers.wado"), used: 56 }); "core:prelude/string.wado/String::push"(__local_15, 58); __local_16 = "core:prelude/format.wado/Formatter::new"(__local_15); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 17 }, __local_16); "core:prelude/string.wado/String::push_str"(__local_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_15 = "core:prelude/string.wado/String::with_capacity"(187); "core:prelude/string.wado/String::push_str"(__local_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_15, 104); "core:prelude/string.wado/String::push"(__local_15, 97); "core:prelude/string.wado/String::push"(__local_15, 110); "core:prelude/string.wado/String::push"(__local_15, 100); "core:prelude/string.wado/String::push"(__local_15, 108); "core:prelude/string.wado/String::push"(__local_15, 101); "core:prelude/string.wado/String::push"(__local_15, 32); "core:prelude/string.wado/String::push"(__local_15, 97); "core:prelude/string.wado/String::push"(__local_15, 116); "core:prelude/string.wado/String::push"(__local_15, 32); "core:prelude/string.wado/String::push_str"(__local_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("http_response_trailers.wado"), used: 56 }); "core:prelude/string.wado/String::push"(__local_15, 58); __local_16 = "core:prelude/format.wado/Formatter::new"(__local_15); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 17 }, __local_16); "core:prelude/string.wado/String::push_str"(__local_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: trailers.has(\"x-request-id\" as FieldName)
 "), used: 54 }); "core:prelude/string.wado/String::push_str"(__local_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("trailers.has(\"x-request-id\" as FieldName): "), used: 43 }); __local_16 = "core:prelude/format.wado/Formatter::new"(__local_15); "core:prelude/primitive.wado/bool^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<bool>" { value: __v0_4 }, __local_16); "core:prelude/string.wado/String::push"(__local_15, 10); __local_15);
         unreachable;
@@ -554,8 +554,8 @@ condition: trailers.has(\"x-request-id\" as FieldName)
     tx_175 = builtin::i32_wrap_i64(packed_173 >> 32_i64);
     rx_177 = builtin::i32_wrap_i64(local.tee packed_176("wasi/stream-new"()));
     tx_178 = builtin::i32_wrap_i64(packed_176 >> 32_i64);
-    drop("wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Fields_append"(local.tee headers("wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("content-type"), used: 12 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("text/plain"), used: 10, index: 0 })));
-    __pattern_temp_2 = "wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: rx_177 }, rx_174);
+    drop("http_response_trailers.wado/__cm_binding__Fields_append"(local.tee headers("http_response_trailers.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("content-type"), used: 12 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("text/plain"), used: 10, index: 0 })));
+    __pattern_temp_2 = "http_response_trailers.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: rx_177 }, rx_174);
     response = __pattern_temp_2.0;
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __tv_1 = 0;
@@ -872,11 +872,11 @@ condition: trailers.has(\"x-request-id\" as FieldName)
     "wasi/resource-drop:request"(request);
 }
 
-fn "wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Fields_new"() with Fields {
+fn "http_response_trailers.wado/__cm_binding__Fields_new"() with Fields {
     return "wasi/wasi:http/Fields::new"();
 }
 
-fn "wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Fields_append"(self, name, value) with Fields {
+fn "http_response_trailers.wado/__cm_binding__Fields_append"(self, name, value) with Fields {
     let __name_packed: i64;
     let __value_packed: i64;
     let __outptr: i32;
@@ -925,13 +925,13 @@ fn "wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Field
     return __result_val;
 }
 
-fn "wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Fields_has"(self, name) with Fields {
+fn "http_response_trailers.wado/__cm_binding__Fields_has"(self, name) with Fields {
     let __name_packed: i64;
     __name_packed = "core:rt/cm_lower_string"(name);
     return "wasi/wasi:http/Fields::has"(self, builtin::i32_wrap_i64(__name_packed), builtin::i32_wrap_i64(__name_packed >> 32_i64));
 }
 
-fn "wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Response_new"(headers, contents, trailers) with Response {
+fn "http_response_trailers.wado/__cm_binding__Response_new"(headers, contents, trailers) with Response {
     let __contents_disc: i32;
     let __contents_inner0: i32;
     let __local_6: i32;
@@ -952,14 +952,14 @@ fn "wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Respo
     return struct.new "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_8, 1: __lifted_result_9 };
 }
 
-fn "wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_export__handle"(request) {
+fn "http_response_trailers.wado/__cm_export__handle"(request) {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:http_response_trailers.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:http_response_trailers.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/http_response_trailers.wado/handle"(request);
+    "http_response_trailers.wado/handle"(request);
 }
 
 fn "core:prelude/primitive.wado/count_digits_i64"(val) {
@@ -1418,4 +1418,4 @@ fn "core:prelude/list.wado/List<u8>::grow"(self) {
     self.repr = new_repr;
 }
 
-export fn "wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_export__handle" as "handle"
+export fn "http_response_trailers.wado/__cm_export__handle" as "handle"

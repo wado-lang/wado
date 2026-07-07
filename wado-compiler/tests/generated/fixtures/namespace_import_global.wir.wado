@@ -112,7 +112,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:./sub/ns_robust_helper.wado::COUNTER: i32 = 0;
-global mut global:__modules_initialized: bool = 0;
+global mut global:wado-compiler/tests/fixtures/namespace_import_global.wado::__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/namespace_import_global.wado/__test_1_namespace_mutable_global_write"() {
     let __v0_0: i32;
@@ -143,20 +143,20 @@ condition: h::COUNTER == 8
 
 fn "wado-compiler/tests/fixtures/namespace_import_global.wado/__cm_export____test_0_namespace_global_read"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/namespace_import_global.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/namespace_import_global.wado::__modules_initialized = 1;
     };
     "wasi/task-return"(0);
 }
 
 fn "wado-compiler/tests/fixtures/namespace_import_global.wado/__cm_export____test_1_namespace_mutable_global_write"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/namespace_import_global.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/namespace_import_global.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/namespace_import_global.wado/__test_1_namespace_mutable_global_write"();
     "wasi/task-return"(0);

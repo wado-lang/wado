@@ -38,13 +38,13 @@ array Array<i32> (mut i32);  // TypeId(6)
 
 array Array<i64> (mut i64);  // TypeId(7)
 
-struct core:prelude//List<i64> {  // TypeId(8)
-    mut repr: ref Array<i64>,
+struct core:prelude//List<i32> {  // TypeId(8)
+    mut repr: ref Array<i32>,
     mut used: i32,
 }
 
-struct core:prelude//List<i32> {  // TypeId(9)
-    mut repr: ref Array<i32>,
+struct core:prelude//List<i64> {  // TypeId(9)
+    mut repr: ref Array<i64>,
     mut used: i32,
 }
 
@@ -187,10 +187,10 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
-global mut global:__const_obj_0: ref null "wado-compiler/tests/fixtures/static_2.wado//WrapBox<core:prelude/string.wado/String>" = ref.null none;
-global mut global:__const_obj_1: ref null "wado-compiler/tests/fixtures/static_2.wado//Wrapper<core:prelude/string.wado/String>" = ref.null none;
-global mut global:__const_obj_2: ref null "core:prelude//List<i64>" = ref.null none;
+global mut global:wado-compiler/tests/fixtures/static_2.wado::__modules_initialized: bool = 0;
+global mut global:wado-compiler/tests/fixtures/static_2.wado::__const_obj_0: ref null "wado-compiler/tests/fixtures/static_2.wado//WrapBox<core:prelude/string.wado/String>" = ref.null none;
+global mut global:wado-compiler/tests/fixtures/static_2.wado::__const_obj_1: ref null "wado-compiler/tests/fixtures/static_2.wado//Wrapper<core:prelude/string.wado/String>" = ref.null none;
+global mut global:wado-compiler/tests/fixtures/static_2.wado::__const_obj_2: ref null "core:prelude//List<i64>" = ref.null none;
 
 fn "wado-compiler/tests/fixtures/static_2.wado/__test_0_generic_static_method_on_generic_type"() {
     let __cond_2: bool;
@@ -199,8 +199,8 @@ fn "wado-compiler/tests/fixtures/static_2.wado/__test_0_generic_static_method_on
     let value_10: ref "core:prelude/string.wado//String";
     let self_11: ref "core:prelude/string.wado//String";
     value_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-    global:__const_obj_0 = struct.new "wado-compiler/tests/fixtures/static_2.wado//WrapBox<core:prelude/string.wado/String>" { value: value_10 };
-    self_11 = global:__const_obj_0.value;
+    global:wado-compiler/tests/fixtures/static_2.wado::__const_obj_0 = struct.new "wado-compiler/tests/fixtures/static_2.wado//WrapBox<core:prelude/string.wado/String>" { value: value_10 };
+    self_11 = global:wado-compiler/tests/fixtures/static_2.wado::__const_obj_0.value;
     __cond_2 = "core:prelude/string.wado/String^Eq::eq"(self_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 });
     if @unlikely(__cond_2 == 0) {
         cold_path;
@@ -218,8 +218,8 @@ fn "wado-compiler/tests/fixtures/static_2.wado/__test_1_generic_static_method_ca
     let value_10: ref "core:prelude/string.wado//String";
     let self_12: ref "core:prelude/string.wado//String";
     value_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-    global:__const_obj_1 = struct.new "wado-compiler/tests/fixtures/static_2.wado//Wrapper<core:prelude/string.wado/String>" { value: value_10 };
-    self_12 = global:__const_obj_1.value;
+    global:wado-compiler/tests/fixtures/static_2.wado::__const_obj_1 = struct.new "wado-compiler/tests/fixtures/static_2.wado//Wrapper<core:prelude/string.wado/String>" { value: value_10 };
+    self_12 = global:wado-compiler/tests/fixtures/static_2.wado::__const_obj_1.value;
     __cond_2 = "core:prelude/string.wado/String^Eq::eq"(self_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 });
     if @unlikely(__cond_2 == 0) {
         cold_path;
@@ -283,10 +283,10 @@ condition: sum == 30 as i64
         unreachable;
     }
     __b = struct.new "core:prelude//List<i64>" { repr: array.new_fixed<i64>(100_i64, 200_i64, 300_i64), used: 3 };
-    global:__const_obj_2 = __b;
-    drop(global:__const_obj_2.used);
-    drop(global:__const_obj_2.used);
-    __v0_11 = builtin::array_get<i64>(global:__const_obj_2.repr, 0);
+    global:wado-compiler/tests/fixtures/static_2.wado::__const_obj_2 = __b;
+    drop(global:wado-compiler/tests/fixtures/static_2.wado::__const_obj_2.used);
+    drop(global:wado-compiler/tests/fixtures/static_2.wado::__const_obj_2.used);
+    __v0_11 = builtin::array_get<i64>(global:wado-compiler/tests/fixtures/static_2.wado::__const_obj_2.repr, 0);
     if @unlikely(__v0_11 != 100_i64) {
         cold_path;
         "core:rt/panic"(__local_19 = "core:prelude/string.wado/String::with_capacity"(133); "core:prelude/string.wado/String::push_str"(__local_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_3_literal_coercion_with_generic_static_method"), used: 52 }); "core:prelude/string.wado/String::push"(__local_19, 32); "core:prelude/string.wado/String::push"(__local_19, 97); "core:prelude/string.wado/String::push"(__local_19, 116); "core:prelude/string.wado/String::push"(__local_19, 32); "core:prelude/string.wado/String::push_str"(__local_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/static_2.wado"), used: 42 }); "core:prelude/string.wado/String::push"(__local_19, 58); __local_20 = "core:prelude/format.wado/Formatter::new"(__local_19); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 132 }, __local_20); "core:prelude/string.wado/String::push_str"(__local_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
@@ -363,10 +363,10 @@ condition: s == \"hello\"
 
 fn "wado-compiler/tests/fixtures/static_2.wado/__cm_export____test_0_generic_static_method_on_generic_type"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/static_2.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/static_2.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/static_2.wado/__test_0_generic_static_method_on_generic_type"();
     "wasi/task-return"(0);
@@ -374,10 +374,10 @@ fn "wado-compiler/tests/fixtures/static_2.wado/__cm_export____test_0_generic_sta
 
 fn "wado-compiler/tests/fixtures/static_2.wado/__cm_export____test_1_generic_static_method_called_from_generic_function"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/static_2.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/static_2.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/static_2.wado/__test_1_generic_static_method_called_from_generic_function"();
     "wasi/task-return"(0);
@@ -385,10 +385,10 @@ fn "wado-compiler/tests/fixtures/static_2.wado/__cm_export____test_1_generic_sta
 
 fn "wado-compiler/tests/fixtures/static_2.wado/__cm_export____test_2_both_type_params_from_outer_generic_context"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/static_2.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/static_2.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/static_2.wado/__test_2_both_type_params_from_outer_generic_context"();
     "wasi/task-return"(0);
@@ -396,10 +396,10 @@ fn "wado-compiler/tests/fixtures/static_2.wado/__cm_export____test_2_both_type_p
 
 fn "wado-compiler/tests/fixtures/static_2.wado/__cm_export____test_3_literal_coercion_with_generic_static_method"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/static_2.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/static_2.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/static_2.wado/__test_3_literal_coercion_with_generic_static_method"();
     "wasi/task-return"(0);
@@ -407,10 +407,10 @@ fn "wado-compiler/tests/fixtures/static_2.wado/__cm_export____test_3_literal_coe
 
 fn "wado-compiler/tests/fixtures/static_2.wado/__cm_export____test_4_nested_generic_types_with_static_methods"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/static_2.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/static_2.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/static_2.wado/__test_4_nested_generic_types_with_static_methods"();
     "wasi/task-return"(0);
@@ -418,10 +418,10 @@ fn "wado-compiler/tests/fixtures/static_2.wado/__cm_export____test_4_nested_gene
 
 fn "wado-compiler/tests/fixtures/static_2.wado/__cm_export____test_5_turbofish_on_non_generic_struct"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/static_2.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/static_2.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/static_2.wado/__test_5_turbofish_on_non_generic_struct"();
     "wasi/task-return"(0);
@@ -429,10 +429,10 @@ fn "wado-compiler/tests/fixtures/static_2.wado/__cm_export____test_5_turbofish_o
 
 fn "wado-compiler/tests/fixtures/static_2.wado/__cm_export____test_6_user_defined_generic_struct_with_static_method"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/static_2.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/static_2.wado::__modules_initialized = 1;
     };
     "wasi/task-return"(0);
 }

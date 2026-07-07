@@ -953,6 +953,15 @@ pub fn module_parent_dir(path: &str) -> &str {
     get_parent_path(path)
 }
 
+/// The symbol name of a module-level global var: `global:{module_source}::{name}`.
+/// Every module is qualified the same way — there is no entry-module special
+/// case, so the declaration and every read/write produce identical names by
+/// construction and can never diverge.
+#[must_use]
+pub fn global_name(module_source: &ModuleSource, name: impl fmt::Display) -> String {
+    format!("global:{module_source}::{name}")
+}
+
 /// The canonical loader identity for a relative `import_source` imported from a
 /// local module `from_path`, anchored at `entry_dir`: compose
 /// ([`resolve_module_path`]) then canonicalize ([`canonical_local_path`]). The

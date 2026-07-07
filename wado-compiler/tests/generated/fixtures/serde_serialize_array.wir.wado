@@ -171,9 +171,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
-global global:__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(10, 20, 30)), used: 3 };
-global mut global:__const_obj_1: ref null "core:prelude//List<core:prelude/string.wado/String>" = ref.null none;
+global mut global:wado-compiler/tests/fixtures/serde_serialize_array.wado::__modules_initialized: bool = 0;
+global global:wado-compiler/tests/fixtures/serde_serialize_array.wado::__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(10, 20, 30)), used: 3 };
+global mut global:wado-compiler/tests/fixtures/serde_serialize_array.wado::__const_obj_1: ref null "core:prelude//List<core:prelude/string.wado/String>" = ref.null none;
 
 fn "wado-compiler/tests/fixtures/serde_serialize_array.wado/run"() with Stdout {
     let ser: ref "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSerializer";
@@ -183,18 +183,18 @@ fn "wado-compiler/tests/fixtures/serde_serialize_array.wado/run"() with Stdout {
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/serde_serialize_array.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/serde_serialize_array.wado::__modules_initialized = 1;
     };
     ser = struct.new "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSerializer" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
-    drop("wado-compiler/tests/fixtures/serde_serialize_array.wado/List<i32>^Serialize::serialize<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSerializer>"(global:__const_obj_0, ser));
+    drop("wado-compiler/tests/fixtures/serde_serialize_array.wado/List<i32>^Serialize::serialize<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSerializer>"(global:wado-compiler/tests/fixtures/serde_serialize_array.wado::__const_obj_0, ser));
     "core:cli/println"(__local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("List<i32>: "), used: 11 }); "core:prelude/string.wado/String::push_str"(__local_7, ser.buf); __local_7);
     ser.buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     __b_3 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 }), used: 2 };
-    global:__const_obj_1 = __b_3;
-    drop("wado-compiler/tests/fixtures/serde_serialize_array.wado/List<core:prelude/string.wado/String>^Serialize::serialize<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSerializer>"(global:__const_obj_1, ser));
+    global:wado-compiler/tests/fixtures/serde_serialize_array.wado::__const_obj_1 = __b_3;
+    drop("wado-compiler/tests/fixtures/serde_serialize_array.wado/List<core:prelude/string.wado/String>^Serialize::serialize<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSerializer>"(global:wado-compiler/tests/fixtures/serde_serialize_array.wado::__const_obj_1, ser));
     "core:cli/println"(__local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("List<String>: "), used: 14 }); "core:prelude/string.wado/String::push_str"(__local_8, ser.buf); __local_8);
     ser.buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     __b_5 = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
@@ -208,10 +208,10 @@ fn "wado-compiler/tests/fixtures/serde_serialize_array.wado/__cm_binding__Stdout
 
 fn "wado-compiler/tests/fixtures/serde_serialize_array.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/serde_serialize_array.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/serde_serialize_array.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/serde_serialize_array.wado/run"();
     "wasi/task-return"(0);

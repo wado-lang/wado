@@ -324,7 +324,7 @@ import fn wasi/task-return:handle from "wasi/task-return:handle";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-write from "wasi/future-write";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:wado-compiler/tests/fixtures/stream_http_echo.wado::__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/stream_http_echo.wado/handle"(request) {
     let body_stream: i32;
@@ -468,10 +468,10 @@ fn "wado-compiler/tests/fixtures/stream_http_echo.wado/handle"(request) {
     let tx_186: i32;
     let __sroa___pattern_temp_0_0: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/stream_http_echo.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/stream_http_echo.wado::__modules_initialized = 1;
     };
     __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed_174("wasi/future-new:transmission-http"()));
     __pattern_temp_1 = "wado-compiler/tests/fixtures/stream_http_echo.wado/__cm_binding__Request_consume_body"(request, __sroa___pattern_temp_0_0);
@@ -855,10 +855,10 @@ fn "wado-compiler/tests/fixtures/stream_http_echo.wado/__cm_binding__Response_ne
 
 fn "wado-compiler/tests/fixtures/stream_http_echo.wado/__cm_export__handle"(request) {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/stream_http_echo.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/stream_http_echo.wado::__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/stream_http_echo.wado/handle"(request);
 }

@@ -52,11 +52,11 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/default_arg_inner_binding_shadows_param.wado/run" = fn();  // TypeId(15)
+type "functype//default_arg_inner_binding_shadows_param.wado/run" = fn();  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/default_arg_inner_binding_shadows_param.wado/__cm_export__run" = fn();  // TypeId(16)
+type "functype//default_arg_inner_binding_shadows_param.wado/__cm_export__run" = fn();  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/default_arg_inner_binding_shadows_param.wado/__initialize_module" = fn();  // TypeId(17)
+type "functype//default_arg_inner_binding_shadows_param.wado/__initialize_module" = fn();  // TypeId(17)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(18)
 
@@ -121,10 +121,10 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global global:OPT: ref null "core:prelude/types.wado//Option<i32>" = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 99 };
-global mut global:__modules_initialized: bool = 0;
+global global:default_arg_inner_binding_shadows_param.wado::OPT: ref null "core:prelude/types.wado//Option<i32>" = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 99 };
+global mut global:default_arg_inner_binding_shadows_param.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/default_arg_inner_binding_shadows_param.wado/run"() {
+fn "default_arg_inner_binding_shadows_param.wado/run"() {
     let x_4: i32;
     let __v0_5: i32;
     let x_7: i32;
@@ -137,51 +137,51 @@ fn "wado-compiler/tests/fixtures/default_arg_inner_binding_shadows_param.wado/ru
     let y_33: i32;
     let y_35: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:default_arg_inner_binding_shadows_param.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        "wado-compiler/tests/fixtures/default_arg_inner_binding_shadows_param.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        "default_arg_inner_binding_shadows_param.wado/__initialize_module"();
+        global:default_arg_inner_binding_shadows_param.wado::__modules_initialized = 1;
     };
-    __v0_5 = local.tee y_33(let __match_scrut_0: ref "core:prelude/types.wado//Option<i32>"; __match_scrut_0 = global:OPT; (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0) -> i32 {
+    __v0_5 = local.tee y_33(let __match_scrut_0: ref "core:prelude/types.wado//Option<i32>"; __match_scrut_0 = global:default_arg_inner_binding_shadows_param.wado::OPT; (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0) -> i32 {
         local.tee x_4(ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0).payload_0) + 1;
     } else {
         0;
     }));
     if @unlikely(__v0_5 != 100) {
         cold_path;
-        "core:rt/panic"(__local_17 = "core:prelude/string.wado/String::with_capacity"(138); "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_17, 114); "core:prelude/string.wado/String::push"(__local_17, 117); "core:prelude/string.wado/String::push"(__local_17, 110); "core:prelude/string.wado/String::push"(__local_17, 32); "core:prelude/string.wado/String::push"(__local_17, 97); "core:prelude/string.wado/String::push"(__local_17, 116); "core:prelude/string.wado/String::push"(__local_17, 32); "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/default_arg_inner_binding_shadows_param.wado"), used: 73 }); "core:prelude/string.wado/String::push"(__local_17, 58); __local_18 = "core:prelude/format.wado/Formatter::new"(__local_17); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 44 }, __local_18); "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_17 = "core:prelude/string.wado/String::with_capacity"(138); "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_17, 114); "core:prelude/string.wado/String::push"(__local_17, 117); "core:prelude/string.wado/String::push"(__local_17, 110); "core:prelude/string.wado/String::push"(__local_17, 32); "core:prelude/string.wado/String::push"(__local_17, 97); "core:prelude/string.wado/String::push"(__local_17, 116); "core:prelude/string.wado/String::push"(__local_17, 32); "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("default_arg_inner_binding_shadows_param.wado"), used: 73 }); "core:prelude/string.wado/String::push"(__local_17, 58); __local_18 = "core:prelude/format.wado/Formatter::new"(__local_17); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 44 }, __local_18); "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: via_match(10) == 100
 "), used: 33 }); "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("via_match(10): "), used: 15 }); __local_18 = "core:prelude/format.wado/Formatter::new"(__local_17); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_5 }, __local_18); "core:prelude/string.wado/String::push"(__local_17, 10); __local_17);
         unreachable;
     }
-    __v0_8 = local.tee y_35(__local_23 = global:OPT; (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__local_23) -> i32 {
+    __v0_8 = local.tee y_35(__local_23 = global:default_arg_inner_binding_shadows_param.wado::OPT; (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__local_23) -> i32 {
         local.tee x_7(ref.cast "core:prelude/types.wado//Option<i32>::Some"(__local_23).payload_0) + 1;
     } else {
         0;
     }));
     if @unlikely(__v0_8 != 100) {
         cold_path;
-        "core:rt/panic"(__local_19 = "core:prelude/string.wado/String::with_capacity"(140); "core:prelude/string.wado/String::push_str"(__local_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_19, 114); "core:prelude/string.wado/String::push"(__local_19, 117); "core:prelude/string.wado/String::push"(__local_19, 110); "core:prelude/string.wado/String::push"(__local_19, 32); "core:prelude/string.wado/String::push"(__local_19, 97); "core:prelude/string.wado/String::push"(__local_19, 116); "core:prelude/string.wado/String::push"(__local_19, 32); "core:prelude/string.wado/String::push_str"(__local_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/default_arg_inner_binding_shadows_param.wado"), used: 73 }); "core:prelude/string.wado/String::push"(__local_19, 58); __local_20 = "core:prelude/format.wado/Formatter::new"(__local_19); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 45 }, __local_20); "core:prelude/string.wado/String::push_str"(__local_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_19 = "core:prelude/string.wado/String::with_capacity"(140); "core:prelude/string.wado/String::push_str"(__local_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_19, 114); "core:prelude/string.wado/String::push"(__local_19, 117); "core:prelude/string.wado/String::push"(__local_19, 110); "core:prelude/string.wado/String::push"(__local_19, 32); "core:prelude/string.wado/String::push"(__local_19, 97); "core:prelude/string.wado/String::push"(__local_19, 116); "core:prelude/string.wado/String::push"(__local_19, 32); "core:prelude/string.wado/String::push_str"(__local_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("default_arg_inner_binding_shadows_param.wado"), used: 73 }); "core:prelude/string.wado/String::push"(__local_19, 58); __local_20 = "core:prelude/format.wado/Formatter::new"(__local_19); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 45 }, __local_20); "core:prelude/string.wado/String::push_str"(__local_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: via_if_let(10) == 100
 "), used: 34 }); "core:prelude/string.wado/String::push_str"(__local_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("via_if_let(10): "), used: 16 }); __local_20 = "core:prelude/format.wado/Formatter::new"(__local_19); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_8 }, __local_20); "core:prelude/string.wado/String::push"(__local_19, 10); __local_19);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/default_arg_inner_binding_shadows_param.wado/__cm_export__run"() {
+fn "default_arg_inner_binding_shadows_param.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:default_arg_inner_binding_shadows_param.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        "wado-compiler/tests/fixtures/default_arg_inner_binding_shadows_param.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        "default_arg_inner_binding_shadows_param.wado/__initialize_module"();
+        global:default_arg_inner_binding_shadows_param.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/default_arg_inner_binding_shadows_param.wado/run"();
+    "default_arg_inner_binding_shadows_param.wado/run"();
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/default_arg_inner_binding_shadows_param.wado/__initialize_module"() {
+fn "default_arg_inner_binding_shadows_param.wado/__initialize_module"() {
 }
 
 fn "core:prelude/primitive.wado/count_digits_i64"(val) {
@@ -519,4 +519,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/default_arg_inner_binding_shadows_param.wado/__cm_export__run" as "run"
+export fn "default_arg_inner_binding_shadows_param.wado/__cm_export__run" as "run"

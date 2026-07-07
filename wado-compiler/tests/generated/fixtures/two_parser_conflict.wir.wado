@@ -227,7 +227,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:wado-compiler/tests/fixtures/two_parser_conflict.wado::__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/two_parser_conflict.wado/count_b"(node) {
     let n: i32;
@@ -269,10 +269,10 @@ fn "wado-compiler/tests/fixtures/two_parser_conflict.wado/__cm_export____test_0_
     let __b_6: ref "core:prelude//List<./sub/two_parser_a.wado/CstChild>";
     let __b_10: ref "core:prelude//List<./sub/two_parser_b.wado/CstChild>";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wado-compiler/tests/fixtures/two_parser_conflict.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wado-compiler/tests/fixtures/two_parser_conflict.wado::__modules_initialized = 1;
     };
     drop(struct.new "./sub/two_parser_a.wado//CstNode" { kind: 0, span: struct.new "./sub/two_parser_a.wado//Span" { start: 0, end: 0 }, children: ref.as_non_null(__b_6 = struct.new "core:prelude//List<./sub/two_parser_a.wado/CstChild>" { repr: builtin::array_new<ref "./sub/two_parser_a.wado//CstChild">(0), used: 0 }; __b_6), flags: 0, alt: -1 });
     __v0 = struct.new "./sub/two_parser_b.wado//CstNode" { kind: 0, span: struct.new "./sub/two_parser_b.wado//Span" { start: 0, end: 0 }, children: ref.as_non_null(__b_10 = struct.new "core:prelude//List<./sub/two_parser_b.wado/CstChild>" { repr: builtin::array_new<ref "./sub/two_parser_b.wado//CstChild">(0), used: 0 }; __b_10), flags: 0, alt: -1 };

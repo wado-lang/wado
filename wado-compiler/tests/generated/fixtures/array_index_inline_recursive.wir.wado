@@ -20,7 +20,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-array Array<&mut wado-compiler/tests/fixtures/array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>> (mut ref "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>");  // TypeId(3)
+array Array<&mut array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>> (mut ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>");  // TypeId(3)
 
 array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(4)
 
@@ -29,14 +29,14 @@ struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(5)
     mut used: i32,
 }
 
-struct core:prelude//List<&mut wado-compiler/tests/fixtures/array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>> {  // TypeId(6)
-    mut repr: ref "Array<&mut wado-compiler/tests/fixtures/array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>",
+struct core:prelude//List<&mut array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>> {  // TypeId(6)
+    mut repr: ref "Array<&mut array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>",
     mut used: i32,
 }
 
-struct wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<core:prelude/string.wado/String> {  // TypeId(7)
+struct array_index_inline_recursive.wado//Node<core:prelude/string.wado/String> {  // TypeId(7)
     mut keys: ref "core:prelude//List<core:prelude/string.wado/String>",
-    mut children: ref "core:prelude//List<&mut wado-compiler/tests/fixtures/array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>",
+    mut children: ref "core:prelude//List<&mut array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>",
     mut is_leaf: bool,
 }
 
@@ -58,13 +58,13 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(15)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/array_index_inline_recursive.wado/print_depth" = fn(i32);  // TypeId(17)
+type "functype//array_index_inline_recursive.wado/print_depth" = fn(i32);  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/array_index_inline_recursive.wado/run" = fn();  // TypeId(18)
+type "functype//array_index_inline_recursive.wado/run" = fn();  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/array_index_inline_recursive.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(19)
+type "functype//array_index_inline_recursive.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(19)
 
-type "functype//wado-compiler/tests/fixtures/array_index_inline_recursive.wado/__cm_export__run" = fn();  // TypeId(20)
+type "functype//array_index_inline_recursive.wado/__cm_export__run" = fn();  // TypeId(20)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(21)
 
@@ -100,7 +100,7 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(37)
 
-type "functype//wado-compiler/tests/fixtures/array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>::traverse" = fn(ref "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>", i32);  // TypeId(38)
+type "functype//array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>::traverse" = fn(ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>", i32);  // TypeId(38)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(39)
 
@@ -121,48 +121,48 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:array_index_inline_recursive.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/array_index_inline_recursive.wado/print_depth"(depth) with Stdout {
+fn "array_index_inline_recursive.wado/print_depth"(depth) with Stdout {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 }; "core:prelude/string.wado/String::push"(__local_1, 100); "core:prelude/string.wado/String::push"(__local_1, 101); "core:prelude/string.wado/String::push"(__local_1, 112); "core:prelude/string.wado/String::push"(__local_1, 116); "core:prelude/string.wado/String::push"(__local_1, 104); "core:prelude/string.wado/String::push"(__local_1, 58); "core:prelude/string.wado/String::push"(__local_1, 32); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; "core:prelude/primitive.wado/i32::fmt_decimal"(depth, __local_2); __local_1);
 }
 
-fn "wado-compiler/tests/fixtures/array_index_inline_recursive.wado/run"() with Stdout {
+fn "array_index_inline_recursive.wado/run"() with Stdout {
     let __b_0: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let __b_1: ref "core:prelude//List<&mut wado-compiler/tests/fixtures/array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>";
-    let leaf1: ref "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>";
+    let __b_1: ref "core:prelude//List<&mut array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>";
+    let leaf1: ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>";
     let __b_3: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let __b_4: ref "core:prelude//List<&mut wado-compiler/tests/fixtures/array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>";
-    let leaf2: ref "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>";
+    let __b_4: ref "core:prelude//List<&mut array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>";
+    let leaf2: ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>";
     let __b_6: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let __b_7: ref "core:prelude//List<&mut wado-compiler/tests/fixtures/array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>";
-    let root: ref "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>";
+    let __b_7: ref "core:prelude//List<&mut array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>";
+    let root: ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:array_index_inline_recursive.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:array_index_inline_recursive.wado::__modules_initialized = 1;
     };
-    leaf1 = struct.new "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>" { keys: ref.as_non_null(__b_0 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }), used: 2 }; __b_0), children: ref.as_non_null(__b_1 = struct.new "core:prelude//List<&mut wado-compiler/tests/fixtures/array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>">(0), used: 0 }; __b_1), is_leaf: 1 };
-    leaf2 = struct.new "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>" { keys: ref.as_non_null(__b_3 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101), used: 1 }), used: 2 }; __b_3), children: ref.as_non_null(__b_4 = struct.new "core:prelude//List<&mut wado-compiler/tests/fixtures/array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>">(0), used: 0 }; __b_4), is_leaf: 1 };
-    root = struct.new "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>" { keys: ref.as_non_null(__b_6 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99), used: 1 }), used: 1 }; __b_6), children: ref.as_non_null(__b_7 = struct.new "core:prelude//List<&mut wado-compiler/tests/fixtures/array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>">(leaf1, leaf2), used: 2 }; __b_7), is_leaf: 0 };
-    "wado-compiler/tests/fixtures/array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>::traverse"(root, 0);
+    leaf1 = struct.new "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>" { keys: ref.as_non_null(__b_0 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }), used: 2 }; __b_0), children: ref.as_non_null(__b_1 = struct.new "core:prelude//List<&mut array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>">(0), used: 0 }; __b_1), is_leaf: 1 };
+    leaf2 = struct.new "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>" { keys: ref.as_non_null(__b_3 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101), used: 1 }), used: 2 }; __b_3), children: ref.as_non_null(__b_4 = struct.new "core:prelude//List<&mut array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>">(0), used: 0 }; __b_4), is_leaf: 1 };
+    root = struct.new "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>" { keys: ref.as_non_null(__b_6 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99), used: 1 }), used: 1 }; __b_6), children: ref.as_non_null(__b_7 = struct.new "core:prelude//List<&mut array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>" { repr: array.new_fixed<ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>">(leaf1, leaf2), used: 2 }; __b_7), is_leaf: 0 };
+    "array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>::traverse"(root, 0);
 }
 
-fn "wado-compiler/tests/fixtures/array_index_inline_recursive.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "array_index_inline_recursive.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/array_index_inline_recursive.wado/__cm_export__run"() {
+fn "array_index_inline_recursive.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:array_index_inline_recursive.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:array_index_inline_recursive.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/array_index_inline_recursive.wado/run"();
+    "array_index_inline_recursive.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -190,7 +190,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/array_index_inline_recursive.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "array_index_inline_recursive.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -480,17 +480,17 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "wado-compiler/tests/fixtures/array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>::traverse"(self, depth) with Stdout {
+fn "array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>::traverse"(self, depth) with Stdout {
     let i: i32;
     let _licm_arith_11: i32;
-    "wado-compiler/tests/fixtures/array_index_inline_recursive.wado/print_depth"(depth);
+    "array_index_inline_recursive.wado/print_depth"(depth);
     if self.is_leaf == 0 {
         i = 0;
         _licm_arith_11 = depth + 1;
         b41: block {
             l42: loop {
                 break_if b41 i >= self.children.used;
-                "wado-compiler/tests/fixtures/array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>::traverse"(builtin::array_get<ref "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>">(self.children.repr, i), _licm_arith_11);
+                "array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>::traverse"(builtin::array_get<ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>">(self.children.repr, i), _licm_arith_11);
                 i = i + 1;
                 continue l42;
             };
@@ -498,4 +498,4 @@ fn "wado-compiler/tests/fixtures/array_index_inline_recursive.wado/Node<core:pre
     }
 }
 
-export fn "wado-compiler/tests/fixtures/array_index_inline_recursive.wado/__cm_export__run" as "run"
+export fn "array_index_inline_recursive.wado/__cm_export__run" as "run"
