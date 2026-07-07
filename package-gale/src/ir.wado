@@ -1167,6 +1167,17 @@ fn empty_alt_group_as_optional(g: &GroupElement) -> Option<Element> {
     if a0_empty == a1_empty {
         return null;
     }
+    // The empty alt's actions (an alt-initial predicate `{p}?` gating whether
+    // to skip, or a print action) would be silently dropped by folding to a
+    // plain Optional: the fold keeps only `body_alt.actions`, and it runs before
+    // action ids are assigned, so the body never reaches the
+    // `warn_unhandled_actions` safety net. Keep the group as a real decision so
+    // the action is retained and surfaces loudly. Executing such a predicate as
+    // a real skip gate is deferred (action.md, the empty-alt retention gap).
+    let empty_alt = if a0_empty { &g.alternatives[0] } else { &g.alternatives[1] };
+    if !empty_alt.actions.is_empty() {
+        return null;
+    }
     // Empty alt first ⇒ prefer to skip ⇒ non-greedy.
     let non_greedy = a0_empty;
     let body_alt = if a0_empty { &g.alternatives[1] } else { &g.alternatives[0] };

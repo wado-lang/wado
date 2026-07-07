@@ -1,11 +1,18 @@
 //! Emit Wado from a parsed java2wado `JExpr` / `JStmt`. Operators pass through,
 //! `$`-refs route through `resolve_attr_ref`, a string `+` chain becomes a
 //! template literal, and method mapping is snake_case over the grammar's own
-//! `@members` methods (see `java2wado.md`). A method call or constant that
+//! `@members` methods (see `action.md`). A method call or constant that
 //! resolves to nothing real is a loud error, not a silently broken emit.
 
 use { ParserRule } from "../ir.wado";
-use { resolve_attr_ref, rule_binding_for, rule_is_left_recursive, LR_ACC_LOCAL } from "../action_translate.wado";
+use {
+    resolve_attr_ref,
+    rule_binding_for,
+    rule_is_left_recursive,
+    ref_is_ctx_to_string_tree,
+    RULE_START_TOK_LOCAL,
+    LR_ACC_LOCAL,
+} from "../action_translate.wado";
 use { to_snake_case } from "../ident.wado";
 use { JExpr, JMember, JCall, JCast, JStmt, JLocal, JAssign } from "./jparser.wado";
 use { tokenize_java } from "./jlexer.wado";
@@ -143,23 +150,17 @@ fn emit_print(
 /// Java primitive / `String` type text to its Wado type, or `None` if outside
 /// the subset (a loud error — the subset grows on demand).
 pub fn map_java_type(ty: &String) -> Option<String> {
-    let t = ty.trim();
-    if t == "int" || t == "short" || t == "byte" {
-        return Option::Some("i32");
-    }
-    if t == "long" {
-        return Option::Some("i64");
-    }
-    if t == "boolean" {
-        return Option::Some("bool");
-    }
-    if t == "String" {
-        return Option::Some("String");
-    }
-    if t == "double" || t == "float" {
-        return Option::Some("f64");
-    }
-    return null;
+    return match ty.trim() {
+        "int" => Option::Some("i32"),
+        "short" => Option::Some("i16"),
+        "byte" => Option::Some("i8"),
+        "long" => Option::Some("i64"),
+        "float" => Option::Some("f32"),
+        "double" => Option::Some("f64"),
+        "boolean" => Option::Some("bool"),
+        "String" => Option::Some("String"),
+        _ => null,
+    };
 }
 
 pub fn emit_expr(
@@ -233,12 +234,20 @@ fn emit_call(
             return emit_ctx_child(rule, m, &c.args, bindings);
         }
     }
+    // `$ctx.toStringTree(this)`: the `$`-attr lexer captures the whole
+    // `$ctx.toStringTree` as the call target, so the trailing `(this)` lands
+    // here. Its Wado form is nullary; drop the redundant parser argument.
+    if let Attr(t) = &c.callee {
+        if ref_is_ctx_to_string_tree(t) {
+            return resolve_attr_ref(rule, rules, t, vals_in_scope, bindings, &env.this_bind);
+        }
+    }
     let args_w = emit_args(rule, rules, &c.args, vals_in_scope, bindings, env)?;
     return match &c.callee {
         Member(m) => emit_member_call(rule, rules, m, &c.args, &args_w, vals_in_scope, bindings, env),
         Name(n) => {
             if *n == "getText" {
-                Result::Ok(`{env.this_bind}.rule_text()`);
+                Result::Ok(`{env.this_bind}.rule_text({RULE_START_TOK_LOCAL})`);
             } else if method_declared(env, n) {
                 Result::Ok(`{env.this_bind}.{to_snake_case(n)}({args_w})`);
             } else {

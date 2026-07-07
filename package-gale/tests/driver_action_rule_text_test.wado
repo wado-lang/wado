@@ -1,6 +1,6 @@
-//! Stage C parser context API: `$text` reads the input consumed by the current
-//! rule so far — from the captured rule-start byte to the last matched token —
-//! via `p.text_span(...)`.
+//! Stage C parser context API: `$text` is the input consumed by the current
+//! rule so far — the concatenation of the parse-tree token texts (skipped
+//! tokens are absent from the stream), matching ANTLR — via `p.rule_text(...)`.
 
 use rt from "./grammars/wado_rule_text.g4"
     with {
@@ -11,8 +11,11 @@ use rt from "./grammars/wado_rule_text.g4"
         },
     };
 
-test "$text spans the input the rule consumed" {
+test "$text is the concatenated token text (skipped WS excluded, ANTLR semantics)" {
     let result = rt::parse(&"foo bar");
     assert result.ok(), "clean parse";
-    assert result.output == "foo bar", `output: '{result.output}'`;
+    // The `' '` between the two IDs is `-> skip`, so it is absent from the token
+    // stream; ANTLR's `$text` concatenates the parse-tree tokens, not the raw
+    // source span, so the space does not appear.
+    assert result.output == "foobar", `output: '{result.output}'`;
 }

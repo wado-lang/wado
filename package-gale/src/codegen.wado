@@ -22,7 +22,7 @@ use {
     grammar_has_at_end_conflict,
 } from "./parser_gen.wado";
 use { gen_node_kinds, gen_alt_enums, gen_string_tree_helper } from "./cst_gen.wado";
-use { should_emit_actions, collect_member_method_names } from "./java2wado.wado";
+use { should_emit_actions, collect_member_method_names, translate_attr_types } from "./java2wado.wado";
 use { gen_highlight } from "./highlight_gen.wado";
 use { GenContext, sets_overlap } from "./gen_context.wado";
 use { CodeWriter, StructSpec, VariantSpec, EnumSpec, Vis } from "./wadopoet.wado";
@@ -94,6 +94,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // would otherwise reset the freshly stamped decision-site ids).
     assign_atn_decisions(grammar);
     assign_action_ids(grammar);
+    translate_attr_types(grammar);
     normalize_caches(grammar);
     // Pre-size the output buffer from the grammar's rule count so the
     // bulk of `String::push_str` calls in `CodeWriter::line` don't

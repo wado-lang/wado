@@ -343,6 +343,26 @@ impl TokenStream {
             self.push_text(out, self.triv_starts[j], self.triv_ends[j]);
         }
     }
+
+    /// `$text` for a rule spanning tokens `[start_tok, end_tok]`: the token
+    /// texts with each token's leading *hidden-channel* trivia interleaved
+    /// (`triv_chans != 0`), matching ANTLR's `TokenStream.getText(interval)`.
+    /// `skip` trivia (channel 0, removed from the stream) is excluded, and so is
+    /// the start token's own leading trivia (the interval begins at the token).
+    pub fn rule_text(&self, start_tok: i32, end_tok: i32) -> String {
+        let mut out = String::new();
+        for let mut i = start_tok; i <= end_tok; i += 1 {
+            if i > start_tok {
+                for let mut j = self.triv_lo[i]; j < self.triv_hi[i]; j += 1 {
+                    if self.triv_chans[j] != 0 {
+                        self.push_text(&mut out, self.triv_starts[j], self.triv_ends[j]);
+                    }
+                }
+            }
+            self.push_token_text(&mut out, i);
+        }
+        return out;
+    }
 }
 
 
@@ -1615,9 +1635,9 @@ impl Parser {
         return self.tokens.kind_at(i);
     }
 
-    fn token_int(&self, i: i32) -> i64 {
+    fn token_int(&self, i: i32) -> i32 {
         let sp = self.tokens.span_at(i);
-        let mut acc: i64 = 0;
+        let mut acc: i32 = 0;
         let mut neg = false;
         let mut j = sp.start;
         if j < sp.end && self.tokens.chars[j] == '-' {
@@ -1627,7 +1647,7 @@ impl Parser {
         while j < sp.end {
             let c = self.tokens.chars[j];
             if c >= '0' && c <= '9' {
-                acc = acc * 10 + (c as i32 - '0' as i32) as i64;
+                acc = acc * 10 + (c as i32 - '0' as i32);
             }
             j += 1;
         }
@@ -1664,6 +1684,10 @@ impl Parser {
             out.push(self.tokens.chars[i]);
         }
         return out;
+    }
+
+    fn rule_text(&self, start_tok: i32) -> String {
+        return self.tokens.rule_text(start_tok, self.pos - 1);
     }
 
     fn input_text(&self) -> String {
@@ -1898,6 +1922,15 @@ impl Parser {
     }
 }
 
+struct ContinueVals {
+    return: i32 = 0,
+}
+
+struct ArgsVals {
+    else: i32 = 0,
+    return: i32 = 0,
+}
+
 fn scan_root(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_continue(tokens, pos, &EMPTY_FOLLOW, 0);
@@ -2073,7 +2106,7 @@ fn _parse_root__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         let continue_ = _parse_continue(p, &EMPTY_FOLLOW);
     }
     if !p.speculating {
-        p.emit(`{p.text_span(p.token_start(_rule_start_tok), p.last_end())}`);
+        p.emit(`{p.rule_text(_rule_start_tok)}`);
     }
     return;
 }
@@ -2089,8 +2122,9 @@ fn _parse_root(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     }
 }
 
-fn _parse_continue__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
+fn _parse_continue__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, vals: ContinueVals = ContinueVals {}, min_prec: i32 = 0) -> ContinueVals {
     let start = p.peek_start();
+    let mut vals = vals;
     let kind = p.peek_kind();
     if kind == TK_FOR {
         p.b.set_alt(0);
@@ -2101,10 +2135,10 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         if !p.speculating {
             if !(1 == 1) {
                 p.no_viable("failed semantic predicate", p.peek_span(), []);
-                return;
+                return vals;
             }
         }
-        return;
+        return vals;
     }
     if kind == TK_BREAK {
         p.b.set_alt(1);
@@ -2133,7 +2167,7 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         } else if grp_kind == TK_IF {
             let if_ = p.expect(TK_IF, &EMPTY_SYNC);
         }
-        return;
+        return vals;
     }
     if kind == TK_IF {
         p.b.set_alt(2);
@@ -2153,21 +2187,22 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             if rep_scan_pos < 0 { break; }
             let if_ = p.expect(TK_IF, &EMPTY_SYNC);
         }
-        return;
+        return vals;
     }
     p.no_viable(
         "expected continue",
         p.peek_span(),
         ["TK_FOR", "TK_BREAK", "TK_IF"],
     );
-    return;
+    return vals;
 }
 
-fn _parse_continue__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
+fn _parse_continue__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> ContinueVals {
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_CONTINUE, _start);
-    _parse_continue__inner_atom(p, follow, min_prec);
+    let vals = ContinueVals {};
+    let mut _lr_acc = _parse_continue__inner_atom(p, follow, vals, min_prec);
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }
@@ -2179,8 +2214,14 @@ fn _parse_continue__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
                 }
                 p.b.start_node_at(_cp, RK_CONTINUE, _start);
                 p.b.set_alt(3);
+                let continue_ = _lr_acc;
+                let mut vals = ContinueVals {};
                 let continue__2 = p.expect(TK_CONTINUE_, &EMPTY_SYNC);
+                if !p.speculating {
+                    vals.return = 0;
+                }
                 p.b.finish_node(p.last_end());
+                _lr_acc = vals;
             } else {
                 break;
             }
@@ -2188,32 +2229,36 @@ fn _parse_continue__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
             break;
         }
     }
-    return;
+    return _lr_acc;
 }
 
-fn _parse_continue(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
-    if p.recovering { return; }
-    _parse_continue__inner(p, follow, min_prec);
+fn _parse_continue(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> ContinueVals {
+    if p.recovering { return ContinueVals {}; }
+    let __vals = _parse_continue__inner(p, follow, min_prec);
     if p.recovering {
         p.push_rule_stack("continue");
     }
+    return __vals;
 }
 
-fn _parse_args__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_args__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, else_: i32 = 0) -> ArgsVals {
     let start = p.peek_start();
+    let mut vals = ArgsVals {};
+    vals.else = else_;
     let for_ = _parse_for(p, follow);
-    return;
+    return vals;
 }
 
-fn _parse_args(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    if p.recovering { return; }
+fn _parse_args(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, else_: i32 = 0) -> ArgsVals {
+    if p.recovering { return ArgsVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_ARGS, _start);
-    _parse_args__inner(p, follow);
+    let __vals = _parse_args__inner(p, follow, else_);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("args");
     }
+    return __vals;
 }
 
 fn _parse_for__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
@@ -2259,11 +2304,11 @@ pub fn parse_root(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 }
 
 pub fn parse_continue(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_continue(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_continue(p); });
 }
 
 pub fn parse_args(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_args(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_args(p); });
 }
 
 pub fn parse_for(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
