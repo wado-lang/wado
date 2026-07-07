@@ -87,23 +87,23 @@ type "functype//core:rt/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(32)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(33)
+type "functype//capture_at_binding_inlined.wado/Box::replace" = fn(ref "capture_at_binding_inlined.wado//Box", i32);  // TypeId(33)
 
-type "functype//core:prelude/primitive.wado/i32^Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(34)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(34)
 
-type "functype//core:prelude/primitive.wado/i32^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(35)
+type "functype//core:prelude/primitive.wado/i32^Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(35)
 
-type "functype//core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(36)
+type "functype//core:prelude/primitive.wado/i32^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(36)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(37)
+type "functype//core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(37)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(38)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(38)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(39)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(39)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(40)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(40)
 
-type "functype//capture_at_binding_inlined.wado/Box::replace" = fn(ref "capture_at_binding_inlined.wado//Box", i32);  // TypeId(41)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(41)
 
 type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(42)
 
@@ -418,6 +418,14 @@ fn "core:rt/cm_stream_write_raw_u8"(handle, data, len) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
+fn "capture_at_binding_inlined.wado/Box::replace"(self, n) {
+    let __b: ref "core:prelude//List<i32>";
+    if n > 1000 {
+        "capture_at_binding_inlined.wado/Box::replace"(self, n - 1);
+    }
+    self.xs = ref.as_non_null(__b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(n), used: 1 }; __b);
+}
+
 fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let is_negative: bool;
     let abs_val: i64;
@@ -510,14 +518,6 @@ fn "core:prelude/string.wado/String::push"(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (c & 63)) & 255);
         self.used = self.used + 4;
     }
-}
-
-fn "capture_at_binding_inlined.wado/Box::replace"(self, n) {
-    let __b: ref "core:prelude//List<i32>";
-    if n > 1000 {
-        "capture_at_binding_inlined.wado/Box::replace"(self, n - 1);
-    }
-    self.xs = ref.as_non_null(__b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(n), used: 1 }; __b);
 }
 
 fn "core:prelude/format.wado/Formatter::new"(buf) {

@@ -44,9 +44,9 @@ type "functype//condition_implication_stale_def_soundness.wado/check_stale_def" 
 
 type "functype//condition_implication_stale_def_soundness.wado/run" = fn();  // TypeId(14)
 
-type "functype//condition_implication_stale_def_soundness.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(15)
+type "functype//condition_implication_stale_def_soundness.wado/__cm_binding__MonotonicClock_now" = fn() -> u64;  // TypeId(15)
 
-type "functype//condition_implication_stale_def_soundness.wado/__cm_binding__MonotonicClock_now" = fn() -> u64;  // TypeId(16)
+type "functype//condition_implication_stale_def_soundness.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(16)
 
 type "functype//condition_implication_stale_def_soundness.wado/__cm_export__run" = fn();  // TypeId(17)
 
@@ -126,12 +126,12 @@ fn "condition_implication_stale_def_soundness.wado/run"() with Stdout, Monotonic
     "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:prelude/primitive.wado/i32::fmt_decimal"(v, __local_4); __local_3);
 }
 
-fn "condition_implication_stale_def_soundness.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return "wasi/wasi:cli/Stdout::write_via_stream"(data);
-}
-
 fn "condition_implication_stale_def_soundness.wado/__cm_binding__MonotonicClock_now"() with MonotonicClock {
     return "wasi/wasi:clocks/MonotonicClock::now"();
+}
+
+fn "condition_implication_stale_def_soundness.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+    return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
 fn "condition_implication_stale_def_soundness.wado/__cm_export__run"() {

@@ -716,8 +716,14 @@ impl fmt::Display for ModuleSource {
             Self::Local { path } => write!(f, "{path}"),
             Self::Dependency { path } => write!(f, "dep:{path}"),
             Self::Remote { url } => write!(f, "{url}"),
+            // Symbol identity, not a file path: the entry's qualifier is its
+            // base name (its path relative to its own directory), so WIR names
+            // stay stable across invocations and machines — the compile path is
+            // absolute under the test harness, relative on the CLI. The real
+            // path for diagnostics comes from `diagnostic_filename`.
             Self::EntryPoint { filename } => {
-                write!(f, "{filename}")
+                let base = filename.rsplit(['/', '\\']).next().unwrap_or(filename);
+                write!(f, "{base}")
             }
             Self::Redirected { uri } => write!(f, "{uri}"),
             Self::Wasm { path, .. } => write!(f, "{path}"),

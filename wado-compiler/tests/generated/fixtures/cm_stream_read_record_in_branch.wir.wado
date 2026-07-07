@@ -101,13 +101,13 @@ type "functype//wasi/wasi:filesystem/Descriptor::read_directory" = fn(i32, i32);
 
 type "functype//cm_stream_read_record_in_branch.wado/run" = fn();  // TypeId(26)
 
-type "functype//cm_stream_read_record_in_branch.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(27)
+type "functype//cm_stream_read_record_in_branch.wado/__cm_binding__Preopens_get_directories" = fn() -> ref "core:prelude//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>";  // TypeId(27)
 
-type "functype//cm_stream_read_record_in_branch.wado/__cm_binding__Stderr_write_via_stream" = fn(i32) -> i32;  // TypeId(28)
+type "functype//cm_stream_read_record_in_branch.wado/__cm_binding__Descriptor_read_directory" = fn(i32) -> ref "tuple//[Stream<wasi:filesystem/types.wado/DirectoryEntry>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";  // TypeId(28)
 
-type "functype//cm_stream_read_record_in_branch.wado/__cm_binding__Preopens_get_directories" = fn() -> ref "core:prelude//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>";  // TypeId(29)
+type "functype//cm_stream_read_record_in_branch.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(29)
 
-type "functype//cm_stream_read_record_in_branch.wado/__cm_binding__Descriptor_read_directory" = fn(i32) -> ref "tuple//[Stream<wasi:filesystem/types.wado/DirectoryEntry>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";  // TypeId(30)
+type "functype//cm_stream_read_record_in_branch.wado/__cm_binding__Stderr_write_via_stream" = fn(i32) -> i32;  // TypeId(30)
 
 type "functype//cm_stream_read_record_in_branch.wado/__cm_export__run" = fn();  // TypeId(31)
 
@@ -284,14 +284,6 @@ condition: index < self.used
     "wasi/resource-drop:descriptor"(dir);
 }
 
-fn "cm_stream_read_record_in_branch.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return "wasi/wasi:cli/Stdout::write_via_stream"(data);
-}
-
-fn "cm_stream_read_record_in_branch.wado/__cm_binding__Stderr_write_via_stream"(data) with Stderr {
-    return "wasi/wasi:cli/Stderr::write_via_stream"(data);
-}
-
 fn "cm_stream_read_record_in_branch.wado/__cm_binding__Preopens_get_directories"() with Preopens {
     let __outptr: i32;
     let __base: i32;
@@ -339,6 +331,14 @@ fn "cm_stream_read_record_in_branch.wado/__cm_binding__Descriptor_read_directory
     __lifted_result_3 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
     return struct.new "tuple//[Stream<wasi:filesystem/types.wado/DirectoryEntry>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]" { 0: __lifted_result_2, 1: __lifted_result_3 };
+}
+
+fn "cm_stream_read_record_in_branch.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+    return "wasi/wasi:cli/Stdout::write_via_stream"(data);
+}
+
+fn "cm_stream_read_record_in_branch.wado/__cm_binding__Stderr_write_via_stream"(data) with Stderr {
+    return "wasi/wasi:cli/Stderr::write_via_stream"(data);
 }
 
 fn "cm_stream_read_record_in_branch.wado/__cm_export__run"() {
