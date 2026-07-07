@@ -35,8 +35,7 @@ r : ( {false}? A | B ) ;
 A : 'a' ;
 B : 'b' ;
 ");
-    assert has_unsupported_action(&diags),
-        "a predicate nested in a group must raise UnsupportedAction, not vanish";
+    assert has_unsupported_action(&diags), "a predicate nested in a group must raise UnsupportedAction, not vanish";
 }
 
 test "empty-alt predicate surfaces a loud diagnostic, not a silent drop" {
@@ -45,8 +44,7 @@ options { language = Wado; }
 r : ( {false}? | A ) A ;
 A : 'a' ;
 ");
-    assert has_unsupported_action(&diags),
-        "an empty-alt predicate `( {p}? | A )` must raise UnsupportedAction, not be folded away";
+    assert has_unsupported_action(&diags), "an empty-alt predicate `( {p}? | A )` must raise UnsupportedAction, not be folded away";
 }
 
 fn gen_source(src: &String) -> String {
@@ -66,6 +64,5 @@ KW : ([a-z]+ { $text == \"zzq\" }? | 'dog') ;
 ID : [a-z]+ ;
 WS : ' ' -> skip ;
 ");
-    assert src.contains("zzq"),
-        "a predicate nested in a lexer group must be emitted, not silently dropped";
+    assert src.contains("zzq"), "a predicate nested in a lexer group must be emitted, not silently dropped";
 }

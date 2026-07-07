@@ -181,9 +181,15 @@ fn element_has_actions(elem: &Element) -> bool {
                 }
             }
         },
-        Repeat(rep) => return element_has_actions(&rep.element),
-        Label(lab) => return element_has_actions(&lab.element),
-        Not(n) => return element_has_actions(&n.element),
+        Repeat(rep) => {
+            return element_has_actions(&rep.element);
+        },
+        Label(lab) => {
+            return element_has_actions(&lab.element);
+        },
+        Not(n) => {
+            return element_has_actions(&n.element);
+        },
         _ => {
         },
     }
@@ -214,8 +220,12 @@ fn lexer_element_has_actions(elem: &LexerElement) -> bool {
                 }
             }
         },
-        Repeat(rep) => return lexer_element_has_actions(&rep.element),
-        Not(n) => return lexer_element_has_actions(&n.element),
+        Repeat(rep) => {
+            return lexer_element_has_actions(&rep.element);
+        },
+        Not(n) => {
+            return lexer_element_has_actions(&n.element);
+        },
         _ => {
         },
     }
@@ -231,7 +241,7 @@ fn lexer_element_has_actions(elem: &LexerElement) -> bool {
 /// A no-op for non-Java grammars and for types already Wado (or unmapped, e.g.
 /// `List<String>`), which pass through unchanged.
 pub fn translate_attr_types(grammar: &mut Grammar) {
-    if !(grammar.action_language matches { Java }) {
+    if !grammar.action_language matches { Java } {
         return;
     }
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
