@@ -191,7 +191,7 @@ impl String {
     /// Internal: Shared view of the backing byte array (stdlib use only).
     /// Returns a reference so reads scan the buffer without copying. Caller must
     /// respect `len()` boundary.
-    pub fn internal_raw_bytes(&self) -> &Array<u8> {
+    internal fn internal_raw_bytes(&self) -> &Array<u8> {
         return &self.repr;
     }
 
@@ -199,13 +199,13 @@ impl String {
     /// Returns a reference so in-place writes reach the buffer; a by-value
     /// `Array<u8>` would be deep-copied and detach the alias. Caller must
     /// respect `len()` boundary.
-    pub fn internal_raw_bytes_mut(&mut self) -> &mut Array<u8> {
+    internal fn internal_raw_bytes_mut(&mut self) -> &mut Array<u8> {
         return &mut self.repr;
     }
 
     /// Internal: Create String from raw UTF-8 bytes (stdlib use only)
     /// The bytes must be valid UTF-8. No validation is performed.
-    pub fn internal_from_utf8_raw(bytes: Array<u8>, len: i32) -> String {
+    internal fn internal_from_utf8_raw(bytes: Array<u8>, len: i32) -> String {
         return String { repr: bytes, used: len };
     }
 
@@ -230,7 +230,7 @@ impl String {
     /// Internal: Append bytes from linear memory to this string (stdlib use only)
     /// Copies `len` bytes starting at `ptr` in linear memory into the string.
     /// The bytes must be valid UTF-8. No validation is performed.
-    pub fn internal_append_from_memory(&mut self, ptr: i32, len: i32) {
+    internal fn internal_append_from_memory(&mut self, ptr: i32, len: i32) {
         if len == 0 {
             return;
         }
@@ -254,7 +254,7 @@ impl String {
     /// `array_copy` cannot express. For left-to-right bulk appends, use
     /// `push_bytes_unchecked` or `push_str_range_unchecked` instead — they compile to
     /// a single `array_copy` and do not require the caller to maintain a write offset.
-    pub fn internal_reserve_uninit(&mut self, n: i32) -> i32 {
+    internal fn internal_reserve_uninit(&mut self, n: i32) -> i32 {
         let new_used = self.used + n;
         if new_used > self.repr.len() {
             builtin::cold_path();

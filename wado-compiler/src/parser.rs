@@ -5360,16 +5360,10 @@ impl Parser {
                     span: type_span.merge(&end),
                 });
             } else {
-                // Impl members carry a binary `pub` / file-private visibility,
-                // not the top-level `internal`/`export` ladder. Reject those
-                // with a clear message instead of the cryptic token error the
-                // member parsers would otherwise produce.
-                if self.check(&TokenKind::Internal) {
-                    return Err(self.error_at_span(
-                        self.peek().span,
-                        "`internal` is not allowed on impl members; methods and associated constants are `pub` or file-private",
-                    ));
-                }
+                // Impl members carry the file-private / `internal` / `pub`
+                // ladder. `export` is rejected with a clear message (a method has
+                // no Component Model boundary) instead of the cryptic token error
+                // the member parsers would otherwise produce.
                 if self.check(&TokenKind::Export) {
                     return Err(self.error_at_span(
                         self.peek().span,
@@ -5379,6 +5373,9 @@ impl Parser {
                 let member_vis = if self.check(&TokenKind::Pub) {
                     self.advance();
                     Visibility::Public
+                } else if self.check(&TokenKind::Internal) {
+                    self.advance();
+                    Visibility::Internal
                 } else {
                     Visibility::Private
                 };
@@ -6601,15 +6598,22 @@ mod tests {
     }
 
     #[test]
-    fn test_internal_export_on_impl_member_is_a_parse_error() {
-        let internal_err =
-            parse("struct S { v: i32 }\nimpl S { internal fn h() -> i32 { return 1 } }")
-                .unwrap_err();
-        assert!(
-            internal_err.message.contains("not allowed on impl members"),
-            "`internal` on an impl member should be a targeted error, got: {}",
-            internal_err.message
-        );
+    fn test_internal_impl_member_parses_as_internal_visibility() {
+        let module =
+            parse("struct S { v: i32 }\nimpl S { internal fn h() -> i32 { return 1 } }").unwrap();
+        let impl_block = module
+            .items
+            .iter()
+            .find_map(|it| match it {
+                crate::ast::Item::Impl(b) => Some(b),
+                _ => None,
+            })
+            .expect("impl block");
+        assert_eq!(impl_block.methods[0].visibility, Visibility::Internal);
+    }
+
+    #[test]
+    fn test_export_on_impl_member_is_a_parse_error() {
         let export_err =
             parse("struct S { v: i32 }\nimpl S { export fn h() -> i32 { return 1 } }").unwrap_err();
         assert!(
