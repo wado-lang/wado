@@ -5505,6 +5505,7 @@ fn "core:prelude/string.wado/StrSplitIter^Iterator::next"(self) {
     let _licm_sep_len_17: i32;
     let _licm_repr_18: ref Array<u8>;
     let _licm_sep_repr_19: ref Array<u8>;
+    let _licm_arith_20: bool;
     if self.finished {
         return ref.null none;
     }
@@ -5513,6 +5514,7 @@ fn "core:prelude/string.wado/StrSplitIter^Iterator::next"(self) {
     _licm_sep_len_17 = self.sep_len;
     _licm_repr_18 = self.repr;
     _licm_sep_repr_19 = self.sep_repr;
+    _licm_arith_20 = _licm_sep_len_17 > 0;
     b589: block {
         l590: loop {
             break_if b589 i > limit;
@@ -5529,7 +5531,11 @@ fn "core:prelude/string.wado/StrSplitIter^Iterator::next"(self) {
                     continue l592;
                 };
             };
-            if matched {
+            if (if matched -> i32 {
+                _licm_arith_20;
+            } else {
+                0;
+            }) {
                 part_6 = builtin::array_new<u8>(local.tee len_5(i - self.pos));
                 builtin::array_copy<u8>(part_6, 0, _licm_repr_18, self.pos, len_5);
                 self.pos = i + _licm_sep_len_17;
@@ -5590,12 +5596,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b597: block {
-        l598: loop {
-            break_if b597 i >= n;
+    b598: block {
+        l599: loop {
+            break_if b598 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l598;
+            continue l599;
         };
     };
 }
@@ -5675,25 +5681,25 @@ fn "core:prelude/format.wado/Formatter::apply_padding_slow"(self, start_pos) {
         _licm_buf_45 = self.buf;
         _licm_arith_46 = start_pos + left_pad;
         _licm_repr_51 = _licm_buf_45.repr;
-        b606: block {
-            l607: loop {
-                break_if b606 i_8 < 0;
+        b607: block {
+            l608: loop {
+                break_if b607 i_8 < 0;
                 index_14 = _licm_arith_46 + i_8;
                 value_15 = builtin::array_get<u8>(_licm_repr_51, start_pos + i_8);
                 builtin::array_set_u8(_licm_repr_51, index_14, value_15);
                 i_8 = i_8 - 1;
-                continue l607;
+                continue l608;
             };
         };
         j_9 = 0;
         _licm_buf_47 = self.buf;
         _licm_repr_52 = _licm_buf_47.repr;
-        b608: block {
-            l609: loop {
-                break_if b608 j_9 >= left_pad;
+        b609: block {
+            l610: loop {
+                break_if b609 j_9 >= left_pad;
                 builtin::array_set_u8(_licm_repr_52, start_pos + j_9, fill_byte);
                 j_9 = j_9 + 1;
-                continue l609;
+                continue l610;
             };
         };
         "core:prelude/string.wado/String::append_byte_filled"(self.buf, fill_byte, right_pad);
@@ -5703,25 +5709,25 @@ fn "core:prelude/format.wado/Formatter::apply_padding_slow"(self, start_pos) {
         _licm_buf_48 = self.buf;
         _licm_arith_49 = start_pos + padding;
         _licm_repr_53 = _licm_buf_48.repr;
-        b610: block {
-            l611: loop {
-                break_if b610 i_10 < 0;
+        b611: block {
+            l612: loop {
+                break_if b611 i_10 < 0;
                 index_30 = _licm_arith_49 + i_10;
                 value_31 = builtin::array_get<u8>(_licm_repr_53, start_pos + i_10);
                 builtin::array_set_u8(_licm_repr_53, index_30, value_31);
                 i_10 = i_10 - 1;
-                continue l611;
+                continue l612;
             };
         };
         j_11 = 0;
         _licm_buf_50 = self.buf;
         _licm_repr_54 = _licm_buf_50.repr;
-        b612: block {
-            l613: loop {
-                break_if b612 j_11 >= padding;
+        b613: block {
+            l614: loop {
+                break_if b613 j_11 >= padding;
                 builtin::array_set_u8(_licm_repr_54, start_pos + j_11, fill_byte);
                 j_11 = j_11 + 1;
-                continue l613;
+                continue l614;
             };
         };
     }
@@ -5829,8 +5835,8 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     truncated = 0;
     __iter_5 = "wado-compiler/tests/fixtures/httpbin_404.wado/$value_copy$T137"(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 }; self_15);
     _licm_arith_52 = limit >= 0;
-    b632: block {
-        l633: loop {
+    b633: block {
+        l634: loop {
             let __sroa___match_10_discriminant: i32;
             let __sroa___match_10_payload_0: char;
             multivalue_bind [__sroa___match_10_discriminant, __sroa___match_10_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_5);
@@ -5841,7 +5847,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
                     0;
                 }) {
                     truncated = 1;
-                    break b632;
+                    break b633;
                 }
                 if __sroa___match_10_payload_0 == 34 {
                     "core:prelude/string.wado/String::push"(f.buf, 92);
@@ -5875,9 +5881,9 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
                 }
                 count = count + 1;
             } else {
-                break b632;
+                break b633;
             }
-            continue l633;
+            continue l634;
         };
     };
     "core:prelude/string.wado/String::push"(f.buf, 34);
@@ -5918,8 +5924,8 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::
     let __match_5: ref null "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>";
     result = "wado-compiler/tests/fixtures/httpbin_404.wado/$value_copy$T692"(__b = struct.new "core:prelude//List<[core:prelude/string.wado/String,core:value/Value]>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:value/Value]">(0), used: 0 }; __b);
     __iter_3 = "wado-compiler/tests/fixtures/httpbin_404.wado/$value_copy$T1299"(struct.new "core:prelude/slice.wado//ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>" { repr: self.entries.repr, index: 0, end: self.entries.used });
-    b647: block {
-        l648: loop {
+    b648: block {
+        l649: loop {
             __match_5 = "core:prelude/slice.wado/ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>^Iterator::next"(__iter_3);
             if ref.is_null(__match_5) == 0 {
                 entry = ref.as_non_null(__match_5);
@@ -5927,9 +5933,9 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::
                     "core:prelude/list.wado/List<[core:prelude/string.wado/String,core:value/Value]>::push"(result, struct.new "tuple//[core:prelude/string.wado/String, core:value/Value]" { 0: ref.as_non_null("wado-compiler/tests/fixtures/httpbin_404.wado/$value_copy$T19"(entry.key)), 1: entry.value });
                 }
             } else {
-                break b647;
+                break b648;
             }
-            continue l648;
+            continue l649;
         };
     };
     return result;
@@ -6015,9 +6021,9 @@ fn "core:prelude/string.wado/String::from_utf8_lossy<core:prelude/bytes.wado/Byt
     cold_path;
     builder = "core:prelude/string.wado/String::with_capacity"(local.tee len_4("core:prelude/slice.wado/ArraySlice<u8>::len"(slice)));
     i = 0;
-    b657: block {
-        l658: loop {
-            break_if b657 i >= len_4;
+    b658: block {
+        l659: loop {
+            break_if b658 i >= len_4;
             let scalar_mv_code: u32;
             let scalar_mv_advance: i32;
             let scalar_mv_valid: bool;
@@ -6028,7 +6034,7 @@ fn "core:prelude/string.wado/String::from_utf8_lossy<core:prelude/bytes.wado/Byt
                 "core:prelude/string.wado/String::push"(builder, 65533);
             }
             i = i + scalar_mv_advance;
-            continue l658;
+            continue l659;
         };
     };
     return builder;
@@ -6053,9 +6059,9 @@ fn "core:prelude/string.wado/String::from_utf8_lossy<wasi:http/types.wado/FieldV
     cold_path;
     builder = "core:prelude/string.wado/String::with_capacity"(local.tee len_4("core:prelude/slice.wado/ArraySlice<u8>::len"(slice)));
     i = 0;
-    b660: block {
-        l661: loop {
-            break_if b660 i >= len_4;
+    b661: block {
+        l662: loop {
+            break_if b661 i >= len_4;
             let scalar_mv_code: u32;
             let scalar_mv_advance: i32;
             let scalar_mv_valid: bool;
@@ -6066,7 +6072,7 @@ fn "core:prelude/string.wado/String::from_utf8_lossy<wasi:http/types.wado/FieldV
                 "core:prelude/string.wado/String::push"(builder, 65533);
             }
             i = i + scalar_mv_advance;
-            continue l661;
+            continue l662;
         };
     };
     return builder;
@@ -6183,8 +6189,8 @@ fn "core:value/Value^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
             return __qm_e_12;
         });
         __iter_14 = "wado-compiler/tests/fixtures/httpbin_404.wado/$value_copy$T1198"(struct.new "core:prelude/slice.wado//ArrayRefIter<core:value/Value>" { repr: arr.repr, index: 0, end: arr.used });
-        b677: block {
-            l678: loop {
+        b678: block {
+            l679: loop {
                 __local_29 = "core:prelude/slice.wado/ArrayRefIter<core:value/Value>^Iterator::next"(__iter_14);
                 if ref.is_null(__local_29) == 0 {
                     item = ref.as_non_null(__local_29);
@@ -6196,9 +6202,9 @@ fn "core:value/Value^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
                         return __qm_e_17;
                     }
                 } else {
-                    break b677;
+                    break b678;
                 }
-                continue l678;
+                continue l679;
             };
         };
         "core:prelude/string.wado/String::push"(seq.buf, 93);
@@ -6217,8 +6223,8 @@ fn "core:value/Value^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
             return __qm_e_20;
         });
         __iter_22 = "wado-compiler/tests/fixtures/httpbin_404.wado/$value_copy$T1201"(self_61 = "core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::entries"(map); struct.new "core:prelude/slice.wado//ArrayIter<[core:prelude/string.wado/String,core:value/Value]>" { repr: self_61.repr, index: 0, end: self_61.used });
-        b683: block {
-            l684: loop {
+        b684: block {
+            l685: loop {
                 __local_31 = "core:prelude/slice.wado/ArrayIter<[core:prelude/string.wado/String,core:value/Value]>^Iterator::next"(__iter_22);
                 if ref.is_null(__local_31) == 0 {
                     let __variant_payload_1: ref "tuple//[core:prelude/string.wado/String, core:value/Value]";
@@ -6240,9 +6246,9 @@ fn "core:value/Value^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
                         return __qm_e_28;
                     }
                 } else {
-                    break b683;
+                    break b684;
                 }
-                continue l684;
+                continue l685;
             };
         };
         "core:prelude/string.wado/String::push"(m.buf, 125);
@@ -6323,8 +6329,8 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::
     _licm_used_27 = _licm_entries_24.used;
     _licm_repr_28 = _licm_entries_24.repr;
     _licm_used_37 = key.used;
-    b690: block {
-        l691: loop {
+    b691: block {
+        l692: loop {
             let __match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
             __match_scrut_0 = current;
             if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0) {
@@ -6363,9 +6369,9 @@ condition: index < self.used
                     current = n.right;
                 }
             } else {
-                break b690;
+                break b691;
             }
-            continue l691;
+            continue l692;
         };
     };
     return -1;

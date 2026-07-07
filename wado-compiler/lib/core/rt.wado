@@ -195,7 +195,7 @@ internal fn cm_lower_list_u8(data: &Array<u8>, len: i32) -> i64 {
 
 /// Lowers a GC List<u8> (e.g., FieldValue) to CM linear memory representation.
 /// Returns (ptr | (len << 32)) as i64.
-internal fn cm_lower_array_u8(arr: &List<u8>) -> i64 {
+internal fn cm_lower_array_u8(arr: List<u8>) -> i64 {
     let len = arr.len();
     return cm_lower_list_u8(arr.internal_raw_data_ref(), len);
 }
@@ -300,7 +300,7 @@ internal fn cm_stream_read_raw_free(ptr: i32, byte_count: i32, element_align: i3
 /// CM adapter for stream.write(data) on Stream<u8>.
 /// Lowers List<u8> to linear memory, calls stream-write, handles BLOCKED.
 internal fn cm_stream_write_u8(handle: i32, data: List<u8>) {
-    let packed = cm_lower_array_u8(&data);
+    let packed = cm_lower_array_u8(data);
     let ptr = packed as i32;
     let len = (packed >> 32) as i32;
     cm_stream_write_drain(handle, ptr, len, 1);

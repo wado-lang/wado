@@ -321,7 +321,7 @@ impl String {
             builtin::cold_path();
             self.grow(new_used);
         }
-        builtin::array_copy(&mut self.repr, self.used, &bytes.internal_raw_data(), 0, n);
+        builtin::array_copy(&mut self.repr, self.used, bytes.internal_raw_data_ref(), 0, n);
         self.used = new_used;
     }
 
@@ -1387,7 +1387,7 @@ impl Iterator for StrSplitIter {
                     break;
                 }
             }
-            if matched {
+            if matched && self.sep_len > 0 {
                 let len = i - self.pos;
                 let mut part: Array<u8> = builtin::array_new(len);
                 builtin::array_copy(&mut part, 0, self.repr, self.pos, len);
@@ -1442,7 +1442,7 @@ impl Iterator for StrSplitNIter {
                     break;
                 }
             }
-            if matched {
+            if matched && self.sep_len > 0 {
                 let len = i - self.pos;
                 let mut part: Array<u8> = builtin::array_new(len);
                 builtin::array_copy(&mut part, 0, self.repr, self.pos, len);

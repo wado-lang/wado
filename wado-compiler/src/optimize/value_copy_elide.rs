@@ -340,8 +340,9 @@ fn is_value_copy_call(body: &Body, expr: ExprId, value_copy_ids: &IndexSet<FuncI
 /// `None` when no local root is reachable — a call result, a constant, or a
 /// bare literal. `None` does *not* by itself mean "fresh": an accessor call such
 /// as `container.index_value(i)` also returns `None` yet aliases the container's
-/// element, so callers must not treat a `None` root as uniquely owned — they
-/// confirm freshness through `EscapeMap::rvalue_is_fresh`.
+/// element. Callers gate on it accordingly — the call-argument path confirms
+/// freshness through `EscapeMap::rvalue_is_fresh`; the binding path additionally
+/// refuses composite value expressions via `yields_subexpression`.
 fn arg_source_root(body: &Body, expr: ExprId) -> Option<u32> {
     match &body.exprs[expr].kind {
         ExprKind::Local { index, .. } => Some(*index),
@@ -428,17 +429,29 @@ fn copy_source_strippable(
             Some(u) => !u.is_assigned() && !u.has_field_mutation,
             None => true,
         },
-        // No local root. An `if` / `match` value returns one of its arms, which
-        // may be a live local it aliases rather than uniquely owns, so its copy
-        // must stay. Every other rootless source (a promoted constant, a global
-        // read, a fresh construction, a fresh-returning call) is safe to alias.
-        None => !arg.expr.as_expr().is_some_and(|e| {
-            matches!(
-                body.exprs[e].kind,
-                ExprKind::If { .. } | ExprKind::Match { .. }
-            )
-        }),
+        // No local root. A composite value expression yields the value of one of
+        // its sub-expressions, which may be a live local it aliases rather than
+        // uniquely owns, so its copy must stay. Every other rootless source (a
+        // promoted constant, a global read, a fresh construction, a fresh-returning
+        // call) is safe to alias.
+        None => !arg
+            .expr
+            .as_expr()
+            .is_some_and(|e| yields_subexpression(body, e)),
     }
+}
+
+/// Whether `e` selects its value from one of several arms (`if` / `match`),
+/// which may be a live local it aliases rather than uniquely owns — so a
+/// read-only binding of such a rootless source must keep its copy. A `block` /
+/// labeled-block is excluded: its value is its single tail/break expression,
+/// whose own freshness is already recovered (a fresh tail is const-promoted and
+/// elided; blocking it would keep redundant copies of constant literals).
+fn yields_subexpression(body: &Body, e: ExprId) -> bool {
+    matches!(
+        body.exprs[e].kind,
+        ExprKind::If { .. } | ExprKind::Match { .. }
+    )
 }
 
 /// Check whether `value` is a `$value_copy$T(arg)` call whose wrapper can be
