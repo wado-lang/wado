@@ -6,8 +6,8 @@ struct core:prelude/types.wado//Box<i32> {  // TypeId(0)
     mut value: i32,
 }
 
-struct core:prelude/types.wado//Box<wado-compiler/tests/fixtures/variant_eq_user_impl.wado/Color> {  // TypeId(1)
-    mut value: ref "wado-compiler/tests/fixtures/variant_eq_user_impl.wado//Color",
+struct core:prelude/types.wado//Box<variant_eq_user_impl.wado/Color> {  // TypeId(1)
+    mut value: ref "variant_eq_user_impl.wado//Color",
 }
 
 array Array<u8> (mut u8);  // TypeId(2)
@@ -17,13 +17,13 @@ struct core:prelude/string.wado//String {  // TypeId(3)
     mut used: i32,
 }
 
-variant wado-compiler/tests/fixtures/variant_eq_user_impl.wado//Color {  // TypeId(4)
+variant variant_eq_user_impl.wado//Color {  // TypeId(4)
     Red,
     Green,
     Blue(i32),
 }
 
-struct wado-compiler/tests/fixtures/variant_eq_user_impl.wado//Color::Blue {  // TypeId(5)
+struct variant_eq_user_impl.wado//Color::Blue {  // TypeId(5)
     discriminant: i32,
     payload_0: i32,
 }
@@ -44,11 +44,11 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/variant_eq_user_impl.wado/run" = fn();  // TypeId(14)
+type "functype//variant_eq_user_impl.wado/run" = fn();  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/variant_eq_user_impl.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(15)
+type "functype//variant_eq_user_impl.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/variant_eq_user_impl.wado/__cm_export__run" = fn();  // TypeId(16)
+type "functype//variant_eq_user_impl.wado/__cm_export__run" = fn();  // TypeId(16)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(17)
 
@@ -68,7 +68,7 @@ type "functype//core:rt/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(25)
 
-type "functype//wado-compiler/tests/fixtures/variant_eq_user_impl.wado/Color^Eq::eq" = fn(ref "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/variant_eq_user_impl.wado/Color>", ref "wado-compiler/tests/fixtures/variant_eq_user_impl.wado//Color") -> bool;  // TypeId(26)
+type "functype//variant_eq_user_impl.wado/Color^Eq::eq" = fn(ref "core:prelude/types.wado//Box<variant_eq_user_impl.wado/Color>", ref "variant_eq_user_impl.wado//Color") -> bool;  // TypeId(26)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(27)
 
@@ -89,51 +89,51 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:variant_eq_user_impl.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/variant_eq_user_impl.wado/run"() with Stdout {
-    let c1: ref "wado-compiler/tests/fixtures/variant_eq_user_impl.wado//Color";
-    let c2: ref "wado-compiler/tests/fixtures/variant_eq_user_impl.wado//Color";
-    let c3: ref "wado-compiler/tests/fixtures/variant_eq_user_impl.wado//Color";
-    let c4: ref "wado-compiler/tests/fixtures/variant_eq_user_impl.wado//Color";
-    let c5: ref "wado-compiler/tests/fixtures/variant_eq_user_impl.wado//Color";
+fn "variant_eq_user_impl.wado/run"() with Stdout {
+    let c1: ref "variant_eq_user_impl.wado//Color";
+    let c2: ref "variant_eq_user_impl.wado//Color";
+    let c3: ref "variant_eq_user_impl.wado//Color";
+    let c4: ref "variant_eq_user_impl.wado//Color";
+    let c5: ref "variant_eq_user_impl.wado//Color";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:variant_eq_user_impl.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:variant_eq_user_impl.wado::__modules_initialized = 1;
     };
-    c1 = struct.new "wado-compiler/tests/fixtures/variant_eq_user_impl.wado//Color" { 0 };
-    c2 = struct.new "wado-compiler/tests/fixtures/variant_eq_user_impl.wado//Color" { 0 };
-    c3 = struct.new "wado-compiler/tests/fixtures/variant_eq_user_impl.wado//Color::Blue" { discriminant: 2, payload_0: 42 };
-    c4 = struct.new "wado-compiler/tests/fixtures/variant_eq_user_impl.wado//Color::Blue" { discriminant: 2, payload_0: 42 };
-    c5 = struct.new "wado-compiler/tests/fixtures/variant_eq_user_impl.wado//Color::Blue" { discriminant: 2, payload_0: 7 };
-    if "wado-compiler/tests/fixtures/variant_eq_user_impl.wado/Color^Eq::eq"(struct.new "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/variant_eq_user_impl.wado/Color>" { value: c1 }, c2) {
+    c1 = struct.new "variant_eq_user_impl.wado//Color" { 0 };
+    c2 = struct.new "variant_eq_user_impl.wado//Color" { 0 };
+    c3 = struct.new "variant_eq_user_impl.wado//Color::Blue" { discriminant: 2, payload_0: 42 };
+    c4 = struct.new "variant_eq_user_impl.wado//Color::Blue" { discriminant: 2, payload_0: 42 };
+    c5 = struct.new "variant_eq_user_impl.wado//Color::Blue" { discriminant: 2, payload_0: 7 };
+    if "variant_eq_user_impl.wado/Color^Eq::eq"(struct.new "core:prelude/types.wado//Box<variant_eq_user_impl.wado/Color>" { value: c1 }, c2) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("red == red"), used: 10 });
     }
-    if "wado-compiler/tests/fixtures/variant_eq_user_impl.wado/Color^Eq::eq"(struct.new "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/variant_eq_user_impl.wado/Color>" { value: c1 }, c3) == 0 {
+    if "variant_eq_user_impl.wado/Color^Eq::eq"(struct.new "core:prelude/types.wado//Box<variant_eq_user_impl.wado/Color>" { value: c1 }, c3) == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("red != blue"), used: 11 });
     }
-    if "wado-compiler/tests/fixtures/variant_eq_user_impl.wado/Color^Eq::eq"(struct.new "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/variant_eq_user_impl.wado/Color>" { value: c3 }, c4) {
+    if "variant_eq_user_impl.wado/Color^Eq::eq"(struct.new "core:prelude/types.wado//Box<variant_eq_user_impl.wado/Color>" { value: c3 }, c4) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("blue(42) == blue(42)"), used: 20 });
     }
-    if "wado-compiler/tests/fixtures/variant_eq_user_impl.wado/Color^Eq::eq"(struct.new "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/variant_eq_user_impl.wado/Color>" { value: c3 }, c5) == 0 {
+    if "variant_eq_user_impl.wado/Color^Eq::eq"(struct.new "core:prelude/types.wado//Box<variant_eq_user_impl.wado/Color>" { value: c3 }, c5) == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("blue(42) != blue(7)"), used: 19 });
     }
 }
 
-fn "wado-compiler/tests/fixtures/variant_eq_user_impl.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "variant_eq_user_impl.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/variant_eq_user_impl.wado/__cm_export__run"() {
+fn "variant_eq_user_impl.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:variant_eq_user_impl.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:variant_eq_user_impl.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/variant_eq_user_impl.wado/run"();
+    "variant_eq_user_impl.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -161,7 +161,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/variant_eq_user_impl.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "variant_eq_user_impl.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -239,10 +239,10 @@ fn "core:rt/cm_stream_write_raw_u8"(handle, data, len) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-fn "wado-compiler/tests/fixtures/variant_eq_user_impl.wado/Color^Eq::eq"(self, other) {
+fn "variant_eq_user_impl.wado/Color^Eq::eq"(self, other) {
     let b1: ref "core:prelude/types.wado//Box<i32>";
     let b2: ref "core:prelude/types.wado//Box<i32>";
-    let __match_scrut_0: ref "wado-compiler/tests/fixtures/variant_eq_user_impl.wado//Color";
+    let __match_scrut_0: ref "variant_eq_user_impl.wado//Color";
     __match_scrut_0 = self.value;
     if __match_scrut_0.discriminant == 0 {
         if other.discriminant == 0 {
@@ -252,7 +252,7 @@ fn "wado-compiler/tests/fixtures/variant_eq_user_impl.wado/Color^Eq::eq"(self, o
         return 0;
     } else {
     }
-    let __match_scrut_2: ref "wado-compiler/tests/fixtures/variant_eq_user_impl.wado//Color";
+    let __match_scrut_2: ref "variant_eq_user_impl.wado//Color";
     __match_scrut_2 = self.value;
     if __match_scrut_2.discriminant == 1 {
         if other.discriminant == 1 {
@@ -262,12 +262,12 @@ fn "wado-compiler/tests/fixtures/variant_eq_user_impl.wado/Color^Eq::eq"(self, o
         return 0;
     } else {
     }
-    let __match_scrut_4: ref "wado-compiler/tests/fixtures/variant_eq_user_impl.wado//Color";
+    let __match_scrut_4: ref "variant_eq_user_impl.wado//Color";
     __match_scrut_4 = self.value;
-    if ref.test "wado-compiler/tests/fixtures/variant_eq_user_impl.wado//Color::Blue"(__match_scrut_4) {
-        b1 = struct.new "core:prelude/types.wado//Box<i32>" { value: ref.cast "wado-compiler/tests/fixtures/variant_eq_user_impl.wado//Color::Blue"(__match_scrut_4).payload_0 };
-        if ref.test "wado-compiler/tests/fixtures/variant_eq_user_impl.wado//Color::Blue"(other) {
-            b2 = struct.new "core:prelude/types.wado//Box<i32>" { value: ref.cast "wado-compiler/tests/fixtures/variant_eq_user_impl.wado//Color::Blue"(other).payload_0 };
+    if ref.test "variant_eq_user_impl.wado//Color::Blue"(__match_scrut_4) {
+        b1 = struct.new "core:prelude/types.wado//Box<i32>" { value: ref.cast "variant_eq_user_impl.wado//Color::Blue"(__match_scrut_4).payload_0 };
+        if ref.test "variant_eq_user_impl.wado//Color::Blue"(other) {
+            b2 = struct.new "core:prelude/types.wado//Box<i32>" { value: ref.cast "variant_eq_user_impl.wado//Color::Blue"(other).payload_0 };
             return b1.value == b2.value;
         } else {
         }
@@ -278,4 +278,4 @@ fn "wado-compiler/tests/fixtures/variant_eq_user_impl.wado/Color^Eq::eq"(self, o
     unreachable;
 }
 
-export fn "wado-compiler/tests/fixtures/variant_eq_user_impl.wado/__cm_export__run" as "run"
+export fn "variant_eq_user_impl.wado/__cm_export__run" as "run"

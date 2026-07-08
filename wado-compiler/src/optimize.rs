@@ -509,7 +509,7 @@ pub mod pass_dump {
         if matches(name, phase) {
             let label = phase.label();
             eprintln!("=== WIR {label} {name} ===");
-            eprintln!("{}", crate::wir_unparse::unparse_wir(module, None));
+            eprintln!("{}", crate::wir_unparse::unparse_wir(module));
             eprintln!("=== end WIR {label} {name} ===");
         }
     }

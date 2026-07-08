@@ -52,13 +52,13 @@ type "functype//wasi/wasi:cli/Stdin::read_via_stream" = fn(i32);  // TypeId(14)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/stream_cm_stdin_read.wado/run" = fn();  // TypeId(16)
+type "functype//stream_cm_stdin_read.wado/run" = fn();  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/stream_cm_stdin_read.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(17)
+type "functype//stream_cm_stdin_read.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/stream_cm_stdin_read.wado/__cm_binding__Stdin_read_via_stream" = fn() -> ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]";  // TypeId(18)
+type "functype//stream_cm_stdin_read.wado/__cm_binding__Stdin_read_via_stream" = fn() -> ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]";  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/stream_cm_stdin_read.wado/__cm_export__run" = fn();  // TypeId(19)
+type "functype//stream_cm_stdin_read.wado/__cm_export__run" = fn();  // TypeId(19)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(20)
 
@@ -122,9 +122,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:stream_cm_stdin_read.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/stream_cm_stdin_read.wado/run"() with Stdout, Stdin {
+fn "stream_cm_stdin_read.wado/run"() with Stdout, Stdin {
     let stdin_stream: i32;
     let total: i32;
     let chunk: ref "core:prelude//List<u8>";
@@ -132,12 +132,12 @@ fn "wado-compiler/tests/fixtures/stream_cm_stdin_read.wado/run"() with Stdout, S
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let __pattern_temp_0: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:stream_cm_stdin_read.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:stream_cm_stdin_read.wado::__modules_initialized = 1;
     };
-    __pattern_temp_0 = "wado-compiler/tests/fixtures/stream_cm_stdin_read.wado/__cm_binding__Stdin_read_via_stream"();
+    __pattern_temp_0 = "stream_cm_stdin_read.wado/__cm_binding__Stdin_read_via_stream"();
     stdin_stream = __pattern_temp_0.0;
     total = 0;
     b0: block {
@@ -152,11 +152,11 @@ fn "wado-compiler/tests/fixtures/stream_cm_stdin_read.wado/run"() with Stdout, S
     "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 }; "core:prelude/string.wado/String::push"(__local_4, 114); "core:prelude/string.wado/String::push"(__local_4, 101); "core:prelude/string.wado/String::push"(__local_4, 97); "core:prelude/string.wado/String::push"(__local_4, 100); "core:prelude/string.wado/String::push"(__local_4, 32); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/i32::fmt_decimal"(total, __local_5); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push"(__local_4, 98); "core:prelude/string.wado/String::push"(__local_4, 121); "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 101); "core:prelude/string.wado/String::push"(__local_4, 115); __local_4);
 }
 
-fn "wado-compiler/tests/fixtures/stream_cm_stdin_read.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "stream_cm_stdin_read.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/stream_cm_stdin_read.wado/__cm_binding__Stdin_read_via_stream"() with Stdin {
+fn "stream_cm_stdin_read.wado/__cm_binding__Stdin_read_via_stream"() with Stdin {
     let __outptr: i32;
     let __lifted_result_1: i32;
     let __lifted_result_2: i32;
@@ -167,14 +167,14 @@ fn "wado-compiler/tests/fixtures/stream_cm_stdin_read.wado/__cm_binding__Stdin_r
     return struct.new "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]" { 0: __lifted_result_1, 1: __lifted_result_2 };
 }
 
-fn "wado-compiler/tests/fixtures/stream_cm_stdin_read.wado/__cm_export__run"() {
+fn "stream_cm_stdin_read.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:stream_cm_stdin_read.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:stream_cm_stdin_read.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/stream_cm_stdin_read.wado/run"();
+    "stream_cm_stdin_read.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -202,7 +202,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/stream_cm_stdin_read.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "stream_cm_stdin_read.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -524,4 +524,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/stream_cm_stdin_read.wado/__cm_export__run" as "run"
+export fn "stream_cm_stdin_read.wado/__cm_export__run" as "run"

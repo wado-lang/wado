@@ -12,8 +12,10 @@ use crate::wir::{
 
 /// Unparse a `WirPackage` into pseudo-Wado source code.
 ///
-/// `cwd` is the current working directory used to shorten entry-point paths.
-pub fn unparse_wir(module: &WirPackage, _cwd: Option<&str>) -> String {
+/// Symbol names are already stable across invocations because
+/// [`ModuleSource`](crate::module_source::ModuleSource)'s `Display` reduces an
+/// entry point to its base name, so no post-hoc path rewriting is needed here.
+pub fn unparse_wir(module: &WirPackage) -> String {
     let mut unparser = WirUnparser::new(&module.types, &module.data);
     unparser.unparse(module);
     unparser.output

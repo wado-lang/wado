@@ -51,11 +51,11 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/array_bounds_elim_loop_guard.wado/run" = fn();  // TypeId(16)
+type "functype//array_bounds_elim_loop_guard.wado/run" = fn();  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/array_bounds_elim_loop_guard.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(17)
+type "functype//array_bounds_elim_loop_guard.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/array_bounds_elim_loop_guard.wado/__cm_export__run" = fn();  // TypeId(18)
+type "functype//array_bounds_elim_loop_guard.wado/__cm_export__run" = fn();  // TypeId(18)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(19)
 
@@ -125,10 +125,10 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
-global global:__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(10, 20, 30, 40, 50)), used: 5 };
+global mut global:array_bounds_elim_loop_guard.wado::__modules_initialized: bool = 0;
+global global:array_bounds_elim_loop_guard.wado::__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(10, 20, 30, 40, 50)), used: 5 };
 
-fn "wado-compiler/tests/fixtures/array_bounds_elim_loop_guard.wado/run"() with Stdout {
+fn "array_bounds_elim_loop_guard.wado/run"() with Stdout {
     let sum: i32;
     let i: i32;
     let __local_6_6: ref "core:prelude/string.wado//String";
@@ -137,15 +137,15 @@ fn "wado-compiler/tests/fixtures/array_bounds_elim_loop_guard.wado/run"() with S
     let __local_9: ref "core:prelude/format.wado//Formatter";
     let _licm_repr_38: ref Array<i32>;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:array_bounds_elim_loop_guard.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:array_bounds_elim_loop_guard.wado::__modules_initialized = 1;
     };
     sum = 0;
     i = 0;
-    drop(global:__const_obj_0.used);
-    _licm_repr_38 = global:__const_obj_0.repr;
+    drop(global:array_bounds_elim_loop_guard.wado::__const_obj_0.used);
+    _licm_repr_38 = global:array_bounds_elim_loop_guard.wado::__const_obj_0.repr;
     b0: block {
         l1: loop {
             break_if b0 i >= 5;
@@ -156,7 +156,7 @@ fn "wado-compiler/tests/fixtures/array_bounds_elim_loop_guard.wado/run"() with S
     };
     if @unlikely(sum != 150) {
         cold_path;
-        "core:rt/panic"(__local_6_6 = "core:prelude/string.wado/String::with_capacity"(118); "core:prelude/string.wado/String::push_str"(__local_6_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_6_6, 114); "core:prelude/string.wado/String::push"(__local_6_6, 117); "core:prelude/string.wado/String::push"(__local_6_6, 110); "core:prelude/string.wado/String::push"(__local_6_6, 32); "core:prelude/string.wado/String::push"(__local_6_6, 97); "core:prelude/string.wado/String::push"(__local_6_6, 116); "core:prelude/string.wado/String::push"(__local_6_6, 32); "core:prelude/string.wado/String::push_str"(__local_6_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/array_bounds_elim_loop_guard.wado"), used: 62 }); "core:prelude/string.wado/String::push"(__local_6_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 12 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_6_6 = "core:prelude/string.wado/String::with_capacity"(118); "core:prelude/string.wado/String::push_str"(__local_6_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_6_6, 114); "core:prelude/string.wado/String::push"(__local_6_6, 117); "core:prelude/string.wado/String::push"(__local_6_6, 110); "core:prelude/string.wado/String::push"(__local_6_6, 32); "core:prelude/string.wado/String::push"(__local_6_6, 97); "core:prelude/string.wado/String::push"(__local_6_6, 116); "core:prelude/string.wado/String::push"(__local_6_6, 32); "core:prelude/string.wado/String::push_str"(__local_6_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array_bounds_elim_loop_guard.wado"), used: 33 }); "core:prelude/string.wado/String::push"(__local_6_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 12 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: sum == 150
 "), used: 23 }); "core:prelude/string.wado/String::push"(__local_6_6, 115); "core:prelude/string.wado/String::push"(__local_6_6, 117); "core:prelude/string.wado/String::push"(__local_6_6, 109); "core:prelude/string.wado/String::push"(__local_6_6, 58); "core:prelude/string.wado/String::push"(__local_6_6, 32); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6_6); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: sum }, __local_7); "core:prelude/string.wado/String::push"(__local_6_6, 10); __local_6_6);
         unreachable;
@@ -164,18 +164,18 @@ condition: sum == 150
     "core:cli/println"(__local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 }; "core:prelude/primitive.wado/i32::fmt_decimal"(sum, __local_9); __local_8);
 }
 
-fn "wado-compiler/tests/fixtures/array_bounds_elim_loop_guard.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "array_bounds_elim_loop_guard.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/array_bounds_elim_loop_guard.wado/__cm_export__run"() {
+fn "array_bounds_elim_loop_guard.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:array_bounds_elim_loop_guard.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:array_bounds_elim_loop_guard.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/array_bounds_elim_loop_guard.wado/run"();
+    "array_bounds_elim_loop_guard.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -203,7 +203,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/array_bounds_elim_loop_guard.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "array_bounds_elim_loop_guard.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -543,4 +543,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/array_bounds_elim_loop_guard.wado/__cm_export__run" as "run"
+export fn "array_bounds_elim_loop_guard.wado/__cm_export__run" as "run"

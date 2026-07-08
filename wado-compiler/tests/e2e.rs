@@ -995,8 +995,7 @@ fn run_normal_test(
             .wir_package
             .as_ref()
             .expect("wir_package should be retained when retain_wir is set");
-        let filename = fixture_path.to_string_lossy();
-        let wir_text = wado_compiler::wir_unparse::unparse_wir(wir_package, Some(&filename));
+        let wir_text = wado_compiler::wir_unparse::unparse_wir(wir_package);
 
         let (expect, not_expect) = spec.wir_expectations(opt_level);
         let opt_name = common::opt_level_name(opt_level);

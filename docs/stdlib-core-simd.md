@@ -89,6 +89,16 @@ Methods use the `relaxed_` prefix.
 - **Q15 multiply:** `i16x8.relaxed_q15mulr_s`
 - **Dot product:** `i16x8.relaxed_dot_i8x16_i7x16_s`, `i32x4.relaxed_dot_i8x16_i7x16_add_s`
 
+## Synopsis
+
+```wado
+let a: i32x4 = [10, 2, 30, 4];
+let b: i32x4 = [1, 20, 3, 40];
+let mins = a.min_s(&b);
+assert mins.extract_lane(0) == 1;
+assert mins.extract_lane(3) == 4;
+```
+
 ## Types
 
 ### `pub type i8x16 = v128`

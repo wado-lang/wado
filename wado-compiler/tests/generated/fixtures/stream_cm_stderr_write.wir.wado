@@ -37,13 +37,13 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/run" = fn();  // TypeId(13)
+type "functype//stream_cm_stderr_write.wado/run" = fn();  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/__cm_binding__Stderr_write_via_stream" = fn(i32) -> i32;  // TypeId(14)
+type "functype//stream_cm_stderr_write.wado/__cm_binding__Stderr_write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/__cm_export__run" = fn();  // TypeId(15)
+type "functype//stream_cm_stderr_write.wado/__cm_export__run" = fn();  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/__cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>" = fn(i32) -> ref null "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>";  // TypeId(16)
+type "functype//stream_cm_stderr_write.wado/__cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>" = fn(i32) -> ref null "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>";  // TypeId(16)
 
 type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(17)
 
@@ -78,45 +78,45 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-read:transmission-cli from "wasi/future-read:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:stream_cm_stderr_write.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/run"() with Stderr {
+fn "stream_cm_stderr_write.wado/run"() with Stderr {
     let subtask: i32;
     let __b: ref "core:prelude//List<u8>";
     let packed: i64;
     let rx_7: i32;
     let tx_8: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:stream_cm_stderr_write.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:stream_cm_stderr_write.wado::__modules_initialized = 1;
     };
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
-    subtask = "wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/__cm_binding__Stderr_write_via_stream"(rx_7);
+    subtask = "stream_cm_stderr_write.wado/__cm_binding__Stderr_write_via_stream"(rx_7);
     __b = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(101, 114, 114, 32, 109, 115, 103, 10), used: 8 };
     "core:rt/cm_stream_write_u8"(tx_8, __b);
     "wasi/stream-drop-writable"(tx_8);
-    drop("wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/__cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"(subtask));
+    drop("stream_cm_stderr_write.wado/__cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"(subtask));
 }
 
-fn "wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/__cm_binding__Stderr_write_via_stream"(data) with Stderr {
+fn "stream_cm_stderr_write.wado/__cm_binding__Stderr_write_via_stream"(data) with Stderr {
     return "wasi/wasi:cli/Stderr::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/__cm_export__run"() {
+fn "stream_cm_stderr_write.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:stream_cm_stderr_write.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:stream_cm_stderr_write.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/run"();
+    "stream_cm_stderr_write.wado/run"();
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/__cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"(handle) {
+fn "stream_cm_stderr_write.wado/__cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"(handle) {
     let ptr: i32;
     let status: i32;
     let result: ref null "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>";
@@ -238,4 +238,4 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-export fn "wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/__cm_export__run" as "run"
+export fn "stream_cm_stderr_write.wado/__cm_export__run" as "run"

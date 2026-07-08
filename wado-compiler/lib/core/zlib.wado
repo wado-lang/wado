@@ -59,6 +59,13 @@
 //! ```
 
 
+#[synopsis]
+test {
+    let data = b"wado wado wado wado";
+    let compressed = zlib_compress(&data);
+    assert uncompress(&compressed) matches { Ok(round) && round == data };
+}
+
 /// Error type for zlib/gzip decompression operations.
 pub enum ZlibError {
     DataTooShort,

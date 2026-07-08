@@ -24,12 +24,12 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct wado-compiler/tests/fixtures/stores_with_effects.wado//Data {  // TypeId(4)
+struct stores_with_effects.wado//Data {  // TypeId(4)
     mut value: i32,
 }
 
-struct wado-compiler/tests/fixtures/stores_with_effects.wado//Container {  // TypeId(5)
-    mut data: ref "wado-compiler/tests/fixtures/stores_with_effects.wado//Data",
+struct stores_with_effects.wado//Container {  // TypeId(5)
+    mut data: ref "stores_with_effects.wado//Data",
 }
 
 enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(6)
@@ -52,13 +52,13 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/stores_with_effects.wado/store_and_log" = fn(ref "wado-compiler/tests/fixtures/stores_with_effects.wado//Data") -> ref "wado-compiler/tests/fixtures/stores_with_effects.wado//Container";  // TypeId(16)
+type "functype//stores_with_effects.wado/store_and_log" = fn(ref "stores_with_effects.wado//Data") -> ref "stores_with_effects.wado//Container";  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/stores_with_effects.wado/run" = fn();  // TypeId(17)
+type "functype//stores_with_effects.wado/run" = fn();  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/stores_with_effects.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(18)
+type "functype//stores_with_effects.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/stores_with_effects.wado/__cm_export__run" = fn();  // TypeId(19)
+type "functype//stores_with_effects.wado/__cm_export__run" = fn();  // TypeId(19)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(20)
 
@@ -128,50 +128,50 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
-global global:__const_obj_0: ref null "wado-compiler/tests/fixtures/stores_with_effects.wado//Data" = struct.new "wado-compiler/tests/fixtures/stores_with_effects.wado//Data" { value: 99 };
+global mut global:stores_with_effects.wado::__modules_initialized: bool = 0;
+global global:stores_with_effects.wado::__const_obj_0: ref null "stores_with_effects.wado//Data" = struct.new "stores_with_effects.wado//Data" { value: 99 };
 
-fn "wado-compiler/tests/fixtures/stores_with_effects.wado/store_and_log"(data) with Stdout {
+fn "stores_with_effects.wado/store_and_log"(data) with Stdout {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(41), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Storing data with value: "), used: 25 }); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; "core:prelude/primitive.wado/i32::fmt_decimal"(data.value, __local_2); __local_1);
-    return struct.new "wado-compiler/tests/fixtures/stores_with_effects.wado//Container" { data: data };
+    return struct.new "stores_with_effects.wado//Container" { data: data };
 }
 
-fn "wado-compiler/tests/fixtures/stores_with_effects.wado/run"() with Stdout {
-    let c: ref "wado-compiler/tests/fixtures/stores_with_effects.wado//Container";
+fn "stores_with_effects.wado/run"() with Stdout {
+    let c: ref "stores_with_effects.wado//Container";
     let __v0: i32;
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:stores_with_effects.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:stores_with_effects.wado::__modules_initialized = 1;
     };
-    c = "wado-compiler/tests/fixtures/stores_with_effects.wado/store_and_log"(global:__const_obj_0);
+    c = "stores_with_effects.wado/store_and_log"(global:stores_with_effects.wado::__const_obj_0);
     __v0 = c.data.value;
     if @unlikely(__v0 != 99) {
         cold_path;
-        "core:rt/panic"(__local_4 = "core:prelude/string.wado/String::with_capacity"(135); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_4, 114); "core:prelude/string.wado/String::push"(__local_4, 117); "core:prelude/string.wado/String::push"(__local_4, 110); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push"(__local_4, 97); "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/stores_with_effects.wado"), used: 53 }); "core:prelude/string.wado/String::push"(__local_4, 58); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 21 }, __local_5); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_4 = "core:prelude/string.wado/String::with_capacity"(135); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_4, 114); "core:prelude/string.wado/String::push"(__local_4, 117); "core:prelude/string.wado/String::push"(__local_4, 110); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push"(__local_4, 97); "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("stores_with_effects.wado"), used: 24 }); "core:prelude/string.wado/String::push"(__local_4, 58); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 21 }, __local_5); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: c.data.value == 99
 "), used: 31 }); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("c.data.value: "), used: 14 }); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0 }, __local_5); "core:prelude/string.wado/String::push"(__local_4, 10); __local_4);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/stores_with_effects.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "stores_with_effects.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/stores_with_effects.wado/__cm_export__run"() {
+fn "stores_with_effects.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:stores_with_effects.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:stores_with_effects.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/stores_with_effects.wado/run"();
+    "stores_with_effects.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -199,7 +199,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/stores_with_effects.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "stores_with_effects.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -539,4 +539,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/stores_with_effects.wado/__cm_export__run" as "run"
+export fn "stores_with_effects.wado/__cm_export__run" as "run"

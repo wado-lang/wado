@@ -30,7 +30,7 @@ struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(4)
     payload_0: i32,
 }
 
-struct wado-compiler/tests/fixtures/trait_bound_5.wado//Wrapper<i32> {  // TypeId(5)
+struct trait_bound_5.wado//Wrapper<i32> {  // TypeId(5)
     mut inner: i32,
 }
 
@@ -52,13 +52,13 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/trait_bound_5.wado/trait_bound_option_eq_none" = fn();  // TypeId(15)
+type "functype//trait_bound_5.wado/trait_bound_option_eq_none" = fn();  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/trait_bound_5.wado/trait_bound_option_propagation" = fn();  // TypeId(16)
+type "functype//trait_bound_5.wado/trait_bound_option_propagation" = fn();  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/trait_bound_5.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(17)
+type "functype//trait_bound_5.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/trait_bound_5.wado/__cm_export__run" = fn();  // TypeId(18)
+type "functype//trait_bound_5.wado/__cm_export__run" = fn();  // TypeId(18)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(19)
 
@@ -94,7 +94,7 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(35)
 
-type "functype//wado-compiler/tests/fixtures/trait_bound_5.wado/Wrapper<i32>^Describable::describe" = fn(ref "wado-compiler/tests/fixtures/trait_bound_5.wado//Wrapper<i32>") -> ref "core:prelude/string.wado//String";  // TypeId(36)
+type "functype//trait_bound_5.wado/Wrapper<i32>^Describable::describe" = fn(ref "trait_bound_5.wado//Wrapper<i32>") -> ref "core:prelude/string.wado//String";  // TypeId(36)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(37)
 
@@ -115,9 +115,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:trait_bound_5.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/trait_bound_5.wado/trait_bound_option_eq_none"() with Stdout {
+fn "trait_bound_5.wado/trait_bound_option_eq_none"() with Stdout {
     let a_0: ref "core:prelude/types.wado//Option<i32>";
     let b_1: ref "core:prelude/types.wado//Option<i32>";
     let c: ref "core:prelude/types.wado//Option<i32>";
@@ -166,7 +166,7 @@ fn "wado-compiler/tests/fixtures/trait_bound_5.wado/trait_bound_option_eq_none"(
     }
 }
 
-fn "wado-compiler/tests/fixtures/trait_bound_5.wado/trait_bound_option_propagation"() with Stdout {
+fn "trait_bound_5.wado/trait_bound_option_propagation"() with Stdout {
     let a_0: ref "core:prelude/types.wado//Option<i32>";
     let b_1: ref "core:prelude/types.wado//Option<i32>";
     let c: ref "core:prelude/types.wado//Option<i32>";
@@ -213,28 +213,28 @@ fn "wado-compiler/tests/fixtures/trait_bound_5.wado/trait_bound_option_propagati
     }
 }
 
-fn "wado-compiler/tests/fixtures/trait_bound_5.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "trait_bound_5.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/trait_bound_5.wado/__cm_export__run"() {
-    let w1: ref "wado-compiler/tests/fixtures/trait_bound_5.wado//Wrapper<i32>";
+fn "trait_bound_5.wado/__cm_export__run"() {
+    let w1: ref "trait_bound_5.wado//Wrapper<i32>";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:trait_bound_5.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:trait_bound_5.wado::__modules_initialized = 1;
     };
     __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_2 @likely(global:trait_bound_5.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:trait_bound_5.wado::__modules_initialized = 1;
     };
-    w1 = struct.new "wado-compiler/tests/fixtures/trait_bound_5.wado//Wrapper<i32>" { inner: 42 };
-    "core:cli/println"("wado-compiler/tests/fixtures/trait_bound_5.wado/Wrapper<i32>^Describable::describe"(w1));
-    "wado-compiler/tests/fixtures/trait_bound_5.wado/trait_bound_option_eq_none"();
-    "wado-compiler/tests/fixtures/trait_bound_5.wado/trait_bound_option_propagation"();
+    w1 = struct.new "trait_bound_5.wado//Wrapper<i32>" { inner: 42 };
+    "core:cli/println"("trait_bound_5.wado/Wrapper<i32>^Describable::describe"(w1));
+    "trait_bound_5.wado/trait_bound_option_eq_none"();
+    "trait_bound_5.wado/trait_bound_option_propagation"();
     "wasi/task-return"(0);
 }
 
@@ -262,7 +262,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/trait_bound_5.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "trait_bound_5.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -552,7 +552,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "wado-compiler/tests/fixtures/trait_bound_5.wado/Wrapper<i32>^Describable::describe"(self) {
+fn "trait_bound_5.wado/Wrapper<i32>^Describable::describe"(self) {
     let __local_1_1: ref "core:prelude/string.wado//String";
     let __local_1_4: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
@@ -560,4 +560,4 @@ fn "wado-compiler/tests/fixtures/trait_bound_5.wado/Wrapper<i32>^Describable::de
     return __local_1_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 }, "core:prelude/string.wado/String::push"(__local_1_1, 87), "core:prelude/string.wado/String::push"(__local_1_1, 114), "core:prelude/string.wado/String::push"(__local_1_1, 97), "core:prelude/string.wado/String::push"(__local_1_1, 112), "core:prelude/string.wado/String::push"(__local_1_1, 112), "core:prelude/string.wado/String::push"(__local_1_1, 101), "core:prelude/string.wado/String::push"(__local_1_1, 114), "core:prelude/string.wado/String::push"(__local_1_1, 40), "core:prelude/string.wado/String::push_str"(__local_1_1, __sroa_self_value = self.inner; __local_1_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1_4 }; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value, __local_2); __local_1_4), "core:prelude/string.wado/String::push"(__local_1_1, 41), __local_1_1;
 }
 
-export fn "wado-compiler/tests/fixtures/trait_bound_5.wado/__cm_export__run" as "run"
+export fn "trait_bound_5.wado/__cm_export__run" as "run"

@@ -20,25 +20,25 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct wado-compiler/tests/fixtures/effect_handler_nested_same.wado//__Dispatch_Counter {  // TypeId(3)
-    mut outer: ref null "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//__Dispatch_Counter",
+struct effect_handler_nested_same.wado//__Dispatch_Counter {  // TypeId(3)
+    mut outer: ref null "effect_handler_nested_same.wado//__Dispatch_Counter",
     mut op_next: ref struct,
 }
 
-struct wado-compiler/tests/fixtures/effect_handler_nested_same.wado//AddTen {  // TypeId(4)
+struct effect_handler_nested_same.wado//AddTen {  // TypeId(4)
     mut base: i32,
 }
 
-struct wado-compiler/tests/fixtures/effect_handler_nested_same.wado//__Closure_3 {  // TypeId(5)
-    mut __capture_0: ref "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//AddTen",
+struct effect_handler_nested_same.wado//__Closure_3 {  // TypeId(5)
+    mut __capture_0: ref "effect_handler_nested_same.wado//AddTen",
 }
 
-struct wado-compiler/tests/fixtures/effect_handler_nested_same.wado//AddOne {  // TypeId(6)
+struct effect_handler_nested_same.wado//AddOne {  // TypeId(6)
     mut base: i32,
 }
 
-struct wado-compiler/tests/fixtures/effect_handler_nested_same.wado//__Closure_2 {  // TypeId(7)
-    mut __capture_0: ref "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//AddOne",
+struct effect_handler_nested_same.wado//__Closure_2 {  // TypeId(7)
+    mut __capture_0: ref "effect_handler_nested_same.wado//AddOne",
 }
 
 enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(8)
@@ -68,13 +68,13 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(19)
 
-type "functype//wado-compiler/tests/fixtures/effect_handler_nested_same.wado/run" = fn();  // TypeId(20)
+type "functype//effect_handler_nested_same.wado/run" = fn();  // TypeId(20)
 
-type "functype//wado-compiler/tests/fixtures/effect_handler_nested_same.wado/__effect_dispatch__Counter__next" = fn() -> i32;  // TypeId(21)
+type "functype//effect_handler_nested_same.wado/__effect_dispatch__Counter__next" = fn() -> i32;  // TypeId(21)
 
-type "functype//wado-compiler/tests/fixtures/effect_handler_nested_same.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(22)
+type "functype//effect_handler_nested_same.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(22)
 
-type "functype//wado-compiler/tests/fixtures/effect_handler_nested_same.wado/__cm_export__run" = fn();  // TypeId(23)
+type "functype//effect_handler_nested_same.wado/__cm_export__run" = fn();  // TypeId(23)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(24)
 
@@ -116,9 +116,9 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(43)
 
-type "functype//wado-compiler/tests/fixtures/effect_handler_nested_same.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//__Closure_2") -> i32;  // TypeId(44)
+type "functype//effect_handler_nested_same.wado/__Closure_2::__call" = fn(ref "effect_handler_nested_same.wado//__Closure_2") -> i32;  // TypeId(44)
 
-type "functype//wado-compiler/tests/fixtures/effect_handler_nested_same.wado/__Closure_3::__call" = fn(ref "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//__Closure_3") -> i32;  // TypeId(45)
+type "functype//effect_handler_nested_same.wado/__Closure_3::__call" = fn(ref "effect_handler_nested_same.wado//__Closure_3") -> i32;  // TypeId(45)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(46)
 
@@ -140,12 +140,12 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__effect_Counter: ref null "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//__Dispatch_Counter" = ref.null none;
-global mut global:__modules_initialized: bool = 0;
+global mut global:effect_handler_nested_same.wado::__effect_Counter: ref null "effect_handler_nested_same.wado//__Dispatch_Counter" = ref.null none;
+global mut global:effect_handler_nested_same.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/effect_handler_nested_same.wado/run"() with Stdout {
-    let outer: ref "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//AddOne";
-    let inner: ref "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//AddTen";
+fn "effect_handler_nested_same.wado/run"() with Stdout {
+    let outer: ref "effect_handler_nested_same.wado//AddOne";
+    let inner: ref "effect_handler_nested_same.wado//AddTen";
     let o1: i32;
     let i1: i32;
     let i2: i32;
@@ -154,51 +154,51 @@ fn "wado-compiler/tests/fixtures/effect_handler_nested_same.wado/run"() with Std
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
-    let __save_Counter_11: ref null "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//__Dispatch_Counter";
-    let __d_Counter_12: ref "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//__Dispatch_Counter";
-    let __save_Counter_14: ref null "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//__Dispatch_Counter";
-    let __d_Counter_15: ref "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//__Dispatch_Counter";
+    let __save_Counter_11: ref null "effect_handler_nested_same.wado//__Dispatch_Counter";
+    let __d_Counter_12: ref "effect_handler_nested_same.wado//__Dispatch_Counter";
+    let __save_Counter_14: ref null "effect_handler_nested_same.wado//__Dispatch_Counter";
+    let __d_Counter_15: ref "effect_handler_nested_same.wado//__Dispatch_Counter";
     let f_19: ref "core:prelude/format.wado//Formatter";
     let f_24: ref "core:prelude/format.wado//Formatter";
     let f_29: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:effect_handler_nested_same.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:effect_handler_nested_same.wado::__modules_initialized = 1;
     };
-    outer = struct.new "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//AddOne" { base: 0 };
-    inner = struct.new "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//AddTen" { base: 100 };
-    __save_Counter_14 = global:__effect_Counter;
-    __d_Counter_15 = struct.new "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//__Dispatch_Counter" { outer: __save_Counter_14, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//__Closure_2" { __capture_0: outer }, func: ref.func "closure/wado-compiler/tests/fixtures/effect_handler_nested_same.wado/__closure_wrapper_0" } };
-    global:__effect_Counter = __d_Counter_15;
-    o1 = "wado-compiler/tests/fixtures/effect_handler_nested_same.wado/__effect_dispatch__Counter__next"();
-    __save_Counter_11 = global:__effect_Counter;
-    __d_Counter_12 = struct.new "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//__Dispatch_Counter" { outer: __save_Counter_11, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//__Closure_3" { __capture_0: inner }, func: ref.func "closure/wado-compiler/tests/fixtures/effect_handler_nested_same.wado/__closure_wrapper_1" } };
-    global:__effect_Counter = __d_Counter_12;
-    i1 = "wado-compiler/tests/fixtures/effect_handler_nested_same.wado/__effect_dispatch__Counter__next"();
-    i2 = "wado-compiler/tests/fixtures/effect_handler_nested_same.wado/__effect_dispatch__Counter__next"();
+    outer = struct.new "effect_handler_nested_same.wado//AddOne" { base: 0 };
+    inner = struct.new "effect_handler_nested_same.wado//AddTen" { base: 100 };
+    __save_Counter_14 = global:effect_handler_nested_same.wado::__effect_Counter;
+    __d_Counter_15 = struct.new "effect_handler_nested_same.wado//__Dispatch_Counter" { outer: __save_Counter_14, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_nested_same.wado//__Closure_2" { __capture_0: outer }, func: ref.func "closure/effect_handler_nested_same.wado/__closure_wrapper_0" } };
+    global:effect_handler_nested_same.wado::__effect_Counter = __d_Counter_15;
+    o1 = "effect_handler_nested_same.wado/__effect_dispatch__Counter__next"();
+    __save_Counter_11 = global:effect_handler_nested_same.wado::__effect_Counter;
+    __d_Counter_12 = struct.new "effect_handler_nested_same.wado//__Dispatch_Counter" { outer: __save_Counter_11, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_nested_same.wado//__Closure_3" { __capture_0: inner }, func: ref.func "closure/effect_handler_nested_same.wado/__closure_wrapper_1" } };
+    global:effect_handler_nested_same.wado::__effect_Counter = __d_Counter_12;
+    i1 = "effect_handler_nested_same.wado/__effect_dispatch__Counter__next"();
+    i2 = "effect_handler_nested_same.wado/__effect_dispatch__Counter__next"();
     "core:cli/println"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(73), used: 0 }; "core:prelude/string.wado/String::push"(__local_6, 111); "core:prelude/string.wado/String::push"(__local_6, 117); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 101); "core:prelude/string.wado/String::push"(__local_6, 114); "core:prelude/string.wado/String::push"(__local_6, 49); "core:prelude/string.wado/String::push"(__local_6, 61); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; f_19 = __local_7; "core:prelude/primitive.wado/i32::fmt_decimal"(o1, f_19); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", inner1="), used: 9 }); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; f_24 = __local_7; "core:prelude/primitive.wado/i32::fmt_decimal"(i1, f_24); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", inner2="), used: 9 }); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; f_29 = __local_7; "core:prelude/primitive.wado/i32::fmt_decimal"(i2, f_29); __local_6);
-    global:__effect_Counter = __save_Counter_11;
-    o2 = "wado-compiler/tests/fixtures/effect_handler_nested_same.wado/__effect_dispatch__Counter__next"();
+    global:effect_handler_nested_same.wado::__effect_Counter = __save_Counter_11;
+    o2 = "effect_handler_nested_same.wado/__effect_dispatch__Counter__next"();
     "core:cli/println"(__local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 }; "core:prelude/string.wado/String::push"(__local_8, 111); "core:prelude/string.wado/String::push"(__local_8, 117); "core:prelude/string.wado/String::push"(__local_8, 116); "core:prelude/string.wado/String::push"(__local_8, 101); "core:prelude/string.wado/String::push"(__local_8, 114); "core:prelude/string.wado/String::push"(__local_8, 50); "core:prelude/string.wado/String::push"(__local_8, 61); __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 }; "core:prelude/primitive.wado/i32::fmt_decimal"(o2, __local_9); __local_8);
-    global:__effect_Counter = __save_Counter_14;
+    global:effect_handler_nested_same.wado::__effect_Counter = __save_Counter_14;
 }
 
-fn "wado-compiler/tests/fixtures/effect_handler_nested_same.wado/__effect_dispatch__Counter__next"() {
-    let __saved: ref null "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//__Dispatch_Counter";
-    let __local_1: ref "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//__Dispatch_Counter";
+fn "effect_handler_nested_same.wado/__effect_dispatch__Counter__next"() {
+    let __saved: ref null "effect_handler_nested_same.wado//__Dispatch_Counter";
+    let __local_1: ref "effect_handler_nested_same.wado//__Dispatch_Counter";
     let __local_2: i32;
-    __saved = global:__effect_Counter;
+    __saved = global:effect_handler_nested_same.wado::__effect_Counter;
     if @likely(ref.is_null(__saved) == 0) {
         __local_1 = ref.as_non_null(__saved);
-        global:__effect_Counter = __local_1.outer;
+        global:effect_handler_nested_same.wado::__effect_Counter = __local_1.outer;
         __local_2 = block -> i32 {
             let __indirect_call_0: ref "canonical//CanonicalClosure_0";
             __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(__local_1.op_next);
             call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env);
         };
-        global:__effect_Counter = __saved;
+        global:effect_handler_nested_same.wado::__effect_Counter = __saved;
         return __local_2;
     } else {
         "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Counter::next`"), used: 40 });
@@ -206,18 +206,18 @@ fn "wado-compiler/tests/fixtures/effect_handler_nested_same.wado/__effect_dispat
     }
 }
 
-fn "wado-compiler/tests/fixtures/effect_handler_nested_same.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "effect_handler_nested_same.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/effect_handler_nested_same.wado/__cm_export__run"() {
+fn "effect_handler_nested_same.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:effect_handler_nested_same.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:effect_handler_nested_same.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/effect_handler_nested_same.wado/run"();
+    "effect_handler_nested_same.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -245,7 +245,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/effect_handler_nested_same.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "effect_handler_nested_same.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -569,26 +569,26 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "wado-compiler/tests/fixtures/effect_handler_nested_same.wado/__Closure_2::__call"(self) {
-    let self_1: ref "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//AddOne";
+fn "effect_handler_nested_same.wado/__Closure_2::__call"(self) {
+    let self_1: ref "effect_handler_nested_same.wado//AddOne";
     return self_1 = self.__capture_0, self_1.base = self_1.base + 1, self_1.base;
 }
 
-fn "wado-compiler/tests/fixtures/effect_handler_nested_same.wado/__Closure_3::__call"(self) {
-    let self_1: ref "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//AddTen";
+fn "effect_handler_nested_same.wado/__Closure_3::__call"(self) {
+    let self_1: ref "effect_handler_nested_same.wado//AddTen";
     return self_1 = self.__capture_0, self_1.base = self_1.base + 10, self_1.base;
 }
 
-fn "closure/wado-compiler/tests/fixtures/effect_handler_nested_same.wado/__closure_wrapper_0"(__env) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//__Closure_2";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//__Closure_2"(__env);
-    return "wado-compiler/tests/fixtures/effect_handler_nested_same.wado/__Closure_2::__call"(__typed_env);
+fn "closure/effect_handler_nested_same.wado/__closure_wrapper_0"(__env) {
+    let __typed_env: ref "effect_handler_nested_same.wado//__Closure_2";
+    __typed_env = ref.cast "effect_handler_nested_same.wado//__Closure_2"(__env);
+    return "effect_handler_nested_same.wado/__Closure_2::__call"(__typed_env);
 }
 
-fn "closure/wado-compiler/tests/fixtures/effect_handler_nested_same.wado/__closure_wrapper_1"(__env) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//__Closure_3";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/effect_handler_nested_same.wado//__Closure_3"(__env);
-    return "wado-compiler/tests/fixtures/effect_handler_nested_same.wado/__Closure_3::__call"(__typed_env);
+fn "closure/effect_handler_nested_same.wado/__closure_wrapper_1"(__env) {
+    let __typed_env: ref "effect_handler_nested_same.wado//__Closure_3";
+    __typed_env = ref.cast "effect_handler_nested_same.wado//__Closure_3"(__env);
+    return "effect_handler_nested_same.wado/__Closure_3::__call"(__typed_env);
 }
 
-export fn "wado-compiler/tests/fixtures/effect_handler_nested_same.wado/__cm_export__run" as "run"
+export fn "effect_handler_nested_same.wado/__cm_export__run" as "run"

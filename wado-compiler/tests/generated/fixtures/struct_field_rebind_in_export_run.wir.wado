@@ -6,9 +6,9 @@ type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(0)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(1)
 
-type "functype//wado-compiler/tests/fixtures/struct_field_rebind_in_export_run.wado/build" = fn(bool);  // TypeId(2)
+type "functype//struct_field_rebind_in_export_run.wado/build" = fn(bool);  // TypeId(2)
 
-type "functype//wado-compiler/tests/fixtures/struct_field_rebind_in_export_run.wado/__cm_export__run" = fn();  // TypeId(3)
+type "functype//struct_field_rebind_in_export_run.wado/__cm_export__run" = fn();  // TypeId(3)
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(4)
 
@@ -16,9 +16,9 @@ import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import memory (1) from "mem/memory";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:struct_field_rebind_in_export_run.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/struct_field_rebind_in_export_run.wado/build"(flag) {
+fn "struct_field_rebind_in_export_run.wado/build"(flag) {
     drop((if flag -> i32 {
         1;
     } else {
@@ -27,24 +27,24 @@ fn "wado-compiler/tests/fixtures/struct_field_rebind_in_export_run.wado/build"(f
     return;
 }
 
-fn "wado-compiler/tests/fixtures/struct_field_rebind_in_export_run.wado/__cm_export__run"() {
+fn "struct_field_rebind_in_export_run.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:struct_field_rebind_in_export_run.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:struct_field_rebind_in_export_run.wado::__modules_initialized = 1;
     };
     __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_2 @likely(global:struct_field_rebind_in_export_run.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:struct_field_rebind_in_export_run.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/struct_field_rebind_in_export_run.wado/build"(1);
+    "struct_field_rebind_in_export_run.wado/build"(1);
     "wasi/task-return"(0);
 }
 
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-export fn "wado-compiler/tests/fixtures/struct_field_rebind_in_export_run.wado/__cm_export__run" as "run"
+export fn "struct_field_rebind_in_export_run.wado/__cm_export__run" as "run"

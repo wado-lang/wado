@@ -62,6 +62,14 @@ stream.update(&chunk2);
 let compressed = stream.finish();
 ```
 
+## Synopsis
+
+```wado
+let data = b"wado wado wado wado";
+let compressed = zlib_compress(&data);
+assert uncompress(&compressed) matches { Ok(round) && round == data };
+```
+
 ## Globals
 
 ### `pub global Z_OK: i32`

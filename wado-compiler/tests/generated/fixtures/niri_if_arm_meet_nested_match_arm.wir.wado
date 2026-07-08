@@ -42,15 +42,15 @@ type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:clocks/MonotonicClock::now" = fn() -> i64;  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/check_match_arm_meet" = fn(bool) -> i32;  // TypeId(14)
+type "functype//niri_if_arm_meet_nested_match_arm.wado/check_match_arm_meet" = fn(bool) -> i32;  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/run" = fn();  // TypeId(15)
+type "functype//niri_if_arm_meet_nested_match_arm.wado/run" = fn();  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(16)
+type "functype//niri_if_arm_meet_nested_match_arm.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/__cm_binding__MonotonicClock_now" = fn() -> u64;  // TypeId(17)
+type "functype//niri_if_arm_meet_nested_match_arm.wado/__cm_binding__MonotonicClock_now" = fn() -> u64;  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/__cm_export__run" = fn();  // TypeId(18)
+type "functype//niri_if_arm_meet_nested_match_arm.wado/__cm_export__run" = fn();  // TypeId(18)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(19)
 
@@ -106,9 +106,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:niri_if_arm_meet_nested_match_arm.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/check_match_arm_meet"(flag) {
+fn "niri_if_arm_meet_nested_match_arm.wado/check_match_arm_meet"(flag) {
     let tag: i32;
     let repr: ref Array<u16>;
     repr = builtin::array_new<u16>(16);
@@ -128,7 +128,7 @@ fn "wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/check_ma
     return 16 + tag;
 }
 
-fn "wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/run"() with Stdout, MonotonicClock {
+fn "niri_if_arm_meet_nested_match_arm.wado/run"() with Stdout, MonotonicClock {
     let now: u64;
     let a: i32;
     let b: i32;
@@ -137,33 +137,33 @@ fn "wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/run"() w
     let f_9: ref "core:prelude/format.wado//Formatter";
     let f_14: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:niri_if_arm_meet_nested_match_arm.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:niri_if_arm_meet_nested_match_arm.wado::__modules_initialized = 1;
     };
-    drop(local.tee now("wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/__cm_binding__MonotonicClock_now"()) != now);
-    a = "wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/check_match_arm_meet"(1);
-    b = "wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/check_match_arm_meet"(0);
+    drop(local.tee now("niri_if_arm_meet_nested_match_arm.wado/__cm_binding__MonotonicClock_now"()) != now);
+    a = "niri_if_arm_meet_nested_match_arm.wado/check_match_arm_meet"(1);
+    b = "niri_if_arm_meet_nested_match_arm.wado/check_match_arm_meet"(0);
     "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; f_9 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(a, f_9); "core:prelude/string.wado/String::push"(__local_4, 44); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; f_14 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(b, f_14); __local_4);
 }
 
-fn "wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "niri_if_arm_meet_nested_match_arm.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/__cm_binding__MonotonicClock_now"() with MonotonicClock {
+fn "niri_if_arm_meet_nested_match_arm.wado/__cm_binding__MonotonicClock_now"() with MonotonicClock {
     return "wasi/wasi:clocks/MonotonicClock::now"();
 }
 
-fn "wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/__cm_export__run"() {
+fn "niri_if_arm_meet_nested_match_arm.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:niri_if_arm_meet_nested_match_arm.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:niri_if_arm_meet_nested_match_arm.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/run"();
+    "niri_if_arm_meet_nested_match_arm.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -191,7 +191,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "niri_if_arm_meet_nested_match_arm.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -481,4 +481,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/__cm_export__run" as "run"
+export fn "niri_if_arm_meet_nested_match_arm.wado/__cm_export__run" as "run"

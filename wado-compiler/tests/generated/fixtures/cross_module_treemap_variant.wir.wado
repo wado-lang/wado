@@ -125,11 +125,11 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(30)
 
-type "functype//wado-compiler/tests/fixtures/cross_module_treemap_variant.wado/run" = fn();  // TypeId(31)
+type "functype//cross_module_treemap_variant.wado/run" = fn();  // TypeId(31)
 
-type "functype//wado-compiler/tests/fixtures/cross_module_treemap_variant.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(32)
+type "functype//cross_module_treemap_variant.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(32)
 
-type "functype//wado-compiler/tests/fixtures/cross_module_treemap_variant.wado/__cm_export__run" = fn();  // TypeId(33)
+type "functype//cross_module_treemap_variant.wado/__cm_export__run" = fn();  // TypeId(33)
 
 type "functype//./sub/cross_module_treemap_variant_helper.wado/stringify" = fn(ref "./sub/cross_module_treemap_variant_helper.wado//Value") -> ref "core:prelude/string.wado//String";  // TypeId(34)
 
@@ -235,18 +235,18 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:cross_module_treemap_variant.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/cross_module_treemap_variant.wado/run"() with Stdout {
+fn "cross_module_treemap_variant.wado/run"() with Stdout {
     let map: ref "core:collections//TreeMap<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>";
     let key: ref "core:prelude/string.wado//String";
     let value: ref "./sub/cross_module_treemap_variant_helper.wado//Value";
     let __sroa_obj_value: ref "./sub/cross_module_treemap_variant_helper.wado//Value";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:cross_module_treemap_variant.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:cross_module_treemap_variant.wado::__modules_initialized = 1;
     };
     map = "core:collections/TreeMap<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>::new"();
     key = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
@@ -256,18 +256,18 @@ fn "wado-compiler/tests/fixtures/cross_module_treemap_variant.wado/run"() with S
     "core:cli/println"("./sub/cross_module_treemap_variant_helper.wado/stringify"(__sroa_obj_value));
 }
 
-fn "wado-compiler/tests/fixtures/cross_module_treemap_variant.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "cross_module_treemap_variant.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/cross_module_treemap_variant.wado/__cm_export__run"() {
+fn "cross_module_treemap_variant.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:cross_module_treemap_variant.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:cross_module_treemap_variant.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/cross_module_treemap_variant.wado/run"();
+    "cross_module_treemap_variant.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -362,7 +362,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/cross_module_treemap_variant.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "cross_module_treemap_variant.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -1245,4 +1245,4 @@ fn "core:prelude/list.wado/List<core:collections/TreeMapNode<core:prelude/string
     self.repr = new_repr;
 }
 
-export fn "wado-compiler/tests/fixtures/cross_module_treemap_variant.wado/__cm_export__run" as "run"
+export fn "cross_module_treemap_variant.wado/__cm_export__run" as "run"

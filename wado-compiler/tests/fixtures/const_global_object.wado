@@ -7,7 +7,7 @@
 // - `NUMS` (array literal) lowers to a const `struct.new` wrapping
 //   `array.new_fixed`.
 //   Both become immutable Wasm globals with an eager init, so the
-//   `global:ORIGIN = …` / `global:NUMS = …` runtime assignments vanish from
+//   `global:const_global_object.wado::ORIGIN = …` / `global:const_global_object.wado::NUMS = …` runtime assignments vanish from
 //   `__initialize_module`.
 // - `GREET` (short string, ≤ 8 bytes) is also eager: short strings get a
 //   constant `array.new_fixed<u8>` repr (a valid Wasm constant instruction)
@@ -37,16 +37,16 @@ __DATA__
 {
     "stdout": "3,4,3,hi,welcome to wado\n",
     "wir_expect:O2": [
-        "global global:ORIGIN",
-        "global global:NUMS",
+        "global global:const_global_object.wado::ORIGIN",
+        "global global:const_global_object.wado::NUMS",
         "array.new_fixed<i32>(10, 20, 30)",
-        "global global:GREET",
+        "global global:const_global_object.wado::GREET",
         "array.new_fixed<u8>(104, 105)",
-        "global mut global:BANNER"
+        "global mut global:const_global_object.wado::BANNER"
     ],
     "wir_not_expect:O2": [
-        "global mut global:ORIGIN",
-        "global mut global:NUMS",
-        "global mut global:GREET"
+        "global mut global:const_global_object.wado::ORIGIN",
+        "global mut global:const_global_object.wado::NUMS",
+        "global mut global:const_global_object.wado::GREET"
     ]
 }

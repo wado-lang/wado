@@ -34,11 +34,11 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/ordering_basic.wado/run" = fn();  // TypeId(13)
+type "functype//ordering_basic.wado/run" = fn();  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/ordering_basic.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(14)
+type "functype//ordering_basic.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/ordering_basic.wado/__cm_export__run" = fn();  // TypeId(15)
+type "functype//ordering_basic.wado/__cm_export__run" = fn();  // TypeId(15)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(16)
 
@@ -85,19 +85,19 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
-global global:__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(1, 2, 3)), used: 3 };
-global global:__const_obj_1: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(1, 2, 4)), used: 3 };
-global mut global:__const_obj_3: ref null "core:prelude/string.wado//String" = ref.null none;
-global mut global:__const_obj_4: ref null "core:prelude/string.wado//String" = ref.null none;
-global mut global:__const_obj_5: ref null "core:prelude/string.wado//String" = ref.null none;
+global mut global:ordering_basic.wado::__modules_initialized: bool = 0;
+global global:ordering_basic.wado::__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(1, 2, 3)), used: 3 };
+global global:ordering_basic.wado::__const_obj_1: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(1, 2, 4)), used: 3 };
+global mut global:ordering_basic.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = ref.null none;
+global mut global:ordering_basic.wado::__const_obj_4: ref null "core:prelude/string.wado//String" = ref.null none;
+global mut global:ordering_basic.wado::__const_obj_5: ref null "core:prelude/string.wado//String" = ref.null none;
 
-fn "wado-compiler/tests/fixtures/ordering_basic.wado/run"() with Stdout {
+fn "ordering_basic.wado/run"() with Stdout {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:ordering_basic.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:ordering_basic.wado::__modules_initialized = 1;
     };
     block {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Less matches Less"), used: 17 });
@@ -108,50 +108,50 @@ fn "wado-compiler/tests/fixtures/ordering_basic.wado/run"() with Stdout {
     block {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Greater matches Greater"), used: 23 });
     };
-    if "core:prelude/list.wado/List<i32>^Ord::cmp"(global:__const_obj_0, global:__const_obj_1) == 0 {
+    if "core:prelude/list.wado/List<i32>^Ord::cmp"(global:ordering_basic.wado::__const_obj_0, global:ordering_basic.wado::__const_obj_1) == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr1 < arr2"), used: 11 });
     }
-    if "core:prelude/list.wado/List<i32>^Ord::cmp"(global:__const_obj_0, global:__const_obj_0) != 2 {
+    if "core:prelude/list.wado/List<i32>^Ord::cmp"(global:ordering_basic.wado::__const_obj_0, global:ordering_basic.wado::__const_obj_0) != 2 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr1 <= arr3"), used: 12 });
     }
-    if "core:prelude/list.wado/List<i32>^Ord::cmp"(global:__const_obj_1, global:__const_obj_0) == 2 {
+    if "core:prelude/list.wado/List<i32>^Ord::cmp"(global:ordering_basic.wado::__const_obj_1, global:ordering_basic.wado::__const_obj_0) == 2 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr2 > arr1"), used: 11 });
     }
-    if "core:prelude/list.wado/List<i32>^Ord::cmp"(global:__const_obj_0, global:__const_obj_0) != 0 {
+    if "core:prelude/list.wado/List<i32>^Ord::cmp"(global:ordering_basic.wado::__const_obj_0, global:ordering_basic.wado::__const_obj_0) != 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr3 >= arr1"), used: 12 });
     }
-    if "core:prelude/list.wado/List<i32>^Eq::eq"(global:__const_obj_0, global:__const_obj_0) {
+    if "core:prelude/list.wado/List<i32>^Eq::eq"(global:ordering_basic.wado::__const_obj_0, global:ordering_basic.wado::__const_obj_0) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr1 == arr3"), used: 12 });
     }
-    global:__const_obj_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 };
-    global:__const_obj_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana"), used: 6 };
-    global:__const_obj_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 };
-    if "core:prelude/string.wado/String^Ord::cmp"(global:__const_obj_3, global:__const_obj_4) == 0 {
+    global:ordering_basic.wado::__const_obj_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 };
+    global:ordering_basic.wado::__const_obj_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana"), used: 6 };
+    global:ordering_basic.wado::__const_obj_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 };
+    if "core:prelude/string.wado/String^Ord::cmp"(global:ordering_basic.wado::__const_obj_3, global:ordering_basic.wado::__const_obj_4) == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple < banana"), used: 14 });
     }
-    if "core:prelude/string.wado/String^Ord::cmp"(global:__const_obj_3, global:__const_obj_5) != 2 {
+    if "core:prelude/string.wado/String^Ord::cmp"(global:ordering_basic.wado::__const_obj_3, global:ordering_basic.wado::__const_obj_5) != 2 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple <= apple"), used: 14 });
     }
-    if "core:prelude/string.wado/String^Ord::cmp"(global:__const_obj_4, global:__const_obj_3) == 2 {
+    if "core:prelude/string.wado/String^Ord::cmp"(global:ordering_basic.wado::__const_obj_4, global:ordering_basic.wado::__const_obj_3) == 2 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana > apple"), used: 14 });
     }
-    if "core:prelude/string.wado/String^Eq::eq"(global:__const_obj_3, global:__const_obj_5) {
+    if "core:prelude/string.wado/String^Eq::eq"(global:ordering_basic.wado::__const_obj_3, global:ordering_basic.wado::__const_obj_5) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple == apple"), used: 14 });
     }
 }
 
-fn "wado-compiler/tests/fixtures/ordering_basic.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "ordering_basic.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/ordering_basic.wado/__cm_export__run"() {
+fn "ordering_basic.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:ordering_basic.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:ordering_basic.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/ordering_basic.wado/run"();
+    "ordering_basic.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -179,7 +179,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/ordering_basic.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "ordering_basic.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -397,4 +397,4 @@ fn "core:prelude/list.wado/List<i32>^Ord::cmp"(self, other) {
     return 1;
 }
 
-export fn "wado-compiler/tests/fixtures/ordering_basic.wado/__cm_export__run" as "run"
+export fn "ordering_basic.wado/__cm_export__run" as "run"

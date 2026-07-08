@@ -147,7 +147,7 @@ pub struct Semantics {
 /// A definition location, assembled from a symbol.
 ///
 /// Returned by [`Semantics::definition_of`]. The `uri` is derived from
-/// `ModuleSource::diagnostic_filename` — it is present for user-authored
+/// `ModuleSource::source_path` — it is present for user-authored
 /// modules (entry point, local files) and absent for stdlib / builtin
 /// sources that have no on-disk URI.
 pub struct Definition {
@@ -514,7 +514,7 @@ impl Semantics {
     /// Built-in and stdlib modules have no on-disk URI and return `None`.
     #[must_use]
     pub fn uri_of(&self, module: &ModuleSource) -> Option<String> {
-        let uri = module.diagnostic_filename();
+        let uri = module.source_path();
         if uri.is_empty() { None } else { Some(uri) }
     }
 
@@ -1112,7 +1112,7 @@ pub fn semantics_of<H: CompilerHost>(
     build_tir: bool,
 ) -> Semantics {
     let logger = Logger::new(host, log_level);
-    let entry_filename = loaded.entry_module_source.diagnostic_filename();
+    let entry_filename = loaded.entry_module_source.source_path();
     if !entry_filename.is_empty() {
         logger.set_file(&entry_filename);
     }

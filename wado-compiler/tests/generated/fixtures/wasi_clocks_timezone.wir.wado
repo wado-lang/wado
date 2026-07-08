@@ -69,17 +69,17 @@ type "functype//wasi/wasi:clocks/Timezone::utc_offset" = fn(i64, i32, i32);  // 
 
 type "functype//wasi/wasi:clocks/Timezone::to_debug_string" = fn(i32);  // TypeId(20)
 
-type "functype//wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/run" = fn();  // TypeId(21)
+type "functype//wasi_clocks_timezone.wado/run" = fn();  // TypeId(21)
 
-type "functype//wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_binding__SystemClock_now" = fn() -> ref "wasi:clocks/system_clock.wado//Instant";  // TypeId(22)
+type "functype//wasi_clocks_timezone.wado/__cm_binding__SystemClock_now" = fn() -> ref "wasi:clocks/system_clock.wado//Instant";  // TypeId(22)
 
-type "functype//wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_binding__Timezone_utc_offset" = fn(ref "wasi:clocks/system_clock.wado//Instant") -> ref "core:prelude/types.wado//Option<i64>";  // TypeId(23)
+type "functype//wasi_clocks_timezone.wado/__cm_binding__Timezone_utc_offset" = fn(ref "wasi:clocks/system_clock.wado//Instant") -> ref "core:prelude/types.wado//Option<i64>";  // TypeId(23)
 
-type "functype//wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_binding__Timezone_to_debug_string" = fn() -> ref "core:prelude/string.wado//String";  // TypeId(24)
+type "functype//wasi_clocks_timezone.wado/__cm_binding__Timezone_to_debug_string" = fn() -> ref "core:prelude/string.wado//String";  // TypeId(24)
 
-type "functype//wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_binding__Timezone_iana_id" = fn() -> ref null "core:prelude/string.wado//String";  // TypeId(25)
+type "functype//wasi_clocks_timezone.wado/__cm_binding__Timezone_iana_id" = fn() -> ref null "core:prelude/string.wado//String";  // TypeId(25)
 
-type "functype//wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_export__run" = fn();  // TypeId(26)
+type "functype//wasi_clocks_timezone.wado/__cm_export__run" = fn();  // TypeId(26)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(27)
 
@@ -154,9 +154,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:wasi_clocks_timezone.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/run"() with SystemClock, Timezone {
+fn "wasi_clocks_timezone.wado/run"() with SystemClock, Timezone {
     let now: ref "wasi:clocks/system_clock.wado//Instant";
     let offset: ref "core:prelude/types.wado//Option<i64>";
     let ns: i64;
@@ -174,48 +174,48 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/run"() with SystemClo
     let __local_24: ref "core:prelude/string.wado//String";
     let __local_25: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wasi_clocks_timezone.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wasi_clocks_timezone.wado::__modules_initialized = 1;
     };
-    now = "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_binding__SystemClock_now"();
-    offset = "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_binding__Timezone_utc_offset"(now);
+    now = "wasi_clocks_timezone.wado/__cm_binding__SystemClock_now"();
+    offset = "wasi_clocks_timezone.wado/__cm_binding__Timezone_utc_offset"(now);
     if ref.test "core:prelude/types.wado//Option<i64>::Some"(offset) {
         ns = ref.cast "core:prelude/types.wado//Option<i64>::Some"(offset).payload_0;
         if ns >= 0_i64 {
             if @unlikely(ns >= 86400000000000_i64) {
                 cold_path;
-                "core:rt/panic"(__local_18 = "core:prelude/string.wado/String::with_capacity"(143); "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_18, 114); "core:prelude/string.wado/String::push"(__local_18, 117); "core:prelude/string.wado/String::push"(__local_18, 110); "core:prelude/string.wado/String::push"(__local_18, 32); "core:prelude/string.wado/String::push"(__local_18, 97); "core:prelude/string.wado/String::push"(__local_18, 116); "core:prelude/string.wado/String::push"(__local_18, 32); "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/wasi_clocks_timezone.wado"), used: 54 }); "core:prelude/string.wado/String::push"(__local_18, 58); __local_19 = "core:prelude/format.wado/Formatter::new"(__local_18); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 17 }, __local_19); "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+                "core:rt/panic"(__local_18 = "core:prelude/string.wado/String::with_capacity"(143); "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_18, 114); "core:prelude/string.wado/String::push"(__local_18, 117); "core:prelude/string.wado/String::push"(__local_18, 110); "core:prelude/string.wado/String::push"(__local_18, 32); "core:prelude/string.wado/String::push"(__local_18, 97); "core:prelude/string.wado/String::push"(__local_18, 116); "core:prelude/string.wado/String::push"(__local_18, 32); "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wasi_clocks_timezone.wado"), used: 25 }); "core:prelude/string.wado/String::push"(__local_18, 58); __local_19 = "core:prelude/format.wado/Formatter::new"(__local_18); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 17 }, __local_19); "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: ns < day_ns
 "), used: 24 }); "core:prelude/string.wado/String::push"(__local_18, 110); "core:prelude/string.wado/String::push"(__local_18, 115); "core:prelude/string.wado/String::push"(__local_18, 58); "core:prelude/string.wado/String::push"(__local_18, 32); __local_19 = "core:prelude/format.wado/Formatter::new"(__local_18); "core:prelude/primitive.wado/i64^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i64>" { value: ns }, __local_19); "core:prelude/string.wado/String::push"(__local_18, 10); "core:prelude/string.wado/String::push"(__local_18, 100); "core:prelude/string.wado/String::push"(__local_18, 97); "core:prelude/string.wado/String::push"(__local_18, 121); "core:prelude/string.wado/String::push"(__local_18, 95); "core:prelude/string.wado/String::push"(__local_18, 110); "core:prelude/string.wado/String::push"(__local_18, 115); "core:prelude/string.wado/String::push"(__local_18, 58); "core:prelude/string.wado/String::push"(__local_18, 32); __local_19 = "core:prelude/format.wado/Formatter::new"(__local_18); "core:prelude/primitive.wado/i64^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i64>" { value: 86400000000000_i64 }, __local_19); "core:prelude/string.wado/String::push"(__local_18, 10); __local_18);
                 unreachable;
             }
         } else if @unlikely(ns <= -86400000000000_i64) {
             cold_path;
-            "core:rt/panic"(__local_20 = "core:prelude/string.wado/String::with_capacity"(170); "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_20, 114); "core:prelude/string.wado/String::push"(__local_20, 117); "core:prelude/string.wado/String::push"(__local_20, 110); "core:prelude/string.wado/String::push"(__local_20, 32); "core:prelude/string.wado/String::push"(__local_20, 97); "core:prelude/string.wado/String::push"(__local_20, 116); "core:prelude/string.wado/String::push"(__local_20, 32); "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/wasi_clocks_timezone.wado"), used: 54 }); "core:prelude/string.wado/String::push"(__local_20, 58); __local_21 = "core:prelude/format.wado/Formatter::new"(__local_20); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 19 }, __local_21); "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+            "core:rt/panic"(__local_20 = "core:prelude/string.wado/String::with_capacity"(170); "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_20, 114); "core:prelude/string.wado/String::push"(__local_20, 117); "core:prelude/string.wado/String::push"(__local_20, 110); "core:prelude/string.wado/String::push"(__local_20, 32); "core:prelude/string.wado/String::push"(__local_20, 97); "core:prelude/string.wado/String::push"(__local_20, 116); "core:prelude/string.wado/String::push"(__local_20, 32); "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wasi_clocks_timezone.wado"), used: 25 }); "core:prelude/string.wado/String::push"(__local_20, 58); __local_21 = "core:prelude/format.wado/Formatter::new"(__local_20); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 19 }, __local_21); "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: ns > -day_ns
 "), used: 25 }); "core:prelude/string.wado/String::push"(__local_20, 110); "core:prelude/string.wado/String::push"(__local_20, 115); "core:prelude/string.wado/String::push"(__local_20, 58); "core:prelude/string.wado/String::push"(__local_20, 32); __local_21 = "core:prelude/format.wado/Formatter::new"(__local_20); "core:prelude/primitive.wado/i64^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i64>" { value: ns }, __local_21); "core:prelude/string.wado/String::push"(__local_20, 10); "core:prelude/string.wado/String::push"(__local_20, 100); "core:prelude/string.wado/String::push"(__local_20, 97); "core:prelude/string.wado/String::push"(__local_20, 121); "core:prelude/string.wado/String::push"(__local_20, 95); "core:prelude/string.wado/String::push"(__local_20, 110); "core:prelude/string.wado/String::push"(__local_20, 115); "core:prelude/string.wado/String::push"(__local_20, 58); "core:prelude/string.wado/String::push"(__local_20, 32); __local_21 = "core:prelude/format.wado/Formatter::new"(__local_20); "core:prelude/primitive.wado/i64^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i64>" { value: 86400000000000_i64 }, __local_21); "core:prelude/string.wado/String::push"(__local_20, 10); "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-day_ns: "), used: 9 }); __local_21 = "core:prelude/format.wado/Formatter::new"(__local_20); "core:prelude/primitive.wado/i64^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i64>" { value: -86400000000000_i64 }, __local_21); "core:prelude/string.wado/String::push"(__local_20, 10); __local_20);
             unreachable;
         }
     } else {
     }
-    debug = "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_binding__Timezone_to_debug_string"();
+    debug = "wasi_clocks_timezone.wado/__cm_binding__Timezone_to_debug_string"();
     __v0_12 = debug.used;
     if @unlikely(__v0_12 <= 0) {
         cold_path;
-        "core:rt/panic"(__local_22 = "core:prelude/string.wado/String::with_capacity"(131); "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_22, 114); "core:prelude/string.wado/String::push"(__local_22, 117); "core:prelude/string.wado/String::push"(__local_22, 110); "core:prelude/string.wado/String::push"(__local_22, 32); "core:prelude/string.wado/String::push"(__local_22, 97); "core:prelude/string.wado/String::push"(__local_22, 116); "core:prelude/string.wado/String::push"(__local_22, 32); "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/wasi_clocks_timezone.wado"), used: 54 }); "core:prelude/string.wado/String::push"(__local_22, 58); __local_23 = "core:prelude/format.wado/Formatter::new"(__local_22); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 23 }, __local_23); "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_22 = "core:prelude/string.wado/String::with_capacity"(131); "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_22, 114); "core:prelude/string.wado/String::push"(__local_22, 117); "core:prelude/string.wado/String::push"(__local_22, 110); "core:prelude/string.wado/String::push"(__local_22, 32); "core:prelude/string.wado/String::push"(__local_22, 97); "core:prelude/string.wado/String::push"(__local_22, 116); "core:prelude/string.wado/String::push"(__local_22, 32); "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wasi_clocks_timezone.wado"), used: 25 }); "core:prelude/string.wado/String::push"(__local_22, 58); __local_23 = "core:prelude/format.wado/Formatter::new"(__local_22); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 23 }, __local_23); "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: debug.len() > 0
 "), used: 28 }); "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("debug.len(): "), used: 13 }); __local_23 = "core:prelude/format.wado/Formatter::new"(__local_22); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_12 }, __local_23); "core:prelude/string.wado/String::push"(__local_22, 10); __local_22);
         unreachable;
     }
-    id = "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_binding__Timezone_iana_id"();
+    id = "wasi_clocks_timezone.wado/__cm_binding__Timezone_iana_id"();
     if ref.is_null(id) == 0 {
         name = ref.as_non_null(id);
         __v0_16 = name.used;
         if @unlikely(__v0_16 <= 0) {
             cold_path;
-            "core:rt/panic"(__local_24 = "core:prelude/string.wado/String::with_capacity"(129); "core:prelude/string.wado/String::push_str"(__local_24, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_24, 114); "core:prelude/string.wado/String::push"(__local_24, 117); "core:prelude/string.wado/String::push"(__local_24, 110); "core:prelude/string.wado/String::push"(__local_24, 32); "core:prelude/string.wado/String::push"(__local_24, 97); "core:prelude/string.wado/String::push"(__local_24, 116); "core:prelude/string.wado/String::push"(__local_24, 32); "core:prelude/string.wado/String::push_str"(__local_24, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/wasi_clocks_timezone.wado"), used: 54 }); "core:prelude/string.wado/String::push"(__local_24, 58); __local_25 = "core:prelude/format.wado/Formatter::new"(__local_24); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 26 }, __local_25); "core:prelude/string.wado/String::push_str"(__local_24, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+            "core:rt/panic"(__local_24 = "core:prelude/string.wado/String::with_capacity"(129); "core:prelude/string.wado/String::push_str"(__local_24, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_24, 114); "core:prelude/string.wado/String::push"(__local_24, 117); "core:prelude/string.wado/String::push"(__local_24, 110); "core:prelude/string.wado/String::push"(__local_24, 32); "core:prelude/string.wado/String::push"(__local_24, 97); "core:prelude/string.wado/String::push"(__local_24, 116); "core:prelude/string.wado/String::push"(__local_24, 32); "core:prelude/string.wado/String::push_str"(__local_24, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wasi_clocks_timezone.wado"), used: 25 }); "core:prelude/string.wado/String::push"(__local_24, 58); __local_25 = "core:prelude/format.wado/Formatter::new"(__local_24); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 26 }, __local_25); "core:prelude/string.wado/String::push_str"(__local_24, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: name.len() > 0
 "), used: 27 }); "core:prelude/string.wado/String::push_str"(__local_24, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("name.len(): "), used: 12 }); __local_25 = "core:prelude/format.wado/Formatter::new"(__local_24); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_16 }, __local_25); "core:prelude/string.wado/String::push"(__local_24, 10); __local_24);
             unreachable;
@@ -224,7 +224,7 @@ condition: name.len() > 0
     }
 }
 
-fn "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_binding__SystemClock_now"() with SystemClock {
+fn "wasi_clocks_timezone.wado/__cm_binding__SystemClock_now"() with SystemClock {
     let __outptr: i32;
     let __lifted_result_1: i64;
     let __lifted_result_2: i32;
@@ -235,7 +235,7 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_binding__SystemC
     return struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: __lifted_result_1, nanoseconds: __lifted_result_2 };
 }
 
-fn "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_binding__Timezone_utc_offset"(when) with Timezone {
+fn "wasi_clocks_timezone.wado/__cm_binding__Timezone_utc_offset"(when) with Timezone {
     let __outptr: i32;
     let __disc: i32;
     let __option_result: ref "core:prelude/types.wado//Option<i64>";
@@ -250,7 +250,7 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_binding__Timezon
     return __option_result;
 }
 
-fn "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_binding__Timezone_to_debug_string"() with Timezone {
+fn "wasi_clocks_timezone.wado/__cm_binding__Timezone_to_debug_string"() with Timezone {
     let __outptr: i32;
     let ptr: i32;
     let len_3: i32;
@@ -263,7 +263,7 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_binding__Timezon
     return struct.new "core:prelude/string.wado//String" { repr: arr, used: len_3 };
 }
 
-fn "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_binding__Timezone_iana_id"() with Timezone {
+fn "wasi_clocks_timezone.wado/__cm_binding__Timezone_iana_id"() with Timezone {
     let __outptr: i32;
     let __disc: i32;
     let __option_result: ref null "core:prelude/string.wado//String";
@@ -281,14 +281,14 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_binding__Timezon
     return __option_result;
 }
 
-fn "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_export__run"() {
+fn "wasi_clocks_timezone.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wasi_clocks_timezone.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wasi_clocks_timezone.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/run"();
+    "wasi_clocks_timezone.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -672,4 +672,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_export__run" as "run"
+export fn "wasi_clocks_timezone.wado/__cm_export__run" as "run"

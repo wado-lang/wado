@@ -127,13 +127,13 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(28)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(29)
 
-type "functype//wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process" = fn(ref "./sub/variant_deref_helper.wado//Elem", ref "core:prelude/string.wado//String");  // TypeId(30)
+type "functype//variant_deref_cross_module.wado/process" = fn(ref "./sub/variant_deref_helper.wado//Elem", ref "core:prelude/string.wado//String");  // TypeId(30)
 
-type "functype//wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process_all" = fn(ref "./sub/variant_deref_helper.wado//Alt", ref "core:prelude/string.wado//String");  // TypeId(31)
+type "functype//variant_deref_cross_module.wado/process_all" = fn(ref "./sub/variant_deref_helper.wado//Alt", ref "core:prelude/string.wado//String");  // TypeId(31)
 
-type "functype//wado-compiler/tests/fixtures/variant_deref_cross_module.wado/__test_0_recursive_variant_deref_from_another_module" = fn();  // TypeId(32)
+type "functype//variant_deref_cross_module.wado/__test_0_recursive_variant_deref_from_another_module" = fn();  // TypeId(32)
 
-type "functype//wado-compiler/tests/fixtures/variant_deref_cross_module.wado/__cm_export____test_0_recursive_variant_deref_from_another_module" = fn();  // TypeId(33)
+type "functype//variant_deref_cross_module.wado/__cm_export____test_0_recursive_variant_deref_from_another_module" = fn();  // TypeId(33)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(34)
 
@@ -214,10 +214,10 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
-global mut global:__const_obj_0: ref null "./sub/variant_deref_helper.wado//Alt" = ref.null none;
+global mut global:variant_deref_cross_module.wado::__modules_initialized: bool = 0;
+global mut global:variant_deref_cross_module.wado::__const_obj_0: ref null "./sub/variant_deref_helper.wado//Alt" = ref.null none;
 
-fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process"(elem, out) {
+fn "variant_deref_cross_module.wado/process"(elem, out) {
     let name_2: ref "core:prelude/string.wado//String";
     let text: ref "core:prelude/string.wado//String";
     let name_4: ref "core:prelude/string.wado//String";
@@ -247,7 +247,7 @@ fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process"(elem, 
     }
     if ref.test "./sub/variant_deref_helper.wado//Elem::Repeat"(elem) {
         rep = ref.cast "./sub/variant_deref_helper.wado//Elem::Repeat"(elem).payload_0;
-        "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process"(rep.element, out);
+        "variant_deref_cross_module.wado/process"(rep.element, out);
         return;
     } else {
     }
@@ -259,7 +259,7 @@ fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process"(elem, 
                 __local_15 = "core:prelude/slice.wado/ArrayIter<./sub/variant_deref_helper.wado/Alt>^Iterator::next"(__iter_7);
                 if ref.is_null(__local_15) == 0 {
                     alt = ref.as_non_null(__local_15);
-                    "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process_all"(alt, out);
+                    "variant_deref_cross_module.wado/process_all"(alt, out);
                 } else {
                     break b5;
                 }
@@ -271,13 +271,13 @@ fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process"(elem, 
     }
     if ref.test "./sub/variant_deref_helper.wado//Elem::Label"(elem) {
         lab = ref.cast "./sub/variant_deref_helper.wado//Elem::Label"(elem).payload_0;
-        "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process"(lab.element, out);
+        "variant_deref_cross_module.wado/process"(lab.element, out);
         return;
     } else {
     }
 }
 
-fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process_all"(alt, out) {
+fn "variant_deref_cross_module.wado/process_all"(alt, out) {
     let __iter_2: ref "core:prelude/slice.wado//ArrayIter<./sub/variant_deref_helper.wado/Elem>";
     let __match_4: ref null "./sub/variant_deref_helper.wado//Elem";
     __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<./sub/variant_deref_helper.wado/Elem>" { repr: alt.elements.repr, index: 0, end: alt.elements.used };
@@ -285,7 +285,7 @@ fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process_all"(al
         l10: loop {
             __match_4 = "core:prelude/slice.wado/ArrayIter<./sub/variant_deref_helper.wado/Elem>^Iterator::next"(__iter_2);
             if ref.is_null(__match_4) == 0 {
-                "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process"(ref.as_non_null(__match_4), out);
+                "variant_deref_cross_module.wado/process"(ref.as_non_null(__match_4), out);
             } else {
                 break b9;
             }
@@ -294,35 +294,35 @@ fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process_all"(al
     };
 }
 
-fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/__test_0_recursive_variant_deref_from_another_module"() {
+fn "variant_deref_cross_module.wado/__test_0_recursive_variant_deref_from_another_module"() {
     let __b: ref "core:prelude//List<./sub/variant_deref_helper.wado/Elem>";
     let out: ref "core:prelude/string.wado//String";
     let __v0: ref "core:prelude/string.wado//String";
     let __cond: bool;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    global:__const_obj_0 = struct.new "./sub/variant_deref_helper.wado//Alt" { label: ref.null none, elements: ref.as_non_null(__b = struct.new "core:prelude//List<./sub/variant_deref_helper.wado/Elem>" { repr: array.new_fixed<ref "./sub/variant_deref_helper.wado//Elem">(struct.new "./sub/variant_deref_helper.wado//Elem::TokenRef" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } }, struct.new "./sub/variant_deref_helper.wado//Elem::Repeat" { discriminant: 3, payload_0: struct.new "./sub/variant_deref_helper.wado//RepeatElem" { element: struct.new "./sub/variant_deref_helper.wado//Elem::Literal" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" world"), used: 6 } } } }), used: 2 }; __b) };
+    global:variant_deref_cross_module.wado::__const_obj_0 = struct.new "./sub/variant_deref_helper.wado//Alt" { label: ref.null none, elements: ref.as_non_null(__b = struct.new "core:prelude//List<./sub/variant_deref_helper.wado/Elem>" { repr: array.new_fixed<ref "./sub/variant_deref_helper.wado//Elem">(struct.new "./sub/variant_deref_helper.wado//Elem::TokenRef" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } }, struct.new "./sub/variant_deref_helper.wado//Elem::Repeat" { discriminant: 3, payload_0: struct.new "./sub/variant_deref_helper.wado//RepeatElem" { element: struct.new "./sub/variant_deref_helper.wado//Elem::Literal" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" world"), used: 6 } } } }), used: 2 }; __b) };
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
-    "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process_all"(global:__const_obj_0, out);
+    "variant_deref_cross_module.wado/process_all"(global:variant_deref_cross_module.wado::__const_obj_0, out);
     __v0 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(out.repr)), used: out.used };
     __cond = "core:prelude/string.wado/String^Eq::eq"(__v0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello world"), used: 11 });
     if @unlikely(__cond == 0) {
         cold_path;
-        "core:rt/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(128); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_recursive_variant_deref_from_another_module"), used: 52 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variant_deref_cross_module.wado"), used: 60 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 50 }, __local_6); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(128); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_recursive_variant_deref_from_another_module"), used: 52 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("variant_deref_cross_module.wado"), used: 31 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 50 }, __local_6); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: out == \"hello world\"
 "), used: 33 }); "core:prelude/string.wado/String::push"(__local_5, 111); "core:prelude/string.wado/String::push"(__local_5, 117); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/format.wado/String^Inspect::inspect"(__v0, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); __local_5);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/__cm_export____test_0_recursive_variant_deref_from_another_module"() {
+fn "variant_deref_cross_module.wado/__cm_export____test_0_recursive_variant_deref_from_another_module"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:variant_deref_cross_module.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:variant_deref_cross_module.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/__test_0_recursive_variant_deref_from_another_module"();
+    "variant_deref_cross_module.wado/__test_0_recursive_variant_deref_from_another_module"();
     "wasi/task-return"(0);
 }
 
@@ -900,4 +900,4 @@ fn "core:prelude/slice.wado/ArrayIter<./sub/variant_deref_helper.wado/Alt>^Itera
     return item;
 }
 
-export fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/__cm_export____test_0_recursive_variant_deref_from_another_module" as "__test_0_recursive_variant_deref_from_another_module"
+export fn "variant_deref_cross_module.wado/__cm_export____test_0_recursive_variant_deref_from_another_module" as "__test_0_recursive_variant_deref_from_another_module"

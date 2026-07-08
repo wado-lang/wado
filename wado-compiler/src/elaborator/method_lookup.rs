@@ -1442,6 +1442,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(names);
         }
 
+        // An inherent method is authoritative: if the receiver's type declares
+        // one by this name, its type parameters (empty when the search above
+        // returned `None`) are the answer. Stop before the by-name trait scans,
+        // which would otherwise adopt an unrelated trait method's type
+        // parameters (e.g. `List::get` wrongly taking `Producer::get<T>`'s `T`).
+        if self.has_inherent_method(struct_name, method_name, struct_module_source) {
+            return Some(vec![]);
+        }
+
         // Fallback: trait default methods (those with a body).
         for header in self.tysys.trait_env.trait_decl_headers.values() {
             for m in &header.methods {
@@ -1525,6 +1534,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
         None
+    }
+
+    /// Whether the receiver's own inherent impls declare a method named
+    /// `method_name`, regardless of its type parameters. Distinguishes "the
+    /// inherent method exists but has no method-level type parameters" from
+    /// "no such inherent method" — a distinction
+    /// [`Self::search_impl_headers_method_tps`] erases by returning `None` in
+    /// both cases.
+    fn has_inherent_method(
+        &self,
+        struct_name: &str,
+        method_name: &str,
+        only_module: Option<&ModuleSource>,
+    ) -> bool {
+        let Some(candidates) = self.tysys.trait_env.all_impl_index.get(struct_name) else {
+            return false;
+        };
+        candidates.iter().any(|key| {
+            if let Some(m) = only_module
+                && &key.0 != m
+            {
+                return false;
+            }
+            self.tysys
+                .trait_env
+                .impl_headers
+                .get(key)
+                .is_some_and(|header| {
+                    header.trait_name.is_none()
+                        && header
+                            .methods
+                            .iter()
+                            .any(|method| method.name == method_name)
+                })
+        })
     }
 
     /// Adjust the receiver expression to match what the method's self parameter expects.

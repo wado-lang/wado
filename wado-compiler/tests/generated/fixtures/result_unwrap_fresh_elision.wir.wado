@@ -55,11 +55,11 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/result_unwrap_fresh_elision.wado/run" = fn();  // TypeId(16)
+type "functype//result_unwrap_fresh_elision.wado/run" = fn();  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/result_unwrap_fresh_elision.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(17)
+type "functype//result_unwrap_fresh_elision.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/result_unwrap_fresh_elision.wado/__cm_export__run" = fn();  // TypeId(18)
+type "functype//result_unwrap_fresh_elision.wado/__cm_export__run" = fn();  // TypeId(18)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(19)
 
@@ -129,7 +129,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(51)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(52)
 
-type "functype//wado-compiler/tests/fixtures/result_unwrap_fresh_elision.wado/make_result" = fn() -> [i32, ref null "core:prelude//List<u8>", ref null "core:prelude/string.wado//String"];  // TypeId(53)
+type "functype//result_unwrap_fresh_elision.wado/make_result" = fn() -> [i32, ref null "core:prelude//List<u8>", ref null "core:prelude/string.wado//String"];  // TypeId(53)
 
 type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(54)
 
@@ -147,9 +147,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:result_unwrap_fresh_elision.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/result_unwrap_fresh_elision.wado/make_result"() {
+fn "result_unwrap_fresh_elision.wado/make_result"() {
     let __b: ref "core:prelude//List<u8>";
     __b = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
     "core:prelude/list.wado/List<u8>::push"(__b, 1);
@@ -158,7 +158,7 @@ fn "wado-compiler/tests/fixtures/result_unwrap_fresh_elision.wado/make_result"()
     return 0, __b, ref.null none;
 }
 
-fn "wado-compiler/tests/fixtures/result_unwrap_fresh_elision.wado/run"() with Stdout {
+fn "result_unwrap_fresh_elision.wado/run"() with Stdout {
     let data: ref "core:prelude//List<u8>";
     let __v0: i32;
     let __local_3: ref "core:prelude/string.wado//String";
@@ -166,15 +166,15 @@ fn "wado-compiler/tests/fixtures/result_unwrap_fresh_elision.wado/run"() with St
     let v: ref "core:prelude//List<u8>";
     let e: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:result_unwrap_fresh_elision.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:result_unwrap_fresh_elision.wado::__modules_initialized = 1;
     };
     let __sroa_self_5_discriminant: i32;
     let __sroa_self_5_case0_payload_0: ref null "core:prelude//List<u8>";
     let __sroa_self_5_case1_payload_0: ref null "core:prelude/string.wado//String";
-    multivalue_bind [__sroa_self_5_discriminant, __sroa_self_5_case0_payload_0, __sroa_self_5_case1_payload_0] = "wado-compiler/tests/fixtures/result_unwrap_fresh_elision.wado/make_result"();
+    multivalue_bind [__sroa_self_5_discriminant, __sroa_self_5_case0_payload_0, __sroa_self_5_case1_payload_0] = "result_unwrap_fresh_elision.wado/make_result"();
     data = (if @likely(__sroa_self_5_discriminant == 0) -> ref "core:prelude//List<u8>" {
         v = ref.as_non_null(__sroa_self_5_case0_payload_0);
         v;
@@ -186,7 +186,7 @@ fn "wado-compiler/tests/fixtures/result_unwrap_fresh_elision.wado/run"() with St
     __v0 = data.used;
     if @unlikely(__v0 != 3) {
         cold_path;
-        "core:rt/panic"(__local_3 = "core:prelude/string.wado/String::with_capacity"(130); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_3, 114); "core:prelude/string.wado/String::push"(__local_3, 117); "core:prelude/string.wado/String::push"(__local_3, 110); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push"(__local_3, 97); "core:prelude/string.wado/String::push"(__local_3, 116); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/result_unwrap_fresh_elision.wado"), used: 61 }); "core:prelude/string.wado/String::push"(__local_3, 58); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 17 }, __local_4); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_3 = "core:prelude/string.wado/String::with_capacity"(130); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_3, 114); "core:prelude/string.wado/String::push"(__local_3, 117); "core:prelude/string.wado/String::push"(__local_3, 110); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push"(__local_3, 97); "core:prelude/string.wado/String::push"(__local_3, 116); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("result_unwrap_fresh_elision.wado"), used: 32 }); "core:prelude/string.wado/String::push"(__local_3, 58); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 17 }, __local_4); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: data.len() == 3
 "), used: 28 }); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("data.len(): "), used: 12 }); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0 }, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); __local_3);
         unreachable;
@@ -194,18 +194,18 @@ condition: data.len() == 3
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
 }
 
-fn "wado-compiler/tests/fixtures/result_unwrap_fresh_elision.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "result_unwrap_fresh_elision.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/result_unwrap_fresh_elision.wado/__cm_export__run"() {
+fn "result_unwrap_fresh_elision.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:result_unwrap_fresh_elision.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:result_unwrap_fresh_elision.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/result_unwrap_fresh_elision.wado/run"();
+    "result_unwrap_fresh_elision.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -233,7 +233,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/result_unwrap_fresh_elision.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "result_unwrap_fresh_elision.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -800,4 +800,4 @@ fn "core:prelude/list.wado/List<u8>::grow"(self) {
     self.repr = new_repr;
 }
 
-export fn "wado-compiler/tests/fixtures/result_unwrap_fresh_elision.wado/__cm_export__run" as "run"
+export fn "result_unwrap_fresh_elision.wado/__cm_export__run" as "run"

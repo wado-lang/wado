@@ -146,9 +146,9 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(31)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(32)
 
-type "functype//wado-compiler/tests/fixtures/two_parser_conflict.wado/count_b" = fn(ref "./sub/two_parser_b.wado//CstNode") -> i32;  // TypeId(33)
+type "functype//two_parser_conflict.wado/count_b" = fn(ref "./sub/two_parser_b.wado//CstNode") -> i32;  // TypeId(33)
 
-type "functype//wado-compiler/tests/fixtures/two_parser_conflict.wado/__cm_export____test_0_two_parsers_with_same_named_types_coexist" = fn();  // TypeId(34)
+type "functype//two_parser_conflict.wado/__cm_export____test_0_two_parsers_with_same_named_types_coexist" = fn();  // TypeId(34)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(35)
 
@@ -227,9 +227,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:two_parser_conflict.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/two_parser_conflict.wado/count_b"(node) {
+fn "two_parser_conflict.wado/count_b"(node) {
     let n: i32;
     let __iter_2: ref "core:prelude/slice.wado//ArrayRefIter<./sub/two_parser_b.wado/CstChild>";
     let child: ref "core:prelude/types.wado//Box<./sub/two_parser_b.wado/CstChild>";
@@ -248,7 +248,7 @@ fn "wado-compiler/tests/fixtures/two_parser_conflict.wado/count_b"(node) {
                 __local_6 = child.value;
                 if ref.test "./sub/two_parser_b.wado//CstChild::Node"(__local_6) {
                     c = ref.cast "./sub/two_parser_b.wado//CstChild::Node"(__local_6).payload_0;
-                    n = n + "wado-compiler/tests/fixtures/two_parser_conflict.wado/count_b"(c);
+                    n = n + "two_parser_conflict.wado/count_b"(c);
                 } else {
                     n = n + 1;
                 }
@@ -261,7 +261,7 @@ fn "wado-compiler/tests/fixtures/two_parser_conflict.wado/count_b"(node) {
     return n;
 }
 
-fn "wado-compiler/tests/fixtures/two_parser_conflict.wado/__cm_export____test_0_two_parsers_with_same_named_types_coexist"() {
+fn "two_parser_conflict.wado/__cm_export____test_0_two_parsers_with_same_named_types_coexist"() {
     let __v0: ref "./sub/two_parser_b.wado//CstNode";
     let __v2: i32;
     let __local_4: ref "core:prelude/string.wado//String";
@@ -269,17 +269,17 @@ fn "wado-compiler/tests/fixtures/two_parser_conflict.wado/__cm_export____test_0_
     let __b_6: ref "core:prelude//List<./sub/two_parser_a.wado/CstChild>";
     let __b_10: ref "core:prelude//List<./sub/two_parser_b.wado/CstChild>";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:two_parser_conflict.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:two_parser_conflict.wado::__modules_initialized = 1;
     };
     drop(struct.new "./sub/two_parser_a.wado//CstNode" { kind: 0, span: struct.new "./sub/two_parser_a.wado//Span" { start: 0, end: 0 }, children: ref.as_non_null(__b_6 = struct.new "core:prelude//List<./sub/two_parser_a.wado/CstChild>" { repr: builtin::array_new<ref "./sub/two_parser_a.wado//CstChild">(0), used: 0 }; __b_6), flags: 0, alt: -1 });
     __v0 = struct.new "./sub/two_parser_b.wado//CstNode" { kind: 0, span: struct.new "./sub/two_parser_b.wado//Span" { start: 0, end: 0 }, children: ref.as_non_null(__b_10 = struct.new "core:prelude//List<./sub/two_parser_b.wado/CstChild>" { repr: builtin::array_new<ref "./sub/two_parser_b.wado//CstChild">(0), used: 0 }; __b_10), flags: 0, alt: -1 };
-    __v2 = "wado-compiler/tests/fixtures/two_parser_conflict.wado/count_b"(__v0);
+    __v2 = "two_parser_conflict.wado/count_b"(__v0);
     if @unlikely((__v2 == 0) == 0) {
         cold_path;
-        "core:rt/panic"(__local_4 = "core:prelude/string.wado/String::with_capacity"(205); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_two_parsers_with_same_named_types_coexist"), used: 50 }); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push"(__local_4, 97); "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/two_parser_conflict.wado"), used: 53 }); "core:prelude/string.wado/String::push"(__local_4, 58); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 28 }, __local_5); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_4 = "core:prelude/string.wado/String::with_capacity"(205); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_two_parsers_with_same_named_types_coexist"), used: 50 }); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push"(__local_4, 97); "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("two_parser_conflict.wado"), used: 24 }); "core:prelude/string.wado/String::push"(__local_4, 58); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 28 }, __local_5); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: count_b(&b::root()) == 0
 "), used: 37 }); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("b::root(): "), used: 11 }); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "./sub/two_parser_b.wado/CstNode^Inspect::inspect"(__v0, __local_5); "core:prelude/string.wado/String::push"(__local_4, 10); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("&b::root(): "), used: 12 }); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/format.wado/&./sub/two_parser_b.wado/CstNode^Inspect::inspect"(__v0, __local_5); "core:prelude/string.wado/String::push"(__local_4, 10); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("count_b(&b::root()): "), used: 21 }); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v2 }, __local_5); "core:prelude/string.wado/String::push"(__local_4, 10); __local_4);
         unreachable;
@@ -808,4 +808,4 @@ fn "core:prelude/list.wado/List<./sub/two_parser_b.wado/CstChild>^Inspect::inspe
     });
 }
 
-export fn "wado-compiler/tests/fixtures/two_parser_conflict.wado/__cm_export____test_0_two_parsers_with_same_named_types_coexist" as "__test_0_two_parsers_with_same_named_types_coexist"
+export fn "two_parser_conflict.wado/__cm_export____test_0_two_parsers_with_same_named_types_coexist" as "__test_0_two_parsers_with_same_named_types_coexist"

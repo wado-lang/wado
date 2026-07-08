@@ -13,9 +13,9 @@ type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(2)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(3)
 
-type "functype//wado-compiler/tests/fixtures/array_bounds_check_negative.wado/run" = fn();  // TypeId(4)
+type "functype//array_bounds_check_negative.wado/run" = fn();  // TypeId(4)
 
-type "functype//wado-compiler/tests/fixtures/array_bounds_check_negative.wado/__cm_export__run" = fn();  // TypeId(5)
+type "functype//array_bounds_check_negative.wado/__cm_export__run" = fn();  // TypeId(5)
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(6)
 
@@ -23,32 +23,32 @@ import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import memory (1) from "mem/memory";
 
-global mut global:__modules_initialized: bool = 0;
-global global:__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(10, 20, 30)), used: 3 };
+global mut global:array_bounds_check_negative.wado::__modules_initialized: bool = 0;
+global global:array_bounds_check_negative.wado::__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(10, 20, 30)), used: 3 };
 
-fn "wado-compiler/tests/fixtures/array_bounds_check_negative.wado/run"() {
+fn "array_bounds_check_negative.wado/run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:array_bounds_check_negative.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:array_bounds_check_negative.wado::__modules_initialized = 1;
     };
-    drop(global:__const_obj_0.used);
-    drop(builtin::array_get<i32>(global:__const_obj_0.repr, -1));
+    drop(global:array_bounds_check_negative.wado::__const_obj_0.used);
+    drop(builtin::array_get<i32>(global:array_bounds_check_negative.wado::__const_obj_0.repr, -1));
 }
 
-fn "wado-compiler/tests/fixtures/array_bounds_check_negative.wado/__cm_export__run"() {
+fn "array_bounds_check_negative.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:array_bounds_check_negative.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:array_bounds_check_negative.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/array_bounds_check_negative.wado/run"();
+    "array_bounds_check_negative.wado/run"();
     "wasi/task-return"(0);
 }
 
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-export fn "wado-compiler/tests/fixtures/array_bounds_check_negative.wado/__cm_export__run" as "run"
+export fn "array_bounds_check_negative.wado/__cm_export__run" as "run"

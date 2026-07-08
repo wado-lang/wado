@@ -609,10 +609,8 @@ impl<'a> NirUnparser<'a> {
                 name,
                 module_source,
             } => {
-                if !module_source.is_entry_point() {
-                    self.output.push_str(&module_source.to_path().join("::"));
-                    self.output.push_str("::");
-                }
+                self.output.push_str(&module_source.to_path().join("::"));
+                self.output.push_str("::");
                 self.output.push_str(name);
             }
             ExprKind::GlobalVarSet {
@@ -621,10 +619,8 @@ impl<'a> NirUnparser<'a> {
                 value,
             } => {
                 let value = *value;
-                if !module_source.is_entry_point() {
-                    self.output.push_str(&module_source.to_path().join("::"));
-                    self.output.push_str("::");
-                }
+                self.output.push_str(&module_source.to_path().join("::"));
+                self.output.push_str("::");
                 self.output.push_str(name);
                 self.output.push_str(" = ");
                 self.unparse_operand(body, value);
@@ -670,12 +666,8 @@ impl<'a> NirUnparser<'a> {
                 let full_name = match self.callee(func_id) {
                     Some(func) => {
                         let func_name = func.name.clone();
-                        if func.module_source.clone().is_entry_point() {
-                            func_name
-                        } else {
-                            let module_path = func.module_path();
-                            format!("{}::{func_name}", module_path.join("::"))
-                        }
+                        let module_path = func.module_path();
+                        format!("{}::{func_name}", module_path.join("::"))
                     }
                     None => format!("fn#{func_id:?}"),
                 };

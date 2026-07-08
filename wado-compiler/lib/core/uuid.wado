@@ -29,6 +29,13 @@ use { u8x16 } from "core:simd";
 use { Random } from "wasi:random";
 use { SystemClock } from "wasi:clocks";
 
+#[synopsis]
+test {
+    let id = Uuid::parse(&"550e8400-e29b-41d4-a716-446655440000").unwrap();
+    assert id.version() == 4;
+    assert id.to_string() == "550e8400-e29b-41d4-a716-446655440000";
+}
+
 /// A 128-bit universally unique identifier.
 ///
 /// The bytes are held big-endian: byte 0 is the most significant. This is the

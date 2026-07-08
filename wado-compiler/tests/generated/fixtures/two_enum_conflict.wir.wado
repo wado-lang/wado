@@ -48,7 +48,7 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/two_enum_conflict.wado/__cm_export____test_0_two_enums_with_same_named_cases_coexist" = fn();  // TypeId(15)
+type "functype//two_enum_conflict.wado/__cm_export____test_0_two_enums_with_same_named_cases_coexist" = fn();  // TypeId(15)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(16)
 
@@ -115,18 +115,18 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:two_enum_conflict.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/two_enum_conflict.wado/__cm_export____test_0_two_enums_with_same_named_cases_coexist"() {
+fn "two_enum_conflict.wado/__cm_export____test_0_two_enums_with_same_named_cases_coexist"() {
     let __v0: "./sub/two_enum_b.wado//enum:Dir";
     let __v1: i32;
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:two_enum_conflict.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:two_enum_conflict.wado::__modules_initialized = 1;
     };
     __v0 = 1;
     __v1 = __inline_rank_4: block -> i32 {
@@ -143,7 +143,7 @@ fn "wado-compiler/tests/fixtures/two_enum_conflict.wado/__cm_export____test_0_tw
     };
     if @unlikely(__v1 != 2) {
         cold_path;
-        "core:rt/panic"(__local_3 = "core:prelude/string.wado/String::with_capacity"(168); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_two_enums_with_same_named_cases_coexist"), used: 48 }); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push"(__local_3, 97); "core:prelude/string.wado/String::push"(__local_3, 116); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/two_enum_conflict.wado"), used: 51 }); "core:prelude/string.wado/String::push"(__local_3, 58); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 25 }, __local_4); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_3 = "core:prelude/string.wado/String::with_capacity"(168); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_two_enums_with_same_named_cases_coexist"), used: 48 }); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push"(__local_3, 97); "core:prelude/string.wado/String::push"(__local_3, 116); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("two_enum_conflict.wado"), used: 22 }); "core:prelude/string.wado/String::push"(__local_3, 58); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 25 }, __local_4); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: rank(b::east()) == 2
 "), used: 33 }); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("b::east(): "), used: 11 }); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "./sub/two_enum_b.wado/Dir^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<./sub/two_enum_b.wado/Dir>" { value: __v0 }, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rank(b::east()): "), used: 17 }); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v1 }, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); __local_3);
         unreachable;
@@ -506,4 +506,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/two_enum_conflict.wado/__cm_export____test_0_two_enums_with_same_named_cases_coexist" as "__test_0_two_enums_with_same_named_cases_coexist"
+export fn "two_enum_conflict.wado/__cm_export____test_0_two_enums_with_same_named_cases_coexist" as "__test_0_two_enums_with_same_named_cases_coexist"

@@ -26,7 +26,7 @@ pub struct DefinitionResult {
 /// Find the definition of the identifier at `position` in `source`.
 ///
 /// `uri` is the URI of the document being edited; cross-file results carry
-/// their own URI (derived from the defining module's `diagnostic_filename`).
+/// their own URI (derived from the defining module's `source_path`).
 #[must_use]
 pub(crate) fn find_definition(ctx: &QueryContext, position: Position) -> Option<DefinitionResult> {
     let (line, col) = ctx.line_col(position);

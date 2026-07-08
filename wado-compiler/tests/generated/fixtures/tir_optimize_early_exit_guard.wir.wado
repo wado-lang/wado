@@ -49,13 +49,13 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/tir_optimize_early_exit_guard.wado/safe_get" = fn(ref "core:prelude//List<char>", i32) -> char;  // TypeId(15)
+type "functype//tir_optimize_early_exit_guard.wado/safe_get" = fn(ref "core:prelude//List<char>", i32) -> char;  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/tir_optimize_early_exit_guard.wado/run" = fn();  // TypeId(16)
+type "functype//tir_optimize_early_exit_guard.wado/run" = fn();  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/tir_optimize_early_exit_guard.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(17)
+type "functype//tir_optimize_early_exit_guard.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/tir_optimize_early_exit_guard.wado/__cm_export__run" = fn();  // TypeId(18)
+type "functype//tir_optimize_early_exit_guard.wado/__cm_export__run" = fn();  // TypeId(18)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(19)
 
@@ -104,44 +104,44 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:tir_optimize_early_exit_guard.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/tir_optimize_early_exit_guard.wado/safe_get"(arr, pos) {
+fn "tir_optimize_early_exit_guard.wado/safe_get"(arr, pos) {
     if pos >= arr.used {
         return 63;
     }
     return builtin::array_get<char>(arr.repr, pos);
 }
 
-fn "wado-compiler/tests/fixtures/tir_optimize_early_exit_guard.wado/run"() with Stdout {
+fn "tir_optimize_early_exit_guard.wado/run"() with Stdout {
     let __b: ref "core:prelude//List<char>";
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:tir_optimize_early_exit_guard.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:tir_optimize_early_exit_guard.wado::__modules_initialized = 1;
     };
     __b = struct.new "core:prelude//List<char>" { repr: array.new_fixed<char>(97, 98, 99), used: 3 };
-    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/char^Display::fmt"(struct.new "core:prelude/types.wado//Box<char>" { value: "wado-compiler/tests/fixtures/tir_optimize_early_exit_guard.wado/safe_get"(__b, 1) }, __local_3); __local_2);
-    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/char^Display::fmt"(struct.new "core:prelude/types.wado//Box<char>" { value: "wado-compiler/tests/fixtures/tir_optimize_early_exit_guard.wado/safe_get"(__b, 10) }, __local_5); __local_4);
+    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/char^Display::fmt"(struct.new "core:prelude/types.wado//Box<char>" { value: "tir_optimize_early_exit_guard.wado/safe_get"(__b, 1) }, __local_3); __local_2);
+    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/char^Display::fmt"(struct.new "core:prelude/types.wado//Box<char>" { value: "tir_optimize_early_exit_guard.wado/safe_get"(__b, 10) }, __local_5); __local_4);
 }
 
-fn "wado-compiler/tests/fixtures/tir_optimize_early_exit_guard.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "tir_optimize_early_exit_guard.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/tir_optimize_early_exit_guard.wado/__cm_export__run"() {
+fn "tir_optimize_early_exit_guard.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:tir_optimize_early_exit_guard.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:tir_optimize_early_exit_guard.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/tir_optimize_early_exit_guard.wado/run"();
+    "tir_optimize_early_exit_guard.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -169,7 +169,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/tir_optimize_early_exit_guard.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "tir_optimize_early_exit_guard.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -358,4 +358,4 @@ fn "core:prelude/format.wado/Formatter::pad"(self, content) {
     }
 }
 
-export fn "wado-compiler/tests/fixtures/tir_optimize_early_exit_guard.wado/__cm_export__run" as "run"
+export fn "tir_optimize_early_exit_guard.wado/__cm_export__run" as "run"

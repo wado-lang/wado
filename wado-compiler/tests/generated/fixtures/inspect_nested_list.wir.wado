@@ -38,13 +38,13 @@ array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado/
 
 array Array<i32> (mut i32);  // TypeId(8)
 
-struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(9)
-    mut repr: ref "Array<core:prelude/string.wado/String>",
+struct core:prelude//List<i32> {  // TypeId(9)
+    mut repr: ref Array<i32>,
     mut used: i32,
 }
 
-struct core:prelude//List<i32> {  // TypeId(10)
-    mut repr: ref Array<i32>,
+struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(10)
+    mut repr: ref "Array<core:prelude/string.wado/String>",
     mut used: i32,
 }
 
@@ -76,9 +76,9 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(20)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(21)
 
-type "functype//wado-compiler/tests/fixtures/inspect_nested_list.wado/__test_0_nested_list_inspect" = fn();  // TypeId(22)
+type "functype//inspect_nested_list.wado/__test_0_nested_list_inspect" = fn();  // TypeId(22)
 
-type "functype//wado-compiler/tests/fixtures/inspect_nested_list.wado/__cm_export____test_0_nested_list_inspect" = fn();  // TypeId(23)
+type "functype//inspect_nested_list.wado/__cm_export____test_0_nested_list_inspect" = fn();  // TypeId(23)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(24)
 
@@ -163,10 +163,10 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
-global mut global:__const_obj_0: ref null "core:prelude//List<core:prelude/list.wado/List<i32>>" = ref.null none;
+global mut global:inspect_nested_list.wado::__modules_initialized: bool = 0;
+global mut global:inspect_nested_list.wado::__const_obj_0: ref null "core:prelude//List<core:prelude/list.wado/List<i32>>" = ref.null none;
 
-fn "wado-compiler/tests/fixtures/inspect_nested_list.wado/__test_0_nested_list_inspect"() {
+fn "inspect_nested_list.wado/__test_0_nested_list_inspect"() {
     let __b_0: ref "core:prelude//List<core:prelude/list.wado/List<i32>>";
     let __b_1: ref "core:prelude//List<i32>";
     let __b_2: ref "core:prelude//List<i32>";
@@ -190,14 +190,14 @@ fn "wado-compiler/tests/fixtures/inspect_nested_list.wado/__test_0_nested_list_i
     let __local_26: ref "core:prelude/string.wado//String";
     let __local_27: ref "core:prelude/format.wado//Formatter";
     __b_0 = struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude//List<i32>">(__b_1 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 }; __b_1, __b_2 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(3, 4), used: 2 }; __b_2), used: 2 };
-    global:__const_obj_0 = __b_0;
+    global:inspect_nested_list.wado::__const_obj_0 = __b_0;
     __local_16 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __local_17 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_16 };
-    "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<core:prelude/list.wado/List<i32>>"(global:__const_obj_0.repr, global:__const_obj_0.used, __local_17, 1, 256);
+    "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<core:prelude/list.wado/List<i32>>"(global:inspect_nested_list.wado::__const_obj_0.repr, global:inspect_nested_list.wado::__const_obj_0.used, __local_17, 1, 256);
     __cond_5 = "core:prelude/string.wado/String^Eq::eq"(__local_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("[[1, 2], [3, 4]]"), used: 16 });
     if @unlikely(__cond_5 == 0) {
         cold_path;
-        "core:rt/panic"(__local_18 = "core:prelude/string.wado/String::with_capacity"(141); "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_nested_list_inspect"), used: 28 }); "core:prelude/string.wado/String::push"(__local_18, 32); "core:prelude/string.wado/String::push"(__local_18, 97); "core:prelude/string.wado/String::push"(__local_18, 116); "core:prelude/string.wado/String::push"(__local_18, 32); "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/inspect_nested_list.wado"), used: 53 }); "core:prelude/string.wado/String::push"(__local_18, 58); __local_19 = "core:prelude/format.wado/Formatter::new"(__local_18); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 4 }, __local_19); "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_18 = "core:prelude/string.wado/String::with_capacity"(141); "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_nested_list_inspect"), used: 28 }); "core:prelude/string.wado/String::push"(__local_18, 32); "core:prelude/string.wado/String::push"(__local_18, 97); "core:prelude/string.wado/String::push"(__local_18, 116); "core:prelude/string.wado/String::push"(__local_18, 32); "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("inspect_nested_list.wado"), used: 24 }); "core:prelude/string.wado/String::push"(__local_18, 58); __local_19 = "core:prelude/format.wado/Formatter::new"(__local_18); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 4 }, __local_19); "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: `{a:?}` == \"[[1, 2], [3, 4]]\"
 "), used: 42 }); "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("`{a:?}`: "), used: 9 }); __local_19 = "core:prelude/format.wado/Formatter::new"(__local_18); "core:prelude/format.wado/String^Inspect::inspect"(__local_16, __local_19); "core:prelude/string.wado/String::push"(__local_18, 10); __local_18);
         unreachable;
@@ -209,7 +209,7 @@ condition: `{a:?}` == \"[[1, 2], [3, 4]]\"
     __cond_9 = "core:prelude/string.wado/String^Eq::eq"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(91, 93), used: 2 });
     if @unlikely(__cond_9 == 0) {
         cold_path;
-        "core:rt/panic"(__local_22 = "core:prelude/string.wado/String::with_capacity"(135); "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_nested_list_inspect"), used: 28 }); "core:prelude/string.wado/String::push"(__local_22, 32); "core:prelude/string.wado/String::push"(__local_22, 97); "core:prelude/string.wado/String::push"(__local_22, 116); "core:prelude/string.wado/String::push"(__local_22, 32); "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/inspect_nested_list.wado"), used: 53 }); "core:prelude/string.wado/String::push"(__local_22, 58); __local_23 = "core:prelude/format.wado/Formatter::new"(__local_22); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 6 }, __local_23); "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_22 = "core:prelude/string.wado/String::with_capacity"(135); "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_nested_list_inspect"), used: 28 }); "core:prelude/string.wado/String::push"(__local_22, 32); "core:prelude/string.wado/String::push"(__local_22, 97); "core:prelude/string.wado/String::push"(__local_22, 116); "core:prelude/string.wado/String::push"(__local_22, 32); "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("inspect_nested_list.wado"), used: 24 }); "core:prelude/string.wado/String::push"(__local_22, 58); __local_23 = "core:prelude/format.wado/Formatter::new"(__local_22); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 6 }, __local_23); "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: `{empty:?}` == \"[]\"
 "), used: 32 }); "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("`{empty:?}`: "), used: 13 }); __local_23 = "core:prelude/format.wado/Formatter::new"(__local_22); "core:prelude/format.wado/String^Inspect::inspect"(__local_20, __local_23); "core:prelude/string.wado/String::push"(__local_22, 10); __local_22);
         unreachable;
@@ -221,21 +221,21 @@ condition: `{empty:?}` == \"[]\"
     __cond_15 = "core:prelude/string.wado/String^Eq::eq"(__local_24, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("[[\"a\"], []]"), used: 11 });
     if @unlikely(__cond_15 == 0) {
         cold_path;
-        "core:rt/panic"(__local_26 = "core:prelude/string.wado/String::with_capacity"(138); "core:prelude/string.wado/String::push_str"(__local_26, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_26, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_nested_list_inspect"), used: 28 }); "core:prelude/string.wado/String::push"(__local_26, 32); "core:prelude/string.wado/String::push"(__local_26, 97); "core:prelude/string.wado/String::push"(__local_26, 116); "core:prelude/string.wado/String::push"(__local_26, 32); "core:prelude/string.wado/String::push_str"(__local_26, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/inspect_nested_list.wado"), used: 53 }); "core:prelude/string.wado/String::push"(__local_26, 58); __local_27 = "core:prelude/format.wado/Formatter::new"(__local_26); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 8 }, __local_27); "core:prelude/string.wado/String::push_str"(__local_26, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_26 = "core:prelude/string.wado/String::with_capacity"(138); "core:prelude/string.wado/String::push_str"(__local_26, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_26, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_nested_list_inspect"), used: 28 }); "core:prelude/string.wado/String::push"(__local_26, 32); "core:prelude/string.wado/String::push"(__local_26, 97); "core:prelude/string.wado/String::push"(__local_26, 116); "core:prelude/string.wado/String::push"(__local_26, 32); "core:prelude/string.wado/String::push_str"(__local_26, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("inspect_nested_list.wado"), used: 24 }); "core:prelude/string.wado/String::push"(__local_26, 58); __local_27 = "core:prelude/format.wado/Formatter::new"(__local_26); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 8 }, __local_27); "core:prelude/string.wado/String::push_str"(__local_26, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: `{b:?}` == \"[[\\\"a\\\"], []]\"
 "), used: 39 }); "core:prelude/string.wado/String::push_str"(__local_26, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("`{b:?}`: "), used: 9 }); __local_27 = "core:prelude/format.wado/Formatter::new"(__local_26); "core:prelude/format.wado/String^Inspect::inspect"(__local_24, __local_27); "core:prelude/string.wado/String::push"(__local_26, 10); __local_26);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/inspect_nested_list.wado/__cm_export____test_0_nested_list_inspect"() {
+fn "inspect_nested_list.wado/__cm_export____test_0_nested_list_inspect"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:inspect_nested_list.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:inspect_nested_list.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/inspect_nested_list.wado/__test_0_nested_list_inspect"();
+    "inspect_nested_list.wado/__test_0_nested_list_inspect"();
     "wasi/task-return"(0);
 }
 
@@ -1008,4 +1008,4 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     }
 }
 
-export fn "wado-compiler/tests/fixtures/inspect_nested_list.wado/__cm_export____test_0_nested_list_inspect" as "__test_0_nested_list_inspect"
+export fn "inspect_nested_list.wado/__cm_export____test_0_nested_list_inspect" as "__test_0_nested_list_inspect"

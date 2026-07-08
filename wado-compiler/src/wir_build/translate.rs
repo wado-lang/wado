@@ -6,6 +6,7 @@
 use crate::compiler_item::SeqField;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
+use crate::name::global_name;
 use crate::nir::{NirBinaryOp, NirFunction, NirParam, NirUnaryOp};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{CanonicalIntrinsic, WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
@@ -1266,16 +1267,6 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Build the qualified global name.
-    fn make_global_name(&self, module_source: &ModuleSource, name: &str) -> String {
-        if module_source.is_entry_point() {
-            format!("global:{name}")
-        } else {
-            let module_path = module_source.to_path();
-            format!("global:{}::{name}", module_path.join("::"))
-        }
-    }
-
     /// Translate the top-level function body: declares locals and translates statements.
     fn translate_block(&mut self, block_id: BlockId) -> Vec<WirInstr> {
         let arena = self.body;
@@ -2058,22 +2049,22 @@ impl FunctionTranslator<'_, '_> {
             ExprKind::GlobalVarGet {
                 module_source,
                 name,
-            } => {
-                let global_name = self.make_global_name(module_source, name);
-                WirInstr::GlobalGet {
-                    name: WirName { fq: global_name },
-                    result_ty: self.wir_type(expr.type_id),
-                }
-            }
+            } => WirInstr::GlobalGet {
+                name: WirName {
+                    fq: global_name(module_source, name),
+                },
+                result_ty: self.wir_type(expr.type_id),
+            },
             ExprKind::GlobalVarSet {
                 module_source,
                 name,
                 value,
             } => {
-                let global_name = self.make_global_name(module_source, name);
                 let val = self.translate_operand(*value);
                 WirInstr::GlobalSet {
-                    name: WirName { fq: global_name },
+                    name: WirName {
+                        fq: global_name(module_source, name),
+                    },
                     value: Box::new(val),
                 }
             }

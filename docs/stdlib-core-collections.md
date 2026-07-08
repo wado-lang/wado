@@ -5,6 +5,20 @@
 
 Collection types: `TreeMap<K, V>` and `TreeSet<T>` (insertion-order preserved).
 
+## Synopsis
+
+```wado
+let sizes = { small: 1, medium: 2, large: 3 } as TreeMap<String, i32>;
+assert sizes.len() == 3;
+assert sizes["medium"] == 2;
+assert sizes.get("small") matches { Some(v) && v == 1 };
+
+let primes = [7, 2, 5, 2, 3] as TreeSet<i32>;
+assert primes.len() == 4;
+assert primes.contains(5);
+assert !primes.contains(4);
+```
+
 ## Structs
 
 ### `pub struct TreeMap<K, V>`

@@ -67,6 +67,7 @@ use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
+use crate::name::global_name;
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, TirBlock, TirEnum, TirEnumCase, TirExpr, TirFlags, TirFlagsMember, TirFunction,
@@ -1568,7 +1569,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .map(|(t, _)| *t)
             .expect("resolve_module records every global in current_module_globals");
 
-        let mut ctx = FunctionContext::new(ty, format!("global:{}", global_decl.name));
+        let mut ctx = FunctionContext::new(
+            ty,
+            global_name(&self.current_module_source, &global_decl.name),
+        );
         let initializer = self.reify_expr(&global_decl.initializer, &mut ctx, Some(ty));
         let param = self.reify_param_attr(global_decl);
 

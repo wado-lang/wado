@@ -38,15 +38,15 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//wado-compiler/tests/fixtures/loop_nested.wado/loop_nested_deep" = fn();  // TypeId(12)
+type "functype//loop_nested.wado/loop_nested_deep" = fn();  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/loop_nested.wado/loop_nested_loop" = fn();  // TypeId(13)
+type "functype//loop_nested.wado/loop_nested_loop" = fn();  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/loop_nested.wado/loop_nested_mixed" = fn();  // TypeId(14)
+type "functype//loop_nested.wado/loop_nested_mixed" = fn();  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/loop_nested.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(15)
+type "functype//loop_nested.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/loop_nested.wado/__cm_export__run" = fn();  // TypeId(16)
+type "functype//loop_nested.wado/__cm_export__run" = fn();  // TypeId(16)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(17)
 
@@ -101,9 +101,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:loop_nested.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/loop_nested.wado/loop_nested_deep"() with Stdout {
+fn "loop_nested.wado/loop_nested_deep"() with Stdout {
     let i: i32;
     let j: i32;
     let k: i32;
@@ -150,7 +150,7 @@ fn "wado-compiler/tests/fixtures/loop_nested.wado/loop_nested_deep"() with Stdou
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 111, 110, 101), used: 4 });
 }
 
-fn "wado-compiler/tests/fixtures/loop_nested.wado/loop_nested_loop"() with Stdout {
+fn "loop_nested.wado/loop_nested_loop"() with Stdout {
     let outer: i32;
     let inner: i32;
     let __local_2: ref "core:prelude/string.wado//String";
@@ -177,7 +177,7 @@ fn "wado-compiler/tests/fixtures/loop_nested.wado/loop_nested_loop"() with Stdou
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 111, 110, 101), used: 4 });
 }
 
-fn "wado-compiler/tests/fixtures/loop_nested.wado/loop_nested_mixed"() with Stdout {
+fn "loop_nested.wado/loop_nested_mixed"() with Stdout {
     let a: i32;
     let b: i32;
     let c: i32;
@@ -218,26 +218,26 @@ fn "wado-compiler/tests/fixtures/loop_nested.wado/loop_nested_mixed"() with Stdo
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 111, 110, 101), used: 4 });
 }
 
-fn "wado-compiler/tests/fixtures/loop_nested.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "loop_nested.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/loop_nested.wado/__cm_export__run"() {
+fn "loop_nested.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:loop_nested.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:loop_nested.wado::__modules_initialized = 1;
     };
     __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_2 @likely(global:loop_nested.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:loop_nested.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/loop_nested.wado/loop_nested_deep"();
-    "wado-compiler/tests/fixtures/loop_nested.wado/loop_nested_loop"();
-    "wado-compiler/tests/fixtures/loop_nested.wado/loop_nested_mixed"();
+    "loop_nested.wado/loop_nested_deep"();
+    "loop_nested.wado/loop_nested_loop"();
+    "loop_nested.wado/loop_nested_mixed"();
     "wasi/task-return"(0);
 }
 
@@ -265,7 +265,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/loop_nested.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "loop_nested.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -555,4 +555,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/loop_nested.wado/__cm_export__run" as "run"
+export fn "loop_nested.wado/__cm_export__run" as "run"

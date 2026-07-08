@@ -24,22 +24,22 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-variant core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput> {  // TypeId(4)
+variant core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput> {  // TypeId(4)
     Some(i32),
     None,
 }
 
-struct core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput>::Some {  // TypeId(5)
+struct core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>::Some {  // TypeId(5)
     discriminant: i32,
     payload_0: i32,
 }
 
-variant core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput> {  // TypeId(6)
+variant core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput> {  // TypeId(6)
     Some(i32),
     None,
 }
 
-struct core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>::Some {  // TypeId(7)
+struct core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput>::Some {  // TypeId(7)
     discriminant: i32,
     payload_0: i32,
 }
@@ -70,17 +70,17 @@ type "functype//wasi/wasi:cli/TerminalStdin::get_terminal_stdin" = fn(i32);  // 
 
 type "functype//wasi/wasi:cli/TerminalStdout::get_terminal_stdout" = fn(i32);  // TypeId(20)
 
-type "functype//wado-compiler/tests/fixtures/wasi_cli_terminal.wado/run" = fn();  // TypeId(21)
+type "functype//wasi_cli_terminal.wado/run" = fn();  // TypeId(21)
 
-type "functype//wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(22)
+type "functype//wasi_cli_terminal.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(22)
 
-type "functype//wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStdin_get_terminal_stdin" = fn() -> ref "core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput>";  // TypeId(23)
+type "functype//wasi_cli_terminal.wado/__cm_binding__TerminalStdin_get_terminal_stdin" = fn() -> ref "core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput>";  // TypeId(23)
 
-type "functype//wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStdout_get_terminal_stdout" = fn() -> ref "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>";  // TypeId(24)
+type "functype//wasi_cli_terminal.wado/__cm_binding__TerminalStdout_get_terminal_stdout" = fn() -> ref "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>";  // TypeId(24)
 
-type "functype//wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStderr_get_terminal_stderr" = fn() -> ref "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>";  // TypeId(25)
+type "functype//wasi_cli_terminal.wado/__cm_binding__TerminalStderr_get_terminal_stderr" = fn() -> ref "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>";  // TypeId(25)
 
-type "functype//wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_export__run" = fn();  // TypeId(26)
+type "functype//wasi_cli_terminal.wado/__cm_export__run" = fn();  // TypeId(26)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(27)
 
@@ -151,9 +151,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:wasi_cli_terminal.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/run"() with Stdout, TerminalStdin, TerminalStdout, TerminalStderr {
+fn "wasi_cli_terminal.wado/run"() with Stdout, TerminalStdin, TerminalStdout, TerminalStderr {
     let stdin_terminal: ref "core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput>";
     let __cond_1: bool;
     let stdout_terminal: ref "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>";
@@ -167,34 +167,34 @@ fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/run"() with Stdout, Term
     let __local_10: ref "core:prelude/string.wado//String";
     let __local_11: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wasi_cli_terminal.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wasi_cli_terminal.wado::__modules_initialized = 1;
     };
-    stdin_terminal = "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStdin_get_terminal_stdin"();
+    stdin_terminal = "wasi_cli_terminal.wado/__cm_binding__TerminalStdin_get_terminal_stdin"();
     __cond_1 = stdin_terminal.discriminant == 1;
     if @unlikely(__cond_1 == 0) {
         cold_path;
-        "core:rt/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(135); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_6, 114); "core:prelude/string.wado/String::push"(__local_6, 117); "core:prelude/string.wado/String::push"(__local_6, 110); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/wasi_cli_terminal.wado"), used: 51 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 10 }, __local_7); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("stdin terminal should be None"), used: 29 }); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(135); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_6, 114); "core:prelude/string.wado/String::push"(__local_6, 117); "core:prelude/string.wado/String::push"(__local_6, 110); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wasi_cli_terminal.wado"), used: 22 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 10 }, __local_7); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("stdin terminal should be None"), used: 29 }); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: stdin_terminal matches { None }
 "), used: 44 }); __local_6);
         unreachable;
     }
-    stdout_terminal = "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStdout_get_terminal_stdout"();
+    stdout_terminal = "wasi_cli_terminal.wado/__cm_binding__TerminalStdout_get_terminal_stdout"();
     __cond_3 = stdout_terminal.discriminant == 1;
     if @unlikely(__cond_3 == 0) {
         cold_path;
-        "core:rt/panic"(__local_8 = "core:prelude/string.wado/String::with_capacity"(136); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_8, 114); "core:prelude/string.wado/String::push"(__local_8, 117); "core:prelude/string.wado/String::push"(__local_8, 110); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push"(__local_8, 97); "core:prelude/string.wado/String::push"(__local_8, 116); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/wasi_cli_terminal.wado"), used: 51 }); "core:prelude/string.wado/String::push"(__local_8, 58); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 13 }, __local_9); "core:prelude/string.wado/String::push"(__local_8, 58); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("stdout terminal should be None"), used: 30 }); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_8 = "core:prelude/string.wado/String::with_capacity"(136); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_8, 114); "core:prelude/string.wado/String::push"(__local_8, 117); "core:prelude/string.wado/String::push"(__local_8, 110); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push"(__local_8, 97); "core:prelude/string.wado/String::push"(__local_8, 116); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wasi_cli_terminal.wado"), used: 22 }); "core:prelude/string.wado/String::push"(__local_8, 58); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 13 }, __local_9); "core:prelude/string.wado/String::push"(__local_8, 58); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("stdout terminal should be None"), used: 30 }); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: stdout_terminal matches { None }
 "), used: 45 }); __local_8);
         unreachable;
     }
-    stderr_terminal = "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStderr_get_terminal_stderr"();
+    stderr_terminal = "wasi_cli_terminal.wado/__cm_binding__TerminalStderr_get_terminal_stderr"();
     __cond_5 = stderr_terminal.discriminant == 1;
     if @unlikely(__cond_5 == 0) {
         cold_path;
-        "core:rt/panic"(__local_10 = "core:prelude/string.wado/String::with_capacity"(136); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_10, 114); "core:prelude/string.wado/String::push"(__local_10, 117); "core:prelude/string.wado/String::push"(__local_10, 110); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push"(__local_10, 97); "core:prelude/string.wado/String::push"(__local_10, 116); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/wasi_cli_terminal.wado"), used: 51 }); "core:prelude/string.wado/String::push"(__local_10, 58); __local_11 = "core:prelude/format.wado/Formatter::new"(__local_10); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 16 }, __local_11); "core:prelude/string.wado/String::push"(__local_10, 58); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("stderr terminal should be None"), used: 30 }); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_10 = "core:prelude/string.wado/String::with_capacity"(136); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_10, 114); "core:prelude/string.wado/String::push"(__local_10, 117); "core:prelude/string.wado/String::push"(__local_10, 110); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push"(__local_10, 97); "core:prelude/string.wado/String::push"(__local_10, 116); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wasi_cli_terminal.wado"), used: 22 }); "core:prelude/string.wado/String::push"(__local_10, 58); __local_11 = "core:prelude/format.wado/Formatter::new"(__local_10); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 16 }, __local_11); "core:prelude/string.wado/String::push"(__local_10, 58); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("stderr terminal should be None"), used: 30 }); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: stderr_terminal matches { None }
 "), used: 45 }); __local_10);
         unreachable;
@@ -202,11 +202,11 @@ condition: stderr_terminal matches { None }
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all terminal tests passed"), used: 25 });
 }
 
-fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "wasi_cli_terminal.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStdin_get_terminal_stdin"() with TerminalStdin {
+fn "wasi_cli_terminal.wado/__cm_binding__TerminalStdin_get_terminal_stdin"() with TerminalStdin {
     let __outptr: i32;
     let __disc: i32;
     let __option_result: ref "core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput>";
@@ -220,7 +220,7 @@ fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalSt
     return __option_result;
 }
 
-fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStdout_get_terminal_stdout"() with TerminalStdout {
+fn "wasi_cli_terminal.wado/__cm_binding__TerminalStdout_get_terminal_stdout"() with TerminalStdout {
     let __outptr: i32;
     let __disc: i32;
     let __option_result: ref "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>";
@@ -234,7 +234,7 @@ fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalSt
     return __option_result;
 }
 
-fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStderr_get_terminal_stderr"() with TerminalStderr {
+fn "wasi_cli_terminal.wado/__cm_binding__TerminalStderr_get_terminal_stderr"() with TerminalStderr {
     let __outptr: i32;
     let __disc: i32;
     let __option_result: ref "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>";
@@ -248,14 +248,14 @@ fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalSt
     return __option_result;
 }
 
-fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_export__run"() {
+fn "wasi_cli_terminal.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wasi_cli_terminal.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wasi_cli_terminal.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/run"();
+    "wasi_cli_terminal.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -283,7 +283,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "wasi_cli_terminal.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -619,4 +619,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_export__run" as "run"
+export fn "wasi_cli_terminal.wado/__cm_export__run" as "run"

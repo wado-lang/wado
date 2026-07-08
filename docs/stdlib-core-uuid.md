@@ -29,6 +29,14 @@ if let Some(parsed) = Uuid::parse(&s) { ... }
 `parse` accepts both the hyphenated form and the 32-digit hyphenless
 "simple" form, matching Rust's `uuid` and Go's `google/uuid`.
 
+## Synopsis
+
+```wado
+let id = Uuid::parse(&"550e8400-e29b-41d4-a716-446655440000").unwrap();
+assert id.version() == 4;
+assert id.to_string() == "550e8400-e29b-41d4-a716-446655440000";
+```
+
 ## Structs
 
 ### `pub struct Uuid`

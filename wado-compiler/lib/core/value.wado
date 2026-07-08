@@ -40,6 +40,13 @@ use {
 
 use { TreeMap } from "core:collections";
 
+#[synopsis]
+test {
+    let doc = to_value(&[1, 2, 3]).unwrap();
+    assert doc matches { List(items) && items.len() == 3 };
+    assert to_value(&"wado") matches { Ok(String(s)) && s == "wado" };
+}
+
 /// A dynamically-typed, format-agnostic value.
 ///
 /// JSON only ever produces `Null` / `Bool` / `Float` / `String` / `List` /

@@ -25,11 +25,11 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//wado-compiler/tests/fixtures/test_synopsis.wado/__test_0" = fn();  // TypeId(10)
+type "functype//test_synopsis.wado/__test_0" = fn();  // TypeId(10)
 
-type "functype//wado-compiler/tests/fixtures/test_synopsis.wado/__cm_export____test_0" = fn();  // TypeId(11)
+type "functype//test_synopsis.wado/__cm_export____test_0" = fn();  // TypeId(11)
 
-type "functype//wado-compiler/tests/fixtures/test_synopsis.wado/__cm_export____test_trap_1" = fn();  // TypeId(12)
+type "functype//test_synopsis.wado/__cm_export____test_trap_1" = fn();  // TypeId(12)
 
 type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(13)
 
@@ -68,28 +68,28 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:test_synopsis.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/test_synopsis.wado/__test_0"() {
+fn "test_synopsis.wado/__test_0"() {
 }
 
-fn "wado-compiler/tests/fixtures/test_synopsis.wado/__cm_export____test_0"() {
+fn "test_synopsis.wado/__cm_export____test_0"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:test_synopsis.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:test_synopsis.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/test_synopsis.wado/__test_0"();
+    "test_synopsis.wado/__test_0"();
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/test_synopsis.wado/__cm_export____test_trap_1"() {
+fn "test_synopsis.wado/__cm_export____test_trap_1"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:test_synopsis.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:test_synopsis.wado::__modules_initialized = 1;
     };
     "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 111, 111, 109), used: 4 });
     unreachable;
@@ -199,5 +199,5 @@ fn "core:rt/cm_stream_write_raw_u8"(handle, data, len) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-export fn "wado-compiler/tests/fixtures/test_synopsis.wado/__cm_export____test_0" as "__test_0"
-export fn "wado-compiler/tests/fixtures/test_synopsis.wado/__cm_export____test_trap_1" as "__test_trap_1"
+export fn "test_synopsis.wado/__cm_export____test_0" as "__test_0"
+export fn "test_synopsis.wado/__cm_export____test_trap_1" as "__test_trap_1"

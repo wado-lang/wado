@@ -24,6 +24,14 @@ use { from_bytes, to_bytes } from "core:json";
 let v: Value = from_bytes(`{"x": 1, "y": [true, null]}`)?;
 let s = to_bytes::<Value>(&v)?;
 
+## Synopsis
+
+```wado
+let doc = to_value(&[1, 2, 3]).unwrap();
+assert doc matches { List(items) && items.len() == 3 };
+assert to_value(&"wado") matches { Ok(String(s)) && s == "wado" };
+```
+
 ## Functions
 
 ### `pub fn to_value<T: Serialize>(value: &T) -> Result<Value, SerializeError>`

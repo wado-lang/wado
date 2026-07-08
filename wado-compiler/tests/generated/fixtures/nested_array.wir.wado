@@ -106,19 +106,19 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(27)
 
-type "functype//wado-compiler/tests/fixtures/nested_array.wado/nested_array_3deep_iterate_test" = fn();  // TypeId(28)
+type "functype//nested_array.wado/nested_array_3deep_iterate_test" = fn();  // TypeId(28)
 
-type "functype//wado-compiler/tests/fixtures/nested_array.wado/nested_array_iterate_test" = fn();  // TypeId(29)
+type "functype//nested_array.wado/nested_array_iterate_test" = fn();  // TypeId(29)
 
-type "functype//wado-compiler/tests/fixtures/nested_array.wado/nested_array_method_test" = fn();  // TypeId(30)
+type "functype//nested_array.wado/nested_array_method_test" = fn();  // TypeId(30)
 
-type "functype//wado-compiler/tests/fixtures/nested_array.wado/nested_array_mutate_test" = fn();  // TypeId(31)
+type "functype//nested_array.wado/nested_array_mutate_test" = fn();  // TypeId(31)
 
-type "functype//wado-compiler/tests/fixtures/nested_array.wado/nested_array_option_access_test" = fn();  // TypeId(32)
+type "functype//nested_array.wado/nested_array_option_access_test" = fn();  // TypeId(32)
 
-type "functype//wado-compiler/tests/fixtures/nested_array.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(33)
+type "functype//nested_array.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(33)
 
-type "functype//wado-compiler/tests/fixtures/nested_array.wado/__cm_export__run" = fn();  // TypeId(34)
+type "functype//nested_array.wado/__cm_export__run" = fn();  // TypeId(34)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(35)
 
@@ -206,9 +206,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:nested_array.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_3deep_iterate_test"() with Stdout {
+fn "nested_array.wado/nested_array_3deep_iterate_test"() with Stdout {
     let __b_0: ref "core:prelude//List<core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>>";
     let __b_1: ref "core:prelude//List<core:prelude/list.wado/List<i32>>";
     let __b_2: ref "core:prelude//List<i32>";
@@ -335,7 +335,7 @@ condition: index < self.used
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
 }
 
-fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_iterate_test"() with Stdout {
+fn "nested_array.wado/nested_array_iterate_test"() with Stdout {
     let __b_0: ref "core:prelude//List<core:prelude/list.wado/List<i32>>";
     let __b_1: ref "core:prelude//List<i32>";
     let __b_2: ref "core:prelude//List<i32>";
@@ -405,7 +405,7 @@ condition: index < self.used
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
 }
 
-fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_method_test"() with Stdout {
+fn "nested_array.wado/nested_array_method_test"() with Stdout {
     let __b_0: ref "core:prelude//List<core:prelude/list.wado/List<i32>>";
     let __b_1: ref "core:prelude//List<i32>";
     let __b_2: ref "core:prelude//List<i32>";
@@ -443,7 +443,7 @@ condition: index < self.used
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
 }
 
-fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_mutate_test"() with Stdout {
+fn "nested_array.wado/nested_array_mutate_test"() with Stdout {
     let __b_0: ref "core:prelude//List<core:prelude/list.wado/List<i32>>";
     let __b_1: ref "core:prelude//List<i32>";
     let __b_2: ref "core:prelude//List<i32>";
@@ -495,7 +495,7 @@ condition: index < self.used
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
 }
 
-fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_option_access_test"() with Stdout {
+fn "nested_array.wado/nested_array_option_access_test"() with Stdout {
     let a: ref "core:prelude/types.wado//Option<i32>";
     let b: ref "core:prelude/types.wado//Option<i32>";
     let c: ref "core:prelude/types.wado//Option<i32>";
@@ -580,28 +580,28 @@ condition: index < self.used
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
 }
 
-fn "wado-compiler/tests/fixtures/nested_array.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "nested_array.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/nested_array.wado/__cm_export__run"() {
+fn "nested_array.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:nested_array.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:nested_array.wado::__modules_initialized = 1;
     };
     __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_2 @likely(global:nested_array.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:nested_array.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/nested_array.wado/nested_array_3deep_iterate_test"();
-    "wado-compiler/tests/fixtures/nested_array.wado/nested_array_iterate_test"();
-    "wado-compiler/tests/fixtures/nested_array.wado/nested_array_method_test"();
-    "wado-compiler/tests/fixtures/nested_array.wado/nested_array_mutate_test"();
-    "wado-compiler/tests/fixtures/nested_array.wado/nested_array_option_access_test"();
+    "nested_array.wado/nested_array_3deep_iterate_test"();
+    "nested_array.wado/nested_array_iterate_test"();
+    "nested_array.wado/nested_array_method_test"();
+    "nested_array.wado/nested_array_mutate_test"();
+    "nested_array.wado/nested_array_option_access_test"();
     "wasi/task-return"(0);
 }
 
@@ -629,7 +629,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/nested_array.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "nested_array.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -1147,4 +1147,4 @@ fn "core:prelude/list.wado/List<i32>::grow"(self) {
     self.repr = new_repr;
 }
 
-export fn "wado-compiler/tests/fixtures/nested_array.wado/__cm_export__run" as "run"
+export fn "nested_array.wado/__cm_export__run" as "run"

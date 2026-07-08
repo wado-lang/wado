@@ -38,11 +38,11 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//wado-compiler/tests/fixtures/opt_eqz.wado/run" = fn();  // TypeId(12)
+type "functype//opt_eqz.wado/run" = fn();  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/opt_eqz.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(13)
+type "functype//opt_eqz.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/opt_eqz.wado/__cm_export__run" = fn();  // TypeId(14)
+type "functype//opt_eqz.wado/__cm_export__run" = fn();  // TypeId(14)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(15)
 
@@ -89,9 +89,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:opt_eqz.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/opt_eqz.wado/run"() with Stdout {
+fn "opt_eqz.wado/run"() with Stdout {
     let __local_0: ref "core:prelude/string.wado//String";
     let __local_1: ref "core:prelude/format.wado//Formatter";
     let __local_2: ref "core:prelude/string.wado//String";
@@ -109,10 +109,10 @@ fn "wado-compiler/tests/fixtures/opt_eqz.wado/run"() with Stdout {
     let f_44: ref "core:prelude/format.wado//Formatter";
     let f_49: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:opt_eqz.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:opt_eqz.wado::__modules_initialized = 1;
     };
     "core:cli/println"(__local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(42), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("i32 eqz: "), used: 9 }); __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_0 }; f_11 = __local_1; "core:prelude/format.wado/Formatter::pad"(f_11, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 }); "core:prelude/string.wado/String::push"(__local_0, 32); __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_0 }; f_16 = __local_1; "core:prelude/format.wado/Formatter::pad"(f_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 }); __local_0);
     "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(43), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("i32 neqz: "), used: 10 }); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; f_22 = __local_3; "core:prelude/format.wado/Formatter::pad"(f_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 }); "core:prelude/string.wado/String::push"(__local_2, 32); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; f_27 = __local_3; "core:prelude/format.wado/Formatter::pad"(f_27, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 }); __local_2);
@@ -120,18 +120,18 @@ fn "wado-compiler/tests/fixtures/opt_eqz.wado/run"() with Stdout {
     "core:cli/println"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(43), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("i64 neqz: "), used: 10 }); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; f_44 = __local_7; "core:prelude/format.wado/Formatter::pad"(f_44, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 }); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; f_49 = __local_7; "core:prelude/format.wado/Formatter::pad"(f_49, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 }); __local_6);
 }
 
-fn "wado-compiler/tests/fixtures/opt_eqz.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "opt_eqz.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/opt_eqz.wado/__cm_export__run"() {
+fn "opt_eqz.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:opt_eqz.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:opt_eqz.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/opt_eqz.wado/run"();
+    "opt_eqz.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -159,7 +159,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/opt_eqz.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "opt_eqz.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -337,4 +337,4 @@ fn "core:prelude/format.wado/Formatter::pad"(self, content) {
     }
 }
 
-export fn "wado-compiler/tests/fixtures/opt_eqz.wado/__cm_export__run" as "run"
+export fn "opt_eqz.wado/__cm_export__run" as "run"

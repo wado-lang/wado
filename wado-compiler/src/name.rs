@@ -246,18 +246,9 @@ impl FreeFunctionName {
 
 impl fmt::Display for FreeFunctionName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.module_source {
-            ModuleSource::EntryPoint { .. } => write!(f, "{}", self.name),
-            ModuleSource::Core { name: module } => write!(f, "core/{}/{}", module, self.name),
-            ModuleSource::Wasi { interface } => write!(f, "wasi/{}/{}", interface, self.name),
-            ModuleSource::Local { path } => write!(f, "{}/{}", path, self.name),
-            ModuleSource::Dependency { .. } => {
-                write!(f, "{}/{}", self.module_source.to_path_string(), self.name)
-            }
-            ModuleSource::Remote { url } => write!(f, "{}/{}", url, self.name),
-            ModuleSource::Redirected { uri } => write!(f, "{}/{}", uri, self.name),
-            ModuleSource::Wasm { path, .. } => write!(f, "{}/{}", path, self.name),
-        }
+        // Every module is qualified the same way through its portable path;
+        // the entry point contributes its base name like any other module.
+        write!(f, "{}/{}", self.module_source.to_path_string(), self.name)
     }
 }
 
@@ -353,12 +344,9 @@ impl MethodName {
 
 impl fmt::Display for MethodName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // For entry point, don't include the module prefix
-        let prefix = if self.module_source.is_entry_point() {
-            String::new()
-        } else {
-            format!("{}/", self.module_source.to_path_string())
-        };
+        // Every module is qualified the same way; the entry point contributes
+        // its base name like any other module.
+        let prefix = format!("{}/", self.module_source.to_path_string());
 
         match &self.trait_name {
             Some(trait_name) => {
@@ -953,6 +941,15 @@ pub fn module_parent_dir(path: &str) -> &str {
     get_parent_path(path)
 }
 
+/// The symbol name of a module-level global var: `global:{module_source}::{name}`.
+/// Every module is qualified the same way — there is no entry-module special
+/// case, so the declaration and every read/write produce identical names by
+/// construction and can never diverge.
+#[must_use]
+pub fn global_name(module_source: &ModuleSource, name: impl fmt::Display) -> String {
+    format!("global:{module_source}::{name}")
+}
+
 /// The canonical loader identity for a relative `import_source` imported from a
 /// local module `from_path`, anchored at `entry_dir`: compose
 /// ([`resolve_module_path`]) then canonicalize ([`canonical_local_path`]). The
@@ -1487,10 +1484,20 @@ mod tests {
     }
 
     #[test]
-    fn test_free_function_name_empty_path() {
+    fn test_free_function_name_entry_is_qualified() {
+        // The entry point is qualified by its portable base name like any other
+        // module — no bare-name special case. The synthetic empty path renders
+        // its `<entry>` placeholder; a real entry contributes its base name,
+        // dropping the compile directory.
         let mut interner = ModuleSourceInterner::new();
-        let func = FreeFunctionName::from_strs(&mut interner, &[], "main");
-        assert_eq!(func.to_string(), "main");
+        let synthetic = FreeFunctionName::from_strs(&mut interner, &[], "main");
+        assert_eq!(synthetic.to_string(), "<entry>/main");
+
+        let entry = FreeFunctionName::from_module_source(
+            &interner.entry_point("/abs/pkg/src/main.wado"),
+            "main",
+        );
+        assert_eq!(entry.to_string(), "main.wado/main");
     }
 
     #[test]

@@ -20,25 +20,25 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct tuple//[wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/Tree, wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/Tree] {  // TypeId(3)
-    mut 0: ref "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree",
-    mut 1: ref "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree",
+struct tuple//[match_nested_variant_tuple_payload.wado/Tree, match_nested_variant_tuple_payload.wado/Tree] {  // TypeId(3)
+    mut 0: ref "match_nested_variant_tuple_payload.wado//Tree",
+    mut 1: ref "match_nested_variant_tuple_payload.wado//Tree",
 }
 
-variant wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree {  // TypeId(4)
+variant match_nested_variant_tuple_payload.wado//Tree {  // TypeId(4)
     Leaf(i32),
-    Branch(ref "tuple//[wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/Tree, wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/Tree]"),
+    Branch(ref "tuple//[match_nested_variant_tuple_payload.wado/Tree, match_nested_variant_tuple_payload.wado/Tree]"),
     Empty,
 }
 
-struct wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Leaf {  // TypeId(5)
+struct match_nested_variant_tuple_payload.wado//Tree::Leaf {  // TypeId(5)
     discriminant: i32,
     payload_0: i32,
 }
 
-struct wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Branch {  // TypeId(6)
+struct match_nested_variant_tuple_payload.wado//Tree::Branch {  // TypeId(6)
     discriminant: i32,
-    payload_0: ref "tuple//[wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/Tree, wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/Tree]",
+    payload_0: ref "tuple//[match_nested_variant_tuple_payload.wado/Tree, match_nested_variant_tuple_payload.wado/Tree]",
 }
 
 enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(7)
@@ -59,11 +59,11 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(14)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/run" = fn();  // TypeId(16)
+type "functype//match_nested_variant_tuple_payload.wado/run" = fn();  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(17)
+type "functype//match_nested_variant_tuple_payload.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/__cm_export__run" = fn();  // TypeId(18)
+type "functype//match_nested_variant_tuple_payload.wado/__cm_export__run" = fn();  // TypeId(18)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(19)
 
@@ -118,15 +118,15 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:match_nested_variant_tuple_payload.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/run"() with Stdout {
-    let tree: ref "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree";
+fn "match_nested_variant_tuple_payload.wado/run"() with Stdout {
+    let tree: ref "match_nested_variant_tuple_payload.wado//Tree";
     let n_1: i32;
     let a: i32;
     let b: i32;
     let result: ref "core:prelude/string.wado//String";
-    let tree2: ref "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree";
+    let tree2: ref "match_nested_variant_tuple_payload.wado//Tree";
     let n_6: i32;
     let result2: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/string.wado//String";
@@ -135,26 +135,26 @@ fn "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/run"() 
     let __local_11: ref "core:prelude/format.wado//Formatter";
     let __local_12: ref "core:prelude/string.wado//String";
     let __local_13: ref "core:prelude/format.wado//Formatter";
-    let __local_14: ref "tuple//[wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/Tree, wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/Tree]";
-    let __local_16: ref "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree";
-    let __local_17: ref "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree";
-    let __local_18: ref "tuple//[wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/Tree, wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/Tree]";
-    let __local_20: ref "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree";
-    let __local_21: ref "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree";
-    let __local_22: ref "tuple//[wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/Tree, wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/Tree]";
-    let __local_24: ref "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree";
-    let __local_25: ref "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree";
+    let __local_14: ref "tuple//[match_nested_variant_tuple_payload.wado/Tree, match_nested_variant_tuple_payload.wado/Tree]";
+    let __local_16: ref "match_nested_variant_tuple_payload.wado//Tree";
+    let __local_17: ref "match_nested_variant_tuple_payload.wado//Tree";
+    let __local_18: ref "tuple//[match_nested_variant_tuple_payload.wado/Tree, match_nested_variant_tuple_payload.wado/Tree]";
+    let __local_20: ref "match_nested_variant_tuple_payload.wado//Tree";
+    let __local_21: ref "match_nested_variant_tuple_payload.wado//Tree";
+    let __local_22: ref "tuple//[match_nested_variant_tuple_payload.wado/Tree, match_nested_variant_tuple_payload.wado/Tree]";
+    let __local_24: ref "match_nested_variant_tuple_payload.wado//Tree";
+    let __local_25: ref "match_nested_variant_tuple_payload.wado//Tree";
     let f_35: ref "core:prelude/format.wado//Formatter";
     let f_40: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:match_nested_variant_tuple_payload.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:match_nested_variant_tuple_payload.wado::__modules_initialized = 1;
     };
-    tree = struct.new "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Branch" { discriminant: 1, payload_0: struct.new "tuple//[wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/Tree, wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/Tree]" { 0: struct.new "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Leaf" { discriminant: 0, payload_0: 10 }, 1: struct.new "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Leaf" { discriminant: 0, payload_0: 20 } } };
-    result = (if ref.test "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Leaf"(tree) -> ref "core:prelude/string.wado//String" {
-        n_1 = ref.cast "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Leaf"(tree).payload_0;
+    tree = struct.new "match_nested_variant_tuple_payload.wado//Tree::Branch" { discriminant: 1, payload_0: struct.new "tuple//[match_nested_variant_tuple_payload.wado/Tree, match_nested_variant_tuple_payload.wado/Tree]" { 0: struct.new "match_nested_variant_tuple_payload.wado//Tree::Leaf" { discriminant: 0, payload_0: 10 }, 1: struct.new "match_nested_variant_tuple_payload.wado//Tree::Leaf" { discriminant: 0, payload_0: 20 } } };
+    result = (if ref.test "match_nested_variant_tuple_payload.wado//Tree::Leaf"(tree) -> ref "core:prelude/string.wado//String" {
+        n_1 = ref.cast "match_nested_variant_tuple_payload.wado//Tree::Leaf"(tree).payload_0;
         __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
         "core:prelude/string.wado/String::push"(__local_8, 108);
         "core:prelude/string.wado/String::push"(__local_8, 101);
@@ -164,14 +164,14 @@ fn "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/run"() 
         __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 };
         "core:prelude/primitive.wado/i32::fmt_decimal"(n_1, __local_9);
         __local_8;
-    } else if (if ref.test "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Branch"(tree) -> i32 {
-        __local_14 = ref.cast "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Branch"(tree).payload_0;
+    } else if (if ref.test "match_nested_variant_tuple_payload.wado//Tree::Branch"(tree) -> i32 {
+        __local_14 = ref.cast "match_nested_variant_tuple_payload.wado//Tree::Branch"(tree).payload_0;
         __local_17 = __local_14.0;
-        if ref.test "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Leaf"(__local_17) -> i32 {
-            a = ref.cast "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Leaf"(__local_17).payload_0;
+        if ref.test "match_nested_variant_tuple_payload.wado//Tree::Leaf"(__local_17) -> i32 {
+            a = ref.cast "match_nested_variant_tuple_payload.wado//Tree::Leaf"(__local_17).payload_0;
             __local_16 = __local_14.1;
-            if ref.test "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Leaf"(__local_16) -> i32 {
-                b = ref.cast "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Leaf"(__local_16).payload_0;
+            if ref.test "match_nested_variant_tuple_payload.wado//Tree::Leaf"(__local_16) -> i32 {
+                b = ref.cast "match_nested_variant_tuple_payload.wado//Tree::Leaf"(__local_16).payload_0;
                 1;
             } else {
                 0;
@@ -198,7 +198,7 @@ fn "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/run"() 
         f_40 = __local_11;
         "core:prelude/primitive.wado/i32::fmt_decimal"(b, f_40);
         __local_10;
-    } else if ref.test "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Branch"(tree) -> ref "core:prelude/string.wado//String" {
+    } else if ref.test "match_nested_variant_tuple_payload.wado//Tree::Branch"(tree) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("branch:other"), used: 12 };
     } else {
         block -> ref "core:prelude/string.wado//String" {
@@ -206,14 +206,14 @@ fn "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/run"() 
         };
     });
     "core:cli/println"(result);
-    tree2 = struct.new "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Branch" { discriminant: 1, payload_0: struct.new "tuple//[wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/Tree, wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/Tree]" { 0: struct.new "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Branch" { discriminant: 1, payload_0: struct.new "tuple//[wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/Tree, wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/Tree]" { 0: struct.new "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Leaf" { discriminant: 0, payload_0: 1 }, 1: struct.new "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree" { 2 } } }, 1: struct.new "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Leaf" { discriminant: 0, payload_0: 2 } } };
-    result2 = (if (if ref.test "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Branch"(tree2) -> i32 {
-        __local_18 = ref.cast "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Branch"(tree2).payload_0;
+    tree2 = struct.new "match_nested_variant_tuple_payload.wado//Tree::Branch" { discriminant: 1, payload_0: struct.new "tuple//[match_nested_variant_tuple_payload.wado/Tree, match_nested_variant_tuple_payload.wado/Tree]" { 0: struct.new "match_nested_variant_tuple_payload.wado//Tree::Branch" { discriminant: 1, payload_0: struct.new "tuple//[match_nested_variant_tuple_payload.wado/Tree, match_nested_variant_tuple_payload.wado/Tree]" { 0: struct.new "match_nested_variant_tuple_payload.wado//Tree::Leaf" { discriminant: 0, payload_0: 1 }, 1: struct.new "match_nested_variant_tuple_payload.wado//Tree" { 2 } } }, 1: struct.new "match_nested_variant_tuple_payload.wado//Tree::Leaf" { discriminant: 0, payload_0: 2 } } };
+    result2 = (if (if ref.test "match_nested_variant_tuple_payload.wado//Tree::Branch"(tree2) -> i32 {
+        __local_18 = ref.cast "match_nested_variant_tuple_payload.wado//Tree::Branch"(tree2).payload_0;
         __local_21 = __local_18.0;
-        if ref.test "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Branch"(__local_21) -> i32 {
+        if ref.test "match_nested_variant_tuple_payload.wado//Tree::Branch"(__local_21) -> i32 {
             __local_20 = __local_18.1;
-            if ref.test "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Leaf"(__local_20) -> i32 {
-                n_6 = ref.cast "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Leaf"(__local_20).payload_0;
+            if ref.test "match_nested_variant_tuple_payload.wado//Tree::Leaf"(__local_20) -> i32 {
+                n_6 = ref.cast "match_nested_variant_tuple_payload.wado//Tree::Leaf"(__local_20).payload_0;
                 1;
             } else {
                 0;
@@ -229,12 +229,12 @@ fn "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/run"() 
         __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_12 };
         "core:prelude/primitive.wado/i32::fmt_decimal"(n_6, __local_13);
         __local_12;
-    } else if (if ref.test "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Branch"(tree2) -> i32 {
-        __local_22 = ref.cast "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Branch"(tree2).payload_0;
+    } else if (if ref.test "match_nested_variant_tuple_payload.wado//Tree::Branch"(tree2) -> i32 {
+        __local_22 = ref.cast "match_nested_variant_tuple_payload.wado//Tree::Branch"(tree2).payload_0;
         __local_25 = __local_22.0;
-        if ref.test "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Leaf"(__local_25) -> i32 {
+        if ref.test "match_nested_variant_tuple_payload.wado//Tree::Leaf"(__local_25) -> i32 {
             __local_24 = __local_22.1;
-            ref.test "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado//Tree::Branch"(__local_24);
+            ref.test "match_nested_variant_tuple_payload.wado//Tree::Branch"(__local_24);
         } else {
             0;
         }
@@ -248,18 +248,18 @@ fn "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/run"() 
     "core:cli/println"(result2);
 }
 
-fn "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "match_nested_variant_tuple_payload.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/__cm_export__run"() {
+fn "match_nested_variant_tuple_payload.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:match_nested_variant_tuple_payload.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:match_nested_variant_tuple_payload.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/run"();
+    "match_nested_variant_tuple_payload.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -287,7 +287,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "match_nested_variant_tuple_payload.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -577,4 +577,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/match_nested_variant_tuple_payload.wado/__cm_export__run" as "run"
+export fn "match_nested_variant_tuple_payload.wado/__cm_export__run" as "run"
