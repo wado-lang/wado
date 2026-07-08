@@ -82,9 +82,7 @@ fn place_root(body: &Body, expr: ExprId) -> Option<PlaceRoot> {
     match &body.exprs[expr].kind {
         ExprKind::Local { index, .. } => Some(PlaceRoot::Local(*index)),
         ExprKind::GlobalVarGet { .. } => Some(PlaceRoot::Global),
-        ExprKind::FieldAccess { expr: inner, .. } => {
-            place_root(body, inner.as_expr()?)
-        }
+        ExprKind::FieldAccess { expr: inner, .. } => place_root(body, inner.as_expr()?),
         _ => None,
     }
 }
@@ -288,7 +286,10 @@ fn collect_in_block(
         {
             continue;
         }
-        let Some(place) = value.as_expr().and_then(|v| clone_referent(body, v, descriptors)) else {
+        let Some(place) = value
+            .as_expr()
+            .and_then(|v| clone_referent(body, v, descriptors))
+        else {
             continue;
         };
         let Some(root) = place_root(body, place) else {
@@ -296,14 +297,9 @@ fn collect_in_block(
         };
         // The single use must be the referent of another `array_clone`, in this
         // same block, after the binding.
-        let Some((u, use_node)) = stmts
-            .iter()
-            .enumerate()
-            .skip(k + 1)
-            .find_map(|(i, &s)| {
-                find_clone_referent_use(body, s, target, descriptors).map(|node| (i, node))
-            })
-        else {
+        let Some((u, use_node)) = stmts.iter().enumerate().skip(k + 1).find_map(|(i, &s)| {
+            find_clone_referent_use(body, s, target, descriptors).map(|node| (i, node))
+        }) else {
             continue;
         };
         // The place must be unchanged across `(k, u]`.
@@ -406,9 +402,9 @@ fn remove_dead_bindings(engine: &mut Engine, block: BlockId, dead: &IndexSet<Stm
     let stmts = engine.body.blocks[block].stmts.clone();
     let mut child_blocks = Vec::new();
     for s in stmts {
-        engine
-            .body
-            .for_each_child(NodeRef::Stmt(s), |c| collect_child_blocks(engine.body, c, &mut child_blocks));
+        engine.body.for_each_child(NodeRef::Stmt(s), |c| {
+            collect_child_blocks(engine.body, c, &mut child_blocks)
+        });
     }
     for b in child_blocks {
         remove_dead_bindings(engine, b, dead);

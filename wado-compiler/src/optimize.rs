@@ -65,11 +65,11 @@
 mod alias;
 mod arena_query;
 mod array_literal;
+mod clone_forward;
 mod condition_implication;
 mod const_branch_prune;
 mod const_folding;
 mod const_object_globalization;
-mod clone_forward;
 mod container_sroa;
 mod copy_prop;
 mod dae;
