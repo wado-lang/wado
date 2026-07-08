@@ -85,15 +85,14 @@ internal fn gc_array_to_memory(arr: &Array<u8>, ptr: i32, len: i32) {
 /// Uses write_raw to pass String's internal GC array directly to the stream,
 /// avoiding the intermediate String → List<u8> byte-by-byte copy.
 internal fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool) {
-    let bytes = message.internal_raw_bytes();
     let len = message.len();
     if add_newline {
         let mut new_repr: Array<u8> = builtin::array_new(len + 1);
-        builtin::array_copy(&mut new_repr, 0, &bytes, 0, len);
+        builtin::array_copy(&mut new_repr, 0, message.internal_raw_bytes(), 0, len);
         builtin::array_set_u8(&mut new_repr, len, 10);
-        tx.write_raw(new_repr, len + 1);
+        tx.write_raw(&new_repr, len + 1);
     } else {
-        tx.write_raw(bytes, len);
+        tx.write_raw(message.internal_raw_bytes(), len);
     }
     tx.drop();
 }
@@ -181,25 +180,24 @@ internal fn cm_lower_string(s: String) -> i64 {
     let len = s.len();
     let bytes = s.internal_raw_bytes();
     let ptr = builtin::realloc(0, 0, 1, len);
-    gc_array_to_memory(&bytes, ptr, len);
+    gc_array_to_memory(bytes, ptr, len);
     return ptr as i64 | len as i64 << 32;
 }
 
 /// Lowers a GC List<u8> to CM linear memory representation.
 /// Returns (ptr | (len << 32)) as i64.
 /// The caller must free the allocated memory after the CM call.
-internal fn cm_lower_list_u8(data: Array<u8>, len: i32) -> i64 {
+internal fn cm_lower_list_u8(data: &Array<u8>, len: i32) -> i64 {
     let ptr = builtin::realloc(0, 0, 1, len);
-    gc_array_to_memory(&data, ptr, len);
+    gc_array_to_memory(data, ptr, len);
     return ptr as i64 | len as i64 << 32;
 }
 
 /// Lowers a GC List<u8> (e.g., FieldValue) to CM linear memory representation.
 /// Returns (ptr | (len << 32)) as i64.
 internal fn cm_lower_array_u8(arr: List<u8>) -> i64 {
-    let data = arr.internal_raw_data();
     let len = arr.len();
-    return cm_lower_list_u8(data, len);
+    return cm_lower_list_u8(arr.internal_raw_data_ref(), len);
 }
 
 /// Writes escaped string content to a Formatter (for inspect/debug output).
@@ -329,7 +327,7 @@ internal fn cm_stream_write_drain(handle: i32, ptr: i32, count: i32, elem_size: 
 
 /// CM adapter for stream.write_raw(data, len) on Stream<u8>.
 /// Lowers raw GC array to linear memory, calls stream-write, handles BLOCKED.
-internal fn cm_stream_write_raw_u8(handle: i32, data: Array<u8>, len: i32) {
+internal fn cm_stream_write_raw_u8(handle: i32, data: &Array<u8>, len: i32) {
     let packed = cm_lower_list_u8(data, len);
     let ptr = packed as i32;
     let raw_len = (packed >> 32) as i32;

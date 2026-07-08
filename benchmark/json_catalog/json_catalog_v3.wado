@@ -137,7 +137,7 @@ fn tokenize(input: String) -> List<u64> {
     loop {
         // skip ws
         while pos < len {
-            let b = builtin::array_get_u8(&raw, pos) as i32;
+            let b = builtin::array_get_u8(raw, pos) as i32;
             if b > 32 {
                 break;
             }
@@ -151,7 +151,7 @@ fn tokenize(input: String) -> List<u64> {
             return tape;
         }
 
-        let b = builtin::array_get_u8(&raw, pos) as i32;
+        let b = builtin::array_get_u8(raw, pos) as i32;
         if b == '{' as i32 {
             tape.push(pack_token(TOK_OBJECT_START, pos, pos + 1));
             pos += 1;
@@ -194,7 +194,7 @@ fn tokenize(input: String) -> List<u64> {
             pos = s;
             // scan for closing " (handle escapes by skipping next byte after \)
             while pos < len {
-                let bb = builtin::array_get_u8(&raw, pos) as i32;
+                let bb = builtin::array_get_u8(raw, pos) as i32;
                 if bb == '"' as i32 {
                     break;
                 }
@@ -213,7 +213,7 @@ fn tokenize(input: String) -> List<u64> {
                 pos += 1;
             }
             while pos < len {
-                let bb = builtin::array_get_u8(&raw, pos) as i32;
+                let bb = builtin::array_get_u8(raw, pos) as i32;
                 if '0' as i32 <= bb <= '9' as i32
                     || bb == '.' as i32
                     || bb == 'e' as i32
@@ -907,7 +907,7 @@ fn parse_counts_v3(json_data: String) -> CatalogCounts {
     let mut c = Cursor {
         tape,
         input: json_data,
-        repr: json_data.internal_raw_bytes(),
+        repr: *json_data.internal_raw_bytes(),
         idx: 0,
     };
     let catalog = c.parse_citm_catalog();

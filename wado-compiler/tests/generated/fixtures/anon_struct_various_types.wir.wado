@@ -185,6 +185,7 @@ fn "anon_struct_various_types.wado/run"() with Stdout {
     let f_55: ref "core:prelude/format.wado//Formatter";
     let f_60: ref "core:prelude/format.wado//Formatter";
     let val_72: ref "core:prelude/int128.wado//i128";
+    let val_74: ref "core:prelude/int128.wado//i128";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:anon_struct_various_types.wado::__modules_initialized);
         cold_path;
@@ -204,7 +205,8 @@ fn "anon_struct_various_types.wado/run"() with Stdout {
             struct.new "core:prelude/int128.wado//u128" { low: val_72.low, high: val_72.high };
             break __inline_i128__abs_u128_21;
         }
-        struct.new "core:prelude/int128.wado//u128" { low: e.low, high: e.high };
+        val_74 = struct.new "core:prelude/int128.wado//i128" { low: e.low, high: e.high };
+        struct.new "core:prelude/int128.wado//u128" { low: val_74.low, high: val_74.high };
         break __inline_i128__abs_u128_21;
     }, __local_17, e.high < 0_i64); __local_16);
     "core:cli/println"(f_5);
@@ -235,18 +237,16 @@ fn "anon_struct_various_types.wado/$value_copy$T96"(v) {
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }
@@ -316,18 +316,16 @@ fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
 }
 
 fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }
@@ -419,7 +417,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
         unreachable;
     }
     if "core:prelude/int128.wado/u128^Ord::cmp"(self, divisor) == 0 {
-        return struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }, self;
+        return struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }, ref.as_non_null("anon_struct_various_types.wado/$value_copy$T96"(self));
     }
     if (if self.low == divisor.low -> i32 {
         self.high == divisor.high;
@@ -434,7 +432,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
     b21: block {
         l22: loop {
             break_if b21 i < 0;
-            remainder = "core:prelude/int128.wado/u128^Shl::shl"(remainder, 1);
+            remainder = "anon_struct_various_types.wado/$value_copy$T96"("core:prelude/int128.wado/u128^Shl::shl"(remainder, 1));
             bit = "core:prelude/int128.wado/u128::get_bit"(self, i);
             if bit {
                 remainder = struct.new "core:prelude/int128.wado//u128" { low: remainder.low | 1_i64, high: remainder.high | 0_i64 };
@@ -447,7 +445,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
             continue l22;
         };
     };
-    return quotient, remainder;
+    return ref.as_non_null("anon_struct_various_types.wado/$value_copy$T96"(quotient)), ref.as_non_null("anon_struct_various_types.wado/$value_copy$T96"(remainder));
 }
 
 fn "core:prelude/int128.wado/u128::get_bit"(self, i) {

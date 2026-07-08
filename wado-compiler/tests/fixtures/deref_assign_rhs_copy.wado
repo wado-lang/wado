@@ -1,0 +1,32 @@
+// Regression for the deref-assign RHS-copy gap (reference-representation WEP,
+// divergence D8): `*ref = v` writes each field of the shared handle but must
+// also deep-copy the RHS, or the referent aliases `v`'s interior (a `List`'s
+// backing array) and a later mutation of `v` corrupts it.
+//
+// The deref-expansion `Let` is synthesized after `value_copy::insert`'s walk, so
+// the copy is requested explicitly at the expansion site, and the `analyze` seed
+// walker registers a copy helper for the deref-target RHS type so that wrap
+// resolves. `value_copy_elide` still drops the copy when the source is unmutated.
+
+test "deref-assign deep-copies the RHS list" {
+    let mut a: List<i32> = [0, 0];
+    let mut b: List<i32> = [5, 6];
+    let r: &mut List<i32> = &mut a;
+    *r = b;
+    b[0] = 999;
+    assert a[0] == 5;
+    assert a[1] == 6;
+}
+
+test "deref-assign deep-copies a reference-element list" {
+    let mut a: List<String> = [];
+    let mut b: List<String> = ["x", "y"];
+    let r: &mut List<String> = &mut a;
+    *r = b;
+    b[0] = "mutated";
+    assert a.len() == 2;
+    assert a[0] == "x";
+}
+
+__DATA__
+{"test": {}}

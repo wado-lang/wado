@@ -1,0 +1,87 @@
+use { split, parse } from "./front_matter.wado";
+
+test "split extracts the json block and body" {
+    let src = "---json
+{ \"title\": \"Hi\", \"date\": \"2026-07-05\" }
+---
+Hello body";
+    match split(&src) {
+        Ok([json, body]) => {
+            assert json == "{ \"title\": \"Hi\", \"date\": \"2026-07-05\" }";
+            assert body == "Hello body";
+        },
+        Err(_) => {
+            assert false;
+        },
+    }
+}
+
+test "split preserves a multi-line body" {
+    let src = "---json
+{}
+---
+line1
+line2";
+    match split(&src) {
+        Ok([_, body]) => {
+            assert body == "line1
+line2";
+        },
+        Err(_) => {
+            assert false;
+        },
+    }
+}
+
+test "split errors without a json fence" {
+    assert split(&"no front matter
+body") matches { Err(_) };
+}
+
+test "split distinguishes an unterminated fence from a missing one" {
+    let unterminated = "---json
+{ \"title\": \"Hi\" }
+still inside";
+    assert split(&unterminated) matches { Err(msg) && msg.contains("unterminated") };
+    assert split(&"no fence") matches { Err(msg) && msg.contains("missing") };
+}
+
+test "parse fills defaults for missing index and tags" {
+    let src = "---json
+{ \"title\": \"Hi\", \"date\": \"2026-07-05\" }
+---
+body";
+    match parse(&src) {
+        Ok([fm, body]) => {
+            assert fm.title == "Hi";
+            assert fm.date == "2026-07-05";
+            assert fm.index == true;
+            assert fm.tags.is_empty();
+            assert body == "body";
+        },
+        Err(_) => {
+            assert false;
+        },
+    }
+}
+
+test "parse reads explicit index false and tags" {
+    let src = "---json
+{ \"title\": \"T\", \"date\": \"d\", \"index\": false, \"tags\": [\"a\", \"b\"] }
+---
+x";
+    match parse(&src) {
+        Ok([fm, _]) => {
+            assert fm.index == false;
+            assert fm.tags.len() == 2;
+            assert fm.tags[0] == "a";
+        },
+        Err(_) => {
+            assert false;
+        },
+    }
+}
+
+test "parse errors without front matter" {
+    assert parse(&"plain body") matches { Err(_) };
+}

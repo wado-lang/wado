@@ -753,7 +753,7 @@ impl i32 {
         let abs_val: i64 = if is_negative { 0 - *self as i64 } else { *self as i64 };
         let digit_count = count_digits_i64(abs_val);
         let offset = f.prepare_int_write(is_negative, "", digit_count);
-        write_decimal_digits(&mut f.buf.internal_raw_bytes(), offset, abs_val, digit_count);
+        write_decimal_digits(f.buf.internal_raw_bytes_mut(), offset, abs_val, digit_count);
     }
 
     fn fmt_into(&self, f: &mut Formatter) {
@@ -824,7 +824,7 @@ impl u32 {
         let abs_val: i64 = if val_i32 < 0 { val_i32 as i64 + 4294967296 } else { val_i32 as i64 };
         let digit_count = count_digits_i64(abs_val);
         let offset = f.prepare_int_write(false, "", digit_count);
-        write_decimal_digits(&mut f.buf.internal_raw_bytes(), offset, abs_val, digit_count);
+        write_decimal_digits(f.buf.internal_raw_bytes_mut(), offset, abs_val, digit_count);
     }
 
     fn fmt_into(&self, f: &mut Formatter) {
@@ -915,14 +915,14 @@ impl i64 {
             let remaining_digits = count_digits_i64(remaining);
             let digit_count = remaining_digits + 1;
             let offset = f.prepare_int_write(true, "", digit_count);
-            let mut repr = f.buf.internal_raw_bytes();
-            write_decimal_digits(&mut repr, offset, remaining, remaining_digits);
-            builtin::array_set_u8(&mut repr, offset + remaining_digits, '8' as u8);
+            let repr = f.buf.internal_raw_bytes_mut();
+            write_decimal_digits(repr, offset, remaining, remaining_digits);
+            builtin::array_set_u8(repr, offset + remaining_digits, '8' as u8);
         } else {
             let abs_val = if is_negative { 0 - value } else { value };
             let digit_count = count_digits_i64(abs_val);
             let offset = f.prepare_int_write(is_negative, "", digit_count);
-            write_decimal_digits(&mut f.buf.internal_raw_bytes(), offset, abs_val, digit_count);
+            write_decimal_digits(f.buf.internal_raw_bytes_mut(), offset, abs_val, digit_count);
         }
     }
 
@@ -988,7 +988,7 @@ impl u64 {
 
         if val_i64 == 0 {
             let offset = f.prepare_int_write(false, "", 1);
-            builtin::array_set_u8(&mut f.buf.internal_raw_bytes(), offset, '0' as u8);
+            builtin::array_set_u8(f.buf.internal_raw_bytes_mut(), offset, '0' as u8);
             return;
         }
 
@@ -1013,7 +1013,7 @@ impl u64 {
         }
 
         let offset = f.prepare_int_write(false, "", digit_count);
-        let mut repr = f.buf.internal_raw_bytes();
+        let repr = f.buf.internal_raw_bytes_mut();
 
         // Write digits using unsigned division (backwards)
         let mut pos = offset + digit_count;
@@ -1039,7 +1039,7 @@ impl u64 {
                 }
                 temp = signed_quot + offset_div + carry;
             }
-            builtin::array_set_u8(&mut repr, pos, ('0' as i32 + digit) as u8);
+            builtin::array_set_u8(repr, pos, ('0' as i32 + digit) as u8);
         }
     }
 
@@ -1056,7 +1056,7 @@ impl u64 {
         let digit_count = count_digits_u64_base(val_i64, bits_per_digit);
         let offset = f.prepare_int_write(false, prefix, digit_count);
         write_u64_base_digits(
-            &mut f.buf.internal_raw_bytes(),
+            f.buf.internal_raw_bytes_mut(),
             offset,
             val_i64,
             digit_count,

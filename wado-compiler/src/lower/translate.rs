@@ -96,9 +96,10 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         task_return_flat_params,
         wasm_assets,
         trait_env,
+        moved_local_spans,
     } = flat;
 
-    // For `try_expand_deref_struct_assign`.
+    // For `try_expand_deref_aggregate_assign`.
     let mut struct_fields_map: IndexMap<
         (String, crate::module_source::ModuleSource),
         Vec<crate::tir::TirField>,
@@ -131,6 +132,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
             stubs: Vec::new(),
             base_len,
         }),
+        moved_local_spans,
     };
 
     let mut func_map: IndexMap<*const RefCell<TirFunction>, Rc<RefCell<NirFunction>>> =
@@ -216,6 +218,10 @@ struct Translator<'a> {
     /// callees are interned on first sight as `extern_stub`s appended after the
     /// in-package functions. Replaces the former post-pass `assign_func_ids`.
     interner: RefCell<Interner>,
+    /// Per-module last-use spans (WEP 2026-05-21). A `Local` read whose span is
+    /// listed is a move-eligible local's final use, so its defensive value copy
+    /// is elided.
+    moved_local_spans: IndexMap<crate::module_source::ModuleSource, IndexSet<Span>>,
 }
 
 /// Construction-time callee-id minting (see [`Translator::interner`]).
@@ -267,6 +273,15 @@ struct FunctionTranslator<'a, 'p> {
     extra: Option<ExtraLocals>,
     immutable_locals: IndexSet<u32>,
     address_taken: IndexSet<u32>,
+    /// Last-use spans for this function's module (WEP 2026-05-21). A `Local`
+    /// read whose span is present is a final use, so its copy is elided.
+    func_moved_spans: Option<&'a IndexSet<Span>>,
+    /// TIR-level move-eligible locals for this function (WEP 2026-05-21):
+    /// backward liveness plus a freshness fixpoint proves each read is a final
+    /// use of a local that exclusively owns fresh storage. Reaches synthesized
+    /// bodies the AST-keyed `func_moved_spans` cannot see (serde de/serialize,
+    /// derives). Unioned with the span check.
+    move_eligible_locals: IndexSet<u32>,
     /// The arena every converter pushes nodes into. `convert_function` takes it
     /// (`into_inner`) as the function's `Body`; `convert_global` wraps the
     /// initializer it builds into a single-statement global-init `Body`.
@@ -296,6 +311,19 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             .map(|(i, _)| u32::try_from(i).unwrap())
             .collect();
         let address_taken = func.address_taken_locals.clone();
+        let func_moved_spans = base.moved_local_spans.get(&func.module_source);
+        let move_eligible_locals = {
+            let oracle = value_copy::ownership::OwnedCalls::new(
+                &base.value_copy.returns_owned,
+                &base.value_copy.returns_self_projection,
+            );
+            value_copy::last_use::compute_move_eligible(
+                func,
+                &oracle,
+                &base.type_table.borrow(),
+                &base.value_copy.functions_with_stores,
+            )
+        };
         Self {
             base,
             specialized,
@@ -305,6 +333,8 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             }),
             immutable_locals,
             address_taken,
+            func_moved_spans,
+            move_eligible_locals,
             arena: RefCell::new(Body::empty()),
         }
     }
@@ -322,6 +352,8 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             extra: None,
             immutable_locals: IndexSet::default(),
             address_taken: IndexSet::default(),
+            func_moved_spans: None,
+            move_eligible_locals: IndexSet::default(),
             arena: RefCell::new(Body::empty()),
         }
     }
@@ -531,7 +563,29 @@ impl Translator<'_> {
 
 impl FunctionTranslator<'_, '_> {
     fn should_wrap_value_copy(&self, value: &TirExpr) -> bool {
-        value_copy::analyze::should_wrap(value, &self.base.type_table.borrow())
+        // A move-eligible local at its final use (WEP 2026-05-21) transfers its
+        // storage: no defensive copy is needed. Sound because last-use liveness
+        // proved the source dead afterward.
+        if self.is_last_use_move(value) {
+            return false;
+        }
+        let oracle = value_copy::ownership::OwnedCalls::new(
+            &self.base.value_copy.returns_owned,
+            &self.base.value_copy.returns_self_projection,
+        );
+        value_copy::analyze::should_wrap(value, &self.base.type_table.borrow(), &oracle)
+    }
+
+    /// Whether `value` is a whole-local read that the last-use analysis marked
+    /// as the local's final use, so its consumption is a move rather than a copy.
+    fn is_last_use_move(&self, value: &TirExpr) -> bool {
+        let TirExprKind::Local { index, .. } = &value.kind else {
+            return false;
+        };
+        self.move_eligible_locals.contains(index)
+            || self
+                .func_moved_spans
+                .is_some_and(|spans| spans.contains(&value.span))
     }
 
     /// Apply a boxing-derived rewrite to `expr`, returning `Some` if
@@ -621,11 +675,13 @@ impl FunctionTranslator<'_, '_> {
         )
     }
 
-    /// Expand `*ref_to_struct = value` (non-Box ref) into field-by-
-    /// field assignments through two fresh temp locals. Box-shaped
-    /// deref-assigns lower as a single statement via the regular
-    /// `try_boxing_rewrite` `Deref` arm.
-    fn try_expand_deref_struct_assign(&self, stmt: &TirStmt) -> Option<Vec<StmtId>> {
+    /// Expand `*ref = value` for an in-place aggregate (non-Box ref) into
+    /// field-by-field assignments through two fresh temp locals — a `struct`
+    /// (`String`) via `struct_fields_map`, or `List<T>` via its `SeqField`
+    /// layout. Box-shaped deref-assigns lower as a single statement via the
+    /// regular `try_boxing_rewrite` `Deref` arm.
+    fn try_expand_deref_aggregate_assign(&self, stmt: &TirStmt) -> Option<Vec<StmtId>> {
+        use crate::compiler_item::SeqField;
         let TirStmtKind::Expr(expr) = &stmt.kind else {
             return None;
         };
@@ -652,21 +708,60 @@ impl FunctionTranslator<'_, '_> {
             _ => return None,
         };
 
-        let (struct_name, struct_module) = if let crate::tir::ResolvedType::Struct {
+        // The referent must be an in-place aggregate, so `*ref = v` writes each
+        // field of the shared handle. Replace-on-assign referents (variant /
+        // enum / fn) are boxed and were filtered by the `box_type_ids` check
+        // above. Three in-place shapes reach here:
+        //   - a plain `struct` (`String`, monomorphized generics): fields from
+        //     `struct_fields_map`.
+        //   - `List<T>`: an in-place `GenericInstance` never monomorphized into
+        //     its own struct, so its canonical `{repr, used}` layout comes from
+        //     `SeqField` with the concrete element type.
+        //   - a tuple (`[A, B, …]`): also an in-place `GenericInstance`, with
+        //     positional fields `0..n` typed by the tuple's element types.
+        // Any other type falls through to the default single-statement lowering.
+        let inner_resolved = self.base.type_table.borrow().get(inner_type_id).clone();
+        let fields: Vec<(String, u32, tir::TypeId)> = if let crate::tir::ResolvedType::Struct {
             name,
             module_source,
             ..
-        } = self.base.type_table.borrow().get(inner_type_id)
+        } = inner_resolved
         {
-            (name.clone(), module_source.clone())
+            self.base
+                .struct_fields_map
+                .get(&(name, module_source))?
+                .iter()
+                .map(|f| (f.name.clone(), f.index, f.type_id))
+                .collect()
         } else {
-            return None;
+            let (list_elem, tuple_elems) = {
+                let tt = self.base.type_table.borrow();
+                (tt.as_list(inner_type_id), tt.as_tuple(inner_type_id))
+            };
+            if let Some(elem) = list_elem {
+                let repr_ty = self.base.type_table.borrow_mut().make_builtin_array(elem);
+                vec![
+                    (
+                        SeqField::Backing.field_name().to_string(),
+                        SeqField::Backing.index(),
+                        repr_ty,
+                    ),
+                    (
+                        SeqField::Len.field_name().to_string(),
+                        SeqField::Len.index(),
+                        crate::tir::TypeTable::I32,
+                    ),
+                ]
+            } else if let Some(elems) = tuple_elems {
+                elems
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, ty)| (i.to_string(), i as u32, ty))
+                    .collect()
+            } else {
+                return None;
+            }
         };
-        let fields = self
-            .base
-            .struct_fields_map
-            .get(&(struct_name, struct_module))?
-            .clone();
         if fields.is_empty() {
             return None;
         }
@@ -678,7 +773,12 @@ impl FunctionTranslator<'_, '_> {
         let ref_nir = self.convert_expr(ref_expr);
         // The RHS is an operand position: a literal (e.g. `*s = "goodbye"`)
         // is interned as `Operand::Value`, never a skeleton `ExprId`.
-        let val_nir = self.convert_operand(value);
+        // This `Let` is synthesized after `value_copy::insert`'s walk, so the
+        // defensive copy is requested explicitly here; otherwise the per-field
+        // write-back would alias the RHS's storage (e.g. a `List`'s backing
+        // array). The `analyze` seed walker registers a helper for the
+        // deref-target RHS type so this wrap resolves.
+        let val_nir = self.wrap_value_copy_operand(self.convert_operand(value), inner_type_id);
 
         let mut out: Vec<StmtId> = Vec::with_capacity(2 + fields.len());
         out.push(self.alloc_stmt(
@@ -704,11 +804,13 @@ impl FunctionTranslator<'_, '_> {
                 is_reactive: false,
                 type_id: inner_type_id,
                 value: val_nir,
-                skip_value_copy: true,
+                // The copy is applied above; `false` lets `value_copy_elide`
+                // drop it again when the RHS source is provably unmutated.
+                skip_value_copy: false,
             },
             span,
         ));
-        for field in &fields {
+        for (field_name, field_index, field_type) in &fields {
             let ref_local = self.alloc_expr(
                 ExprKind::Local {
                     index: ref_idx,
@@ -728,19 +830,19 @@ impl FunctionTranslator<'_, '_> {
             let target_field = self.alloc_expr(
                 ExprKind::FieldAccess {
                     expr: ref_local.into(),
-                    field_index: field.index,
-                    field_name: field.name.clone(),
+                    field_index: *field_index,
+                    field_name: field_name.clone(),
                 },
-                field.type_id,
+                *field_type,
                 span,
             );
             let value_field = self.alloc_expr(
                 ExprKind::FieldAccess {
                     expr: val_local.into(),
-                    field_index: field.index,
-                    field_name: field.name.clone(),
+                    field_index: *field_index,
+                    field_name: field_name.clone(),
                 },
-                field.type_id,
+                *field_type,
                 span,
             );
             let assign = self.alloc_expr(
@@ -748,7 +850,7 @@ impl FunctionTranslator<'_, '_> {
                     target: target_field,
                     value: value_field.into(),
                 },
-                field.type_id,
+                *field_type,
                 span,
             );
             out.push(self.alloc_stmt(StmtKind::Expr(assign.into()), span));
@@ -832,7 +934,7 @@ impl FunctionTranslator<'_, '_> {
     fn convert_block(&self, block: &TirBlock) -> BlockId {
         let mut stmts: Vec<StmtId> = Vec::with_capacity(block.stmts.len());
         for s in &block.stmts {
-            if let Some(expanded) = self.try_expand_deref_struct_assign(s) {
+            if let Some(expanded) = self.try_expand_deref_aggregate_assign(s) {
                 stmts.extend(expanded);
             } else {
                 stmts.push(self.convert_stmt(s));
@@ -1348,7 +1450,10 @@ impl FunctionTranslator<'_, '_> {
                     .collect(),
             },
             TirExprKind::TupleLiteral { elements } => ExprKind::TupleLiteral {
-                elements: elements.iter().map(|e| self.convert_operand(e)).collect(),
+                elements: elements
+                    .iter()
+                    .map(|e| self.convert_literal_element(e))
+                    .collect(),
             },
             TirExprKind::TupleSpread { .. } => unreachable!(
                 "TirExprKind::TupleSpread should be expanded by monomorphize before lower::translate runs"
@@ -1598,8 +1703,20 @@ impl FunctionTranslator<'_, '_> {
     fn convert_struct_field(&self, field: &TirStructField) -> ArenaStructField {
         ArenaStructField {
             name: field.name.clone(),
-            value: self.convert_operand(&field.value),
+            value: self.convert_literal_element(&field.value),
             field_index: field.field_index,
+        }
+    }
+
+    /// Convert a value stored into an aggregate literal (a struct field or tuple
+    /// element), deep-copying it when it names an existing value — building a
+    /// literal from a variable must not share the variable's interior.
+    fn convert_literal_element(&self, value: &TirExpr) -> Operand {
+        let converted = self.convert_operand(value);
+        if self.should_wrap_value_copy(value) {
+            self.wrap_value_copy_operand(converted, value.type_id)
+        } else {
+            converted
         }
     }
 
@@ -1696,13 +1813,15 @@ impl FunctionTranslator<'_, '_> {
     }
 
     fn convert_call_arg(&self, arg: &CallArg) -> ArenaCallArg {
-        // `is_mut` value-semantic args get a defensive
-        // `$value_copy$T` wrap; specialised-callee fn-param `Local`
-        // args get a `ClosureToCanonical` wrap. They don't interact:
-        // the value-copy predicate matches on the raw TIR, the
-        // specialised wrap on the converted NIR (always non-value-
-        // semantic).
-        let needs_value_copy = arg.is_mut && self.should_wrap_value_copy(&arg.expr);
+        // Every by-value argument gets a defensive `$value_copy$T` wrap —
+        // value semantics deep-copies a value passed to a function.
+        // `should_wrap_value_copy` excludes references (`&T` / `&mut T`), fresh
+        // values, and non-copy types, so a `&mut` arg is passed through.
+        // Specialised-callee fn-param `Local` args get a `ClosureToCanonical`
+        // wrap; the two don't interact: the value-copy predicate matches on the
+        // raw TIR, the specialised wrap on the converted (non-value-semantic)
+        // NIR.
+        let needs_value_copy = self.should_wrap_value_copy(&arg.expr);
         let value_type = arg.expr.type_id;
         let converted = self.convert_specialized_arg_operand(&arg.expr);
         let expr = if needs_value_copy {

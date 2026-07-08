@@ -10,23 +10,56 @@
 //! Wrapper elision runs later in `optimize::value_copy_elide`.
 
 pub mod analyze;
+pub mod last_use;
+pub mod ownership;
 pub mod synthesize;
 
 use crate::flat_package::FlatPackage;
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
+use crate::name::FunctionId;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// `TypeId` → `(ModuleSource, $value_copy$T<id>)` for every helper
-/// `synthesize_helpers` registered in [`FlatPackage::functions`].
+/// `synthesize_helpers` registered in [`FlatPackage::functions`], plus the
+/// interprocedural return-convention set the fold consults to decide whether a
+/// call result is owned (a move) or borrowed (a copy).
 pub struct ValueCopyPlan {
     pub name_for_type: IndexMap<TypeId, (ModuleSource, String)>,
+    pub returns_owned: IndexSet<FunctionId>,
+    /// Functions whose every returned value is owned *or* a projection of the
+    /// receiver / first parameter (`build(&self) -> List { return *self }`). A
+    /// call to one is fresh when its receiver is, so a `[1, 2, 3]` builder
+    /// finalized by `.build()` is not defensively copied. Superset of
+    /// `returns_owned`.
+    pub returns_self_projection: IndexSet<FunctionId>,
+    /// Functions with a non-empty `stores[...]` clause — a callee that may
+    /// persist a reference passed to it. A local whose `&`/`&mut` is passed to
+    /// one is borrow-escaped and cannot be moved (the TIR move analysis runs
+    /// before inlining, so `stores_aliased_locals` is not yet populated).
+    pub functions_with_stores: IndexSet<FunctionId>,
 }
 
 pub fn plan(flat: &mut FlatPackage) -> ValueCopyPlan {
     let seed = analyze::collect_seed_types(flat);
     let name_for_type = synthesize::synthesize_helpers(flat, seed);
-    ValueCopyPlan { name_for_type }
+    // Computed after synthesis so the value-copy helpers (always owned) are
+    // present in `flat.functions` and seed the fixpoint.
+    let conventions = ownership::compute_return_conventions(flat);
+    let functions_with_stores = flat
+        .functions
+        .iter()
+        .filter_map(|f| {
+            let f = f.borrow();
+            (!f.stores.is_empty()).then(|| ownership::func_key(&f.module_source, &f.name))
+        })
+        .collect();
+    ValueCopyPlan {
+        name_for_type,
+        returns_owned: conventions.returns_owned,
+        returns_self_projection: conventions.returns_self_projection,
+        functions_with_stores,
+    }
 }
 
 /// True when a value of `type_id` must be deep-copied on assignment

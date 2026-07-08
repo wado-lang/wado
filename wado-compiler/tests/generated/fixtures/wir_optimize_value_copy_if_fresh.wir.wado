@@ -109,20 +109,20 @@ fn "wir_optimize_value_copy_if_fresh.wado/run"() with Stdout {
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
-    let self_14: i32;
-    let self_20: i32;
-    let s_23: ref "core:prelude/string.wado//String";
+    let self_16: i32;
+    let self_22: i32;
     let s_25: ref "core:prelude/string.wado//String";
+    let s_27: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:wir_optimize_value_copy_if_fresh.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:wir_optimize_value_copy_if_fresh.wado::__modules_initialized = 1;
     };
-    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; self_14 = 10; "core:prelude/primitive.wado/i32::fmt_decimal"(10, __local_3); __local_2);
-    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_20(global:wir_optimize_value_copy_if_fresh.wado::__const_obj_1.inner), __local_5); __local_4);
-    "core:cli/println"(s_23 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121, 101, 115), used: 3 }; s_23);
-    "core:cli/println"(s_25 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111), used: 2 }; s_25);
+    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; self_16 = 10; "core:prelude/primitive.wado/i32::fmt_decimal"(10, __local_3); __local_2);
+    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_22(global:wir_optimize_value_copy_if_fresh.wado::__const_obj_1.inner), __local_5); __local_4);
+    "core:cli/println"(s_25 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121, 101, 115), used: 3 }; s_25);
+    "core:cli/println"(s_27 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111), used: 2 }; s_27);
 }
 
 fn "wir_optimize_value_copy_if_fresh.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -141,18 +141,16 @@ fn "wir_optimize_value_copy_if_fresh.wado/__cm_export__run"() {
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }

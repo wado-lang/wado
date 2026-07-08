@@ -187,6 +187,29 @@ fix to conform; none should be preserved.
       box resource handles like other replace types, or explicitly reject `&mut`
       of a resource. (`&mut resource` is currently unverified / effectively
       unsupported.)
+- [x] D7 — whole-value `*ref = v` write-back for `List<T>` and tuples. An in-place
+      `&mut T` makes `*r = v` a field-wise write-back onto the shared handle,
+      lowered by `try_expand_deref_aggregate_assign`. That expansion only
+      recognised `ResolvedType::Struct` (`String`, and monomorphized generics like
+      `TreeMap<K,V>`), so `List<T>` and tuples (`[A, B]`) — in-place
+      `GenericInstance`s that are never monomorphized into their own struct — fell
+      through and the assignment was silently dropped at every opt level
+      (`*xs = []` was a no-op). Fixed by decomposing `List<T>` through its
+      canonical `SeqField` `{repr, used}` layout and a tuple through its positional
+      fields, both with concrete element types.
+- [x] D8 — `*ref = v` did not deep-copy the RHS. The write-back decomposition in
+      `try_expand_deref_aggregate_assign` moved the RHS's fields into the shared
+      handle without a value copy, because deref-expansion `Let`s are synthesized
+      after `value_copy::insert`'s walk and `wrap_value_copy_operand` found no
+      registered helper for the referent type at that site. So `*r = v` aliased
+      `v`'s interior — e.g. `*list_ref = other; other[0] = 9` also mutated the
+      referent's element. Fixed by seeding a copy helper for the deref-target RHS
+      type in the `analyze` walker and re-requesting the copy explicitly at the
+      expansion site (`skip_value_copy = false` lets `value_copy_elide` drop it
+      again when the source is unmutated, so `*xs = []`/literal cases stay free).
+      Note: a _separate_ pre-existing gap remains — a tuple literal does not copy
+      its element variables (`a = [inner, 1]; inner[0] = 9` mutates `a.0`), which
+      is tuple-literal construction, not deref-assign, and is out of scope here.
 
 ## Consequences
 

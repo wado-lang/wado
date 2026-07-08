@@ -1,0 +1,43 @@
+// Regression: `select_lowering` rewrites `if cond { a } else { b }` into
+// `builtin::select(cond, a, b)`, whose result aliases the chosen operand. The
+// value-copy inserted around the `if` binding must not be elided as fresh —
+// otherwise the bound value shares its source arm's storage and a later
+// mutation of that arm corrupts it. Only reproduces at -O2, where
+// `select_lowering` runs and `value_copy_elide` strips the copy.
+
+fn choose(cond: bool, a: List<i32>, b: List<i32>) -> List<i32> {
+    return if cond { a } else { b };
+}
+
+test "select-lowered if binds an independent copy of the true arm" {
+    let mut a: List<i32> = [1, 2, 3];
+    let mut b: List<i32> = [4, 5, 6];
+    let x = if true { a } else { b };
+    a[0] = 999;
+    assert x[0] == 1;
+}
+
+test "select-lowered if binds an independent copy of the false arm" {
+    let mut a: List<i32> = [1, 2, 3];
+    let mut b: List<i32> = [4, 5, 6];
+    let y = if false { a } else { b };
+    b[1] = 999;
+    assert y[1] == 5;
+}
+
+test "select through a helper still copies each arm" {
+    let mut a: List<i32> = [1, 2, 3];
+    let mut b: List<i32> = [4, 5, 6];
+    let x = choose(true, a, b);
+    a[2] = 999;
+    assert x[2] == 3;
+}
+
+test "select of fresh literals is still elided but correct" {
+    let x = if true { [1, 2] } else { [3, 4] };
+    assert x[0] == 1;
+    assert x[1] == 2;
+}
+
+__DATA__
+{"test": {}}

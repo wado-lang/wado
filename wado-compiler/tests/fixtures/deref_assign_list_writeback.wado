@@ -1,0 +1,43 @@
+// Regression: assigning a whole value through a `&mut List` (`*buf = v`) must
+// write back to the shared handle, like `*buf = String::new()` does for String.
+// The write-back is lowered by decomposing `*ref = v` into per-field writes;
+// this only fired for `ResolvedType::Struct`, so `List<T>` (an in-place but
+// `GenericInstance` struct) silently dropped the assignment at every opt level.
+
+fn reset_empty(buf: &mut List<i32>) {
+    *buf = [];
+}
+
+fn replace(buf: &mut List<i32>) {
+    let v: List<i32> = [9, 9];
+    *buf = v;
+}
+
+fn replace_strings(buf: &mut List<String>) {
+    *buf = ["x", "y"];
+}
+
+test "deref-assign of an empty list writes back" {
+    let mut xs: List<i32> = [1, 2, 3];
+    reset_empty(&mut xs);
+    assert xs.is_empty();
+}
+
+test "deref-assign of a list value writes back" {
+    let mut xs: List<i32> = [1, 2, 3];
+    replace(&mut xs);
+    assert xs.len() == 2;
+    assert xs[0] == 9;
+    assert xs[1] == 9;
+}
+
+test "deref-assign of a list with a reference-typed backing array writes back" {
+    let mut xs: List<String> = ["a"];
+    replace_strings(&mut xs);
+    assert xs.len() == 2;
+    assert xs[0] == "x";
+    assert xs[1] == "y";
+}
+
+__DATA__
+{"test": {}}

@@ -945,6 +945,15 @@ test "split no match" {
     assert parts[0] == "hello";
 }
 
+test "split empty separator terminates" {
+    let parts: List<String> = "ab".split("").collect();
+    assert parts.len() == 1;
+    assert parts[0] == "ab";
+    let n: List<String> = "ab".splitn(3, "").collect();
+    assert n.len() == 1;
+    assert n[0] == "ab";
+}
+
 test "splitn" {
     let parts: List<String> = "a,b,c,d".splitn(3, ",").collect();
     assert parts.len() == 3;
@@ -1190,4 +1199,17 @@ test "String::from_utf8_slice rejects invalid UTF-8" {
     assert String::from_utf8_slice(([0xE6, 0x97] as List<u8>).as_slice()) matches { Err(_) };
     assert String::from_utf8_slice(([0xED, 0xA0, 0x80] as List<u8>).as_slice()) matches { Err(_) };
     assert String::from_utf8_slice(([0xF4, 0x90, 0x80, 0x80] as List<u8>).as_slice()) matches { Err(_) };
+}
+
+test "strip_suffix removes a matching suffix" {
+    assert "hello.md".strip_suffix(".md") matches { Some(s) && s == "hello" };
+    assert "hello.md".strip_suffix(".txt") matches { None };
+    assert "".strip_suffix(".md") matches { None };
+    assert "a".strip_suffix("a") matches { Some(s) && s == "" };
+}
+
+test "strip_prefix removes a matching prefix" {
+    assert "---json".strip_prefix("---") matches { Some(s) && s == "json" };
+    assert "abc".strip_prefix("x") matches { None };
+    assert "abc".strip_prefix("abc") matches { Some(s) && s == "" };
 }

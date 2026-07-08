@@ -1004,7 +1004,7 @@ impl<'a> Unparser<'a> {
             for assoc_const in &i.constants {
                 this.emit_member(assoc_const.id, assoc_const.span, &[], |this| {
                     this.write_indent();
-                    this.emit_kw_if(assoc_const.visibility.is_public(), "pub ");
+                    this.output.push_str(assoc_const.visibility.keyword());
                     this.output.push_str("const ");
                     this.output.push_str(&assoc_const.name);
                     this.output.push_str(": ");

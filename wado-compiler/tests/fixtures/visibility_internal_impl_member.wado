@@ -1,0 +1,26 @@
+//! `internal` is accepted on impl members (methods and associated constants),
+//! giving them the same file-private / `internal` / `pub` ladder as top-level
+//! items. `internal` widens a member to the package. Visibility is not yet
+//! enforced at member-call sites, so this checks that an `internal` member
+//! parses and is callable.
+
+struct Counter {
+    n: i32,
+}
+
+impl Counter {
+    internal const START: i32 = 10;
+
+    internal fn bump(&self) -> i32 {
+        return self.n + 1;
+    }
+}
+
+test "internal method and associated const are callable" {
+    let c = Counter { n: Counter::START };
+    assert c.n == 10;
+    assert c.bump() == 11;
+}
+
+__DATA__
+{"test": {}}

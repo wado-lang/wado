@@ -1,8 +1,11 @@
-// Escape analysis: optimization should NOT fire.
-// Each template result escapes (passed to a non-inlined function or stored
-// in a collection). The WIR must NOT contain __tmpl_buf_.
+// Escape analysis: hoisting must NOT fire when the whole template String
+// escapes the iteration. Each result is passed by value to println (a core
+// lib function, not inlined), so the entire local escapes and its backing
+// buffer cannot be reused. The WIR must NOT contain __tmpl_buf_.
+//
+// The complementary case — a template whose bytes escape only through a fresh
+// deep copy — IS safely hoisted; see tmpl_hoist_escape_copy_safe.wado.
 use { println, Stdout } from "core:cli";
-use { TreeMap } from "core:collections";
 
 export fn run() with Stdout {
     // Case 1: let-bound template passed to println (core lib, not inlined)
@@ -15,20 +18,10 @@ export fn run() with Stdout {
     for let mut i = 0; i < 3; i += 1 {
         println(`y={i}`);
     }
-
-    // Case 3: template stored as map key via index assignment
-    let mut map = TreeMap::<String, i32>::new();
-    for let mut i = 0; i < 5; i += 1 {
-        map[`k{i}`] = i;
-    }
-    assert map.len() == 5;
-    assert map["k0"] == 0;
-    assert map["k4"] == 4;
-    println("ok");
 }
 
 __DATA__
 {
-    "stdout": "x=0\nx=1\nx=2\ny=0\ny=1\ny=2\nok\n",
+    "stdout": "x=0\nx=1\nx=2\ny=0\ny=1\ny=2\n",
     "wir_not_expect:O2": ["__tmpl_buf_"]
 }

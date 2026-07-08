@@ -214,7 +214,7 @@ internal fn parse_u64_digits(s: &String, start: i32, end: i32, radix: u32) -> Re
     let bytes = s.internal_raw_bytes();
     let mut acc: u64 = 0;
     for let mut i = start; i < end; i += 1 {
-        let d = digit_value(builtin::array_get_u8(&bytes, i));
+        let d = digit_value(builtin::array_get_u8(bytes, i));
         if d < 0 || d >= radix as i32 {
             return Result::Err(IntErrorKind::InvalidDigit);
         }
@@ -241,7 +241,7 @@ internal fn parse_u128_digits(s: &String, start: i32, end: i32, radix: u32) -> R
     let bytes = s.internal_raw_bytes();
     let mut acc: u128 = 0;
     for let mut i = start; i < end; i += 1 {
-        let d = digit_value(builtin::array_get_u8(&bytes, i));
+        let d = digit_value(builtin::array_get_u8(bytes, i));
         if d < 0 || d >= radix as i32 {
             return Result::Err(IntErrorKind::InvalidDigit);
         }

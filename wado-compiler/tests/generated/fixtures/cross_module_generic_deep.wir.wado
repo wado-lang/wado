@@ -99,7 +99,6 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 global mut global:cross_module_generic_deep.wado::__modules_initialized: bool = 0;
 global mut global:cross_module_generic_deep.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = ref.null none;
-global mut global:cross_module_generic_deep.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = ref.null none;
 
 fn "cross_module_generic_deep.wado/run"() with Stdout {
     let __local_6: ref "core:prelude/string.wado//String";
@@ -115,7 +114,8 @@ fn "cross_module_generic_deep.wado/run"() with Stdout {
     let f_40: ref "core:prelude/format.wado//Formatter";
     let f_45: ref "core:prelude/format.wado//Formatter";
     let value_62: ref "core:prelude/string.wado//String";
-    let value_64: ref "core:prelude/string.wado//String";
+    let value_71: ref "core:prelude/string.wado//String";
+    let __sroa_value_repr: ref Array<u8>;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:cross_module_generic_deep.wado::__modules_initialized);
         cold_path;
@@ -129,9 +129,9 @@ fn "cross_module_generic_deep.wado/run"() with Stdout {
     value_62 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     global:cross_module_generic_deep.wado::__const_obj_0 = value_62;
     "core:cli/println"(__local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_14, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wrap(hello) = "), used: 14 }); "core:prelude/string.wado/String::push_str"(__local_14, global:cross_module_generic_deep.wado::__const_obj_0); __local_14);
-    value_64 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 };
-    global:cross_module_generic_deep.wado::__const_obj_1 = value_64;
-    "core:cli/println"(__local_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("quad_wrap(world) = "), used: 19 }); "core:prelude/string.wado/String::push_str"(__local_15, global:cross_module_generic_deep.wado::__const_obj_1); __local_15);
+    __sroa_value_repr = array.new_data<u8>("world");
+    value_71 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__sroa_value_repr)), used: 5 };
+    "core:cli/println"(__local_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("quad_wrap(world) = "), used: 19 }); "core:prelude/string.wado/String::push_str"(__local_15, value_71); __local_15);
 }
 
 fn "cross_module_generic_deep.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -150,18 +150,16 @@ fn "cross_module_generic_deep.wado/__cm_export__run"() {
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }

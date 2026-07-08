@@ -1,0 +1,147 @@
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags, ErrorCode } from "wasi:filesystem";
+use { build, Post } from "./post.wado";
+use { build_site, SiteFile } from "./site.wado";
+
+export fn run() with Stdout, Stderr, Preopens {
+    let dirs = Preopens::get_directories();
+    if dirs.is_empty() {
+        eprintln("sheaf: no preopened directory available");
+        return;
+    }
+    let root = dirs[0].0;
+
+    let posts = read_posts(&root);
+    let files = build_site(&posts);
+    write_site(&root, &files);
+    println(`sheaf: generated {files.len()} file(s) from {posts.len()} post(s)`);
+}
+
+fn read_posts(root: &Descriptor) -> List<Post> with Stderr {
+    let mut posts: List<Post> = [];
+    let content = match open_dir(root, "content") {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln(`sheaf: cannot open content/ directory: {e:?}`);
+            return posts;
+        },
+    };
+    let names = match read_dir_names(&content) {
+        Ok(n) => n,
+        Err(e) => {
+            eprintln(`sheaf: cannot read content/ directory: {e:?}`);
+            return posts;
+        },
+    };
+    for let name of names {
+        match name.strip_suffix(".md") {
+            Some(slug) => match read_file(&content, name) {
+                Ok(source) => match build(slug, &source) {
+                    Ok(post) => posts.push(post),
+                    Err(e) => eprintln(`sheaf: {name}: {e}`),
+                },
+                Err(e) => eprintln(`sheaf: cannot read {name}: {e:?}`),
+            },
+            None => {
+            },
+        }
+    }
+    return posts;
+}
+
+fn write_site(root: &Descriptor, files: &List<SiteFile>) with Stderr {
+    match root.create_directory_at("_site").wait() {
+        Ok(_) => {
+        },
+        Err(ErrorCode::Exist) => {
+        },
+        Err(e) => {
+            eprintln(`sheaf: cannot create _site/: {e:?}`);
+            return;
+        },
+    }
+    let site = match root.open_at(
+        PathFlags::none(),
+        "_site",
+        OpenFlags::Directory,
+        DescriptorFlags::Read | DescriptorFlags::MutateDirectory,
+    ).wait() {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln(`sheaf: cannot open _site/: {e:?}`);
+            return;
+        },
+    };
+    for let f of files {
+        match write_file(&site, f.path, &f.content) {
+            Ok(_) => {
+            },
+            Err(e) => eprintln(`sheaf: cannot write {f.path}: {e:?}`),
+        }
+    }
+}
+
+fn open_dir(root: &Descriptor, name: String) -> Result<Descriptor, ErrorCode> {
+    return root.open_at(PathFlags::none(), name, OpenFlags::Directory, DescriptorFlags::Read).wait();
+}
+
+fn read_dir_names(dir: &Descriptor) -> Result<List<String>, ErrorCode> {
+    let mut names: List<String> = [];
+    let [stream, done] = dir.read_directory();
+    loop {
+        let chunk = stream.read(64);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let e of chunk {
+            names.push(e.name);
+        }
+    }
+    stream.drop();
+    let read_result = done.read();
+    done.drop();
+    if let Some(Err(e)) = read_result {
+        return Result::Err(e);
+    }
+    return Result::Ok(names);
+}
+
+fn read_file(dir: &Descriptor, path: String) -> Result<String, ErrorCode> {
+    let file = dir.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait()?;
+    let [stream, done] = file.read_via_stream(0 as Filesize);
+    let mut bytes: List<u8> = [];
+    loop {
+        let chunk = stream.read(8192);
+        if chunk.len() == 0 {
+            break;
+        }
+        bytes.extend(&chunk);
+    }
+    stream.drop();
+    let read_result = done.read();
+    done.drop();
+    if let Some(Err(e)) = read_result {
+        return Result::Err(e);
+    }
+    return Result::Ok(String::from_utf8_lossy(bytes));
+}
+
+fn write_file(dir: &Descriptor, path: String, content: &String) -> Result<(), ErrorCode> {
+    let file = dir.open_at(
+        PathFlags::none(),
+        path,
+        OpenFlags::Create | OpenFlags::Truncate,
+        DescriptorFlags::Write | DescriptorFlags::Read,
+    ).wait()?;
+    let bytes: List<u8> = content.bytes().collect();
+    let [rx, tx] = Stream::<u8>::new();
+    let sub = file.write_via_stream(rx, 0 as Filesize);
+    tx.write(bytes);
+    tx.drop();
+    let write_result = sub.read();
+    sub.drop();
+    if let Some(Err(e)) = write_result {
+        return Result::Err(e);
+    }
+    return Result::Ok(());
+}

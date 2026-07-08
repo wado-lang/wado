@@ -1214,6 +1214,15 @@ fn read_license_text(
 }
 
 pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
+    run_returning_bytes(opts).await.map(|_| ())
+}
+
+/// Like [`run`], but also returns the emitted component bytes. A run / serve
+/// driver uses its own compilation directly instead of reading the artifact
+/// back from `build/`, where a concurrent build could leave it torn or serve a
+/// different world's bytes. Returns an empty `Vec` on the `--wat-to-stdout`
+/// path, which writes no artifact.
+pub async fn run_returning_bytes(opts: CompileOptions) -> Result<Vec<u8>, CliExit> {
     // Output format is independent of the compiled bytes; resolve it first so we
     // know whether to retain WIR (only the wasm-output embedding path needs it).
     let format = opts
@@ -1239,7 +1248,7 @@ pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
     if opts.wat_to_stdout {
         let wat = wasm_to_wat(&wasm)?;
         print!("{wat}");
-        return Ok(());
+        return Ok(Vec::new());
     }
 
     // Discover the package manifest once, reused for the default output path and
@@ -1279,7 +1288,7 @@ pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
     fs::write(&output_path, &bytes)
         .map_err(|e| CliExit::error(format!("writing output file: {e}")))?;
     eprintln!("Generated: {}", output_path.display());
-    Ok(())
+    Ok(bytes)
 }
 
 /// The `<root>/build/<segment>.wasm` artifact path for a publish build, where
