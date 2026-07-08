@@ -5,7 +5,7 @@
 //!   schemes the wado compiler emits via `module_uri`.
 //! - `Uri::to_filename` strips `file://` for compiler-side diagnostic
 //!   filenames and falls back to the raw string for non-file schemes
-//!   (matching the behaviour of `ModuleSource::diagnostic_filename`).
+//!   (matching the behaviour of `ModuleSource::source_path`).
 //! - `Uri::workspace_root` extracts the directory of a `file:` URI for
 //!   the per-document `FilesystemCompilerHost` base path.
 //!
@@ -79,7 +79,7 @@ impl Uri {
     ///
     /// For `file://` URIs returns the absolute path with the scheme
     /// stripped. For every other scheme returns the raw URI — matching
-    /// `ModuleSource::diagnostic_filename` so cross-file diagnostic
+    /// `ModuleSource::source_path` so cross-file diagnostic
     /// rendering stays consistent.
     #[must_use]
     pub fn to_filename(&self) -> String {

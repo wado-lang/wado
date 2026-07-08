@@ -2282,7 +2282,7 @@ fn __test_0() {
     greeting.String::push_str(&String { repr: packed"Hello, ", used: 7 });
     greeting.String::push_str(&String { repr: packed"Wado!", used: 5 });
     __assert_0: {
-        let __v0: String = "$value_copy$T27"(greeting);
+        let __v0: String = "ops.mess_dirty.wado::$value_copy$T27"(greeting);
         let __cond: bool = __v0."String^Eq::eq"(&String { repr: packed"Hello, Wado!", used: 12 });
         if !__cond {
             core::builtin::cold_path();
@@ -2304,7 +2304,7 @@ fn __test_0() {
             });
         }
     }
-    let primes: List<i32> = "$value_copy$T107"(__seq_lit: {
+    let primes: List<i32> = "ops.mess_dirty.wado::$value_copy$T107"(__seq_lit: {
         let mut __b: List<i32> = "core::prelude/list.wado::List<i32>^SequenceLiteralBuilder::new_literal"(4);
         __b."List<i32>^SequenceLiteralBuilder::push_literal"(2);
         __b."List<i32>^SequenceLiteralBuilder::push_literal"(3);
@@ -4852,7 +4852,7 @@ fn u128::fmt_decimal_magnitude(self: &u128, f: &mut Formatter, is_neg: bool) {
     }
     let ten: u128 = "core::prelude/int128.wado::u128::from_u64"(10);
     let mut digit_count: i32 = 0;
-    let mut temp: u128 = "$value_copy$T50"(*self);
+    let mut temp: u128 = "ops.mess_dirty.wado::$value_copy$T50"(*self);
     loop {
         if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
             break;
@@ -4865,7 +4865,7 @@ fn u128::fmt_decimal_magnitude(self: &u128, f: &mut Formatter, is_neg: bool) {
     let offset: i32 = f.Formatter::prepare_int_write(is_neg, String { repr: packed"", used: 0 }, digit_count);
     let mut arr: Array<u8> = f.buf.String::internal_raw_bytes();
     let mut pos: i32 = (offset + digit_count);
-    let mut temp: u128 = "$value_copy$T50"(*self);
+    let mut temp: u128 = "ops.mess_dirty.wado::$value_copy$T50"(*self);
     loop {
         if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
             break;
@@ -11071,7 +11071,7 @@ pub fn String::chars(self: &String) -> StrCharIter {
 }
 
 pub fn String::to_chars(self: &String) -> List<char> {
-    let bytes: ArraySlice<u8> = "$value_copy$T25"(self.String::as_bytes() as ArraySlice<u8>);
+    let bytes: ArraySlice<u8> = "ops.mess_dirty.wado::$value_copy$T25"(self.String::as_bytes() as ArraySlice<u8>);
     let len: i32 = self.used;
     let mut chars: List<char> = "core::prelude/list.wado::List<char>::with_capacity"(len);
     let mut i: i32 = 0;
@@ -12161,7 +12161,7 @@ pub fn "StrSplitIter^Iterator::for_each"(self: &mut StrSplitIter, f: fn mut(Stri
         let __match_3: Option<String> = self."StrSplitIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                f("$value_copy$T27"(item));
+                f("ops.mess_dirty.wado::$value_copy$T27"(item));
             },
             _ => {
                 break;
@@ -12175,7 +12175,7 @@ pub fn "StrSplitIter^Iterator::find"(self: &mut StrSplitIter, pred: fn mut(Strin
         let __match_3: Option<String> = self."StrSplitIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T27"(item)) {
+                if pred("ops.mess_dirty.wado::$value_copy$T27"(item)) {
                     return Option<String>::Some(item);
                 }
             },
@@ -12192,7 +12192,7 @@ pub fn "StrSplitIter^Iterator::any"(self: &mut StrSplitIter, pred: fn mut(String
         let __match_3: Option<String> = self."StrSplitIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T27"(item)) {
+                if pred("ops.mess_dirty.wado::$value_copy$T27"(item)) {
                     return true;
                 }
             },
@@ -12209,7 +12209,7 @@ pub fn "StrSplitIter^Iterator::all"(self: &mut StrSplitIter, pred: fn mut(String
         let __match_3: Option<String> = self."StrSplitIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if !pred("$value_copy$T27"(item)) {
+                if !pred("ops.mess_dirty.wado::$value_copy$T27"(item)) {
                     return false;
                 }
             },
@@ -12262,7 +12262,7 @@ pub fn "StrSplitIter^Iterator::position"(self: &mut StrSplitIter, pred: fn mut(S
         let __match_4: Option<String> = self."StrSplitIter^Iterator::next"();
         match __match_4 {
             Some(item) => {
-                if pred("$value_copy$T27"(item)) {
+                if pred("ops.mess_dirty.wado::$value_copy$T27"(item)) {
                     return Option<i32>::Some(idx);
                 }
                 idx = (idx + 1);
@@ -12279,12 +12279,12 @@ pub fn "StrSplitIter^Iterator::reduce"(self: &mut StrSplitIter, f: fn mut(String
     let __match_5: Option<String> = self."StrSplitIter^Iterator::next"();
     match __match_5 {
         Some(first) => {
-            let mut acc: String = "$value_copy$T27"(first);
+            let mut acc: String = "ops.mess_dirty.wado::$value_copy$T27"(first);
             loop {
                 let __match_6: Option<String> = self."StrSplitIter^Iterator::next"();
                 match __match_6 {
                     Some(item) => {
-                        acc = f("$value_copy$T27"(acc), "$value_copy$T27"(item));
+                        acc = f("ops.mess_dirty.wado::$value_copy$T27"(acc), "ops.mess_dirty.wado::$value_copy$T27"(item));
                     },
                     _ => {
                         break;
@@ -12402,7 +12402,7 @@ pub fn "StrSplitNIter^Iterator::for_each"(self: &mut StrSplitNIter, f: fn mut(St
         let __match_3: Option<String> = self."StrSplitNIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                f("$value_copy$T27"(item));
+                f("ops.mess_dirty.wado::$value_copy$T27"(item));
             },
             _ => {
                 break;
@@ -12416,7 +12416,7 @@ pub fn "StrSplitNIter^Iterator::find"(self: &mut StrSplitNIter, pred: fn mut(Str
         let __match_3: Option<String> = self."StrSplitNIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T27"(item)) {
+                if pred("ops.mess_dirty.wado::$value_copy$T27"(item)) {
                     return Option<String>::Some(item);
                 }
             },
@@ -12433,7 +12433,7 @@ pub fn "StrSplitNIter^Iterator::any"(self: &mut StrSplitNIter, pred: fn mut(Stri
         let __match_3: Option<String> = self."StrSplitNIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T27"(item)) {
+                if pred("ops.mess_dirty.wado::$value_copy$T27"(item)) {
                     return true;
                 }
             },
@@ -12450,7 +12450,7 @@ pub fn "StrSplitNIter^Iterator::all"(self: &mut StrSplitNIter, pred: fn mut(Stri
         let __match_3: Option<String> = self."StrSplitNIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if !pred("$value_copy$T27"(item)) {
+                if !pred("ops.mess_dirty.wado::$value_copy$T27"(item)) {
                     return false;
                 }
             },
@@ -12503,7 +12503,7 @@ pub fn "StrSplitNIter^Iterator::position"(self: &mut StrSplitNIter, pred: fn mut
         let __match_4: Option<String> = self."StrSplitNIter^Iterator::next"();
         match __match_4 {
             Some(item) => {
-                if pred("$value_copy$T27"(item)) {
+                if pred("ops.mess_dirty.wado::$value_copy$T27"(item)) {
                     return Option<i32>::Some(idx);
                 }
                 idx = (idx + 1);
@@ -12520,12 +12520,12 @@ pub fn "StrSplitNIter^Iterator::reduce"(self: &mut StrSplitNIter, f: fn mut(Stri
     let __match_5: Option<String> = self."StrSplitNIter^Iterator::next"();
     match __match_5 {
         Some(first) => {
-            let mut acc: String = "$value_copy$T27"(first);
+            let mut acc: String = "ops.mess_dirty.wado::$value_copy$T27"(first);
             loop {
                 let __match_6: Option<String> = self."StrSplitNIter^Iterator::next"();
                 match __match_6 {
                     Some(item) => {
-                        acc = f("$value_copy$T27"(acc), "$value_copy$T27"(item));
+                        acc = f("ops.mess_dirty.wado::$value_copy$T27"(acc), "ops.mess_dirty.wado::$value_copy$T27"(item));
                     },
                     _ => {
                         break;
@@ -12622,7 +12622,7 @@ pub fn "StrSplitWhitespaceIter^Iterator::for_each"(self: &mut StrSplitWhitespace
         let __match_3: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                f("$value_copy$T27"(item));
+                f("ops.mess_dirty.wado::$value_copy$T27"(item));
             },
             _ => {
                 break;
@@ -12636,7 +12636,7 @@ pub fn "StrSplitWhitespaceIter^Iterator::find"(self: &mut StrSplitWhitespaceIter
         let __match_3: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T27"(item)) {
+                if pred("ops.mess_dirty.wado::$value_copy$T27"(item)) {
                     return Option<String>::Some(item);
                 }
             },
@@ -12653,7 +12653,7 @@ pub fn "StrSplitWhitespaceIter^Iterator::any"(self: &mut StrSplitWhitespaceIter,
         let __match_3: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T27"(item)) {
+                if pred("ops.mess_dirty.wado::$value_copy$T27"(item)) {
                     return true;
                 }
             },
@@ -12670,7 +12670,7 @@ pub fn "StrSplitWhitespaceIter^Iterator::all"(self: &mut StrSplitWhitespaceIter,
         let __match_3: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if !pred("$value_copy$T27"(item)) {
+                if !pred("ops.mess_dirty.wado::$value_copy$T27"(item)) {
                     return false;
                 }
             },
@@ -12723,7 +12723,7 @@ pub fn "StrSplitWhitespaceIter^Iterator::position"(self: &mut StrSplitWhitespace
         let __match_4: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
         match __match_4 {
             Some(item) => {
-                if pred("$value_copy$T27"(item)) {
+                if pred("ops.mess_dirty.wado::$value_copy$T27"(item)) {
                     return Option<i32>::Some(idx);
                 }
                 idx = (idx + 1);
@@ -12740,12 +12740,12 @@ pub fn "StrSplitWhitespaceIter^Iterator::reduce"(self: &mut StrSplitWhitespaceIt
     let __match_5: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
     match __match_5 {
         Some(first) => {
-            let mut acc: String = "$value_copy$T27"(first);
+            let mut acc: String = "ops.mess_dirty.wado::$value_copy$T27"(first);
             loop {
                 let __match_6: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
                 match __match_6 {
                     Some(item) => {
-                        acc = f("$value_copy$T27"(acc), "$value_copy$T27"(item));
+                        acc = f("ops.mess_dirty.wado::$value_copy$T27"(acc), "ops.mess_dirty.wado::$value_copy$T27"(item));
                     },
                     _ => {
                         break;
@@ -12859,7 +12859,7 @@ pub fn "StrLinesIter^Iterator::for_each"(self: &mut StrLinesIter, f: fn mut(Stri
         let __match_3: Option<String> = self."StrLinesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                f("$value_copy$T27"(item));
+                f("ops.mess_dirty.wado::$value_copy$T27"(item));
             },
             _ => {
                 break;
@@ -12873,7 +12873,7 @@ pub fn "StrLinesIter^Iterator::find"(self: &mut StrLinesIter, pred: fn mut(Strin
         let __match_3: Option<String> = self."StrLinesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T27"(item)) {
+                if pred("ops.mess_dirty.wado::$value_copy$T27"(item)) {
                     return Option<String>::Some(item);
                 }
             },
@@ -12890,7 +12890,7 @@ pub fn "StrLinesIter^Iterator::any"(self: &mut StrLinesIter, pred: fn mut(String
         let __match_3: Option<String> = self."StrLinesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T27"(item)) {
+                if pred("ops.mess_dirty.wado::$value_copy$T27"(item)) {
                     return true;
                 }
             },
@@ -12907,7 +12907,7 @@ pub fn "StrLinesIter^Iterator::all"(self: &mut StrLinesIter, pred: fn mut(String
         let __match_3: Option<String> = self."StrLinesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if !pred("$value_copy$T27"(item)) {
+                if !pred("ops.mess_dirty.wado::$value_copy$T27"(item)) {
                     return false;
                 }
             },
@@ -12960,7 +12960,7 @@ pub fn "StrLinesIter^Iterator::position"(self: &mut StrLinesIter, pred: fn mut(S
         let __match_4: Option<String> = self."StrLinesIter^Iterator::next"();
         match __match_4 {
             Some(item) => {
-                if pred("$value_copy$T27"(item)) {
+                if pred("ops.mess_dirty.wado::$value_copy$T27"(item)) {
                     return Option<i32>::Some(idx);
                 }
                 idx = (idx + 1);
@@ -12977,12 +12977,12 @@ pub fn "StrLinesIter^Iterator::reduce"(self: &mut StrLinesIter, f: fn mut(String
     let __match_5: Option<String> = self."StrLinesIter^Iterator::next"();
     match __match_5 {
         Some(first) => {
-            let mut acc: String = "$value_copy$T27"(first);
+            let mut acc: String = "ops.mess_dirty.wado::$value_copy$T27"(first);
             loop {
                 let __match_6: Option<String> = self."StrLinesIter^Iterator::next"();
                 match __match_6 {
                     Some(item) => {
-                        acc = f("$value_copy$T27"(acc), "$value_copy$T27"(item));
+                        acc = f("ops.mess_dirty.wado::$value_copy$T27"(acc), "ops.mess_dirty.wado::$value_copy$T27"(item));
                     },
                     _ => {
                         break;
@@ -13083,7 +13083,7 @@ pub fn "StrCharIndicesIter^Iterator::for_each"(self: &mut StrCharIndicesIter, f:
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                f("$value_copy$T309"(item));
+                f("ops.mess_dirty.wado::$value_copy$T309"(item));
             },
             _ => {
                 break;
@@ -13097,7 +13097,7 @@ pub fn "StrCharIndicesIter^Iterator::find"(self: &mut StrCharIndicesIter, pred: 
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T309"(item)) {
+                if pred("ops.mess_dirty.wado::$value_copy$T309"(item)) {
                     return Option<[i32, char]>::Some(item);
                 }
             },
@@ -13114,7 +13114,7 @@ pub fn "StrCharIndicesIter^Iterator::any"(self: &mut StrCharIndicesIter, pred: f
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T309"(item)) {
+                if pred("ops.mess_dirty.wado::$value_copy$T309"(item)) {
                     return true;
                 }
             },
@@ -13131,7 +13131,7 @@ pub fn "StrCharIndicesIter^Iterator::all"(self: &mut StrCharIndicesIter, pred: f
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if !pred("$value_copy$T309"(item)) {
+                if !pred("ops.mess_dirty.wado::$value_copy$T309"(item)) {
                     return false;
                 }
             },
@@ -13184,7 +13184,7 @@ pub fn "StrCharIndicesIter^Iterator::position"(self: &mut StrCharIndicesIter, pr
         let __match_4: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_4 {
             Some(item) => {
-                if pred("$value_copy$T309"(item)) {
+                if pred("ops.mess_dirty.wado::$value_copy$T309"(item)) {
                     return Option<i32>::Some(idx);
                 }
                 idx = (idx + 1);
@@ -13201,12 +13201,12 @@ pub fn "StrCharIndicesIter^Iterator::reduce"(self: &mut StrCharIndicesIter, f: f
     let __match_5: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
     match __match_5 {
         Some(first) => {
-            let mut acc: [i32, char] = "$value_copy$T309"(first);
+            let mut acc: [i32, char] = "ops.mess_dirty.wado::$value_copy$T309"(first);
             loop {
                 let __match_6: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
                 match __match_6 {
                     Some(item) => {
-                        acc = f("$value_copy$T309"(acc), "$value_copy$T309"(item));
+                        acc = f("ops.mess_dirty.wado::$value_copy$T309"(acc), "ops.mess_dirty.wado::$value_copy$T309"(item));
                     },
                     _ => {
                         break;
@@ -15894,7 +15894,7 @@ fn __test_4_logical() {
 }
 
 pub export fn run() {
-    __initialize_modules();
+    "ops.mess_dirty.wado::__initialize_modules"();
 }
 
 pub fn "Future<unknown>^Inspect::inspect"(self: &Future<unknown>, f: &mut Formatter) {
@@ -16173,8 +16173,8 @@ pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::
 }
 
 export fn __cm_export__run() {
-    __initialize_modules();
-    run();
+    "ops.mess_dirty.wado::__initialize_modules"();
+    "ops.mess_dirty.wado::run"();
     cm_raw_call task-return(0);
 }
 
@@ -16744,7 +16744,7 @@ pub fn Formatter::close_brace(self: &mut Formatter, close: String) {
 
 pub fn "String^Display::fmt"(self: &String, f: &mut Formatter) {
     if (f.precision >= 0) {
-        let mut capped: String = "$value_copy$T27"(*self);
+        let mut capped: String = "ops.mess_dirty.wado::$value_copy$T27"(*self);
         capped.String::truncate_chars(f.precision);
         f.Formatter::pad(capped);
     } else {
@@ -18129,12 +18129,12 @@ fn "__Closure_1^DisplayAlt::fmt_alt"(self: &__Closure_1, f: &mut Formatter) {
 }
 
 fn __initialize_modules() {
-    if __modules_initialized {
+    if ops.mess_dirty.wado::__modules_initialized {
         return;
     }
     core::builtin::cold_path();
     "core::prelude/fpfmt.wado::__initialize_module"();
-    __modules_initialized = true;
+    ops.mess_dirty.wado::__modules_initialized = true;
 }
 
 fn "$value_copy$T309"(v: [i32, char]) -> [i32, char] {

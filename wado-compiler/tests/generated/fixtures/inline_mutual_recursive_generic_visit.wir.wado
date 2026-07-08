@@ -94,9 +94,9 @@ type "functype//inline_mutual_recursive_generic_visit.wado/__cm_binding__Stdout_
 
 type "functype//inline_mutual_recursive_generic_visit.wado/__cm_export__run" = fn();  // TypeId(26)
 
-type "functype//inline_mutual_recursive_generic_visit.wado/walk_node<inline_mutual_recursive_generic_visit.wado/Sum>" = fn(ref "inline_mutual_recursive_generic_visit.wado//Sum", ref "inline_mutual_recursive_generic_visit.wado//Node");  // TypeId(27)
+type "functype//inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/walk_node<inline_mutual_recursive_generic_visit.wado/Sum>" = fn(ref "inline_mutual_recursive_generic_visit.wado//Sum", ref "inline_mutual_recursive_generic_visit.wado//Node");  // TypeId(27)
 
-type "functype//inline_mutual_recursive_generic_visit.wado/walk_branch<inline_mutual_recursive_generic_visit.wado/Sum>" = fn(ref "inline_mutual_recursive_generic_visit.wado//Sum", ref "core:prelude//List<inline_mutual_recursive_generic_visit.wado/Node>");  // TypeId(28)
+type "functype//inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/walk_branch<inline_mutual_recursive_generic_visit.wado/Sum>" = fn(ref "inline_mutual_recursive_generic_visit.wado//Sum", ref "core:prelude//List<inline_mutual_recursive_generic_visit.wado/Node>");  // TypeId(28)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(29)
 
@@ -205,7 +205,7 @@ fn "inline_mutual_recursive_generic_visit.wado/run"() with Stdout {
     };
     __sroa_tree_value = struct.new "inline_mutual_recursive_generic_visit.wado//Node::Branch" { discriminant: 1, payload_0: struct.new "inline_mutual_recursive_generic_visit.wado//BranchNode" { children: ref.as_non_null(__b_0 = struct.new "core:prelude//List<inline_mutual_recursive_generic_visit.wado/Node>" { repr: array.new_fixed<ref "inline_mutual_recursive_generic_visit.wado//Node">(struct.new "inline_mutual_recursive_generic_visit.wado//Node::Leaf" { discriminant: 0, payload_0: struct.new "inline_mutual_recursive_generic_visit.wado//LeafNode" { value: 1 } }, struct.new "inline_mutual_recursive_generic_visit.wado//Node::Branch" { discriminant: 1, payload_0: struct.new "inline_mutual_recursive_generic_visit.wado//BranchNode" { children: ref.as_non_null(__b_1 = struct.new "core:prelude//List<inline_mutual_recursive_generic_visit.wado/Node>" { repr: array.new_fixed<ref "inline_mutual_recursive_generic_visit.wado//Node">(struct.new "inline_mutual_recursive_generic_visit.wado//Node::Leaf" { discriminant: 0, payload_0: struct.new "inline_mutual_recursive_generic_visit.wado//LeafNode" { value: 2 } }, struct.new "inline_mutual_recursive_generic_visit.wado//Node::Leaf" { discriminant: 0, payload_0: struct.new "inline_mutual_recursive_generic_visit.wado//LeafNode" { value: 3 } }), used: 2 }; __b_1) } }), used: 2 }; __b_0) } };
     sum = struct.new "inline_mutual_recursive_generic_visit.wado//Sum" { total: 0 };
-    "inline_mutual_recursive_generic_visit.wado/walk_node<inline_mutual_recursive_generic_visit.wado/Sum>"(sum, __sroa_tree_value);
+    "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/walk_node<inline_mutual_recursive_generic_visit.wado/Sum>"(sum, __sroa_tree_value);
     same = struct.new "inline_mutual_recursive_generic_visit.wado//Node::Branch" { discriminant: 1, payload_0: struct.new "inline_mutual_recursive_generic_visit.wado//BranchNode" { children: ref.as_non_null(__b_4 = struct.new "core:prelude//List<inline_mutual_recursive_generic_visit.wado/Node>" { repr: array.new_fixed<ref "inline_mutual_recursive_generic_visit.wado//Node">(struct.new "inline_mutual_recursive_generic_visit.wado//Node::Leaf" { discriminant: 0, payload_0: struct.new "inline_mutual_recursive_generic_visit.wado//LeafNode" { value: 1 } }, struct.new "inline_mutual_recursive_generic_visit.wado//Node::Branch" { discriminant: 1, payload_0: struct.new "inline_mutual_recursive_generic_visit.wado//BranchNode" { children: ref.as_non_null(__b_5 = struct.new "core:prelude//List<inline_mutual_recursive_generic_visit.wado/Node>" { repr: array.new_fixed<ref "inline_mutual_recursive_generic_visit.wado//Node">(struct.new "inline_mutual_recursive_generic_visit.wado//Node::Leaf" { discriminant: 0, payload_0: struct.new "inline_mutual_recursive_generic_visit.wado//LeafNode" { value: 2 } }, struct.new "inline_mutual_recursive_generic_visit.wado//Node::Leaf" { discriminant: 0, payload_0: struct.new "inline_mutual_recursive_generic_visit.wado//LeafNode" { value: 3 } }), used: 2 }; __b_5) } }), used: 2 }; __b_4) } };
     __cond = "inline_mutual_recursive_generic_visit.wado/Node^Eq::eq"(struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: __sroa_tree_value }, same);
     if @unlikely(__cond == 0) {
@@ -233,7 +233,7 @@ fn "inline_mutual_recursive_generic_visit.wado/__cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "inline_mutual_recursive_generic_visit.wado/walk_node<inline_mutual_recursive_generic_visit.wado/Sum>"(v, node) {
+fn "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/walk_node<inline_mutual_recursive_generic_visit.wado/Sum>"(v, node) {
     let l: ref "inline_mutual_recursive_generic_visit.wado//LeafNode";
     let b: ref "inline_mutual_recursive_generic_visit.wado//BranchNode";
     if ref.test "inline_mutual_recursive_generic_visit.wado//Node::Leaf"(node) {
@@ -243,11 +243,11 @@ fn "inline_mutual_recursive_generic_visit.wado/walk_node<inline_mutual_recursive
         };
     } else {
         b = ref.cast "inline_mutual_recursive_generic_visit.wado//Node::Branch"(node).payload_0;
-        "inline_mutual_recursive_generic_visit.wado/walk_branch<inline_mutual_recursive_generic_visit.wado/Sum>"(v, b.children);
+        "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/walk_branch<inline_mutual_recursive_generic_visit.wado/Sum>"(v, b.children);
     }
 }
 
-fn "inline_mutual_recursive_generic_visit.wado/walk_branch<inline_mutual_recursive_generic_visit.wado/Sum>"(v, b) {
+fn "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/walk_branch<inline_mutual_recursive_generic_visit.wado/Sum>"(v, b) {
     let __iter_2: ref "core:prelude/slice.wado//ArrayRefIter<inline_mutual_recursive_generic_visit.wado/Node>";
     let c: ref "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>";
     let __match_4: ref null "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>";
@@ -257,7 +257,7 @@ fn "inline_mutual_recursive_generic_visit.wado/walk_branch<inline_mutual_recursi
             __match_4 = "core:prelude/slice.wado/ArrayRefIter<inline_mutual_recursive_generic_visit.wado/Node>^Iterator::next"(__iter_2);
             if ref.is_null(__match_4) == 0 {
                 c = ref.as_non_null(__match_4);
-                "inline_mutual_recursive_generic_visit.wado/walk_node<inline_mutual_recursive_generic_visit.wado/Sum>"(v, c.value);
+                "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/walk_node<inline_mutual_recursive_generic_visit.wado/Sum>"(v, c.value);
             } else {
                 break b2;
             }

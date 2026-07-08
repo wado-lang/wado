@@ -164,7 +164,7 @@ impl From<LoadError> for crate::compiler_host::Diagnostic {
                 code: Code::InvalidSyntax,
                 message: format!("lexer error: {message}"),
                 span: Some(DiagnosticSpan {
-                    file: module_source.diagnostic_filename(),
+                    file: module_source.source_path(),
                     line,
                     column,
                     end_line: None,
@@ -181,7 +181,7 @@ impl From<LoadError> for crate::compiler_host::Diagnostic {
                 code: Code::InvalidSyntax,
                 message: format!("parse error: {message}"),
                 span: Some(DiagnosticSpan {
-                    file: module_source.diagnostic_filename(),
+                    file: module_source.source_path(),
                     line,
                     column,
                     end_line: None,
@@ -1799,7 +1799,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // Bind errors are emitted directly to the host via Logger.
         // We use a temporary logger per module so error counting is per-module.
         let logger = Logger::new(self.host, self.log_level);
-        logger.set_file(module_source.diagnostic_filename());
+        logger.set_file(module_source.source_path());
         bind::bind_module(module, &logger).map_err(|_bail| {
             let error_count = logger.error_count();
             LoadError::BindError {
@@ -1814,7 +1814,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // Collect (module_source, raw_path) pairs. The map key stays the
         // module's `Display` (matching the elaborator's `included_files`
         // lookup), but the include path resolves against the module's real
-        // filename via `diagnostic_filename`: an entry point's `Display` is its
+        // filename via `source_path`: an entry point's `Display` is its
         // stable base name for symbol identity, which drops the directory a
         // relative include needs.
         let mut pairs: IndexSet<[String; 2]> = IndexSet::default();
@@ -1824,7 +1824,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             for raw_path in module.include_paths() {
                 resolve_path
                     .entry(ms_str.clone())
-                    .or_insert_with(|| module_source.diagnostic_filename());
+                    .or_insert_with(|| module_source.source_path());
                 pairs.insert([ms_str.clone(), raw_path.clone()]);
             }
         }
@@ -1833,7 +1833,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         let entry_module_source = self
             .entry_module_source
             .as_ref()
-            .map(ModuleSource::diagnostic_filename);
+            .map(ModuleSource::source_path);
         let mut included = IndexMap::default();
         for pair in pairs {
             let [ref ms_str, ref raw_path] = pair;

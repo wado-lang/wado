@@ -49,7 +49,7 @@ type "functype//trait_bound_3.wado/__cm_binding__Stdout_write_via_stream" = fn(i
 
 type "functype//trait_bound_3.wado/__cm_export__run" = fn();  // TypeId(15)
 
-type "functype//trait_bound_3.wado/describe<trait_bound_3.wado/Player>" = fn(ref "trait_bound_3.wado//Player") -> ref "core:prelude/string.wado//String";  // TypeId(16)
+type "functype//trait_bound_3.wado/trait_bound_3.wado/describe<trait_bound_3.wado/Player>" = fn(ref "trait_bound_3.wado//Player") -> ref "core:prelude/string.wado//String";  // TypeId(16)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(17)
 
@@ -135,11 +135,11 @@ fn "trait_bound_3.wado/__cm_export__run"() {
     };
     "trait_bound_3.wado/trait_bound_method_on_type_param_chain"();
     p = struct.new "trait_bound_3.wado//Player" { player_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 }, player_score: 100 };
-    "core:cli/println"("trait_bound_3.wado/describe<trait_bound_3.wado/Player>"(p));
+    "core:cli/println"("trait_bound_3.wado/trait_bound_3.wado/describe<trait_bound_3.wado/Player>"(p));
     "wasi/task-return"(0);
 }
 
-fn "trait_bound_3.wado/describe<trait_bound_3.wado/Player>"(x) {
+fn "trait_bound_3.wado/trait_bound_3.wado/describe<trait_bound_3.wado/Player>"(x) {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }, "core:prelude/string.wado/String::push_str"(__local_1, x.player_name), "core:prelude/string.wado/String::push"(__local_1, 58), "core:prelude/string.wado/String::push"(__local_1, 32), __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }, "core:prelude/primitive.wado/i32::fmt_decimal"(x.player_score, __local_2), __local_1;

@@ -345,7 +345,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
     /// Collect all definitions from a module into the symbol table
     fn collect_definitions(&mut self, module: &Module, module_source: &ModuleSource) {
-        self.logger.set_file(module_source.diagnostic_filename());
+        self.logger.set_file(module_source.source_path());
         for item in &module.items {
             match item {
                 Item::Function(func) => {
@@ -674,7 +674,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         if module.has_no_prelude() {
             return;
         }
-        self.logger.set_file(module_source.diagnostic_filename());
+        self.logger.set_file(module_source.source_path());
         for item in &module.items {
             let (name, span) = match item {
                 Item::Struct(d) => (&d.name, d.span),
@@ -755,7 +755,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         modules: &crate::hashmap::IndexMap<ModuleSource, Module>,
     ) -> Result<(), Bail> {
         for (source, module) in modules {
-            self.logger.set_file(source.diagnostic_filename());
+            self.logger.set_file(source.source_path());
             self.validate_imports(module, source, modules)?;
         }
         Ok(())
