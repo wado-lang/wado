@@ -55,11 +55,11 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(14)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/ref_impl_dispatch_list_vs_array.wado/run" = fn();  // TypeId(16)
+type "functype//ref_impl_dispatch_list_vs_array.wado/run" = fn();  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/ref_impl_dispatch_list_vs_array.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(17)
+type "functype//ref_impl_dispatch_list_vs_array.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/ref_impl_dispatch_list_vs_array.wado/__cm_export__run" = fn();  // TypeId(18)
+type "functype//ref_impl_dispatch_list_vs_array.wado/__cm_export__run" = fn();  // TypeId(18)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(19)
 
@@ -116,9 +116,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:ref_impl_dispatch_list_vs_array.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/ref_impl_dispatch_list_vs_array.wado/run"() with Stdout {
+fn "ref_impl_dispatch_list_vs_array.wado/run"() with Stdout {
     let __b: ref "core:prelude//List<i32>";
     let a: ref Array<i32>;
     let asum: i32;
@@ -136,10 +136,10 @@ fn "wado-compiler/tests/fixtures/ref_impl_dispatch_list_vs_array.wado/run"() wit
     let end_57: i32;
     let __sroa_c_total: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:ref_impl_dispatch_list_vs_array.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:ref_impl_dispatch_list_vs_array.wado::__modules_initialized = 1;
     };
     __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4), used: 4 };
     __sroa_c_total = 0;
@@ -182,18 +182,18 @@ fn "wado-compiler/tests/fixtures/ref_impl_dispatch_list_vs_array.wado/run"() wit
     "core:cli/println"(__local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 }; "core:prelude/primitive.wado/i32::fmt_decimal"(asum, __local_10); __local_9);
 }
 
-fn "wado-compiler/tests/fixtures/ref_impl_dispatch_list_vs_array.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "ref_impl_dispatch_list_vs_array.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/ref_impl_dispatch_list_vs_array.wado/__cm_export__run"() {
+fn "ref_impl_dispatch_list_vs_array.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:ref_impl_dispatch_list_vs_array.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:ref_impl_dispatch_list_vs_array.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/ref_impl_dispatch_list_vs_array.wado/run"();
+    "ref_impl_dispatch_list_vs_array.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -219,7 +219,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/ref_impl_dispatch_list_vs_array.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "ref_impl_dispatch_list_vs_array.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -519,4 +519,4 @@ fn "core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(self) {
     return val;
 }
 
-export fn "wado-compiler/tests/fixtures/ref_impl_dispatch_list_vs_array.wado/__cm_export__run" as "run"
+export fn "ref_impl_dispatch_list_vs_array.wado/__cm_export__run" as "run"

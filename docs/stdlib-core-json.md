@@ -17,6 +17,15 @@ Serde I/O is bytes-primary: prefer `to_bytes` / `from_bytes` when the data
 is consumed as bytes. `to_bytes_pretty` and `to_bytes_canonical` cover the
 indented and the deterministic (sorted-key) forms.
 
+## Synopsis
+
+```wado
+let json = to_string(&[1, 2, 3]).unwrap();
+assert json == "[1,2,3]";
+let parsed: List<i32> = from_string(json).unwrap();
+assert parsed == [1, 2, 3];
+```
+
 ## Functions
 
 ### `pub fn write_escaped_string(buf: &mut String, s: &String)`

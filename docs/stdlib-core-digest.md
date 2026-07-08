@@ -33,6 +33,13 @@ let digest = h.finalize();
 Message bytes are accepted from any `AsByteSlice` source: a `ByteSlice`,
 `ByteList`, `ByteArray`, plain `List<u8>`, or a `String` (its UTF-8 bytes).
 
+## Synopsis
+
+```wado
+let digest = sha256(&"wado");
+assert digest.to_hex() == "fe3d12dc082eed509c3869ed16f0c209f2fbaeee3a41aa09f0033798efd67052";
+```
+
 ## Functions
 
 ### `pub fn sha256<S: AsByteSlice>(data: &S) -> ByteList`

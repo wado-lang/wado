@@ -38,11 +38,11 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//wado-compiler/tests/fixtures/struct_literal_string_key.wado/run" = fn();  // TypeId(12)
+type "functype//struct_literal_string_key.wado/run" = fn();  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/struct_literal_string_key.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(13)
+type "functype//struct_literal_string_key.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/struct_literal_string_key.wado/__cm_export__run" = fn();  // TypeId(14)
+type "functype//struct_literal_string_key.wado/__cm_export__run" = fn();  // TypeId(14)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(15)
 
@@ -97,10 +97,10 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
-global mut global:__const_obj_0: ref null "core:prelude/string.wado//String" = ref.null none;
+global mut global:struct_literal_string_key.wado::__modules_initialized: bool = 0;
+global mut global:struct_literal_string_key.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = ref.null none;
 
-fn "wado-compiler/tests/fixtures/struct_literal_string_key.wado/run"() with Stdout {
+fn "struct_literal_string_key.wado/run"() with Stdout {
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
     let __local_5: ref "core:prelude/string.wado//String";
@@ -112,29 +112,29 @@ fn "wado-compiler/tests/fixtures/struct_literal_string_key.wado/run"() with Stdo
     let f_29: ref "core:prelude/format.wado//Formatter";
     let f_34: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:struct_literal_string_key.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:struct_literal_string_key.wado::__modules_initialized = 1;
     };
     "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; f_12 = __local_4; "core:prelude/primitive.wado/i32::fmt_decimal"(10, f_12); "core:prelude/string.wado/String::push"(__local_3, 44); "core:prelude/string.wado/String::push"(__local_3, 32); __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; f_17 = __local_4; "core:prelude/primitive.wado/i32::fmt_decimal"(20, f_17); __local_3);
-    global:__const_obj_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 };
-    "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_5, global:__const_obj_0); "core:prelude/string.wado/String::push"(__local_5, 44); "core:prelude/string.wado/String::push"(__local_5, 32); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; "core:prelude/primitive.wado/i32::fmt_decimal"(30, __local_6); __local_5);
+    global:struct_literal_string_key.wado::__const_obj_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 };
+    "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_5, global:struct_literal_string_key.wado::__const_obj_0); "core:prelude/string.wado/String::push"(__local_5, 44); "core:prelude/string.wado/String::push"(__local_5, 32); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; "core:prelude/primitive.wado/i32::fmt_decimal"(30, __local_6); __local_5);
     "core:cli/println"(__local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }; __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; f_29 = __local_8; "core:prelude/primitive.wado/i32::fmt_decimal"(1, f_29); "core:prelude/string.wado/String::push"(__local_7, 44); "core:prelude/string.wado/String::push"(__local_7, 32); __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; f_34 = __local_8; "core:prelude/primitive.wado/i32::fmt_decimal"(2, f_34); __local_7);
 }
 
-fn "wado-compiler/tests/fixtures/struct_literal_string_key.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "struct_literal_string_key.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/struct_literal_string_key.wado/__cm_export__run"() {
+fn "struct_literal_string_key.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:struct_literal_string_key.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:struct_literal_string_key.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/struct_literal_string_key.wado/run"();
+    "struct_literal_string_key.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -160,7 +160,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/struct_literal_string_key.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "struct_literal_string_key.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -450,4 +450,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/struct_literal_string_key.wado/__cm_export__run" as "run"
+export fn "struct_literal_string_key.wado/__cm_export__run" as "run"

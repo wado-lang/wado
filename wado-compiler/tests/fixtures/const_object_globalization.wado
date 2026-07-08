@@ -16,7 +16,7 @@ use { println, Stdout } from "core:cli";
 // A constant lookup table indexed dynamically in a loop survives optimization
 // as a real heap object (it cannot be scalarized), so it is the prime target.
 // Read-only: every use of `table` is a `.repr` / `.used` read. It is hoisted
-// to an immutable `global:__const_obj_*`.
+// to an immutable `global:const_object_globalization.wado::__const_obj_*`.
 fn lookup(n: i32) -> i32 {
     let table: List<i32> = [10, 20, 30, 40];
     let mut sum = 0;
@@ -67,10 +67,10 @@ __DATA__
 {
     "stdout": "200,104,7\n",
     "wir_expect:O2": [
-        "global global:__const_obj",
+        "global global:const_object_globalization.wado::__const_obj",
         "array.new_fixed<i32>(10, 20, 30, 40)"
     ],
     "wir_not_expect:O2": [
-        "global mut global:__const_obj"
+        "global mut global:const_object_globalization.wado::__const_obj"
     ]
 }

@@ -24,7 +24,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct wado-compiler/tests/fixtures/hfs_nested_loop_after_mut_call.wado//S {  // TypeId(4)
+struct hfs_nested_loop_after_mut_call.wado//S {  // TypeId(4)
     mut a: i32,
     mut b: i32,
 }
@@ -47,11 +47,11 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/hfs_nested_loop_after_mut_call.wado/touch" = fn(ref "wado-compiler/tests/fixtures/hfs_nested_loop_after_mut_call.wado//S");  // TypeId(14)
+type "functype//hfs_nested_loop_after_mut_call.wado/touch" = fn(ref "hfs_nested_loop_after_mut_call.wado//S");  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/hfs_nested_loop_after_mut_call.wado/run" = fn();  // TypeId(15)
+type "functype//hfs_nested_loop_after_mut_call.wado/run" = fn();  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/hfs_nested_loop_after_mut_call.wado/__cm_export__run" = fn();  // TypeId(16)
+type "functype//hfs_nested_loop_after_mut_call.wado/__cm_export__run" = fn();  // TypeId(16)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(17)
 
@@ -116,14 +116,14 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:hfs_nested_loop_after_mut_call.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/hfs_nested_loop_after_mut_call.wado/touch"(s) {
+fn "hfs_nested_loop_after_mut_call.wado/touch"(s) {
     s.a = s.a + 100;
 }
 
-fn "wado-compiler/tests/fixtures/hfs_nested_loop_after_mut_call.wado/run"() {
-    let s: ref "wado-compiler/tests/fixtures/hfs_nested_loop_after_mut_call.wado//S";
+fn "hfs_nested_loop_after_mut_call.wado/run"() {
+    let s: ref "hfs_nested_loop_after_mut_call.wado//S";
     let sink: i32;
     let o: i32;
     let k: i32;
@@ -139,12 +139,12 @@ fn "wado-compiler/tests/fixtures/hfs_nested_loop_after_mut_call.wado/run"() {
     let _licm_arith_16: i32;
     let __hfs_a_17: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:hfs_nested_loop_after_mut_call.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:hfs_nested_loop_after_mut_call.wado::__modules_initialized = 1;
     };
-    s = struct.new "wado-compiler/tests/fixtures/hfs_nested_loop_after_mut_call.wado//S" { a: 0, b: 0 };
+    s = struct.new "hfs_nested_loop_after_mut_call.wado//S" { a: 0, b: 0 };
     sink = 0;
     o = 0;
     __hfs_a_17 = 0;
@@ -154,7 +154,7 @@ fn "wado-compiler/tests/fixtures/hfs_nested_loop_after_mut_call.wado/run"() {
             sink = sink + __hfs_a_17;
             __hfs_a_17 = __hfs_a_17 + 1;
             s.a = __hfs_a_17;
-            "wado-compiler/tests/fixtures/hfs_nested_loop_after_mut_call.wado/touch"(s);
+            "hfs_nested_loop_after_mut_call.wado/touch"(s);
             k = 0;
             _licm_arith_16 = o - o;
             b2: block {
@@ -177,28 +177,28 @@ fn "wado-compiler/tests/fixtures/hfs_nested_loop_after_mut_call.wado/run"() {
     __v0_4 = s.a;
     if @unlikely(__v0_4 != 309) {
         cold_path;
-        "core:rt/panic"(__local_10 = "core:prelude/string.wado/String::with_capacity"(136); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_10, 114); "core:prelude/string.wado/String::push"(__local_10, 117); "core:prelude/string.wado/String::push"(__local_10, 110); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push"(__local_10, 97); "core:prelude/string.wado/String::push"(__local_10, 116); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/hfs_nested_loop_after_mut_call.wado"), used: 64 }); "core:prelude/string.wado/String::push"(__local_10, 58); __local_11 = "core:prelude/format.wado/Formatter::new"(__local_10); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 52 }, __local_11); "core:prelude/string.wado/String::push"(__local_10, 58); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push_str"(__local_10, __local_8 = "core:prelude/string.wado/String::with_capacity"(42); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("s.a corrupted: "), used: 15 }); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: s.a }, __local_9); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" (want 309)"), used: 11 }); __local_8); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_10 = "core:prelude/string.wado/String::with_capacity"(136); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_10, 114); "core:prelude/string.wado/String::push"(__local_10, 117); "core:prelude/string.wado/String::push"(__local_10, 110); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push"(__local_10, 97); "core:prelude/string.wado/String::push"(__local_10, 116); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hfs_nested_loop_after_mut_call.wado"), used: 35 }); "core:prelude/string.wado/String::push"(__local_10, 58); __local_11 = "core:prelude/format.wado/Formatter::new"(__local_10); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 52 }, __local_11); "core:prelude/string.wado/String::push"(__local_10, 58); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push_str"(__local_10, __local_8 = "core:prelude/string.wado/String::with_capacity"(42); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("s.a corrupted: "), used: 15 }); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: s.a }, __local_9); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" (want 309)"), used: 11 }); __local_8); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: s.a == 309
 "), used: 23 }); "core:prelude/string.wado/String::push"(__local_10, 115); "core:prelude/string.wado/String::push"(__local_10, 46); "core:prelude/string.wado/String::push"(__local_10, 97); "core:prelude/string.wado/String::push"(__local_10, 58); "core:prelude/string.wado/String::push"(__local_10, 32); __local_11 = "core:prelude/format.wado/Formatter::new"(__local_10); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_4 }, __local_11); "core:prelude/string.wado/String::push"(__local_10, 10); __local_10);
         unreachable;
     }
     if @unlikely(sink != 921) {
         cold_path;
-        "core:rt/panic"(__local_14 = "core:prelude/string.wado/String::with_capacity"(138); "core:prelude/string.wado/String::push_str"(__local_14, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_14, 114); "core:prelude/string.wado/String::push"(__local_14, 117); "core:prelude/string.wado/String::push"(__local_14, 110); "core:prelude/string.wado/String::push"(__local_14, 32); "core:prelude/string.wado/String::push"(__local_14, 97); "core:prelude/string.wado/String::push"(__local_14, 116); "core:prelude/string.wado/String::push"(__local_14, 32); "core:prelude/string.wado/String::push_str"(__local_14, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/hfs_nested_loop_after_mut_call.wado"), used: 64 }); "core:prelude/string.wado/String::push"(__local_14, 58); __local_15 = "core:prelude/format.wado/Formatter::new"(__local_14); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 53 }, __local_15); "core:prelude/string.wado/String::push"(__local_14, 58); "core:prelude/string.wado/String::push"(__local_14, 32); "core:prelude/string.wado/String::push_str"(__local_14, __local_12 = "core:prelude/string.wado/String::with_capacity"(43); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sink corrupted: "), used: 16 }); __local_13 = "core:prelude/format.wado/Formatter::new"(__local_12); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: sink }, __local_13); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" (want 921)"), used: 11 }); __local_12); "core:prelude/string.wado/String::push_str"(__local_14, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_14 = "core:prelude/string.wado/String::with_capacity"(138); "core:prelude/string.wado/String::push_str"(__local_14, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_14, 114); "core:prelude/string.wado/String::push"(__local_14, 117); "core:prelude/string.wado/String::push"(__local_14, 110); "core:prelude/string.wado/String::push"(__local_14, 32); "core:prelude/string.wado/String::push"(__local_14, 97); "core:prelude/string.wado/String::push"(__local_14, 116); "core:prelude/string.wado/String::push"(__local_14, 32); "core:prelude/string.wado/String::push_str"(__local_14, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hfs_nested_loop_after_mut_call.wado"), used: 35 }); "core:prelude/string.wado/String::push"(__local_14, 58); __local_15 = "core:prelude/format.wado/Formatter::new"(__local_14); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 53 }, __local_15); "core:prelude/string.wado/String::push"(__local_14, 58); "core:prelude/string.wado/String::push"(__local_14, 32); "core:prelude/string.wado/String::push_str"(__local_14, __local_12 = "core:prelude/string.wado/String::with_capacity"(43); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sink corrupted: "), used: 16 }); __local_13 = "core:prelude/format.wado/Formatter::new"(__local_12); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: sink }, __local_13); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" (want 921)"), used: 11 }); __local_12); "core:prelude/string.wado/String::push_str"(__local_14, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: sink == 921
 "), used: 24 }); "core:prelude/string.wado/String::push"(__local_14, 115); "core:prelude/string.wado/String::push"(__local_14, 105); "core:prelude/string.wado/String::push"(__local_14, 110); "core:prelude/string.wado/String::push"(__local_14, 107); "core:prelude/string.wado/String::push"(__local_14, 58); "core:prelude/string.wado/String::push"(__local_14, 32); __local_15 = "core:prelude/format.wado/Formatter::new"(__local_14); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: sink }, __local_15); "core:prelude/string.wado/String::push"(__local_14, 10); __local_14);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/hfs_nested_loop_after_mut_call.wado/__cm_export__run"() {
+fn "hfs_nested_loop_after_mut_call.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:hfs_nested_loop_after_mut_call.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:hfs_nested_loop_after_mut_call.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/hfs_nested_loop_after_mut_call.wado/run"();
+    "hfs_nested_loop_after_mut_call.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -535,4 +535,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/hfs_nested_loop_after_mut_call.wado/__cm_export__run" as "run"
+export fn "hfs_nested_loop_after_mut_call.wado/__cm_export__run" as "run"

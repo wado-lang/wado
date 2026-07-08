@@ -64,9 +64,9 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(16)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/cross_module_struct_field_type.wado/run" = fn();  // TypeId(18)
+type "functype//cross_module_struct_field_type.wado/run" = fn();  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/cross_module_struct_field_type.wado/__cm_export__run" = fn();  // TypeId(19)
+type "functype//cross_module_struct_field_type.wado/__cm_export__run" = fn();  // TypeId(19)
 
 type "functype//wado-compiler/tests/fixtures/cross_module_struct_field_type.wado/$value_copy$T27" = fn(ref "./sub/cross_module_struct_field_type_lib.wado//Inner") -> ref "./sub/cross_module_struct_field_type_lib.wado//Inner";  // TypeId(20)
 
@@ -155,9 +155,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:cross_module_struct_field_type.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/cross_module_struct_field_type.wado/run"() {
+fn "cross_module_struct_field_type.wado/run"() {
     let w: ref "./sub/cross_module_struct_field_type_lib.wado//Wrapper";
     let __b_1: ref "core:prelude//List<./sub/cross_module_struct_field_type_lib.wado/Inner>";
     let expected: ref "./sub/cross_module_struct_field_type_lib.wado//Wrapper";
@@ -167,31 +167,31 @@ fn "wado-compiler/tests/fixtures/cross_module_struct_field_type.wado/run"() {
     let __b_9: ref "core:prelude//List<./sub/cross_module_struct_field_type_lib.wado/Inner>";
     let __sroa_v_repr: ref Array<u8>;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:cross_module_struct_field_type.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:cross_module_struct_field_type.wado::__modules_initialized = 1;
     };
     w = struct.new "./sub/cross_module_struct_field_type_lib.wado//Wrapper" { name: ref.as_non_null(__sroa_v_repr = array.new_fixed<u8>(116, 101, 115, 116); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__sroa_v_repr)), used: 4 }), items: ref.as_non_null(__b_9 = struct.new "core:prelude//List<./sub/cross_module_struct_field_type_lib.wado/Inner>" { repr: builtin::array_new<ref "./sub/cross_module_struct_field_type_lib.wado//Inner">(0), used: 0 }; struct.new "core:prelude//List<./sub/cross_module_struct_field_type_lib.wado/Inner>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "./sub/cross_module_struct_field_type_lib.wado//Inner">(/*via $value_copy$T27*/ __b_9.repr)), used: 0 }) };
     expected = struct.new "./sub/cross_module_struct_field_type_lib.wado//Wrapper" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 101, 115, 116), used: 4 }, items: ref.as_non_null(__b_1 = struct.new "core:prelude//List<./sub/cross_module_struct_field_type_lib.wado/Inner>" { repr: builtin::array_new<ref "./sub/cross_module_struct_field_type_lib.wado//Inner">(0), used: 0 }; __b_1) };
     __cond = "./sub/cross_module_struct_field_type_lib.wado/Wrapper^Eq::eq"(w, expected);
     if @unlikely(__cond == 0) {
         cold_path;
-        "core:rt/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(146); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_6, 114); "core:prelude/string.wado/String::push"(__local_6, 117); "core:prelude/string.wado/String::push"(__local_6, 110); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/cross_module_struct_field_type.wado"), used: 64 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 6 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(146); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_6, 114); "core:prelude/string.wado/String::push"(__local_6, 117); "core:prelude/string.wado/String::push"(__local_6, 110); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("cross_module_struct_field_type.wado"), used: 35 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 6 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: w == expected
 "), used: 26 }); "core:prelude/string.wado/String::push"(__local_6, 119); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "./sub/cross_module_struct_field_type_lib.wado/Wrapper^Inspect::inspect"(w, __local_7); "core:prelude/string.wado/String::push"(__local_6, 10); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected: "), used: 10 }); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "./sub/cross_module_struct_field_type_lib.wado/Wrapper^Inspect::inspect"(expected, __local_7); "core:prelude/string.wado/String::push"(__local_6, 10); __local_6);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/cross_module_struct_field_type.wado/__cm_export__run"() {
+fn "cross_module_struct_field_type.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:cross_module_struct_field_type.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:cross_module_struct_field_type.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/cross_module_struct_field_type.wado/run"();
+    "cross_module_struct_field_type.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -891,4 +891,4 @@ fn "core:prelude/list.wado/List<./sub/cross_module_struct_field_type_lib.wado/In
     return 1;
 }
 
-export fn "wado-compiler/tests/fixtures/cross_module_struct_field_type.wado/__cm_export__run" as "run"
+export fn "cross_module_struct_field_type.wado/__cm_export__run" as "run"

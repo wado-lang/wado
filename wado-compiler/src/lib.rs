@@ -321,7 +321,7 @@ fn emit_unused_diagnostics<H: CompilerHost>(
             let Some(module) = sem.modules.get(owning) else {
                 continue;
             };
-            let filename = owning.diagnostic_filename();
+            let filename = owning.source_path();
             for item in &module.items {
                 match item {
                     Item::Function(func) if func.id == *id => {

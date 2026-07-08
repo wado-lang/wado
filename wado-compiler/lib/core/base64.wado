@@ -20,6 +20,13 @@
 //   if let Some(decoded) = decode(&b64) { ... }
 
 
+#[synopsis]
+test {
+    let encoded = encode(&b"Hello, Wado!");
+    assert encoded == "SGVsbG8sIFdhZG8h";
+    assert decode(&encoded) matches { Some(round) && encode(&round) == encoded };
+}
+
 pub flags Encoding {
     UrlSafe,
     NoPadding,

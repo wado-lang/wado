@@ -40,7 +40,7 @@ struct core:json//JsonStructSerializer {  // TypeId(6)
     mut count: i32,
 }
 
-struct wado-compiler/tests/fixtures/anon_compose_serde.wado//__anon_{user_id:i32,ip:String,request_id:i32} {  // TypeId(7)
+struct anon_compose_serde.wado//__anon_{user_id:i32,ip:String,request_id:i32} {  // TypeId(7)
     mut user_id: i32,
     mut ip: ref "core:prelude/string.wado//String",
     mut request_id: i32,
@@ -79,9 +79,9 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(18)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(19)
 
-type "functype//wado-compiler/tests/fixtures/anon_compose_serde.wado/__test_0_composed_anonymous_struct_serializes" = fn();  // TypeId(20)
+type "functype//anon_compose_serde.wado/__test_0_composed_anonymous_struct_serializes" = fn();  // TypeId(20)
 
-type "functype//wado-compiler/tests/fixtures/anon_compose_serde.wado/__cm_export____test_0_composed_anonymous_struct_serializes" = fn();  // TypeId(21)
+type "functype//anon_compose_serde.wado/__cm_export____test_0_composed_anonymous_struct_serializes" = fn();  // TypeId(21)
 
 type "functype//wado-compiler/tests/fixtures/anon_compose_serde.wado/$value_copy$T87" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(22)
 
@@ -145,7 +145,7 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(52)
 
-type "functype//wado-compiler/tests/fixtures/anon_compose_serde.wado/__anon_{user_id:i32,ip:String,request_id:i32}^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "wado-compiler/tests/fixtures/anon_compose_serde.wado//__anon_{user_id:i32,ip:String,request_id:i32}", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(53)
+type "functype//anon_compose_serde.wado/__anon_{user_id:i32,ip:String,request_id:i32}^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "anon_compose_serde.wado//__anon_{user_id:i32,ip:String,request_id:i32}", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(53)
 
 type "functype//core:json/JsonStructSerializer^SerializeStruct::field<core:prelude/string.wado/String>" = fn(ref "core:json//JsonStructSerializer", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(54)
 
@@ -157,7 +157,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(57)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(58)
 
-type "functype//core:json/core/json/to_string<wado-compiler/tests/fixtures/anon_compose_serde.wado/__anon_{user_id:i32,ip:String,request_id:i32}>" = fn(ref "wado-compiler/tests/fixtures/anon_compose_serde.wado//__anon_{user_id:i32,ip:String,request_id:i32}") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(59)
+type "functype//core:json/core/json/to_string<anon_compose_serde.wado/__anon_{user_id:i32,ip:String,request_id:i32}>" = fn(ref "anon_compose_serde.wado//__anon_{user_id:i32,ip:String,request_id:i32}") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(59)
 
 type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(60)
 
@@ -174,23 +174,33 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:anon_compose_serde.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/anon_compose_serde.wado/__test_0_composed_anonymous_struct_serializes"() {
-    let payload: ref "wado-compiler/tests/fixtures/anon_compose_serde.wado//__anon_{user_id:i32,ip:String,request_id:i32}";
+fn "anon_compose_serde.wado/__test_0_composed_anonymous_struct_serializes"() {
+    let payload: ref "anon_compose_serde.wado//__anon_{user_id:i32,ip:String,request_id:i32}";
     let json: ref "core:prelude/string.wado//String";
     let __v1: ref "core:prelude/string.wado//String";
     let __cond: bool;
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
+<<<<<<< HEAD
     let len_a: i32;
     let __sroa___sroa_ctx_ip_repr: ref Array<u8>;
     __sroa___sroa_ctx_ip_repr = array.new_data<u8>("10.0.0.1");
     payload = struct.new "wado-compiler/tests/fixtures/anon_compose_serde.wado//__anon_{user_id:i32,ip:String,request_id:i32}" { user_id: 7, ip: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__sroa___sroa_ctx_ip_repr)), used: 8 }, request_id: 42 };
+||||||| 88506a642
+    let __sroa_ctx_ip: ref "core:prelude/string.wado//String";
+    __sroa_ctx_ip = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("10.0.0.1"), used: 8 };
+    payload = struct.new "wado-compiler/tests/fixtures/anon_compose_serde.wado//__anon_{user_id:i32,ip:String,request_id:i32}" { user_id: 7, ip: __sroa_ctx_ip, request_id: 42 };
+=======
+    let __sroa_ctx_ip: ref "core:prelude/string.wado//String";
+    __sroa_ctx_ip = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("10.0.0.1"), used: 8 };
+    payload = struct.new "anon_compose_serde.wado//__anon_{user_id:i32,ip:String,request_id:i32}" { user_id: 7, ip: __sroa_ctx_ip, request_id: 42 };
+>>>>>>> origin/main
     let __sroa_s_discriminant: i32;
     let __sroa_s_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_s_case1_payload_0: ref null "core:serde//SerializeError";
-    multivalue_bind [__sroa_s_discriminant, __sroa_s_case0_payload_0, __sroa_s_case1_payload_0] = "core:json/core/json/to_string<wado-compiler/tests/fixtures/anon_compose_serde.wado/__anon_{user_id:i32,ip:String,request_id:i32}>"(payload);
+    multivalue_bind [__sroa_s_discriminant, __sroa_s_case0_payload_0, __sroa_s_case1_payload_0] = "core:json/core/json/to_string<anon_compose_serde.wado/__anon_{user_id:i32,ip:String,request_id:i32}>"(payload);
     if @likely(__sroa_s_discriminant == 0) {
         json = ref.as_non_null(__sroa_s_case0_payload_0);
         __v1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"user_id\":7,\"ip\":\"10.0.0.1\",\"request_id\":42}"), used: 45 };
@@ -203,7 +213,7 @@ fn "wado-compiler/tests/fixtures/anon_compose_serde.wado/__test_0_composed_anony
         };
         if @unlikely(__cond == 0) {
             cold_path;
-            "core:rt/panic"(__local_8 = "core:prelude/string.wado/String::with_capacity"(234); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_composed_anonymous_struct_serializes"), used: 45 }); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push"(__local_8, 97); "core:prelude/string.wado/String::push"(__local_8, 116); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/anon_compose_serde.wado"), used: 52 }); "core:prelude/string.wado/String::push"(__local_8, 58); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 16 }, __local_9); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+            "core:rt/panic"(__local_8 = "core:prelude/string.wado/String::with_capacity"(234); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_composed_anonymous_struct_serializes"), used: 45 }); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push"(__local_8, 97); "core:prelude/string.wado/String::push"(__local_8, 116); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("anon_compose_serde.wado"), used: 23 }); "core:prelude/string.wado/String::push"(__local_8, 58); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 16 }, __local_9); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: json == `\\{\"user_id\":7,\"ip\":\"10.0.0.1\",\"request_id\":42\\}`
 "), used: 70 }); "core:prelude/string.wado/String::push"(__local_8, 106); "core:prelude/string.wado/String::push"(__local_8, 115); "core:prelude/string.wado/String::push"(__local_8, 111); "core:prelude/string.wado/String::push"(__local_8, 110); "core:prelude/string.wado/String::push"(__local_8, 58); "core:prelude/string.wado/String::push"(__local_8, 32); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/format.wado/String^Inspect::inspect"(json, __local_9); "core:prelude/string.wado/String::push"(__local_8, 10); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("`\\{\"user_id\":7,\"ip\":\"10.0.0.1\",\"request_id\":42\\}`: "), used: 51 }); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/format.wado/String^Inspect::inspect"(__v1, __local_9); "core:prelude/string.wado/String::push"(__local_8, 10); __local_8);
             unreachable;
@@ -214,15 +224,15 @@ condition: json == `\\{\"user_id\":7,\"ip\":\"10.0.0.1\",\"request_id\":42\\}`
     }
 }
 
-fn "wado-compiler/tests/fixtures/anon_compose_serde.wado/__cm_export____test_0_composed_anonymous_struct_serializes"() {
+fn "anon_compose_serde.wado/__cm_export____test_0_composed_anonymous_struct_serializes"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:anon_compose_serde.wado::__modules_initialized);
         cold_path;
         "core:base64/__initialize_module"();
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:anon_compose_serde.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/anon_compose_serde.wado/__test_0_composed_anonymous_struct_serializes"();
+    "anon_compose_serde.wado/__test_0_composed_anonymous_struct_serializes"();
     "wasi/task-return"(0);
 }
 
@@ -489,12 +499,12 @@ fn "core:json/write_json_i32"(buf, v) {
     return ref.null none;
 }
 
-fn "core:json/core/json/to_string<wado-compiler/tests/fixtures/anon_compose_serde.wado/__anon_{user_id:i32,ip:String,request_id:i32}>"(value) {
+fn "core:json/core/json/to_string<anon_compose_serde.wado/__anon_{user_id:i32,ip:String,request_id:i32}>"(value) {
     let buf: ref "core:prelude/string.wado//String";
     let __qm_e: ref "core:serde//SerializeError";
     let __match_5: ref null "core:serde//SerializeError";
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
-    __match_5 = "wado-compiler/tests/fixtures/anon_compose_serde.wado/__anon_{user_id:i32,ip:String,request_id:i32}^Serialize::serialize<core:json/JsonSerializer>"(value, buf);
+    __match_5 = "anon_compose_serde.wado/__anon_{user_id:i32,ip:String,request_id:i32}^Serialize::serialize<core:json/JsonSerializer>"(value, buf);
     if @likely(ref.is_null(__match_5)) {
     } else {
         __qm_e = ref.as_non_null(__match_5);
@@ -878,7 +888,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     }
 }
 
-fn "wado-compiler/tests/fixtures/anon_compose_serde.wado/__anon_{user_id:i32,ip:String,request_id:i32}^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
+fn "anon_compose_serde.wado/__anon_{user_id:i32,ip:String,request_id:i32}^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
     let __result: ref "core:prelude/types.wado//Result<core:json/JsonStructSerializer,core:serde/SerializeError>";
     let __local_3: ref "core:json//JsonStructSerializer";
     "core:prelude/string.wado/String::push"(s, 123);
@@ -925,4 +935,4 @@ fn "core:json/JsonStructSerializer^SerializeStruct::field<i32>"(self, name, valu
     return r;
 }
 
-export fn "wado-compiler/tests/fixtures/anon_compose_serde.wado/__cm_export____test_0_composed_anonymous_struct_serializes" as "__test_0_composed_anonymous_struct_serializes"
+export fn "anon_compose_serde.wado/__cm_export____test_0_composed_anonymous_struct_serializes" as "__test_0_composed_anonymous_struct_serializes"

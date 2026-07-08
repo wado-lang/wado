@@ -2866,8 +2866,6 @@ impl FunctionRef {
     pub fn full_name(&self) -> String {
         if let Some(info) = &self.method_info {
             info.to_mangled_name()
-        } else if self.module_source.is_entry_point() {
-            self.name.clone()
         } else {
             let path = self.module_source.to_path();
             format!("{}/{}", path.join("/"), &self.name)

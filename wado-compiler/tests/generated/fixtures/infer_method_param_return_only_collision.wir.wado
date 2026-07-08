@@ -87,13 +87,13 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(20)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(21)
 
-type "functype//wado-compiler/tests/fixtures/infer_method_param_return_only_collision.wado/__test_0_return_only_method_param_resolves_per_call_site__ok_arm____t_" = fn();  // TypeId(22)
+type "functype//infer_method_param_return_only_collision.wado/__test_0_return_only_method_param_resolves_per_call_site__ok_arm____t_" = fn();  // TypeId(22)
 
-type "functype//wado-compiler/tests/fixtures/infer_method_param_return_only_collision.wado/__test_1_return_only_method_param_resolves_per_call_site__err_arm____e_" = fn();  // TypeId(23)
+type "functype//infer_method_param_return_only_collision.wado/__test_1_return_only_method_param_resolves_per_call_site__err_arm____e_" = fn();  // TypeId(23)
 
-type "functype//wado-compiler/tests/fixtures/infer_method_param_return_only_collision.wado/__cm_export____test_0_return_only_method_param_resolves_per_call_site__ok_arm____t_" = fn();  // TypeId(24)
+type "functype//infer_method_param_return_only_collision.wado/__cm_export____test_0_return_only_method_param_resolves_per_call_site__ok_arm____t_" = fn();  // TypeId(24)
 
-type "functype//wado-compiler/tests/fixtures/infer_method_param_return_only_collision.wado/__cm_export____test_1_return_only_method_param_resolves_per_call_site__err_arm____e_" = fn();  // TypeId(25)
+type "functype//infer_method_param_return_only_collision.wado/__cm_export____test_1_return_only_method_param_resolves_per_call_site__err_arm____e_" = fn();  // TypeId(25)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(26)
 
@@ -145,7 +145,17 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(49)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(50)
 
+<<<<<<< HEAD
 type "functype//wado-compiler/tests/fixtures/infer_method_param_return_only_collision.wado/Result<i32,core:prelude/string.wado/String>^Decoder::decode" = fn(i32) -> [i32, ref null "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>", i32];  // TypeId(51)
+||||||| 88506a642
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(51)
+
+type "functype//wado-compiler/tests/fixtures/infer_method_param_return_only_collision.wado/Result<i32,core:prelude/string.wado/String>^Decoder::decode" = fn(i32) -> [i32, ref null "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>", i32];  // TypeId(52)
+=======
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(51)
+
+type "functype//infer_method_param_return_only_collision.wado/Result<i32,core:prelude/string.wado/String>^Decoder::decode" = fn(i32) -> [i32, ref null "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>", i32];  // TypeId(52)
+>>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -160,9 +170,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:infer_method_param_return_only_collision.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/infer_method_param_return_only_collision.wado/__test_0_return_only_method_param_resolves_per_call_site__ok_arm____t_"() {
+fn "infer_method_param_return_only_collision.wado/__test_0_return_only_method_param_resolves_per_call_site__ok_arm____t_"() {
     let __cond: bool;
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
@@ -170,7 +180,7 @@ fn "wado-compiler/tests/fixtures/infer_method_param_return_only_collision.wado/_
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>";
     let __sroa_r_case1_payload_0: i32;
-    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "wado-compiler/tests/fixtures/infer_method_param_return_only_collision.wado/Result<i32,core:prelude/string.wado/String>^Decoder::decode"(0);
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "infer_method_param_return_only_collision.wado/Result<i32,core:prelude/string.wado/String>^Decoder::decode"(0);
     __cond = (if __sroa_r_discriminant == 0 -> i32 {
         __local_5 = ref.as_non_null(__sroa_r_case0_payload_0);
         if ref.test "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok"(__local_5) -> i32 {
@@ -184,14 +194,14 @@ fn "wado-compiler/tests/fixtures/infer_method_param_return_only_collision.wado/_
     });
     if @unlikely(__cond == 0) {
         cold_path;
-        "core:rt/panic"(__local_3 = "core:prelude/string.wado/String::with_capacity"(109); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_return_only_method_param_resolves_per_call_site__ok_arm____t_"), used: 70 }); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push"(__local_3, 97); "core:prelude/string.wado/String::push"(__local_3, 116); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/infer_method_param_return_only_collision.wado"), used: 74 }); "core:prelude/string.wado/String::push"(__local_3, 58); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 53 }, __local_4); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_3 = "core:prelude/string.wado/String::with_capacity"(109); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_return_only_method_param_resolves_per_call_site__ok_arm____t_"), used: 70 }); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push"(__local_3, 97); "core:prelude/string.wado/String::push"(__local_3, 116); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("infer_method_param_return_only_collision.wado"), used: 45 }); "core:prelude/string.wado/String::push"(__local_3, 58); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 53 }, __local_4); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: r matches { Ok(Ok(0)) }
 "), used: 36 }); __local_3);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/infer_method_param_return_only_collision.wado/__test_1_return_only_method_param_resolves_per_call_site__err_arm____e_"() {
+fn "infer_method_param_return_only_collision.wado/__test_1_return_only_method_param_resolves_per_call_site__err_arm____e_"() {
     let s: ref "core:prelude/string.wado//String";
     let __cond: bool;
     let __local_4: ref "core:prelude/string.wado//String";
@@ -201,7 +211,7 @@ fn "wado-compiler/tests/fixtures/infer_method_param_return_only_collision.wado/_
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>";
     let __sroa_r_case1_payload_0: i32;
-    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "wado-compiler/tests/fixtures/infer_method_param_return_only_collision.wado/Result<i32,core:prelude/string.wado/String>^Decoder::decode"(1);
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "infer_method_param_return_only_collision.wado/Result<i32,core:prelude/string.wado/String>^Decoder::decode"(1);
     __cond = (if (if __sroa_r_discriminant == 0 -> i32 {
         __local_6 = ref.as_non_null(__sroa_r_case0_payload_0);
         if ref.test "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err"(__local_6) -> i32 {
@@ -225,32 +235,32 @@ fn "wado-compiler/tests/fixtures/infer_method_param_return_only_collision.wado/_
     });
     if @unlikely(__cond == 0) {
         cold_path;
-        "core:rt/panic"(__local_4 = "core:prelude/string.wado/String::with_capacity"(121); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_return_only_method_param_resolves_per_call_site__err_arm____e_"), used: 71 }); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push"(__local_4, 97); "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/infer_method_param_return_only_collision.wado"), used: 74 }); "core:prelude/string.wado/String::push"(__local_4, 58); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 59 }, __local_5); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_4 = "core:prelude/string.wado/String::with_capacity"(121); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_return_only_method_param_resolves_per_call_site__err_arm____e_"), used: 71 }); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push"(__local_4, 97); "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("infer_method_param_return_only_collision.wado"), used: 45 }); "core:prelude/string.wado/String::push"(__local_4, 58); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 59 }, __local_5); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: r matches { Ok(Err(s)) && s == \"\" }
 "), used: 48 }); __local_4);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/infer_method_param_return_only_collision.wado/__cm_export____test_0_return_only_method_param_resolves_per_call_site__ok_arm____t_"() {
+fn "infer_method_param_return_only_collision.wado/__cm_export____test_0_return_only_method_param_resolves_per_call_site__ok_arm____t_"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:infer_method_param_return_only_collision.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:infer_method_param_return_only_collision.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/infer_method_param_return_only_collision.wado/__test_0_return_only_method_param_resolves_per_call_site__ok_arm____t_"();
+    "infer_method_param_return_only_collision.wado/__test_0_return_only_method_param_resolves_per_call_site__ok_arm____t_"();
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/infer_method_param_return_only_collision.wado/__cm_export____test_1_return_only_method_param_resolves_per_call_site__err_arm____e_"() {
+fn "infer_method_param_return_only_collision.wado/__cm_export____test_1_return_only_method_param_resolves_per_call_site__err_arm____e_"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:infer_method_param_return_only_collision.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:infer_method_param_return_only_collision.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/infer_method_param_return_only_collision.wado/__test_1_return_only_method_param_resolves_per_call_site__err_arm____e_"();
+    "infer_method_param_return_only_collision.wado/__test_1_return_only_method_param_resolves_per_call_site__err_arm____e_"();
     "wasi/task-return"(0);
 }
 
@@ -599,7 +609,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "wado-compiler/tests/fixtures/infer_method_param_return_only_collision.wado/Result<i32,core:prelude/string.wado/String>^Decoder::decode"(va) {
+fn "infer_method_param_return_only_collision.wado/Result<i32,core:prelude/string.wado/String>^Decoder::decode"(va) {
     let __qm_v_1: i32;
     let __qm_e_2: i32;
     let t: i32;
@@ -644,5 +654,5 @@ fn "wado-compiler/tests/fixtures/infer_method_param_return_only_collision.wado/R
     }
 }
 
-export fn "wado-compiler/tests/fixtures/infer_method_param_return_only_collision.wado/__cm_export____test_0_return_only_method_param_resolves_per_call_site__ok_arm____t_" as "__test_0_return_only_method_param_resolves_per_call_site__ok_arm____t_"
-export fn "wado-compiler/tests/fixtures/infer_method_param_return_only_collision.wado/__cm_export____test_1_return_only_method_param_resolves_per_call_site__err_arm____e_" as "__test_1_return_only_method_param_resolves_per_call_site__err_arm____e_"
+export fn "infer_method_param_return_only_collision.wado/__cm_export____test_0_return_only_method_param_resolves_per_call_site__ok_arm____t_" as "__test_0_return_only_method_param_resolves_per_call_site__ok_arm____t_"
+export fn "infer_method_param_return_only_collision.wado/__cm_export____test_1_return_only_method_param_resolves_per_call_site__err_arm____e_" as "__test_1_return_only_method_param_resolves_per_call_site__err_arm____e_"

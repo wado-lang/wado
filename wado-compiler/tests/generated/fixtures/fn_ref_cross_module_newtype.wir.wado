@@ -6,7 +6,7 @@ type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(0)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(1)
 
-type "functype//wado-compiler/tests/fixtures/fn_ref_cross_module_newtype.wado/__cm_export____test_0_imported_fn_ref_preserves_newtype_params_in_its_signature" = fn();  // TypeId(2)
+type "functype//fn_ref_cross_module_newtype.wado/__cm_export____test_0_imported_fn_ref_preserves_newtype_params_in_its_signature" = fn();  // TypeId(2)
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(3)
 
@@ -14,14 +14,14 @@ import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import memory (1) from "mem/memory";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:fn_ref_cross_module_newtype.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/fn_ref_cross_module_newtype.wado/__cm_export____test_0_imported_fn_ref_preserves_newtype_params_in_its_signature"() {
+fn "fn_ref_cross_module_newtype.wado/__cm_export____test_0_imported_fn_ref_preserves_newtype_params_in_its_signature"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:fn_ref_cross_module_newtype.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:fn_ref_cross_module_newtype.wado::__modules_initialized = 1;
     };
     "wasi/task-return"(0);
 }
@@ -29,4 +29,4 @@ fn "wado-compiler/tests/fixtures/fn_ref_cross_module_newtype.wado/__cm_export___
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-export fn "wado-compiler/tests/fixtures/fn_ref_cross_module_newtype.wado/__cm_export____test_0_imported_fn_ref_preserves_newtype_params_in_its_signature" as "__test_0_imported_fn_ref_preserves_newtype_params_in_its_signature"
+export fn "fn_ref_cross_module_newtype.wado/__cm_export____test_0_imported_fn_ref_preserves_newtype_params_in_its_signature" as "__test_0_imported_fn_ref_preserves_newtype_params_in_its_signature"

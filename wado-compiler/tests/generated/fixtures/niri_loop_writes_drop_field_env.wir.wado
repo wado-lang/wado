@@ -38,15 +38,15 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//wado-compiler/tests/fixtures/niri_loop_writes_drop_field_env.wado/check_mut_borrowed" = fn() -> i32;  // TypeId(12)
+type "functype//niri_loop_writes_drop_field_env.wado/check_mut_borrowed" = fn() -> i32;  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/niri_loop_writes_drop_field_env.wado/check_written_fields" = fn() -> i32;  // TypeId(13)
+type "functype//niri_loop_writes_drop_field_env.wado/check_written_fields" = fn() -> i32;  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/niri_loop_writes_drop_field_env.wado/run" = fn();  // TypeId(14)
+type "functype//niri_loop_writes_drop_field_env.wado/run" = fn();  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/niri_loop_writes_drop_field_env.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(15)
+type "functype//niri_loop_writes_drop_field_env.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/niri_loop_writes_drop_field_env.wado/__cm_export__run" = fn();  // TypeId(16)
+type "functype//niri_loop_writes_drop_field_env.wado/__cm_export__run" = fn();  // TypeId(16)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(17)
 
@@ -101,9 +101,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:niri_loop_writes_drop_field_env.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/niri_loop_writes_drop_field_env.wado/check_mut_borrowed"() {
+fn "niri_loop_writes_drop_field_env.wado/check_mut_borrowed"() {
     let i: i32;
     let __sroa_c_size: i32;
     __sroa_c_size = 16;
@@ -122,7 +122,7 @@ fn "wado-compiler/tests/fixtures/niri_loop_writes_drop_field_env.wado/check_mut_
     return __sroa_c_size;
 }
 
-fn "wado-compiler/tests/fixtures/niri_loop_writes_drop_field_env.wado/check_written_fields"() {
+fn "niri_loop_writes_drop_field_env.wado/check_written_fields"() {
     let i: i32;
     let __sroa_c_size: i32;
     __sroa_c_size = 16;
@@ -141,7 +141,7 @@ fn "wado-compiler/tests/fixtures/niri_loop_writes_drop_field_env.wado/check_writ
     return __sroa_c_size;
 }
 
-fn "wado-compiler/tests/fixtures/niri_loop_writes_drop_field_env.wado/run"() with Stdout {
+fn "niri_loop_writes_drop_field_env.wado/run"() with Stdout {
     let a: i32;
     let b: i32;
     let __local_2: ref "core:prelude/string.wado//String";
@@ -149,28 +149,28 @@ fn "wado-compiler/tests/fixtures/niri_loop_writes_drop_field_env.wado/run"() wit
     let f_7: ref "core:prelude/format.wado//Formatter";
     let f_12: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:niri_loop_writes_drop_field_env.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:niri_loop_writes_drop_field_env.wado::__modules_initialized = 1;
     };
-    a = "wado-compiler/tests/fixtures/niri_loop_writes_drop_field_env.wado/check_mut_borrowed"();
-    b = "wado-compiler/tests/fixtures/niri_loop_writes_drop_field_env.wado/check_written_fields"();
+    a = "niri_loop_writes_drop_field_env.wado/check_mut_borrowed"();
+    b = "niri_loop_writes_drop_field_env.wado/check_written_fields"();
     "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; f_7 = __local_3; "core:prelude/primitive.wado/i32::fmt_decimal"(a, f_7); "core:prelude/string.wado/String::push"(__local_2, 44); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; f_12 = __local_3; "core:prelude/primitive.wado/i32::fmt_decimal"(b, f_12); __local_2);
 }
 
-fn "wado-compiler/tests/fixtures/niri_loop_writes_drop_field_env.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "niri_loop_writes_drop_field_env.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/niri_loop_writes_drop_field_env.wado/__cm_export__run"() {
+fn "niri_loop_writes_drop_field_env.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:niri_loop_writes_drop_field_env.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:niri_loop_writes_drop_field_env.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/niri_loop_writes_drop_field_env.wado/run"();
+    "niri_loop_writes_drop_field_env.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -196,7 +196,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/niri_loop_writes_drop_field_env.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "niri_loop_writes_drop_field_env.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -486,4 +486,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/niri_loop_writes_drop_field_env.wado/__cm_export__run" as "run"
+export fn "niri_loop_writes_drop_field_env.wado/__cm_export__run" as "run"

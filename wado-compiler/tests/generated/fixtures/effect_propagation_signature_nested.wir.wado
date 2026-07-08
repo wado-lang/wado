@@ -25,13 +25,13 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//wado-compiler/tests/fixtures/effect_propagation_signature_nested.wado/unwrap" = fn(i32);  // TypeId(10)
+type "functype//effect_propagation_signature_nested.wado/unwrap" = fn(i32);  // TypeId(10)
 
-type "functype//wado-compiler/tests/fixtures/effect_propagation_signature_nested.wado/run" = fn();  // TypeId(11)
+type "functype//effect_propagation_signature_nested.wado/run" = fn();  // TypeId(11)
 
-type "functype//wado-compiler/tests/fixtures/effect_propagation_signature_nested.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(12)
+type "functype//effect_propagation_signature_nested.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/effect_propagation_signature_nested.wado/__cm_export__run" = fn();  // TypeId(13)
+type "functype//effect_propagation_signature_nested.wado/__cm_export__run" = fn();  // TypeId(13)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(14)
 
@@ -71,9 +71,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:effect_propagation_signature_nested.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/effect_propagation_signature_nested.wado/unwrap"(h) {
+fn "effect_propagation_signature_nested.wado/unwrap"(h) {
     let packed: i64;
     let rx_5: i32;
     let tx_6: i32;
@@ -84,35 +84,35 @@ fn "wado-compiler/tests/fixtures/effect_propagation_signature_nested.wado/unwrap
     "wasi/stream-drop-readable"(h);
 }
 
-fn "wado-compiler/tests/fixtures/effect_propagation_signature_nested.wado/run"() with Stdout {
+fn "effect_propagation_signature_nested.wado/run"() with Stdout {
     let packed: i64;
     let rx_4: i32;
     let tx_5: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:effect_propagation_signature_nested.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:effect_propagation_signature_nested.wado::__modules_initialized = 1;
     };
     rx_4 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_5 = builtin::i32_wrap_i64(packed >> 32_i64);
     "wasi/stream-drop-writable"(tx_5);
-    "wado-compiler/tests/fixtures/effect_propagation_signature_nested.wado/unwrap"(rx_4);
+    "effect_propagation_signature_nested.wado/unwrap"(rx_4);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
 }
 
-fn "wado-compiler/tests/fixtures/effect_propagation_signature_nested.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "effect_propagation_signature_nested.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/effect_propagation_signature_nested.wado/__cm_export__run"() {
+fn "effect_propagation_signature_nested.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:effect_propagation_signature_nested.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:effect_propagation_signature_nested.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/effect_propagation_signature_nested.wado/run"();
+    "effect_propagation_signature_nested.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -138,7 +138,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/effect_propagation_signature_nested.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "effect_propagation_signature_nested.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -212,4 +212,4 @@ fn "core:rt/cm_stream_write_raw_u8"(handle, data, len) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-export fn "wado-compiler/tests/fixtures/effect_propagation_signature_nested.wado/__cm_export__run" as "run"
+export fn "effect_propagation_signature_nested.wado/__cm_export__run" as "run"

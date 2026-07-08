@@ -1375,7 +1375,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
             // Set file context so diagnostics emitted during resolution
             // carry the correct module filename (not the entry module).
-            logger.set_file(module_source.diagnostic_filename());
+            logger.set_file(module_source.source_path());
 
             // Phase 1 — `annotate_bodies`: run the body walk to populate
             // `ModuleSemantics`. The combined walk's own TIR is discarded;
@@ -1442,7 +1442,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     );
                 } else if reify_eligible.contains(module_source) {
                     let module = modules.get(module_source).expect("module should exist");
-                    logger.set_file(module_source.diagnostic_filename());
+                    logger.set_file(module_source.source_path());
                     let sem_ref = state
                         .module_semantics
                         .get(module_source)
@@ -1766,7 +1766,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             if stdlib_set.contains(module_source) {
                 continue;
             }
-            logger.set_file(module_source.diagnostic_filename());
+            logger.set_file(module_source.source_path());
 
             // Build per-module known names: global names + import aliases + trait names
             let mut module_known_names = known_type_names.clone();

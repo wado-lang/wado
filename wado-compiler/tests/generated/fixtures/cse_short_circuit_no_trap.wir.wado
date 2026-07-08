@@ -38,15 +38,15 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//wado-compiler/tests/fixtures/cse_short_circuit_no_trap.wado/probe" = fn(i32, i32) -> i32;  // TypeId(12)
+type "functype//cse_short_circuit_no_trap.wado/probe" = fn(i32, i32) -> i32;  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/cse_short_circuit_no_trap.wado/opaque" = fn(i32) -> i32;  // TypeId(13)
+type "functype//cse_short_circuit_no_trap.wado/opaque" = fn(i32) -> i32;  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/cse_short_circuit_no_trap.wado/run" = fn();  // TypeId(14)
+type "functype//cse_short_circuit_no_trap.wado/run" = fn();  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/cse_short_circuit_no_trap.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(15)
+type "functype//cse_short_circuit_no_trap.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/cse_short_circuit_no_trap.wado/__cm_export__run" = fn();  // TypeId(16)
+type "functype//cse_short_circuit_no_trap.wado/__cm_export__run" = fn();  // TypeId(16)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(17)
 
@@ -101,9 +101,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:cse_short_circuit_no_trap.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/cse_short_circuit_no_trap.wado/probe"(n, limit) {
+fn "cse_short_circuit_no_trap.wado/probe"(n, limit) {
     let i: i32;
     let sum: i32;
     i = 0;
@@ -123,38 +123,38 @@ fn "wado-compiler/tests/fixtures/cse_short_circuit_no_trap.wado/probe"(n, limit)
     return sum;
 }
 
-fn "wado-compiler/tests/fixtures/cse_short_circuit_no_trap.wado/opaque"(v) {
+fn "cse_short_circuit_no_trap.wado/opaque"(v) {
     if v <= 0 {
         return 0;
     }
-    return "wado-compiler/tests/fixtures/cse_short_circuit_no_trap.wado/opaque"(v - 1);
+    return "cse_short_circuit_no_trap.wado/opaque"(v - 1);
 }
 
-fn "wado-compiler/tests/fixtures/cse_short_circuit_no_trap.wado/run"() with Stdout {
+fn "cse_short_circuit_no_trap.wado/run"() with Stdout {
     let __local_0: ref "core:prelude/string.wado//String";
     let __local_1: ref "core:prelude/format.wado//Formatter";
     let self_6: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:cse_short_circuit_no_trap.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:cse_short_circuit_no_trap.wado::__modules_initialized = 1;
     };
-    "core:cli/println"(__local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_0 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_6("wado-compiler/tests/fixtures/cse_short_circuit_no_trap.wado/probe"("wado-compiler/tests/fixtures/cse_short_circuit_no_trap.wado/opaque"(5), 1)), __local_1); __local_0);
+    "core:cli/println"(__local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_0 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_6("cse_short_circuit_no_trap.wado/probe"("cse_short_circuit_no_trap.wado/opaque"(5), 1)), __local_1); __local_0);
 }
 
-fn "wado-compiler/tests/fixtures/cse_short_circuit_no_trap.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "cse_short_circuit_no_trap.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/cse_short_circuit_no_trap.wado/__cm_export__run"() {
+fn "cse_short_circuit_no_trap.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:cse_short_circuit_no_trap.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:cse_short_circuit_no_trap.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/cse_short_circuit_no_trap.wado/run"();
+    "cse_short_circuit_no_trap.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -180,7 +180,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/cse_short_circuit_no_trap.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "cse_short_circuit_no_trap.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -470,4 +470,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/cse_short_circuit_no_trap.wado/__cm_export__run" as "run"
+export fn "cse_short_circuit_no_trap.wado/__cm_export__run" as "run"

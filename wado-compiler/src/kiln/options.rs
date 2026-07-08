@@ -142,7 +142,7 @@ pub fn extract_options_descriptor(
             code: Code::GeneratorOptionsUnsupported,
             message: format!(
                 "kiln: generator module {:?} has no TIR available",
-                module.diagnostic_filename()
+                module.source_path()
             ),
             span: None,
         });
@@ -155,7 +155,7 @@ pub fn extract_options_descriptor(
             code: Code::GeneratorOptionsUnsupported,
             message: format!(
                 "kiln: generator {:?} does not declare `generate` function",
-                module.diagnostic_filename()
+                module.source_path()
             ),
             span: None,
         });
@@ -334,7 +334,7 @@ fn nested_struct_descriptor(
             field_name,
             &format!(
                 "nested struct `{struct_name}` declaring module {:?} is not available",
-                struct_module.diagnostic_filename()
+                struct_module.source_path()
             ),
         );
         return None;
@@ -389,7 +389,7 @@ fn enum_variants(
             field_name,
             &format!(
                 "enum `{enum_name}` declaring module {:?} is not available",
-                enum_module.diagnostic_filename()
+                enum_module.source_path()
             ),
         );
         return None;
@@ -508,7 +508,7 @@ fn evaluate_literal(
 }
 
 fn span_of(span: &Span, module: &ModuleSource) -> DiagnosticSpan {
-    DiagnosticSpan::from_span(span, Some(&module.diagnostic_filename()))
+    DiagnosticSpan::from_span(span, Some(&module.source_path()))
 }
 
 fn push_unsupported(
@@ -522,7 +522,7 @@ fn push_unsupported(
         code: Code::GeneratorOptionsUnsupported,
         message: format!(
             "kiln: Options.{field_name} in {:?}: {msg}",
-            module.diagnostic_filename()
+            module.source_path()
         ),
         span: None,
     });

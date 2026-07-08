@@ -30,7 +30,7 @@ struct core:json//JsonStructSerializer {  // TypeId(4)
     mut count: i32,
 }
 
-struct wado-compiler/tests/fixtures/serde_bound_driven_absence.wado//UsedForSerialize {  // TypeId(5)
+struct serde_bound_driven_absence.wado//UsedForSerialize {  // TypeId(5)
     mut x: i32,
 }
 
@@ -55,7 +55,7 @@ type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(10)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(11)
 
-type "functype//wado-compiler/tests/fixtures/serde_bound_driven_absence.wado/__cm_export__run" = fn();  // TypeId(12)
+type "functype//serde_bound_driven_absence.wado/__cm_export__run" = fn();  // TypeId(12)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(13)
 
@@ -91,7 +91,7 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(29)
 
-type "functype//wado-compiler/tests/fixtures/serde_bound_driven_absence.wado/UsedForSerialize^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "wado-compiler/tests/fixtures/serde_bound_driven_absence.wado//UsedForSerialize", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(30)
+type "functype//serde_bound_driven_absence.wado/UsedForSerialize^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "serde_bound_driven_absence.wado//UsedForSerialize", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(30)
 
 type "functype//core:json/JsonStructSerializer^SerializeStruct::field<i32>" = fn(ref "core:json//JsonStructSerializer", ref "core:prelude/string.wado//String", i32) -> ref null "core:serde//SerializeError";  // TypeId(31)
 
@@ -99,36 +99,36 @@ import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import memory (1) from "mem/memory";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:serde_bound_driven_absence.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/serde_bound_driven_absence.wado/__cm_export__run"() {
-    let a: ref "wado-compiler/tests/fixtures/serde_bound_driven_absence.wado//UsedForSerialize";
+fn "serde_bound_driven_absence.wado/__cm_export__run"() {
+    let a: ref "serde_bound_driven_absence.wado//UsedForSerialize";
     let buf: ref "core:prelude/string.wado//String";
     let __local_5: ref null "core:serde//SerializeError";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:serde_bound_driven_absence.wado::__modules_initialized);
         cold_path;
         "core:base64/__initialize_module"();
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:serde_bound_driven_absence.wado::__modules_initialized = 1;
     };
     __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_2 @likely(global:serde_bound_driven_absence.wado::__modules_initialized);
         cold_path;
         "core:base64/__initialize_module"();
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:serde_bound_driven_absence.wado::__modules_initialized = 1;
     };
-    a = struct.new "wado-compiler/tests/fixtures/serde_bound_driven_absence.wado//UsedForSerialize" { x: 1 };
-    __inline_core_json_to_string_wado_compiler_tests_fixtures_serde_bound_driven_absence_wado_UsedForSerialize__0: block {
+    a = struct.new "serde_bound_driven_absence.wado//UsedForSerialize" { x: 1 };
+    __inline_core_json_to_string_serde_bound_driven_absence_wado_UsedForSerialize__0: block {
         buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
-        __local_5 = "wado-compiler/tests/fixtures/serde_bound_driven_absence.wado/UsedForSerialize^Serialize::serialize<core:json/JsonSerializer>"(a, buf);
+        __local_5 = "serde_bound_driven_absence.wado/UsedForSerialize^Serialize::serialize<core:json/JsonSerializer>"(a, buf);
         if @likely(ref.is_null(__local_5)) {
         } else {
             drop(ref.as_non_null(__local_5));
-            break __inline_core_json_to_string_wado_compiler_tests_fixtures_serde_bound_driven_absence_wado_UsedForSerialize__0: cold_path;
+            break __inline_core_json_to_string_serde_bound_driven_absence_wado_UsedForSerialize__0: cold_path;
         }
-        break __inline_core_json_to_string_wado_compiler_tests_fixtures_serde_bound_driven_absence_wado_UsedForSerialize__0;
+        break __inline_core_json_to_string_serde_bound_driven_absence_wado_UsedForSerialize__0;
     };
     "wasi/task-return"(0);
 }
@@ -512,7 +512,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "wado-compiler/tests/fixtures/serde_bound_driven_absence.wado/UsedForSerialize^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
+fn "serde_bound_driven_absence.wado/UsedForSerialize^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
     let __result: ref "core:prelude/types.wado//Result<core:json/JsonStructSerializer,core:serde/SerializeError>";
     let __local_3: ref "core:json//JsonStructSerializer";
     "core:prelude/string.wado/String::push"(s, 123);
@@ -541,4 +541,4 @@ fn "core:json/JsonStructSerializer^SerializeStruct::field<i32>"(self, name, valu
     return r;
 }
 
-export fn "wado-compiler/tests/fixtures/serde_bound_driven_absence.wado/__cm_export__run" as "run"
+export fn "serde_bound_driven_absence.wado/__cm_export__run" as "run"

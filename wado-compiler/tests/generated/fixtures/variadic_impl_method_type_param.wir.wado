@@ -49,11 +49,11 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/variadic_impl_method_type_param.wado/run" = fn();  // TypeId(15)
+type "functype//variadic_impl_method_type_param.wado/run" = fn();  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/variadic_impl_method_type_param.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(16)
+type "functype//variadic_impl_method_type_param.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/variadic_impl_method_type_param.wado/__cm_export__run" = fn();  // TypeId(17)
+type "functype//variadic_impl_method_type_param.wado/__cm_export__run" = fn();  // TypeId(17)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(18)
 
@@ -103,7 +103,7 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(41)
 
-type "functype//wado-compiler/tests/fixtures/variadic_impl_method_type_param.wado/[]<i32,bool>^Countable::count" = fn(ref "tuple//[i32, bool]") -> i32;  // TypeId(42)
+type "functype//variadic_impl_method_type_param.wado/[]<i32,bool>^Countable::count" = fn(ref "tuple//[i32, bool]") -> i32;  // TypeId(42)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(43)
 
@@ -125,23 +125,23 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
-global global:__const_obj_0: ref null "tuple//[i32, bool]" = struct.new "tuple//[i32, bool]" { 0: 42, 1: 1 };
+global mut global:variadic_impl_method_type_param.wado::__modules_initialized: bool = 0;
+global global:variadic_impl_method_type_param.wado::__const_obj_0: ref null "tuple//[i32, bool]" = struct.new "tuple//[i32, bool]" { 0: 42, 1: 1 };
 
-fn "wado-compiler/tests/fixtures/variadic_impl_method_type_param.wado/run"() with Stdout {
+fn "variadic_impl_method_type_param.wado/run"() with Stdout {
     let c: i32;
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:variadic_impl_method_type_param.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:variadic_impl_method_type_param.wado::__modules_initialized = 1;
     };
-    c = "wado-compiler/tests/fixtures/variadic_impl_method_type_param.wado/[]<i32,bool>^Countable::count"(global:__const_obj_0);
+    c = "variadic_impl_method_type_param.wado/[]<i32,bool>^Countable::count"(global:variadic_impl_method_type_param.wado::__const_obj_0);
     if @unlikely(c != 3) {
         cold_path;
-        "core:rt/panic"(__local_4 = "core:prelude/string.wado/String::with_capacity"(112); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_4, 114); "core:prelude/string.wado/String::push"(__local_4, 117); "core:prelude/string.wado/String::push"(__local_4, 110); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push"(__local_4, 97); "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variadic_impl_method_type_param.wado"), used: 65 }); "core:prelude/string.wado/String::push"(__local_4, 58); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 30 }, __local_5); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_4 = "core:prelude/string.wado/String::with_capacity"(112); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_4, 114); "core:prelude/string.wado/String::push"(__local_4, 117); "core:prelude/string.wado/String::push"(__local_4, 110); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push"(__local_4, 97); "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("variadic_impl_method_type_param.wado"), used: 36 }); "core:prelude/string.wado/String::push"(__local_4, 58); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 30 }, __local_5); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: c == 3
 "), used: 19 }); "core:prelude/string.wado/String::push"(__local_4, 99); "core:prelude/string.wado/String::push"(__local_4, 58); "core:prelude/string.wado/String::push"(__local_4, 32); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: c }, __local_5); "core:prelude/string.wado/String::push"(__local_4, 10); __local_4);
         unreachable;
@@ -149,18 +149,18 @@ condition: c == 3
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
 }
 
-fn "wado-compiler/tests/fixtures/variadic_impl_method_type_param.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "variadic_impl_method_type_param.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/variadic_impl_method_type_param.wado/__cm_export__run"() {
+fn "variadic_impl_method_type_param.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:variadic_impl_method_type_param.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:variadic_impl_method_type_param.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/variadic_impl_method_type_param.wado/run"();
+    "variadic_impl_method_type_param.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -186,7 +186,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/variadic_impl_method_type_param.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "variadic_impl_method_type_param.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -524,9 +524,15 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
+<<<<<<< HEAD
 fn "wado-compiler/tests/fixtures/variadic_impl_method_type_param.wado/[]<i32,bool>^Countable::count"(self) {
     drop(struct.new "tuple//[i32, bool]" { 0: self.0, 1: self.1 });
+||||||| 88506a642
+fn "wado-compiler/tests/fixtures/variadic_impl_method_type_param.wado/[]<i32,bool>^Countable::count"(self) {
+=======
+fn "variadic_impl_method_type_param.wado/[]<i32,bool>^Countable::count"(self) {
+>>>>>>> origin/main
     return 3;
 }
 
-export fn "wado-compiler/tests/fixtures/variadic_impl_method_type_param.wado/__cm_export__run" as "run"
+export fn "variadic_impl_method_type_param.wado/__cm_export__run" as "run"

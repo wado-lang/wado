@@ -24,9 +24,9 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct wado-compiler/tests/fixtures/global_closure_field.wado//__Closure_3 {  // TypeId(4)}
+struct global_closure_field.wado//__Closure_3 {  // TypeId(4)}
 
-struct wado-compiler/tests/fixtures/global_closure_field.wado//__Closure_2 {  // TypeId(5)}
+struct global_closure_field.wado//__Closure_2 {  // TypeId(5)}
 
 enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(6)
 
@@ -53,11 +53,11 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(15)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/global_closure_field.wado/__cm_export____test_0_global_closure_runs_after_lazy_init" = fn();  // TypeId(17)
+type "functype//global_closure_field.wado/__cm_export____test_0_global_closure_runs_after_lazy_init" = fn();  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/global_closure_field.wado/__cm_export____test_1_global_closure_can_be_reassigned" = fn();  // TypeId(18)
+type "functype//global_closure_field.wado/__cm_export____test_1_global_closure_can_be_reassigned" = fn();  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/global_closure_field.wado/__initialize_module" = fn();  // TypeId(19)
+type "functype//global_closure_field.wado/__initialize_module" = fn();  // TypeId(19)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(20)
 
@@ -103,9 +103,9 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(41)
 
-type "functype//wado-compiler/tests/fixtures/global_closure_field.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/global_closure_field.wado//__Closure_2", i32) -> i32;  // TypeId(42)
+type "functype//global_closure_field.wado/__Closure_2::__call" = fn(ref "global_closure_field.wado//__Closure_2", i32) -> i32;  // TypeId(42)
 
-type "functype//wado-compiler/tests/fixtures/global_closure_field.wado/__Closure_3::__call" = fn(ref "wado-compiler/tests/fixtures/global_closure_field.wado//__Closure_3", i32) -> i32;  // TypeId(43)
+type "functype//global_closure_field.wado/__Closure_3::__call" = fn(ref "global_closure_field.wado//__Closure_3", i32) -> i32;  // TypeId(43)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(44)
 
@@ -126,22 +126,22 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:CB: ref null struct = ref.null none;
-global mut global:__modules_initialized: bool = 0;
+global mut global:global_closure_field.wado::CB: ref null struct = ref.null none;
+global mut global:global_closure_field.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/global_closure_field.wado/__cm_export____test_0_global_closure_runs_after_lazy_init"() {
+fn "global_closure_field.wado/__cm_export____test_0_global_closure_runs_after_lazy_init"() {
     let __v0: i32;
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let f: ref struct;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:global_closure_field.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        "wado-compiler/tests/fixtures/global_closure_field.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        "global_closure_field.wado/__initialize_module"();
+        global:global_closure_field.wado::__modules_initialized = 1;
     };
-    f = global:CB;
+    f = global:global_closure_field.wado::CB;
     __v0 = block -> i32 {
         let __indirect_call_0: ref "canonical//CanonicalClosure_0";
         __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(f);
@@ -149,7 +149,7 @@ fn "wado-compiler/tests/fixtures/global_closure_field.wado/__cm_export____test_0
     };
     if @unlikely(__v0 != 50) {
         cold_path;
-        "core:rt/panic"(__local_2 = "core:prelude/string.wado/String::with_capacity"(135); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_global_closure_runs_after_lazy_init"), used: 44 }); "core:prelude/string.wado/String::push"(__local_2, 32); "core:prelude/string.wado/String::push"(__local_2, 97); "core:prelude/string.wado/String::push"(__local_2, 116); "core:prelude/string.wado/String::push"(__local_2, 32); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/global_closure_field.wado"), used: 54 }); "core:prelude/string.wado/String::push"(__local_2, 58); __local_3 = "core:prelude/format.wado/Formatter::new"(__local_2); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 19 }, __local_3); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_2 = "core:prelude/string.wado/String::with_capacity"(135); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_global_closure_runs_after_lazy_init"), used: 44 }); "core:prelude/string.wado/String::push"(__local_2, 32); "core:prelude/string.wado/String::push"(__local_2, 97); "core:prelude/string.wado/String::push"(__local_2, 116); "core:prelude/string.wado/String::push"(__local_2, 32); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("global_closure_field.wado"), used: 25 }); "core:prelude/string.wado/String::push"(__local_2, 58); __local_3 = "core:prelude/format.wado/Formatter::new"(__local_2); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 19 }, __local_3); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: apply(CB, 5) == 50
 "), used: 31 }); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apply(CB, 5): "), used: 14 }); __local_3 = "core:prelude/format.wado/Formatter::new"(__local_2); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0 }, __local_3); "core:prelude/string.wado/String::push"(__local_2, 10); __local_2);
         unreachable;
@@ -157,20 +157,20 @@ condition: apply(CB, 5) == 50
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/global_closure_field.wado/__cm_export____test_1_global_closure_can_be_reassigned"() {
+fn "global_closure_field.wado/__cm_export____test_1_global_closure_can_be_reassigned"() {
     let __v0: i32;
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let f: ref struct;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:global_closure_field.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        "wado-compiler/tests/fixtures/global_closure_field.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        "global_closure_field.wado/__initialize_module"();
+        global:global_closure_field.wado::__modules_initialized = 1;
     };
-    global:CB = struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/global_closure_field.wado//__Closure_2" {  }, func: ref.func "closure/wado-compiler/tests/fixtures/global_closure_field.wado/__closure_wrapper_0" };
-    f = global:CB;
+    global:global_closure_field.wado::CB = struct.new "canonical//CanonicalClosure_0" { env: struct.new "global_closure_field.wado//__Closure_2" {  }, func: ref.func "closure/global_closure_field.wado/__closure_wrapper_0" };
+    f = global:global_closure_field.wado::CB;
     __v0 = block -> i32 {
         let __indirect_call_0: ref "canonical//CanonicalClosure_0";
         __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(f);
@@ -178,7 +178,7 @@ fn "wado-compiler/tests/fixtures/global_closure_field.wado/__cm_export____test_1
     };
     if @unlikely(__v0 != 105) {
         cold_path;
-        "core:rt/panic"(__local_2 = "core:prelude/string.wado/String::with_capacity"(136); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_global_closure_can_be_reassigned"), used: 41 }); "core:prelude/string.wado/String::push"(__local_2, 32); "core:prelude/string.wado/String::push"(__local_2, 97); "core:prelude/string.wado/String::push"(__local_2, 116); "core:prelude/string.wado/String::push"(__local_2, 32); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/global_closure_field.wado"), used: 54 }); "core:prelude/string.wado/String::push"(__local_2, 58); __local_3 = "core:prelude/format.wado/Formatter::new"(__local_2); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 24 }, __local_3); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_2 = "core:prelude/string.wado/String::with_capacity"(136); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_global_closure_can_be_reassigned"), used: 41 }); "core:prelude/string.wado/String::push"(__local_2, 32); "core:prelude/string.wado/String::push"(__local_2, 97); "core:prelude/string.wado/String::push"(__local_2, 116); "core:prelude/string.wado/String::push"(__local_2, 32); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("global_closure_field.wado"), used: 25 }); "core:prelude/string.wado/String::push"(__local_2, 58); __local_3 = "core:prelude/format.wado/Formatter::new"(__local_2); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 24 }, __local_3); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: apply(CB, 5) == 105
 "), used: 32 }); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apply(CB, 5): "), used: 14 }); __local_3 = "core:prelude/format.wado/Formatter::new"(__local_2); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0 }, __local_3); "core:prelude/string.wado/String::push"(__local_2, 10); __local_2);
         unreachable;
@@ -186,8 +186,8 @@ condition: apply(CB, 5) == 105
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/global_closure_field.wado/__initialize_module"() {
-    global:CB = struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/global_closure_field.wado//__Closure_3" {  }, func: ref.func "closure/wado-compiler/tests/fixtures/global_closure_field.wado/__closure_wrapper_1" };
+fn "global_closure_field.wado/__initialize_module"() {
+    global:global_closure_field.wado::CB = struct.new "canonical//CanonicalClosure_0" { env: struct.new "global_closure_field.wado//__Closure_3" {  }, func: ref.func "closure/global_closure_field.wado/__closure_wrapper_1" };
 }
 
 fn "core:prelude/primitive.wado/count_digits_i64"(val) {
@@ -523,25 +523,25 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "wado-compiler/tests/fixtures/global_closure_field.wado/__Closure_2::__call"(self, y) {
+fn "global_closure_field.wado/__Closure_2::__call"(self, y) {
     return y + 100;
 }
 
-fn "wado-compiler/tests/fixtures/global_closure_field.wado/__Closure_3::__call"(self, x) {
+fn "global_closure_field.wado/__Closure_3::__call"(self, x) {
     return x * 10;
 }
 
-fn "closure/wado-compiler/tests/fixtures/global_closure_field.wado/__closure_wrapper_0"(__env, __p0) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/global_closure_field.wado//__Closure_2";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/global_closure_field.wado//__Closure_2"(__env);
-    return "wado-compiler/tests/fixtures/global_closure_field.wado/__Closure_2::__call"(__typed_env, __p0);
+fn "closure/global_closure_field.wado/__closure_wrapper_0"(__env, __p0) {
+    let __typed_env: ref "global_closure_field.wado//__Closure_2";
+    __typed_env = ref.cast "global_closure_field.wado//__Closure_2"(__env);
+    return "global_closure_field.wado/__Closure_2::__call"(__typed_env, __p0);
 }
 
-fn "closure/wado-compiler/tests/fixtures/global_closure_field.wado/__closure_wrapper_1"(__env, __p0) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/global_closure_field.wado//__Closure_3";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/global_closure_field.wado//__Closure_3"(__env);
-    return "wado-compiler/tests/fixtures/global_closure_field.wado/__Closure_3::__call"(__typed_env, __p0);
+fn "closure/global_closure_field.wado/__closure_wrapper_1"(__env, __p0) {
+    let __typed_env: ref "global_closure_field.wado//__Closure_3";
+    __typed_env = ref.cast "global_closure_field.wado//__Closure_3"(__env);
+    return "global_closure_field.wado/__Closure_3::__call"(__typed_env, __p0);
 }
 
-export fn "wado-compiler/tests/fixtures/global_closure_field.wado/__cm_export____test_0_global_closure_runs_after_lazy_init" as "__test_0_global_closure_runs_after_lazy_init"
-export fn "wado-compiler/tests/fixtures/global_closure_field.wado/__cm_export____test_1_global_closure_can_be_reassigned" as "__test_1_global_closure_can_be_reassigned"
+export fn "global_closure_field.wado/__cm_export____test_0_global_closure_runs_after_lazy_init" as "__test_0_global_closure_runs_after_lazy_init"
+export fn "global_closure_field.wado/__cm_export____test_1_global_closure_can_be_reassigned" as "__test_1_global_closure_can_be_reassigned"

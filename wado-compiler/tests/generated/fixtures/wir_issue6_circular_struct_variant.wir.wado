@@ -24,24 +24,24 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Node {  // TypeId(4)
-    mut left: ref "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Tree",
-    mut right: ref "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Tree",
+struct wir_issue6_circular_struct_variant.wado//Node {  // TypeId(4)
+    mut left: ref "wir_issue6_circular_struct_variant.wado//Tree",
+    mut right: ref "wir_issue6_circular_struct_variant.wado//Tree",
 }
 
-variant wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Tree {  // TypeId(5)
+variant wir_issue6_circular_struct_variant.wado//Tree {  // TypeId(5)
     Leaf(i32),
-    Branch(ref "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Node"),
+    Branch(ref "wir_issue6_circular_struct_variant.wado//Node"),
 }
 
-struct wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Tree::Leaf {  // TypeId(6)
+struct wir_issue6_circular_struct_variant.wado//Tree::Leaf {  // TypeId(6)
     discriminant: i32,
     payload_0: i32,
 }
 
-struct wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Tree::Branch {  // TypeId(7)
+struct wir_issue6_circular_struct_variant.wado//Tree::Branch {  // TypeId(7)
     discriminant: i32,
-    payload_0: ref "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Node",
+    payload_0: ref "wir_issue6_circular_struct_variant.wado//Node",
 }
 
 enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(8)
@@ -64,13 +64,13 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado/sum_tree" = fn(ref "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Tree") -> i32;  // TypeId(18)
+type "functype//wir_issue6_circular_struct_variant.wado/sum_tree" = fn(ref "wir_issue6_circular_struct_variant.wado//Tree") -> i32;  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado/run" = fn();  // TypeId(19)
+type "functype//wir_issue6_circular_struct_variant.wado/run" = fn();  // TypeId(19)
 
-type "functype//wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(20)
+type "functype//wir_issue6_circular_struct_variant.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(20)
 
-type "functype//wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado/__cm_export__run" = fn();  // TypeId(21)
+type "functype//wir_issue6_circular_struct_variant.wado/__cm_export__run" = fn();  // TypeId(21)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(22)
 
@@ -140,43 +140,43 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:wir_issue6_circular_struct_variant.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado/sum_tree"(t) {
+fn "wir_issue6_circular_struct_variant.wado/sum_tree"(t) {
     let v: i32;
-    let n: ref "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Node";
-    return (if ref.test "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Tree::Leaf"(t) -> i32 {
-        local.tee v(ref.cast "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Tree::Leaf"(t).payload_0);
+    let n: ref "wir_issue6_circular_struct_variant.wado//Node";
+    return (if ref.test "wir_issue6_circular_struct_variant.wado//Tree::Leaf"(t) -> i32 {
+        local.tee v(ref.cast "wir_issue6_circular_struct_variant.wado//Tree::Leaf"(t).payload_0);
     } else {
-        n = ref.cast "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Tree::Branch"(t).payload_0;
-        "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado/sum_tree"(n.left) + "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado/sum_tree"(n.right);
+        n = ref.cast "wir_issue6_circular_struct_variant.wado//Tree::Branch"(t).payload_0;
+        "wir_issue6_circular_struct_variant.wado/sum_tree"(n.left) + "wir_issue6_circular_struct_variant.wado/sum_tree"(n.right);
     });
 }
 
-fn "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado/run"() with Stdout {
-    let leaf1: ref "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Tree";
-    let leaf2: ref "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Tree";
-    let leaf3: ref "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Tree";
+fn "wir_issue6_circular_struct_variant.wado/run"() with Stdout {
+    let leaf1: ref "wir_issue6_circular_struct_variant.wado//Tree";
+    let leaf2: ref "wir_issue6_circular_struct_variant.wado//Tree";
+    let leaf3: ref "wir_issue6_circular_struct_variant.wado//Tree";
     let total: i32;
     let __local_7: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/format.wado//Formatter";
     let __local_9: ref "core:prelude/string.wado//String";
     let __local_10: ref "core:prelude/format.wado//Formatter";
-    let __sroa_branch_value: ref "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Tree";
+    let __sroa_branch_value: ref "wir_issue6_circular_struct_variant.wado//Tree";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wir_issue6_circular_struct_variant.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wir_issue6_circular_struct_variant.wado::__modules_initialized = 1;
     };
-    leaf1 = struct.new "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Tree::Leaf" { discriminant: 0, payload_0: 1 };
-    leaf2 = struct.new "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Tree::Leaf" { discriminant: 0, payload_0: 2 };
-    leaf3 = struct.new "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Tree::Leaf" { discriminant: 0, payload_0: 3 };
-    __sroa_branch_value = struct.new "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Tree::Branch" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Node" { left: leaf1, right: struct.new "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Tree::Branch" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Node" { left: leaf2, right: leaf3 } } } };
-    total = "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado/sum_tree"(__sroa_branch_value);
+    leaf1 = struct.new "wir_issue6_circular_struct_variant.wado//Tree::Leaf" { discriminant: 0, payload_0: 1 };
+    leaf2 = struct.new "wir_issue6_circular_struct_variant.wado//Tree::Leaf" { discriminant: 0, payload_0: 2 };
+    leaf3 = struct.new "wir_issue6_circular_struct_variant.wado//Tree::Leaf" { discriminant: 0, payload_0: 3 };
+    __sroa_branch_value = struct.new "wir_issue6_circular_struct_variant.wado//Tree::Branch" { discriminant: 1, payload_0: struct.new "wir_issue6_circular_struct_variant.wado//Node" { left: leaf1, right: struct.new "wir_issue6_circular_struct_variant.wado//Tree::Branch" { discriminant: 1, payload_0: struct.new "wir_issue6_circular_struct_variant.wado//Node" { left: leaf2, right: leaf3 } } } };
+    total = "wir_issue6_circular_struct_variant.wado/sum_tree"(__sroa_branch_value);
     if @unlikely(total != 6) {
         cold_path;
-        "core:rt/panic"(__local_7 = "core:prelude/string.wado/String::with_capacity"(120); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_7, 114); "core:prelude/string.wado/String::push"(__local_7, 117); "core:prelude/string.wado/String::push"(__local_7, 110); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push"(__local_7, 97); "core:prelude/string.wado/String::push"(__local_7, 116); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado"), used: 68 }); "core:prelude/string.wado/String::push"(__local_7, 58); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 36 }, __local_8); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_7 = "core:prelude/string.wado/String::with_capacity"(120); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_7, 114); "core:prelude/string.wado/String::push"(__local_7, 117); "core:prelude/string.wado/String::push"(__local_7, 110); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push"(__local_7, 97); "core:prelude/string.wado/String::push"(__local_7, 116); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wir_issue6_circular_struct_variant.wado"), used: 39 }); "core:prelude/string.wado/String::push"(__local_7, 58); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 36 }, __local_8); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: total == 6
 "), used: 23 }); "core:prelude/string.wado/String::push"(__local_7, 116); "core:prelude/string.wado/String::push"(__local_7, 111); "core:prelude/string.wado/String::push"(__local_7, 116); "core:prelude/string.wado/String::push"(__local_7, 97); "core:prelude/string.wado/String::push"(__local_7, 108); "core:prelude/string.wado/String::push"(__local_7, 58); "core:prelude/string.wado/String::push"(__local_7, 32); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: total }, __local_8); "core:prelude/string.wado/String::push"(__local_7, 10); __local_7);
         unreachable;
@@ -184,18 +184,18 @@ condition: total == 6
     "core:cli/println"(__local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 }; "core:prelude/primitive.wado/i32::fmt_decimal"(total, __local_10); __local_9);
 }
 
-fn "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "wir_issue6_circular_struct_variant.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado/__cm_export__run"() {
+fn "wir_issue6_circular_struct_variant.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wir_issue6_circular_struct_variant.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wir_issue6_circular_struct_variant.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado/run"();
+    "wir_issue6_circular_struct_variant.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -221,7 +221,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "wir_issue6_circular_struct_variant.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -559,4 +559,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado/__cm_export__run" as "run"
+export fn "wir_issue6_circular_struct_variant.wado/__cm_export__run" as "run"

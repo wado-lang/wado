@@ -264,19 +264,19 @@ type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  //
 
 type "functype//wasi/wasi:http/Response::set_status_code" = fn(i32, i32) -> i32;  // TypeId(51)
 
-type "functype//wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/handle" = fn(i32);  // TypeId(52)
+type "functype//http_uninit_string_conditional_trap.wado/handle" = fn(i32);  // TypeId(52)
 
-type "functype//wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Request_get_path_with_query" = fn(i32) -> ref null "core:prelude/string.wado//String";  // TypeId(53)
+type "functype//http_uninit_string_conditional_trap.wado/__cm_binding__Request_get_path_with_query" = fn(i32) -> ref null "core:prelude/string.wado//String";  // TypeId(53)
 
-type "functype//wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(54)
+type "functype//http_uninit_string_conditional_trap.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(54)
 
-type "functype//wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Fields_append" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude//List<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(55)
+type "functype//http_uninit_string_conditional_trap.wado/__cm_binding__Fields_append" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude//List<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(55)
 
-type "functype//wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(56)
+type "functype//http_uninit_string_conditional_trap.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(56)
 
-type "functype//wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Response_set_status_code" = fn(i32, i32) -> ref "core:prelude/types.wado//Result<(),()>";  // TypeId(57)
+type "functype//http_uninit_string_conditional_trap.wado/__cm_binding__Response_set_status_code" = fn(i32, i32) -> ref "core:prelude/types.wado//Result<(),()>";  // TypeId(57)
 
-type "functype//wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_export__handle" = fn(i32);  // TypeId(58)
+type "functype//http_uninit_string_conditional_trap.wado/__cm_export__handle" = fn(i32);  // TypeId(58)
 
 type "functype//wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/$value_copy$T21" = fn(ref "core:prelude//List<u8>") -> ref "core:prelude//List<u8>";  // TypeId(59)
 
@@ -340,9 +340,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-write from "wasi/future-write";
 import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:http_uninit_string_conditional_trap.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/handle"(request) {
+fn "http_uninit_string_conditional_trap.wado/handle"(request) {
     let take_else: bool;
     let body_str: ref "core:prelude/string.wado//String";
     let resp_headers: i32;
@@ -478,12 +478,12 @@ fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/handle
     let rx_169: i32;
     let tx_170: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:http_uninit_string_conditional_trap.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:http_uninit_string_conditional_trap.wado::__modules_initialized = 1;
     };
-    __local_161 = "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Request_get_path_with_query"(request);
+    __local_161 = "http_uninit_string_conditional_trap.wado/__cm_binding__Request_get_path_with_query"(request);
     take_else = (if ref.is_null(__local_161) == 0 -> bool {
         1;
     } else {
@@ -498,9 +498,9 @@ fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/handle
     tx_167 = builtin::i32_wrap_i64(packed_165 >> 32_i64);
     rx_169 = builtin::i32_wrap_i64(local.tee packed_168("wasi/stream-new"()));
     tx_170 = builtin::i32_wrap_i64(packed_168 >> 32_i64);
-    drop("wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Fields_append"(local.tee resp_headers("wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("content-type"), used: 12 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("text/plain"), used: 10, index: 0 })));
-    __pattern_temp_2 = "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Response_new"(resp_headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: rx_169 }, rx_166);
-    drop("wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Response_set_status_code"(local.tee response(__pattern_temp_2.0), 200));
+    drop("http_uninit_string_conditional_trap.wado/__cm_binding__Fields_append"(local.tee resp_headers("http_uninit_string_conditional_trap.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("content-type"), used: 12 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("text/plain"), used: 10, index: 0 })));
+    __pattern_temp_2 = "http_uninit_string_conditional_trap.wado/__cm_binding__Response_new"(resp_headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: rx_169 }, rx_166);
+    drop("http_uninit_string_conditional_trap.wado/__cm_binding__Response_set_status_code"(local.tee response(__pattern_temp_2.0), 200));
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __tv_1 = 0;
     __tv_2 = 0;
@@ -814,7 +814,7 @@ fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/handle
     "wasi/resource-drop:request"(request);
 }
 
-fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Request_get_path_with_query"(self) with Request {
+fn "http_uninit_string_conditional_trap.wado/__cm_binding__Request_get_path_with_query"(self) with Request {
     let __outptr: i32;
     let __disc: i32;
     let __option_result: ref null "core:prelude/string.wado//String";
@@ -834,11 +834,11 @@ fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_b
     return __option_result;
 }
 
-fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Fields_new"() with Fields {
+fn "http_uninit_string_conditional_trap.wado/__cm_binding__Fields_new"() with Fields {
     return "wasi/wasi:http/Fields::new"();
 }
 
-fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Fields_append"(self, name, value) with Fields {
+fn "http_uninit_string_conditional_trap.wado/__cm_binding__Fields_append"(self, name, value) with Fields {
     let __name_packed: i64;
     let __value_packed: i64;
     let __outptr: i32;
@@ -886,7 +886,7 @@ fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_b
     return __result_val;
 }
 
-fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Response_new"(headers, contents, trailers) with Response {
+fn "http_uninit_string_conditional_trap.wado/__cm_binding__Response_new"(headers, contents, trailers) with Response {
     let __contents_disc: i32;
     let __contents_inner0: i32;
     let __local_6: i32;
@@ -907,7 +907,7 @@ fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_b
     return struct.new "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_8, 1: __lifted_result_9 };
 }
 
-fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Response_set_status_code"(self, status_code) with Response {
+fn "http_uninit_string_conditional_trap.wado/__cm_binding__Response_set_status_code"(self, status_code) with Response {
     let __disc: i32;
     let __result_val: ref "core:prelude/types.wado//Result<(),()>";
     __disc = "wasi/wasi:http/Response::set_status_code"(self, status_code);
@@ -920,14 +920,14 @@ fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_b
     return __result_val;
 }
 
-fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_export__handle"(request) {
+fn "http_uninit_string_conditional_trap.wado/__cm_export__handle"(request) {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:http_uninit_string_conditional_trap.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:http_uninit_string_conditional_trap.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/handle"(request);
+    "http_uninit_string_conditional_trap.wado/handle"(request);
 }
 
 fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/$value_copy$T21"(v) {
@@ -1117,4 +1117,4 @@ fn "core:prelude/list.wado/List<u8>::grow"(self) {
     self.repr = new_repr;
 }
 
-export fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_export__handle" as "handle"
+export fn "http_uninit_string_conditional_trap.wado/__cm_export__handle" as "handle"

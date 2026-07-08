@@ -119,8 +119,8 @@
     (import "wasi" "task-return" (func (;1;) (type 1)))
     (import "mem" "memory" (memory (;0;) 1))
     (global (;0;) (mut i32) (i32.const 0))
-    (export "run" (func $wado-compiler/tests/format.fixtures/ops.all_dirty.wado/__cm_export__run))
-    (func $wado-compiler/tests/format.fixtures/ops.all_dirty.wado/__cm_export__run (;2;) (type 2)
+    (export "run" (func $ops.all_dirty.wado/__cm_export__run))
+    (func $ops.all_dirty.wado/__cm_export__run (;2;) (type 2)
       (block ;; label = @1
         (br_if 0 (;@1;)
           (global.get 0)

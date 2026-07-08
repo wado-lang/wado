@@ -553,7 +553,11 @@ impl ModuleSource {
 
     /// Convert to the legacy `Vec<String>` module path representation.
     ///
-    /// This enables gradual migration while maintaining compatibility.
+    /// This is the module's **portable qualifier** — the identity used to
+    /// namespace its symbols. An entry point contributes its base name (its
+    /// path relative to its own directory), not the raw compile path, so
+    /// symbol names stay stable across invocations and machines. The real
+    /// on-disk path lives on [`ModuleSource::source_path`].
     #[must_use]
     pub fn to_path(&self) -> Vec<String> {
         match self {
@@ -562,7 +566,7 @@ impl ModuleSource {
             Self::Local { path } => vec![path.to_string()],
             Self::Dependency { path } => vec!["dep".to_string(), path.to_string()],
             Self::Remote { url } => vec![url.to_string()],
-            Self::EntryPoint { filename } => vec![filename.to_string()],
+            Self::EntryPoint { filename } => vec![entry_basename(filename).to_string()],
             Self::Redirected { uri } => vec![uri.to_string()],
             Self::Wasm { path, .. } => vec![path.to_string()],
         }
@@ -664,7 +668,7 @@ impl ModuleSource {
     /// Convert to a path string format used for method name mangling.
     ///
     /// Returns `self.to_path().join("/")`:
-    /// - `EntryPoint { filename }` → `"{filename}"`
+    /// - `EntryPoint { filename }` → `"{basename}"`
     /// - `Local { path }` → `"{path}"`
     /// - `Core { name }` → `"core/{name}"`
     /// - `Wasi { interface }` → `"wasi/{interface}"`
@@ -688,13 +692,20 @@ impl ModuleSource {
         format!("{self}//{name}")
     }
 
-    /// Return a filename suitable for diagnostic messages.
+    /// The module's real source location.
+    ///
+    /// This is the counterpart to the portable qualifier ([`Self::to_path`] /
+    /// [`Display`]): it keeps the entry point's full compile path (absolute
+    /// under the test harness, relative on the CLI) rather than its base name.
+    /// Consumed both where a real path is needed to resolve sibling files
+    /// (`#include_str` / `#include_bytes`) and as the filename shown in
+    /// diagnostics.
     ///
     /// Returns an empty string for entry points without real filenames
     /// (e.g., `<stdin>`, `<entry>`) so that `Logger::apply_file_context`
     /// can fill in the correct file from the logger's current file context.
     #[must_use]
-    pub fn diagnostic_filename(&self) -> String {
+    pub fn source_path(&self) -> String {
         match self {
             Self::EntryPoint { filename } => {
                 if filename.starts_with('<') {
@@ -708,6 +719,13 @@ impl ModuleSource {
     }
 }
 
+/// The portable base name of an entry-point filename: its path relative to
+/// its own directory. Shared by [`ModuleSource::to_path`] and [`Display`] so a
+/// module's symbol qualifier is identical however it is rendered.
+fn entry_basename(filename: &str) -> &str {
+    filename.rsplit(['/', '\\']).next().unwrap_or(filename)
+}
+
 impl fmt::Display for ModuleSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -716,9 +734,12 @@ impl fmt::Display for ModuleSource {
             Self::Local { path } => write!(f, "{path}"),
             Self::Dependency { path } => write!(f, "dep:{path}"),
             Self::Remote { url } => write!(f, "{url}"),
-            Self::EntryPoint { filename } => {
-                write!(f, "{filename}")
-            }
+            // Symbol identity, not a file path: the entry's qualifier is its
+            // base name (its path relative to its own directory), so WIR names
+            // stay stable across invocations and machines — the compile path is
+            // absolute under the test harness, relative on the CLI. The real
+            // path for diagnostics comes from `source_path`.
+            Self::EntryPoint { filename } => write!(f, "{}", entry_basename(filename)),
             Self::Redirected { uri } => write!(f, "{uri}"),
             Self::Wasm { path, .. } => write!(f, "{path}"),
         }
@@ -826,6 +847,13 @@ mod tests {
 
         let source = interner.entry_point("test.wado");
         assert_eq!(source.to_path(), vec!["test.wado"]);
+
+        // An entry in a sub-directory contributes only its portable base name,
+        // not the raw compile path; the full path lives on `source_path`.
+        let source = interner.entry_point("/abs/pkg/src/main.wado");
+        assert_eq!(source.to_path(), vec!["main.wado"]);
+        assert_eq!(source.to_string(), "main.wado");
+        assert_eq!(source.source_path(), "/abs/pkg/src/main.wado");
     }
 
     #[test]

@@ -271,15 +271,21 @@ type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(50)
 
 type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  // TypeId(51)
 
-type "functype//wado-compiler/tests/fixtures/http_base64_decode.wado/handle" = fn(i32);  // TypeId(52)
+type "functype//http_base64_decode.wado/handle" = fn(i32);  // TypeId(52)
 
-type "functype//wado-compiler/tests/fixtures/http_base64_decode.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(53)
+type "functype//http_base64_decode.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(53)
 
-type "functype//wado-compiler/tests/fixtures/http_base64_decode.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(54)
+type "functype//http_base64_decode.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(54)
 
-type "functype//wado-compiler/tests/fixtures/http_base64_decode.wado/__cm_export__handle" = fn(i32);  // TypeId(55)
+type "functype//http_base64_decode.wado/__cm_export__handle" = fn(i32);  // TypeId(55)
 
+<<<<<<< HEAD
 type "functype//wado-compiler/tests/fixtures/http_base64_decode.wado/$value_copy$T29" = fn(ref Array<u8>) -> ref Array<u8>;  // TypeId(56)
+||||||| 88506a642
+type "functype//wado-compiler/tests/fixtures/http_base64_decode.wado/$value_copy$T33" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref "core:prelude/slice.wado//ArraySlice<u8>";  // TypeId(56)
+=======
+type "functype//http_base64_decode.wado/$value_copy$T33" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref "core:prelude/slice.wado//ArraySlice<u8>";  // TypeId(56)
+>>>>>>> origin/main
 
 type "functype//wado-compiler/tests/fixtures/http_base64_decode.wado/$value_copy$T21" = fn(ref "core:prelude//List<u8>") -> ref "core:prelude//List<u8>";  // TypeId(57)
 
@@ -392,10 +398,10 @@ import fn wasi/future-write from "wasi/future-write";
 import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:core::base64::DECODE_TABLE: ref null "core:prelude//List<u8>" = ref.null none;
-global mut global:__modules_initialized: bool = 0;
+global mut global:core:base64::DECODE_TABLE: ref null "core:prelude//List<u8>" = ref.null none;
+global mut global:http_base64_decode.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/http_base64_decode.wado/handle"(request) {
+fn "http_base64_decode.wado/handle"(request) {
     let result: ref null "core:prelude//List<u8>";
     let bytes_2: ref "core:prelude//List<u8>";
     let __cond: bool;
@@ -536,11 +542,11 @@ fn "wado-compiler/tests/fixtures/http_base64_decode.wado/handle"(request) {
     let rx_177: i32;
     let tx_178: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:http_base64_decode.wado::__modules_initialized);
         cold_path;
         "core:base64/__initialize_module"();
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:http_base64_decode.wado::__modules_initialized = 1;
     };
     result = "core:base64/decode_impl"(struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: array.new_fixed<u8>(89, 87, 74, 106), start: 0, end: 4 });
     __cond = (if ref.is_null(result) == 0 -> bool {
@@ -551,7 +557,7 @@ fn "wado-compiler/tests/fixtures/http_base64_decode.wado/handle"(request) {
     });
     if @unlikely(__cond == 0) {
         cold_path;
-        "core:rt/panic"(__local_13 = "core:prelude/string.wado/String::with_capacity"(136); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_13, 104); "core:prelude/string.wado/String::push"(__local_13, 97); "core:prelude/string.wado/String::push"(__local_13, 110); "core:prelude/string.wado/String::push"(__local_13, 100); "core:prelude/string.wado/String::push"(__local_13, 108); "core:prelude/string.wado/String::push"(__local_13, 101); "core:prelude/string.wado/String::push"(__local_13, 32); "core:prelude/string.wado/String::push"(__local_13, 97); "core:prelude/string.wado/String::push"(__local_13, 116); "core:prelude/string.wado/String::push"(__local_13, 32); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http_base64_decode.wado"), used: 52 }); "core:prelude/string.wado/String::push"(__local_13, 58); __local_14 = "core:prelude/format.wado/Formatter::new"(__local_13); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 7 }, __local_14); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_13 = "core:prelude/string.wado/String::with_capacity"(136); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_13, 104); "core:prelude/string.wado/String::push"(__local_13, 97); "core:prelude/string.wado/String::push"(__local_13, 110); "core:prelude/string.wado/String::push"(__local_13, 100); "core:prelude/string.wado/String::push"(__local_13, 108); "core:prelude/string.wado/String::push"(__local_13, 101); "core:prelude/string.wado/String::push"(__local_13, 32); "core:prelude/string.wado/String::push"(__local_13, 97); "core:prelude/string.wado/String::push"(__local_13, 116); "core:prelude/string.wado/String::push"(__local_13, 32); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("http_base64_decode.wado"), used: 23 }); "core:prelude/string.wado/String::push"(__local_13, 58); __local_14 = "core:prelude/format.wado/Formatter::new"(__local_13); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 7 }, __local_14); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: result matches { Some(bytes) && bytes.len() == 3 }
 "), used: 63 }); __local_13);
         unreachable;
@@ -560,7 +566,7 @@ condition: result matches { Some(bytes) && bytes.len() == 3 }
     tx_175 = builtin::i32_wrap_i64(packed_173 >> 32_i64);
     rx_177 = builtin::i32_wrap_i64(local.tee packed_176("wasi/stream-new"()));
     tx_178 = builtin::i32_wrap_i64(packed_176 >> 32_i64);
-    __pattern_temp_2 = "wado-compiler/tests/fixtures/http_base64_decode.wado/__cm_binding__Response_new"(local.tee headers("wado-compiler/tests/fixtures/http_base64_decode.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: rx_177 }, rx_174);
+    __pattern_temp_2 = "http_base64_decode.wado/__cm_binding__Response_new"(local.tee headers("http_base64_decode.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: rx_177 }, rx_174);
     response = __pattern_temp_2.0;
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __tv_1 = 0;
@@ -882,11 +888,11 @@ condition: result matches { Some(bytes) && bytes.len() == 3 }
     "wasi/resource-drop:request"(request);
 }
 
-fn "wado-compiler/tests/fixtures/http_base64_decode.wado/__cm_binding__Fields_new"() with Fields {
+fn "http_base64_decode.wado/__cm_binding__Fields_new"() with Fields {
     return "wasi/wasi:http/Fields::new"();
 }
 
-fn "wado-compiler/tests/fixtures/http_base64_decode.wado/__cm_binding__Response_new"(headers, contents, trailers) with Response {
+fn "http_base64_decode.wado/__cm_binding__Response_new"(headers, contents, trailers) with Response {
     let __contents_disc: i32;
     let __contents_inner0: i32;
     let __local_6: i32;
@@ -907,23 +913,31 @@ fn "wado-compiler/tests/fixtures/http_base64_decode.wado/__cm_binding__Response_
     return struct.new "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_8, 1: __lifted_result_9 };
 }
 
-fn "wado-compiler/tests/fixtures/http_base64_decode.wado/__cm_export__handle"(request) {
+fn "http_base64_decode.wado/__cm_export__handle"(request) {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:http_base64_decode.wado::__modules_initialized);
         cold_path;
         "core:base64/__initialize_module"();
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:http_base64_decode.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/http_base64_decode.wado/handle"(request);
+    "http_base64_decode.wado/handle"(request);
 }
 
+<<<<<<< HEAD
 fn "wado-compiler/tests/fixtures/http_base64_decode.wado/$value_copy$T29"(v) {
     return builtin::array_clone<u8>(v);
 }
 
 fn "wado-compiler/tests/fixtures/http_base64_decode.wado/$value_copy$T21"(v) {
     return struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used };
+||||||| 88506a642
+fn "wado-compiler/tests/fixtures/http_base64_decode.wado/$value_copy$T33"(v) {
+    return struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: v.repr, start: v.start, end: v.end };
+=======
+fn "http_base64_decode.wado/$value_copy$T33"(v) {
+    return struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: v.repr, start: v.start, end: v.end };
+>>>>>>> origin/main
 }
 
 fn "core:base64/build_decode_table"() {
@@ -1149,7 +1163,7 @@ fn "core:base64/decode_impl"(input) {
         out_len = out_len + 2;
     }
     out = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(out_len), used: 0 };
-    table = global:core::base64::DECODE_TABLE;
+    table = global:core:base64::DECODE_TABLE;
     i = 0;
     _licm_used_82 = table.used;
     _licm_repr_83 = table.repr;
@@ -1581,7 +1595,7 @@ fn "core:rt/cm_stream_write_raw_u8"(handle, data, len) {
 }
 
 fn "core:base64/__initialize_module"() {
-    global:core::base64::DECODE_TABLE = "core:base64/build_decode_table"();
+    global:core:base64::DECODE_TABLE = "core:base64/build_decode_table"();
 }
 
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
@@ -1842,7 +1856,13 @@ fn "core:prelude/string.wado/String::from_utf8_lossy<core:prelude/bytes.wado/Byt
     let i: i32;
     let bytes_13: ref Array<u8>;
     collected = "core:prelude/slice.wado/ArrayIter<u8>::collect"(struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: bytes.repr, index: 0, end: bytes.used });
+<<<<<<< HEAD
     slice = struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: collected.repr, start: 0, end: collected.used };
+||||||| 88506a642
+    slice = "wado-compiler/tests/fixtures/http_base64_decode.wado/$value_copy$T33"(struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: collected.repr, start: 0, end: collected.used });
+=======
+    slice = "http_base64_decode.wado/$value_copy$T33"(struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: collected.repr, start: 0, end: collected.used });
+>>>>>>> origin/main
     __fused___inline_String__from_utf8_slice_2: block {
         break_if __fused___inline_String__from_utf8_slice_2 @unlikely("core:prelude/string.wado/String::is_valid_utf8"(slice) == 0);
         bytes_13 = "core:prelude/slice.wado/ArraySlice<u8>::to_array"(slice);
@@ -1934,4 +1954,4 @@ fn "core:prelude/slice.wado/ArrayIter<u8>::collect"(self) {
     return repr_5 = "wado-compiler/tests/fixtures/http_base64_decode.wado/$value_copy$T29"(repr_2), struct.new "core:prelude//List<u8>" { repr: ref.as_non_null("wado-compiler/tests/fixtures/http_base64_decode.wado/$value_copy$T29"(repr_5)), used: remaining };
 }
 
-export fn "wado-compiler/tests/fixtures/http_base64_decode.wado/__cm_export__handle" as "handle"
+export fn "http_base64_decode.wado/__cm_export__handle" as "handle"

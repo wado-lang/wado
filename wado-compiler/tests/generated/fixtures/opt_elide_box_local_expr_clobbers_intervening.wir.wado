@@ -44,13 +44,13 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/opt_elide_box_local_expr_clobbers_intervening.wado/incr" = fn() -> i32;  // TypeId(14)
+type "functype//opt_elide_box_local_expr_clobbers_intervening.wado/incr" = fn() -> i32;  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/opt_elide_box_local_expr_clobbers_intervening.wado/run" = fn();  // TypeId(15)
+type "functype//opt_elide_box_local_expr_clobbers_intervening.wado/run" = fn();  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/opt_elide_box_local_expr_clobbers_intervening.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(16)
+type "functype//opt_elide_box_local_expr_clobbers_intervening.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/opt_elide_box_local_expr_clobbers_intervening.wado/__cm_export__run" = fn();  // TypeId(17)
+type "functype//opt_elide_box_local_expr_clobbers_intervening.wado/__cm_export__run" = fn();  // TypeId(17)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(18)
 
@@ -120,32 +120,32 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:counter: i32 = 0;
-global mut global:__modules_initialized: bool = 0;
+global mut global:opt_elide_box_local_expr_clobbers_intervening.wado::counter: i32 = 0;
+global mut global:opt_elide_box_local_expr_clobbers_intervening.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/opt_elide_box_local_expr_clobbers_intervening.wado/incr"() {
-    global:counter = global:counter + 1;
-    return global:counter;
+fn "opt_elide_box_local_expr_clobbers_intervening.wado/incr"() {
+    global:opt_elide_box_local_expr_clobbers_intervening.wado::counter = global:opt_elide_box_local_expr_clobbers_intervening.wado::counter + 1;
+    return global:opt_elide_box_local_expr_clobbers_intervening.wado::counter;
 }
 
-fn "wado-compiler/tests/fixtures/opt_elide_box_local_expr_clobbers_intervening.wado/run"() with Stdout {
+fn "opt_elide_box_local_expr_clobbers_intervening.wado/run"() with Stdout {
     let snapshot: i32;
     let result: i32;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let __sroa_boxed_v: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:opt_elide_box_local_expr_clobbers_intervening.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:opt_elide_box_local_expr_clobbers_intervening.wado::__modules_initialized = 1;
     };
-    __sroa_boxed_v = "wado-compiler/tests/fixtures/opt_elide_box_local_expr_clobbers_intervening.wado/incr"();
-    snapshot = global:counter;
+    __sroa_boxed_v = "opt_elide_box_local_expr_clobbers_intervening.wado/incr"();
+    snapshot = global:opt_elide_box_local_expr_clobbers_intervening.wado::counter;
     result = __sroa_boxed_v + snapshot;
     if @unlikely(result != 2) {
         cold_path;
-        "core:rt/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(122); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_5, 114); "core:prelude/string.wado/String::push"(__local_5, 117); "core:prelude/string.wado/String::push"(__local_5, 110); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_elide_box_local_expr_clobbers_intervening.wado"), used: 79 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 47 }, __local_6); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(122); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_5, 114); "core:prelude/string.wado/String::push"(__local_5, 117); "core:prelude/string.wado/String::push"(__local_5, 110); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_elide_box_local_expr_clobbers_intervening.wado"), used: 50 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 47 }, __local_6); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: result == 2
 "), used: 24 }); "core:prelude/string.wado/String::push"(__local_5, 114); "core:prelude/string.wado/String::push"(__local_5, 101); "core:prelude/string.wado/String::push"(__local_5, 115); "core:prelude/string.wado/String::push"(__local_5, 117); "core:prelude/string.wado/String::push"(__local_5, 108); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: result }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); __local_5);
         unreachable;
@@ -153,18 +153,18 @@ condition: result == 2
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
 }
 
-fn "wado-compiler/tests/fixtures/opt_elide_box_local_expr_clobbers_intervening.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "opt_elide_box_local_expr_clobbers_intervening.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/opt_elide_box_local_expr_clobbers_intervening.wado/__cm_export__run"() {
+fn "opt_elide_box_local_expr_clobbers_intervening.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:opt_elide_box_local_expr_clobbers_intervening.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:opt_elide_box_local_expr_clobbers_intervening.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/opt_elide_box_local_expr_clobbers_intervening.wado/run"();
+    "opt_elide_box_local_expr_clobbers_intervening.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -190,7 +190,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/opt_elide_box_local_expr_clobbers_intervening.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "opt_elide_box_local_expr_clobbers_intervening.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -528,4 +528,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/opt_elide_box_local_expr_clobbers_intervening.wado/__cm_export__run" as "run"
+export fn "opt_elide_box_local_expr_clobbers_intervening.wado/__cm_export__run" as "run"

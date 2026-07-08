@@ -643,7 +643,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
     }
     if opts.show_wir {
         if let Some(ref wir_package) = result.wir_package {
-            let unparsed = wado_compiler::wir_unparse::unparse_wir(wir_package, None);
+            let unparsed = wado_compiler::wir_unparse::unparse_wir(wir_package);
             if unparsed.is_empty() {
                 println!("(empty module)");
             } else {

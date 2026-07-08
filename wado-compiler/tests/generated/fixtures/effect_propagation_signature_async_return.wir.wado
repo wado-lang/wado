@@ -219,13 +219,13 @@ type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(37)
 
 type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  // TypeId(38)
 
-type "functype//wado-compiler/tests/fixtures/effect_propagation_signature_async_return.wado/handle" = fn(i32);  // TypeId(39)
+type "functype//effect_propagation_signature_async_return.wado/handle" = fn(i32);  // TypeId(39)
 
-type "functype//wado-compiler/tests/fixtures/effect_propagation_signature_async_return.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(40)
+type "functype//effect_propagation_signature_async_return.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(40)
 
-type "functype//wado-compiler/tests/fixtures/effect_propagation_signature_async_return.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(41)
+type "functype//effect_propagation_signature_async_return.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(41)
 
-type "functype//wado-compiler/tests/fixtures/effect_propagation_signature_async_return.wado/__cm_export__handle" = fn(i32);  // TypeId(42)
+type "functype//effect_propagation_signature_async_return.wado/__cm_export__handle" = fn(i32);  // TypeId(42)
 
 type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(43)
 
@@ -260,9 +260,9 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:effect_propagation_signature_async_return.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/effect_propagation_signature_async_return.wado/handle"(request) {
+fn "effect_propagation_signature_async_return.wado/handle"(request) {
     let headers: i32;
     let response: i32;
     let __task_ret: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
@@ -392,14 +392,14 @@ fn "wado-compiler/tests/fixtures/effect_propagation_signature_async_return.wado/
     let rx: i32;
     let tx: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:effect_propagation_signature_async_return.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:effect_propagation_signature_async_return.wado::__modules_initialized = 1;
     };
     rx = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
     tx = builtin::i32_wrap_i64(packed >> 32_i64);
-    __pattern_temp_1 = "wado-compiler/tests/fixtures/effect_propagation_signature_async_return.wado/__cm_binding__Response_new"(local.tee headers("wado-compiler/tests/fixtures/effect_propagation_signature_async_return.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, rx);
+    __pattern_temp_1 = "effect_propagation_signature_async_return.wado/__cm_binding__Response_new"(local.tee headers("effect_propagation_signature_async_return.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, rx);
     response = __pattern_temp_1.0;
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __tv_1 = 0;
@@ -712,11 +712,11 @@ fn "wado-compiler/tests/fixtures/effect_propagation_signature_async_return.wado/
     "wasi/resource-drop:request"(request);
 }
 
-fn "wado-compiler/tests/fixtures/effect_propagation_signature_async_return.wado/__cm_binding__Fields_new"() with Fields {
+fn "effect_propagation_signature_async_return.wado/__cm_binding__Fields_new"() with Fields {
     return "wasi/wasi:http/Fields::new"();
 }
 
-fn "wado-compiler/tests/fixtures/effect_propagation_signature_async_return.wado/__cm_binding__Response_new"(headers, contents, trailers) with Response {
+fn "effect_propagation_signature_async_return.wado/__cm_binding__Response_new"(headers, contents, trailers) with Response {
     let __contents_disc: i32;
     let __contents_inner0: i32;
     let __local_6: i32;
@@ -737,14 +737,14 @@ fn "wado-compiler/tests/fixtures/effect_propagation_signature_async_return.wado/
     return struct.new "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_8, 1: __lifted_result_9 };
 }
 
-fn "wado-compiler/tests/fixtures/effect_propagation_signature_async_return.wado/__cm_export__handle"(request) {
+fn "effect_propagation_signature_async_return.wado/__cm_export__handle"(request) {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:effect_propagation_signature_async_return.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:effect_propagation_signature_async_return.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/effect_propagation_signature_async_return.wado/handle"(request);
+    "effect_propagation_signature_async_return.wado/handle"(request);
 }
 
 fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
@@ -774,4 +774,4 @@ fn "core:rt/cm_lower_string"(s) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-export fn "wado-compiler/tests/fixtures/effect_propagation_signature_async_return.wado/__cm_export__handle" as "handle"
+export fn "effect_propagation_signature_async_return.wado/__cm_export__handle" as "handle"

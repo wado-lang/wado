@@ -10,7 +10,7 @@ use crate::compiler_item::{
 use crate::hashmap::IndexSet;
 use crate::logger::Logger;
 use crate::module_source::ModuleSource;
-use crate::name::MethodName;
+use crate::name::{MethodName, global_name};
 use crate::tir::{
     FunctionKind, TirEffect, TirEffectOp, TirFunction, TirParam, TirResource, TirStruct, TirTest,
     TirVariantDecl, TypeId, TypeTable,
@@ -804,10 +804,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Resolve the type
         let ty = self.resolve_type(&global_decl.ty);
 
-        // Create a minimal function context for resolving the initializer expression
-        // Global initialization has no locals, but we need the context for expression resolution
-        // The function name is used for #function compile-time literal (empty for global init)
-        let mut ctx = FunctionContext::new(ty, format!("global:{}", global_decl.name));
+        // Global initialization has no locals; the context only carries the
+        // `#function` label. Reify must reproduce it byte-for-byte so the
+        // per-`AstId` expression types line up, so both route through
+        // `global_name`.
+        let mut ctx = FunctionContext::new(
+            ty,
+            global_name(&self.current_module_source, &global_decl.name),
+        );
 
         // Resolve the initializer expression with expected type for type
         // inference. Its per-`AstId` expression types are recorded for reify.

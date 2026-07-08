@@ -65,11 +65,17 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(15)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/run" = fn();  // TypeId(17)
+type "functype//string_from_utf8_lossy_newtype.wado/run" = fn();  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/__cm_export__run" = fn();  // TypeId(18)
+type "functype//string_from_utf8_lossy_newtype.wado/__cm_export__run" = fn();  // TypeId(18)
 
+<<<<<<< HEAD
 type "functype//wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/$value_copy$T22" = fn(ref Array<u8>) -> ref Array<u8>;  // TypeId(19)
+||||||| 88506a642
+type "functype//wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/$value_copy$T26" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref "core:prelude/slice.wado//ArraySlice<u8>";  // TypeId(19)
+=======
+type "functype//string_from_utf8_lossy_newtype.wado/$value_copy$T26" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref "core:prelude/slice.wado//ArraySlice<u8>";  // TypeId(19)
+>>>>>>> origin/main
 
 type "functype//wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/$value_copy$T65" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(20)
 
@@ -131,7 +137,7 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(49)
 
-type "functype//core:prelude/string.wado/String::from_utf8_lossy<wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/MyBytes>" = fn(ref "core:prelude//List<u8>") -> ref "core:prelude/string.wado//String";  // TypeId(50)
+type "functype//core:prelude/string.wado/String::from_utf8_lossy<string_from_utf8_lossy_newtype.wado/MyBytes>" = fn(ref "core:prelude//List<u8>") -> ref "core:prelude/string.wado//String";  // TypeId(50)
 
 type "functype//core:prelude/slice.wado/ArraySlice<u8>::to_array" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref Array<u8>;  // TypeId(51)
 
@@ -160,9 +166,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:string_from_utf8_lossy_newtype.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/run"() {
+fn "string_from_utf8_lossy_newtype.wado/run"() {
     let __b: ref "core:prelude//List<u8>";
     let s: ref "core:prelude/string.wado//String";
     let __cond: bool;
@@ -170,12 +176,13 @@ fn "wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/run"() {
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let len_a: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:string_from_utf8_lossy_newtype.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:string_from_utf8_lossy_newtype.wado::__modules_initialized = 1;
     };
     __b = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111), used: 5 };
+<<<<<<< HEAD
     s = "core:prelude/string.wado/String::from_utf8_lossy<wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/MyBytes>"(__b);
     __cond = __inline_String_Eq__eq_9: block -> bool {
         len_a = s.used;
@@ -184,32 +191,47 @@ fn "wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/run"() {
         }
         break __inline_String_Eq__eq_9: "core:prelude/string.wado/String^Eq::eq_bytes"(s.repr, array.new_data<u8>("Hello"), len_a);
     };
+||||||| 88506a642
+    s = "core:prelude/string.wado/String::from_utf8_lossy<wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/MyBytes>"(__b);
+    __cond = "core:prelude/string.wado/String^Eq::eq"(s, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Hello"), used: 5 });
+=======
+    s = "core:prelude/string.wado/String::from_utf8_lossy<string_from_utf8_lossy_newtype.wado/MyBytes>"(__b);
+    __cond = "core:prelude/string.wado/String^Eq::eq"(s, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Hello"), used: 5 });
+>>>>>>> origin/main
     if @unlikely(__cond == 0) {
         cold_path;
-        "core:rt/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(118); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_5, 114); "core:prelude/string.wado/String::push"(__local_5, 117); "core:prelude/string.wado/String::push"(__local_5, 110); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado"), used: 64 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 10 }, __local_6); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(118); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_5, 114); "core:prelude/string.wado/String::push"(__local_5, 117); "core:prelude/string.wado/String::push"(__local_5, 110); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("string_from_utf8_lossy_newtype.wado"), used: 35 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 10 }, __local_6); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: s == \"Hello\"
 "), used: 25 }); "core:prelude/string.wado/String::push"(__local_5, 115); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/format.wado/String^Inspect::inspect"(s, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); __local_5);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/__cm_export__run"() {
+fn "string_from_utf8_lossy_newtype.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:string_from_utf8_lossy_newtype.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:string_from_utf8_lossy_newtype.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/run"();
+    "string_from_utf8_lossy_newtype.wado/run"();
     "wasi/task-return"(0);
 }
 
+<<<<<<< HEAD
 fn "wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/$value_copy$T22"(v) {
     return builtin::array_clone<u8>(v);
 }
 
 fn "wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/$value_copy$T65"(v) {
     return struct.new "core:prelude/string.wado//StrCharIter" { repr: v.repr, used: v.used, byte_index: v.byte_index };
+||||||| 88506a642
+fn "wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/$value_copy$T26"(v) {
+    return struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: v.repr, start: v.start, end: v.end };
+=======
+fn "string_from_utf8_lossy_newtype.wado/$value_copy$T26"(v) {
+    return struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: v.repr, start: v.start, end: v.end };
+>>>>>>> origin/main
 }
 
 fn "core:prelude/primitive.wado/count_digits_i64"(val) {
@@ -928,7 +950,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     }
 }
 
-fn "core:prelude/string.wado/String::from_utf8_lossy<wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/MyBytes>"(bytes) {
+fn "core:prelude/string.wado/String::from_utf8_lossy<string_from_utf8_lossy_newtype.wado/MyBytes>"(bytes) {
     let collected: ref "core:prelude//List<u8>";
     let slice: ref "core:prelude/slice.wado//ArraySlice<u8>";
     let __fused_payload_3: ref "core:prelude/string.wado//String";
@@ -937,7 +959,13 @@ fn "core:prelude/string.wado/String::from_utf8_lossy<wado-compiler/tests/fixture
     let i: i32;
     let bytes_13: ref Array<u8>;
     collected = "core:prelude/slice.wado/ArrayIter<u8>::collect"(struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: bytes.repr, index: 0, end: bytes.used });
+<<<<<<< HEAD
     slice = struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: collected.repr, start: 0, end: collected.used };
+||||||| 88506a642
+    slice = "wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/$value_copy$T26"(struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: collected.repr, start: 0, end: collected.used });
+=======
+    slice = "string_from_utf8_lossy_newtype.wado/$value_copy$T26"(struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: collected.repr, start: 0, end: collected.used });
+>>>>>>> origin/main
     __fused___inline_String__from_utf8_slice_2: block {
         break_if __fused___inline_String__from_utf8_slice_2 @unlikely("core:prelude/string.wado/String::is_valid_utf8"(slice) == 0);
         bytes_13 = "core:prelude/slice.wado/ArraySlice<u8>::to_array"(slice);
@@ -994,4 +1022,4 @@ fn "core:prelude/slice.wado/ArrayIter<u8>::collect"(self) {
     return repr_5 = "wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/$value_copy$T22"(repr_2), struct.new "core:prelude//List<u8>" { repr: ref.as_non_null("wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/$value_copy$T22"(repr_5)), used: remaining };
 }
 
-export fn "wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/__cm_export__run" as "run"
+export fn "string_from_utf8_lossy_newtype.wado/__cm_export__run" as "run"

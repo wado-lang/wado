@@ -24,12 +24,12 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct wado-compiler/tests/fixtures/ref_3.wado//Point {  // TypeId(4)
+struct ref_3.wado//Point {  // TypeId(4)
     mut x: i32,
     mut y: i32,
 }
 
-struct wado-compiler/tests/fixtures/ref_3.wado//BasicPoint {  // TypeId(5)
+struct ref_3.wado//BasicPoint {  // TypeId(5)
     mut x: i32,
     mut y: i32,
 }
@@ -61,41 +61,41 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/ref_3.wado/print_basic_point" = fn(ref "wado-compiler/tests/fixtures/ref_3.wado//BasicPoint");  // TypeId(18)
+type "functype//ref_3.wado/print_basic_point" = fn(ref "ref_3.wado//BasicPoint");  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/ref_3.wado/move_point" = fn(ref "wado-compiler/tests/fixtures/ref_3.wado//Point");  // TypeId(19)
+type "functype//ref_3.wado/move_point" = fn(ref "ref_3.wado//Point");  // TypeId(19)
 
-type "functype//wado-compiler/tests/fixtures/ref_3.wado/ref_struct_mut" = fn();  // TypeId(20)
+type "functype//ref_3.wado/ref_struct_mut" = fn();  // TypeId(20)
 
-type "functype//wado-compiler/tests/fixtures/ref_3.wado/ref_struct_nested" = fn();  // TypeId(21)
+type "functype//ref_3.wado/ref_struct_nested" = fn();  // TypeId(21)
 
-type "functype//wado-compiler/tests/fixtures/ref_3.wado/ref_struct_string_field" = fn();  // TypeId(22)
+type "functype//ref_3.wado/ref_struct_string_field" = fn();  // TypeId(22)
 
-type "functype//wado-compiler/tests/fixtures/ref_3.wado/ref_array_basic" = fn();  // TypeId(23)
+type "functype//ref_3.wado/ref_array_basic" = fn();  // TypeId(23)
 
-type "functype//wado-compiler/tests/fixtures/ref_3.wado/ref_array_ref_element" = fn();  // TypeId(24)
+type "functype//ref_3.wado/ref_array_ref_element" = fn();  // TypeId(24)
 
-type "functype//wado-compiler/tests/fixtures/ref_3.wado/ref_closure_capture" = fn();  // TypeId(25)
+type "functype//ref_3.wado/ref_closure_capture" = fn();  // TypeId(25)
 
-type "functype//wado-compiler/tests/fixtures/ref_3.wado/ref_closure_mut_param" = fn();  // TypeId(26)
+type "functype//ref_3.wado/ref_closure_mut_param" = fn();  // TypeId(26)
 
-type "functype//wado-compiler/tests/fixtures/ref_3.wado/ref_method_receivers_test" = fn();  // TypeId(27)
+type "functype//ref_3.wado/ref_method_receivers_test" = fn();  // TypeId(27)
 
-type "functype//wado-compiler/tests/fixtures/ref_3.wado/ref_edge_coercion" = fn();  // TypeId(28)
+type "functype//ref_3.wado/ref_edge_coercion" = fn();  // TypeId(28)
 
-type "functype//wado-compiler/tests/fixtures/ref_3.wado/ref_edge_double_deref" = fn();  // TypeId(29)
+type "functype//ref_3.wado/ref_edge_double_deref" = fn();  // TypeId(29)
 
-type "functype//wado-compiler/tests/fixtures/ref_3.wado/ref_edge_multi_mut" = fn();  // TypeId(30)
+type "functype//ref_3.wado/ref_edge_multi_mut" = fn();  // TypeId(30)
 
-type "functype//wado-compiler/tests/fixtures/ref_3.wado/ref_edge_nested" = fn();  // TypeId(31)
+type "functype//ref_3.wado/ref_edge_nested" = fn();  // TypeId(31)
 
-type "functype//wado-compiler/tests/fixtures/ref_3.wado/ref_edge_temp" = fn();  // TypeId(32)
+type "functype//ref_3.wado/ref_edge_temp" = fn();  // TypeId(32)
 
-type "functype//wado-compiler/tests/fixtures/ref_3.wado/run" = fn();  // TypeId(33)
+type "functype//ref_3.wado/run" = fn();  // TypeId(33)
 
-type "functype//wado-compiler/tests/fixtures/ref_3.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(34)
+type "functype//ref_3.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(34)
 
-type "functype//wado-compiler/tests/fixtures/ref_3.wado/__cm_export__run" = fn();  // TypeId(35)
+type "functype//ref_3.wado/__cm_export__run" = fn();  // TypeId(35)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(36)
 
@@ -165,12 +165,20 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+<<<<<<< HEAD
 global mut global:__modules_initialized: bool = 0;
 global global:__const_obj_1: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(1, 2, 3)), used: 3 };
 global global:__const_obj_2: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(10, 20, 30)), used: 3 };
 global global:__const_obj_3: ref null "wado-compiler/tests/fixtures/ref_3.wado//BasicPoint" = struct.new "wado-compiler/tests/fixtures/ref_3.wado//BasicPoint" { x: 10, y: 20 };
+||||||| 88506a642
+global mut global:__modules_initialized: bool = 0;
+global global:__const_obj_1: ref null "wado-compiler/tests/fixtures/ref_3.wado//BasicPoint" = struct.new "wado-compiler/tests/fixtures/ref_3.wado//BasicPoint" { x: 10, y: 20 };
+=======
+global mut global:ref_3.wado::__modules_initialized: bool = 0;
+global global:ref_3.wado::__const_obj_1: ref null "ref_3.wado//BasicPoint" = struct.new "ref_3.wado//BasicPoint" { x: 10, y: 20 };
+>>>>>>> origin/main
 
-fn "wado-compiler/tests/fixtures/ref_3.wado/print_basic_point"(p) with Stdout {
+fn "ref_3.wado/print_basic_point"(p) with Stdout {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     let f_6: ref "core:prelude/format.wado//Formatter";
@@ -178,23 +186,23 @@ fn "wado-compiler/tests/fixtures/ref_3.wado/print_basic_point"(p) with Stdout {
     "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; f_6 = __local_2; "core:prelude/primitive.wado/i32::fmt_decimal"(p.x, f_6); "core:prelude/string.wado/String::push"(__local_1, 44); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; f_11 = __local_2; "core:prelude/primitive.wado/i32::fmt_decimal"(p.y, f_11); __local_1);
 }
 
-fn "wado-compiler/tests/fixtures/ref_3.wado/move_point"(p) {
+fn "ref_3.wado/move_point"(p) {
     p.x = p.x + 10;
     p.y = p.y + 20;
 }
 
-fn "wado-compiler/tests/fixtures/ref_3.wado/ref_struct_mut"() with Stdout {
-    let p: ref "wado-compiler/tests/fixtures/ref_3.wado//Point";
+fn "ref_3.wado/ref_struct_mut"() with Stdout {
+    let p: ref "ref_3.wado//Point";
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     let f_6: ref "core:prelude/format.wado//Formatter";
     let f_11: ref "core:prelude/format.wado//Formatter";
-    p = struct.new "wado-compiler/tests/fixtures/ref_3.wado//Point" { x: 1, y: 2 };
-    "wado-compiler/tests/fixtures/ref_3.wado/move_point"(p);
+    p = struct.new "ref_3.wado//Point" { x: 1, y: 2 };
+    "ref_3.wado/move_point"(p);
     "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; f_6 = __local_2; "core:prelude/primitive.wado/i32::fmt_decimal"(p.x, f_6); "core:prelude/string.wado/String::push"(__local_1, 44); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; f_11 = __local_2; "core:prelude/primitive.wado/i32::fmt_decimal"(p.y, f_11); __local_1);
 }
 
-fn "wado-compiler/tests/fixtures/ref_3.wado/ref_struct_nested"() with Stdout {
+fn "ref_3.wado/ref_struct_nested"() with Stdout {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     let __local_3: ref "core:prelude/string.wado//String";
@@ -206,7 +214,7 @@ fn "wado-compiler/tests/fixtures/ref_3.wado/ref_struct_nested"() with Stdout {
     "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa___sroa_o_inner_value, __local_4); __local_3);
 }
 
-fn "wado-compiler/tests/fixtures/ref_3.wado/ref_struct_string_field"() with Stdout {
+fn "ref_3.wado/ref_struct_string_field"() with Stdout {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     let __local_3: ref "core:prelude/string.wado//String";
@@ -223,7 +231,15 @@ fn "wado-compiler/tests/fixtures/ref_3.wado/ref_struct_string_field"() with Stdo
     "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_3, __sroa_u_name); "core:prelude/string.wado/String::push"(__local_3, 44); "core:prelude/string.wado/String::push"(__local_3, 32); __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_u_age, __local_4); __local_3);
 }
 
+<<<<<<< HEAD
 fn "wado-compiler/tests/fixtures/ref_3.wado/ref_array_basic"() with Stdout {
+||||||| 88506a642
+fn "wado-compiler/tests/fixtures/ref_3.wado/ref_array_basic"() with Stdout {
+    let __b: ref "core:prelude//List<i32>";
+=======
+fn "ref_3.wado/ref_array_basic"() with Stdout {
+    let __b: ref "core:prelude//List<i32>";
+>>>>>>> origin/main
     let before: i32;
     let after: i32;
     let __local_4: ref "core:prelude/string.wado//String";
@@ -268,7 +284,15 @@ condition: index < self.used
     "core:cli/println"(__local_6_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 }; "core:prelude/string.wado/String::push"(__local_6_6, 97); "core:prelude/string.wado/String::push"(__local_6_6, 102); "core:prelude/string.wado/String::push"(__local_6_6, 116); "core:prelude/string.wado/String::push"(__local_6_6, 101); "core:prelude/string.wado/String::push"(__local_6_6, 114); "core:prelude/string.wado/String::push"(__local_6_6, 58); "core:prelude/string.wado/String::push"(__local_6_6, 32); __local_7_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6_6 }; "core:prelude/primitive.wado/i32::fmt_decimal"(after, __local_7_7); __local_6_6);
 }
 
+<<<<<<< HEAD
 fn "wado-compiler/tests/fixtures/ref_3.wado/ref_array_ref_element"() with Stdout {
+||||||| 88506a642
+fn "wado-compiler/tests/fixtures/ref_3.wado/ref_array_ref_element"() with Stdout {
+    let __b: ref "core:prelude//List<i32>";
+=======
+fn "ref_3.wado/ref_array_ref_element"() with Stdout {
+    let __b: ref "core:prelude//List<i32>";
+>>>>>>> origin/main
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
     let __local_5_5: ref "core:prelude/string.wado//String";
@@ -314,7 +338,7 @@ condition: index < self.used
     "core:cli/println"(__local_7_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_7_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ref still: "), used: 11 }); __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7_7 }; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_r_value, __local_8); __local_7_7);
 }
 
-fn "wado-compiler/tests/fixtures/ref_3.wado/ref_closure_capture"() with Stdout {
+fn "ref_3.wado/ref_closure_capture"() with Stdout {
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let __local_6: ref "core:prelude/string.wado//String";
@@ -323,7 +347,7 @@ fn "wado-compiler/tests/fixtures/ref_3.wado/ref_closure_capture"() with Stdout {
     "core:cli/println"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("tripled: "), used: 9 }); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; "core:prelude/primitive.wado/i32::fmt_decimal"(126, __local_7); __local_6);
 }
 
-fn "wado-compiler/tests/fixtures/ref_3.wado/ref_closure_mut_param"() with Stdout {
+fn "ref_3.wado/ref_closure_mut_param"() with Stdout {
     let y: ref "core:prelude/types.wado//Box<i32>";
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
@@ -332,7 +356,7 @@ fn "wado-compiler/tests/fixtures/ref_3.wado/ref_closure_mut_param"() with Stdout
     "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(26), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("modified: "), used: 10 }); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; "core:prelude/primitive.wado/i32::fmt_decimal"(y.value, __local_2); __local_1);
 }
 
-fn "wado-compiler/tests/fixtures/ref_3.wado/ref_method_receivers_test"() with Stdout {
+fn "ref_3.wado/ref_method_receivers_test"() with Stdout {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     let __local_3: ref "core:prelude/string.wado//String";
@@ -344,13 +368,13 @@ fn "wado-compiler/tests/fixtures/ref_3.wado/ref_method_receivers_test"() with St
     "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("after increment: "), used: 17 }); __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_c_value, __local_4); __local_3);
 }
 
-fn "wado-compiler/tests/fixtures/ref_3.wado/ref_edge_coercion"() with Stdout {
+fn "ref_3.wado/ref_edge_coercion"() with Stdout {
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
     "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(42, __local_3); __local_2);
 }
 
-fn "wado-compiler/tests/fixtures/ref_3.wado/ref_edge_double_deref"() with Stdout {
+fn "ref_3.wado/ref_edge_double_deref"() with Stdout {
     let a: ref "core:prelude/types.wado//Box<i32>";
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
@@ -359,7 +383,7 @@ fn "wado-compiler/tests/fixtures/ref_3.wado/ref_edge_double_deref"() with Stdout
     "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:prelude/primitive.wado/i32::fmt_decimal"(a.value, __local_4); __local_3);
 }
 
-fn "wado-compiler/tests/fixtures/ref_3.wado/ref_edge_multi_mut"() with Stdout {
+fn "ref_3.wado/ref_edge_multi_mut"() with Stdout {
     let a: ref "core:prelude/types.wado//Box<i32>";
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
@@ -370,25 +394,26 @@ fn "wado-compiler/tests/fixtures/ref_3.wado/ref_edge_multi_mut"() with Stdout {
     "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; "core:prelude/primitive.wado/i32::fmt_decimal"(a.value, __local_2); __local_1);
 }
 
-fn "wado-compiler/tests/fixtures/ref_3.wado/ref_edge_nested"() with Stdout {
+fn "ref_3.wado/ref_edge_nested"() with Stdout {
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
     "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:prelude/primitive.wado/i32::fmt_decimal"(42, __local_4); __local_3);
 }
 
-fn "wado-compiler/tests/fixtures/ref_3.wado/ref_edge_temp"() with Stdout {
+fn "ref_3.wado/ref_edge_temp"() with Stdout {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; "core:prelude/primitive.wado/i32::fmt_decimal"(1 + 2, __local_2); __local_1);
 }
 
-fn "wado-compiler/tests/fixtures/ref_3.wado/run"() with Stdout {
+fn "ref_3.wado/run"() with Stdout {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:ref_3.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:ref_3.wado::__modules_initialized = 1;
     };
+<<<<<<< HEAD
     "wado-compiler/tests/fixtures/ref_3.wado/print_basic_point"(global:__const_obj_3);
     "wado-compiler/tests/fixtures/ref_3.wado/ref_struct_mut"();
     "wado-compiler/tests/fixtures/ref_3.wado/ref_struct_nested"();
@@ -403,20 +428,51 @@ fn "wado-compiler/tests/fixtures/ref_3.wado/run"() with Stdout {
     "wado-compiler/tests/fixtures/ref_3.wado/ref_edge_multi_mut"();
     "wado-compiler/tests/fixtures/ref_3.wado/ref_edge_nested"();
     "wado-compiler/tests/fixtures/ref_3.wado/ref_edge_temp"();
+||||||| 88506a642
+    "wado-compiler/tests/fixtures/ref_3.wado/print_basic_point"(global:__const_obj_1);
+    "wado-compiler/tests/fixtures/ref_3.wado/ref_struct_mut"();
+    "wado-compiler/tests/fixtures/ref_3.wado/ref_struct_nested"();
+    "wado-compiler/tests/fixtures/ref_3.wado/ref_struct_string_field"();
+    "wado-compiler/tests/fixtures/ref_3.wado/ref_array_basic"();
+    "wado-compiler/tests/fixtures/ref_3.wado/ref_array_ref_element"();
+    "wado-compiler/tests/fixtures/ref_3.wado/ref_closure_capture"();
+    "wado-compiler/tests/fixtures/ref_3.wado/ref_closure_mut_param"();
+    "wado-compiler/tests/fixtures/ref_3.wado/ref_method_receivers_test"();
+    "wado-compiler/tests/fixtures/ref_3.wado/ref_edge_coercion"();
+    "wado-compiler/tests/fixtures/ref_3.wado/ref_edge_double_deref"();
+    "wado-compiler/tests/fixtures/ref_3.wado/ref_edge_multi_mut"();
+    "wado-compiler/tests/fixtures/ref_3.wado/ref_edge_nested"();
+    "wado-compiler/tests/fixtures/ref_3.wado/ref_edge_temp"();
+=======
+    "ref_3.wado/print_basic_point"(global:ref_3.wado::__const_obj_1);
+    "ref_3.wado/ref_struct_mut"();
+    "ref_3.wado/ref_struct_nested"();
+    "ref_3.wado/ref_struct_string_field"();
+    "ref_3.wado/ref_array_basic"();
+    "ref_3.wado/ref_array_ref_element"();
+    "ref_3.wado/ref_closure_capture"();
+    "ref_3.wado/ref_closure_mut_param"();
+    "ref_3.wado/ref_method_receivers_test"();
+    "ref_3.wado/ref_edge_coercion"();
+    "ref_3.wado/ref_edge_double_deref"();
+    "ref_3.wado/ref_edge_multi_mut"();
+    "ref_3.wado/ref_edge_nested"();
+    "ref_3.wado/ref_edge_temp"();
+>>>>>>> origin/main
 }
 
-fn "wado-compiler/tests/fixtures/ref_3.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "ref_3.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/ref_3.wado/__cm_export__run"() {
+fn "ref_3.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:ref_3.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:ref_3.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/ref_3.wado/run"();
+    "ref_3.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -442,7 +498,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/ref_3.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "ref_3.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -780,4 +836,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/ref_3.wado/__cm_export__run" as "run"
+export fn "ref_3.wado/__cm_export__run" as "run"

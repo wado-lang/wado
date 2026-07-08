@@ -3,6 +3,7 @@
 
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
+use crate::name::global_name;
 use crate::nir::NirFunction;
 use crate::tir::TypeTable;
 use crate::wir::{
@@ -547,7 +548,6 @@ fn register_exports(ctx: &mut WirContext<'_>) {
 /// - Entry module: `"global:{name}"`
 /// - Other modules: `"global:{mod_path}::{name}"`
 fn register_globals(ctx: &mut WirContext<'_>) {
-    let entry_source = &ctx.package.entry_module_source;
     let type_table = &*ctx.package.type_table.borrow();
 
     for global in &ctx.package.globals {
@@ -556,12 +556,7 @@ fn register_globals(ctx: &mut WirContext<'_>) {
             continue;
         }
 
-        let global_name = if module_source == entry_source {
-            format!("global:{}", global.name)
-        } else {
-            let module_path = module_source.to_path();
-            format!("global:{}::{}", module_path.join("::"), global.name)
-        };
+        let global_name = global_name(module_source, &global.name);
 
         let mut wir_type = ctx.type_id_to_wir_type(type_table, global.ty);
 

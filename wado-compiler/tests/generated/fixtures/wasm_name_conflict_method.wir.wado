@@ -47,11 +47,11 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/wasm_name_conflict_method.wado/run" = fn();  // TypeId(14)
+type "functype//wasm_name_conflict_method.wado/run" = fn();  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/wasm_name_conflict_method.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(15)
+type "functype//wasm_name_conflict_method.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/wasm_name_conflict_method.wado/__cm_export__run" = fn();  // TypeId(16)
+type "functype//wasm_name_conflict_method.wado/__cm_export__run" = fn();  // TypeId(16)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(17)
 
@@ -106,10 +106,24 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+<<<<<<< HEAD
 global mut global:__modules_initialized: bool = 0;
+||||||| 88506a642
+global mut global:__modules_initialized: bool = 0;
+global mut global:__const_obj_0: ref null "./sub/wasm_name_conflict_method_mod_b.wado//ContainerB" = ref.null none;
+=======
+global mut global:wasm_name_conflict_method.wado::__modules_initialized: bool = 0;
+global mut global:wasm_name_conflict_method.wado::__const_obj_0: ref null "./sub/wasm_name_conflict_method_mod_b.wado//ContainerB" = ref.null none;
+>>>>>>> origin/main
 
+<<<<<<< HEAD
 fn "wado-compiler/tests/fixtures/wasm_name_conflict_method.wado/run"() with Stdout {
     let cb: ref "./sub/wasm_name_conflict_method_mod_b.wado//ContainerB";
+||||||| 88506a642
+fn "wado-compiler/tests/fixtures/wasm_name_conflict_method.wado/run"() with Stdout {
+=======
+fn "wasm_name_conflict_method.wado/run"() with Stdout {
+>>>>>>> origin/main
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let __local_6: ref "core:prelude/string.wado//String";
@@ -118,30 +132,42 @@ fn "wado-compiler/tests/fixtures/wasm_name_conflict_method.wado/run"() with Stdo
     let self_19: ref "./sub/wasm_name_conflict_method_mod_b.wado//Config";
     let __sroa_n_repr: ref Array<u8>;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wasm_name_conflict_method.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wasm_name_conflict_method.wado::__modules_initialized = 1;
     };
     "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 }; "core:prelude/string.wado/String::push"(__local_4, 97); "core:prelude/string.wado/String::push"(__local_4, 58); "core:prelude/string.wado/String::push"(__local_4, 32); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; self_14 = 42; "core:prelude/primitive.wado/i32::fmt_decimal"(42, __local_5); __local_4);
+<<<<<<< HEAD
     __sroa_n_repr = array.new_data<u8>("hello");
     cb = struct.new "./sub/wasm_name_conflict_method_mod_b.wado//ContainerB" { config: struct.new "./sub/wasm_name_conflict_method_mod_b.wado//Config" { name: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__sroa_n_repr)), used: 5 }, count: 7 } };
     self_19 = cb.config;
     "core:cli/println"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 }; "core:prelude/string.wado/String::push"(__local_6, 98); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, self_19.name); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; "core:prelude/primitive.wado/i32::fmt_decimal"(self_19.count, __local_7); __local_6);
+||||||| 88506a642
+    n = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
+    global:__const_obj_0 = struct.new "./sub/wasm_name_conflict_method_mod_b.wado//ContainerB" { config: struct.new "./sub/wasm_name_conflict_method_mod_b.wado//Config" { name: n, count: 7 } };
+    self_18 = global:__const_obj_0.config;
+    "core:cli/println"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 }; "core:prelude/string.wado/String::push"(__local_6, 98); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, self_18.name); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; "core:prelude/primitive.wado/i32::fmt_decimal"(self_18.count, __local_7); __local_6);
+=======
+    n = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
+    global:wasm_name_conflict_method.wado::__const_obj_0 = struct.new "./sub/wasm_name_conflict_method_mod_b.wado//ContainerB" { config: struct.new "./sub/wasm_name_conflict_method_mod_b.wado//Config" { name: n, count: 7 } };
+    self_18 = global:wasm_name_conflict_method.wado::__const_obj_0.config;
+    "core:cli/println"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 }; "core:prelude/string.wado/String::push"(__local_6, 98); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, self_18.name); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; "core:prelude/primitive.wado/i32::fmt_decimal"(self_18.count, __local_7); __local_6);
+>>>>>>> origin/main
 }
 
-fn "wado-compiler/tests/fixtures/wasm_name_conflict_method.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "wasm_name_conflict_method.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/wasm_name_conflict_method.wado/__cm_export__run"() {
+fn "wasm_name_conflict_method.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:wasm_name_conflict_method.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:wasm_name_conflict_method.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/wasm_name_conflict_method.wado/run"();
+    "wasm_name_conflict_method.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -167,7 +193,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/wasm_name_conflict_method.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "wasm_name_conflict_method.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -457,4 +483,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/wasm_name_conflict_method.wado/__cm_export__run" as "run"
+export fn "wasm_name_conflict_method.wado/__cm_export__run" as "run"

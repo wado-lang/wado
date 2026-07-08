@@ -38,11 +38,11 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//wado-compiler/tests/fixtures/labeled_block_break_coercion.wado/run" = fn();  // TypeId(12)
+type "functype//labeled_block_break_coercion.wado/run" = fn();  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/labeled_block_break_coercion.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(13)
+type "functype//labeled_block_break_coercion.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/labeled_block_break_coercion.wado/__cm_export__run" = fn();  // TypeId(14)
+type "functype//labeled_block_break_coercion.wado/__cm_export__run" = fn();  // TypeId(14)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(15)
 
@@ -99,34 +99,34 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:labeled_block_break_coercion.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/labeled_block_break_coercion.wado/run"() with Stdout {
+fn "labeled_block_break_coercion.wado/run"() with Stdout {
     let __local_10: ref "core:prelude/string.wado//String";
     let __local_11: ref "core:prelude/format.wado//Formatter";
     let f_15: ref "core:prelude/format.wado//Formatter";
     let f_20: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:labeled_block_break_coercion.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:labeled_block_break_coercion.wado::__modules_initialized = 1;
     };
     "core:cli/println"(__local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(43), used: 0 }; "core:prelude/string.wado/String::push"(__local_10, 119); "core:prelude/string.wado/String::push"(__local_10, 105); "core:prelude/string.wado/String::push"(__local_10, 100); "core:prelude/string.wado/String::push"(__local_10, 101); "core:prelude/string.wado/String::push"(__local_10, 61); __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_10 }; f_15 = __local_11; "core:prelude/primitive.wado/i64::fmt_decimal"(10_i64, f_15); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push"(__local_10, 115); "core:prelude/string.wado/String::push"(__local_10, 97); "core:prelude/string.wado/String::push"(__local_10, 109); "core:prelude/string.wado/String::push"(__local_10, 101); "core:prelude/string.wado/String::push"(__local_10, 61); __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_10 }; f_20 = __local_11; "core:prelude/primitive.wado/i32::fmt_decimal"(2, f_20); __local_10);
 }
 
-fn "wado-compiler/tests/fixtures/labeled_block_break_coercion.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "labeled_block_break_coercion.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/labeled_block_break_coercion.wado/__cm_export__run"() {
+fn "labeled_block_break_coercion.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:labeled_block_break_coercion.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:labeled_block_break_coercion.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/labeled_block_break_coercion.wado/run"();
+    "labeled_block_break_coercion.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -152,7 +152,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/labeled_block_break_coercion.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "labeled_block_break_coercion.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -467,4 +467,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/labeled_block_break_coercion.wado/__cm_export__run" as "run"
+export fn "labeled_block_break_coercion.wado/__cm_export__run" as "run"

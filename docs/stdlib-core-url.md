@@ -15,6 +15,16 @@ if let Ok(url) = url {
 let pq = url.path_with_query(); // "/path?key=val"
 }
 
+## Synopsis
+
+```wado
+let url = Url::parse("https://wado.dev/docs?q=synopsis").unwrap();
+assert url.scheme == "https";
+assert url.host == "wado.dev";
+assert url.path == "/docs";
+assert url.query_get("q") matches { Some(v) && v == "synopsis" };
+```
+
 ## Functions
 
 ### `pub fn percent_encode(input: String) -> String`

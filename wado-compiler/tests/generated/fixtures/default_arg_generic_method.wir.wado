@@ -9,11 +9,23 @@ struct core:prelude/string.wado//String {  // TypeId(1)
     mut used: i32,
 }
 
+<<<<<<< HEAD
 struct wado-compiler/tests/fixtures/default_arg_generic_method.wado//MyBox<core:prelude/string.wado/String> {  // TypeId(2)
     mut value: ref "core:prelude/string.wado//String",
 }
+||||||| 88506a642
+type "functype//wado-compiler/tests/fixtures/default_arg_generic_method.wado/run" = fn();  // TypeId(2)
+=======
+type "functype//default_arg_generic_method.wado/run" = fn();  // TypeId(2)
+>>>>>>> origin/main
 
+<<<<<<< HEAD
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(3)
+||||||| 88506a642
+type "functype//wado-compiler/tests/fixtures/default_arg_generic_method.wado/__cm_export__run" = fn();  // TypeId(3)
+=======
+type "functype//default_arg_generic_method.wado/__cm_export__run" = fn();  // TypeId(3)
+>>>>>>> origin/main
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(4)
 
@@ -27,32 +39,38 @@ import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import memory (1) from "mem/memory";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:default_arg_generic_method.wado::__modules_initialized: bool = 0;
 
+<<<<<<< HEAD
 fn "wado-compiler/tests/fixtures/default_arg_generic_method.wado/run"() {
     let __sroa_value_repr: ref Array<u8>;
+||||||| 88506a642
+fn "wado-compiler/tests/fixtures/default_arg_generic_method.wado/run"() {
+=======
+fn "default_arg_generic_method.wado/run"() {
+>>>>>>> origin/main
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:default_arg_generic_method.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:default_arg_generic_method.wado::__modules_initialized = 1;
     };
     __sroa_value_repr = array.new_fixed<u8>(120);
     drop(struct.new "wado-compiler/tests/fixtures/default_arg_generic_method.wado//MyBox<core:prelude/string.wado/String>" { value: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__sroa_value_repr)), used: 1 } });
 }
 
-fn "wado-compiler/tests/fixtures/default_arg_generic_method.wado/__cm_export__run"() {
+fn "default_arg_generic_method.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:default_arg_generic_method.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:default_arg_generic_method.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/default_arg_generic_method.wado/run"();
+    "default_arg_generic_method.wado/run"();
     "wasi/task-return"(0);
 }
 
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-export fn "wado-compiler/tests/fixtures/default_arg_generic_method.wado/__cm_export__run" as "run"
+export fn "default_arg_generic_method.wado/__cm_export__run" as "run"

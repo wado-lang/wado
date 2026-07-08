@@ -52,9 +52,9 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/cross_module_same_name_struct.wado/__test_0_cross_module_same_name_structs" = fn();  // TypeId(15)
+type "functype//cross_module_same_name_struct.wado/__test_0_cross_module_same_name_structs" = fn();  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/cross_module_same_name_struct.wado/__cm_export____test_0_cross_module_same_name_structs" = fn();  // TypeId(16)
+type "functype//cross_module_same_name_struct.wado/__cm_export____test_0_cross_module_same_name_structs" = fn();  // TypeId(16)
 
 type "functype//wado-compiler/tests/fixtures/cross_module_same_name_struct.wado/$value_copy$T66" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(17)
 
@@ -131,13 +131,28 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+<<<<<<< HEAD
 global mut global:__modules_initialized: bool = 0;
+||||||| 88506a642
+global mut global:__modules_initialized: bool = 0;
+global mut global:__const_obj_0: ref null "./sub/cross_module_same_name_struct_a.wado//Item" = ref.null none;
+=======
+global mut global:cross_module_same_name_struct.wado::__modules_initialized: bool = 0;
+global mut global:cross_module_same_name_struct.wado::__const_obj_0: ref null "./sub/cross_module_same_name_struct_a.wado//Item" = ref.null none;
+>>>>>>> origin/main
 
+<<<<<<< HEAD
 fn "wado-compiler/tests/fixtures/cross_module_same_name_struct.wado/__test_0_cross_module_same_name_structs"() {
     let a: ref "./sub/cross_module_same_name_struct_a.wado//Item";
+||||||| 88506a642
+fn "wado-compiler/tests/fixtures/cross_module_same_name_struct.wado/__test_0_cross_module_same_name_structs"() {
+=======
+fn "cross_module_same_name_struct.wado/__test_0_cross_module_same_name_structs"() {
+>>>>>>> origin/main
     let __cond_2: bool;
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
+<<<<<<< HEAD
     let i_12: ref "core:prelude/string.wado//String";
     let len_a: i32;
     let v_23: ref "core:prelude/string.wado//String";
@@ -153,23 +168,38 @@ fn "wado-compiler/tests/fixtures/cross_module_same_name_struct.wado/__test_0_cro
         }
         break __inline_String_Eq__eq_4: "core:prelude/string.wado/String^Eq::eq_bytes"(i_12.repr, array.new_data<u8>("hello"), len_a);
     };
+||||||| 88506a642
+    let name: ref "core:prelude/string.wado//String";
+    let i_11: ref "core:prelude/string.wado//String";
+    name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
+    global:__const_obj_0 = struct.new "./sub/cross_module_same_name_struct_a.wado//Item" { name: name };
+    i_11 = global:__const_obj_0.name;
+    __cond_2 = "core:prelude/string.wado/String^Eq::eq"(i_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 });
+=======
+    let name: ref "core:prelude/string.wado//String";
+    let i_11: ref "core:prelude/string.wado//String";
+    name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
+    global:cross_module_same_name_struct.wado::__const_obj_0 = struct.new "./sub/cross_module_same_name_struct_a.wado//Item" { name: name };
+    i_11 = global:cross_module_same_name_struct.wado::__const_obj_0.name;
+    __cond_2 = "core:prelude/string.wado/String^Eq::eq"(i_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 });
+>>>>>>> origin/main
     if @unlikely(__cond_2 == 0) {
         cold_path;
-        "core:rt/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(140); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_cross_module_same_name_structs"), used: 39 }); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/cross_module_same_name_struct.wado"), used: 63 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 9 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(140); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_cross_module_same_name_structs"), used: 39 }); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("cross_module_same_name_struct.wado"), used: 34 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 9 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: item_name(a) == \"hello\"
 "), used: 36 }); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("item_name(a): "), used: 14 }); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/format.wado/String^Inspect::inspect"(i_12, __local_7); "core:prelude/string.wado/String::push"(__local_6, 10); __local_6);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/cross_module_same_name_struct.wado/__cm_export____test_0_cross_module_same_name_structs"() {
+fn "cross_module_same_name_struct.wado/__cm_export____test_0_cross_module_same_name_structs"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:cross_module_same_name_struct.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:cross_module_same_name_struct.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/cross_module_same_name_struct.wado/__test_0_cross_module_same_name_structs"();
+    "cross_module_same_name_struct.wado/__test_0_cross_module_same_name_structs"();
     "wasi/task-return"(0);
 }
 
@@ -735,4 +765,4 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     }
 }
 
-export fn "wado-compiler/tests/fixtures/cross_module_same_name_struct.wado/__cm_export____test_0_cross_module_same_name_structs" as "__test_0_cross_module_same_name_structs"
+export fn "cross_module_same_name_struct.wado/__cm_export____test_0_cross_module_same_name_structs" as "__test_0_cross_module_same_name_structs"

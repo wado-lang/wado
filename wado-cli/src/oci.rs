@@ -11,6 +11,7 @@
 //! Authentication mirrors `wado publish`: the `WKG_OCI_USERNAME` /
 //! `WKG_OCI_PASSWORD` environment variables, else an anonymous pull.
 
+use bytes::Bytes;
 use oci_client::client::{Certificate, CertificateEncoding, ClientConfig};
 use oci_client::secrets::RegistryAuth;
 use oci_client::{Client, Reference};
@@ -86,7 +87,7 @@ pub async fn manifest_digest(reference: &Reference) -> anyhow::Result<String> {
 }
 
 /// Pull the component's Wasm bytes (the single `application/wasm` layer).
-pub async fn pull_component(reference: &Reference) -> anyhow::Result<Vec<u8>> {
+pub async fn pull_component(reference: &Reference) -> anyhow::Result<Bytes> {
     let data = client()
         .pull(reference, &auth(), vec![WASM_LAYER_MEDIA_TYPE])
         .await?;

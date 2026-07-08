@@ -51,13 +51,13 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/short_circuit.wado/side_effect" = fn(ref "core:prelude/string.wado//String", bool) -> bool;  // TypeId(16)
+type "functype//short_circuit.wado/side_effect" = fn(ref "core:prelude/string.wado//String", bool) -> bool;  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/short_circuit.wado/run" = fn();  // TypeId(17)
+type "functype//short_circuit.wado/run" = fn();  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/short_circuit.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(18)
+type "functype//short_circuit.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/short_circuit.wado/__cm_export__run" = fn();  // TypeId(19)
+type "functype//short_circuit.wado/__cm_export__run" = fn();  // TypeId(19)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(20)
 
@@ -127,16 +127,16 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
-global global:__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(10, 20, 30)), used: 3 };
+global mut global:short_circuit.wado::__modules_initialized: bool = 0;
+global global:short_circuit.wado::__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(10, 20, 30)), used: 3 };
 
-fn "wado-compiler/tests/fixtures/short_circuit.wado/side_effect"(msg, result) with Stdout {
+fn "short_circuit.wado/side_effect"(msg, result) with Stdout {
     let __local_2: ref "core:prelude/string.wado//String";
     "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("side_effect called: "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_2, msg); __local_2);
     return result;
 }
 
-fn "wado-compiler/tests/fixtures/short_circuit.wado/run"() with Stdout {
+fn "short_circuit.wado/run"() with Stdout {
     let i: i32;
     let __local_5_5: ref "core:prelude/string.wado//String";
     let __local_6_6: ref "core:prelude/format.wado//Formatter";
@@ -151,10 +151,10 @@ fn "wado-compiler/tests/fixtures/short_circuit.wado/run"() with Stdout {
     let self_42: i32;
     let _licm_repr_51: ref Array<i32>;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:short_circuit.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:short_circuit.wado::__modules_initialized = 1;
     };
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("=== Testing && ==="), used: 18 });
     if block -> i32 {
@@ -164,7 +164,7 @@ fn "wado-compiler/tests/fixtures/short_circuit.wado/run"() with Stdout {
     } else {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("branch not taken (correct)"), used: 26 });
     }
-    if "wado-compiler/tests/fixtures/short_circuit.wado/side_effect"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("should print (&&)"), used: 17 }, 1) {
+    if "short_circuit.wado/side_effect"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("should print (&&)"), used: 17 }, 1) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("branch taken (correct)"), used: 22 });
     }
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
@@ -174,14 +174,14 @@ fn "wado-compiler/tests/fixtures/short_circuit.wado/run"() with Stdout {
     } {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("branch taken (correct)"), used: 22 });
     }
-    if "wado-compiler/tests/fixtures/short_circuit.wado/side_effect"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("should print (||)"), used: 17 }, 1) {
+    if "short_circuit.wado/side_effect"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("should print (||)"), used: 17 }, 1) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("branch taken (correct)"), used: 22 });
     }
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 === Testing while loop ==="), used: 27 });
     i = 0;
-    drop(global:__const_obj_0.used);
-    _licm_repr_51 = global:__const_obj_0.repr;
+    drop(global:short_circuit.wado::__const_obj_0.used);
+    _licm_repr_51 = global:short_circuit.wado::__const_obj_0.repr;
     b6: block {
         l7: loop {
             break_if b6 (if i < 3 -> i32 {
@@ -209,7 +209,7 @@ condition: index < self.used
     "core:cli/println"(__local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Loop ended at i = "), used: 18 }); __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; "core:prelude/primitive.wado/i32::fmt_decimal"(i, __local_8); __local_7);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 === Testing nested ==="), used: 23 });
-    if "wado-compiler/tests/fixtures/short_circuit.wado/side_effect"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("nested: should print"), used: 20 }, 1) {
+    if "short_circuit.wado/side_effect"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("nested: should print"), used: 20 }, 1) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("nested branch taken (correct)"), used: 29 });
     }
     if block -> i32 {
@@ -221,18 +221,18 @@ condition: index < self.used
     }
 }
 
-fn "wado-compiler/tests/fixtures/short_circuit.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "short_circuit.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/short_circuit.wado/__cm_export__run"() {
+fn "short_circuit.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:short_circuit.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:short_circuit.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/short_circuit.wado/run"();
+    "short_circuit.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -258,7 +258,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/short_circuit.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "short_circuit.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -596,4 +596,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/short_circuit.wado/__cm_export__run" as "run"
+export fn "short_circuit.wado/__cm_export__run" as "run"

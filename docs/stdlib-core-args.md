@@ -65,6 +65,15 @@ compiler layer; and at parse time the deserializer sees only field indices,
 not their types or arity, so it cannot self-check (only over-supply —
 "too many positionals" — is caught). See the WEP for the rationale.
 
+## Synopsis
+
+```wado
+let opts = parse::<Options>(["in.txt", "--verbose", "--jobs", "4"]).unwrap();
+assert opts.input == "in.txt";
+assert opts.verbose;
+assert opts.jobs == 4;
+```
+
 ## Functions
 
 ### `pub fn parse<T: Deserialize>(argv: List<String>) -> Result<T, ArgsError>`

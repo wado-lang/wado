@@ -35,13 +35,13 @@ type "functype//wasi/wasi:cli/Stdin::read_via_stream" = fn(i32);  // TypeId(10)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(12)
+type "functype//stream_cm_stdin_pipe.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_binding__Stdin_read_via_stream" = fn() -> ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]";  // TypeId(13)
+type "functype//stream_cm_stdin_pipe.wado/__cm_binding__Stdin_read_via_stream" = fn() -> ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]";  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_export__run" = fn();  // TypeId(14)
+type "functype//stream_cm_stdin_pipe.wado/__cm_export__run" = fn();  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>" = fn(i32) -> ref null "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>";  // TypeId(15)
+type "functype//stream_cm_stdin_pipe.wado/__cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>" = fn(i32) -> ref null "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>";  // TypeId(15)
 
 type "functype//core:rt/future_await_blocked" = fn(i32) -> i32;  // TypeId(16)
 
@@ -60,13 +60,13 @@ import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::wri
 import memory (1) from "mem/memory";
 import fn wasi/future-read:transmission-cli from "wasi/future-read:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:stream_cm_stdin_pipe.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "stream_cm_stdin_pipe.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_binding__Stdin_read_via_stream"() with Stdin {
+fn "stream_cm_stdin_pipe.wado/__cm_binding__Stdin_read_via_stream"() with Stdin {
     let __outptr: i32;
     let __lifted_result_1: i32;
     let __lifted_result_2: i32;
@@ -77,28 +77,28 @@ fn "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_binding__Stdin_r
     return struct.new "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]" { 0: __lifted_result_1, 1: __lifted_result_2 };
 }
 
-fn "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_export__run"() {
+fn "stream_cm_stdin_pipe.wado/__cm_export__run"() {
     let stdin_stream: i32;
     let subtask: i32;
     let __pattern_temp_0: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:stream_cm_stdin_pipe.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:stream_cm_stdin_pipe.wado::__modules_initialized = 1;
     };
     __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_2 @likely(global:stream_cm_stdin_pipe.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:stream_cm_stdin_pipe.wado::__modules_initialized = 1;
     };
-    __pattern_temp_0 = "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_binding__Stdin_read_via_stream"();
-    drop("wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"(local.tee subtask("wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_binding__Stdout_write_via_stream"(local.tee stdin_stream(__pattern_temp_0.0)))));
+    __pattern_temp_0 = "stream_cm_stdin_pipe.wado/__cm_binding__Stdin_read_via_stream"();
+    drop("stream_cm_stdin_pipe.wado/__cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"(local.tee subtask("stream_cm_stdin_pipe.wado/__cm_binding__Stdout_write_via_stream"(local.tee stdin_stream(__pattern_temp_0.0)))));
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"(handle) {
+fn "stream_cm_stdin_pipe.wado/__cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"(handle) {
     let ptr: i32;
     let status: i32;
     let result: ref null "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>";
@@ -153,4 +153,4 @@ fn "core:rt/future_await_blocked"(handle) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-export fn "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_export__run" as "run"
+export fn "stream_cm_stdin_pipe.wado/__cm_export__run" as "run"

@@ -36,9 +36,9 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//wado-compiler/tests/fixtures/variant_import_struct_simple.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(12)
+type "functype//variant_import_struct_simple.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/variant_import_struct_simple.wado/__cm_export__run" = fn();  // TypeId(13)
+type "functype//variant_import_struct_simple.wado/__cm_export__run" = fn();  // TypeId(13)
 
 type "functype//./variant_import_struct_module.wado/format_with_opts" = fn(ref "core:prelude/string.wado//String", ref "./variant_import_struct_module.wado//Options") -> ref "core:prelude/string.wado//String";  // TypeId(14)
 
@@ -85,26 +85,26 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:variant_import_struct_simple.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/variant_import_struct_simple.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "variant_import_struct_simple.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/variant_import_struct_simple.wado/__cm_export__run"() {
+fn "variant_import_struct_simple.wado/__cm_export__run"() {
     let opts: ref "./variant_import_struct_module.wado//Options";
     let s1: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:variant_import_struct_simple.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:variant_import_struct_simple.wado::__modules_initialized = 1;
     };
     __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_2 @likely(global:variant_import_struct_simple.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:variant_import_struct_simple.wado::__modules_initialized = 1;
     };
     opts = struct.new "./variant_import_struct_module.wado//Options" { align: struct.new "./variant_import_struct_module.wado//Align" { 1 }, width: 0 };
     s1 = "./variant_import_struct_module.wado/format_with_opts"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 }, opts);
@@ -191,7 +191,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/variant_import_struct_simple.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "variant_import_struct_simple.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -330,4 +330,4 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     }
 }
 
-export fn "wado-compiler/tests/fixtures/variant_import_struct_simple.wado/__cm_export__run" as "run"
+export fn "variant_import_struct_simple.wado/__cm_export__run" as "run"

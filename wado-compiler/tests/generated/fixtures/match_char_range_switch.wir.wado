@@ -44,13 +44,13 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/match_char_range_switch.wado/classify" = fn(char) -> i32;  // TypeId(13)
+type "functype//match_char_range_switch.wado/classify" = fn(char) -> i32;  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/match_char_range_switch.wado/run" = fn();  // TypeId(14)
+type "functype//match_char_range_switch.wado/run" = fn();  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/match_char_range_switch.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(15)
+type "functype//match_char_range_switch.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/match_char_range_switch.wado/__cm_export__run" = fn();  // TypeId(16)
+type "functype//match_char_range_switch.wado/__cm_export__run" = fn();  // TypeId(16)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(17)
 
@@ -107,9 +107,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:match_char_range_switch.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/match_char_range_switch.wado/classify"(c) {
+fn "match_char_range_switch.wado/classify"(c) {
     return b0: block -> i32 {
         b1: block {
             b2: block {
@@ -418,17 +418,17 @@ fn "wado-compiler/tests/fixtures/match_char_range_switch.wado/classify"(c) {
     };
 }
 
-fn "wado-compiler/tests/fixtures/match_char_range_switch.wado/run"() with Stdout {
+fn "match_char_range_switch.wado/run"() with Stdout {
     let sum: i32;
     let __iter_2: ref "core:prelude/string.wado//StrCharIter";
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let __sroa_s_repr: ref Array<u8>;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:match_char_range_switch.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:match_char_range_switch.wado::__modules_initialized = 1;
     };
     __sroa_s_repr = array.new_data<u8>("Ab_9!");
     sum = 0;
@@ -439,7 +439,7 @@ fn "wado-compiler/tests/fixtures/match_char_range_switch.wado/run"() with Stdout
             let __sroa___match_6_payload_0: char;
             multivalue_bind [__sroa___match_6_discriminant, __sroa___match_6_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
             if __sroa___match_6_discriminant == 0 {
-                sum = sum + "wado-compiler/tests/fixtures/match_char_range_switch.wado/classify"(__sroa___match_6_payload_0);
+                sum = sum + "match_char_range_switch.wado/classify"(__sroa___match_6_payload_0);
             } else {
                 break b77;
             }
@@ -449,18 +449,18 @@ fn "wado-compiler/tests/fixtures/match_char_range_switch.wado/run"() with Stdout
     "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/i32::fmt_decimal"(sum, __local_5); __local_4);
 }
 
-fn "wado-compiler/tests/fixtures/match_char_range_switch.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "match_char_range_switch.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/match_char_range_switch.wado/__cm_export__run"() {
+fn "match_char_range_switch.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:match_char_range_switch.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:match_char_range_switch.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/match_char_range_switch.wado/run"();
+    "match_char_range_switch.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -486,7 +486,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/match_char_range_switch.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "match_char_range_switch.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -824,4 +824,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/match_char_range_switch.wado/__cm_export__run" as "run"
+export fn "match_char_range_switch.wado/__cm_export__run" as "run"

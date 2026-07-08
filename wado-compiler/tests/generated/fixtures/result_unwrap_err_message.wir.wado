@@ -59,7 +59,7 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(14)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/result_unwrap_err_message.wado/__cm_export__run" = fn();  // TypeId(16)
+type "functype//result_unwrap_err_message.wado/__cm_export__run" = fn();  // TypeId(16)
 
 type "functype//wado-compiler/tests/fixtures/result_unwrap_err_message.wado/$value_copy$T64" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(17)
 
@@ -124,23 +124,23 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:result_unwrap_err_message.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/result_unwrap_err_message.wado/__cm_export__run"() {
+fn "result_unwrap_err_message.wado/__cm_export__run"() {
     let err_val: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>";
     let v: i32;
     let e: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:result_unwrap_err_message.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:result_unwrap_err_message.wado::__modules_initialized = 1;
     };
     __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_2 @likely(global:result_unwrap_err_message.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:result_unwrap_err_message.wado::__modules_initialized = 1;
     };
     err_val = struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("decode failed"), used: 13 } };
     drop((if @likely(ref.test "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok"(err_val)) -> i32 {
@@ -643,4 +643,4 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     }
 }
 
-export fn "wado-compiler/tests/fixtures/result_unwrap_err_message.wado/__cm_export__run" as "run"
+export fn "result_unwrap_err_message.wado/__cm_export__run" as "run"

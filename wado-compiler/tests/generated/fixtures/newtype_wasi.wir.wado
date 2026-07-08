@@ -29,19 +29,19 @@ type "functype//wasi/wasi:clocks/MonotonicClock::now" = fn() -> i64;  // TypeId(
 
 type "functype//wasi/wasi:clocks/MonotonicClock::get_resolution" = fn() -> i64;  // TypeId(11)
 
-type "functype//wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_chained" = fn();  // TypeId(12)
+type "functype//newtype_wasi.wado/newtype_wasi_chained" = fn();  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_duration" = fn();  // TypeId(13)
+type "functype//newtype_wasi.wado/newtype_wasi_duration" = fn();  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_multiple" = fn();  // TypeId(14)
+type "functype//newtype_wasi.wado/newtype_wasi_multiple" = fn();  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(15)
+type "functype//newtype_wasi.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__MonotonicClock_now" = fn() -> u64;  // TypeId(16)
+type "functype//newtype_wasi.wado/__cm_binding__MonotonicClock_now" = fn() -> u64;  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__MonotonicClock_get_resolution" = fn() -> u64;  // TypeId(17)
+type "functype//newtype_wasi.wado/__cm_binding__MonotonicClock_get_resolution" = fn() -> u64;  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_export__run" = fn();  // TypeId(18)
+type "functype//newtype_wasi.wado/__cm_export__run" = fn();  // TypeId(18)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(19)
 
@@ -80,12 +80,12 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:newtype_wasi.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_chained"() with Stdout, MonotonicClock {
+fn "newtype_wasi.wado/newtype_wasi_chained"() with Stdout, MonotonicClock {
     let t1: u64;
     let t2: u64;
-    t1 = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__MonotonicClock_now"();
+    t1 = "newtype_wasi.wado/__cm_binding__MonotonicClock_now"();
     if (if t1 == t1 -> i32 {
         t1 == t1;
     } else {
@@ -95,16 +95,16 @@ fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_chained"() with 
     } else {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("FAILED: values differ"), used: 21 });
     }
-    t2 = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__MonotonicClock_now"();
+    t2 = "newtype_wasi.wado/__cm_binding__MonotonicClock_now"();
     if (t2 - t1) >=u 0_i64 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("timestamp arithmetic works"), used: 26 });
     }
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("chained newtype tests passed"), used: 28 });
 }
 
-fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_duration"() with Stdout, MonotonicClock {
+fn "newtype_wasi.wado/newtype_wasi_duration"() with Stdout, MonotonicClock {
     let res: u64;
-    res = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__MonotonicClock_get_resolution"();
+    res = "newtype_wasi.wado/__cm_binding__MonotonicClock_get_resolution"();
     if res >u 0_i64 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("resolution is positive"), used: 22 });
     } else {
@@ -119,12 +119,12 @@ fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_duration"() with
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("duration tests passed"), used: 21 });
 }
 
-fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_multiple"() with Stdout, MonotonicClock {
+fn "newtype_wasi.wado/newtype_wasi_multiple"() with Stdout, MonotonicClock {
     let start: u64;
     let res: u64;
     let end: u64;
-    start = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__MonotonicClock_now"();
-    res = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__MonotonicClock_get_resolution"();
+    start = "newtype_wasi.wado/__cm_binding__MonotonicClock_now"();
+    res = "newtype_wasi.wado/__cm_binding__MonotonicClock_get_resolution"();
     if (if start >u 0_i64 -> i32 {
         res >u 0_i64;
     } else {
@@ -132,41 +132,41 @@ fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_multiple"() with
     }) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("both newtypes have positive values"), used: 34 });
     }
-    end = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__MonotonicClock_now"();
+    end = "newtype_wasi.wado/__cm_binding__MonotonicClock_now"();
     if (end - start) >=u 0_i64 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("elapsed time is non-negative"), used: 28 });
     }
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("multiple wasi newtype tests passed"), used: 34 });
 }
 
-fn "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "newtype_wasi.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__MonotonicClock_now"() with MonotonicClock {
+fn "newtype_wasi.wado/__cm_binding__MonotonicClock_now"() with MonotonicClock {
     return "wasi/wasi:clocks/MonotonicClock::now"();
 }
 
-fn "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__MonotonicClock_get_resolution"() with MonotonicClock {
+fn "newtype_wasi.wado/__cm_binding__MonotonicClock_get_resolution"() with MonotonicClock {
     return "wasi/wasi:clocks/MonotonicClock::get_resolution"();
 }
 
-fn "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_export__run"() {
+fn "newtype_wasi.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:newtype_wasi.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:newtype_wasi.wado::__modules_initialized = 1;
     };
     __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_2 @likely(global:newtype_wasi.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:newtype_wasi.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_chained"();
-    "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_duration"();
-    "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_multiple"();
+    "newtype_wasi.wado/newtype_wasi_chained"();
+    "newtype_wasi.wado/newtype_wasi_duration"();
+    "newtype_wasi.wado/newtype_wasi_multiple"();
     "wasi/task-return"(0);
 }
 
@@ -192,7 +192,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "newtype_wasi.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -266,4 +266,4 @@ fn "core:rt/cm_stream_write_raw_u8"(handle, data, len) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-export fn "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_export__run" as "run"
+export fn "newtype_wasi.wado/__cm_export__run" as "run"

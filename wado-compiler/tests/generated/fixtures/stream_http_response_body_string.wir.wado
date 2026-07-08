@@ -240,15 +240,15 @@ type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(44)
 
 type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  // TypeId(45)
 
-type "functype//wado-compiler/tests/fixtures/stream_http_response_body_string.wado/string_to_bytes" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude//List<u8>";  // TypeId(46)
+type "functype//stream_http_response_body_string.wado/string_to_bytes" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude//List<u8>";  // TypeId(46)
 
-type "functype//wado-compiler/tests/fixtures/stream_http_response_body_string.wado/handle" = fn(i32);  // TypeId(47)
+type "functype//stream_http_response_body_string.wado/handle" = fn(i32);  // TypeId(47)
 
-type "functype//wado-compiler/tests/fixtures/stream_http_response_body_string.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(48)
+type "functype//stream_http_response_body_string.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(48)
 
-type "functype//wado-compiler/tests/fixtures/stream_http_response_body_string.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(49)
+type "functype//stream_http_response_body_string.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(49)
 
-type "functype//wado-compiler/tests/fixtures/stream_http_response_body_string.wado/__cm_export__handle" = fn(i32);  // TypeId(50)
+type "functype//stream_http_response_body_string.wado/__cm_export__handle" = fn(i32);  // TypeId(50)
 
 type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(51)
 
@@ -299,9 +299,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-write from "wasi/future-write";
 import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:stream_http_response_body_string.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/stream_http_response_body_string.wado/string_to_bytes"(s) {
+fn "stream_http_response_body_string.wado/string_to_bytes"(s) {
     let __b: ref "core:prelude//List<u8>";
     let bytes: ref "core:prelude//List<u8>";
     let __iter_3: ref "core:prelude/string.wado//StrCharIter";
@@ -326,7 +326,7 @@ fn "wado-compiler/tests/fixtures/stream_http_response_body_string.wado/string_to
     return bytes;
 }
 
-fn "wado-compiler/tests/fixtures/stream_http_response_body_string.wado/handle"(request) {
+fn "stream_http_response_body_string.wado/handle"(request) {
     let headers: i32;
     let response: i32;
     let body: ref "core:prelude//List<u8>";
@@ -460,16 +460,16 @@ fn "wado-compiler/tests/fixtures/stream_http_response_body_string.wado/handle"(r
     let rx_167: i32;
     let tx_168: i32;
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:stream_http_response_body_string.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:stream_http_response_body_string.wado::__modules_initialized = 1;
     };
     rx_164 = builtin::i32_wrap_i64(local.tee packed_163("wasi/future-new"()));
     tx_165 = builtin::i32_wrap_i64(packed_163 >> 32_i64);
     rx_167 = builtin::i32_wrap_i64(local.tee packed_166("wasi/stream-new"()));
     tx_168 = builtin::i32_wrap_i64(packed_166 >> 32_i64);
-    __pattern_temp_2 = "wado-compiler/tests/fixtures/stream_http_response_body_string.wado/__cm_binding__Response_new"(local.tee headers("wado-compiler/tests/fixtures/stream_http_response_body_string.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: rx_167 }, rx_164);
+    __pattern_temp_2 = "stream_http_response_body_string.wado/__cm_binding__Response_new"(local.tee headers("stream_http_response_body_string.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: rx_167 }, rx_164);
     response = __pattern_temp_2.0;
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __tv_1 = 0;
@@ -762,7 +762,7 @@ fn "wado-compiler/tests/fixtures/stream_http_response_body_string.wado/handle"(r
         }
         "wasi/task-return:handle"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
-    body = "wado-compiler/tests/fixtures/stream_http_response_body_string.wado/string_to_bytes"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(79, 75), used: 2 });
+    body = "stream_http_response_body_string.wado/string_to_bytes"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(79, 75), used: 2 });
     "core:rt/cm_stream_write_u8"(tx_168, body);
     "wasi/stream-drop-writable"(tx_168);
     let __fw_write_ptr_1: i32;
@@ -785,11 +785,11 @@ fn "wado-compiler/tests/fixtures/stream_http_response_body_string.wado/handle"(r
     "wasi/resource-drop:request"(request);
 }
 
-fn "wado-compiler/tests/fixtures/stream_http_response_body_string.wado/__cm_binding__Fields_new"() with Fields {
+fn "stream_http_response_body_string.wado/__cm_binding__Fields_new"() with Fields {
     return "wasi/wasi:http/Fields::new"();
 }
 
-fn "wado-compiler/tests/fixtures/stream_http_response_body_string.wado/__cm_binding__Response_new"(headers, contents, trailers) with Response {
+fn "stream_http_response_body_string.wado/__cm_binding__Response_new"(headers, contents, trailers) with Response {
     let __contents_disc: i32;
     let __contents_inner0: i32;
     let __local_6: i32;
@@ -810,14 +810,14 @@ fn "wado-compiler/tests/fixtures/stream_http_response_body_string.wado/__cm_bind
     return struct.new "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_8, 1: __lifted_result_9 };
 }
 
-fn "wado-compiler/tests/fixtures/stream_http_response_body_string.wado/__cm_export__handle"(request) {
+fn "stream_http_response_body_string.wado/__cm_export__handle"(request) {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:stream_http_response_body_string.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:stream_http_response_body_string.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/stream_http_response_body_string.wado/handle"(request);
+    "stream_http_response_body_string.wado/handle"(request);
 }
 
 fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
@@ -970,4 +970,4 @@ fn "core:prelude/list.wado/List<u8>::grow"(self) {
     self.repr = new_repr;
 }
 
-export fn "wado-compiler/tests/fixtures/stream_http_response_body_string.wado/__cm_export__handle" as "handle"
+export fn "stream_http_response_body_string.wado/__cm_export__handle" as "handle"

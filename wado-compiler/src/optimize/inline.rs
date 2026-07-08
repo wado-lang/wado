@@ -300,12 +300,8 @@ fn count_block_exprs(
 /// Mirrors the same fix `wir_build/functions.rs::build_mangled_name` adopted
 /// in commit 2b005695b for exactly this divergence.
 fn function_inline_key(module_source: &ModuleSource, name: &str) -> String {
-    if module_source.is_entry_point() {
-        name.to_string()
-    } else {
-        let path = module_source.to_path();
-        format!("{}/{}", path.join("/"), name)
-    }
+    let path = module_source.to_path();
+    format!("{}/{}", path.join("/"), name)
 }
 
 /// Compute the call-graph key for a `NirFunction` definition.  Must agree

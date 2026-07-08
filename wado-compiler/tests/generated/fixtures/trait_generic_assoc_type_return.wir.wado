@@ -81,11 +81,29 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(21)
 
+<<<<<<< HEAD
 type "functype//wado-compiler/tests/fixtures/trait_generic_assoc_type_return.wado/run" = fn();  // TypeId(22)
+||||||| 88506a642
+type "functype//wado-compiler/tests/fixtures/trait_generic_assoc_type_return.wado/run" = fn();  // TypeId(19)
+=======
+type "functype//trait_generic_assoc_type_return.wado/run" = fn();  // TypeId(19)
+>>>>>>> origin/main
 
+<<<<<<< HEAD
 type "functype//wado-compiler/tests/fixtures/trait_generic_assoc_type_return.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(23)
+||||||| 88506a642
+type "functype//wado-compiler/tests/fixtures/trait_generic_assoc_type_return.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(20)
+=======
+type "functype//trait_generic_assoc_type_return.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(20)
+>>>>>>> origin/main
 
+<<<<<<< HEAD
 type "functype//wado-compiler/tests/fixtures/trait_generic_assoc_type_return.wado/__cm_export__run" = fn();  // TypeId(24)
+||||||| 88506a642
+type "functype//wado-compiler/tests/fixtures/trait_generic_assoc_type_return.wado/__cm_export__run" = fn();  // TypeId(21)
+=======
+type "functype//trait_generic_assoc_type_return.wado/__cm_export__run" = fn();  // TypeId(21)
+>>>>>>> origin/main
 
 type "functype//wado-compiler/tests/fixtures/trait_generic_assoc_type_return.wado/$value_copy$T168" = fn(ref "tuple//[bool, i32]") -> ref "tuple//[bool, i32]";  // TypeId(25)
 
@@ -157,9 +175,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:trait_generic_assoc_type_return.wado::__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/trait_generic_assoc_type_return.wado/run"() with Stdout {
+fn "trait_generic_assoc_type_return.wado/run"() with Stdout {
     let r: ref "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/ParseIntError>";
     let v_1: i32;
     let __local_2: ref "core:prelude/string.wado//String";
@@ -167,10 +185,10 @@ fn "wado-compiler/tests/fixtures/trait_generic_assoc_type_return.wado/run"() wit
     let s_4: ref "core:prelude/string.wado//String";
     let e: ref "core:prelude/intparse.wado//ParseIntError";
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:trait_generic_assoc_type_return.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:trait_generic_assoc_type_return.wado::__modules_initialized = 1;
     };
     s_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("xyz123abc"), used: 9 };
     let __sroa___match_scrut_0_discriminant: i32;
@@ -191,18 +209,18 @@ fn "wado-compiler/tests/fixtures/trait_generic_assoc_type_return.wado/run"() wit
     }
 }
 
-fn "wado-compiler/tests/fixtures/trait_generic_assoc_type_return.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "trait_generic_assoc_type_return.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/trait_generic_assoc_type_return.wado/__cm_export__run"() {
+fn "trait_generic_assoc_type_return.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:trait_generic_assoc_type_return.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:trait_generic_assoc_type_return.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/trait_generic_assoc_type_return.wado/run"();
+    "trait_generic_assoc_type_return.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -232,7 +250,7 @@ fn "core:cli/println"(message) with Stdout {
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wado-compiler/tests/fixtures/trait_generic_assoc_type_return.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    handle = "trait_generic_assoc_type_return.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -727,4 +745,4 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/trait_generic_assoc_type_return.wado/__cm_export__run" as "run"
+export fn "trait_generic_assoc_type_return.wado/__cm_export__run" as "run"

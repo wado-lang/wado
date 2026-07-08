@@ -551,10 +551,7 @@ async fn render_phases(
                                     ));
                                 };
                                 let mut s = golden_header("WIR with -O2 optimization", input_path);
-                                s.push_str(&wado_compiler::wir_unparse::unparse_wir(
-                                    wir_package,
-                                    Some(input_path),
-                                ));
+                                s.push_str(&wado_compiler::wir_unparse::unparse_wir(wir_package));
                                 Ok(s)
                             });
                         }

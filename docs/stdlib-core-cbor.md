@@ -27,6 +27,14 @@ stops at binary32).
 The spec is vendored verbatim at `wado-compiler/ref/rfc8949.txt`; comments
 cite section numbers from it.
 
+## Synopsis
+
+```wado
+let bytes = to_bytes(&[1, 2, 3]).unwrap();
+let back: List<i32> = from_bytes(bytes).unwrap();
+assert back == [1, 2, 3];
+```
+
 ## Functions
 
 ### `pub fn to_bytes<T: Serialize>(value: &T) -> Result<ByteList, SerializeError>`
