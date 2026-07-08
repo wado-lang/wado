@@ -39,11 +39,12 @@
 //! final read), so at worst a copy is kept.
 
 use super::analyze::is_owned_value;
-use super::ownership::OwnedCalls;
+use super::ownership::{OwnedCalls, func_key};
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::name::FunctionId;
 use crate::tir::{
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirMatchArm, TirPattern, TirStmt, TirStmtKind,
-    TypeTable,
+    FunctionRef, TirBlock, TirExpr, TirExprKind, TirFunction, TirMatchArm, TirPattern, TirStmt,
+    TirStmtKind, TirUnaryOp, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -54,6 +55,7 @@ pub fn compute_move_eligible(
     func: &TirFunction,
     oracle: &OwnedCalls,
     type_table: &TypeTable,
+    functions_with_stores: &IndexSet<FunctionId>,
 ) -> IndexSet<u32> {
     let Some(body) = &func.body else {
         return IndexSet::default();
@@ -71,8 +73,10 @@ pub fn compute_move_eligible(
     }
 
     let mut a = Analyzer {
+        functions_with_stores,
         non_final: IndexSet::default(),
         aliases_live: IndexSet::default(),
+        borrow_escaped: IndexSet::default(),
         let_sources: IndexMap::default(),
         match_sources: Vec::new(),
         exits: Vec::new(),
@@ -119,18 +123,20 @@ pub fn compute_move_eligible(
         }
     }
 
-    // Move-eligible: a fresh local whose every read is final, whose address is
-    // not taken, and which does not alias a still-live local at its binding
-    // (`aliases_live`). Freshness alone is not enough — a fresh value read again
-    // (a twice-consumed `?` temporary, the `Err`-rewrap scrutinee) is fresh but
-    // not safe to move.
+    // Move-eligible: a fresh local whose every value-read is final, which does
+    // not alias a still-live local at its binding (`aliases_live`), and which is
+    // not borrow-escaped — no reference to it persists past its move. A
+    // transient `&`/`&mut` (a call argument to a callee that does not store it)
+    // is a use that keeps the local live but never blocks a later move, so the
+    // "build a fresh buffer, mutate it in place, hand it off" pattern
+    // (`List::filled`, builders) moves instead of copying.
     let owned: IndexSet<u32> = fresh
         .iter()
         .copied()
         .filter(|idx| {
             !a.non_final.contains(idx)
                 && !a.aliases_live.contains(idx)
-                && !func.address_taken_locals.contains(idx)
+                && !a.borrow_escaped.contains(idx)
         })
         .collect();
     owned
@@ -193,21 +199,89 @@ struct Exit {
     live: IndexSet<u32>,
 }
 
-struct Analyzer {
+struct Analyzer<'a> {
+    functions_with_stores: &'a IndexSet<FunctionId>,
     non_final: IndexSet<u32>,
     aliases_live: IndexSet<u32>,
+    /// Locals a persisting reference is taken of — a `&`/`&mut` that is not a
+    /// transient call argument, or is passed to a callee that may store it. Such
+    /// a local may be observed through the reference after its move, so it stays
+    /// copied.
+    borrow_escaped: IndexSet<u32>,
     let_sources: IndexMap<u32, Vec<TirExpr>>,
     match_sources: Vec<(u32, TirExpr)>,
     exits: Vec<Exit>,
     all_locals: IndexSet<u32>,
 }
 
-impl Analyzer {
+impl Analyzer<'_> {
     fn read(&mut self, index: u32, live: &mut IndexSet<u32>, record: bool) {
         if record && live.contains(&index) {
             self.non_final.insert(index);
         }
         live.insert(index);
+    }
+
+    /// A `&place` / `&mut place`: the referent local's storage is used here (keep
+    /// it live so an earlier value-read is not mistaken for a final use), but a
+    /// borrow is not a value consumption, so it never marks the local `non_final`
+    /// — a transient borrow before a later move is fine. Projection indices in
+    /// `place` (`&arr[i]`) are ordinary value-reads. Returns the referent.
+    fn borrow_read(
+        &mut self,
+        place: &TirExpr,
+        live: &mut IndexSet<u32>,
+        record: bool,
+    ) -> Option<u32> {
+        match &place.kind {
+            TirExprKind::Local { index, .. } => {
+                live.insert(*index);
+                Some(*index)
+            }
+            TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::VariantPayload { expr: inner, .. }
+            | TirExprKind::Cast { expr: inner, .. }
+            | TirExprKind::Unary { expr: inner, .. } => self.borrow_read(inner, live, record),
+            TirExprKind::Index { expr: inner, index } => {
+                self.walk_expr(index, live, record);
+                self.borrow_read(inner, live, record)
+            }
+            // A borrow of a non-place (a fresh temporary) escapes nothing.
+            _ => {
+                self.walk_expr(place, live, record);
+                None
+            }
+        }
+    }
+
+    /// Process a call's argument. An explicit `&`/`&mut` argument is a transient
+    /// borrow unless the callee may store it (`functions_with_stores`), in which
+    /// case the referent escapes; every other argument is an ordinary value.
+    fn walk_call_arg(
+        &mut self,
+        arg: &TirExpr,
+        callee: Option<&FunctionRef>,
+        live: &mut IndexSet<u32>,
+        record: bool,
+    ) {
+        if let TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+            expr: place,
+        } = &arg.kind
+        {
+            let referent = self.borrow_read(place, live, record);
+            if record
+                && let Some(r) = referent
+                && callee.is_some_and(|c| {
+                    self.functions_with_stores
+                        .contains(&func_key(&c.module_source, &c.name))
+                })
+            {
+                self.borrow_escaped.insert(r);
+            }
+        } else {
+            self.walk_expr(arg, live, record);
+        }
     }
 
     /// Record that binding `local` derives from `source`: if the local whose
@@ -422,6 +496,42 @@ impl Analyzer {
             }
             TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
                 self.walk_block(block, live, record);
+            }
+            // Calls classify each `&`/`&mut` argument as a transient borrow (see
+            // `walk_call_arg`); the callee / receiver is an ordinary read.
+            TirExprKind::Call { func, args, .. } => {
+                for arg in args.iter().rev() {
+                    self.walk_call_arg(&arg.expr, Some(func), live, record);
+                }
+            }
+            TirExprKind::MethodCall {
+                func,
+                receiver,
+                args,
+                ..
+            } => {
+                for arg in args.iter().rev() {
+                    self.walk_call_arg(&arg.expr, Some(func), live, record);
+                }
+                self.walk_expr(receiver, live, record);
+            }
+            TirExprKind::CmRawCall { args, .. } => {
+                for arg in args.iter().rev() {
+                    self.walk_call_arg(arg, None, live, record);
+                }
+            }
+            // A `&`/`&mut` reached outside a call argument (a `let r = &x`, a
+            // stored / returned reference) persists past the borrow, so the
+            // referent escapes and stays copied.
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                expr: place,
+            } => {
+                if let Some(r) = self.borrow_read(place, live, record)
+                    && record
+                {
+                    self.borrow_escaped.insert(r);
+                }
             }
             _ => {
                 let mut children: Vec<&TirExpr> = Vec::new();

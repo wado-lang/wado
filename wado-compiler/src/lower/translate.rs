@@ -314,7 +314,12 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         let func_moved_spans = base.moved_local_spans.get(&func.module_source);
         let move_eligible_locals = {
             let oracle = value_copy::ownership::OwnedCalls::new(&base.value_copy.returns_owned);
-            value_copy::last_use::compute_move_eligible(func, &oracle, &base.type_table.borrow())
+            value_copy::last_use::compute_move_eligible(
+                func,
+                &oracle,
+                &base.type_table.borrow(),
+                &base.value_copy.functions_with_stores,
+            )
         };
         Self {
             base,

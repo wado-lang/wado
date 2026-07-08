@@ -27,6 +27,11 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 pub struct ValueCopyPlan {
     pub name_for_type: IndexMap<TypeId, (ModuleSource, String)>,
     pub returns_owned: IndexSet<FunctionId>,
+    /// Functions with a non-empty `stores[...]` clause — a callee that may
+    /// persist a reference passed to it. A local whose `&`/`&mut` is passed to
+    /// one is borrow-escaped and cannot be moved (the TIR move analysis runs
+    /// before inlining, so `stores_aliased_locals` is not yet populated).
+    pub functions_with_stores: IndexSet<FunctionId>,
 }
 
 pub fn plan(flat: &mut FlatPackage) -> ValueCopyPlan {
@@ -35,9 +40,18 @@ pub fn plan(flat: &mut FlatPackage) -> ValueCopyPlan {
     // Computed after synthesis so the value-copy helpers (always owned) are
     // present in `flat.functions` and seed the fixpoint.
     let returns_owned = ownership::compute_returns_owned(flat);
+    let functions_with_stores = flat
+        .functions
+        .iter()
+        .filter_map(|f| {
+            let f = f.borrow();
+            (!f.stores.is_empty()).then(|| ownership::func_key(&f.module_source, &f.name))
+        })
+        .collect();
     ValueCopyPlan {
         name_for_type,
         returns_owned,
+        functions_with_stores,
     }
 }
 
