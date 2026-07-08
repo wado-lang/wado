@@ -67,8 +67,7 @@ pub fn compute_returns_owned(project: &FlatPackage) -> IndexSet<FunctionId> {
     for func in &project.functions {
         let func = func.borrow();
         let is_helper = matches!(func.kind, FunctionKind::ValueCopy { .. });
-        let is_builtin =
-            func.module_source.is_core_builtin() || func.module_source.is_wasm_asset();
+        let is_builtin = func.module_source.is_core_builtin() || func.module_source.is_wasm_asset();
         if is_helper || (is_builtin && func.name != "array_get") {
             owned.insert(func_key(&func.module_source, &func.name));
         }
@@ -124,7 +123,13 @@ fn function_returns_owned(
     walker.all_owned
 }
 
-/// Walk every `return` / `break value` and require its operand owned.
+/// Walk every `return value` and require its operand owned. Only `return`
+/// delivers a function's result — Wado value-returning functions always use an
+/// explicit `return`. A `break value` is internal to a loop or a labeled-block
+/// expression (e.g. the `break: __b` inside a `[1,2,3]` sequence literal that is
+/// itself the payload of a returned `Ok(...)`), so its freshness is judged by
+/// `is_owned_value` on the enclosing return expression, not here — checking it
+/// against the function-level fresh set would spuriously poison the return.
 struct ReturnWalker<'a> {
     fresh: &'a IndexSet<u32>,
     oracle: &'a OwnedCalls<'a>,
@@ -134,17 +139,10 @@ struct ReturnWalker<'a> {
 
 impl TirRefVisitor for ReturnWalker<'_> {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
-        match &stmt.kind {
-            TirStmtKind::Return { value: Some(v) }
-            | TirStmtKind::Break {
-                value: Some(v),
-                ..
-            } => {
-                if !super::analyze::is_owned_value(v, self.fresh, self.oracle, self.type_table) {
-                    self.all_owned = false;
-                }
-            }
-            _ => {}
+        if let TirStmtKind::Return { value: Some(v) } = &stmt.kind
+            && !super::analyze::is_owned_value(v, self.fresh, self.oracle, self.type_table)
+        {
+            self.all_owned = false;
         }
         self.walk_stmt(stmt);
     }

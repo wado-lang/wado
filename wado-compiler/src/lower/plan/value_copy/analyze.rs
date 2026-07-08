@@ -295,7 +295,14 @@ fn block_breaks_are_fresh(
 ) -> bool {
     let mut found = false;
     let mut fresh_locals = parent_fresh.clone();
-    if scan_block_for_breaks(label, block, &mut found, &mut fresh_locals, oracle, type_table) {
+    if scan_block_for_breaks(
+        label,
+        block,
+        &mut found,
+        &mut fresh_locals,
+        oracle,
+        type_table,
+    ) {
         found
     } else {
         false

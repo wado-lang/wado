@@ -276,6 +276,12 @@ struct FunctionTranslator<'a, 'p> {
     /// Last-use spans for this function's module (WEP 2026-05-21). A `Local`
     /// read whose span is present is a final use, so its copy is elided.
     func_moved_spans: Option<&'a IndexSet<Span>>,
+    /// TIR-level move-eligible locals for this function (WEP 2026-05-21):
+    /// backward liveness plus a freshness fixpoint proves each read is a final
+    /// use of a local that exclusively owns fresh storage. Reaches synthesized
+    /// bodies the AST-keyed `func_moved_spans` cannot see (serde de/serialize,
+    /// derives). Unioned with the span check.
+    move_eligible_locals: IndexSet<u32>,
     /// The arena every converter pushes nodes into. `convert_function` takes it
     /// (`into_inner`) as the function's `Body`; `convert_global` wraps the
     /// initializer it builds into a single-statement global-init `Body`.
@@ -306,6 +312,10 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             .collect();
         let address_taken = func.address_taken_locals.clone();
         let func_moved_spans = base.moved_local_spans.get(&func.module_source);
+        let move_eligible_locals = {
+            let oracle = value_copy::ownership::OwnedCalls::new(&base.value_copy.returns_owned);
+            value_copy::last_use::compute_move_eligible(func, &oracle, &base.type_table.borrow())
+        };
         Self {
             base,
             specialized,
@@ -316,6 +326,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             immutable_locals,
             address_taken,
             func_moved_spans,
+            move_eligible_locals,
             arena: RefCell::new(Body::empty()),
         }
     }
@@ -334,6 +345,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             immutable_locals: IndexSet::default(),
             address_taken: IndexSet::default(),
             func_moved_spans: None,
+            move_eligible_locals: IndexSet::default(),
             arena: RefCell::new(Body::empty()),
         }
     }
@@ -556,8 +568,11 @@ impl FunctionTranslator<'_, '_> {
     /// Whether `value` is a whole-local read that the last-use analysis marked
     /// as the local's final use, so its consumption is a move rather than a copy.
     fn is_last_use_move(&self, value: &TirExpr) -> bool {
-        matches!(value.kind, TirExprKind::Local { .. })
-            && self
+        let TirExprKind::Local { index, .. } = &value.kind else {
+            return false;
+        };
+        self.move_eligible_locals.contains(index)
+            || self
                 .func_moved_spans
                 .is_some_and(|spans| spans.contains(&value.span))
     }

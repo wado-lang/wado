@@ -256,7 +256,10 @@ fn analyze_body(
     // receivers are not — they name the caller's storage and are never moved.
     for param in &func.params {
         if param.self_kind == ast::SelfKind::None
-            && !matches!(&param.ty, ast::Type::Reference(_) | ast::Type::MutReference(_))
+            && !matches!(
+                &param.ty,
+                ast::Type::Reference(_) | ast::Type::MutReference(_)
+            )
         {
             elig.bindings.insert(param.id);
         }
@@ -435,7 +438,13 @@ impl LastUseAnalyzer<'_> {
             }
             ast::Stmt::TaskReturn(t) => self.walk_expr(&t.value, live, record),
             ast::Stmt::If(s) => {
-                self.walk_if(&s.condition, &s.then_block, s.else_block.as_ref(), live, record);
+                self.walk_if(
+                    &s.condition,
+                    &s.then_block,
+                    s.else_block.as_ref(),
+                    live,
+                    record,
+                );
             }
             ast::Stmt::While(s) => self.walk_while(&s.condition, &s.body, live, record),
             ast::Stmt::For(s) => self.walk_for(s, live, record),
@@ -446,7 +455,11 @@ impl LastUseAnalyzer<'_> {
                 // Reset to the innermost loop-exit set (the fall-through below a
                 // break is unreachable). Unknown target (labeled / no context) →
                 // keep every eligible local live, the safe over-approximation.
-                *live = self.loop_exit.last().cloned().unwrap_or_else(|| self.eligible.clone());
+                *live = self
+                    .loop_exit
+                    .last()
+                    .cloned()
+                    .unwrap_or_else(|| self.eligible.clone());
                 if let Some(value) = &b.value {
                     self.walk_expr(value, live, record);
                 }
@@ -520,7 +533,7 @@ impl LastUseAnalyzer<'_> {
     fn walk_loop(&mut self, body: &Block, live: &mut IndexSet<AstId>, record: bool) {
         let exit_live = live.clone();
         self.loop_exit.push(exit_live.clone());
-        let mut head = exit_live.clone();
+        let mut head = exit_live;
         loop {
             let mut work = head.clone();
             self.walk_block(body, &mut work, false);
@@ -560,7 +573,7 @@ impl LastUseAnalyzer<'_> {
             head = candidate;
         }
         let mut live_after_init = if record {
-            let mut work = head.clone();
+            let mut work = head;
             if let Some(update) = &s.update {
                 self.walk_expr(update, &mut work, true);
             }
@@ -1044,6 +1057,43 @@ mod last_use_tests {
                    return items; }";
         // `v` is bound and consumed within one iteration → its push is a last use.
         assert_eq!(count(src, "v"), 1);
+    }
+
+    #[test]
+    fn serde_list_deserialize_item_is_moved() {
+        // Mirrors `impl Deserialize for List<T>` in lib/core/serde.wado: the
+        // accumulator loop pushes each `item` bound from `if let Some(item) =
+        // next_opt`, with the only loop exit a `return` in the else branch.
+        let src = "\
+            fn src(x: i32) -> Option<List<i32>> { if x > 0 { return Option::Some([x]); } return Option::None; } \
+            export fn f() -> List<List<i32>> { \
+              let mut items: List<List<i32>> = List::with_capacity(2); \
+              let mut i = 0; \
+              loop { \
+                let next_opt = src(i); \
+                if let Some(item) = next_opt { \
+                  items.push(item); \
+                } else { \
+                  return items; \
+                } \
+                i = i + 1; \
+              } \
+            }";
+        assert_eq!(count(src, "item"), 1);
+    }
+
+    #[test]
+    fn iflet_binding_in_loop_is_moved() {
+        let src = "export fn f(n: i32) -> List<List<i32>> { \
+                   let mut items: List<List<i32>> = []; \
+                   let mut i = 0; \
+                   loop { \
+                     let next_opt = if i < n { Option::Some([i, i]) } else { Option::None }; \
+                     if let Some(item) = next_opt { items.push(item); } else { break; } \
+                     i = i + 1; \
+                   } \
+                   return items; }";
+        assert_eq!(count(src, "item"), 1);
     }
 
     #[test]

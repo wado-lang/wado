@@ -10,6 +10,7 @@
 //! Wrapper elision runs later in `optimize::value_copy_elide`.
 
 pub mod analyze;
+pub mod last_use;
 pub mod ownership;
 pub mod synthesize;
 

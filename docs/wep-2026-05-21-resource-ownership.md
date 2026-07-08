@@ -436,6 +436,65 @@ and which no interprocedural `returns_fresh` property is needed to justify.
   and by-value `R` are the surface forms. The builtin names may be retired
   once binding synthesis is type-driven.
 
+### M5 value-copy client — as implemented
+
+The shipped value-copy client is caller-side and single-phase, but its
+move/copy decision is split across two analyses rather than one `AstId`-keyed
+classification, because two consumers with different reach need it:
+
+- Source last use — `elaborator::liveness` runs the backward last-use pass over
+  the typed AST and projects the final-use sites to `(module, span)` in
+  `moved_local_spans` (threaded `Package` → `FlatPackage` to the planner). This
+  is the LSP-facing, `AstId`-keyed artifact the WEP describes.
+- Synthesized last use — the AST pass cannot see reify- and
+  synthesizer-emitted bodies (serde `deserialize`/`serialize`, `Default` /
+  `Clone` derives, the `?` desugar), which is exactly where the hot copies are
+  (a deserialized struct field). So `lower::plan::value_copy::last_use` runs a
+  second last-use analysis directly on the monomorphized TIR of every function.
+  It is post-monomorphization, so it keys on nothing — it recomputes per body —
+  and needs no cross-phase span table.
+
+The fold (`lower::translate`) moves a consumption when _either_ analysis marks
+it: the span is in `moved_local_spans`, or the TIR local is in the per-function
+move set. Union is sound because each is independently sound; the TIR pass is
+the superset in practice but the span pass is retained for source fidelity.
+
+The TIR pass (`compute_move_eligible`) is a backward liveness plus a freshness
+fixpoint. A local is moved when:
+
+- every read of it is a _final_ read (dead on every live path afterward) —
+  precise across divergent `match` arms (a `?` `Err`-rewrap reads the scrutinee
+  but only on the returning path, so the scrutinee stays a final read on the
+  `Ok` path) and across loop back-edges (a value produced and consumed in one
+  iteration is dead at the head);
+- it _exclusively owns fresh storage_ — a least fixpoint over `is_owned_value`
+  (shared with the return-convention analysis) proves its value traces to a
+  fresh allocation, allowing multi-read intermediates (the `?` tag-test +
+  payload-extract) to carry freshness up the chain;
+- it has _no live alias_ at its binding — the local its value is a projection
+  or whole-value move of (`alias_root`, `None` for a fresh allocation whose
+  result aliases nothing) is dead after the binding. This is what keeps
+  `if let Some(s) = opt { s.push(x) }` copying `s` while `opt` is read again,
+  yet lets a deserialize temporary — whose scrutinee is a dead call result —
+  move.
+
+Freshness (does the value alias existing data) and consumability (is this the
+last observation) are orthogonal: a fresh value read twice is not movable, and
+the analysis keeps them as separate sets (`fresh` vs the final move set)
+precisely so a twice-read fresh temporary propagates ownership without itself
+being moved.
+
+The return-convention analysis (`ownership.rs`) supplies the interprocedural
+half: a call is a fresh allocation iff its callee returns owned. It is the
+caller-side, single-phase replacement for `optimize::escape`'s `returns_fresh`
+fixpoint. `optimize::escape` / `optimize::value_copy_elide` are not yet deleted
+(the `param_escapes` confinement half still feeds `value_copy_demote`); their
+removal is deferred to the M5 checklist below.
+
+- [ ] Fold the confinement (`param_escapes`) recovery into the caller-side
+      insertion so `optimize::escape` / `optimize::value_copy_elide` can be
+      deleted, as the WEP intends.
+
 ### Relationship to earlier WEPs
 
 - [WEP 2026-01-12 (RAII)](./wep-2026-01-12-resource-lifecycle.md): its
