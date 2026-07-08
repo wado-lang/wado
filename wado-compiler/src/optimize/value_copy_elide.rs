@@ -467,7 +467,8 @@ fn elision_safe(
     value_copy_ids: &IndexSet<FuncId>,
     usage: &IndexMap<u32, LocalUsage>,
 ) -> bool {
-    is_target_read_only(target_index, usage) && copy_source_strippable(body, value, value_copy_ids, usage)
+    is_target_read_only(target_index, usage)
+        && copy_source_strippable(body, value, value_copy_ids, usage)
 }
 
 /// Collect `$value_copy$T(arg)` calls that sit directly in an aggregate literal

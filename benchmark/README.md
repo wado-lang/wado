@@ -147,17 +147,17 @@ Compress:
 
 | Implementation         | Throughput  | ms/iter   | vs best |
 | ---------------------- | ----------- | --------- | ------- |
-| Rust (zlib-rs)         | 228.61 MB/s | 2.762 ms  | 1.00x   |
-| JavaScript (node:zlib) | 160.31 MB/s | 3.939 ms  | 1.43x   |
-| **Wado** (core:zlib)   | 30.92 MB/s  | 20.421 ms | 7.39x   |
+| Rust (zlib-rs)         | 213.52 MB/s | 2.958 ms  | 1.00x   |
+| JavaScript (node:zlib) | 148.78 MB/s | 4.245 ms  | 1.44x   |
+| **Wado** (core:zlib)   | 44.90 MB/s  | 14.065 ms | 4.75x   |
 
 Decompress:
 
 | Implementation         | Throughput  | ms/iter  | vs best |
 | ---------------------- | ----------- | -------- | ------- |
-| Rust (zlib-rs)         | 2.06 GB/s   | 0.306 ms | 1.00x   |
-| JavaScript (node:zlib) | 1.02 GB/s   | 0.617 ms | 2.02x   |
-| **Wado** (core:zlib)   | 173.74 MB/s | 3.634 ms | 11.88x  |
+| Rust (zlib-rs)         | 1.81 GB/s   | 0.349 ms | 1.00x   |
+| JavaScript (node:zlib) | 1.08 GB/s   | 0.583 ms | 1.68x   |
+| **Wado** (core:zlib)   | 243.78 MB/s | 2.590 ms | 7.42x   |
 
 ## Parsing
 
