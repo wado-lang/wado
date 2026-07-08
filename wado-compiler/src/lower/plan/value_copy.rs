@@ -27,6 +27,12 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 pub struct ValueCopyPlan {
     pub name_for_type: IndexMap<TypeId, (ModuleSource, String)>,
     pub returns_owned: IndexSet<FunctionId>,
+    /// Functions whose every returned value is owned *or* a projection of the
+    /// receiver / first parameter (`build(&self) -> List { return *self }`). A
+    /// call to one is fresh when its receiver is, so a `[1, 2, 3]` builder
+    /// finalized by `.build()` is not defensively copied. Superset of
+    /// `returns_owned`.
+    pub returns_self_projection: IndexSet<FunctionId>,
     /// Functions with a non-empty `stores[...]` clause — a callee that may
     /// persist a reference passed to it. A local whose `&`/`&mut` is passed to
     /// one is borrow-escaped and cannot be moved (the TIR move analysis runs
@@ -39,7 +45,7 @@ pub fn plan(flat: &mut FlatPackage) -> ValueCopyPlan {
     let name_for_type = synthesize::synthesize_helpers(flat, seed);
     // Computed after synthesis so the value-copy helpers (always owned) are
     // present in `flat.functions` and seed the fixpoint.
-    let returns_owned = ownership::compute_returns_owned(flat);
+    let conventions = ownership::compute_return_conventions(flat);
     let functions_with_stores = flat
         .functions
         .iter()
@@ -50,7 +56,8 @@ pub fn plan(flat: &mut FlatPackage) -> ValueCopyPlan {
         .collect();
     ValueCopyPlan {
         name_for_type,
-        returns_owned,
+        returns_owned: conventions.returns_owned,
+        returns_self_projection: conventions.returns_self_projection,
         functions_with_stores,
     }
 }

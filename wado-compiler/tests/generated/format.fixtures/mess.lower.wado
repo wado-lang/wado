@@ -2050,7 +2050,7 @@ pub fn println(message: String) with Stdout {
     let rx: Stream<u8> = __pattern_temp_0.0;
     let tx: StreamWritable<u8> = __pattern_temp_0.1;
     let handle: Future<Result<(), ErrorCode>> = "mess_dirty.wado::__cm_binding__Stdout_write_via_stream"(rx as i32);
-    core::cli::write_to_stream(tx, "mess_dirty.wado::$value_copy$T28"(message), true);
+    core::cli::write_to_stream(tx, message, true);
     core::rt::drop_cli_write_future(handle);
 }
 
@@ -2059,7 +2059,7 @@ pub fn eprintln(message: String) with Stderr {
     let rx: Stream<u8> = __pattern_temp_0.0;
     let tx: StreamWritable<u8> = __pattern_temp_0.1;
     let handle: Future<Result<(), ErrorCode>> = "mess_dirty.wado::__cm_binding__Stderr_write_via_stream"(rx as i32);
-    core::cli::write_to_stream(tx, "mess_dirty.wado::$value_copy$T28"(message), true);
+    core::cli::write_to_stream(tx, message, true);
     core::rt::drop_cli_write_future(handle);
 }
 
@@ -2068,7 +2068,7 @@ pub fn print(message: String) with Stdout {
     let rx: Stream<u8> = __pattern_temp_0.0;
     let tx: StreamWritable<u8> = __pattern_temp_0.1;
     let handle: Future<Result<(), ErrorCode>> = "mess_dirty.wado::__cm_binding__Stdout_write_via_stream"(rx as i32);
-    core::cli::write_to_stream(tx, "mess_dirty.wado::$value_copy$T28"(message), false);
+    core::cli::write_to_stream(tx, message, false);
     core::rt::drop_cli_write_future(handle);
 }
 
@@ -2077,7 +2077,7 @@ pub fn eprint(message: String) with Stderr {
     let rx: Stream<u8> = __pattern_temp_0.0;
     let tx: StreamWritable<u8> = __pattern_temp_0.1;
     let handle: Future<Result<(), ErrorCode>> = "mess_dirty.wado::__cm_binding__Stderr_write_via_stream"(rx as i32);
-    core::cli::write_to_stream(tx, "mess_dirty.wado::$value_copy$T28"(message), false);
+    core::cli::write_to_stream(tx, message, false);
     core::rt::drop_cli_write_future(handle);
 }
 
@@ -2086,7 +2086,7 @@ pub fn print_bytes(data: List<u8>) with Stdout {
     let rx: Stream<u8> = __pattern_temp_0.0;
     let tx: StreamWritable<u8> = __pattern_temp_0.1;
     let handle: Future<Result<(), ErrorCode>> = "mess_dirty.wado::__cm_binding__Stdout_write_via_stream"(rx as i32);
-    core::rt::cm_stream_write_u8(&tx as i32, "mess_dirty.wado::$value_copy$T22"(data));
+    core::rt::cm_stream_write_u8(&tx as i32, data);
     cm_raw_call stream-drop-writable(&tx as i32);
     core::rt::drop_cli_write_future(handle);
 }
@@ -8367,7 +8367,7 @@ fn u64::fmt_base(self: Box<u64>, f: &mut Formatter, base: i32, upper: bool, pref
     };
     let mask: i32 = (base - 1);
     let digit_count: i32 = "core::prelude/primitive.wado::count_digits_u64_base"(val_i64, bits_per_digit);
-    let offset: i32 = f.Formatter::prepare_int_write(false, "mess_dirty.wado::$value_copy$T28"(prefix), digit_count);
+    let offset: i32 = f.Formatter::prepare_int_write(false, prefix, digit_count);
     "core::prelude/primitive.wado::write_u64_base_digits"(f.buf.String::internal_raw_bytes_mut(), offset, val_i64, digit_count, bits_per_digit, mask, upper);
 }
 
@@ -11103,7 +11103,7 @@ fn String::internal_into_raw_bytes(s: String) -> Array<u8> {
 }
 
 fn String::internal_from_utf8_raw(bytes: Array<u8>, len: i32) -> String {
-    return String { repr: "mess_dirty.wado::$value_copy$T20"(bytes), used: len };
+    return String { repr: bytes, used: len };
 }
 
 pub fn String::grow(self: &mut String, min_capacity: i32) {
@@ -11297,10 +11297,10 @@ pub fn "StrUtf8ByteIter^Iterator::next"(self: &mut StrUtf8ByteIter) -> Option<u8
 }
 
 pub fn "StrUtf8ByteIter^Iterator::collect"(self: &mut StrUtf8ByteIter) -> List<u8> {
-    let mut result: List<u8> = "mess_dirty.wado::$value_copy$T22"(__seq_lit: {
+    let mut result: List<u8> = __seq_lit: {
         let mut __b: List<u8> = "core::prelude/list.wado::List<u8>^SequenceLiteralBuilder::new_literal"(0);
         break __seq_lit: __b."List<u8>^SequenceLiteralBuilder::build"();
-    });
+    };
     loop {
         let __match_4: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
         match __match_4 {
@@ -11520,10 +11520,10 @@ pub fn "StrCharIter^Iterator::next"(self: &mut StrCharIter) -> Option<char> {
 }
 
 pub fn "StrCharIter^Iterator::collect"(self: &mut StrCharIter) -> List<char> {
-    let mut result: List<char> = "mess_dirty.wado::$value_copy$T338"(__seq_lit: {
+    let mut result: List<char> = __seq_lit: {
         let mut __b: List<char> = "core::prelude/list.wado::List<char>^SequenceLiteralBuilder::new_literal"(0);
         break __seq_lit: __b."List<char>^SequenceLiteralBuilder::build"();
-    });
+    };
     loop {
         let __match_4: Option<char> = self."StrCharIter^Iterator::next"();
         match __match_4 {
@@ -12225,7 +12225,7 @@ pub fn String::substr_bytes_unchecked(self: &String, start: i32, end: i32) -> St
 }
 
 pub fn String::contains(self: &String, pat: String) -> bool {
-    return match self.String::find("mess_dirty.wado::$value_copy$T28"(pat)) {
+    return match self.String::find(pat) {
         Some(_) => true,
         _ => false,
     };
@@ -12497,7 +12497,7 @@ pub fn String::insert_str(self: &mut String, byte_index: i32, s: String) {
             });
         }
     }
-    self.String::insert_str_unchecked(byte_index, "mess_dirty.wado::$value_copy$T28"(s));
+    self.String::insert_str_unchecked(byte_index, s);
 }
 
 pub fn String::insert_str_unchecked(self: &mut String, byte_index: i32, s: String) {
@@ -12647,7 +12647,7 @@ pub fn String::repeat(self: &String, n: i32) -> String {
 }
 
 pub fn String::replace(self: &String, from: String, to: String) -> String {
-    return self.String::replacen("mess_dirty.wado::$value_copy$T28"(from), "mess_dirty.wado::$value_copy$T28"(to), -1);
+    return self.String::replacen(from, to, -1);
 }
 
 pub fn String::replacen(self: &String, from: String, to: String, count: i32) -> String {
@@ -12793,10 +12793,10 @@ pub fn "StrSplitIter^Iterator::next"(self: &mut StrSplitIter) -> Option<String> 
 }
 
 pub fn "StrSplitIter^Iterator::collect"(self: &mut StrSplitIter) -> List<String> {
-    let mut result: List<String> = "mess_dirty.wado::$value_copy$T119"(__seq_lit: {
+    let mut result: List<String> = __seq_lit: {
         let mut __b: List<String> = "core::prelude/list.wado::List<core:prelude/string.wado/String>^SequenceLiteralBuilder::new_literal"(0);
         break __seq_lit: __b."List<core:prelude/string.wado/String>^SequenceLiteralBuilder::build"();
-    });
+    };
     loop {
         let __match_4: Option<String> = self."StrSplitIter^Iterator::next"();
         match __match_4 {
@@ -13034,10 +13034,10 @@ pub fn "StrSplitNIter^Iterator::next"(self: &mut StrSplitNIter) -> Option<String
 }
 
 pub fn "StrSplitNIter^Iterator::collect"(self: &mut StrSplitNIter) -> List<String> {
-    let mut result: List<String> = "mess_dirty.wado::$value_copy$T119"(__seq_lit: {
+    let mut result: List<String> = __seq_lit: {
         let mut __b: List<String> = "core::prelude/list.wado::List<core:prelude/string.wado/String>^SequenceLiteralBuilder::new_literal"(0);
         break __seq_lit: __b."List<core:prelude/string.wado/String>^SequenceLiteralBuilder::build"();
-    });
+    };
     loop {
         let __match_4: Option<String> = self."StrSplitNIter^Iterator::next"();
         match __match_4 {
@@ -13254,10 +13254,10 @@ pub fn "StrSplitWhitespaceIter^Iterator::next"(self: &mut StrSplitWhitespaceIter
 }
 
 pub fn "StrSplitWhitespaceIter^Iterator::collect"(self: &mut StrSplitWhitespaceIter) -> List<String> {
-    let mut result: List<String> = "mess_dirty.wado::$value_copy$T119"(__seq_lit: {
+    let mut result: List<String> = __seq_lit: {
         let mut __b: List<String> = "core::prelude/list.wado::List<core:prelude/string.wado/String>^SequenceLiteralBuilder::new_literal"(0);
         break __seq_lit: __b."List<core:prelude/string.wado/String>^SequenceLiteralBuilder::build"();
-    });
+    };
     loop {
         let __match_4: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
         match __match_4 {
@@ -13491,10 +13491,10 @@ pub fn "StrLinesIter^Iterator::next"(self: &mut StrLinesIter) -> Option<String> 
 }
 
 pub fn "StrLinesIter^Iterator::collect"(self: &mut StrLinesIter) -> List<String> {
-    let mut result: List<String> = "mess_dirty.wado::$value_copy$T119"(__seq_lit: {
+    let mut result: List<String> = __seq_lit: {
         let mut __b: List<String> = "core::prelude/list.wado::List<core:prelude/string.wado/String>^SequenceLiteralBuilder::new_literal"(0);
         break __seq_lit: __b."List<core:prelude/string.wado/String>^SequenceLiteralBuilder::build"();
-    });
+    };
     loop {
         let __match_4: Option<String> = self."StrLinesIter^Iterator::next"();
         match __match_4 {
@@ -13715,10 +13715,10 @@ pub fn "StrCharIndicesIter^Iterator::next"(self: &mut StrCharIndicesIter) -> Opt
 }
 
 pub fn "StrCharIndicesIter^Iterator::collect"(self: &mut StrCharIndicesIter) -> List<[i32, char]> {
-    let mut result: List<[i32, char]> = "mess_dirty.wado::$value_copy$T423"(__seq_lit: {
+    let mut result: List<[i32, char]> = __seq_lit: {
         let mut __b: List<[i32, char]> = "core::prelude/list.wado::List<[i32,char]>^SequenceLiteralBuilder::new_literal"(0);
         break __seq_lit: __b."List<[i32,char]>^SequenceLiteralBuilder::build"();
-    });
+    };
     loop {
         let __match_4: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_4 {
@@ -15359,7 +15359,7 @@ pub fn log_stdout(message: String) {
     let rx: Stream<u8> = __pattern_temp_0.0;
     let tx: StreamWritable<u8> = __pattern_temp_0.1;
     let future_handle: i32 = core::builtin::call_indirect_stdout_write_via_stream(rx as i32);
-    core::rt::write_string_to_stream(tx, "mess_dirty.wado::$value_copy$T28"(message), true);
+    core::rt::write_string_to_stream(tx, message, true);
     core::rt::drop_cli_write_future(future_handle as Future<Result<(), ErrorCode>>);
 }
 
@@ -15368,17 +15368,17 @@ pub fn log_stderr(message: String) {
     let rx: Stream<u8> = __pattern_temp_0.0;
     let tx: StreamWritable<u8> = __pattern_temp_0.1;
     let future_handle: i32 = core::builtin::call_indirect_stderr_write_via_stream(rx as i32);
-    core::rt::write_string_to_stream(tx, "mess_dirty.wado::$value_copy$T28"(message), true);
+    core::rt::write_string_to_stream(tx, message, true);
     core::rt::drop_cli_write_future(future_handle as Future<Result<(), ErrorCode>>);
 }
 
 fn panic(message: String) -> ! {
-    core::rt::log_stderr("mess_dirty.wado::$value_copy$T28"(message));
+    core::rt::log_stderr(message);
     core::builtin::unreachable();
 }
 
 fn assert_failed(message: String) -> ! {
-    core::rt::panic("mess_dirty.wado::$value_copy$T28"(message));
+    core::rt::panic(message);
 }
 
 fn unreachable() -> ! {
@@ -15484,7 +15484,7 @@ fn cm_stream_read_raw_free(ptr: i32, byte_count: i32, element_align: i32) {
 }
 
 fn cm_stream_write_u8(handle: i32, data: List<u8>) {
-    let packed: i64 = core::rt::cm_lower_array_u8("mess_dirty.wado::$value_copy$T22"(data));
+    let packed: i64 = core::rt::cm_lower_array_u8(data);
     let ptr: i32 = packed as i32;
     let len: i32 = (packed >> 32) as i32;
     core::rt::cm_stream_write_drain(handle, ptr, len, 1);
@@ -15519,7 +15519,7 @@ fn cm_stream_write_raw_u8(handle: i32, data: &Array<u8>, len: i32) {
 }
 
 fn cm_error_context_new(msg: String) -> i32 {
-    let packed: i64 = core::rt::cm_lower_string("mess_dirty.wado::$value_copy$T28"(msg));
+    let packed: i64 = core::rt::cm_lower_string(msg);
     let ptr: i32 = packed as i32;
     let len: i32 = (packed >> 32) as i32;
     let handle: i32 = core::builtin::error_context_new(ptr, len);
@@ -19648,7 +19648,7 @@ fn Wrapper::clone_it(self: &Wrapper) -> Wrapper {
 }
 
 fn Logger::new(prefix: String) -> Logger {
-    return Logger { prefix: "mess_dirty.wado::$value_copy$T28"(prefix) };
+    return Logger { prefix: prefix };
 }
 
 fn Logger::log(self: &Logger, msg: String) {
@@ -20923,11 +20923,11 @@ pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::
 }
 
 pub fn ConvertError::new(message: String) -> ConvertError {
-    return ConvertError { message: "mess_dirty.wado::$value_copy$T28"(message) };
+    return ConvertError { message: message };
 }
 
 pub fn LenientParseError::new(reason: String) -> LenientParseError {
-    return LenientParseError { reason: "mess_dirty.wado::$value_copy$T28"(reason) };
+    return LenientParseError { reason: reason };
 }
 
 pub fn LenientParseError::reason(self: &LenientParseError) -> String {
@@ -21317,7 +21317,7 @@ pub fn "List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>:
         core::builtin::cold_path();
         self."List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::grow"();
     }
-    self.repr."Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>^IndexAssign<i32>::index_assign"(used, "mess_dirty.wado::$value_copy$T137"(value));
+    self.repr."Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>^IndexAssign<i32>::index_assign"(used, value);
     self.used = (used + 1);
 }
 
@@ -21371,7 +21371,7 @@ fn "[]<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
 }
 
 fn "List<u8>::internal_from_raw"(repr: Array<u8>, used: i32) -> List<u8> {
-    return List<u8> { repr: "mess_dirty.wado::$value_copy$T20"(repr), used: used };
+    return List<u8> { repr: repr, used: used };
 }
 
 pub fn "Array<u8>^InspectAlt::inspect_alt"(self: &Array<u8>, f: &mut Formatter) {
@@ -21408,7 +21408,7 @@ pub fn "List<[i32,char]>::push"(self: &mut List<[i32, char]>, value: [i32, char]
         core::builtin::cold_path();
         self."List<[i32,char]>::grow"();
     }
-    self.repr."Array<[i32,char]>^IndexAssign<i32>::index_assign"(used, "mess_dirty.wado::$value_copy$T339"(value));
+    self.repr."Array<[i32,char]>^IndexAssign<i32>::index_assign"(used, value);
     self.used = (used + 1);
 }
 
@@ -21426,7 +21426,7 @@ pub fn "List<core:prelude/string.wado/String>::push"(self: &mut List<String>, va
         core::builtin::cold_path();
         self."List<core:prelude/string.wado/String>::grow"();
     }
-    self.repr."Array<core:prelude/string.wado/String>^IndexAssign<i32>::index_assign"(used, "mess_dirty.wado::$value_copy$T28"(value));
+    self.repr."Array<core:prelude/string.wado/String>^IndexAssign<i32>::index_assign"(used, value);
     self.used = (used + 1);
 }
 
@@ -21882,7 +21882,7 @@ fn "IterMap<core:prelude/string.wado/StrCharIter,char>^IntoIterator::into_iter"(
 }
 
 fn "Array<core:prelude/string.wado/String>^IndexAssign<i32>::index_assign"(self: &mut Array<String>, index: i32, value: String) with stores[value] {
-    core::builtin::array_set::<String>(self, index, "mess_dirty.wado::$value_copy$T28"(value));
+    core::builtin::array_set::<String>(self, index, value);
 }
 
 pub fn "List<core:prelude/string.wado/String>::grow"(self: &mut List<String>) {
@@ -21902,7 +21902,7 @@ pub fn "List<[i32,char]>::with_capacity"(capacity: i32) -> List<[i32, char]> {
 }
 
 fn "Array<[i32,char]>^IndexAssign<i32>::index_assign"(self: &mut Array<[i32, char]>, index: i32, value: [i32, char]) with stores[value] {
-    core::builtin::array_set::<[i32, char]>(self, index, "mess_dirty.wado::$value_copy$T339"(value));
+    core::builtin::array_set::<[i32, char]>(self, index, value);
 }
 
 pub fn "List<[i32,char]>::grow"(self: &mut List<[i32, char]>) {
@@ -21950,7 +21950,7 @@ fn "core/prelude/array.wado/write_seq_inspect_alt<u8>"(repr: &Array<u8>, len: i3
 }
 
 fn "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>^IndexAssign<i32>::index_assign"(self: &mut Array<[String, String]>, index: i32, value: [String, String]) with stores[value] {
-    core::builtin::array_set::<[String, String]>(self, index, "mess_dirty.wado::$value_copy$T137"(value));
+    core::builtin::array_set::<[String, String]>(self, index, value);
 }
 
 pub fn "List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::grow"(self: &mut List<[String, String]>) {

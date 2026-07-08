@@ -313,7 +313,10 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         let address_taken = func.address_taken_locals.clone();
         let func_moved_spans = base.moved_local_spans.get(&func.module_source);
         let move_eligible_locals = {
-            let oracle = value_copy::ownership::OwnedCalls::new(&base.value_copy.returns_owned);
+            let oracle = value_copy::ownership::OwnedCalls::new(
+                &base.value_copy.returns_owned,
+                &base.value_copy.returns_self_projection,
+            );
             value_copy::last_use::compute_move_eligible(
                 func,
                 &oracle,
@@ -566,7 +569,10 @@ impl FunctionTranslator<'_, '_> {
         if self.is_last_use_move(value) {
             return false;
         }
-        let oracle = value_copy::ownership::OwnedCalls::new(&self.base.value_copy.returns_owned);
+        let oracle = value_copy::ownership::OwnedCalls::new(
+            &self.base.value_copy.returns_owned,
+            &self.base.value_copy.returns_self_projection,
+        );
         value_copy::analyze::should_wrap(value, &self.base.type_table.borrow(), &oracle)
     }
 

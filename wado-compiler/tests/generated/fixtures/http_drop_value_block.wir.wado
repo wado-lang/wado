@@ -902,7 +902,7 @@ fn "http_drop_value_block.wado/__cm_binding__Request_get_method"(self) with Requ
     } else if __vdisc == 8 {
         __vresult = struct.new "wasi:http/types.wado//Method" { 8 };
     } else {
-        __vresult = struct.new "wasi:http/types.wado//Method::Other" { discriminant: 9, payload_0: ref.as_non_null(ptr = builtin::load_i32(__outptr + 4); len_5 = builtin::load_i32((__outptr + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_5); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(arr)), used: len_5 }) };
+        __vresult = struct.new "wasi:http/types.wado//Method::Other" { discriminant: 9, payload_0: ref.as_non_null(ptr = builtin::load_i32(__outptr + 4); len_5 = builtin::load_i32((__outptr + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_5); struct.new "core:prelude/string.wado//String" { repr: arr, used: len_5 }) };
     }
     drop("mem/realloc"(__outptr, 12, 4, 0));
     return __vresult;
@@ -948,7 +948,7 @@ fn "http_drop_value_block.wado/__cm_binding__Fields_append"(self, name, value) w
             __disc_10 = builtin::load_u8((__outptr + 4) + 4);
             __option_result = ref.null none;
             if __disc_10 != 0 {
-                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_17 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr_18 = "core:rt/memory_to_gc_array"(ptr, len_17); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(arr_18)), used: len_17 });
+                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_17 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr_18 = "core:rt/memory_to_gc_array"(ptr, len_17); struct.new "core:prelude/string.wado//String" { repr: arr_18, used: len_17 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
             }
             __vresult = struct.new "wasi:http/types.wado//HeaderError::Other" { discriminant: 4, payload_0: __option_result };

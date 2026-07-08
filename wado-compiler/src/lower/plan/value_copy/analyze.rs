@@ -26,7 +26,8 @@ use crate::tir_visitor::TirRefVisitor;
 pub fn collect_seed_types(project: &FlatPackage) -> IndexSet<TypeId> {
     let type_table = project.type_table.borrow();
     let no_owned: IndexSet<FunctionId> = IndexSet::default();
-    let oracle = OwnedCalls::new(&no_owned);
+    let no_self_proj: IndexSet<FunctionId> = IndexSet::default();
+    let oracle = OwnedCalls::new(&no_owned, &no_self_proj);
     let mut walker = SeedWalker {
         type_table: &type_table,
         oracle: &oracle,
@@ -200,9 +201,22 @@ pub(crate) fn is_owned_value(
         // A call is owned iff its callee returns an owned value. A core builtin
         // allocates or computes a fresh result — except `array_get`, the element
         // read that aliases its container — handled inside `oracle.is_owned`. A
-        // raw CM call lifts a fresh value across the ABI boundary.
-        TirExprKind::Call { func, .. } | TirExprKind::MethodCall { func, .. } => {
+        // raw CM call lifts a fresh value across the ABI boundary. A callee that
+        // instead returns a projection of its receiver / first argument
+        // (`build(&self) -> List { return *self }`) yields a fresh value exactly
+        // when that receiver is itself fresh, so `[1, 2, 3]`'s builder — a fresh
+        // block-local finalized by `.build()` — is not defensively copied.
+        TirExprKind::Call { func, args, .. } => {
             oracle.is_owned(func)
+                || (oracle.returns_self_projection(func)
+                    && args
+                        .first()
+                        .is_some_and(|a| is_owned_value(&a.expr, fresh_locals, oracle, type_table)))
+        }
+        TirExprKind::MethodCall { func, receiver, .. } => {
+            oracle.is_owned(func)
+                || (oracle.returns_self_projection(func)
+                    && is_owned_value(receiver, fresh_locals, oracle, type_table))
         }
         TirExprKind::CmRawCall { .. } => true,
         TirExprKind::VariantConstruct { .. } | TirExprKind::EnumConstruct { .. } => true,

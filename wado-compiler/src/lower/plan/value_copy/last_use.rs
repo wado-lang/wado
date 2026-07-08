@@ -43,8 +43,8 @@ use super::ownership::{OwnedCalls, func_key};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::FunctionId;
 use crate::tir::{
-    FunctionRef, TirBlock, TirExpr, TirExprKind, TirFunction, TirMatchArm, TirPattern, TirStmt,
-    TirStmtKind, TirUnaryOp, TypeTable,
+    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirMatchArm,
+    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -92,11 +92,28 @@ pub fn compute_move_eligible(
     // deserialize temporary read twice (the `?` tag-test + payload-extract, or a
     // re-wrapped `Err` arm) still counts, propagating freshness up the chain to
     // the field that is finally moved.
+    // By-value (non-reference) parameters are owned storage the function holds
+    // exclusively: the caller either deep-copied the argument in, or move-elided
+    // a fresh-and-dead one (whose source is then dead), so nothing live aliases
+    // the parameter. Consuming it at its final use is therefore a move — a
+    // `build(self) -> Self { return self }` returns its receiver without a copy.
+    // Multi-use or borrow-escaping parameters are still held back by `non_final`
+    // / `borrow_escaped`, so this only frees genuinely final consumptions.
+    // Reference parameters (`&self`) borrow the caller's storage and are never
+    // seeded. (This intraprocedural move set is distinct from the interprocedural
+    // return convention, which must stay conservative — a stored-then-returned
+    // parameter aliases the store, so params are not owned there.)
     let mut fresh: IndexSet<u32> = a
         .let_sources
         .keys()
         .copied()
         .chain(a.match_sources.iter().map(|(l, _)| *l))
+        .chain(
+            func.params
+                .iter()
+                .filter(|p| !is_reference_type(p.type_id, type_table))
+                .map(|p| p.local_index),
+        )
         .collect();
     let mut changed = true;
     while changed {
@@ -633,6 +650,15 @@ fn collect_child_exprs<'e>(expr: &'e TirExpr, out: &mut Vec<&'e TirExpr>) {
         }
         _ => {}
     }
+}
+
+/// A `&T` / `&mut T` parameter borrows the caller's storage, so it is never a
+/// movable owned value. Everything else a function takes by value it owns.
+fn is_reference_type(type_id: crate::tir::TypeId, type_table: &TypeTable) -> bool {
+    matches!(
+        type_table.get(type_id),
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+    )
 }
 
 fn union(a: &IndexSet<u32>, b: &IndexSet<u32>) -> IndexSet<u32> {

@@ -23,7 +23,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FreeFunctionName, FunctionId};
 use crate::tir::{
-    FunctionKind, FunctionRef, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TypeTable,
+    FunctionKind, FunctionRef, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TirUnaryOp,
+    TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -36,11 +37,18 @@ pub fn func_key(module: &ModuleSource, name: &str) -> FunctionId {
 /// Oracle the freshness checker consults for a call's return convention.
 pub struct OwnedCalls<'a> {
     returns_owned: &'a IndexSet<FunctionId>,
+    returns_self_projection: &'a IndexSet<FunctionId>,
 }
 
 impl<'a> OwnedCalls<'a> {
-    pub fn new(returns_owned: &'a IndexSet<FunctionId>) -> Self {
-        Self { returns_owned }
+    pub fn new(
+        returns_owned: &'a IndexSet<FunctionId>,
+        returns_self_projection: &'a IndexSet<FunctionId>,
+    ) -> Self {
+        Self {
+            returns_owned,
+            returns_self_projection,
+        }
     }
 
     /// Whether a call to `func` yields an owned (fresh) value. A core builtin
@@ -54,13 +62,37 @@ impl<'a> OwnedCalls<'a> {
         self.returns_owned
             .contains(&func_key(&func.module_source, &func.name))
     }
+
+    /// Whether `func` returns a projection of its receiver / first parameter
+    /// (`build(&self) -> List { return *self }`, an accessor `first(&self)`),
+    /// so a call to it is fresh exactly when that receiver is fresh. Builtins
+    /// are already owned (`is_owned`); only body functions the fixpoint proved
+    /// self-projecting qualify.
+    pub fn returns_self_projection(&self, func: &FunctionRef) -> bool {
+        if func.module_source.is_core_builtin() || func.module_source.is_wasm_asset() {
+            return false;
+        }
+        self.returns_self_projection
+            .contains(&func_key(&func.module_source, &func.name))
+    }
 }
 
-/// Least fixpoint over "the function returns an owned value". Seeds the
-/// always-owned callees (value-copy helpers clone; builtins except `array_get`
-/// allocate) and grows: a body function becomes owned once every value it
-/// returns is owned given the current owned set.
-pub fn compute_returns_owned(project: &FlatPackage) -> IndexSet<FunctionId> {
+/// Per-function return conventions the fold consults: `returns_owned` (every
+/// returned value is freshly materialized) and its superset
+/// `returns_self_projection` (every returned value is owned *or* a projection of
+/// the receiver / first parameter).
+pub struct ReturnConventions {
+    pub returns_owned: IndexSet<FunctionId>,
+    pub returns_self_projection: IndexSet<FunctionId>,
+}
+
+/// Least fixpoint over the two return conventions. Seeds the always-owned
+/// callees (value-copy helpers clone; builtins except `array_get` allocate) and
+/// grows: a body function becomes owned once every value it returns is owned,
+/// and self-projecting once every value it returns is owned *or* a projection of
+/// its first parameter (`return *self`). `returns_owned` is a subset of
+/// `returns_self_projection`.
+pub fn compute_return_conventions(project: &FlatPackage) -> ReturnConventions {
     let type_table = project.type_table.borrow();
 
     let mut owned: IndexSet<FunctionId> = IndexSet::default();
@@ -72,69 +104,90 @@ pub fn compute_returns_owned(project: &FlatPackage) -> IndexSet<FunctionId> {
             owned.insert(func_key(&func.module_source, &func.name));
         }
     }
+    let mut self_proj: IndexSet<FunctionId> = owned.clone();
 
     loop {
         let mut newly_owned: Vec<FunctionId> = Vec::new();
+        let mut newly_self_proj: Vec<FunctionId> = Vec::new();
         {
-            let oracle = OwnedCalls::new(&owned);
+            let oracle = OwnedCalls::new(&owned, &self_proj);
             for func in &project.functions {
                 let func = func.borrow();
                 let key = func_key(&func.module_source, &func.name);
-                if owned.contains(&key) {
+                let already_owned = owned.contains(&key);
+                let already_self_proj = self_proj.contains(&key);
+                if already_owned && already_self_proj {
                     continue;
                 }
                 let Some(body) = &func.body else {
                     continue;
                 };
                 let n_params = u32::try_from(func.params.len()).unwrap_or(u32::MAX);
-                if function_returns_owned(body, n_params, &oracle, &type_table) {
-                    newly_owned.push(key);
+                let (ret_owned, ret_self_proj) =
+                    function_return_convention(body, n_params, &oracle, &type_table);
+                if !already_owned && ret_owned {
+                    newly_owned.push(key.clone());
+                }
+                if !already_self_proj && ret_self_proj {
+                    newly_self_proj.push(key);
                 }
             }
         }
-        if newly_owned.is_empty() {
+        if newly_owned.is_empty() && newly_self_proj.is_empty() {
             break;
         }
         for key in newly_owned {
+            self_proj.insert(key.clone());
             owned.insert(key);
+        }
+        for key in newly_self_proj {
+            self_proj.insert(key);
         }
     }
 
-    owned
+    ReturnConventions {
+        returns_owned: owned,
+        returns_self_projection: self_proj,
+    }
 }
 
-/// Whether every value the function can return is owned, given the callee
-/// convention `oracle` and the fresh-local set (Let bindings and match-arm
-/// bindings that destructure an owned source).
-fn function_returns_owned(
+/// The function's `(returns_owned, returns_self_projection)` convention: whether
+/// every returned value is owned, and whether every returned value is owned *or*
+/// a projection of the first parameter (`return *self`). Judged against the
+/// callee convention `oracle` and the fresh-local set (Let bindings and
+/// match-arm bindings that destructure an owned source).
+fn function_return_convention(
     body: &TirBlock,
     n_params: u32,
     oracle: &OwnedCalls,
     type_table: &TypeTable,
-) -> bool {
+) -> (bool, bool) {
     let fresh = compute_fresh_locals(body, n_params, oracle, type_table);
     let mut walker = ReturnWalker {
         fresh: &fresh,
         oracle,
         type_table,
         all_owned: true,
+        all_owned_or_self_proj: true,
     };
     walker.visit_block(body);
-    walker.all_owned
+    (walker.all_owned, walker.all_owned_or_self_proj)
 }
 
-/// Walk every `return value` and require its operand owned. Only `return`
-/// delivers a function's result — Wado value-returning functions always use an
-/// explicit `return`. A `break value` is internal to a loop or a labeled-block
-/// expression (e.g. the `break: __b` inside a `[1,2,3]` sequence literal that is
-/// itself the payload of a returned `Ok(...)`), so its freshness is judged by
-/// `is_owned_value` on the enclosing return expression, not here — checking it
-/// against the function-level fresh set would spuriously poison the return.
+/// Walk every `return value` and classify its operand: owned, or a projection of
+/// the first parameter (`return *self`). Only `return` delivers a function's
+/// result — Wado value-returning functions always use an explicit `return`. A
+/// `break value` is internal to a loop or a labeled-block expression (e.g. the
+/// `break: __b` inside a `[1,2,3]` sequence literal that is itself the payload of
+/// a returned `Ok(...)`), so its freshness is judged by `is_owned_value` on the
+/// enclosing return expression, not here — checking it against the
+/// function-level fresh set would spuriously poison the return.
 struct ReturnWalker<'a> {
     fresh: &'a IndexSet<u32>,
     oracle: &'a OwnedCalls<'a>,
     type_table: &'a TypeTable,
     all_owned: bool,
+    all_owned_or_self_proj: bool,
 }
 
 impl TirRefVisitor for ReturnWalker<'_> {
@@ -143,8 +196,30 @@ impl TirRefVisitor for ReturnWalker<'_> {
             && !super::analyze::is_owned_value(v, self.fresh, self.oracle, self.type_table)
         {
             self.all_owned = false;
+            if !is_projection_of_param(v, 0) {
+                self.all_owned_or_self_proj = false;
+            }
         }
         self.walk_stmt(stmt);
+    }
+}
+
+/// True when `expr` is a projection — a `deref` / field / index / payload / cast
+/// chain — rooted at parameter `param`, so it aliases that parameter's storage.
+/// A projection of a fresh receiver is itself fresh, which is what lets a call to
+/// a self-projecting callee be treated as fresh when its receiver is.
+pub(super) fn is_projection_of_param(expr: &TirExpr, param: u32) -> bool {
+    match &expr.kind {
+        TirExprKind::Local { index, .. } => *index == param,
+        TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            expr: inner,
+        }
+        | TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::Index { expr: inner, .. } => is_projection_of_param(inner, param),
+        _ => false,
     }
 }
 

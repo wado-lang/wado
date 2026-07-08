@@ -146,7 +146,6 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:mut_ref_if_return.wado::__modules_initialized: bool = 0;
-global mut global:mut_ref_if_return.wado::__const_obj_0: ref null "core:prelude//List<mut_ref_if_return.wado/Token>" = ref.null none;
 
 fn "mut_ref_if_return.wado/parse_item"(p) {
     let kind: i32;
@@ -237,7 +236,7 @@ fn "mut_ref_if_return.wado/run"() {
     let parser: ref "mut_ref_if_return.wado//Parser";
     let e: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/string.wado//String";
-    let __sroa_tokens_repr: ref "Array<mut_ref_if_return.wado/Token>";
+    let tokens_14: ref "core:prelude//List<mut_ref_if_return.wado/Token>";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:mut_ref_if_return.wado::__modules_initialized);
         cold_path;
@@ -245,10 +244,8 @@ fn "mut_ref_if_return.wado/run"() {
         global:mut_ref_if_return.wado::__modules_initialized = 1;
     };
     __b = struct.new "core:prelude//List<mut_ref_if_return.wado/Token>" { repr: array.new_fixed<ref "mut_ref_if_return.wado//Token">(struct.new "mut_ref_if_return.wado//Token" { kind: 1, text: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } }, struct.new "mut_ref_if_return.wado//Token" { kind: 0, text: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } }), used: 2 };
-    global:mut_ref_if_return.wado::__const_obj_0 = __b;
-    __sroa_tokens_repr = builtin::array_clone_deep<ref "mut_ref_if_return.wado//Token">(/*via $value_copy$T27*/ global:mut_ref_if_return.wado::__const_obj_0.repr);
-    drop(global:mut_ref_if_return.wado::__const_obj_0.used);
-    parser = struct.new "mut_ref_if_return.wado//Parser" { tokens: struct.new "core:prelude//List<mut_ref_if_return.wado/Token>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "mut_ref_if_return.wado//Token">(/*via $value_copy$T27*/ __sroa_tokens_repr)), used: 2 }, pos: 0 };
+    tokens_14 = struct.new "core:prelude//List<mut_ref_if_return.wado/Token>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "mut_ref_if_return.wado//Token">(/*via $value_copy$T27*/ __b.repr)), used: 2 };
+    parser = struct.new "mut_ref_if_return.wado//Parser" { tokens: tokens_14, pos: 0 };
     let __sroa___sroa_r_value_discriminant: i32;
     let __sroa___sroa_r_value_case0_payload_0: i32;
     let __sroa___sroa_r_value_case1_payload_0: ref null "core:prelude/string.wado//String";

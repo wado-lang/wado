@@ -153,13 +153,11 @@ global mut global:result_unwrap_fresh_elision.wado::__modules_initialized: bool 
 
 fn "result_unwrap_fresh_elision.wado/make_result"() {
     let __b: ref "core:prelude//List<u8>";
-    let arr: ref "core:prelude//List<u8>";
     __b = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
-    arr = struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(builtin::array_clone<u8>(__b.repr)), used: 0 };
-    "core:prelude/list.wado/List<u8>::push"(arr, 1);
-    "core:prelude/list.wado/List<u8>::push"(arr, 2);
-    "core:prelude/list.wado/List<u8>::push"(arr, 3);
-    return 0, arr, ref.null none;
+    "core:prelude/list.wado/List<u8>::push"(__b, 1);
+    "core:prelude/list.wado/List<u8>::push"(__b, 2);
+    "core:prelude/list.wado/List<u8>::push"(__b, 3);
+    return 0, __b, ref.null none;
 }
 
 fn "result_unwrap_fresh_elision.wado/run"() with Stdout {

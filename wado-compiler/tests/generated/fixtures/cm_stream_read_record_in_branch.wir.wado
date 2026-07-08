@@ -408,7 +408,7 @@ fn "cm_stream_read_record_in_branch.wado/__cm_stream_read_DirectoryEntry"(handle
                 __disc = builtin::load_u8(addr + 4);
                 __option_result = ref.null none;
                 if __disc != 0 {
-                    __option_result = ref.as_non_null(ptr_18 = builtin::load_i32((addr + 4) + 4); len_19 = builtin::load_i32(((addr + 4) + 4) + 4); arr_20 = "core:rt/memory_to_gc_array"(ptr_18, len_19); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(arr_20)), used: len_19 });
+                    __option_result = ref.as_non_null(ptr_18 = builtin::load_i32((addr + 4) + 4); len_19 = builtin::load_i32(((addr + 4) + 4) + 4); arr_20 = "core:rt/memory_to_gc_array"(ptr_18, len_19); struct.new "core:prelude/string.wado//String" { repr: arr_20, used: len_19 });
                     drop("mem/realloc"(builtin::load_i32((addr + 4) + 4), builtin::load_i32(((addr + 4) + 4) + 4), 1, 0));
                 }
                 __vresult = struct.new "wasi:filesystem/types.wado//DescriptorType::Other" { discriminant: 7, payload_0: __option_result };

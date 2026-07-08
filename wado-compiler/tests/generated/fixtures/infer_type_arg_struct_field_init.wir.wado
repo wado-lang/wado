@@ -28,13 +28,11 @@ struct core:prelude/format.wado//Formatter {  // TypeId(4)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-array Array<i32> (mut i32);  // TypeId(5)
+array Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>> (mut ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>");  // TypeId(5)
 
-array Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>> (mut ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>");  // TypeId(6)
+array Array<core:collections/TreeMapNode<core:prelude/string.wado/String>> (mut ref "core:collections//TreeMapNode<core:prelude/string.wado/String>");  // TypeId(6)
 
-array Array<core:collections/TreeMapNode<core:prelude/string.wado/String>> (mut ref "core:collections//TreeMapNode<core:prelude/string.wado/String>");  // TypeId(7)
-
-struct core:collections//TreeMap<core:prelude/string.wado/String,i32> {  // TypeId(8)
+struct core:collections//TreeMap<core:prelude/string.wado/String,i32> {  // TypeId(7)
     mut root: ref "core:prelude/types.wado//Option<i32>",
     mut nodes: ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>",
     mut entries: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>",
@@ -42,13 +40,13 @@ struct core:collections//TreeMap<core:prelude/string.wado/String,i32> {  // Type
     mut deleted_count: i32,
 }
 
-struct core:collections//TreeMapEntry<core:prelude/string.wado/String,i32> {  // TypeId(9)
+struct core:collections//TreeMapEntry<core:prelude/string.wado/String,i32> {  // TypeId(8)
     mut key: ref "core:prelude/string.wado//String",
     mut value: i32,
     mut deleted: bool,
 }
 
-struct core:collections//TreeMapNode<core:prelude/string.wado/String> {  // TypeId(10)
+struct core:collections//TreeMapNode<core:prelude/string.wado/String> {  // TypeId(9)
     mut key: ref "core:prelude/string.wado//String",
     mut index: i32,
     mut level: i32,
@@ -56,114 +54,101 @@ struct core:collections//TreeMapNode<core:prelude/string.wado/String> {  // Type
     mut right: ref "core:prelude/types.wado//Option<i32>",
 }
 
-variant core:prelude/types.wado//Option<i32> {  // TypeId(11)
+variant core:prelude/types.wado//Option<i32> {  // TypeId(10)
     Some(i32),
     None,
 }
 
-struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(12)
+struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(11)
     discriminant: i32,
     payload_0: i32,
 }
 
-struct core:prelude//List<i32> {  // TypeId(13)
-    mut repr: ref Array<i32>,
-    mut used: i32,
-}
-
-struct core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>> {  // TypeId(14)
+struct core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>> {  // TypeId(12)
     mut repr: ref "Array<core:collections/TreeMapNode<core:prelude/string.wado/String>>",
     mut used: i32,
 }
 
-struct core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>> {  // TypeId(15)
+struct core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>> {  // TypeId(13)
     mut repr: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>",
     mut used: i32,
 }
 
-enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(16)
+enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(14)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(17)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(15)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(18)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(16)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(20)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(18)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(21)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(19)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(22)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(20)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(23)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(21)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(24)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(22)
 
-type "functype//infer_type_arg_struct_field_init.wado/__test_0_struct_field_initializers_infer_generic_type_args_from_the_field_type" = fn();  // TypeId(25)
+type "functype//infer_type_arg_struct_field_init.wado/__test_0_struct_field_initializers_infer_generic_type_args_from_the_field_type" = fn();  // TypeId(23)
 
-type "functype//infer_type_arg_struct_field_init.wado/__cm_export____test_0_struct_field_initializers_infer_generic_type_args_from_the_field_type" = fn();  // TypeId(26)
+type "functype//infer_type_arg_struct_field_init.wado/__cm_export____test_0_struct_field_initializers_infer_generic_type_args_from_the_field_type" = fn();  // TypeId(24)
 
-type "functype//infer_type_arg_struct_field_init.wado/$value_copy$T985" = fn(ref "core:collections//TreeMapNode<core:prelude/string.wado/String>") -> ref "core:collections//TreeMapNode<core:prelude/string.wado/String>";  // TypeId(27)
+type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(25)
 
-type "functype//infer_type_arg_struct_field_init.wado/$value_copy$T984" = fn(ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>") -> ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>";  // TypeId(28)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, i64, i32);  // TypeId(26)
 
-type "functype//infer_type_arg_struct_field_init.wado/$value_copy$T1000" = fn(ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>") -> ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>";  // TypeId(29)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(27)
 
-type "functype//infer_type_arg_struct_field_init.wado/$value_copy$T996" = fn(ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>") -> ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>";  // TypeId(30)
+type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(28)
 
-type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(31)
+type "functype//core:rt/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(29)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, i64, i32);  // TypeId(32)
+type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(30)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(33)
+type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(31)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(34)
+type "functype//core:rt/wait_for_blocked" = fn(i32) -> i32;  // TypeId(32)
 
-type "functype//core:rt/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(35)
+type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(33)
 
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(36)
+type "functype//core:rt/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(34)
 
-type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(37)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(35)
 
-type "functype//core:rt/wait_for_blocked" = fn(i32) -> i32;  // TypeId(38)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(36)
 
-type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(39)
+type "functype//core:prelude/primitive.wado/i32^Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(37)
 
-type "functype//core:rt/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(40)
+type "functype//core:prelude/primitive.wado/i32^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(38)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(41)
+type "functype//core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(39)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(42)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(40)
 
-type "functype//core:prelude/primitive.wado/i32^Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(43)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(41)
 
-type "functype//core:prelude/primitive.wado/i32^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(44)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(42)
 
-type "functype//core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(45)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(43)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(46)
+type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(44)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(47)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(45)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(48)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(46)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(49)
+type "functype//core:prelude/types.wado/Option<i32>^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>", ref "core:prelude/format.wado//Formatter");  // TypeId(47)
 
-type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(50)
+type "functype//core:collections/TreeMap<core:prelude/string.wado/String,i32>::new" = fn() -> ref "core:collections//TreeMap<core:prelude/string.wado/String,i32>";  // TypeId(48)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(51)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(49)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(52)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(50)
 
-type "functype//core:prelude/types.wado/Option<i32>^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>", ref "core:prelude/format.wado//Formatter");  // TypeId(53)
-
-type "functype//core:collections/TreeMap<core:prelude/string.wado/String,i32>::new" = fn() -> ref "core:collections//TreeMap<core:prelude/string.wado/String,i32>";  // TypeId(54)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(55)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(56)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(57)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(51)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -188,14 +173,11 @@ fn "infer_type_arg_struct_field_init.wado/__test_0_struct_field_initializers_inf
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
-    let __b: ref "core:prelude//List<i32>";
     let a: i32;
     let b: i32;
     let __sroa_h_m: ref "core:collections//TreeMap<core:prelude/string.wado/String,i32>";
     let __sroa_h_o: ref "core:prelude/types.wado//Option<i32>";
     __sroa_h_m = "core:collections/TreeMap<core:prelude/string.wado/String,i32>::new"();
-    __b = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-    drop(struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(builtin::array_clone<i32>(__b.repr)), used: 0 });
     __sroa_h_o = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 1 };
     __v0_1 = __sroa_h_m.size;
     if @unlikely((__v0_1 == 0) == 0) {
@@ -239,24 +221,6 @@ fn "infer_type_arg_struct_field_init.wado/__cm_export____test_0_struct_field_ini
     };
     "infer_type_arg_struct_field_init.wado/__test_0_struct_field_initializers_infer_generic_type_args_from_the_field_type"();
     "wasi/task-return"(0);
-}
-
-fn "infer_type_arg_struct_field_init.wado/$value_copy$T985"(v) {
-    return v;
-}
-
-fn "infer_type_arg_struct_field_init.wado/$value_copy$T984"(v) {
-    let v_1: ref "core:prelude/string.wado//String";
-    let v_2: ref "core:prelude/string.wado//String";
-    return struct.new "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>" { key: ref.as_non_null(v_1 = v.key; v_2 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v_1.repr)), used: v_1.used }; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v_2.repr)), used: v_2.used }), value: v.value, deleted: v.deleted };
-}
-
-fn "infer_type_arg_struct_field_init.wado/$value_copy$T1000"(v) {
-    return struct.new "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>">(/*via $value_copy$T984*/ v.repr)), used: v.used };
-}
-
-fn "infer_type_arg_struct_field_init.wado/$value_copy$T996"(v) {
-    return struct.new "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(/*via $value_copy$T985*/ v.repr)), used: v.used };
 }
 
 fn "core:prelude/primitive.wado/count_digits_i64"(val) {
@@ -617,7 +581,7 @@ fn "core:prelude/types.wado/Option<i32>^Inspect::inspect"(self, f) {
 fn "core:collections/TreeMap<core:prelude/string.wado/String,i32>::new"() {
     let __b_0: ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>";
     let __b_1: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>";
-    return struct.new "core:collections//TreeMap<core:prelude/string.wado/String,i32>" { root: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, nodes: ref.as_non_null("infer_type_arg_struct_field_init.wado/$value_copy$T996"(__b_0 = struct.new "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(0), used: 0 }; __b_0)), entries: ref.as_non_null("infer_type_arg_struct_field_init.wado/$value_copy$T1000"(__b_1 = struct.new "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>">(0), used: 0 }; __b_1)), size: 0, deleted_count: 0 };
+    return struct.new "core:collections//TreeMap<core:prelude/string.wado/String,i32>" { root: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, nodes: ref.as_non_null(__b_0 = struct.new "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(0), used: 0 }; __b_0), entries: ref.as_non_null(__b_1 = struct.new "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>">(0), used: 0 }; __b_1), size: 0, deleted_count: 0 };
 }
 
 export fn "infer_type_arg_struct_field_init.wado/__cm_export____test_0_struct_field_initializers_infer_generic_type_args_from_the_field_type" as "__test_0_struct_field_initializers_infer_generic_type_args_from_the_field_type"

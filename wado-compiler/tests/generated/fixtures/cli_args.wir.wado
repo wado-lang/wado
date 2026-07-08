@@ -153,7 +153,7 @@ fn "cli_args.wado/__cm_binding__Environment_get_arguments"() with Environment {
         l1: loop {
             break_if b0 __i >= __count;
             __elem_addr = __base + (__i * 8);
-            "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__result, ptr = builtin::load_i32(__elem_addr); len_8 = builtin::load_i32(__elem_addr + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_8); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(arr)), used: len_8 });
+            "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__result, ptr = builtin::load_i32(__elem_addr); len_8 = builtin::load_i32(__elem_addr + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_8); struct.new "core:prelude/string.wado//String" { repr: arr, used: len_8 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr), builtin::load_i32(__elem_addr + 4), 1, 0));
             __i = __i + 1;
             continue l1;

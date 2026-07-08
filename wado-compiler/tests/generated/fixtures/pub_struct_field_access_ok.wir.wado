@@ -103,23 +103,23 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:pub_struct_field_access_ok.wado::__modules_initialized: bool = 0;
+global mut global:pub_struct_field_access_ok.wado::__const_obj_0: ref null "./sub/pub_struct_field_module.wado//Config" = ref.null none;
 
 fn "pub_struct_field_access_ok.wado/run"() with Stdout {
-    let c_0: ref "./sub/pub_struct_field_module.wado//Config";
     let s: i32;
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
-    let __sroa_name_repr: ref Array<u8>;
+    let name: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:pub_struct_field_access_ok.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:pub_struct_field_access_ok.wado::__modules_initialized = 1;
     };
-    __sroa_name_repr = array.new_data<u8>("hello");
-    c_0 = struct.new "./sub/pub_struct_field_module.wado//Config" { name: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__sroa_name_repr)), used: 5 }, secret: 42 };
-    "core:cli/println"(c_0.name);
-    s = c_0.secret;
+    name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
+    global:pub_struct_field_access_ok.wado::__const_obj_0 = struct.new "./sub/pub_struct_field_module.wado//Config" { name: name, secret: 42 };
+    "core:cli/println"(global:pub_struct_field_access_ok.wado::__const_obj_0.name);
+    s = global:pub_struct_field_access_ok.wado::__const_obj_0.secret;
     "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(s, __local_3); __local_2);
 }
 

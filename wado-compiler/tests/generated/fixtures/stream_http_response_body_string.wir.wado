@@ -303,11 +303,9 @@ global mut global:stream_http_response_body_string.wado::__modules_initialized: 
 
 fn "stream_http_response_body_string.wado/string_to_bytes"(s) {
     let __b: ref "core:prelude//List<u8>";
-    let bytes: ref "core:prelude//List<u8>";
     let __iter_3: ref "core:prelude/string.wado//StrCharIter";
     let __sroa_v_repr: ref Array<u8>;
     __b = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
-    bytes = struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(builtin::array_clone<u8>(__b.repr)), used: 0 };
     __sroa_v_repr = s.repr;
     __iter_3 = struct.new "core:prelude/string.wado//StrCharIter" { repr: __sroa_v_repr, used: s.used, byte_index: 0 };
     b0: block {
@@ -316,14 +314,14 @@ fn "stream_http_response_body_string.wado/string_to_bytes"(s) {
             let __sroa___match_5_payload_0: char;
             multivalue_bind [__sroa___match_5_discriminant, __sroa___match_5_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_3);
             if __sroa___match_5_discriminant == 0 {
-                "core:prelude/list.wado/List<u8>::push"(bytes, __sroa___match_5_payload_0 & 255);
+                "core:prelude/list.wado/List<u8>::push"(__b, __sroa___match_5_payload_0 & 255);
             } else {
                 break b0;
             }
             continue l1;
         };
     };
-    return bytes;
+    return __b;
 }
 
 fn "stream_http_response_body_string.wado/handle"(request) {

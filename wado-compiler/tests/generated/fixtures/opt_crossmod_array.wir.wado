@@ -201,6 +201,8 @@ fn "opt_crossmod_array.wado/run"() with Stdout {
     let __local_58: ref "core:prelude/format.wado//Formatter";
     let __local_59: ref "core:prelude/string.wado//String";
     let __local_60: ref "core:prelude/format.wado//Formatter";
+    let a_61: ref "core:prelude/string.wado//String";
+    let b_62: ref "core:prelude/string.wado//String";
     let __v1_67: i32;
     let __local_5_69: ref "core:prelude/string.wado//String";
     let __local_6_70: ref "core:prelude/format.wado//Formatter";
@@ -214,18 +216,16 @@ fn "opt_crossmod_array.wado/run"() with Stdout {
     let len_a_168: i32;
     let p_195: ref "./sub/opt_crossmod_level1.wado//Pair<core:prelude/string.wado/String>";
     let __b_196: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let __b_216: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let __sroa_b_repr: ref Array<u8>;
-    let __sroa_a_repr: ref Array<u8>;
+    let __b_214: ref "core:prelude//List<core:prelude/string.wado/String>";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:opt_crossmod_array.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:opt_crossmod_array.wado::__modules_initialized = 1;
     };
-    __sroa_a_repr = array.new_data<u8>("hello");
-    __sroa_b_repr = array.new_data<u8>("world");
-    p_195 = struct.new "./sub/opt_crossmod_level1.wado//Pair<core:prelude/string.wado/String>" { first: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__sroa_a_repr)), used: 5 }, second: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__sroa_b_repr)), used: 5 } };
+    a_61 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
+    b_62 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 };
+    p_195 = struct.new "./sub/opt_crossmod_level1.wado//Pair<core:prelude/string.wado/String>" { first: a_61, second: b_62 };
     __b_196 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(p_195.first, p_195.second), used: 2 };
     __v0_1 = 2;
     if @unlikely(__v0_1 != 2) {
@@ -309,8 +309,8 @@ condition: it[2] == 30
 "), used: 24 }); "core:prelude/string.wado/String::push"(__local_45, 105); "core:prelude/string.wado/String::push"(__local_45, 116); "core:prelude/string.wado/String::push"(__local_45, 91); "core:prelude/string.wado/String::push"(__local_45, 50); "core:prelude/string.wado/String::push"(__local_45, 93); "core:prelude/string.wado/String::push"(__local_45, 58); "core:prelude/string.wado/String::push"(__local_45, 32); __local_46 = "core:prelude/format.wado/Formatter::new"(__local_45); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_14 }, __local_46); "core:prelude/string.wado/String::push"(__local_45, 10); __local_45);
         unreachable;
     }
-    __b_216 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("alpha"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 101, 116, 97), used: 4 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("gamma"), used: 5 }), used: 3 };
-    global:opt_crossmod_array.wado::__const_obj_1 = __b_216;
+    __b_214 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("alpha"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 101, 116, 97), used: 4 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("gamma"), used: 5 }), used: 3 };
+    global:opt_crossmod_array.wado::__const_obj_1 = __b_214;
     drop(global:opt_crossmod_array.wado::__const_obj_1.used);
     drop(global:opt_crossmod_array.wado::__const_obj_1.used);
     __v0_19 = builtin::array_get<ref "core:prelude/string.wado//String">(global:opt_crossmod_array.wado::__const_obj_1.repr, 0);
