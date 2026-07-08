@@ -14,6 +14,7 @@
 //! arm can never itself be an `If` / `Call`, and the worklist's bottom-up order
 //! produces the same result the old top-down visitor did.
 
+use crate::lower::plan::value_copy::needs_value_copy;
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, StmtKind};
@@ -72,6 +73,12 @@ impl Rule for SelectLoweringRule<'_> {
         };
         let result_type = engine.body.exprs[id].type_id;
         if result_type == TypeTable::UNIT {
+            return false;
+        }
+        // A `select` returns one of its operands. For a deep-copied result that
+        // aliases the chosen arm's live storage, so lower only scalar results;
+        // the normal `if` lowering copies the arm.
+        if needs_value_copy(result_type, self.type_table) {
             return false;
         }
         let Some(true_val) = arm_select_value(engine.body, then_branch, self.type_table) else {

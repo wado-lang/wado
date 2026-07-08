@@ -1210,7 +1210,7 @@ struct CatalogCounts {
 fn parse_counts_v2(json_data: String) -> CatalogCounts {
     let mut p = P {
         input: json_data,
-        repr: json_data.internal_raw_bytes(),
+        repr: *json_data.internal_raw_bytes(),
         pos: 0,
         len: json_data.len(),
     };

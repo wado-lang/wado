@@ -84,33 +84,31 @@ type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(r
 
 type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(31)
 
-type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(32)
+type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref Array<u8>, ref Array<u8>, i32) -> bool;  // TypeId(32)
 
-type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref Array<u8>, ref Array<u8>, i32) -> bool;  // TypeId(33)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(33)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(34)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(34)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(35)
+type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(35)
 
-type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(36)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(36)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(37)
+type "functype//core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::push" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>", ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]");  // TypeId(37)
 
-type "functype//core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::push" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>", ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]");  // TypeId(38)
+type "functype//dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.wado/String>::has" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>", ref "core:prelude/string.wado//String") -> bool;  // TypeId(38)
 
-type "functype//dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.wado/String>::has" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>", ref "core:prelude/string.wado//String") -> bool;  // TypeId(39)
+type "functype//dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.wado/String>::get" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>", ref "core:prelude/string.wado//String") -> ref null "core:prelude/string.wado//String";  // TypeId(39)
 
-type "functype//dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.wado/String>::get" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>", ref "core:prelude/string.wado//String") -> ref null "core:prelude/string.wado//String";  // TypeId(40)
+type "functype//dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.wado/String>::set" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(40)
 
-type "functype//dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.wado/String>::set" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(41)
+type "functype//core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::grow" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>");  // TypeId(41)
 
-type "functype//core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::grow" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>");  // TypeId(42)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(42)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(43)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(43)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(44)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(45)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(44)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -210,18 +208,16 @@ fn "dict_mini.wado/__cm_export__run"() {
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }
@@ -402,26 +398,17 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
     self.used = new_used;
 }
 
-fn "core:prelude/string.wado/String^Eq::eq"(self, other) {
-    let len_a: i32;
-    len_a = self.used;
-    if len_a != other.used {
-        return 0;
-    }
-    return "core:prelude/string.wado/String^Eq::eq_bytes"(self.repr, other.repr, len_a);
-}
-
 fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
     let i: i32;
     i = 0;
-    b24: block {
-        l25: loop {
-            break_if b24 i >= len;
+    b23: block {
+        l24: loop {
+            break_if b23 i >= len;
             if builtin::array_get<u8>(a, i) != builtin::array_get<u8>(b, i) {
                 return 0;
             }
             i = i + 1;
-            continue l25;
+            continue l24;
         };
     };
     return 1;
@@ -458,12 +445,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b31: block {
-        l32: loop {
-            break_if b31 i >= n;
+    b30: block {
+        l31: loop {
+            break_if b30 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l32;
+            continue l31;
         };
     };
 }
@@ -593,19 +580,30 @@ fn "core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/st
 
 fn "dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.wado/String>::has"(self, key) {
     let i: i32;
-    let _licm_used_11: i32;
-    let _licm_repr_12: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
+    let self_11: ref "core:prelude/string.wado//String";
+    let len_a: i32;
+    let _licm_used_14: i32;
+    let _licm_repr_15: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
+    let _licm_used_22: i32;
     i = 0;
-    _licm_used_11 = self.used;
-    _licm_repr_12 = self.repr;
-    b55: block {
-        l56: loop {
-            break_if b55 i >= _licm_used_11;
-            if "core:prelude/string.wado/String^Eq::eq"(builtin::array_get<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(_licm_repr_12, i).0, key) {
+    _licm_used_14 = self.used;
+    _licm_repr_15 = self.repr;
+    _licm_used_22 = key.used;
+    b54: block {
+        l55: loop {
+            break_if b54 i >= _licm_used_14;
+            if __inline_String_Eq__eq_2: block -> bool {
+                self_11 = builtin::array_get<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(_licm_repr_15, i).0;
+                len_a = self_11.used;
+                if len_a != _licm_used_22 {
+                    break __inline_String_Eq__eq_2: 0;
+                }
+                break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(self_11.repr, key.repr, len_a);
+            } {
                 return 1;
             }
             i = i + 1;
-            continue l56;
+            continue l55;
         };
     };
     return 0;
@@ -613,16 +611,27 @@ fn "dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.
 
 fn "dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.wado/String>::get"(self, key) {
     let i: i32;
-    let _licm_used_18: i32;
-    let _licm_repr_19: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
+    let self_11: ref "core:prelude/string.wado//String";
+    let len_a: i32;
+    let _licm_used_21: i32;
+    let _licm_repr_22: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
+    let _licm_used_31: i32;
     i = 0;
-    _licm_used_18 = self.used;
-    _licm_repr_19 = self.repr;
+    _licm_used_21 = self.used;
+    _licm_repr_22 = self.repr;
+    _licm_used_31 = key.used;
     b58: block {
         l59: loop {
-            break_if b58 i >= _licm_used_18;
-            if "core:prelude/string.wado/String^Eq::eq"(builtin::array_get<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(_licm_repr_19, i).0, key) {
-                return builtin::array_get<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(_licm_repr_19, i).1;
+            break_if b58 i >= _licm_used_21;
+            if __inline_String_Eq__eq_2: block -> bool {
+                self_11 = builtin::array_get<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(_licm_repr_22, i).0;
+                len_a = self_11.used;
+                if len_a != _licm_used_31 {
+                    break __inline_String_Eq__eq_2: 0;
+                }
+                break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(self_11.repr, key.repr, len_a);
+            } {
+                return builtin::array_get<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(_licm_repr_22, i).1;
             }
             i = i + 1;
             continue l59;
@@ -633,22 +642,33 @@ fn "dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.
 
 fn "dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.wado/String>::set"(self, key, value) {
     let i: i32;
-    let value_16: ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]";
-    let _licm_used_25: i32;
-    let _licm_repr_26: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
+    let self_12: ref "core:prelude/string.wado//String";
+    let len_a: i32;
+    let value_23: ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]";
+    let _licm_used_32: i32;
+    let _licm_repr_33: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
+    let _licm_used_34: i32;
     i = 0;
-    _licm_used_25 = self.used;
-    _licm_repr_26 = self.repr;
-    b61: block {
-        l62: loop {
-            break_if b61 i >= _licm_used_25;
-            if "core:prelude/string.wado/String^Eq::eq"(builtin::array_get<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(_licm_repr_26, i).0, key) {
-                value_16 = struct.new "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: key, 1: value };
-                builtin::array_set<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(_licm_repr_26, i, value_16);
+    _licm_used_32 = self.used;
+    _licm_repr_33 = self.repr;
+    _licm_used_34 = key.used;
+    b62: block {
+        l63: loop {
+            break_if b62 i >= _licm_used_32;
+            if __inline_String_Eq__eq_2: block -> bool {
+                self_12 = builtin::array_get<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(_licm_repr_33, i).0;
+                len_a = self_12.used;
+                if len_a != _licm_used_34 {
+                    break __inline_String_Eq__eq_2: 0;
+                }
+                break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(self_12.repr, key.repr, len_a);
+            } {
+                value_23 = struct.new "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: key, 1: value };
+                builtin::array_set<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(_licm_repr_33, i, value_23);
                 return;
             }
             i = i + 1;
-            continue l62;
+            continue l63;
         };
     };
     "core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::push"(self, struct.new "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: key, 1: value });

@@ -1,0 +1,57 @@
+//! Front matter: a leading `---json` … `---` block followed by the post body.
+
+use { from_string } from "core:json";
+use { Deserialize } from "core:serde";
+
+pub struct FrontMatter {
+    pub title: String,
+    pub date: String,
+    pub tags: List<String> = [],
+    pub index: bool = true,
+}
+
+impl Deserialize for FrontMatter;
+
+/// Split a document into `[front_matter_json, body]`, distinguishing a missing
+/// opening fence from an unterminated one.
+pub fn split(source: &String) -> Result<[String, String], String> {
+    let normalized = source.replace("\r\n", "\n");
+    let lines: List<String> = normalized.split("\n").collect();
+    if lines.is_empty() || lines[0].trim() != "---json" {
+        return Result::Err("missing ---json front matter");
+    }
+    let mut close = -1;
+    for let mut i = 1; i < lines.len(); i += 1 {
+        if lines[i].trim() == "---" {
+            close = i;
+            break;
+        }
+    }
+    if close < 0 {
+        return Result::Err("unterminated ---json fence");
+    }
+    let json = join_range(&lines, 1, close);
+    let body = join_range(&lines, close + 1, lines.len());
+    return Result::Ok([json, body]);
+}
+
+fn join_range(lines: &List<String>, s: i32, e: i32) -> String {
+    let mut out: List<String> = [];
+    for let k of s..<e {
+        out.push(lines[k]);
+    }
+    return out.join("\n");
+}
+
+/// Parse a document into its `FrontMatter` and body text.
+pub fn parse(source: &String) -> Result<[FrontMatter, String], String> {
+    let [json, body] = split(source)?;
+    match from_string::<FrontMatter>(json) {
+        Ok(fm) => {
+            return Result::Ok([fm, body]);
+        },
+        Err(e) => {
+            return Result::Err(`invalid front matter: {e:?}`);
+        },
+    }
+}

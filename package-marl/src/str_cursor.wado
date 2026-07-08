@@ -1,0 +1,85 @@
+//! A peekable cursor over a materialized `List<char>`.
+//!
+//! It offers stream-style reading (`bump`/`eof`) plus the random access
+//! Markdown parsing needs — look-behind for emphasis flanking, unbounded
+//! look-ahead with backtracking for code spans and links, slicing, and cheap
+//! sub-ranges that share the same buffer. The buffer is materialized once; a
+//! cursor only holds a reference to it plus its `[start, end)` window and
+//! position, so copies and sub-cursors are cheap.
+//!
+//! Package-local for now; a candidate for promotion to a stdlib `StrCursor`
+//! once other parsers (`core:json`, `core:url`, Gale) validate the shape.
+
+pub struct StrCursor {
+    chars: &List<char>,
+    start: i32,
+    pos: i32,
+    end: i32,
+}
+
+pub fn chars_of(text: &String) -> List<char> {
+    return text.chars().collect();
+}
+
+/// The substring over the absolute range `[s, e)` of a char buffer.
+pub fn slice_chars(chars: &List<char>, s: i32, e: i32) -> String {
+    let mut out = String::new();
+    let mut k = s;
+    while k < e {
+        out.push(chars[k]);
+        k += 1;
+    }
+    return out;
+}
+
+impl StrCursor {
+    pub fn over(chars: &List<char>) -> StrCursor with stores[chars] {
+        return StrCursor { chars, start: 0, pos: 0, end: chars.len() };
+    }
+
+    /// The character at an absolute index, or `None` outside the `[start, end)`
+    /// window. Indices before `start` and at/after `end` read as `None`, so the
+    /// window boundaries act as line boundaries for flanking.
+    pub fn at(&self, idx: i32) -> Option<char> {
+        if self.start <= idx < self.end {
+            return Option::Some(self.chars[idx]);
+        }
+        return null;
+    }
+
+    pub fn is_at(&self, idx: i32, c: char) -> bool {
+        return self.at(idx) matches { Some(x) && x == c };
+    }
+
+    pub fn bump(&mut self) {
+        if self.pos < self.end {
+            self.pos += 1;
+        }
+    }
+
+    pub fn eof(&self) -> bool {
+        return self.pos >= self.end;
+    }
+
+    pub fn position(&self) -> i32 {
+        return self.pos;
+    }
+
+    pub fn set_position(&mut self, p: i32) {
+        self.pos = p;
+    }
+
+    pub fn end(&self) -> i32 {
+        return self.end;
+    }
+
+    /// The substring over the absolute range `[s, e)`.
+    pub fn slice(&self, s: i32, e: i32) -> String {
+        return slice_chars(self.chars, s, e);
+    }
+
+    /// A sub-cursor over `[s, e)` sharing the same buffer, positioned at `s`.
+    pub fn sub(&self, s: i32, e: i32) -> StrCursor with stores[self] {
+        return StrCursor { chars: self.chars, start: s, pos: s, end: e };
+    }
+}

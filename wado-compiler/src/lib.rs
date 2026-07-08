@@ -805,6 +805,7 @@ fn compile_after_load<H: CompilerHost>(
         state,
         tir_modules,
         interner,
+        liveness,
         ..
     } = sem;
 
@@ -869,6 +870,8 @@ fn compile_after_load<H: CompilerHost>(
 
     // Apply options to package (must be before synthesis)
     let mut package = package;
+    // Last-use spans (WEP 2026-05-21) drive value-copy elision downstream.
+    package.moved_local_spans = liveness.moved_spans;
     if let Some(world) = options.target_world {
         package.target_world = world;
     }

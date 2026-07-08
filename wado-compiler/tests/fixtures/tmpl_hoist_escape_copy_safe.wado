@@ -1,0 +1,32 @@
+// Ownership analysis (WEP 2026-05-21): each iteration builds a *fresh* template
+// String `k{i}` and stores it as a map key. The build is an owned value, so it
+// is *moved* into the insert — no defensive `$value_copy$String` and no reused
+// scratch buffer to hoist. Every key is a distinct freshly built String, so
+// they stay independent (verified by the per-key asserts). This caller-side
+// move replaces the older hoist-scratch-then-copy strategy at equivalent
+// allocation cost.
+use { println, Stdout } from "core:cli";
+use { TreeMap } from "core:collections";
+
+export fn run() with Stdout {
+    let mut map = TreeMap::<String, i32>::new();
+    for let mut i = 0; i < 5; i += 1 {
+        map[`k{i}`] = i;
+    }
+    assert map.len() == 5;
+    assert map["k0"] == 0;
+    assert map["k4"] == 4;
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_expect:O2": [
+        "TreeMap<core:prelude/string.wado/String,i32>::insert",
+        "String::push_str"
+    ],
+    "wir_not_expect:O2": [
+        "__tmpl_buf_"
+    ]
+}

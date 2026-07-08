@@ -449,9 +449,11 @@ pub async fn build_world_component(
     opts.embed_wit = core.embed_wit;
     opts.no_embed_metadata = core.no_embed_metadata;
     opts.embed_metadata = core.embed_metadata;
-    compile::run(opts).await?;
-    std::fs::read(output)
-        .map_err(|e| CliExit::error(format!("reading built component {}: {e}", output.display())))
+    // Use the bytes we just compiled rather than reading `output` back: a
+    // concurrent build (e.g. parallel `serve` drivers sharing this project's
+    // `build/<world>.wasm`) could leave the file torn or holding another
+    // world's module.
+    compile::run_returning_bytes(opts).await
 }
 
 /// Produce the runnable component for a driver (`run` / `serve`). In a project

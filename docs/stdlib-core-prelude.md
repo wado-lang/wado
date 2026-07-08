@@ -799,7 +799,7 @@ Opaque i32 handle managed by the runtime.
 
 Write a chunk of data to the stream.
 
-#### `fn write_raw(&self, data: Array<T>, len: i32)`
+#### `fn write_raw(&self, data: &Array<T>, len: i32)`
 
 Write raw GC array directly to the stream.
 `len` is the number of valid elements (may be less than array capacity).
@@ -3164,10 +3164,6 @@ never copies elements.
 
 _Fields are private._
 
-#### `pub fn internal_new(repr: &Array<T>, start: i32, end: i32) -> ArraySlice<T> with stores[repr]`
-
-Internal: build a slice from a backing array reference and bounds.
-
 #### `pub fn len(&self) -> i32`
 
 Returns the number of elements in the slice.
@@ -3208,16 +3204,6 @@ Returns a by-value iterator over the slice.
 
 Copies the slice's elements into a new `Array<T>`.
 
-#### `pub fn internal_repr(&self) -> &Array<T> with stores[self]`
-
-Internal: the backing array this slice views. Paired with
-`internal_start`, lets bulk-copy paths (`List::extend_from_slice`)
-`array_copy` directly from the view without a temporary.
-
-#### `pub fn internal_start(&self) -> i32`
-
-Internal: the start offset of this slice within its backing array.
-
 #### `impl IndexValue<i32> for ArraySlice<T>`
 
 ##### `fn index_value(&self, index: i32) -> Self::Output`
@@ -3231,10 +3217,6 @@ Internal: the start offset of this slice within its backing array.
 A by-value forward iterator over a backing `Array<T>` range `[index, end)`.
 
 _Fields are private._
-
-#### `pub fn internal_new(repr: &Array<T>, index: i32, end: i32) -> ArrayIter<T> with stores[repr]`
-
-Internal: build an iterator over `[index, end)` of a backing array.
 
 #### `pub fn collect(&mut self) -> List<T>`
 
@@ -3264,10 +3246,6 @@ backing array. Backs `for x of &list`.
 
 _Fields are private._
 
-#### `pub fn internal_new(repr: &Array<T>, index: i32, end: i32) -> ArrayRefIter<T> with stores[repr]`
-
-Internal: build a by-reference iterator over `[index, end)`.
-
 #### `pub fn copied(&self) -> ArrayIter<T>`
 
 Value ("copied") view over the same backing: yields `T` instead of `&T`.
@@ -3285,10 +3263,6 @@ item is a `ArraySlice<T>` viewing the backing array.
 
 _Fields are private._
 
-#### `pub fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> ArrayWindows<T> with stores[repr]`
-
-Internal: build a windows iterator over `[index, end)` with window `size`.
-
 #### `impl Iterator for ArrayWindows<T>`
 
 ##### `fn next(&mut self) -> Option<Self::Item>`
@@ -3303,10 +3277,6 @@ An iterator over non-overlapping chunks of up to `size` elements. The last
 chunk may be shorter. Each item is a `ArraySlice<T>` viewing the backing array.
 
 _Fields are private._
-
-#### `pub fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> ArrayChunks<T> with stores[repr]`
-
-Internal: build a chunks iterator over `[index, end)` with chunk `size`.
 
 #### `impl Iterator for ArrayChunks<T>`
 
@@ -3368,39 +3338,11 @@ Write the byte at `index` without bounds or UTF-8 checks.
 - The resulting byte sequence must remain valid UTF-8. This is the
   caller's responsibility (cf. Rust's `as_bytes_mut`, which is `unsafe`).
 
-#### `pub fn internal_raw_bytes(&self) -> Array<u8>`
-
-Internal: Get raw bytes array (stdlib use only)
-Returns the underlying byte array. Caller must respect `len()` boundary.
-
-#### `pub fn internal_from_utf8_raw(bytes: Array<u8>, len: i32) -> String`
-
-Internal: Create String from raw UTF-8 bytes (stdlib use only)
-The bytes must be valid UTF-8. No validation is performed.
-
 #### `pub fn grow(&mut self, min_capacity: i32)`
 
 Ensure the string has capacity for at least `min_capacity` bytes.
 If the current capacity is less than `min_capacity`, grows the buffer.
 Uses amortized doubling strategy for efficiency.
-
-#### `pub fn internal_append_from_memory(&mut self, ptr: i32, len: i32)`
-
-Internal: Append bytes from linear memory to this string (stdlib use only)
-Copies `len` bytes starting at `ptr` in linear memory into the string.
-The bytes must be valid UTF-8. No validation is performed.
-
-#### `pub fn internal_reserve_uninit(&mut self, n: i32) -> i32`
-
-Internal: Reserve `n` uninitialised bytes at the end of the string (stdlib use only).
-Returns the byte offset where the caller must write exactly `n` valid UTF-8 bytes
-into `internal_raw_bytes()`. The string's length is advanced immediately, so the
-caller MUST fill all `n` bytes before the string is observed.
-
-Intended for right-to-left writes (integer/float decimal formatting) that
-`array_copy` cannot express. For left-to-right bulk appends, use
-`push_bytes_unchecked` or `push_str_range_unchecked` instead — they compile to
-a single `array_copy` and do not require the caller to maintain a write offset.
 
 #### `pub fn append_byte_filled(&mut self, byte: u8, n: i32)`
 
@@ -3439,11 +3381,11 @@ Append the bytes of `bytes` to this string in one bulk `array_copy`.
 
 - The resulting byte sequence must remain valid UTF-8.
 
-#### `pub fn bytes(&self) -> StrUtf8ByteIter`
+#### `pub fn bytes(&self) -> StrUtf8ByteIter with stores[self]`
 
 Returns an iterator over the UTF-8 bytes of the string.
 
-#### `pub fn chars(&self) -> StrCharIter`
+#### `pub fn chars(&self) -> StrCharIter with stores[self]`
 
 Returns an iterator over the Unicode scalar values (chars) of the string.
 
@@ -3582,6 +3524,16 @@ Returns true if this string starts with the given prefix.
 
 Returns true if this string ends with the given suffix.
 
+#### `pub fn strip_prefix(&self, prefix: String) -> Option<String>`
+
+Returns the string with `prefix` removed from the front, or None when it
+does not start with `prefix`.
+
+#### `pub fn strip_suffix(&self, suffix: String) -> Option<String>`
+
+Returns the string with `suffix` removed from the end, or None when it
+does not end with `suffix`.
+
 #### `pub fn find(&self, pat: String) -> Option<i32>`
 
 Returns the byte index of the first occurrence of `pat`, or None.
@@ -3700,23 +3652,23 @@ Accepts any `IntoIterator` whose item is `u8`: `List<u8>`, `StrUtf8ByteIter`, et
 The caller must ensure the bytes form valid UTF-8, otherwise the resulting
 String will contain invalid UTF-8, which may cause undefined behavior.
 
-#### `pub fn split(&self, sep: String) -> StrSplitIter`
+#### `pub fn split(&self, sep: String) -> StrSplitIter with stores[self]`
 
 Returns an iterator over substrings split by the given separator.
 
-#### `pub fn splitn(&self, n: i32, sep: String) -> StrSplitNIter`
+#### `pub fn splitn(&self, n: i32, sep: String) -> StrSplitNIter with stores[self]`
 
 Returns an iterator over at most `n` substrings split by the given separator.
 
-#### `pub fn split_whitespace(&self) -> StrSplitWhitespaceIter`
+#### `pub fn split_whitespace(&self) -> StrSplitWhitespaceIter with stores[self]`
 
 Returns an iterator over whitespace-separated substrings.
 
-#### `pub fn lines(&self) -> StrLinesIter`
+#### `pub fn lines(&self) -> StrLinesIter with stores[self]`
 
 Returns an iterator over the lines of this string.
 
-#### `pub fn char_indices(&self) -> StrCharIndicesIter`
+#### `pub fn char_indices(&self) -> StrCharIndicesIter with stores[self]`
 
 Returns an iterator over characters with their byte indices.
 
@@ -3909,10 +3861,6 @@ _Fields are private._
 #### `pub fn capacity(&self) -> i32`
 
 Returns the total number of elements the list can hold without reallocating.
-
-#### `pub fn internal_raw_data(&self) -> Array<T>`
-
-#### `pub fn internal_from_raw(repr: Array<T>, used: i32) -> List<T>`
 
 #### `pub fn push(&mut self, value: T) with stores[value]`
 

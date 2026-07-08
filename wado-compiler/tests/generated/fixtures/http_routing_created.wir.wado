@@ -248,23 +248,21 @@ type "functype//core:rt/cm_lower_string" = fn(ref "core:prelude/string.wado//Str
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(51)
 
-type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(52)
+type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref Array<u8>, ref Array<u8>, i32) -> bool;  // TypeId(52)
 
-type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref Array<u8>, ref Array<u8>, i32) -> bool;  // TypeId(53)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(53)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(54)
+type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(54)
 
-type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(55)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(55)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(56)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(56)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(57)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(57)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(58)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(58)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(59)
-
-type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(60)
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(59)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -414,6 +412,7 @@ fn "http_routing_created.wado/handle"(request) {
     let packed: i64;
     let rx: i32;
     let tx: i32;
+    let len_a: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:http_routing_created.wado::__modules_initialized);
         cold_path;
@@ -427,7 +426,13 @@ fn "http_routing_created.wado/handle"(request) {
     response = __pattern_temp_1.0;
     if ref.is_null(path) == 0 {
         p = ref.as_non_null(path);
-        if "core:prelude/string.wado/String^Eq::eq"(p, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/created"), used: 8 }) {
+        if __inline_String_Eq__eq_2: block -> bool {
+            len_a = p.used;
+            if len_a != 8 {
+                break __inline_String_Eq__eq_2: 0;
+            }
+            break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(p.repr, array.new_data<u8>("/created"), len_a);
+        } {
             drop("http_routing_created.wado/__cm_binding__Response_set_status_code"(response, 201));
         }
     } else {
@@ -815,12 +820,12 @@ fn "core:rt/memory_to_gc_array"(ptr, len) {
     let i: i32;
     arr = builtin::array_new<u8>(len);
     i = 0;
-    b67: block {
-        l68: loop {
-            break_if b67 i >= len;
+    b68: block {
+        l69: loop {
+            break_if b68 i >= len;
             builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
             i = i + 1;
-            continue l68;
+            continue l69;
         };
     };
     return arr;
@@ -829,12 +834,12 @@ fn "core:rt/memory_to_gc_array"(ptr, len) {
 fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b69: block {
-        l70: loop {
-            break_if b69 i >= len;
+    b70: block {
+        l71: loop {
+            break_if b70 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l70;
+            continue l71;
         };
     };
 }
@@ -851,15 +856,6 @@ fn "core:rt/cm_lower_string"(s) {
 }
 
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
-}
-
-fn "core:prelude/string.wado/String^Eq::eq"(self, other) {
-    let len_a: i32;
-    len_a = self.used;
-    if len_a != other.used {
-        return 0;
-    }
-    return "core:prelude/string.wado/String^Eq::eq_bytes"(self.repr, other.repr, len_a);
 }
 
 fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {

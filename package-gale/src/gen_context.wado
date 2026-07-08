@@ -500,9 +500,10 @@ impl GenContext {
     }
 
     /// Return the collected diagnostics (a value copy under Wado value
-    /// semantics; `self` keeps its own). `lower_with_ctx` reads them
-    /// exactly once into `LoweredGrammar.diagnostics`, so the copy is
-    /// harmless.
+    /// semantics; `self` keeps its own, so callers must read this after the
+    /// last diagnostic-producing pass). `lower_with_ctx` snapshots the
+    /// lowering-time set into `LoweredGrammar.diagnostics`; `generate` reads
+    /// the final set once emit-time warnings have also landed.
     pub fn copy_diagnostics(&self) -> List<Diagnostic> {
         return self.diagnostics;
     }

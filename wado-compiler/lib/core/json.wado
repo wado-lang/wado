@@ -2333,7 +2333,8 @@ pub fn to_bytes<T: Serialize>(value: &T) -> Result<List<u8>, SerializeError> {
     let mut buf = String::with_capacity(SERIALIZE_BUFFER_CAPACITY);
     let mut ser = JsonSerializer { buf: &mut buf };
     value.serialize(&mut ser)?;
-    return Result::Ok(List::internal_from_raw(buf.internal_raw_bytes(), buf.len()));
+    let len = buf.len();
+    return Result::Ok(List::internal_from_raw(String::internal_into_raw_bytes(buf), len));
 }
 
 /// Serializes a value to a pretty JSON string. Convenience over
@@ -2386,7 +2387,8 @@ pub fn to_bytes_canonical<T: Serialize>(value: &T) -> Result<List<u8>, Serialize
     let mut buf = String::with_capacity(SERIALIZE_BUFFER_CAPACITY);
     let mut ser = CanonicalJsonSerializer { buf: &mut buf };
     value.serialize(&mut ser)?;
-    return Result::Ok(List::internal_from_raw(buf.internal_raw_bytes(), buf.len()));
+    let len = buf.len();
+    return Result::Ok(List::internal_from_raw(String::internal_into_raw_bytes(buf), len));
 }
 
 /// Serializes a value to pretty-printed UTF-8 JSON bytes.
@@ -2399,5 +2401,6 @@ pub fn to_bytes_pretty<T: Serialize>(value: &T) -> Result<List<u8>, SerializeErr
         depth: 0,
     };
     value.serialize(&mut ser)?;
-    return Result::Ok(List::internal_from_raw(buf.internal_raw_bytes(), buf.len()));
+    let len = buf.len();
+    return Result::Ok(List::internal_from_raw(String::internal_into_raw_bytes(buf), len));
 }

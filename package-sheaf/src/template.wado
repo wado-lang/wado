@@ -1,0 +1,50 @@
+//! HTML templates built from the language's template literals plus Marl's HTML
+//! escaping helpers.
+
+use { escape_text, escape_attr } from "../../package-marl/src/lib.wado";
+use { Post } from "./post.wado";
+
+/// The shared document head, up to and including the opening `<body>`.
+fn page_head(title: String, noindex: bool) -> String {
+    let mut out = String::new();
+    out.push_str(&"<!doctype html>\n<html>\n<head>\n");
+    out.push_str(&`<meta charset="utf-8" />\n`);
+    out.push_str(&`<title>{escape_text(&title)}</title>\n`);
+    if noindex {
+        out.push_str(&`<meta name="robots" content="noindex, nofollow" />\n`);
+    }
+    out.push_str(&"</head>\n<body>\n");
+    return out;
+}
+
+pub fn render_page(post: &Post) -> String {
+    let mut out = page_head(post.title, !post.index);
+    out.push_str(&"<article>\n");
+    out.push_str(&`<h1>{escape_text(&post.title)}</h1>\n`);
+    out.push_str(&`<time>{escape_text(&post.date)}</time>\n`);
+    out.push_str(&post.body_html);
+    out.push('\n');
+    out.push_str(&"</article>\n</body>\n</html>\n");
+    return out;
+}
+
+pub fn render_index(posts: &List<Post>) -> String {
+    let mut published: List<Post> = [];
+    for let p of posts {
+        if p.index {
+            published.push(*p);
+        }
+    }
+    published.sort_by(|a: &Post, b: &Post| b.date.cmp(&a.date));
+
+    let mut out = page_head("Blog", false);
+    out.push_str(&"<ul>\n");
+    for let p of published {
+        let href = `{p.slug}.html`;
+        out.push_str(
+            &`<li><a href="{escape_attr(&href)}">{escape_text(&p.title)}</a> <time>{escape_text(&p.date)}</time></li>\n`,
+        );
+    }
+    out.push_str(&"</ul>\n</body>\n</html>\n");
+    return out;
+}

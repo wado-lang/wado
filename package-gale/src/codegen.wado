@@ -58,12 +58,14 @@ pub struct GenerateOptions {
     pub trace: bool = false,
 }
 
-/// Result of a codegen pass: the generated `.wado` source plus the
-/// prediction-strategy diagnostics the single lowering raised. Codegen
-/// always lowers exactly once, so the diagnostics ride out on the same
-/// `LoweredGrammar` the emit walk consumes — callers that want to surface
-/// warnings (`gale gen`) read `diagnostics`; callers that only need the
-/// module text (the Kiln generator entry, unit tests) read `source`.
+/// Result of a codegen pass: the generated `.wado` source plus every
+/// diagnostic the pass collected in its shared `GenContext` — both the
+/// prediction-strategy warnings lowering raised and the emit-time safety-net
+/// warnings (`warn_unhandled_actions`), which run after lowering. Read from
+/// `ctx` at the end so nothing added after the `LoweredGrammar` snapshot is
+/// lost. Callers that want to surface warnings (`gale gen`) read
+/// `diagnostics`; callers that only need the module text (the Kiln generator
+/// entry, unit tests) read `source`.
 pub struct GeneratedOutput {
     pub source: String,
     pub diagnostics: List<Diagnostic>,
@@ -200,9 +202,12 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     if needs_latn {
         gen_latn_data_global(&mut w, &latn.atn);
     }
+    // Read the full diagnostic set from `ctx`, not `lowered.diagnostics`:
+    // the latter is a lowering-time snapshot, and the emit walk's
+    // `warn_unhandled_actions` safety net pushes to `ctx` afterwards.
     return GeneratedOutput {
         source: w.to_string(),
-        diagnostics: lowered.diagnostics,
+        diagnostics: ctx.copy_diagnostics(),
     };
 }
 

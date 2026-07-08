@@ -1,0 +1,78 @@
+// Regression: value-copy on pass/escape. The spec says "every value is deeply
+// copied when assigned or passed to a function, except for references." Two
+// value-semantic positions previously did not copy an aggregate variable, so a
+// later mutation of the source corrupted the copy (at every opt level):
+//   A — a non-mut by-value parameter aliased its argument (a `mut` parameter
+//       already copied), leaking the alias when the callee returned/stored it;
+//   B — an aggregate literal (`[x, y]`, `Foo { f: x }`, `[x]`) did not copy its
+//       element/field variables.
+// Fixed by copying every by-value argument and every literal element position in
+// the value-copy analyze/fold; `value_copy_elide` still drops the redundant ones.
+
+struct Holder {
+    xs: List<i32>,
+    n: i32,
+}
+
+fn id_plain(v: List<i32>) -> List<i32> {
+    return v;
+}
+
+// `v` is used exactly once, so its wrapper is elided as a move — but `v` is
+// this frame's private copy (the caller copied `original` in), so storing it
+// must not alias the caller's value.
+fn stash(v: List<i32>, sink: &mut List<List<i32>>) {
+    sink.push(v);
+}
+
+// A — non-mut by-value parameter aliases the argument.
+test "non-mut by-value param does not alias the argument" {
+    let mut a: List<i32> = [7, 8];
+    let b = id_plain(a);
+    a[0] = 999;
+    assert b[0] == 7;
+}
+
+test "pushing a variable copies it" {
+    let mut inner: List<i32> = [7, 8];
+    let mut outer: List<List<i32>> = [];
+    outer.push(inner);
+    inner[0] = 999;
+    assert outer[0][0] == 7;
+}
+
+// The move of a single-use parameter is sound: the caller still deep-copies at
+// the call (the parameter escapes into `sink`), so mutating the original after
+// the call leaves the stored value untouched.
+test "single-use parameter is moved but the caller still copies" {
+    let mut original: List<i32> = [1, 2];
+    let mut sink: List<List<i32>> = [];
+    stash(original, &mut sink);
+    original[0] = 999;
+    assert sink[0][0] == 1;
+}
+
+// B — aggregate literal element / field positions.
+test "tuple literal copies an element variable" {
+    let mut inner: List<i32> = [7, 8];
+    let t: [List<i32>, i32] = [inner, 1];
+    inner[0] = 999;
+    assert t.0[0] == 7;
+}
+
+test "struct literal copies a field variable" {
+    let mut inner: List<i32> = [7, 8];
+    let h = Holder { xs: inner, n: 1 };
+    inner[0] = 999;
+    assert h.xs[0] == 7;
+}
+
+test "list literal copies an element variable" {
+    let mut inner: List<i32> = [7, 8];
+    let a: List<List<i32>> = [inner];
+    inner[0] = 999;
+    assert a[0][0] == 7;
+}
+
+__DATA__
+{"test": {}}

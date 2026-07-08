@@ -687,6 +687,8 @@ fn "effect_handler_resource_fields.wado/handle"(request) {
     let __save_Fields: ref null "effect_handler_resource_fields.wado//__Dispatch_Fields";
     let __d_Fields: ref "effect_handler_resource_fields.wado//__Dispatch_Fields";
     let __pattern_temp_1: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
+    let v_174: ref "core:prelude/string.wado//String";
+    let v_175: ref "core:prelude/string.wado//String";
     let packed: i64;
     let rx: i32;
     let tx: i32;
@@ -700,8 +702,8 @@ fn "effect_handler_resource_fields.wado/handle"(request) {
     __save_Fields = global:effect_handler_resource_fields.wado::__effect_Fields;
     __d_Fields = struct.new "effect_handler_resource_fields.wado//__Dispatch_Fields" { outer: __save_Fields, op_new: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_resource_fields.wado//__Closure_2" { __capture_0: counter }, func: ref.func "closure/effect_handler_resource_fields.wado/__closure_wrapper_0" }, op_from_list: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_resource_fields.wado//__Closure_3" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/__closure_wrapper_1" }, op_get: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_resource_fields.wado//__Closure_4" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/__closure_wrapper_2" }, op_has: struct.new "canonical//CanonicalClosure_3" { env: struct.new "effect_handler_resource_fields.wado//__Closure_5" { __capture_0: counter }, func: ref.func "closure/effect_handler_resource_fields.wado/__closure_wrapper_3" }, op_set: struct.new "canonical//CanonicalClosure_4" { env: struct.new "effect_handler_resource_fields.wado//__Closure_6" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/__closure_wrapper_4" }, op_delete: struct.new "canonical//CanonicalClosure_5" { env: struct.new "effect_handler_resource_fields.wado//__Closure_7" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/__closure_wrapper_5" }, op_get_and_delete: struct.new "canonical//CanonicalClosure_6" { env: struct.new "effect_handler_resource_fields.wado//__Closure_8" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/__closure_wrapper_6" }, op_append: struct.new "canonical//CanonicalClosure_7" { env: struct.new "effect_handler_resource_fields.wado//__Closure_9" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/__closure_wrapper_7" }, op_copy_all: struct.new "canonical//CanonicalClosure_8" { env: struct.new "effect_handler_resource_fields.wado//__Closure_10" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/__closure_wrapper_8" }, op_clone: struct.new "canonical//CanonicalClosure_9" { env: struct.new "effect_handler_resource_fields.wado//__Closure_11" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/__closure_wrapper_9" } };
     global:effect_handler_resource_fields.wado::__effect_Fields = __d_Fields;
-    drop("effect_handler_resource_fields.wado/__effect_dispatch__Fields__has"(local.tee f("effect_handler_resource_fields.wado/__effect_dispatch__Fields__new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-test"), used: 6 }));
-    drop("effect_handler_resource_fields.wado/__effect_dispatch__Fields__has"(f, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-test"), used: 6 }));
+    drop("effect_handler_resource_fields.wado/__effect_dispatch__Fields__has"(local.tee f("effect_handler_resource_fields.wado/__effect_dispatch__Fields__new"()), v_174 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-test"), used: 6 }; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v_174.repr)), used: v_174.used }));
+    drop("effect_handler_resource_fields.wado/__effect_dispatch__Fields__has"(f, v_175 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-test"), used: 6 }; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v_175.repr)), used: v_175.used }));
     "wasi/resource-drop:fields"(f);
     global:effect_handler_resource_fields.wado::__effect_Fields = __save_Fields;
     __v0_5 = global:effect_handler_resource_fields.wado::new_count;
@@ -1066,7 +1068,7 @@ fn "effect_handler_resource_fields.wado/__effect_dispatch__Fields__has"(self, na
         __local_4 = block -> bool {
             let __indirect_call_0: ref "canonical//CanonicalClosure_3";
             __indirect_call_0 = ref.cast "canonical//CanonicalClosure_3"(__local_3.op_has);
-            call_ref "functype/$canonical_closure_fn_3"(__indirect_call_0.func, __indirect_call_0.env, self, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(name.repr)), used: name.used });
+            call_ref "functype/$canonical_closure_fn_3"(__indirect_call_0.func, __indirect_call_0.env, self, name);
         };
         global:effect_handler_resource_fields.wado::__effect_Fields = __saved;
         return __local_4;
@@ -1169,18 +1171,16 @@ fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
 }
 
 fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
     let len: i32;
     let new_repr: ref Array<u8>;
-    bytes = message.repr;
     len = message.used;
     if add_newline {
         new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         "core:rt/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        "core:rt/cm_stream_write_raw_u8"(tx, bytes, len);
+        "core:rt/cm_stream_write_raw_u8"(tx, message.repr, len);
     }
     "wasi/stream-drop-writable"(tx);
 }

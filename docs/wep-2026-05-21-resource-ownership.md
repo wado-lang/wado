@@ -1,4 +1,4 @@
-# WEP: Resource Ownership and a Resource-Scoped Borrow Checker
+# WEP: Ownership Analysis — Affine Resources, the Borrow Checker, and Value-Copy Elision
 
 ## Context
 
@@ -7,6 +7,15 @@ gives resources a precise ownership discipline that Wado's surface language
 does not yet model. This WEP adopts that discipline as an affine type rule
 plus a small, resource-scoped static check, and uses the result as the
 foundation for the long-reserved `move` and `unique` keywords.
+
+The move-tracking half of that check is not specific to affine types. It
+answers one question — _is this the binding's last use, or is the value still
+live afterward?_ — and that same question decides, for a copyable value type,
+whether a materialization needs a physical deep copy or can transfer storage in
+place. This WEP therefore also specifies value-copy elision as a third client
+of one shared ownership analysis, retiring the separate
+"copy-everything-then-elide" machinery (`optimize::escape` +
+`optimize::value_copy_elide`). See "Generalization to copyable value types".
 
 ### Component Model resource ownership
 
@@ -216,8 +225,10 @@ explicit CFG.
 The move-or-drop-while-borrowed check starts lexical: while a `let b = &r;`
 binding is in scope, `r` may not be moved or dropped. Method-call receivers
 (`r.foo()`) create a borrow that lives only for the call expression and never
-conflict. A later, non-breaking refinement can replace lexical scoping with
-last-use liveness (NLL-style) if it proves too restrictive.
+conflict. A later, non-breaking refinement replaces lexical scoping with
+last-use liveness (NLL-style); the value-copy client below makes that
+refinement the analysis basis, so the two share one liveness computation (see
+"Generalization to copyable value types").
 
 The cost of "lightweight" is paid in expressiveness, deliberately:
 
@@ -296,14 +307,123 @@ synthesized destructor unless it contains resource fields. This lets the
 feature land resource-first and generalize to user-defined move-only types
 with no additional checker machinery — resources are simply the first client.
 
+### Generalization to copyable value types
+
+Affine resources and `unique struct`s use the move analysis to _forbid_ a
+second use of a moved binding. A copyable value type uses the identical
+analysis to _decide_ whether a materialization needs a physical deep copy or
+can transfer storage in place. Copyable value types are the third client of the
+one analysis.
+
+Value semantics requires that every binding, field, element, argument, and
+return logically own its value: `let b = a; b.push(4)` must not perturb `a`.
+The physical copy that guarantees this is needed only when the source stays
+live and observably distinct from the destination — exactly the condition the
+ownership analysis already names. At each site where a value-typed value is
+_consumed into an owner_ — a `let` / assignment binding, a struct field, a
+list / tuple element, a by-value argument, or a return — the analysis
+classifies the consumption:
+
+| Consumption                                             | Copyable value type                         |
+| ------------------------------------------------------- | ------------------------------------------- |
+| last use of the source (the source is `moved`)          | move — transfer storage, emit no copy       |
+| source still live afterward                             | copy — materialize an independent deep copy |
+| source live, but neither it nor the destination mutates | share — alias, emit no copy (read-only)     |
+
+Row one is where an affine resource moves and a `unique struct` the same; a
+copyable type does likewise, so the copy is elided. Row two is where a resource
+raises use-after-move; a copyable type instead materializes the copy that keeps
+the two independent. Row three has no resource analogue — resources are never
+shared — and is a value-type-only refinement.
+
+This is the whole model, and it replaces "copy-everything-then-elide". Rather
+than inserting a `$value_copy$T` wrapper at every materialization and later
+proving each removable via a whole-program freshness / escape analysis, the
+ownership analysis decides move / copy / share once, at the consumption site,
+on structured TIR. A site the analysis cannot prove safe defaults to `copy` —
+sound, at worst an extra copy, never a miscompile — the same safe default the
+affine checker takes when it cannot prove a binding dead.
+
+#### Last-use liveness is the basis, not a refinement
+
+The affine checker can start lexical (a borrow holds until its `let` leaves
+scope). The copyable client cannot: a move pays off precisely at the last
+_use_, which routinely precedes scope exit — `items.push(elem)` is `elem`'s
+last use even though `elem` is still in scope for the rest of the loop body. So
+the ownership analysis is defined on last-use liveness (NLL-style): a binding is
+`moved` at the program point of its final use on each path, computed by backward
+liveness over the same structural TIR walk and merged at the same join points.
+Promoting last-use liveness from the deferred refinement to the basis is
+non-breaking for the affine clients — it only lengthens the span a binding is
+available before its move — and is required by the value-copy client. It is
+implemented once and shared.
+
+#### What the value-copy client adds over the move core
+
+The move core is shared verbatim. The copyable client layers two things the
+affine clients do not need:
+
+- Copy materialization on a live consumption — the affine error case. The
+  existing deep-copy helpers (`$value_copy$T`) are reused, but emitted only at
+  sites the analysis marks `copy`, not everywhere.
+- The read-only-share refinement: a consumption whose source and destination
+  are both never mutated again may alias. Mutability is a local property
+  (`let` vs `let mut`, whether a `&mut` is taken), not a whole-program alias
+  question, so it stays within the same structural walk; where it cannot be
+  shown, the site falls back to `copy`.
+
+One independent soundness bug is fixed alongside: a recursive value type's
+`$value_copy$T` helper currently falls back to identity (`return v`) to avoid
+unbounded synthesis, which silently shares storage. A materialized copy must be
+a true deep copy, so the helper for a recursive type is emitted as a
+mutually-recursive function that copies through the indirection rather than
+returning its argument.
+
+#### Retirement of the freshness / escape machinery
+
+As this WEP deletes `resource_cleanup.rs`'s heuristic ownership reconstruction,
+the value-copy client deletes the two-phase copy machinery it supersedes:
+
+- `lower::plan::value_copy` stops wrapping every materialization; it emits a
+  copy only where the ownership analysis says `copy`.
+- `optimize::escape` (the interprocedural freshness / `returns_fresh` fixpoint)
+  and `optimize::value_copy_elide` (the wrapper-stripping pass) are removed.
+  Their job — recovering copies that were never necessary — no longer exists,
+  because the copies are not inserted in the first place.
+
+The freshness analysis failed on exactly the shapes the ownership analysis
+handles natively: a value threaded through `?`, a match-arm binding, or an
+accumulator `push` is a chain of last-use moves, which liveness sees directly
+and which no interprocedural `returns_fresh` property is needed to justify.
+
 ### Pipeline and implementation
 
-- The move / borrow check is a diagnostic pass over resolved TIR, run early
-  enough that errors point at source spans. The structural walk and the
-  three-state lattice are the whole pass.
+- The move / borrow check is a diagnostic pass over the resolved,
+  `AstId`-keyed `Semantics` layer that `annotate` produces — not over TIR.
+  This is deliberate: the LSP path stops at `Semantics` and never builds TIR
+  (`build_tir = false`, no reify), so a TIR-level pass could not surface
+  use-after-move / move-while-borrowed errors in the editor. Running over
+  `Semantics` places the analysis exactly where the existing item-level
+  liveness and unused diagnostics already run — the shared LSP + batch path —
+  and keys its output by `AstId`, so errors point at source spans and the
+  facts are available to both the editor and batch compilation. The structural
+  walk, the last-use liveness, and the three-state lattice are the whole pass.
+  Its per-consumption classification (move / copy / share / error), keyed by
+  `AstId`, is the single output every client reads.
+- The value-copy client consumes that classification in the batch pipeline:
+  reify (the sole TIR producer, running before monomorphization) stamps each
+  consumption-site TIR node with its class read from the `AstId`-keyed result,
+  so every monomorphized instance inherits one decision computed once on the
+  generic body. Desugar-introduced temporaries (a `?` match-arm binding) carry
+  no `AstId`; they are single-use by construction, hence trivially `move`,
+  decided structurally at the stamp site.
 - Drop elaboration remains a synthesis pass. It no longer reconstructs
   ownership: it consumes the checker's authoritative "owned and not moved at
   this scope exit" set and inserts the drop.
+- Value-copy lowering (`lower::plan::value_copy`) reads the same classification:
+  it emits a `$value_copy$T` at `copy` sites and nothing at `move` / `share`
+  sites. There is no separate elision pass. `optimize::escape` and
+  `optimize::value_copy_elide` are deleted.
 - `synthesis/resource_cleanup.rs`: the heuristic ownership-reconstruction half
   (`is_resource_aggregate` and the borrow-vs-transfer guesses) is removed. The
   drop-elaboration mechanism — walking scopes, emitting `resource.drop` on
@@ -315,6 +435,65 @@ with no additional checker machinery — resources are simply the first client.
 - `Own<T>` / `Borrow<T>` in `cm_abi.rs` are not surfaced as user types; `&R`
   and by-value `R` are the surface forms. The builtin names may be retired
   once binding synthesis is type-driven.
+
+### M5 value-copy client — as implemented
+
+The shipped value-copy client is caller-side and single-phase, but its
+move/copy decision is split across two analyses rather than one `AstId`-keyed
+classification, because two consumers with different reach need it:
+
+- Source last use — `elaborator::liveness` runs the backward last-use pass over
+  the typed AST and projects the final-use sites to `(module, span)` in
+  `moved_local_spans` (threaded `Package` → `FlatPackage` to the planner). This
+  is the LSP-facing, `AstId`-keyed artifact the WEP describes.
+- Synthesized last use — the AST pass cannot see reify- and
+  synthesizer-emitted bodies (serde `deserialize`/`serialize`, `Default` /
+  `Clone` derives, the `?` desugar), which is exactly where the hot copies are
+  (a deserialized struct field). So `lower::plan::value_copy::last_use` runs a
+  second last-use analysis directly on the monomorphized TIR of every function.
+  It is post-monomorphization, so it keys on nothing — it recomputes per body —
+  and needs no cross-phase span table.
+
+The fold (`lower::translate`) moves a consumption when _either_ analysis marks
+it: the span is in `moved_local_spans`, or the TIR local is in the per-function
+move set. Union is sound because each is independently sound; the TIR pass is
+the superset in practice but the span pass is retained for source fidelity.
+
+The TIR pass (`compute_move_eligible`) is a backward liveness plus a freshness
+fixpoint. A local is moved when:
+
+- every read of it is a _final_ read (dead on every live path afterward) —
+  precise across divergent `match` arms (a `?` `Err`-rewrap reads the scrutinee
+  but only on the returning path, so the scrutinee stays a final read on the
+  `Ok` path) and across loop back-edges (a value produced and consumed in one
+  iteration is dead at the head);
+- it _exclusively owns fresh storage_ — a least fixpoint over `is_owned_value`
+  (shared with the return-convention analysis) proves its value traces to a
+  fresh allocation, allowing multi-read intermediates (the `?` tag-test +
+  payload-extract) to carry freshness up the chain;
+- it has _no live alias_ at its binding — the local its value is a projection
+  or whole-value move of (`alias_root`, `None` for a fresh allocation whose
+  result aliases nothing) is dead after the binding. This is what keeps
+  `if let Some(s) = opt { s.push(x) }` copying `s` while `opt` is read again,
+  yet lets a deserialize temporary — whose scrutinee is a dead call result —
+  move.
+
+Freshness (does the value alias existing data) and consumability (is this the
+last observation) are orthogonal: a fresh value read twice is not movable, and
+the analysis keeps them as separate sets (`fresh` vs the final move set)
+precisely so a twice-read fresh temporary propagates ownership without itself
+being moved.
+
+The return-convention analysis (`ownership.rs`) supplies the interprocedural
+half: a call is a fresh allocation iff its callee returns owned. It is the
+caller-side, single-phase replacement for `optimize::escape`'s `returns_fresh`
+fixpoint. `optimize::escape` / `optimize::value_copy_elide` are not yet deleted
+(the `param_escapes` confinement half still feeds `value_copy_demote`); their
+removal is deferred to the M5 checklist below.
+
+- [ ] Fold the confinement (`param_escapes`) recovery into the caller-side
+      insertion so `optimize::escape` / `optimize::value_copy_elide` can be
+      deleted, as the WEP intends.
 
 ### Relationship to earlier WEPs
 
@@ -331,6 +510,13 @@ with no additional checker machinery — resources are simply the first client.
 - [WEP 2026-04-28 (Inheritance)](./wep-2026-04-28-resource-inheritance.md):
   amended (in that WEP) so its value-semantics wording reads as scoped to
   host-object resources, not language-wide.
+- [WEP 2026-01-12 (Value Semantics and Reference Stores)](./wep-2026-01-12-value-semantics-and-stores.md)
+  and [WEP 2026-06-15 (Live ValueGraph)](./wep-2026-06-15-live-value-graph.md):
+  the "copy-everything-then-elide" implementation of value semantics — blanket
+  `$value_copy$T` insertion recovered by `optimize::escape` /
+  `optimize::value_copy_elide` — is superseded by the value-copy client of this
+  WEP's ownership analysis. The value-semantics _language rule_ is unchanged;
+  only how the compiler realizes it changes.
 
 ## Amendments to earlier WEPs
 
@@ -376,11 +562,25 @@ note in that WEP.
   checker.
 - `move` and `unique` get a real implementation, resource-first, generalizing
   to `unique struct` with no extra machinery.
+- Value-copy elision becomes a property of one local, structural analysis
+  instead of a whole-program freshness / escape fixpoint. The failure mode that
+  fixpoint has — one non-fresh link (an error return, an `&mut`-capturing
+  intermediate) poisoning a whole call chain, so hot-path copies survive — is
+  gone: a last-use move needs no interprocedural property to justify.
+- Two fragile subsystems collapse into the checker's output:
+  `resource_cleanup.rs`'s ownership heuristic and `optimize::escape` +
+  `optimize::value_copy_elide`.
+- Missed optimizations are detectable without benchmarks: each move / copy /
+  share decision is fixable in an e2e `wir_not_expect` fixture.
 
 ### Negative
 
 - `move` and move errors are a new concept in an otherwise value-semantics
   language, applying to one type category (plus `unique struct`).
+- The analysis must be last-use liveness from the start, not the simpler
+  lexical scoping the affine checker could have shipped alone — a larger first
+  increment, though a strictly more precise one, and shared by all three
+  clients.
 - Binding-granular tracking forbids moving an element out of a
   resource-bearing aggregate; such code must restructure around iteration.
 - Borrows cannot escape a function, so a resource API cannot return a `&R`.
@@ -406,8 +606,10 @@ note in that WEP.
 
 - [ ] `move` keyword in lexer / AST / parser; `unique` token consumed by the
       parser as a `struct` modifier and recognized as implicit on resources.
-- [ ] Move-tracking pass over resolved TIR: per-binding `unborrowed` /
-      `borrowed` / `moved` lattice, structural walk, join-point merge.
+- [ ] Move-tracking pass over the resolved `Semantics` layer (`AstId`-keyed,
+      shared LSP + batch path — not TIR): per-binding `unborrowed` / `borrowed`
+      / `moved` lattice, backward last-use liveness, structural walk, join-point
+      merge. The per-consumption classification is the shared output.
 - [ ] use-after-move and move-while-borrowed diagnostics with source spans.
 - [ ] Reject copying a resource binding; require `move` at value-consuming
       argument positions.
@@ -433,6 +635,20 @@ note in that WEP.
       with no ownership heuristics left.
 - [x] Apply the wording amendments to WEP 2026-04-28 and WEP 2026-03-01.
 
+### M5: Value-copy client (copy elision)
+
+- [ ] Emit the per-consumption move / copy / share classification for copyable
+      value types from the same checker output.
+- [ ] `lower::plan::value_copy` inserts `$value_copy$T` only at `copy` sites.
+- [ ] Read-only-share refinement from local `let` / `let mut` / `&mut`
+      mutability, defaulting to `copy`.
+- [ ] Fix recursive-type `$value_copy$T` synthesis to a true deep copy
+      (mutually-recursive helper), replacing the identity `return v` fallback.
+- [ ] Delete `optimize::escape` and `optimize::value_copy_elide`.
+- [ ] Pin representative move / copy / share decisions as e2e
+      `wir_not_expect` / `wir_expect` fixtures (serde `?`-chain, accumulator
+      `push`, literal-into-field, `let b = a; b.mut; …a`).
+
 ## References
 
 - [Component Model Explainer — Handle types and Resource built-ins](../vendor/component-model/design/mvp/Explainer.md)
@@ -442,3 +658,6 @@ note in that WEP.
 - [Resource Inheritance and Downcast](./wep-2026-04-28-resource-inheritance.md)
 - [Migration to GC in Components](./wep-2026-03-28-gc-in-components.md)
 - [TIR-Level CM Binding Synthesis](./wep-2026-02-15-cm-binding-synthesis.md)
+- [Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md)
+- [The Live ValueGraph](./wep-2026-06-15-live-value-graph.md)
+- [Optimizer Remarks for Missed Optimizations](./wep-2026-06-03-optimizer-remarks.md)

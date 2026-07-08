@@ -31,7 +31,7 @@ internal struct ArraySlice<T> {
 
 impl ArraySlice<T> {
     /// Internal: build a slice from a backing array reference and bounds.
-    pub fn internal_new(repr: &Array<T>, start: i32, end: i32) -> ArraySlice<T> with stores[repr] {
+    internal fn internal_new(repr: &Array<T>, start: i32, end: i32) -> ArraySlice<T> with stores[repr] {
         return ArraySlice { repr, start, end };
     }
 
@@ -106,12 +106,12 @@ impl ArraySlice<T> {
     /// Internal: the backing array this slice views. Paired with
     /// `internal_start`, lets bulk-copy paths (`List::extend_from_slice`)
     /// `array_copy` directly from the view without a temporary.
-    pub fn internal_repr(&self) -> &Array<T> with stores[self] {
+    internal fn internal_repr(&self) -> &Array<T> with stores[self] {
         return self.repr;
     }
 
     /// Internal: the start offset of this slice within its backing array.
-    pub fn internal_start(&self) -> i32 {
+    internal fn internal_start(&self) -> i32 {
         return self.start;
     }
 }
@@ -146,7 +146,7 @@ internal struct ArrayIter<T> {
 
 impl ArrayIter<T> {
     /// Internal: build an iterator over `[index, end)` of a backing array.
-    pub fn internal_new(repr: &Array<T>, index: i32, end: i32) -> ArrayIter<T> with stores[repr] {
+    internal fn internal_new(repr: &Array<T>, index: i32, end: i32) -> ArrayIter<T> with stores[repr] {
         return ArrayIter { repr, index, end };
     }
 }
@@ -235,7 +235,7 @@ internal struct ArrayRefIter<T> {
 
 impl ArrayRefIter<T> {
     /// Internal: build a by-reference iterator over `[index, end)`.
-    pub fn internal_new(repr: &Array<T>, index: i32, end: i32) -> ArrayRefIter<T> with stores[repr] {
+    internal fn internal_new(repr: &Array<T>, index: i32, end: i32) -> ArrayRefIter<T> with stores[repr] {
         return ArrayRefIter { repr, index, end };
     }
 
@@ -272,7 +272,7 @@ internal struct ArrayWindows<T> {
 
 impl ArrayWindows<T> {
     /// Internal: build a windows iterator over `[index, end)` with window `size`.
-    pub fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> ArrayWindows<T> with stores[repr] {
+    internal fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> ArrayWindows<T> with stores[repr] {
         assert size > 0, "window size must be positive";
         return ArrayWindows { repr, index, end, size };
     }
@@ -315,7 +315,7 @@ internal struct ArrayChunks<T> {
 
 impl ArrayChunks<T> {
     /// Internal: build a chunks iterator over `[index, end)` with chunk `size`.
-    pub fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> ArrayChunks<T> with stores[repr] {
+    internal fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> ArrayChunks<T> with stores[repr] {
         assert size > 0, "chunk size must be positive";
         return ArrayChunks { repr, index, end, size };
     }
