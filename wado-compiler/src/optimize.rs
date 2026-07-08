@@ -69,6 +69,7 @@ mod condition_implication;
 mod const_branch_prune;
 mod const_folding;
 mod const_object_globalization;
+mod clone_forward;
 mod container_sroa;
 mod copy_prop;
 mod dae;
@@ -794,5 +795,14 @@ fn run_optimization_passes(
     // recognizer has matched its shape, so it only strips dead-weight locals.
     run_pass("nir/scalar_forward", project, profiler, |p| {
         forward_scalar_temps(p, &mut gate)
+    });
+    // Forward read-only clones that inlining + const-object globalization leave
+    // behind (`array_clone(&array_clone(&__const_obj))` into a read-only
+    // binding). Runs last: `const_object_globalization` — which creates the
+    // const global the residual clone reads — is itself a post-loop pass, so the
+    // flat `let t = array_clone(&global.field)` shape only exists here, after the
+    // pre-inline value-copy elider that cannot reach it has long run.
+    run_pass("nir/clone_forward", project, profiler, |p| {
+        clone_forward::forward_redundant_clones(p)
     });
 }
