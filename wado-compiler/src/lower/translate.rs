@@ -96,6 +96,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         task_return_flat_params,
         wasm_assets,
         trait_env,
+        moved_local_spans,
     } = flat;
 
     // For `try_expand_deref_aggregate_assign`.
@@ -131,6 +132,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
             stubs: Vec::new(),
             base_len,
         }),
+        moved_local_spans,
     };
 
     let mut func_map: IndexMap<*const RefCell<TirFunction>, Rc<RefCell<NirFunction>>> =
@@ -216,6 +218,10 @@ struct Translator<'a> {
     /// callees are interned on first sight as `extern_stub`s appended after the
     /// in-package functions. Replaces the former post-pass `assign_func_ids`.
     interner: RefCell<Interner>,
+    /// Per-module last-use spans (WEP 2026-05-21). A `Local` read whose span is
+    /// listed is a move-eligible local's final use, so its defensive value copy
+    /// is elided.
+    moved_local_spans: IndexMap<crate::module_source::ModuleSource, IndexSet<Span>>,
 }
 
 /// Construction-time callee-id minting (see [`Translator::interner`]).
@@ -267,6 +273,9 @@ struct FunctionTranslator<'a, 'p> {
     extra: Option<ExtraLocals>,
     immutable_locals: IndexSet<u32>,
     address_taken: IndexSet<u32>,
+    /// Last-use spans for this function's module (WEP 2026-05-21). A `Local`
+    /// read whose span is present is a final use, so its copy is elided.
+    func_moved_spans: Option<&'a IndexSet<Span>>,
     /// The arena every converter pushes nodes into. `convert_function` takes it
     /// (`into_inner`) as the function's `Body`; `convert_global` wraps the
     /// initializer it builds into a single-statement global-init `Body`.
@@ -296,6 +305,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             .map(|(i, _)| u32::try_from(i).unwrap())
             .collect();
         let address_taken = func.address_taken_locals.clone();
+        let func_moved_spans = base.moved_local_spans.get(&func.module_source);
         Self {
             base,
             specialized,
@@ -305,6 +315,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             }),
             immutable_locals,
             address_taken,
+            func_moved_spans,
             arena: RefCell::new(Body::empty()),
         }
     }
@@ -322,6 +333,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             extra: None,
             immutable_locals: IndexSet::default(),
             address_taken: IndexSet::default(),
+            func_moved_spans: None,
             arena: RefCell::new(Body::empty()),
         }
     }
@@ -531,7 +543,22 @@ impl Translator<'_> {
 
 impl FunctionTranslator<'_, '_> {
     fn should_wrap_value_copy(&self, value: &TirExpr) -> bool {
+        // A move-eligible local at its final use (WEP 2026-05-21) transfers its
+        // storage: no defensive copy is needed. Sound because last-use liveness
+        // proved the source dead afterward.
+        if self.is_last_use_move(value) {
+            return false;
+        }
         value_copy::analyze::should_wrap(value, &self.base.type_table.borrow())
+    }
+
+    /// Whether `value` is a whole-local read that the last-use analysis marked
+    /// as the local's final use, so its consumption is a move rather than a copy.
+    fn is_last_use_move(&self, value: &TirExpr) -> bool {
+        matches!(value.kind, TirExprKind::Local { .. })
+            && self
+                .func_moved_spans
+                .is_some_and(|spans| spans.contains(&value.span))
     }
 
     /// Apply a boxing-derived rewrite to `expr`, returning `Some` if

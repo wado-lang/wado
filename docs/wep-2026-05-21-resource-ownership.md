@@ -398,11 +398,25 @@ and which no interprocedural `returns_fresh` property is needed to justify.
 
 ### Pipeline and implementation
 
-- The move / borrow check is a diagnostic pass over resolved TIR, run early
-  enough that errors point at source spans. The structural walk, the last-use
-  liveness, and the three-state lattice are the whole pass. Its per-consumption
-  classification (move / copy / share / error) is the single output every
-  client reads.
+- The move / borrow check is a diagnostic pass over the resolved,
+  `AstId`-keyed `Semantics` layer that `annotate` produces — not over TIR.
+  This is deliberate: the LSP path stops at `Semantics` and never builds TIR
+  (`build_tir = false`, no reify), so a TIR-level pass could not surface
+  use-after-move / move-while-borrowed errors in the editor. Running over
+  `Semantics` places the analysis exactly where the existing item-level
+  liveness and unused diagnostics already run — the shared LSP + batch path —
+  and keys its output by `AstId`, so errors point at source spans and the
+  facts are available to both the editor and batch compilation. The structural
+  walk, the last-use liveness, and the three-state lattice are the whole pass.
+  Its per-consumption classification (move / copy / share / error), keyed by
+  `AstId`, is the single output every client reads.
+- The value-copy client consumes that classification in the batch pipeline:
+  reify (the sole TIR producer, running before monomorphization) stamps each
+  consumption-site TIR node with its class read from the `AstId`-keyed result,
+  so every monomorphized instance inherits one decision computed once on the
+  generic body. Desugar-introduced temporaries (a `?` match-arm binding) carry
+  no `AstId`; they are single-use by construction, hence trivially `move`,
+  decided structurally at the stamp site.
 - Drop elaboration remains a synthesis pass. It no longer reconstructs
   ownership: it consumes the checker's authoritative "owned and not moved at
   this scope exit" set and inserts the drop.
@@ -533,9 +547,10 @@ note in that WEP.
 
 - [ ] `move` keyword in lexer / AST / parser; `unique` token consumed by the
       parser as a `struct` modifier and recognized as implicit on resources.
-- [ ] Move-tracking pass over resolved TIR: per-binding `unborrowed` /
-      `borrowed` / `moved` lattice, backward last-use liveness, structural walk,
-      join-point merge. The per-consumption classification is the shared output.
+- [ ] Move-tracking pass over the resolved `Semantics` layer (`AstId`-keyed,
+      shared LSP + batch path — not TIR): per-binding `unborrowed` / `borrowed`
+      / `moved` lattice, backward last-use liveness, structural walk, join-point
+      merge. The per-consumption classification is the shared output.
 - [ ] use-after-move and move-while-borrowed diagnostics with source spans.
 - [ ] Reject copying a resource binding; require `move` at value-consuming
       argument positions.
