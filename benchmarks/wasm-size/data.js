@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783473912227,
+  "lastUpdate": 1783546653382,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -38797,6 +38797,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 263813,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "483a510fc4d580ee0cfc4b503a754dabaa21689b",
+          "message": "Merge pull request #1533 from wado-lang/claude/minimal-blog-wado-aiagcg\n\nfeat(sheaf): add the Sheaf & Marl minimal blog system",
+          "timestamp": "2026-07-09T06:27:00+09:00",
+          "tree_id": "4b489407a6ff4e281377dae9684a406f0cfb1b4b",
+          "url": "https://github.com/wado-lang/wado/commit/483a510fc4d580ee0cfc4b503a754dabaa21689b"
+        },
+        "date": 1783546652737,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8246,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15624,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 267452,
             "unit": "bytes"
           }
         ]
