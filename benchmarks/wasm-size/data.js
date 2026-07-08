@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783460357844,
+  "lastUpdate": 1783473912227,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -38733,6 +38733,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0d411bb56203f5398f4b3f27106f72484e192be7"
         },
         "date": 1783460357405,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1927,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15734,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 263813,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "23cb769f9650245d2a82f0cadefe90be6b67dacf",
+          "message": "Merge pull request #1534 from wado-lang/claude/stdlib-synopsis-tests\n\nfeat(synopsis): synopsis tests across core stdlib, plus WIR naming and inference fixes",
+          "timestamp": "2026-07-08T10:13:10+09:00",
+          "tree_id": "e1775e01a841e6ad98fe5c2002d01eb69026a2ee",
+          "url": "https://github.com/wado-lang/wado/commit/23cb769f9650245d2a82f0cadefe90be6b67dacf"
+        },
+        "date": 1783473911580,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
