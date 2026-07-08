@@ -102,8 +102,6 @@ fn "result_match_payload.wado/run"() with Stdout {
     let __local_9: ref "core:prelude/string.wado//String";
     let __local_10: ref "core:prelude/string.wado//String";
     let __local_11: ref "core:prelude/string.wado//String";
-    let v_12: ref "core:prelude/string.wado//String";
-    let v_15: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:result_match_payload.wado::__modules_initialized);
         cold_path;
@@ -112,7 +110,7 @@ fn "result_match_payload.wado/run"() with Stdout {
     };
     ok_val = struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("success"), used: 7 } };
     err_val = struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("failure"), used: 7 } };
-    v_12 = (if ref.test "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok"(ok_val) -> ref "core:prelude/string.wado//String" {
+    x = (if ref.test "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok"(ok_val) -> ref "core:prelude/string.wado//String" {
         s_2 = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok"(ok_val).payload_0;
         __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
         "core:prelude/string.wado/String::push"(__local_8, 111);
@@ -132,9 +130,8 @@ fn "result_match_payload.wado/run"() with Stdout {
         "core:prelude/string.wado/String::push_str"(__local_9, s_3);
         __local_9;
     });
-    x = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v_12.repr)), used: v_12.used };
     "core:cli/println"(x);
-    v_15 = (if ref.test "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok"(err_val) -> ref "core:prelude/string.wado//String" {
+    y = (if ref.test "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok"(err_val) -> ref "core:prelude/string.wado//String" {
         s_5 = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok"(err_val).payload_0;
         __local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
         "core:prelude/string.wado/String::push"(__local_10, 111);
@@ -154,7 +151,6 @@ fn "result_match_payload.wado/run"() with Stdout {
         "core:prelude/string.wado/String::push_str"(__local_11, s_6);
         __local_11;
     });
-    y = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v_15.repr)), used: v_15.used };
     "core:cli/println"(y);
 }
 

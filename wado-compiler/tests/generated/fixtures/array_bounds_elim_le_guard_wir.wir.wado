@@ -108,16 +108,16 @@ fn "array_bounds_elim_le_guard_wir.wado/sum_le"(limit) {
     let i: i32;
     let n: i32;
     let repr: ref Array<i32>;
-    let _licm_repr_16: ref Array<i32>;
+    let _licm_repr_15: ref Array<i32>;
     repr = builtin::array_new<i32>(local.tee n(limit + 1));
     builtin::array_fill<i32>(repr, 0, 1, n);
     sum = 0;
     i = 0;
-    _licm_repr_16 = ref.as_non_null(builtin::array_clone<i32>(repr));
+    _licm_repr_15 = repr;
     b0: block {
         l1: loop {
             break_if b0 i > limit;
-            sum = sum + builtin::array_get<i32>(_licm_repr_16, i);
+            sum = sum + builtin::array_get<i32>(_licm_repr_15, i);
             i = i + 1;
             continue l1;
         };

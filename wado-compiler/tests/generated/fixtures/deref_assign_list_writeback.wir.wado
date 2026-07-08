@@ -38,13 +38,13 @@ array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado/
 
 array Array<i32> (mut i32);  // TypeId(7)
 
-struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(8)
-    mut repr: ref "Array<core:prelude/string.wado/String>",
+struct core:prelude//List<i32> {  // TypeId(8)
+    mut repr: ref Array<i32>,
     mut used: i32,
 }
 
-struct core:prelude//List<i32> {  // TypeId(9)
-    mut repr: ref Array<i32>,
+struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(9)
+    mut repr: ref "Array<core:prelude/string.wado/String>",
     mut used: i32,
 }
 
@@ -66,27 +66,27 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(17)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/reset_empty" = fn(ref "core:prelude//List<i32>");  // TypeId(19)
+type "functype//deref_assign_list_writeback.wado/reset_empty" = fn(ref "core:prelude//List<i32>");  // TypeId(19)
 
-type "functype//wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/replace" = fn(ref "core:prelude//List<i32>");  // TypeId(20)
+type "functype//deref_assign_list_writeback.wado/replace" = fn(ref "core:prelude//List<i32>");  // TypeId(20)
 
-type "functype//wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/replace_strings" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(21)
+type "functype//deref_assign_list_writeback.wado/replace_strings" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(21)
 
-type "functype//wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/__test_0_deref_assign_of_an_empty_list_writes_back" = fn();  // TypeId(22)
+type "functype//deref_assign_list_writeback.wado/__test_0_deref_assign_of_an_empty_list_writes_back" = fn();  // TypeId(22)
 
-type "functype//wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/__test_1_deref_assign_of_a_list_value_writes_back" = fn();  // TypeId(23)
+type "functype//deref_assign_list_writeback.wado/__test_1_deref_assign_of_a_list_value_writes_back" = fn();  // TypeId(23)
 
-type "functype//wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/__test_2_deref_assign_of_a_list_with_a_reference_typed_backing_array_writes_back" = fn();  // TypeId(24)
+type "functype//deref_assign_list_writeback.wado/__test_2_deref_assign_of_a_list_with_a_reference_typed_backing_array_writes_back" = fn();  // TypeId(24)
 
-type "functype//wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/__cm_export____test_0_deref_assign_of_an_empty_list_writes_back" = fn();  // TypeId(25)
+type "functype//deref_assign_list_writeback.wado/__cm_export____test_0_deref_assign_of_an_empty_list_writes_back" = fn();  // TypeId(25)
 
-type "functype//wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/__cm_export____test_1_deref_assign_of_a_list_value_writes_back" = fn();  // TypeId(26)
+type "functype//deref_assign_list_writeback.wado/__cm_export____test_1_deref_assign_of_a_list_value_writes_back" = fn();  // TypeId(26)
 
-type "functype//wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/__cm_export____test_2_deref_assign_of_a_list_with_a_reference_typed_backing_array_writes_back" = fn();  // TypeId(27)
+type "functype//deref_assign_list_writeback.wado/__cm_export____test_2_deref_assign_of_a_list_with_a_reference_typed_backing_array_writes_back" = fn();  // TypeId(27)
 
-type "functype//wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/$value_copy$T64" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(28)
+type "functype//deref_assign_list_writeback.wado/$value_copy$T64" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(28)
 
-type "functype//wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/$value_copy$T27" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(29)
+type "functype//deref_assign_list_writeback.wado/$value_copy$T27" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(29)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(30)
 
@@ -167,29 +167,29 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
-global global:__const_obj_0: ref null "core:prelude//List<core:prelude/string.wado/String>" = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(120)), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(121)), used: 1 })), used: 2 };
+global mut global:deref_assign_list_writeback.wado::__modules_initialized: bool = 0;
+global global:deref_assign_list_writeback.wado::__const_obj_0: ref null "core:prelude//List<core:prelude/string.wado/String>" = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(120)), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(121)), used: 1 })), used: 2 };
 
-fn "wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/reset_empty"(buf) {
+fn "deref_assign_list_writeback.wado/reset_empty"(buf) {
     let __b: ref "core:prelude//List<i32>";
     __b = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
     buf.repr = __b.repr;
     buf.used = 0;
 }
 
-fn "wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/replace"(buf) {
+fn "deref_assign_list_writeback.wado/replace"(buf) {
     let __b: ref "core:prelude//List<i32>";
     __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(9, 9), used: 2 };
     buf.repr = __b.repr;
     buf.used = 2;
 }
 
-fn "wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/replace_strings"(buf) {
-    buf.repr = global:__const_obj_0.repr;
-    buf.used = global:__const_obj_0.used;
+fn "deref_assign_list_writeback.wado/replace_strings"(buf) {
+    buf.repr = global:deref_assign_list_writeback.wado::__const_obj_0.repr;
+    buf.used = global:deref_assign_list_writeback.wado::__const_obj_0.used;
 }
 
-fn "wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/__test_0_deref_assign_of_an_empty_list_writes_back"() {
+fn "deref_assign_list_writeback.wado/__test_0_deref_assign_of_an_empty_list_writes_back"() {
     let __b: ref "core:prelude//List<i32>";
     let xs: ref "core:prelude//List<i32>";
     let __v0: bool;
@@ -197,18 +197,18 @@ fn "wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/__test_0_deref
     let __local_5: ref "core:prelude/format.wado//Formatter";
     __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
     xs = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(builtin::array_clone<i32>(__b.repr)), used: 3 };
-    "wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/reset_empty"(xs);
+    "deref_assign_list_writeback.wado/reset_empty"(xs);
     __v0 = xs.used == 0;
     if @unlikely(__v0 == 0) {
         cold_path;
-        "core:rt/panic"(__local_4 = "core:prelude/string.wado/String::with_capacity"(131); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_deref_assign_of_an_empty_list_writes_back"), used: 50 }); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push"(__local_4, 97); "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/deref_assign_list_writeback.wado"), used: 61 }); "core:prelude/string.wado/String::push"(__local_4, 58); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 23 }, __local_5); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_4 = "core:prelude/string.wado/String::with_capacity"(131); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_deref_assign_of_an_empty_list_writes_back"), used: 50 }); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push"(__local_4, 97); "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("deref_assign_list_writeback.wado"), used: 32 }); "core:prelude/string.wado/String::push"(__local_4, 58); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 23 }, __local_5); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: xs.is_empty()
 "), used: 26 }); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("xs.is_empty(): "), used: 15 }); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/bool^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<bool>" { value: __v0 }, __local_5); "core:prelude/string.wado/String::push"(__local_4, 10); __local_4);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/__test_1_deref_assign_of_a_list_value_writes_back"() {
+fn "deref_assign_list_writeback.wado/__test_1_deref_assign_of_a_list_value_writes_back"() {
     let __b: ref "core:prelude//List<i32>";
     let xs: ref "core:prelude//List<i32>";
     let __v0_2: i32;
@@ -228,11 +228,11 @@ fn "wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/__test_1_deref
     let __local_6_40: ref "core:prelude/format.wado//Formatter";
     __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
     xs = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(builtin::array_clone<i32>(__b.repr)), used: 3 };
-    "wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/replace"(xs);
+    "deref_assign_list_writeback.wado/replace"(xs);
     __v0_2 = xs.used;
     if @unlikely(__v0_2 != 2) {
         cold_path;
-        "core:rt/panic"(__local_8 = "core:prelude/string.wado/String::with_capacity"(126); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_deref_assign_of_a_list_value_writes_back"), used: 49 }); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push"(__local_8, 97); "core:prelude/string.wado/String::push"(__local_8, 116); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/deref_assign_list_writeback.wado"), used: 61 }); "core:prelude/string.wado/String::push"(__local_8, 58); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 29 }, __local_9); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_8 = "core:prelude/string.wado/String::with_capacity"(126); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_deref_assign_of_a_list_value_writes_back"), used: 49 }); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push"(__local_8, 97); "core:prelude/string.wado/String::push"(__local_8, 116); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("deref_assign_list_writeback.wado"), used: 32 }); "core:prelude/string.wado/String::push"(__local_8, 58); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 29 }, __local_9); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: xs.len() == 2
 "), used: 26 }); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("xs.len(): "), used: 10 }); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_2 }, __local_9); "core:prelude/string.wado/String::push"(__local_8, 10); __local_8);
         unreachable;
@@ -248,7 +248,7 @@ condition: index < self.used
     __v0_4 = builtin::array_get<i32>(xs.repr, 0);
     if @unlikely(__v0_4 != 9) {
         cold_path;
-        "core:rt/panic"(__local_10 = "core:prelude/string.wado/String::with_capacity"(120); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_deref_assign_of_a_list_value_writes_back"), used: 49 }); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push"(__local_10, 97); "core:prelude/string.wado/String::push"(__local_10, 116); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/deref_assign_list_writeback.wado"), used: 61 }); "core:prelude/string.wado/String::push"(__local_10, 58); __local_11 = "core:prelude/format.wado/Formatter::new"(__local_10); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 30 }, __local_11); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_10 = "core:prelude/string.wado/String::with_capacity"(120); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_deref_assign_of_a_list_value_writes_back"), used: 49 }); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push"(__local_10, 97); "core:prelude/string.wado/String::push"(__local_10, 116); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("deref_assign_list_writeback.wado"), used: 32 }); "core:prelude/string.wado/String::push"(__local_10, 58); __local_11 = "core:prelude/format.wado/Formatter::new"(__local_10); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 30 }, __local_11); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: xs[0] == 9
 "), used: 23 }); "core:prelude/string.wado/String::push"(__local_10, 120); "core:prelude/string.wado/String::push"(__local_10, 115); "core:prelude/string.wado/String::push"(__local_10, 91); "core:prelude/string.wado/String::push"(__local_10, 48); "core:prelude/string.wado/String::push"(__local_10, 93); "core:prelude/string.wado/String::push"(__local_10, 58); "core:prelude/string.wado/String::push"(__local_10, 32); __local_11 = "core:prelude/format.wado/Formatter::new"(__local_10); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_4 }, __local_11); "core:prelude/string.wado/String::push"(__local_10, 10); __local_10);
         unreachable;
@@ -264,14 +264,14 @@ condition: index < self.used
     __v0_6 = builtin::array_get<i32>(xs.repr, 1);
     if @unlikely(__v0_6 != 9) {
         cold_path;
-        "core:rt/panic"(__local_12 = "core:prelude/string.wado/String::with_capacity"(120); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_deref_assign_of_a_list_value_writes_back"), used: 49 }); "core:prelude/string.wado/String::push"(__local_12, 32); "core:prelude/string.wado/String::push"(__local_12, 97); "core:prelude/string.wado/String::push"(__local_12, 116); "core:prelude/string.wado/String::push"(__local_12, 32); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/deref_assign_list_writeback.wado"), used: 61 }); "core:prelude/string.wado/String::push"(__local_12, 58); __local_13 = "core:prelude/format.wado/Formatter::new"(__local_12); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 31 }, __local_13); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_12 = "core:prelude/string.wado/String::with_capacity"(120); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_deref_assign_of_a_list_value_writes_back"), used: 49 }); "core:prelude/string.wado/String::push"(__local_12, 32); "core:prelude/string.wado/String::push"(__local_12, 97); "core:prelude/string.wado/String::push"(__local_12, 116); "core:prelude/string.wado/String::push"(__local_12, 32); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("deref_assign_list_writeback.wado"), used: 32 }); "core:prelude/string.wado/String::push"(__local_12, 58); __local_13 = "core:prelude/format.wado/Formatter::new"(__local_12); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 31 }, __local_13); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: xs[1] == 9
 "), used: 23 }); "core:prelude/string.wado/String::push"(__local_12, 120); "core:prelude/string.wado/String::push"(__local_12, 115); "core:prelude/string.wado/String::push"(__local_12, 91); "core:prelude/string.wado/String::push"(__local_12, 49); "core:prelude/string.wado/String::push"(__local_12, 93); "core:prelude/string.wado/String::push"(__local_12, 58); "core:prelude/string.wado/String::push"(__local_12, 32); __local_13 = "core:prelude/format.wado/Formatter::new"(__local_12); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_6 }, __local_13); "core:prelude/string.wado/String::push"(__local_12, 10); __local_12);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/__test_2_deref_assign_of_a_list_with_a_reference_typed_backing_array_writes_back"() {
+fn "deref_assign_list_writeback.wado/__test_2_deref_assign_of_a_list_with_a_reference_typed_backing_array_writes_back"() {
     let __b: ref "core:prelude//List<core:prelude/string.wado/String>";
     let xs: ref "core:prelude//List<core:prelude/string.wado/String>";
     let __v0_2: i32;
@@ -295,11 +295,11 @@ fn "wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/__test_2_deref
     let len_a_48: i32;
     __b = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }), used: 1 };
     xs = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude/string.wado//String">(/*via $value_copy$T27*/ __b.repr)), used: 1 };
-    "wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/replace_strings"(xs);
+    "deref_assign_list_writeback.wado/replace_strings"(xs);
     __v0_2 = xs.used;
     if @unlikely(__v0_2 != 2) {
         cold_path;
-        "core:rt/panic"(__local_8 = "core:prelude/string.wado/String::with_capacity"(126); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_2_deref_assign_of_a_list_with_a_reference_typed_backing_array_writes_back"), used: 80 }); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push"(__local_8, 97); "core:prelude/string.wado/String::push"(__local_8, 116); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/deref_assign_list_writeback.wado"), used: 61 }); "core:prelude/string.wado/String::push"(__local_8, 58); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 37 }, __local_9); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_8 = "core:prelude/string.wado/String::with_capacity"(126); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_2_deref_assign_of_a_list_with_a_reference_typed_backing_array_writes_back"), used: 80 }); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push"(__local_8, 97); "core:prelude/string.wado/String::push"(__local_8, 116); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("deref_assign_list_writeback.wado"), used: 32 }); "core:prelude/string.wado/String::push"(__local_8, 58); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 37 }, __local_9); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: xs.len() == 2
 "), used: 26 }); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("xs.len(): "), used: 10 }); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_2 }, __local_9); "core:prelude/string.wado/String::push"(__local_8, 10); __local_8);
         unreachable;
@@ -322,7 +322,7 @@ condition: index < self.used
     };
     if @unlikely(__cond_5 == 0) {
         cold_path;
-        "core:rt/panic"(__local_10 = "core:prelude/string.wado/String::with_capacity"(122); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_2_deref_assign_of_a_list_with_a_reference_typed_backing_array_writes_back"), used: 80 }); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push"(__local_10, 97); "core:prelude/string.wado/String::push"(__local_10, 116); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/deref_assign_list_writeback.wado"), used: 61 }); "core:prelude/string.wado/String::push"(__local_10, 58); __local_11 = "core:prelude/format.wado/Formatter::new"(__local_10); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 38 }, __local_11); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_10 = "core:prelude/string.wado/String::with_capacity"(122); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_2_deref_assign_of_a_list_with_a_reference_typed_backing_array_writes_back"), used: 80 }); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push"(__local_10, 97); "core:prelude/string.wado/String::push"(__local_10, 116); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("deref_assign_list_writeback.wado"), used: 32 }); "core:prelude/string.wado/String::push"(__local_10, 58); __local_11 = "core:prelude/format.wado/Formatter::new"(__local_10); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 38 }, __local_11); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: xs[0] == \"x\"
 "), used: 25 }); "core:prelude/string.wado/String::push"(__local_10, 120); "core:prelude/string.wado/String::push"(__local_10, 115); "core:prelude/string.wado/String::push"(__local_10, 91); "core:prelude/string.wado/String::push"(__local_10, 48); "core:prelude/string.wado/String::push"(__local_10, 93); "core:prelude/string.wado/String::push"(__local_10, 58); "core:prelude/string.wado/String::push"(__local_10, 32); __local_11 = "core:prelude/format.wado/Formatter::new"(__local_10); "core:prelude/format.wado/String^Inspect::inspect"(__v0_4, __local_11); "core:prelude/string.wado/String::push"(__local_10, 10); __local_10);
         unreachable;
@@ -345,51 +345,51 @@ condition: index < self.used
     };
     if @unlikely(__cond_7 == 0) {
         cold_path;
-        "core:rt/panic"(__local_12 = "core:prelude/string.wado/String::with_capacity"(122); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_2_deref_assign_of_a_list_with_a_reference_typed_backing_array_writes_back"), used: 80 }); "core:prelude/string.wado/String::push"(__local_12, 32); "core:prelude/string.wado/String::push"(__local_12, 97); "core:prelude/string.wado/String::push"(__local_12, 116); "core:prelude/string.wado/String::push"(__local_12, 32); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/deref_assign_list_writeback.wado"), used: 61 }); "core:prelude/string.wado/String::push"(__local_12, 58); __local_13 = "core:prelude/format.wado/Formatter::new"(__local_12); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 39 }, __local_13); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_12 = "core:prelude/string.wado/String::with_capacity"(122); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_2_deref_assign_of_a_list_with_a_reference_typed_backing_array_writes_back"), used: 80 }); "core:prelude/string.wado/String::push"(__local_12, 32); "core:prelude/string.wado/String::push"(__local_12, 97); "core:prelude/string.wado/String::push"(__local_12, 116); "core:prelude/string.wado/String::push"(__local_12, 32); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("deref_assign_list_writeback.wado"), used: 32 }); "core:prelude/string.wado/String::push"(__local_12, 58); __local_13 = "core:prelude/format.wado/Formatter::new"(__local_12); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 39 }, __local_13); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: xs[1] == \"y\"
 "), used: 25 }); "core:prelude/string.wado/String::push"(__local_12, 120); "core:prelude/string.wado/String::push"(__local_12, 115); "core:prelude/string.wado/String::push"(__local_12, 91); "core:prelude/string.wado/String::push"(__local_12, 49); "core:prelude/string.wado/String::push"(__local_12, 93); "core:prelude/string.wado/String::push"(__local_12, 58); "core:prelude/string.wado/String::push"(__local_12, 32); __local_13 = "core:prelude/format.wado/Formatter::new"(__local_12); "core:prelude/format.wado/String^Inspect::inspect"(__v0_6, __local_13); "core:prelude/string.wado/String::push"(__local_12, 10); __local_12);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/__cm_export____test_0_deref_assign_of_an_empty_list_writes_back"() {
+fn "deref_assign_list_writeback.wado/__cm_export____test_0_deref_assign_of_an_empty_list_writes_back"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:deref_assign_list_writeback.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:deref_assign_list_writeback.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/__test_0_deref_assign_of_an_empty_list_writes_back"();
+    "deref_assign_list_writeback.wado/__test_0_deref_assign_of_an_empty_list_writes_back"();
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/__cm_export____test_1_deref_assign_of_a_list_value_writes_back"() {
+fn "deref_assign_list_writeback.wado/__cm_export____test_1_deref_assign_of_a_list_value_writes_back"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:deref_assign_list_writeback.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:deref_assign_list_writeback.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/__test_1_deref_assign_of_a_list_value_writes_back"();
+    "deref_assign_list_writeback.wado/__test_1_deref_assign_of_a_list_value_writes_back"();
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/__cm_export____test_2_deref_assign_of_a_list_with_a_reference_typed_backing_array_writes_back"() {
+fn "deref_assign_list_writeback.wado/__cm_export____test_2_deref_assign_of_a_list_with_a_reference_typed_backing_array_writes_back"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:deref_assign_list_writeback.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:deref_assign_list_writeback.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/__test_2_deref_assign_of_a_list_with_a_reference_typed_backing_array_writes_back"();
+    "deref_assign_list_writeback.wado/__test_2_deref_assign_of_a_list_with_a_reference_typed_backing_array_writes_back"();
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/$value_copy$T64"(v) {
+fn "deref_assign_list_writeback.wado/$value_copy$T64"(v) {
     return struct.new "core:prelude/string.wado//StrCharIter" { repr: v.repr, used: v.used, byte_index: v.byte_index };
 }
 
-fn "wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/$value_copy$T27"(v) {
+fn "deref_assign_list_writeback.wado/$value_copy$T27"(v) {
     return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used };
 }
 
@@ -935,7 +935,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 34);
     count = 0;
     truncated = 0;
-    __iter_5 = "wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/$value_copy$T64"(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 }; self_15);
+    __iter_5 = "deref_assign_list_writeback.wado/$value_copy$T64"(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 }; self_15);
     _licm_arith_52 = limit >= 0;
     b80: block {
         l81: loop {
@@ -995,6 +995,6 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     }
 }
 
-export fn "wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/__cm_export____test_0_deref_assign_of_an_empty_list_writes_back" as "__test_0_deref_assign_of_an_empty_list_writes_back"
-export fn "wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/__cm_export____test_1_deref_assign_of_a_list_value_writes_back" as "__test_1_deref_assign_of_a_list_value_writes_back"
-export fn "wado-compiler/tests/fixtures/deref_assign_list_writeback.wado/__cm_export____test_2_deref_assign_of_a_list_with_a_reference_typed_backing_array_writes_back" as "__test_2_deref_assign_of_a_list_with_a_reference_typed_backing_array_writes_back"
+export fn "deref_assign_list_writeback.wado/__cm_export____test_0_deref_assign_of_an_empty_list_writes_back" as "__test_0_deref_assign_of_an_empty_list_writes_back"
+export fn "deref_assign_list_writeback.wado/__cm_export____test_1_deref_assign_of_a_list_value_writes_back" as "__test_1_deref_assign_of_a_list_value_writes_back"
+export fn "deref_assign_list_writeback.wado/__cm_export____test_2_deref_assign_of_a_list_with_a_reference_typed_backing_array_writes_back" as "__test_2_deref_assign_of_a_list_with_a_reference_typed_backing_array_writes_back"

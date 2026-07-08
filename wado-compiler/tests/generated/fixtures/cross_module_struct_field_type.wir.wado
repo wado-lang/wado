@@ -68,9 +68,9 @@ type "functype//cross_module_struct_field_type.wado/run" = fn();  // TypeId(18)
 
 type "functype//cross_module_struct_field_type.wado/__cm_export__run" = fn();  // TypeId(19)
 
-type "functype//wado-compiler/tests/fixtures/cross_module_struct_field_type.wado/$value_copy$T27" = fn(ref "./sub/cross_module_struct_field_type_lib.wado//Inner") -> ref "./sub/cross_module_struct_field_type_lib.wado//Inner";  // TypeId(20)
+type "functype//cross_module_struct_field_type.wado/$value_copy$T27" = fn(ref "./sub/cross_module_struct_field_type_lib.wado//Inner") -> ref "./sub/cross_module_struct_field_type_lib.wado//Inner";  // TypeId(20)
 
-type "functype//wado-compiler/tests/fixtures/cross_module_struct_field_type.wado/$value_copy$T67" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(21)
+type "functype//cross_module_struct_field_type.wado/$value_copy$T67" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(21)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(22)
 
@@ -195,11 +195,11 @@ fn "cross_module_struct_field_type.wado/__cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/cross_module_struct_field_type.wado/$value_copy$T27"(v) {
+fn "cross_module_struct_field_type.wado/$value_copy$T27"(v) {
     return struct.new "./sub/cross_module_struct_field_type_lib.wado//Inner" { value: v.value };
 }
 
-fn "wado-compiler/tests/fixtures/cross_module_struct_field_type.wado/$value_copy$T67"(v) {
+fn "cross_module_struct_field_type.wado/$value_copy$T67"(v) {
     return struct.new "core:prelude/string.wado//StrCharIter" { repr: v.repr, used: v.used, byte_index: v.byte_index };
 }
 
@@ -804,7 +804,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 34);
     count = 0;
     truncated = 0;
-    __iter_5 = "wado-compiler/tests/fixtures/cross_module_struct_field_type.wado/$value_copy$T67"(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 }; self_15);
+    __iter_5 = "cross_module_struct_field_type.wado/$value_copy$T67"(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 }; self_15);
     _licm_arith_52 = limit >= 0;
     b74: block {
         l75: loop {

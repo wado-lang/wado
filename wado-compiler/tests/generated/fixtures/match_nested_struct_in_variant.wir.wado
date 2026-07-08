@@ -111,28 +111,17 @@ fn "match_nested_struct_in_variant.wado/run"() with Stdout {
     let result: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
-    let v: ref "core:prelude/string.wado//String";
-    let f_10: ref "core:prelude/format.wado//Formatter";
-    let f_15: ref "core:prelude/format.wado//Formatter";
+    let f_9: ref "core:prelude/format.wado//Formatter";
+    let f_14: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:match_nested_struct_in_variant.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:match_nested_struct_in_variant.wado::__modules_initialized = 1;
     };
-<<<<<<< HEAD
-    opt = struct.new "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado//Point" { x: 5, y: 10 };
-    v = (if ref.is_null(opt) == 0 -> ref "core:prelude/string.wado//String" {
-        let __variant_payload_1: ref "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado//Point";
-||||||| 88506a642
-    opt = struct.new "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado//Point" { x: 5, y: 10 };
-    result = (if ref.is_null(opt) == 0 -> ref "core:prelude/string.wado//String" {
-        let __variant_payload_1: ref "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado//Point";
-=======
     opt = struct.new "match_nested_struct_in_variant.wado//Point" { x: 5, y: 10 };
     result = (if ref.is_null(opt) == 0 -> ref "core:prelude/string.wado//String" {
         let __variant_payload_1: ref "match_nested_struct_in_variant.wado//Point";
->>>>>>> origin/main
         __variant_payload_1 = ref.as_non_null(opt);
         x = __variant_payload_1.x;
         y = __variant_payload_1.y;
@@ -145,17 +134,16 @@ fn "match_nested_struct_in_variant.wado/run"() with Stdout {
         "core:prelude/string.wado/String::push"(__local_4, 58);
         "core:prelude/string.wado/String::push"(__local_4, 32);
         __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 };
-        f_10 = __local_5;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(x, f_10);
+        f_9 = __local_5;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(x, f_9);
         "core:prelude/string.wado/String::push"(__local_4, 44);
         __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 };
-        f_15 = __local_5;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(y, f_15);
+        f_14 = __local_5;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(y, f_14);
         __local_4;
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 110, 101), used: 4 };
     });
-    result = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used };
     "core:cli/println"(result);
 }
 

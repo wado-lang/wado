@@ -1518,7 +1518,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 fn "serde_serialize_variant.wado/Shape^Serialize::serialize<serde_serialize_variant.wado/JsonSerializer>"(self, s) {
     let r: ref "core:prelude/types.wado//Box<f64>";
     let __local_5: ref "serde_serialize_variant.wado//JsonVariantSerializer";
-    let __sroa_v_ser: ref "serde_serialize_variant.wado//JsonSerializer";
+    let s_9: ref "serde_serialize_variant.wado//JsonSerializer";
     return let __match_scrut_0: ref "serde_serialize_variant.wado//Shape", __match_scrut_0 = self.value, (if ref.test "serde_serialize_variant.wado//Shape::Circle"(__match_scrut_0) -> ref null "serde_serialize_variant.wado//SerializeError" {
         r = struct.new "core:prelude/types.wado//Box<f64>" { value: ref.cast "serde_serialize_variant.wado//Shape::Circle"(__match_scrut_0).payload_0 };
         let __sroa_v_3_discriminant: i32;
@@ -1527,9 +1527,9 @@ fn "serde_serialize_variant.wado/Shape^Serialize::serialize<serde_serialize_vari
         multivalue_bind [__sroa_v_3_discriminant, __sroa_v_3_case0_payload_0, __sroa_v_3_case1_payload_0] = "serde_serialize_variant.wado/JsonSerializer^Serializer::begin_variant"(s, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Shape"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Circle"), used: 6 }, 0);
         if __sroa_v_3_discriminant == 0 {
             __local_5 = ref.as_non_null(__sroa_v_3_case0_payload_0);
-            __sroa_v_ser = __local_5.ser;
-            drop("serde_serialize_variant.wado/JsonSerializer^Serializer::serialize_f64"(__sroa_v_ser, r.value));
-            return "core:prelude/string.wado/String::push"(__sroa_v_ser.buf, 125), ref.null none;
+            s_9 = __local_5.ser;
+            drop("serde_serialize_variant.wado/JsonSerializer^Serializer::serialize_f64"(s_9, r.value));
+            return "core:prelude/string.wado/String::push"(__local_5.ser.buf, 125), ref.null none;
         } else {
         }
         return struct.new "serde_serialize_variant.wado//SerializeError" { message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("begin_variant failed"), used: 20 } };

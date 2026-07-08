@@ -928,7 +928,6 @@ fn "http_fields_get_and_delete.wado/__cm_binding__Fields_append"(self, name, val
     let ptr: i32;
     let len_17: i32;
     let arr_18: ref Array<u8>;
-    let bytes: ref Array<u8>;
     __name_packed = "core:rt/cm_lower_string"(name);
     __value_packed = "core:rt/cm_lower_list_u8"(value.repr, value.used);
     __outptr = "mem/realloc"(0, 0, 4, 20);
@@ -952,7 +951,7 @@ fn "http_fields_get_and_delete.wado/__cm_binding__Fields_append"(self, name, val
             __disc_10 = builtin::load_u8((__outptr + 4) + 4);
             __option_result = ref.null none;
             if __disc_10 != 0 {
-                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_17 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr_18 = "core:rt/memory_to_gc_array"(ptr, len_17); bytes = builtin::array_clone<u8>(arr_18); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(bytes)), used: len_17 });
+                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_17 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr_18 = "core:rt/memory_to_gc_array"(ptr, len_17); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(arr_18)), used: len_17 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
             }
             __vresult = struct.new "wasi:http/types.wado//HeaderError::Other" { discriminant: 4, payload_0: __option_result };
@@ -990,7 +989,6 @@ fn "http_fields_get_and_delete.wado/__cm_binding__Fields_get_and_delete"(self, n
     let ptr: i32;
     let len_24: i32;
     let arr: ref Array<u8>;
-    let bytes: ref Array<u8>;
     __name_packed = "core:rt/cm_lower_string"(name);
     __outptr = "mem/realloc"(0, 0, 4, 20);
     "wasi/wasi:http/Fields::get_and_delete"(self, builtin::i32_wrap_i64(__name_packed), builtin::i32_wrap_i64(__name_packed >> 32_i64), __outptr);
@@ -1041,7 +1039,7 @@ fn "http_fields_get_and_delete.wado/__cm_binding__Fields_get_and_delete"(self, n
             __disc_18 = builtin::load_u8((__outptr + 4) + 4);
             __option_result = ref.null none;
             if __disc_18 != 0 {
-                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_24 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_24); bytes = builtin::array_clone<u8>(arr); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(bytes)), used: len_24 });
+                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_24 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_24); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(arr)), used: len_24 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
             }
             __vresult = struct.new "wasi:http/types.wado//HeaderError::Other" { discriminant: 4, payload_0: __option_result };

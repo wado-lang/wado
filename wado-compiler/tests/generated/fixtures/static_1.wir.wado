@@ -90,15 +90,9 @@ type "functype//static_1.wado/__cm_export____test_7_static_method_non_constructo
 
 type "functype//static_1.wado/__cm_export____test_8_static_method_in_other_module__u128_i128_" = fn();  // TypeId(30)
 
-<<<<<<< HEAD
-type "functype//wado-compiler/tests/fixtures/static_1.wado/$value_copy$T56" = fn(ref "core:prelude/int128.wado//i128") -> ref "core:prelude/int128.wado//i128";  // TypeId(31)
-||||||| 88506a642
-type "functype//wado-compiler/tests/fixtures/static_1.wado/$value_copy$T55" = fn(ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(31)
-=======
-type "functype//static_1.wado/$value_copy$T55" = fn(ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(31)
->>>>>>> origin/main
+type "functype//static_1.wado/$value_copy$T56" = fn(ref "core:prelude/int128.wado//i128") -> ref "core:prelude/int128.wado//i128";  // TypeId(31)
 
-type "functype//wado-compiler/tests/fixtures/static_1.wado/$value_copy$T55" = fn(ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(32)
+type "functype//static_1.wado/$value_copy$T55" = fn(ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(32)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(33)
 
@@ -154,15 +148,9 @@ type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(r
 
 type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(59)
 
-<<<<<<< HEAD
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(60)
-||||||| 88506a642
-type "functype//wado-compiler/tests/fixtures/static_1.wado/Point::distance_squared" = fn(ref "wado-compiler/tests/fixtures/static_1.wado//Point", ref "wado-compiler/tests/fixtures/static_1.wado//Point") -> i32;  // TypeId(60)
-=======
-type "functype//static_1.wado/Point::distance_squared" = fn(ref "static_1.wado//Point", ref "static_1.wado//Point") -> i32;  // TypeId(60)
->>>>>>> origin/main
 
-type "functype//wado-compiler/tests/fixtures/static_1.wado/Point::distance_squared" = fn(ref "wado-compiler/tests/fixtures/static_1.wado//Point", ref "wado-compiler/tests/fixtures/static_1.wado//Point") -> i32;  // TypeId(61)
+type "functype//static_1.wado/Point::distance_squared" = fn(ref "static_1.wado//Point", ref "static_1.wado//Point") -> i32;  // TypeId(61)
 
 type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(62)
 
@@ -422,17 +410,11 @@ fn "static_1.wado/__cm_export____test_8_static_method_in_other_module__u128_i128
     "wasi/task-return"(0);
 }
 
-<<<<<<< HEAD
-fn "wado-compiler/tests/fixtures/static_1.wado/$value_copy$T56"(v) {
+fn "static_1.wado/$value_copy$T56"(v) {
     return struct.new "core:prelude/int128.wado//i128" { low: v.low, high: v.high };
 }
 
-fn "wado-compiler/tests/fixtures/static_1.wado/$value_copy$T55"(v) {
-||||||| 88506a642
-fn "wado-compiler/tests/fixtures/static_1.wado/$value_copy$T55"(v) {
-=======
 fn "static_1.wado/$value_copy$T55"(v) {
->>>>>>> origin/main
     return struct.new "core:prelude/int128.wado//u128" { low: v.low, high: v.high };
 }
 
@@ -590,7 +572,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
         unreachable;
     }
     if "core:prelude/int128.wado/u128^Ord::cmp"(self, divisor) == 0 {
-        return struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }, ref.as_non_null("wado-compiler/tests/fixtures/static_1.wado/$value_copy$T55"(self));
+        return struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }, ref.as_non_null("static_1.wado/$value_copy$T55"(self));
     }
     if (if self.low == divisor.low -> i32 {
         self.high == divisor.high;
@@ -605,20 +587,20 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
     b30: block {
         l31: loop {
             break_if b30 i < 0;
-            remainder = "wado-compiler/tests/fixtures/static_1.wado/$value_copy$T55"("core:prelude/int128.wado/u128^Shl::shl"(remainder, 1));
+            remainder = "static_1.wado/$value_copy$T55"("core:prelude/int128.wado/u128^Shl::shl"(remainder, 1));
             bit = "core:prelude/int128.wado/u128::get_bit"(self, i);
             if bit {
-                remainder = "wado-compiler/tests/fixtures/static_1.wado/$value_copy$T55"(struct.new "core:prelude/int128.wado//u128" { low: remainder.low | 1_i64, high: remainder.high | 0_i64 });
+                remainder = struct.new "core:prelude/int128.wado//u128" { low: remainder.low | 1_i64, high: remainder.high | 0_i64 };
             }
             if "core:prelude/int128.wado/u128^Ord::cmp"(remainder, divisor) != 0 {
-                remainder = "wado-compiler/tests/fixtures/static_1.wado/$value_copy$T55"("core:prelude/int128.wado/u128^Sub::sub"(remainder, divisor));
+                remainder = "core:prelude/int128.wado/u128^Sub::sub"(remainder, divisor);
                 quotient = "core:prelude/int128.wado/u128::set_bit"(quotient, i);
             }
             i = i - 1;
             continue l31;
         };
     };
-    return ref.as_non_null("wado-compiler/tests/fixtures/static_1.wado/$value_copy$T55"(quotient)), ref.as_non_null("wado-compiler/tests/fixtures/static_1.wado/$value_copy$T55"(remainder));
+    return ref.as_non_null("static_1.wado/$value_copy$T55"(quotient)), ref.as_non_null("static_1.wado/$value_copy$T55"(remainder));
 }
 
 fn "core:prelude/int128.wado/u128::get_bit"(self, i) {
@@ -760,7 +742,7 @@ fn "core:prelude/int128.wado/i128^Inspect::inspect"(self, f) {
             struct.new "core:prelude/int128.wado//u128" { low: val_10.low, high: val_10.high };
             break __inline_i128__abs_u128_2;
         }
-        val_11 = "wado-compiler/tests/fixtures/static_1.wado/$value_copy$T56"(self);
+        val_11 = "static_1.wado/$value_copy$T56"(self);
         struct.new "core:prelude/int128.wado//u128" { low: val_11.low, high: val_11.high };
         break __inline_i128__abs_u128_2;
     }, f, self.high < 0_i64);

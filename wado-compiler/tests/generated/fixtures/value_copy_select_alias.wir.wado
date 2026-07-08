@@ -49,19 +49,19 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_select_alias.wado/__test_0_select_lowered_if_binds_an_independent_copy_of_the_true_arm" = fn();  // TypeId(15)
+type "functype//value_copy_select_alias.wado/__test_0_select_lowered_if_binds_an_independent_copy_of_the_true_arm" = fn();  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_select_alias.wado/__test_1_select_lowered_if_binds_an_independent_copy_of_the_false_arm" = fn();  // TypeId(16)
+type "functype//value_copy_select_alias.wado/__test_1_select_lowered_if_binds_an_independent_copy_of_the_false_arm" = fn();  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_select_alias.wado/__test_2_select_through_a_helper_still_copies_each_arm" = fn();  // TypeId(17)
+type "functype//value_copy_select_alias.wado/__test_2_select_through_a_helper_still_copies_each_arm" = fn();  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_select_alias.wado/__cm_export____test_0_select_lowered_if_binds_an_independent_copy_of_the_true_arm" = fn();  // TypeId(18)
+type "functype//value_copy_select_alias.wado/__cm_export____test_0_select_lowered_if_binds_an_independent_copy_of_the_true_arm" = fn();  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_select_alias.wado/__cm_export____test_1_select_lowered_if_binds_an_independent_copy_of_the_false_arm" = fn();  // TypeId(19)
+type "functype//value_copy_select_alias.wado/__cm_export____test_1_select_lowered_if_binds_an_independent_copy_of_the_false_arm" = fn();  // TypeId(19)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_select_alias.wado/__cm_export____test_2_select_through_a_helper_still_copies_each_arm" = fn();  // TypeId(20)
+type "functype//value_copy_select_alias.wado/__cm_export____test_2_select_through_a_helper_still_copies_each_arm" = fn();  // TypeId(20)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_select_alias.wado/__cm_export____test_3_select_of_fresh_literals_is_still_elided_but_correct" = fn();  // TypeId(21)
+type "functype//value_copy_select_alias.wado/__cm_export____test_3_select_of_fresh_literals_is_still_elided_but_correct" = fn();  // TypeId(21)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(22)
 
@@ -126,11 +126,11 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
-global global:__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(1, 2, 3)), used: 3 };
-global global:__const_obj_1: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(4, 5, 6)), used: 3 };
+global mut global:value_copy_select_alias.wado::__modules_initialized: bool = 0;
+global global:value_copy_select_alias.wado::__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(1, 2, 3)), used: 3 };
+global global:value_copy_select_alias.wado::__const_obj_1: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(4, 5, 6)), used: 3 };
 
-fn "wado-compiler/tests/fixtures/value_copy_select_alias.wado/__test_0_select_lowered_if_binds_an_independent_copy_of_the_true_arm"() {
+fn "value_copy_select_alias.wado/__test_0_select_lowered_if_binds_an_independent_copy_of_the_true_arm"() {
     let __v0_5: i32;
     let __local_7_7: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/format.wado//Formatter";
@@ -141,9 +141,9 @@ fn "wado-compiler/tests/fixtures/value_copy_select_alias.wado/__test_0_select_lo
     let __sroa_x_repr: ref Array<i32>;
     let __sroa_a_repr: ref Array<i32>;
     let __sroa_a_used: i32;
-    __sroa_a_repr = builtin::array_clone<i32>(global:__const_obj_0.repr);
-    __sroa_a_used = global:__const_obj_0.used;
-    drop(builtin::array_clone<i32>(global:__const_obj_1.repr));
+    __sroa_a_repr = builtin::array_clone<i32>(global:value_copy_select_alias.wado::__const_obj_0.repr);
+    __sroa_a_used = global:value_copy_select_alias.wado::__const_obj_0.used;
+    drop(builtin::array_clone<i32>(global:value_copy_select_alias.wado::__const_obj_1.repr));
     __sroa_x_repr = builtin::array_clone<i32>(__sroa_a_repr);
     if @unlikely(0 >= __sroa_a_used) {
         cold_path;
@@ -163,14 +163,14 @@ condition: index < self.used
     __v0_5 = builtin::array_get<i32>(__sroa_x_repr, 0);
     if @unlikely(__v0_5 != 1) {
         cold_path;
-        "core:rt/panic"(__local_7_7 = "core:prelude/string.wado/String::with_capacity"(118); "core:prelude/string.wado/String::push_str"(__local_7_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_7_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_select_lowered_if_binds_an_independent_copy_of_the_true_arm"), used: 68 }); "core:prelude/string.wado/String::push"(__local_7_7, 32); "core:prelude/string.wado/String::push"(__local_7_7, 97); "core:prelude/string.wado/String::push"(__local_7_7, 116); "core:prelude/string.wado/String::push"(__local_7_7, 32); "core:prelude/string.wado/String::push_str"(__local_7_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/value_copy_select_alias.wado"), used: 57 }); "core:prelude/string.wado/String::push"(__local_7_7, 58); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7_7); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 17 }, __local_8); "core:prelude/string.wado/String::push_str"(__local_7_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_7_7 = "core:prelude/string.wado/String::with_capacity"(118); "core:prelude/string.wado/String::push_str"(__local_7_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_7_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_select_lowered_if_binds_an_independent_copy_of_the_true_arm"), used: 68 }); "core:prelude/string.wado/String::push"(__local_7_7, 32); "core:prelude/string.wado/String::push"(__local_7_7, 97); "core:prelude/string.wado/String::push"(__local_7_7, 116); "core:prelude/string.wado/String::push"(__local_7_7, 32); "core:prelude/string.wado/String::push_str"(__local_7_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value_copy_select_alias.wado"), used: 28 }); "core:prelude/string.wado/String::push"(__local_7_7, 58); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7_7); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 17 }, __local_8); "core:prelude/string.wado/String::push_str"(__local_7_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: x[0] == 1
 "), used: 22 }); "core:prelude/string.wado/String::push"(__local_7_7, 120); "core:prelude/string.wado/String::push"(__local_7_7, 91); "core:prelude/string.wado/String::push"(__local_7_7, 48); "core:prelude/string.wado/String::push"(__local_7_7, 93); "core:prelude/string.wado/String::push"(__local_7_7, 58); "core:prelude/string.wado/String::push"(__local_7_7, 32); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7_7); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_5 }, __local_8); "core:prelude/string.wado/String::push"(__local_7_7, 10); __local_7_7);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/value_copy_select_alias.wado/__test_1_select_lowered_if_binds_an_independent_copy_of_the_false_arm"() {
+fn "value_copy_select_alias.wado/__test_1_select_lowered_if_binds_an_independent_copy_of_the_false_arm"() {
     let __v0_5: i32;
     let __local_7_7: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/format.wado//Formatter";
@@ -181,9 +181,9 @@ fn "wado-compiler/tests/fixtures/value_copy_select_alias.wado/__test_1_select_lo
     let __sroa_y_repr: ref Array<i32>;
     let __sroa_b_repr: ref Array<i32>;
     let __sroa_b_used: i32;
-    drop(builtin::array_clone<i32>(global:__const_obj_0.repr));
-    __sroa_b_repr = builtin::array_clone<i32>(global:__const_obj_1.repr);
-    __sroa_b_used = global:__const_obj_1.used;
+    drop(builtin::array_clone<i32>(global:value_copy_select_alias.wado::__const_obj_0.repr));
+    __sroa_b_repr = builtin::array_clone<i32>(global:value_copy_select_alias.wado::__const_obj_1.repr);
+    __sroa_b_used = global:value_copy_select_alias.wado::__const_obj_1.used;
     __sroa_y_repr = builtin::array_clone<i32>(__sroa_b_repr);
     if @unlikely(1 >= __sroa_b_used) {
         cold_path;
@@ -203,14 +203,14 @@ condition: index < self.used
     __v0_5 = builtin::array_get<i32>(__sroa_y_repr, 1);
     if @unlikely(__v0_5 != 5) {
         cold_path;
-        "core:rt/panic"(__local_7_7 = "core:prelude/string.wado/String::with_capacity"(118); "core:prelude/string.wado/String::push_str"(__local_7_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_7_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_select_lowered_if_binds_an_independent_copy_of_the_false_arm"), used: 69 }); "core:prelude/string.wado/String::push"(__local_7_7, 32); "core:prelude/string.wado/String::push"(__local_7_7, 97); "core:prelude/string.wado/String::push"(__local_7_7, 116); "core:prelude/string.wado/String::push"(__local_7_7, 32); "core:prelude/string.wado/String::push_str"(__local_7_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/value_copy_select_alias.wado"), used: 57 }); "core:prelude/string.wado/String::push"(__local_7_7, 58); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7_7); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 25 }, __local_8); "core:prelude/string.wado/String::push_str"(__local_7_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_7_7 = "core:prelude/string.wado/String::with_capacity"(118); "core:prelude/string.wado/String::push_str"(__local_7_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_7_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_select_lowered_if_binds_an_independent_copy_of_the_false_arm"), used: 69 }); "core:prelude/string.wado/String::push"(__local_7_7, 32); "core:prelude/string.wado/String::push"(__local_7_7, 97); "core:prelude/string.wado/String::push"(__local_7_7, 116); "core:prelude/string.wado/String::push"(__local_7_7, 32); "core:prelude/string.wado/String::push_str"(__local_7_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value_copy_select_alias.wado"), used: 28 }); "core:prelude/string.wado/String::push"(__local_7_7, 58); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7_7); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 25 }, __local_8); "core:prelude/string.wado/String::push_str"(__local_7_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: y[1] == 5
 "), used: 22 }); "core:prelude/string.wado/String::push"(__local_7_7, 121); "core:prelude/string.wado/String::push"(__local_7_7, 91); "core:prelude/string.wado/String::push"(__local_7_7, 49); "core:prelude/string.wado/String::push"(__local_7_7, 93); "core:prelude/string.wado/String::push"(__local_7_7, 58); "core:prelude/string.wado/String::push"(__local_7_7, 32); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7_7); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_5 }, __local_8); "core:prelude/string.wado/String::push"(__local_7_7, 10); __local_7_7);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/value_copy_select_alias.wado/__test_2_select_through_a_helper_still_copies_each_arm"() {
+fn "value_copy_select_alias.wado/__test_2_select_through_a_helper_still_copies_each_arm"() {
     let __v0_5: i32;
     let __local_7_7: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/format.wado//Formatter";
@@ -223,10 +223,10 @@ fn "wado-compiler/tests/fixtures/value_copy_select_alias.wado/__test_2_select_th
     let __sroa_b_used: i32;
     let __sroa_a_repr: ref Array<i32>;
     let __sroa_a_used: i32;
-    __sroa_a_repr = builtin::array_clone<i32>(global:__const_obj_0.repr);
-    __sroa_a_used = global:__const_obj_0.used;
-    __sroa_b_repr = builtin::array_clone<i32>(global:__const_obj_1.repr);
-    __sroa_b_used = global:__const_obj_1.used;
+    __sroa_a_repr = builtin::array_clone<i32>(global:value_copy_select_alias.wado::__const_obj_0.repr);
+    __sroa_a_used = global:value_copy_select_alias.wado::__const_obj_0.used;
+    __sroa_b_repr = builtin::array_clone<i32>(global:value_copy_select_alias.wado::__const_obj_1.repr);
+    __sroa_b_used = global:value_copy_select_alias.wado::__const_obj_1.used;
     a_30 = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(builtin::array_clone<i32>(__sroa_a_repr)), used: __sroa_a_used };
     drop(struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(builtin::array_clone<i32>(__sroa_b_repr)), used: __sroa_b_used });
     if @unlikely(2 >= __sroa_a_used) {
@@ -247,52 +247,52 @@ condition: index < self.used
     __v0_5 = builtin::array_get<i32>(a_30.repr, 2);
     if @unlikely(__v0_5 != 3) {
         cold_path;
-        "core:rt/panic"(__local_7_7 = "core:prelude/string.wado/String::with_capacity"(118); "core:prelude/string.wado/String::push_str"(__local_7_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_7_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_2_select_through_a_helper_still_copies_each_arm"), used: 54 }); "core:prelude/string.wado/String::push"(__local_7_7, 32); "core:prelude/string.wado/String::push"(__local_7_7, 97); "core:prelude/string.wado/String::push"(__local_7_7, 116); "core:prelude/string.wado/String::push"(__local_7_7, 32); "core:prelude/string.wado/String::push_str"(__local_7_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/value_copy_select_alias.wado"), used: 57 }); "core:prelude/string.wado/String::push"(__local_7_7, 58); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7_7); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 33 }, __local_8); "core:prelude/string.wado/String::push_str"(__local_7_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_7_7 = "core:prelude/string.wado/String::with_capacity"(118); "core:prelude/string.wado/String::push_str"(__local_7_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_7_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_2_select_through_a_helper_still_copies_each_arm"), used: 54 }); "core:prelude/string.wado/String::push"(__local_7_7, 32); "core:prelude/string.wado/String::push"(__local_7_7, 97); "core:prelude/string.wado/String::push"(__local_7_7, 116); "core:prelude/string.wado/String::push"(__local_7_7, 32); "core:prelude/string.wado/String::push_str"(__local_7_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value_copy_select_alias.wado"), used: 28 }); "core:prelude/string.wado/String::push"(__local_7_7, 58); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7_7); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 33 }, __local_8); "core:prelude/string.wado/String::push_str"(__local_7_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: x[2] == 3
 "), used: 22 }); "core:prelude/string.wado/String::push"(__local_7_7, 120); "core:prelude/string.wado/String::push"(__local_7_7, 91); "core:prelude/string.wado/String::push"(__local_7_7, 50); "core:prelude/string.wado/String::push"(__local_7_7, 93); "core:prelude/string.wado/String::push"(__local_7_7, 58); "core:prelude/string.wado/String::push"(__local_7_7, 32); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7_7); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_5 }, __local_8); "core:prelude/string.wado/String::push"(__local_7_7, 10); __local_7_7);
         unreachable;
     }
 }
 
-fn "wado-compiler/tests/fixtures/value_copy_select_alias.wado/__cm_export____test_0_select_lowered_if_binds_an_independent_copy_of_the_true_arm"() {
+fn "value_copy_select_alias.wado/__cm_export____test_0_select_lowered_if_binds_an_independent_copy_of_the_true_arm"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:value_copy_select_alias.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:value_copy_select_alias.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/value_copy_select_alias.wado/__test_0_select_lowered_if_binds_an_independent_copy_of_the_true_arm"();
+    "value_copy_select_alias.wado/__test_0_select_lowered_if_binds_an_independent_copy_of_the_true_arm"();
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/value_copy_select_alias.wado/__cm_export____test_1_select_lowered_if_binds_an_independent_copy_of_the_false_arm"() {
+fn "value_copy_select_alias.wado/__cm_export____test_1_select_lowered_if_binds_an_independent_copy_of_the_false_arm"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:value_copy_select_alias.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:value_copy_select_alias.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/value_copy_select_alias.wado/__test_1_select_lowered_if_binds_an_independent_copy_of_the_false_arm"();
+    "value_copy_select_alias.wado/__test_1_select_lowered_if_binds_an_independent_copy_of_the_false_arm"();
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/value_copy_select_alias.wado/__cm_export____test_2_select_through_a_helper_still_copies_each_arm"() {
+fn "value_copy_select_alias.wado/__cm_export____test_2_select_through_a_helper_still_copies_each_arm"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:value_copy_select_alias.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:value_copy_select_alias.wado::__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/value_copy_select_alias.wado/__test_2_select_through_a_helper_still_copies_each_arm"();
+    "value_copy_select_alias.wado/__test_2_select_through_a_helper_still_copies_each_arm"();
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/value_copy_select_alias.wado/__cm_export____test_3_select_of_fresh_literals_is_still_elided_but_correct"() {
+fn "value_copy_select_alias.wado/__cm_export____test_3_select_of_fresh_literals_is_still_elided_but_correct"() {
     __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        break_if __inline___initialize_modules_0 @likely(global:value_copy_select_alias.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
-        global:__modules_initialized = 1;
+        global:value_copy_select_alias.wado::__modules_initialized = 1;
     };
     "wasi/task-return"(0);
 }
@@ -630,7 +630,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-export fn "wado-compiler/tests/fixtures/value_copy_select_alias.wado/__cm_export____test_0_select_lowered_if_binds_an_independent_copy_of_the_true_arm" as "__test_0_select_lowered_if_binds_an_independent_copy_of_the_true_arm"
-export fn "wado-compiler/tests/fixtures/value_copy_select_alias.wado/__cm_export____test_1_select_lowered_if_binds_an_independent_copy_of_the_false_arm" as "__test_1_select_lowered_if_binds_an_independent_copy_of_the_false_arm"
-export fn "wado-compiler/tests/fixtures/value_copy_select_alias.wado/__cm_export____test_2_select_through_a_helper_still_copies_each_arm" as "__test_2_select_through_a_helper_still_copies_each_arm"
-export fn "wado-compiler/tests/fixtures/value_copy_select_alias.wado/__cm_export____test_3_select_of_fresh_literals_is_still_elided_but_correct" as "__test_3_select_of_fresh_literals_is_still_elided_but_correct"
+export fn "value_copy_select_alias.wado/__cm_export____test_0_select_lowered_if_binds_an_independent_copy_of_the_true_arm" as "__test_0_select_lowered_if_binds_an_independent_copy_of_the_true_arm"
+export fn "value_copy_select_alias.wado/__cm_export____test_1_select_lowered_if_binds_an_independent_copy_of_the_false_arm" as "__test_1_select_lowered_if_binds_an_independent_copy_of_the_false_arm"
+export fn "value_copy_select_alias.wado/__cm_export____test_2_select_through_a_helper_still_copies_each_arm" as "__test_2_select_through_a_helper_still_copies_each_arm"
+export fn "value_copy_select_alias.wado/__cm_export____test_3_select_of_fresh_literals_is_still_elided_but_correct" as "__test_3_select_of_fresh_literals_is_still_elided_but_correct"

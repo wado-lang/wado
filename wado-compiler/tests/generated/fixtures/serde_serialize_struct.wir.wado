@@ -520,17 +520,15 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 
 fn "serde_serialize_struct.wado/User^Serialize::serialize<serde_serialize_struct.wado/JsonSerializer>"(self, s) {
     let st_2: ref "core:prelude/types.wado//Result<serde_serialize_struct.wado/JsonStructSerializer,serde_serialize_struct.wado/SerializeError>";
-    let st_3: ref "serde_serialize_struct.wado//JsonStructSerializer";
     let __local_4: ref "serde_serialize_struct.wado//JsonStructSerializer";
     "core:prelude/string.wado/String::push"(s.buf, 123);
     st_2 = struct.new "core:prelude/types.wado//Result<serde_serialize_struct.wado/JsonStructSerializer,serde_serialize_struct.wado/SerializeError>::Ok" { discriminant: 0, payload_0: struct.new "serde_serialize_struct.wado//JsonStructSerializer" { ser: s, count: 0 } };
     if ref.test "core:prelude/types.wado//Result<serde_serialize_struct.wado/JsonStructSerializer,serde_serialize_struct.wado/SerializeError>::Ok"(st_2) {
         __local_4 = ref.cast "core:prelude/types.wado//Result<serde_serialize_struct.wado/JsonStructSerializer,serde_serialize_struct.wado/SerializeError>::Ok"(st_2).payload_0;
-        st_3 = struct.new "serde_serialize_struct.wado//JsonStructSerializer" { ser: __local_4.ser, count: __local_4.count };
-        drop("serde_serialize_struct.wado/JsonStructSerializer^SerializeStruct::field<core:prelude/string.wado/String>"(st_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("userName"), used: 8 }, self.name));
-        drop("serde_serialize_struct.wado/JsonStructSerializer^SerializeStruct::field<i32>"(st_3, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 103, 101), used: 3 }, self.age));
-        drop("serde_serialize_struct.wado/JsonStructSerializer^SerializeStruct::field<bool>"(st_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("active"), used: 6 }, self.active));
-        return "core:prelude/string.wado/String::push"(st_3.ser.buf, 125), ref.null none;
+        drop("serde_serialize_struct.wado/JsonStructSerializer^SerializeStruct::field<core:prelude/string.wado/String>"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("userName"), used: 8 }, self.name));
+        drop("serde_serialize_struct.wado/JsonStructSerializer^SerializeStruct::field<i32>"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 103, 101), used: 3 }, self.age));
+        drop("serde_serialize_struct.wado/JsonStructSerializer^SerializeStruct::field<bool>"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("active"), used: 6 }, self.active));
+        return "core:prelude/string.wado/String::push"(__local_4.ser.buf, 125), ref.null none;
     } else {
     }
     return struct.new "serde_serialize_struct.wado//SerializeError" { message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("begin_struct failed"), used: 19 } };

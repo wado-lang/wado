@@ -255,14 +255,12 @@ fn "wasi_clocks_timezone.wado/__cm_binding__Timezone_to_debug_string"() with Tim
     let ptr: i32;
     let len_3: i32;
     let arr: ref Array<u8>;
-    let bytes: ref Array<u8>;
     "wasi/wasi:clocks/Timezone::to_debug_string"(local.tee __outptr("mem/realloc"(0, 0, 4, 8)));
     ptr = builtin::load_i32(__outptr);
     len_3 = builtin::load_i32(__outptr + 4);
     arr = "core:rt/memory_to_gc_array"(ptr, len_3);
-    bytes = builtin::array_clone<u8>(arr);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return struct.new "core:prelude/string.wado//String" { repr: bytes, used: len_3 };
+    return struct.new "core:prelude/string.wado//String" { repr: arr, used: len_3 };
 }
 
 fn "wasi_clocks_timezone.wado/__cm_binding__Timezone_iana_id"() with Timezone {
@@ -272,12 +270,11 @@ fn "wasi_clocks_timezone.wado/__cm_binding__Timezone_iana_id"() with Timezone {
     let ptr: i32;
     let len_4: i32;
     let arr: ref Array<u8>;
-    let bytes: ref Array<u8>;
     "wasi/wasi:clocks/Timezone::iana_id"(local.tee __outptr("mem/realloc"(0, 0, 4, 12)));
     __disc = builtin::load_u8(__outptr);
     __option_result = ref.null none;
     if __disc != 0 {
-        __option_result = ref.as_non_null(ptr = builtin::load_i32(__outptr + 4); len_4 = builtin::load_i32((__outptr + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_4); bytes = builtin::array_clone<u8>(arr); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(bytes)), used: len_4 });
+        __option_result = ref.as_non_null(ptr = builtin::load_i32(__outptr + 4); len_4 = builtin::load_i32((__outptr + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_4); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(arr)), used: len_4 });
         drop("mem/realloc"(builtin::load_i32(__outptr + 4), builtin::load_i32((__outptr + 4) + 4), 1, 0));
     }
     drop("mem/realloc"(__outptr, 12, 4, 0));

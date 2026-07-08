@@ -278,7 +278,7 @@ type "functype//http_uninit_string_conditional_trap.wado/__cm_binding__Response_
 
 type "functype//http_uninit_string_conditional_trap.wado/__cm_export__handle" = fn(i32);  // TypeId(58)
 
-type "functype//wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/$value_copy$T21" = fn(ref "core:prelude//List<u8>") -> ref "core:prelude//List<u8>";  // TypeId(59)
+type "functype//http_uninit_string_conditional_trap.wado/$value_copy$T21" = fn(ref "core:prelude//List<u8>") -> ref "core:prelude//List<u8>";  // TypeId(59)
 
 type "functype//core:rt/memory_to_gc_array" = fn(i32, i32) -> ref Array<u8>;  // TypeId(60)
 
@@ -821,13 +821,12 @@ fn "http_uninit_string_conditional_trap.wado/__cm_binding__Request_get_path_with
     let ptr: i32;
     let len_5: i32;
     let arr: ref Array<u8>;
-    let bytes: ref Array<u8>;
     __outptr = "mem/realloc"(0, 0, 4, 12);
     "wasi/wasi:http/Request::get_path_with_query"(self, __outptr);
     __disc = builtin::load_u8(__outptr);
     __option_result = ref.null none;
     if __disc != 0 {
-        __option_result = ref.as_non_null(ptr = builtin::load_i32(__outptr + 4); len_5 = builtin::load_i32((__outptr + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_5); bytes = builtin::array_clone<u8>(arr); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(bytes)), used: len_5 });
+        __option_result = ref.as_non_null(ptr = builtin::load_i32(__outptr + 4); len_5 = builtin::load_i32((__outptr + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_5); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(arr)), used: len_5 });
         drop("mem/realloc"(builtin::load_i32(__outptr + 4), builtin::load_i32((__outptr + 4) + 4), 1, 0));
     }
     drop("mem/realloc"(__outptr, 12, 4, 0));
@@ -851,7 +850,6 @@ fn "http_uninit_string_conditional_trap.wado/__cm_binding__Fields_append"(self, 
     let ptr: i32;
     let len_17: i32;
     let arr_18: ref Array<u8>;
-    let bytes: ref Array<u8>;
     __name_packed = "core:rt/cm_lower_string"(name);
     __value_packed = "core:rt/cm_lower_list_u8"(value.repr, value.used);
     __outptr = "mem/realloc"(0, 0, 4, 20);
@@ -875,7 +873,7 @@ fn "http_uninit_string_conditional_trap.wado/__cm_binding__Fields_append"(self, 
             __disc_10 = builtin::load_u8((__outptr + 4) + 4);
             __option_result = ref.null none;
             if __disc_10 != 0 {
-                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_17 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr_18 = "core:rt/memory_to_gc_array"(ptr, len_17); bytes = builtin::array_clone<u8>(arr_18); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(bytes)), used: len_17 });
+                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_17 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr_18 = "core:rt/memory_to_gc_array"(ptr, len_17); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(arr_18)), used: len_17 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
             }
             __vresult = struct.new "wasi:http/types.wado//HeaderError::Other" { discriminant: 4, payload_0: __option_result };
@@ -930,7 +928,7 @@ fn "http_uninit_string_conditional_trap.wado/__cm_export__handle"(request) {
     "http_uninit_string_conditional_trap.wado/handle"(request);
 }
 
-fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/$value_copy$T21"(v) {
+fn "http_uninit_string_conditional_trap.wado/$value_copy$T21"(v) {
     return struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used };
 }
 
@@ -1076,7 +1074,7 @@ fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
     let _licm_used_12: i32;
     let _licm_repr_13: ref Array<u8>;
     let __hfs_index_14: i32;
-    result = "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/$value_copy$T21"(__b = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 }; __b);
+    result = "http_uninit_string_conditional_trap.wado/$value_copy$T21"(__b = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 }; __b);
     _licm_used_12 = self.used;
     _licm_repr_13 = self.repr;
     __hfs_index_14 = self.index;

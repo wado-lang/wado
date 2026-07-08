@@ -182,7 +182,7 @@ type "functype//wir_future_unit_result.wado/__cm_export__run" = fn();  // TypeId
 
 type "functype//wir_future_unit_result.wado/__cm_future_read_core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>" = fn(i32) -> ref "core:prelude/types.wado//Option<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>";  // TypeId(41)
 
-type "functype//wado-compiler/tests/fixtures/wir_future_unit_result.wado/$value_copy$T71" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(42)
+type "functype//wir_future_unit_result.wado/$value_copy$T71" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(42)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(43)
 
@@ -260,15 +260,9 @@ type "functype//core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descript
 
 type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(80)
 
-<<<<<<< HEAD
 type "functype//core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>::grow" = fn(ref "core:prelude//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>");  // TypeId(81)
-||||||| 88506a642
-type "functype//wado-compiler/tests/fixtures/wir_future_unit_result.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/wir_future_unit_result.wado//__Closure_2", i32) -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(81)
-=======
-type "functype//wir_future_unit_result.wado/__Closure_2::__call" = fn(ref "wir_future_unit_result.wado//__Closure_2", i32) -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(81)
->>>>>>> origin/main
 
-type "functype//wado-compiler/tests/fixtures/wir_future_unit_result.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/wir_future_unit_result.wado//__Closure_2", i32) -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(82)
+type "functype//wir_future_unit_result.wado/__Closure_2::__call" = fn(ref "wir_future_unit_result.wado//__Closure_2", i32) -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(82)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(83)
 
@@ -393,10 +387,10 @@ fn "wir_future_unit_result.wado/__cm_binding__Preopens_get_directories"() with P
     let __i: i32;
     let __elem_addr: i32;
     let __lifted_result_6: i32;
+    let __lifted_result_7: ref "core:prelude/string.wado//String";
     let ptr: i32;
     let len_10: i32;
     let arr: ref Array<u8>;
-    let bytes: ref Array<u8>;
     "wasi/wasi:filesystem/Preopens::get_directories"(local.tee __outptr("mem/realloc"(0, 0, 4, 8)));
     __base = builtin::load_i32(__outptr);
     __result = struct.new "core:prelude//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>" { repr: builtin::array_new<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(local.tee __count(builtin::load_i32(__outptr + 4))), used: 0 };
@@ -408,8 +402,8 @@ fn "wir_future_unit_result.wado/__cm_binding__Preopens_get_directories"() with P
             ptr = builtin::load_i32(__elem_addr + 4);
             len_10 = builtin::load_i32((__elem_addr + 4) + 4);
             arr = "core:rt/memory_to_gc_array"(ptr, len_10);
-            bytes = builtin::array_clone<u8>(arr);
-            "core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>::push"(__result, struct.new "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]" { 0: __lifted_result_6, 1: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(bytes)), used: len_10 } });
+            __lifted_result_7 = struct.new "core:prelude/string.wado//String" { repr: arr, used: len_10 };
+            "core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>::push"(__result, struct.new "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]" { 0: __lifted_result_6, 1: __lifted_result_7 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 4), builtin::load_i32((__elem_addr + 4) + 4), 1, 0));
             __i = __i + 1;
             continue l10;
@@ -452,7 +446,6 @@ fn "wir_future_unit_result.wado/__cm_lift__Descriptor_open_at"(__outptr) {
     let ptr: i32;
     let len_8: i32;
     let arr: ref Array<u8>;
-    let bytes: ref Array<u8>;
     __disc_1 = builtin::load_u8(__outptr);
     __result_val = ref.null none;
     if __disc_1 == 0 {
@@ -536,7 +529,7 @@ fn "wir_future_unit_result.wado/__cm_lift__Descriptor_open_at"(__outptr) {
             __disc_5 = builtin::load_u8((__outptr + 4) + 4);
             __option_result = ref.null none;
             if __disc_5 != 0 {
-                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_8 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_8); bytes = builtin::array_clone<u8>(arr); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(bytes)), used: len_8 });
+                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_8 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_8); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(arr)), used: len_8 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
             }
             __vresult = struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: __option_result };
@@ -570,7 +563,6 @@ fn "wir_future_unit_result.wado/__cm_future_read_core:prelude/types.wado/Result<
     let ptr_11: i32;
     let len_12: i32;
     let arr: ref Array<u8>;
-    let bytes: ref Array<u8>;
     ptr_1 = "mem/realloc"(0, 0, 4, 20);
     status = "wasi/future-read:transmission-filesystem"(handle, ptr_1);
     if status == -1 {
@@ -661,7 +653,7 @@ fn "wir_future_unit_result.wado/__cm_future_read_core:prelude/types.wado/Result<
                 __disc_8 = builtin::load_u8((ptr_1 + 4) + 4);
                 __option_result = ref.null none;
                 if __disc_8 != 0 {
-                    __option_result = ref.as_non_null(ptr_11 = builtin::load_i32(((ptr_1 + 4) + 4) + 4); len_12 = builtin::load_i32((((ptr_1 + 4) + 4) + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr_11, len_12); bytes = builtin::array_clone<u8>(arr); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(bytes)), used: len_12 });
+                    __option_result = ref.as_non_null(ptr_11 = builtin::load_i32(((ptr_1 + 4) + 4) + 4); len_12 = builtin::load_i32((((ptr_1 + 4) + 4) + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr_11, len_12); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(arr)), used: len_12 });
                     drop("mem/realloc"(builtin::load_i32(((ptr_1 + 4) + 4) + 4), builtin::load_i32((((ptr_1 + 4) + 4) + 4) + 4), 1, 0));
                 }
                 __vresult = struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: __option_result };
@@ -674,7 +666,7 @@ fn "wir_future_unit_result.wado/__cm_future_read_core:prelude/types.wado/Result<
     return result;
 }
 
-fn "wado-compiler/tests/fixtures/wir_future_unit_result.wado/$value_copy$T71"(v) {
+fn "wir_future_unit_result.wado/$value_copy$T71"(v) {
     return struct.new "core:prelude/string.wado//StrCharIter" { repr: v.repr, used: v.used, byte_index: v.byte_index };
 }
 
@@ -1263,7 +1255,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 34);
     count = 0;
     truncated = 0;
-    __iter_5 = "wado-compiler/tests/fixtures/wir_future_unit_result.wado/$value_copy$T71"(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 }; self_15);
+    __iter_5 = "wir_future_unit_result.wado/$value_copy$T71"(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 }; self_15);
     _licm_arith_52 = limit >= 0;
     b152: block {
         l153: loop {

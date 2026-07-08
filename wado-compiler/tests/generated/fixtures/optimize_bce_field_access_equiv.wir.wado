@@ -119,7 +119,7 @@ fn "optimize_bce_field_access_equiv.wado/run"() {
     let __local_6_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let repr: ref Array<i32>;
-    let _licm_repr_21: ref Array<i32>;
+    let _licm_repr_20: ref Array<i32>;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:optimize_bce_field_access_equiv.wado::__modules_initialized);
         cold_path;
@@ -130,11 +130,11 @@ fn "optimize_bce_field_access_equiv.wado/run"() {
     builtin::array_fill<i32>(repr, 0, 42, 100);
     sum = 0;
     i = 0;
-    _licm_repr_21 = ref.as_non_null(builtin::array_clone<i32>(repr));
+    _licm_repr_20 = repr;
     b0: block {
         l1: loop {
             break_if b0 i >= 100;
-            sum = sum + builtin::array_get<i32>(_licm_repr_21, i);
+            sum = sum + builtin::array_get<i32>(_licm_repr_20, i);
             i = i + 1;
             continue l1;
         };

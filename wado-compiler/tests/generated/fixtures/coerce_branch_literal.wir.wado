@@ -121,15 +121,9 @@ type "functype//coerce_branch_literal.wado/__cm_export____test_5_match_arm_liter
 
 type "functype//coerce_branch_literal.wado/__cm_export____test_6_if_else_literal_adopts_the_typed_branch__either_side_" = fn();  // TypeId(35)
 
-<<<<<<< HEAD
-type "functype//wado-compiler/tests/fixtures/coerce_branch_literal.wado/$value_copy$T51" = fn(ref "core:prelude/int128.wado//i128") -> ref "core:prelude/int128.wado//i128";  // TypeId(36)
-||||||| 88506a642
-type "functype//wado-compiler/tests/fixtures/coerce_branch_literal.wado/$value_copy$T50" = fn(ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(36)
-=======
 type "functype//coerce_branch_literal.wado/$value_copy$T50" = fn(ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(36)
->>>>>>> origin/main
 
-type "functype//wado-compiler/tests/fixtures/coerce_branch_literal.wado/$value_copy$T50" = fn(ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(37)
+type "functype//coerce_branch_literal.wado/$value_copy$T51" = fn(ref "core:prelude/int128.wado//i128") -> ref "core:prelude/int128.wado//i128";  // TypeId(37)
 
 type "functype//core:prelude/fpfmt.wado/unpack64" = fn(f64) -> [u64, i32];  // TypeId(38)
 
@@ -454,18 +448,12 @@ fn "coerce_branch_literal.wado/__cm_export____test_6_if_else_literal_adopts_the_
     "wasi/task-return"(0);
 }
 
-<<<<<<< HEAD
-fn "wado-compiler/tests/fixtures/coerce_branch_literal.wado/$value_copy$T51"(v) {
-    return struct.new "core:prelude/int128.wado//i128" { low: v.low, high: v.high };
+fn "coerce_branch_literal.wado/$value_copy$T50"(v) {
+    return struct.new "core:prelude/int128.wado//u128" { low: v.low, high: v.high };
 }
 
-fn "wado-compiler/tests/fixtures/coerce_branch_literal.wado/$value_copy$T50"(v) {
-||||||| 88506a642
-fn "wado-compiler/tests/fixtures/coerce_branch_literal.wado/$value_copy$T50"(v) {
-=======
-fn "coerce_branch_literal.wado/$value_copy$T50"(v) {
->>>>>>> origin/main
-    return struct.new "core:prelude/int128.wado//u128" { low: v.low, high: v.high };
+fn "coerce_branch_literal.wado/$value_copy$T51"(v) {
+    return struct.new "core:prelude/int128.wado//i128" { low: v.low, high: v.high };
 }
 
 fn "core:prelude/fpfmt.wado/unpack64"(f) {
@@ -1362,7 +1350,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
         unreachable;
     }
     if "core:prelude/int128.wado/u128^Ord::cmp"(self, divisor) == 0 {
-        return struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }, ref.as_non_null("wado-compiler/tests/fixtures/coerce_branch_literal.wado/$value_copy$T50"(self));
+        return struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }, ref.as_non_null("coerce_branch_literal.wado/$value_copy$T50"(self));
     }
     if (if self.low == divisor.low -> i32 {
         self.high == divisor.high;
@@ -1377,20 +1365,20 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
     b142: block {
         l143: loop {
             break_if b142 i < 0;
-            remainder = "wado-compiler/tests/fixtures/coerce_branch_literal.wado/$value_copy$T50"("core:prelude/int128.wado/u128^Shl::shl"(remainder, 1));
+            remainder = "coerce_branch_literal.wado/$value_copy$T50"("core:prelude/int128.wado/u128^Shl::shl"(remainder, 1));
             bit = "core:prelude/int128.wado/u128::get_bit"(self, i);
             if bit {
-                remainder = "wado-compiler/tests/fixtures/coerce_branch_literal.wado/$value_copy$T50"(struct.new "core:prelude/int128.wado//u128" { low: remainder.low | 1_i64, high: remainder.high | 0_i64 });
+                remainder = struct.new "core:prelude/int128.wado//u128" { low: remainder.low | 1_i64, high: remainder.high | 0_i64 };
             }
             if "core:prelude/int128.wado/u128^Ord::cmp"(remainder, divisor) != 0 {
-                remainder = "wado-compiler/tests/fixtures/coerce_branch_literal.wado/$value_copy$T50"("core:prelude/int128.wado/u128^Sub::sub"(remainder, divisor));
+                remainder = "core:prelude/int128.wado/u128^Sub::sub"(remainder, divisor);
                 quotient = "core:prelude/int128.wado/u128::set_bit"(quotient, i);
             }
             i = i - 1;
             continue l143;
         };
     };
-    return ref.as_non_null("wado-compiler/tests/fixtures/coerce_branch_literal.wado/$value_copy$T50"(quotient)), ref.as_non_null("wado-compiler/tests/fixtures/coerce_branch_literal.wado/$value_copy$T50"(remainder));
+    return ref.as_non_null("coerce_branch_literal.wado/$value_copy$T50"(quotient)), ref.as_non_null("coerce_branch_literal.wado/$value_copy$T50"(remainder));
 }
 
 fn "core:prelude/int128.wado/u128::get_bit"(self, i) {
@@ -1532,7 +1520,7 @@ fn "core:prelude/int128.wado/i128^Inspect::inspect"(self, f) {
             struct.new "core:prelude/int128.wado//u128" { low: val_10.low, high: val_10.high };
             break __inline_i128__abs_u128_2;
         }
-        val_11 = "wado-compiler/tests/fixtures/coerce_branch_literal.wado/$value_copy$T51"(self);
+        val_11 = "coerce_branch_literal.wado/$value_copy$T51"(self);
         struct.new "core:prelude/int128.wado//u128" { low: val_11.low, high: val_11.high };
         break __inline_i128__abs_u128_2;
     }, f, self.high < 0_i64);

@@ -57,7 +57,7 @@ type "functype//stream_read_basic.wado/__cm_binding__Stdout_write_via_stream" = 
 
 type "functype//stream_read_basic.wado/__cm_export__run" = fn();  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/stream_read_basic.wado/$value_copy$T20" = fn(ref Array<u8>) -> ref Array<u8>;  // TypeId(19)
+type "functype//stream_read_basic.wado/$value_copy$T20" = fn(ref Array<u8>) -> ref Array<u8>;  // TypeId(19)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(20)
 
@@ -182,7 +182,7 @@ fn "stream_read_basic.wado/__cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/stream_read_basic.wado/$value_copy$T20"(v) {
+fn "stream_read_basic.wado/$value_copy$T20"(v) {
     return builtin::array_clone<u8>(v);
 }
 
@@ -347,7 +347,7 @@ fn "core:rt/cm_stream_read_u8"(handle, max) {
     count = result >> 4;
     arr = "core:rt/memory_to_gc_array"(ptr, count);
     drop("mem/realloc"(ptr, max, 1, 0));
-    return struct.new "core:prelude//List<u8>" { repr: ref.as_non_null("wado-compiler/tests/fixtures/stream_read_basic.wado/$value_copy$T20"(arr)), used: count };
+    return struct.new "core:prelude//List<u8>" { repr: ref.as_non_null("stream_read_basic.wado/$value_copy$T20"(arr)), used: count };
 }
 
 fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {

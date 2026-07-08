@@ -830,7 +830,6 @@ fn "http_request_scheme.wado/__cm_binding__Request_get_scheme"(self) with Reques
     let ptr: i32;
     let len_7: i32;
     let arr: ref Array<u8>;
-    let bytes: ref Array<u8>;
     __outptr = "mem/realloc"(0, 0, 4, 16);
     "wasi/wasi:http/Request::get_scheme"(self, __outptr);
     __disc = builtin::load_u8(__outptr);
@@ -843,7 +842,7 @@ fn "http_request_scheme.wado/__cm_binding__Request_get_scheme"(self) with Reques
         } else if __vdisc == 1 {
             __vresult = struct.new "wasi:http/types.wado//Scheme" { 1 };
         } else {
-            __vresult = struct.new "wasi:http/types.wado//Scheme::Other" { discriminant: 2, payload_0: ref.as_non_null(ptr = builtin::load_i32((__outptr + 4) + 4); len_7 = builtin::load_i32(((__outptr + 4) + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_7); bytes = builtin::array_clone<u8>(arr); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(bytes)), used: len_7 }) };
+            __vresult = struct.new "wasi:http/types.wado//Scheme::Other" { discriminant: 2, payload_0: ref.as_non_null(ptr = builtin::load_i32((__outptr + 4) + 4); len_7 = builtin::load_i32(((__outptr + 4) + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_7); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(arr)), used: len_7 }) };
         }
         __option_result = __vresult;
     }

@@ -98,7 +98,7 @@ type "functype//effect_handler_generic_impl.wado/__cm_export____test_1_generic_i
 
 type "functype//effect_handler_generic_impl.wado/__cm_export____test_2_bundled_form_enumerates_effects_from_a_generic_impl" = fn();  // TypeId(29)
 
-type "functype//wado-compiler/tests/fixtures/effect_handler_generic_impl.wado/$value_copy$T65" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(30)
+type "functype//effect_handler_generic_impl.wado/$value_copy$T65" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(30)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(31)
 
@@ -196,14 +196,13 @@ fn "effect_handler_generic_impl.wado/__test_0_generic_impl_handles_an_effect_for
     let __local_7: ref null "effect_handler_generic_impl.wado//__Dispatch_Greeter";
     let __local_8: ref "effect_handler_generic_impl.wado//__Dispatch_Greeter";
     let __local_9: ref "core:prelude/string.wado//String";
-<<<<<<< HEAD
     let len_a: i32;
-    h = struct.new "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado//Holder<i32>" { payload: 1 };
-    __local_7 = global:__effect_Greeter;
-    __local_8 = struct.new "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado//__Dispatch_Greeter" { outer: __local_7, op_greet: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado//__Closure_2" { __capture_0: h }, func: ref.func "closure/wado-compiler/tests/fixtures/effect_handler_generic_impl.wado/__closure_wrapper_0" } };
-    global:__effect_Greeter = __local_8;
-    __local_9 = "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado/__effect_dispatch__Greeter__greet"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 111, 98), used: 3 });
-    global:__effect_Greeter = __local_7;
+    h = struct.new "effect_handler_generic_impl.wado//Holder<i32>" { payload: 1 };
+    __local_7 = global:effect_handler_generic_impl.wado::__effect_Greeter;
+    __local_8 = struct.new "effect_handler_generic_impl.wado//__Dispatch_Greeter" { outer: __local_7, op_greet: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_generic_impl.wado//__Closure_2" { __capture_0: h }, func: ref.func "closure/effect_handler_generic_impl.wado/__closure_wrapper_0" } };
+    global:effect_handler_generic_impl.wado::__effect_Greeter = __local_8;
+    __local_9 = "effect_handler_generic_impl.wado/__effect_dispatch__Greeter__greet"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 111, 98), used: 3 });
+    global:effect_handler_generic_impl.wado::__effect_Greeter = __local_7;
     __cond = __inline_String_Eq__eq_0: block -> bool {
         len_a = __local_9.used;
         if len_a != 6 {
@@ -211,23 +210,6 @@ fn "effect_handler_generic_impl.wado/__test_0_generic_impl_handles_an_effect_for
         }
         break __inline_String_Eq__eq_0: "core:prelude/string.wado/String^Eq::eq_bytes"(__local_9.repr, array.new_data<u8>("hi bob"), len_a);
     };
-||||||| 88506a642
-    h = struct.new "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado//Holder<i32>" { payload: 1 };
-    __local_7 = global:__effect_Greeter;
-    __local_8 = struct.new "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado//__Dispatch_Greeter" { outer: __local_7, op_greet: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado//__Closure_2" { __capture_0: h }, func: ref.func "closure/wado-compiler/tests/fixtures/effect_handler_generic_impl.wado/__closure_wrapper_0" } };
-    global:__effect_Greeter = __local_8;
-    __local_9 = "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado/__effect_dispatch__Greeter__greet"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 111, 98), used: 3 });
-    global:__effect_Greeter = __local_7;
-    __cond = "core:prelude/string.wado/String^Eq::eq"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hi bob"), used: 6 });
-=======
-    h = struct.new "effect_handler_generic_impl.wado//Holder<i32>" { payload: 1 };
-    __local_7 = global:effect_handler_generic_impl.wado::__effect_Greeter;
-    __local_8 = struct.new "effect_handler_generic_impl.wado//__Dispatch_Greeter" { outer: __local_7, op_greet: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_generic_impl.wado//__Closure_2" { __capture_0: h }, func: ref.func "closure/effect_handler_generic_impl.wado/__closure_wrapper_0" } };
-    global:effect_handler_generic_impl.wado::__effect_Greeter = __local_8;
-    __local_9 = "effect_handler_generic_impl.wado/__effect_dispatch__Greeter__greet"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 111, 98), used: 3 });
-    global:effect_handler_generic_impl.wado::__effect_Greeter = __local_7;
-    __cond = "core:prelude/string.wado/String^Eq::eq"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hi bob"), used: 6 });
->>>>>>> origin/main
     if @unlikely(__cond == 0) {
         cold_path;
         "core:rt/panic"(__local_4 = "core:prelude/string.wado/String::with_capacity"(119); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_generic_impl_handles_an_effect_for_holder_i32_"), used: 55 }); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push"(__local_4, 97); "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("effect_handler_generic_impl.wado"), used: 32 }); "core:prelude/string.wado/String::push"(__local_4, 58); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 28 }, __local_5); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
@@ -245,14 +227,13 @@ fn "effect_handler_generic_impl.wado/__test_1_generic_impl_handles_an_effect_for
     let __local_7: ref null "effect_handler_generic_impl.wado//__Dispatch_Greeter";
     let __local_8: ref "effect_handler_generic_impl.wado//__Dispatch_Greeter";
     let __local_9: ref "core:prelude/string.wado//String";
-<<<<<<< HEAD
     let len_a: i32;
-    h = struct.new "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado//Holder<core:prelude/string.wado/String>" { payload: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 } };
-    __local_7 = global:__effect_Greeter;
-    __local_8 = struct.new "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado//__Dispatch_Greeter" { outer: __local_7, op_greet: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado//__Closure_3" { __capture_0: h }, func: ref.func "closure/wado-compiler/tests/fixtures/effect_handler_generic_impl.wado/__closure_wrapper_1" } };
-    global:__effect_Greeter = __local_8;
-    __local_9 = "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado/__effect_dispatch__Greeter__greet"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 110, 110), used: 3 });
-    global:__effect_Greeter = __local_7;
+    h = struct.new "effect_handler_generic_impl.wado//Holder<core:prelude/string.wado/String>" { payload: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 } };
+    __local_7 = global:effect_handler_generic_impl.wado::__effect_Greeter;
+    __local_8 = struct.new "effect_handler_generic_impl.wado//__Dispatch_Greeter" { outer: __local_7, op_greet: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_generic_impl.wado//__Closure_3" { __capture_0: h }, func: ref.func "closure/effect_handler_generic_impl.wado/__closure_wrapper_1" } };
+    global:effect_handler_generic_impl.wado::__effect_Greeter = __local_8;
+    __local_9 = "effect_handler_generic_impl.wado/__effect_dispatch__Greeter__greet"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 110, 110), used: 3 });
+    global:effect_handler_generic_impl.wado::__effect_Greeter = __local_7;
     __cond = __inline_String_Eq__eq_0: block -> bool {
         len_a = __local_9.used;
         if len_a != 6 {
@@ -260,23 +241,6 @@ fn "effect_handler_generic_impl.wado/__test_1_generic_impl_handles_an_effect_for
         }
         break __inline_String_Eq__eq_0: "core:prelude/string.wado/String^Eq::eq_bytes"(__local_9.repr, array.new_data<u8>("hi ann"), len_a);
     };
-||||||| 88506a642
-    h = struct.new "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado//Holder<core:prelude/string.wado/String>" { payload: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 } };
-    __local_7 = global:__effect_Greeter;
-    __local_8 = struct.new "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado//__Dispatch_Greeter" { outer: __local_7, op_greet: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado//__Closure_3" { __capture_0: h }, func: ref.func "closure/wado-compiler/tests/fixtures/effect_handler_generic_impl.wado/__closure_wrapper_1" } };
-    global:__effect_Greeter = __local_8;
-    __local_9 = "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado/__effect_dispatch__Greeter__greet"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 110, 110), used: 3 });
-    global:__effect_Greeter = __local_7;
-    __cond = "core:prelude/string.wado/String^Eq::eq"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hi ann"), used: 6 });
-=======
-    h = struct.new "effect_handler_generic_impl.wado//Holder<core:prelude/string.wado/String>" { payload: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 } };
-    __local_7 = global:effect_handler_generic_impl.wado::__effect_Greeter;
-    __local_8 = struct.new "effect_handler_generic_impl.wado//__Dispatch_Greeter" { outer: __local_7, op_greet: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_generic_impl.wado//__Closure_3" { __capture_0: h }, func: ref.func "closure/effect_handler_generic_impl.wado/__closure_wrapper_1" } };
-    global:effect_handler_generic_impl.wado::__effect_Greeter = __local_8;
-    __local_9 = "effect_handler_generic_impl.wado/__effect_dispatch__Greeter__greet"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 110, 110), used: 3 });
-    global:effect_handler_generic_impl.wado::__effect_Greeter = __local_7;
-    __cond = "core:prelude/string.wado/String^Eq::eq"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hi ann"), used: 6 });
->>>>>>> origin/main
     if @unlikely(__cond == 0) {
         cold_path;
         "core:rt/panic"(__local_4 = "core:prelude/string.wado/String::with_capacity"(119); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_generic_impl_handles_an_effect_for_holder_string_"), used: 58 }); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push"(__local_4, 97); "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("effect_handler_generic_impl.wado"), used: 32 }); "core:prelude/string.wado/String::push"(__local_4, 58); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 36 }, __local_5); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
@@ -294,14 +258,13 @@ fn "effect_handler_generic_impl.wado/__test_2_bundled_form_enumerates_effects_fr
     let __local_7: ref null "effect_handler_generic_impl.wado//__Dispatch_Greeter";
     let __local_8: ref "effect_handler_generic_impl.wado//__Dispatch_Greeter";
     let __local_9: ref "core:prelude/string.wado//String";
-<<<<<<< HEAD
     let len_a: i32;
-    h = struct.new "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado//Holder<bool>" { payload: 1 };
-    __local_7 = global:__effect_Greeter;
-    __local_8 = struct.new "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado//__Dispatch_Greeter" { outer: __local_7, op_greet: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado//__Closure_4" { __capture_0: h }, func: ref.func "closure/wado-compiler/tests/fixtures/effect_handler_generic_impl.wado/__closure_wrapper_2" } };
-    global:__effect_Greeter = __local_8;
-    __local_9 = "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado/__effect_dispatch__Greeter__greet"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 121), used: 2 });
-    global:__effect_Greeter = __local_7;
+    h = struct.new "effect_handler_generic_impl.wado//Holder<bool>" { payload: 1 };
+    __local_7 = global:effect_handler_generic_impl.wado::__effect_Greeter;
+    __local_8 = struct.new "effect_handler_generic_impl.wado//__Dispatch_Greeter" { outer: __local_7, op_greet: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_generic_impl.wado//__Closure_4" { __capture_0: h }, func: ref.func "closure/effect_handler_generic_impl.wado/__closure_wrapper_2" } };
+    global:effect_handler_generic_impl.wado::__effect_Greeter = __local_8;
+    __local_9 = "effect_handler_generic_impl.wado/__effect_dispatch__Greeter__greet"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 121), used: 2 });
+    global:effect_handler_generic_impl.wado::__effect_Greeter = __local_7;
     __cond = __inline_String_Eq__eq_0: block -> bool {
         len_a = __local_9.used;
         if len_a != 5 {
@@ -309,23 +272,6 @@ fn "effect_handler_generic_impl.wado/__test_2_bundled_form_enumerates_effects_fr
         }
         break __inline_String_Eq__eq_0: "core:prelude/string.wado/String^Eq::eq_bytes"(__local_9.repr, array.new_data<u8>("hi cy"), len_a);
     };
-||||||| 88506a642
-    h = struct.new "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado//Holder<bool>" { payload: 1 };
-    __local_7 = global:__effect_Greeter;
-    __local_8 = struct.new "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado//__Dispatch_Greeter" { outer: __local_7, op_greet: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado//__Closure_4" { __capture_0: h }, func: ref.func "closure/wado-compiler/tests/fixtures/effect_handler_generic_impl.wado/__closure_wrapper_2" } };
-    global:__effect_Greeter = __local_8;
-    __local_9 = "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado/__effect_dispatch__Greeter__greet"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 121), used: 2 });
-    global:__effect_Greeter = __local_7;
-    __cond = "core:prelude/string.wado/String^Eq::eq"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hi cy"), used: 5 });
-=======
-    h = struct.new "effect_handler_generic_impl.wado//Holder<bool>" { payload: 1 };
-    __local_7 = global:effect_handler_generic_impl.wado::__effect_Greeter;
-    __local_8 = struct.new "effect_handler_generic_impl.wado//__Dispatch_Greeter" { outer: __local_7, op_greet: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_generic_impl.wado//__Closure_4" { __capture_0: h }, func: ref.func "closure/effect_handler_generic_impl.wado/__closure_wrapper_2" } };
-    global:effect_handler_generic_impl.wado::__effect_Greeter = __local_8;
-    __local_9 = "effect_handler_generic_impl.wado/__effect_dispatch__Greeter__greet"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 121), used: 2 });
-    global:effect_handler_generic_impl.wado::__effect_Greeter = __local_7;
-    __cond = "core:prelude/string.wado/String^Eq::eq"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hi cy"), used: 5 });
->>>>>>> origin/main
     if @unlikely(__cond == 0) {
         cold_path;
         "core:rt/panic"(__local_4 = "core:prelude/string.wado/String::with_capacity"(118); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_2_bundled_form_enumerates_effects_from_a_generic_impl"), used: 60 }); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push"(__local_4, 97); "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("effect_handler_generic_impl.wado"), used: 32 }); "core:prelude/string.wado/String::push"(__local_4, 58); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 44 }, __local_5); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
@@ -389,7 +335,7 @@ fn "effect_handler_generic_impl.wado/__cm_export____test_2_bundled_form_enumerat
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado/$value_copy$T65"(v) {
+fn "effect_handler_generic_impl.wado/$value_copy$T65"(v) {
     return struct.new "core:prelude/string.wado//StrCharIter" { repr: v.repr, used: v.used, byte_index: v.byte_index };
 }
 
@@ -891,7 +837,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 34);
     count = 0;
     truncated = 0;
-    __iter_5 = "wado-compiler/tests/fixtures/effect_handler_generic_impl.wado/$value_copy$T65"(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 }; self_15);
+    __iter_5 = "effect_handler_generic_impl.wado/$value_copy$T65"(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 }; self_15);
     _licm_arith_52 = limit >= 0;
     b70: block {
         l71: loop {

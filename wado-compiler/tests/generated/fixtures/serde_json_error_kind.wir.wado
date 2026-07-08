@@ -81,9 +81,9 @@ type "functype//serde_json_error_kind.wado/__cm_export____test_0_enum_field_acce
 
 type "functype//serde_json_error_kind.wado/__cm_export____test_1_enum_field_compared_directly" = fn();  // TypeId(21)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_error_kind.wado/$value_copy$T25" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref "core:prelude/slice.wado//ArraySlice<u8>";  // TypeId(22)
+type "functype//serde_json_error_kind.wado/$value_copy$T25" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref "core:prelude/slice.wado//ArraySlice<u8>";  // TypeId(22)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_error_kind.wado/$value_copy$T27" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(23)
+type "functype//serde_json_error_kind.wado/$value_copy$T27" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(23)
 
 type "functype//core:prelude/fpfmt.wado/pow10_coarse" = fn(i32) -> [u64, u64];  // TypeId(24)
 
@@ -259,11 +259,11 @@ fn "serde_json_error_kind.wado/__cm_export____test_1_enum_field_compared_directl
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/serde_json_error_kind.wado/$value_copy$T25"(v) {
+fn "serde_json_error_kind.wado/$value_copy$T25"(v) {
     return struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: v.repr, start: v.start, end: v.end };
 }
 
-fn "wado-compiler/tests/fixtures/serde_json_error_kind.wado/$value_copy$T27"(v) {
+fn "serde_json_error_kind.wado/$value_copy$T27"(v) {
     return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used };
 }
 
@@ -759,7 +759,7 @@ fn "core:json/core/json/from_bytes<i32,core:prelude/string.wado/String>"(input) 
     let __qm_v: i32;
     let __qm_e: ref "core:serde//DeserializeError";
     let v: i32;
-    de = struct.new "core:json//JsonDeserializer" { input: ref.as_non_null("wado-compiler/tests/fixtures/serde_json_error_kind.wado/$value_copy$T25"(struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: input.used })), pos: 0 };
+    de = struct.new "core:json//JsonDeserializer" { input: ref.as_non_null("serde_json_error_kind.wado/$value_copy$T25"(struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: input.used })), pos: 0 };
     let __sroa___match_scrut_0_discriminant: i32;
     let __sroa___match_scrut_0_case0_payload_0: i32;
     let __sroa___match_scrut_0_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -876,7 +876,7 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 }
 
 fn "core:serde/DeserializeError::unexpected_type"(msg, offset) {
-    return struct.new "core:serde//DeserializeError" { kind: 0, message: ref.as_non_null("wado-compiler/tests/fixtures/serde_json_error_kind.wado/$value_copy$T27"(msg)), offset: offset };
+    return struct.new "core:serde//DeserializeError" { kind: 0, message: ref.as_non_null("serde_json_error_kind.wado/$value_copy$T27"(msg)), offset: offset };
 }
 
 fn "core:serde/DeserializeError::eof"(offset) {
@@ -888,7 +888,7 @@ fn "core:serde/DeserializeError::trailing"(offset) {
 }
 
 fn "core:serde/DeserializeError::overflow"(msg, offset) {
-    return struct.new "core:serde//DeserializeError" { kind: 5, message: ref.as_non_null("wado-compiler/tests/fixtures/serde_json_error_kind.wado/$value_copy$T27"(msg)), offset: offset };
+    return struct.new "core:serde//DeserializeError" { kind: 5, message: ref.as_non_null("serde_json_error_kind.wado/$value_copy$T27"(msg)), offset: offset };
 }
 
 fn "core:serde/DeserializeErrorKind^Inspect::inspect"(self, f) {

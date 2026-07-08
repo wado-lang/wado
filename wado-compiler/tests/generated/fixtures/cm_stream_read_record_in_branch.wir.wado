@@ -226,7 +226,7 @@ fn "cm_stream_read_record_in_branch.wado/run"() with Stdout, Stderr, Preopens {
     let __v1: i32;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    let v_18: ref "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>";
+    let v: ref "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>";
     let len_a: i32;
     let __sroa_entries_repr: ref "Array<wasi:filesystem/types.wado/DirectoryEntry>";
     let __sroa_entries_used: i32;
@@ -250,21 +250,13 @@ condition: index < self.used
     }; builtin::array_get<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(dirs.repr, 0).0));
     dir_stream = __pattern_temp_0.0;
     _done = __pattern_temp_0.1;
-<<<<<<< HEAD
-    v_18 = (if dirs.used > 0 -> ref "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>" {
-        "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_stream_read_DirectoryEntry"(dir_stream, 100);
-||||||| 88506a642
-    v = (if dirs.used > 0 -> ref "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>" {
-        "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_stream_read_DirectoryEntry"(dir_stream, 100);
-=======
     v = (if dirs.used > 0 -> ref "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>" {
         "cm_stream_read_record_in_branch.wado/__cm_stream_read_DirectoryEntry"(dir_stream, 100);
->>>>>>> origin/main
     } else {
         "cm_stream_read_record_in_branch.wado/__cm_stream_read_DirectoryEntry"(dir_stream, 0);
     });
-    __sroa_entries_repr = builtin::array_clone<ref "wasi:filesystem/types.wado//DirectoryEntry">(v_18.repr);
-    __sroa_entries_used = v_18.used;
+    __sroa_entries_repr = builtin::array_clone<ref "wasi:filesystem/types.wado//DirectoryEntry">(v.repr);
+    __sroa_entries_used = v.used;
     found_hello = 0;
     __iter_6 = struct.new "core:prelude/slice.wado//ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>" { repr: __sroa_entries_repr, index: 0, end: __sroa_entries_used };
     b3: block {
@@ -272,12 +264,12 @@ condition: index < self.used
             __match_9 = "core:prelude/slice.wado/ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>^Iterator::next"(__iter_6);
             if ref.is_null(__match_9) == 0 {
                 entry = ref.as_non_null(__match_9);
-                if __inline_String_Eq__eq_8: block -> bool {
+                if __inline_String_Eq__eq_7: block -> bool {
                     len_a = entry.name.used;
                     if len_a != 9 {
-                        break __inline_String_Eq__eq_8: 0;
+                        break __inline_String_Eq__eq_7: 0;
                     }
-                    break __inline_String_Eq__eq_8: "core:prelude/string.wado/String^Eq::eq_bytes"(entry.name.repr, array.new_data<u8>("hello.txt"), len_a);
+                    break __inline_String_Eq__eq_7: "core:prelude/string.wado/String^Eq::eq_bytes"(entry.name.repr, array.new_data<u8>("hello.txt"), len_a);
                 } {
                     found_hello = 1;
                 }
@@ -305,10 +297,10 @@ fn "cm_stream_read_record_in_branch.wado/__cm_binding__Preopens_get_directories"
     let __i: i32;
     let __elem_addr: i32;
     let __lifted_result_6: i32;
+    let __lifted_result_7: ref "core:prelude/string.wado//String";
     let ptr: i32;
     let len_10: i32;
     let arr: ref Array<u8>;
-    let bytes: ref Array<u8>;
     "wasi/wasi:filesystem/Preopens::get_directories"(local.tee __outptr("mem/realloc"(0, 0, 4, 8)));
     __base = builtin::load_i32(__outptr);
     __result = struct.new "core:prelude//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>" { repr: builtin::array_new<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(local.tee __count(builtin::load_i32(__outptr + 4))), used: 0 };
@@ -320,8 +312,8 @@ fn "cm_stream_read_record_in_branch.wado/__cm_binding__Preopens_get_directories"
             ptr = builtin::load_i32(__elem_addr + 4);
             len_10 = builtin::load_i32((__elem_addr + 4) + 4);
             arr = "core:rt/memory_to_gc_array"(ptr, len_10);
-            bytes = builtin::array_clone<u8>(arr);
-            "core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>::push"(__result, struct.new "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]" { 0: __lifted_result_6, 1: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(bytes)), used: len_10 } });
+            __lifted_result_7 = struct.new "core:prelude/string.wado//String" { repr: arr, used: len_10 };
+            "core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>::push"(__result, struct.new "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]" { 0: __lifted_result_6, 1: __lifted_result_7 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 4), builtin::load_i32((__elem_addr + 4) + 4), 1, 0));
             __i = __i + 1;
             continue l10;
@@ -385,8 +377,6 @@ fn "cm_stream_read_record_in_branch.wado/__cm_stream_read_DirectoryEntry"(handle
     let ptr_21: i32;
     let len_22: i32;
     let arr_23: ref Array<u8>;
-    let bytes_25: ref Array<u8>;
-    let bytes_28: ref Array<u8>;
     byte_count = max * 24;
     ptr_3 = "mem/realloc"(0, 0, 4, byte_count);
     result = "wasi/stream-read:directory-entry"(handle, ptr_3, max);
@@ -418,7 +408,7 @@ fn "cm_stream_read_record_in_branch.wado/__cm_stream_read_DirectoryEntry"(handle
                 __disc = builtin::load_u8(addr + 4);
                 __option_result = ref.null none;
                 if __disc != 0 {
-                    __option_result = ref.as_non_null(ptr_18 = builtin::load_i32((addr + 4) + 4); len_19 = builtin::load_i32(((addr + 4) + 4) + 4); arr_20 = "core:rt/memory_to_gc_array"(ptr_18, len_19); bytes_28 = builtin::array_clone<u8>(arr_20); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(bytes_28)), used: len_19 });
+                    __option_result = ref.as_non_null(ptr_18 = builtin::load_i32((addr + 4) + 4); len_19 = builtin::load_i32(((addr + 4) + 4) + 4); arr_20 = "core:rt/memory_to_gc_array"(ptr_18, len_19); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(arr_20)), used: len_19 });
                     drop("mem/realloc"(builtin::load_i32((addr + 4) + 4), builtin::load_i32(((addr + 4) + 4) + 4), 1, 0));
                 }
                 __vresult = struct.new "wasi:filesystem/types.wado//DescriptorType::Other" { discriminant: 7, payload_0: __option_result };
@@ -426,8 +416,7 @@ fn "cm_stream_read_record_in_branch.wado/__cm_stream_read_DirectoryEntry"(handle
             ptr_21 = builtin::load_i32(addr + 16);
             len_22 = builtin::load_i32((addr + 16) + 4);
             arr_23 = "core:rt/memory_to_gc_array"(ptr_21, len_22);
-            bytes_25 = builtin::array_clone<u8>(arr_23);
-            __lifted_result_13 = struct.new "core:prelude/string.wado//String" { repr: bytes_25, used: len_22 };
+            __lifted_result_13 = struct.new "core:prelude/string.wado//String" { repr: arr_23, used: len_22 };
             __struct_result = struct.new "wasi:filesystem/types.wado//DirectoryEntry" { type: __vresult, name: __lifted_result_13 };
             "core:prelude/list.wado/List<wasi:filesystem/types.wado/DirectoryEntry>::push"(arr_6, __struct_result);
             i = i + 1;
