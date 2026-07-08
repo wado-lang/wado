@@ -1,9 +1,10 @@
-// Escape analysis: a template String whose bytes escape only through a fresh
-// deep copy IS safely hoisted. Storing `k{i}` as a map key copies the bytes
-// (value semantics: `key = String { repr: array_clone(buf.repr), used }`), so
-// the reused scratch buffer never aliases a stored key. The buffer is hoisted
-// (__tmpl_buf_ present) and each key stays independent — verified by the
-// per-key asserts below.
+// Ownership analysis (WEP 2026-05-21): each iteration builds a *fresh* template
+// String `k{i}` and stores it as a map key. The build is an owned value, so it
+// is *moved* into the insert — no defensive `$value_copy$String` and no reused
+// scratch buffer to hoist. Every key is a distinct freshly built String, so
+// they stay independent (verified by the per-key asserts). This caller-side
+// move replaces the older hoist-scratch-then-copy strategy at equivalent
+// allocation cost.
 use { println, Stdout } from "core:cli";
 use { TreeMap } from "core:collections";
 
@@ -22,7 +23,10 @@ __DATA__
 {
     "stdout": "ok\n",
     "wir_expect:O2": [
-        "__tmpl_buf_",
-        "array_clone<u8>(__tmpl_buf_"
+        "TreeMap<core:prelude/string.wado/String,i32>::insert",
+        "String::push_str"
+    ],
+    "wir_not_expect:O2": [
+        "__tmpl_buf_"
     ]
 }

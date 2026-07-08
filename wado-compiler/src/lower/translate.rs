@@ -549,7 +549,8 @@ impl FunctionTranslator<'_, '_> {
         if self.is_last_use_move(value) {
             return false;
         }
-        value_copy::analyze::should_wrap(value, &self.base.type_table.borrow())
+        let oracle = value_copy::ownership::OwnedCalls::new(&self.base.value_copy.returns_owned);
+        value_copy::analyze::should_wrap(value, &self.base.type_table.borrow(), &oracle)
     }
 
     /// Whether `value` is a whole-local read that the last-use analysis marked

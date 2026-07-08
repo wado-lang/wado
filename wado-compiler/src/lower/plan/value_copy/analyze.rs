@@ -6,8 +6,10 @@
 //! [`collect_seed_types`] walks every function with the same
 //! predicates to feed [`super::synthesize::synthesize_helpers`].
 
+use super::ownership::OwnedCalls;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
+use crate::name::FunctionId;
 use crate::tir::{
     TirBlock, TirExpr, TirExprKind, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
     TypeId, TypeTable,
@@ -17,10 +19,17 @@ use crate::tir_visitor::TirRefVisitor;
 /// Every `TypeId` the fold will wrap in `$value_copy$T(...)`, plus
 /// element types of `array_clone::<T>(...)` calls that codegen
 /// routes through the same helper.
+///
+/// Runs before the return-convention fixpoint, so it uses a conservative
+/// oracle (only builtins are owned). That over-collects seed types — a helper
+/// the precise fold never calls is dead-code-eliminated — but never misses one.
 pub fn collect_seed_types(project: &FlatPackage) -> IndexSet<TypeId> {
     let type_table = project.type_table.borrow();
+    let no_owned: IndexSet<FunctionId> = IndexSet::default();
+    let oracle = OwnedCalls::new(&no_owned);
     let mut walker = SeedWalker {
         type_table: &type_table,
+        oracle: &oracle,
         out: IndexSet::default(),
         immutable_locals: IndexSet::default(),
     };
@@ -42,13 +51,14 @@ pub fn collect_seed_types(project: &FlatPackage) -> IndexSet<TypeId> {
 
 struct SeedWalker<'a> {
     type_table: &'a TypeTable,
+    oracle: &'a OwnedCalls<'a>,
     out: IndexSet<TypeId>,
     immutable_locals: IndexSet<u32>,
 }
 
 impl SeedWalker<'_> {
     fn record_if_wrap(&mut self, expr: &TirExpr) {
-        if should_wrap(expr, self.type_table) {
+        if should_wrap(expr, self.type_table, self.oracle) {
             self.out.insert(expr.type_id);
         }
     }
@@ -141,10 +151,10 @@ impl TirRefVisitor for SeedWalker<'_> {
 /// Shape predicate shared with the fold. Site-specific gating
 /// (e.g. `skip_value_copy`, `is_source_immutable` for `Let`, the
 /// `Local`-target check for `Assign`) is the caller's job.
-pub fn should_wrap(expr: &TirExpr, type_table: &TypeTable) -> bool {
+pub fn should_wrap(expr: &TirExpr, type_table: &TypeTable, oracle: &OwnedCalls) -> bool {
     super::needs_value_copy(expr.type_id, type_table)
         && !is_copy_value_call(expr)
-        && !is_fresh_value(expr, type_table)
+        && !is_fresh_value(expr, oracle, type_table)
 }
 
 /// Avoid re-wrapping the `copy_value::<NestedT>(...)` markers
@@ -157,15 +167,25 @@ fn is_copy_value_call(expr: &TirExpr) -> bool {
     )
 }
 
-/// A fresh expression does not alias existing data, so no
-/// defensive copy is needed.
-pub fn is_fresh_value(expr: &TirExpr, type_table: &TypeTable) -> bool {
-    is_fresh_in_context(expr, &IndexSet::default(), type_table)
+/// A fresh (owned) expression does not alias existing data, so no defensive
+/// copy is needed. `oracle` decides a call's return convention interprocedurally.
+pub fn is_fresh_value(expr: &TirExpr, oracle: &OwnedCalls, type_table: &TypeTable) -> bool {
+    is_owned_value(expr, &IndexSet::default(), oracle, type_table)
 }
 
-fn is_fresh_in_context(
+/// Whether `expr` produces an *owned* value in the context of the owned locals
+/// in `fresh_locals` — a value that aliases nothing the caller can still reach,
+/// so consuming it into an owner is a move. A call is owned iff its callee
+/// returns owned (`oracle`), the caller-side, single-phase replacement for the
+/// old interprocedural escape recovery: the accessor `index_value(self: &List,
+/// i) -> T { return self.repr[i] }` returns a borrowed projection of `&self`
+/// (wado-lang/wado#1527), so it is *not* owned and its result is copied at a
+/// materialization — but never at a mutable-place use, which is not a
+/// materialization, so `arr[i].field.push(x)` keeps its element aliased.
+pub(crate) fn is_owned_value(
     expr: &TirExpr,
     fresh_locals: &IndexSet<u32>,
+    oracle: &OwnedCalls,
     type_table: &TypeTable,
 ) -> bool {
     match &expr.kind {
@@ -177,58 +197,48 @@ fn is_fresh_in_context(
         | TirExprKind::TupleLen { .. }
         | TirExprKind::TypePackExpansion { .. }
         | TirExprKind::Null => true,
-        // A call result is *not* assumed fresh: a function may return a value
-        // aliased into an argument, receiver, or global — an accessor like
-        // `index_value(self: &List, i) -> T { return self.repr[i] }` returns
-        // element storage aliased into the container (wado-lang/wado#1527). The
-        // conservative copy is recovered by `value_copy_elide` for calls the
-        // interprocedural escape analysis proves return a fresh value.
-        //
-        // A core builtin is the exception: it allocates or computes a fresh
-        // result — except the array element read, which aliases its container.
-        // Recognizing this at insertion keeps the fold from wrapping the fresh
-        // `array_clone` a value-copy helper emits in a redundant second copy
-        // (helper bodies are skipped by the elide recovery). Mirrors
-        // `optimize::escape::builtin_result_is_fresh`.
-        TirExprKind::Call { func, .. }
-            if func.module_source.is_core_builtin() && func.name != "array_get" =>
-        {
-            true
+        // A call is owned iff its callee returns an owned value. A core builtin
+        // allocates or computes a fresh result — except `array_get`, the element
+        // read that aliases its container — handled inside `oracle.is_owned`. A
+        // raw CM call lifts a fresh value across the ABI boundary.
+        TirExprKind::Call { func, .. } | TirExprKind::MethodCall { func, .. } => {
+            oracle.is_owned(func)
         }
+        TirExprKind::CmRawCall { .. } => true,
         TirExprKind::VariantConstruct { .. } | TirExprKind::EnumConstruct { .. } => true,
         TirExprKind::Local { index, .. } => fresh_locals.contains(index),
         TirExprKind::Unary {
             op: TirUnaryOp::Deref,
             expr: inner,
-        } => is_fresh_in_context(inner, fresh_locals, type_table),
+        } => is_owned_value(inner, fresh_locals, oracle, type_table),
         TirExprKind::LabeledBlock { label, block, .. } => {
-            block_breaks_are_fresh(label, block, fresh_locals, type_table)
+            block_breaks_are_fresh(label, block, fresh_locals, oracle, type_table)
         }
         TirExprKind::Match { expr: scrut, arms } => {
-            match_result_is_fresh(scrut, arms, fresh_locals, type_table)
+            match_result_is_fresh(scrut, arms, fresh_locals, oracle, type_table)
         }
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. } => {
-            is_fresh_in_context(inner, fresh_locals, type_table)
+            is_owned_value(inner, fresh_locals, oracle, type_table)
         }
         _ => false,
     }
 }
 
-/// A `match` yields a fresh value when every value-producing arm yields a
-/// fresh value. Divergent arms (`Never`-typed body: `=> return …`, `=> panic()`)
-/// contribute no value and are skipped. When the scrutinee is itself fresh, an
-/// arm's pattern bindings destructure unaliased data, so they are fresh too —
-/// this is what makes `let x = f()?` (which desugars to
-/// `match f() { Ok(v) => v, Err(e) => return Err(e) }`) copy-free when `f()`
-/// returns a fresh value.
+/// A `match` yields an owned value when every value-producing arm yields one.
+/// Divergent arms (`Never`-typed body: `=> return …`, `=> panic()`) contribute
+/// no value and are skipped. When the scrutinee is owned, an arm's pattern
+/// bindings destructure unaliased data, so they are owned too — this is what
+/// makes `let x = f()?` (which desugars to `match f() { Ok(v) => v, Err(e) =>
+/// return Err(e) }`) copy-free when `f()` returns an owned value.
 fn match_result_is_fresh(
     scrut: &TirExpr,
     arms: &[TirMatchArm],
     fresh_locals: &IndexSet<u32>,
+    oracle: &OwnedCalls,
     type_table: &TypeTable,
 ) -> bool {
-    let scrut_fresh = is_fresh_in_context(scrut, fresh_locals, type_table);
+    let scrut_fresh = is_owned_value(scrut, fresh_locals, oracle, type_table);
     let mut saw_value_arm = false;
     for arm in arms {
         if type_table.is_never(arm.body.type_id) {
@@ -239,7 +249,7 @@ fn match_result_is_fresh(
         if scrut_fresh {
             collect_pattern_bindings(&arm.pattern, &mut arm_fresh);
         }
-        if !is_fresh_in_context(&arm.body, &arm_fresh, type_table) {
+        if !is_owned_value(&arm.body, &arm_fresh, oracle, type_table) {
             return false;
         }
     }
@@ -248,7 +258,7 @@ fn match_result_is_fresh(
 
 /// Collect every local a pattern binds, so a fresh scrutinee's destructured
 /// parts can be treated as fresh in the arm body.
-fn collect_pattern_bindings(pattern: &TirPattern, out: &mut IndexSet<u32>) {
+pub(crate) fn collect_pattern_bindings(pattern: &TirPattern, out: &mut IndexSet<u32>) {
     match pattern {
         TirPattern::Binding { local_index, .. } => {
             out.insert(*local_index);
@@ -280,11 +290,12 @@ fn block_breaks_are_fresh(
     label: &str,
     block: &TirBlock,
     parent_fresh: &IndexSet<u32>,
+    oracle: &OwnedCalls,
     type_table: &TypeTable,
 ) -> bool {
     let mut found = false;
     let mut fresh_locals = parent_fresh.clone();
-    if scan_block_for_breaks(label, block, &mut found, &mut fresh_locals, type_table) {
+    if scan_block_for_breaks(label, block, &mut found, &mut fresh_locals, oracle, type_table) {
         found
     } else {
         false
@@ -296,10 +307,11 @@ fn scan_block_for_breaks(
     block: &TirBlock,
     found: &mut bool,
     fresh_locals: &mut IndexSet<u32>,
+    oracle: &OwnedCalls,
     type_table: &TypeTable,
 ) -> bool {
     for stmt in &block.stmts {
-        if !scan_stmt_for_breaks(label, stmt, found, fresh_locals, type_table) {
+        if !scan_stmt_for_breaks(label, stmt, found, fresh_locals, oracle, type_table) {
             return false;
         }
     }
@@ -311,13 +323,14 @@ fn scan_stmt_for_breaks(
     stmt: &TirStmt,
     found: &mut bool,
     fresh_locals: &mut IndexSet<u32>,
+    oracle: &OwnedCalls,
     type_table: &TypeTable,
 ) -> bool {
     match &stmt.kind {
         TirStmtKind::Let {
             local_index, value, ..
         } => {
-            if is_fresh_in_context(value, fresh_locals, type_table) {
+            if is_owned_value(value, fresh_locals, oracle, type_table) {
                 fresh_locals.insert(*local_index);
             }
             true
@@ -327,28 +340,28 @@ fn scan_stmt_for_breaks(
             value: Some(v),
         } if l == label => {
             *found = true;
-            is_fresh_in_context(v, fresh_locals, type_table)
+            is_owned_value(v, fresh_locals, oracle, type_table)
         }
         TirStmtKind::If {
             then_block,
             else_block,
             ..
         } => {
-            if !scan_block_for_breaks(label, then_block, found, fresh_locals, type_table) {
+            if !scan_block_for_breaks(label, then_block, found, fresh_locals, oracle, type_table) {
                 return false;
             }
             if let Some(eb) = else_block
-                && !scan_block_for_breaks(label, eb, found, fresh_locals, type_table)
+                && !scan_block_for_breaks(label, eb, found, fresh_locals, oracle, type_table)
             {
                 return false;
             }
             true
         }
         TirStmtKind::Loop { body } => {
-            scan_block_for_breaks(label, body, found, fresh_locals, type_table)
+            scan_block_for_breaks(label, body, found, fresh_locals, oracle, type_table)
         }
         TirStmtKind::Expr(expr) => {
-            scan_expr_for_breaks(label, expr, found, fresh_locals, type_table)
+            scan_expr_for_breaks(label, expr, found, fresh_locals, oracle, type_table)
         }
         _ => true,
     }
@@ -359,22 +372,23 @@ fn scan_expr_for_breaks(
     expr: &TirExpr,
     found: &mut bool,
     fresh_locals: &mut IndexSet<u32>,
+    oracle: &OwnedCalls,
     type_table: &TypeTable,
 ) -> bool {
     match &expr.kind {
         TirExprKind::LabeledBlock { block, .. } | TirExprKind::Block(block) => {
-            scan_block_for_breaks(label, block, found, fresh_locals, type_table)
+            scan_block_for_breaks(label, block, found, fresh_locals, oracle, type_table)
         }
         TirExprKind::If {
             then_branch,
             else_branch,
             ..
         } => {
-            if !scan_block_for_breaks(label, then_branch, found, fresh_locals, type_table) {
+            if !scan_block_for_breaks(label, then_branch, found, fresh_locals, oracle, type_table) {
                 return false;
             }
             if let Some(eb) = else_branch
-                && !scan_block_for_breaks(label, eb, found, fresh_locals, type_table)
+                && !scan_block_for_breaks(label, eb, found, fresh_locals, oracle, type_table)
             {
                 return false;
             }
