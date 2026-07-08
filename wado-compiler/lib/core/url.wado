@@ -2,14 +2,6 @@
 //! URL parsing and construction for special schemes (WHATWG URL Standard).
 //!
 //! Supports `http`, `https`, `ws`, and `wss` schemes.
-//!
-//! Usage:
-//!   use { Url, ParseError, percent_encode, percent_decode, parse_query, format_query } from "core:url";
-//!
-//!   let url = Url::parse("https://example.com/path?key=val");
-//!   if let Ok(url) = url {
-//!       let pq = url.path_with_query();  // "/path?key=val"
-//!   }
 
 
 use { TreeMap } from "core:collections";
@@ -25,11 +17,10 @@ use {
 
 #[synopsis]
 test {
-    let url = Url::parse("https://wado.dev/docs?q=synopsis").unwrap();
-    assert url.scheme == "https";
-    assert url.host == "wado.dev";
-    assert url.path == "/docs";
-    assert url.query_get("q") matches { Some(v) && v == "synopsis" };
+    assert Url::parse("https://wado.dev/docs?q=synopsis") matches { Ok(url) && url.scheme == "https"
+        && url.host == "wado.dev"
+        && url.path == "/docs"
+        && url.query_get("q") matches { Some(v) && v == "synopsis" } };
 }
 
 /// Error type for URL parsing failures.

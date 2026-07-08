@@ -6,12 +6,7 @@
 //! JSON's, so any type that serializes to `core:json` serializes to CBOR with no
 //! source changes — the derived `Serialize`/`Deserialize` impls drive both.
 //!
-//! The API is bytes-only (CBOR is binary):
-//!
-//!   use { to_bytes, from_bytes } from "core:cbor";
-//!
-//!   let bytes = to_bytes::<i32>(&42)?;            // [0x18, 0x2a]
-//!   let v: i32 = from_bytes(bytes)?;              // 42
+//! The API is bytes-only (CBOR is binary).
 //!
 //! Encoding uses preferred (shortest) serialization (RFC 8949 §4.1). Decoding is
 //! variation-tolerant (§4.1): it accepts any well-formed encoding, preferred or
@@ -47,9 +42,8 @@ use {
 
 #[synopsis]
 test {
-    let bytes = to_bytes(&[1, 2, 3]).unwrap();
-    let back: List<i32> = from_bytes(bytes).unwrap();
-    assert back == [1, 2, 3];
+    let encoded = to_bytes(&[1, 2, 3]);
+    assert encoded matches { Ok(b) && from_bytes::<List<i32>>(b) matches { Ok(v) && v == [1, 2, 3] } };
 }
 
 global SERIALIZE_BUFFER_CAPACITY: i32 = 64;

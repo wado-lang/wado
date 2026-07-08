@@ -7,12 +7,6 @@ JSON serialization and deserialization (self-describing format).
 
 Implements the `core:serde` `Serializer` and `Deserializer` traits for JSON.
 
-Usage:
-use { to_string, from_string } from "core:json";
-
-let json = to_string(&42); // "42"
-let val = from_string::<i32>("42"); // Result::Ok(42)
-
 Serde I/O is bytes-primary: prefer `to_bytes` / `from_bytes` when the data
 is consumed as bytes. `to_bytes_pretty` and `to_bytes_canonical` cover the
 indented and the deterministic (sorted-key) forms.
@@ -20,10 +14,8 @@ indented and the deterministic (sorted-key) forms.
 ## Synopsis
 
 ```wado
-let json = to_string(&[1, 2, 3]).unwrap();
-assert json == "[1,2,3]";
-let parsed: List<i32> = from_string(json).unwrap();
-assert parsed == [1, 2, 3];
+assert to_string(&[1, 2, 3]) matches { Ok(s) && s == "[1,2,3]" };
+assert from_string::<List<i32>>("[1,2,3]") matches { Ok(v) && v == [1, 2, 3] };
 ```
 
 ## Functions

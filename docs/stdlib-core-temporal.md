@@ -31,13 +31,6 @@ component that never calls one.
 
 Both `core:temporal` types are ISO 8601 only and so store no calendar.
 
-```
-use { Instant, ZonedDateTime } from "core:temporal";
-
-let epoch = Instant { seconds: 0, nanoseconds: 0 };
-let zoned = ZonedDateTime { instant: epoch, time_zone: "UTC" };
-```
-
 ## Synopsis
 
 ```wado

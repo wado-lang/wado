@@ -4,16 +4,6 @@
 //! Structs are encoded as positional arrays (field names omitted).
 //! Unit variants (enums) are encoded as integer discriminants.
 //! Payload variants are encoded as `[disc, payload]`.
-//!
-//! Usage:
-//!   use { to_string, from_string } from "core:json_nsd";
-//!
-//!   struct Point { x: i32, y: i32 }
-//!   impl Serialize for Point;
-//!   impl Deserialize for Point;
-//!
-//!   let json = to_string(&Point { x: 1, y: 2 });  // "[1,2]"
-//!   let val: Result<Point, DeserializeError> = from_string("[1,2]");  // Ok(Point { x: 1, y: 2 })
 
 
 use {
@@ -38,6 +28,19 @@ use {
 } from "core:serde";
 
 use { write_escaped_string, JsonDeserializer } from "core:json";
+
+#[synopsis]
+test {
+    assert to_string(&Point { x: 1, y: 2 }) matches { Ok(s) && s == "[1,2]" };
+    assert from_string::<Point>("[1,2]") matches { Ok(p) && p.x == 1 && p.y == 2 };
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+impl Serialize for Point;
+impl Deserialize for Point;
 
 // Sub-serializers hold `&mut String` so writes flow back to the
 // outer buffer the caller still owns. A value-typed `String` field
