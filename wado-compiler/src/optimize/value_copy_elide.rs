@@ -169,9 +169,12 @@ fn is_mut_ref_type(type_id: TypeId, type_table: &TypeTable) -> bool {
 
 #[derive(Debug, Default)]
 pub(super) struct LocalUsage {
-    /// Count of `local = expr` assignments. Used by the Assign-form
-    /// elision branch to recognize "binding-style" assignments (count
-    /// == 1) — those behave like a `Let` and are eligible to strip.
+    /// Count of `local = expr` assignments. `copy_source_strippable` uses
+    /// [`Self::is_assigned`] to refuse aliasing a *source* root that is
+    /// itself ever reassigned: the flat, flow-insensitive usage map cannot
+    /// tell whether a given read sees the value before or after such a
+    /// reassignment, so a reassigned source is conservatively never treated
+    /// as stable enough to alias into.
     assign_count: u32,
     has_field_mutation: bool,
     /// Count of every `Local` occurrence (reads and assignment targets). A
@@ -182,9 +185,7 @@ pub(super) struct LocalUsage {
 
 impl LocalUsage {
     /// True when the local is assigned at least once after its
-    /// initialization. The Let-form elision uses this to refuse stripping
-    /// a binding whose target is later overwritten (and therefore can't
-    /// be safely aliased to the source).
+    /// initialization. See the field doc on [`Self::assign_count`].
     fn is_assigned(&self) -> bool {
         self.assign_count > 0
     }
@@ -304,8 +305,21 @@ fn mark_root_field_mutated_operand(
 
 /// Mark every local that contributes to `expr`'s observable storage as
 /// potentially field-mutated, following pure projections (`FieldAccess`,
-/// `VariantPayload`, `Cast`, `Unary`). Mirrors `copy_prop`'s
-/// `mark_potentially_mutated_local`.
+/// `VariantPayload`, `Cast`, `Unary`, `Index`) and, conservatively, a
+/// `MethodCall` receiver. Mirrors `copy_prop`'s `mark_potentially_mutated_local`
+/// (and this module's own [`arg_source_root`]) in which projections share
+/// storage with their root; `Index` was previously missing here, which
+/// under-counted mutation through an indexed element (`x[i].field.push(...)`)
+/// as not touching `x`.
+///
+/// `List<T>::index_value(i)` (raw `x[i]` before `inline` expands the trait
+/// call) returns storage aliased into the receiver, same as a raw `Index`, but
+/// arrives here as an opaque `MethodCall` — indistinguishable, without a
+/// signature-shape classifier, from a method that returns a genuinely fresh
+/// value. Recursing into every `MethodCall` receiver errs toward marking too
+/// much rather than too little: `has_field_mutation` only ever *blocks*
+/// elision, so over-approximating it costs a missed optimization, never
+/// unsound aliasing.
 fn mark_root_field_mutated(body: &Body, expr: ExprId, usage: &mut IndexMap<u32, LocalUsage>) {
     match &body.exprs[expr].kind {
         ExprKind::Local { index, .. } => {
@@ -314,8 +328,12 @@ fn mark_root_field_mutated(body: &Body, expr: ExprId, usage: &mut IndexMap<u32, 
         ExprKind::Unary { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
         | ExprKind::FieldAccess { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. } => {
+        | ExprKind::VariantPayload { expr: inner, .. }
+        | ExprKind::Index { expr: inner, .. } => {
             mark_root_field_mutated_operand(body, *inner, usage);
+        }
+        ExprKind::MethodCall { receiver, .. } => {
+            mark_root_field_mutated_operand(body, *receiver, usage);
         }
         _ => {}
     }
@@ -381,17 +399,16 @@ fn reads_through_deref(body: &Body, expr: ExprId) -> bool {
     }
 }
 
-/// Whether the local `target_index` is read-only enough to alias a source into:
-/// at most `assign_limit` reassignments and no field mutation. The alias a strip
-/// creates is unobservable only when this holds for both ends (the binding side
-/// here, the source side in [`copy_source_strippable`]).
-fn is_target_read_only(
-    target_index: u32,
-    assign_limit: u32,
-    usage: &IndexMap<u32, LocalUsage>,
-) -> bool {
+/// Whether the local `target_index` is read-only enough to alias a source
+/// into: never field-mutated (a whole-value rebind is fine at any count — a
+/// bare reassignment replaces which object the local refers to, it never
+/// touches the object a prior alias still points at; only an in-place field
+/// mutation could make the alias observable). The alias a strip creates is
+/// unobservable only when this holds for both ends (the binding side here,
+/// the source side in [`copy_source_strippable`]).
+fn is_target_read_only(target_index: u32, usage: &IndexMap<u32, LocalUsage>) -> bool {
     match usage.get(&target_index) {
-        Some(u) => u.assign_count <= assign_limit && !u.has_field_mutation,
+        Some(u) => !u.has_field_mutation,
         None => true,
     }
 }
@@ -446,13 +463,11 @@ fn yields_subexpression(body: &Body, e: ExprId) -> bool {
 fn elision_safe(
     body: &Body,
     target_index: u32,
-    target_assign_limit: u32,
     value: ExprId,
     value_copy_ids: &IndexSet<FuncId>,
     usage: &IndexMap<u32, LocalUsage>,
 ) -> bool {
-    is_target_read_only(target_index, target_assign_limit, usage)
-        && copy_source_strippable(body, value, value_copy_ids, usage)
+    is_target_read_only(target_index, usage) && copy_source_strippable(body, value, value_copy_ids, usage)
 }
 
 /// Collect `$value_copy$T(arg)` calls that sit directly in an aggregate literal
@@ -502,32 +517,32 @@ fn collect_strippable(
     usage: &IndexMap<u32, LocalUsage>,
 ) -> Vec<ExprId> {
     match &body.stmts[stmt].kind {
-        // `let x = $value_copy$T(arg)` — Let establishes a fresh binding, so
-        // any subsequent assignment to `x` invalidates the snapshot; require
-        // `assign_count == 0`.
+        // `let x = $value_copy$T(arg)` — a later whole-value reassignment of
+        // `x` does not itself defeat the alias (it only replaces which object
+        // `x` refers to; see `is_target_read_only`), so only field mutation
+        // and `skip_value_copy` block this.
         StmtKind::Let {
             local_index,
             value,
-            is_mut,
             skip_value_copy,
             ..
         } => {
             let Some(ve) = value.as_expr() else {
                 return vec![];
             };
-            if *is_mut || *skip_value_copy {
+            if *skip_value_copy {
                 return vec![];
             }
             // `let x = $value_copy$T(arg)` — strip when both x and the source
             // are read-only.
-            if elision_safe(body, *local_index, 0, ve, value_copy_ids, usage) {
+            if elision_safe(body, *local_index, ve, value_copy_ids, usage) {
                 return vec![ve];
             }
             // `let c = Struct { f: $value_copy$T(arg), … }` — when the container
-            // `c` is never reassigned or field-mutated its fields never change,
-            // so the copies stored into them may be elided (source-side check
+            // `c` is never field-mutated its fields never change in place, so
+            // the copies stored into them may be elided (source-side check
             // per copy).
-            if is_target_read_only(*local_index, 0, usage) {
+            if is_target_read_only(*local_index, usage) {
                 let mut out = Vec::new();
                 collect_literal_element_copies(body, ve, value_copy_ids, usage, &mut out);
                 return out;
@@ -535,12 +550,13 @@ fn collect_strippable(
             vec![]
         }
         // `x = $value_copy$T(arg)` top-level — the Assign *is* the binding.
-        // Allow elision when this is the only assignment (`assign_count == 1`).
+        // Any number of other reassignments of `x` elsewhere are fine too
+        // (see `is_target_read_only`).
         StmtKind::Expr(Operand::Expr(e)) => {
             if let ExprKind::Assign { target, value } = &body.exprs[*e].kind
                 && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
                 && let Some(ve) = value.as_expr()
-                && elision_safe(body, *index, 1, ve, value_copy_ids, usage)
+                && elision_safe(body, *index, ve, value_copy_ids, usage)
             {
                 vec![ve]
             } else {
