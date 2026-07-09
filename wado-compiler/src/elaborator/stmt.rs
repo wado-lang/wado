@@ -188,24 +188,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn resolve_local_struct(&mut self, struct_decl: &ast::StructDecl) {
-        if !struct_decl.type_params.is_empty() {
-            // Generic local structs are a follow-up; left unresolved.
-            return;
-        }
         let module_source = self.current_module_source.clone();
+        let mangled_name = format!("{}@{:?}", struct_decl.name, struct_decl.id);
+
+        // Generic local structs need `T` etc. in scope while resolving field
+        // types (so a field of type `T` becomes a `TypeParam`, not
+        // `UNKNOWN`), mirroring `resolve_struct`'s top-level handling. The
+        // scope is entered unconditionally — harmless no-op when there are
+        // no type params — and dropped before the type is registered below.
+        let mut scope = self.enter_inherited_type_param_scope();
+        scope.annotate_ctx.trait_ctx.type_params.clear();
+        scope.register_generic_params(&struct_decl.type_params, 0);
+
         let mut fields = Vec::new();
         let mut field_ast_ids = Vec::new();
         let mut field_defaults = Vec::new();
         let mut tir_fields = Vec::new();
         for (index, field) in struct_decl.fields.iter().enumerate() {
-            let type_id = self.resolve_type(&field.ty);
+            let type_id = scope.resolve_type(&field.ty);
             fields.push((field.name.clone(), type_id, field.visibility));
             field_ast_ids.push(field.id);
             field_defaults.push(field.default.clone());
             // TODO(local types): field defaults are not resolved into a TIR
             // expression here (unlike top-level `resolve_struct`), so a local
             // struct literal that omits a defaulted field will not yet get
-            // the right value. None of Task 5's fixtures exercise this.
+            // the right value. None of Task 5/6's fixtures exercise this.
             tir_fields.push(TirField {
                 name: field.name.clone(),
                 visibility: field.visibility,
@@ -219,7 +226,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 default_expr: None,
             });
         }
-        let mangled_name = format!("{}@{:?}", struct_decl.name, struct_decl.id);
+        let type_param_bounds: Vec<(String, Vec<String>)> = struct_decl
+            .type_params
+            .iter()
+            .map(|p| {
+                (
+                    p.name.clone(),
+                    p.bounds.iter().map(|b| b.name.clone()).collect(),
+                )
+            })
+            .collect();
+        let type_param_type_ids: Vec<TypeId> = struct_decl
+            .type_params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| scope.tysys.type_table.borrow_mut().make_type_param(p.name.clone(), i as u32))
+            .collect();
+        let tir_type_params: Vec<crate::tir::TirTypeParam> = struct_decl
+            .type_params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| crate::tir::TirTypeParam {
+                name: p.name.clone(),
+                is_effect: p.is_effect,
+                is_pack: p.is_pack,
+                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
+                default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
+                index: i as u32,
+            })
+            .collect();
+        drop(scope);
+
+        // Register a `TypeId` for the declaration itself, generic or not —
+        // mirrors `intern_all_decl_types`'s "base entry" for a module-level
+        // generic struct (its own usage sites mint separate
+        // `GenericInstance` TypeIds; this one exists so bare-name lookups
+        // like `type_id_of_decl` have something to find).
         let type_id = self
             .tysys
             .type_table
@@ -229,6 +271,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow_mut()
             .register_decl_type(struct_decl.id, type_id);
+
         let info = super::types::StructFieldInfo {
             name: mangled_name.clone(),
             module_source: module_source.clone(),
@@ -236,8 +279,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             fields,
             field_ast_ids,
             field_defaults,
-            type_param_bounds: Vec::new(),
-            type_param_type_ids: Vec::new(),
+            type_param_bounds,
+            type_param_type_ids,
         };
         self.sem
             .decls
@@ -251,12 +294,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // reify to walk (they live inside a function body), so — like
         // anonymous struct literals — the full `TirStruct` is built here,
         // during annotate, and flushed into the module's TIR at the same
-        // point `pending_anonymous_structs` is.
+        // point `pending_anonymous_structs` is. The monomorphizer treats any
+        // `TirStruct` with non-empty `type_params` as a generic template
+        // (see `monomorphize.rs`'s `resolved_generic_structs` scan) rather
+        // than an emittable concrete type, so no separate list is needed for
+        // the generic case.
         self.sem.decls.pending_anonymous_structs.push(TirStruct {
             name: mangled_name,
             module_source,
             visibility: ast::Visibility::Private,
-            type_params: Vec::new(),
+            type_params: tir_type_params,
             monomorph_info: None,
             fields: tir_fields,
             span: struct_decl.span,
@@ -266,7 +313,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     fn resolve_local_newtype(&mut self, newtype_decl: &ast::Newtype) {
         if !newtype_decl.type_params.is_empty() {
-            // Generic local newtypes are a follow-up; left unresolved.
+            // Generic local newtypes (`type Wrapper<T> = List<T>;`) are a
+            // follow-up, unlike generic local structs (see
+            // `resolve_local_struct`): they go through a different
+            // mechanism (`GenericNewtypeInfo` + AST-level substitution in
+            // `resolve_generic_type`, keyed by `local_generic_newtypes`,
+            // rather than a `TirStruct` template the monomorphizer expands)
+            // that this WEP hasn't wired up. Left unresolved — a reference
+            // still surfaces the ordinary "unknown type" error.
             return;
         }
         let module_source = self.current_module_source.clone();

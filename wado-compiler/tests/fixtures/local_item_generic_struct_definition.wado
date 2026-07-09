@@ -1,0 +1,49 @@
+// A generic struct declared inside a function body (local item) resolves:
+// field types pick up the type params, literal construction infers type
+// arguments from field values (or an explicit annotation), and sibling
+// functions may each declare their own same-named local generic struct
+// without colliding.
+
+test "local generic struct, inferred type args" {
+    struct Box<T> {
+        value: T,
+    }
+    let b = Box { value: 42 };
+    assert b.value == 42;
+}
+
+test "local generic struct, explicit type args" {
+    struct Box<T> {
+        value: T,
+    }
+    let b: Box<i32> = Box { value: 7 };
+    assert b.value == 7;
+}
+
+test "local generic struct with two type params" {
+    struct Pair<A, B> {
+        first: A,
+        second: B,
+    }
+    let p = Pair { first: 1, second: "hi" };
+    assert p.first == 1;
+    assert p.second == "hi";
+}
+
+fn make_one() -> i32 {
+    struct Box<T> {
+        value: T,
+    }
+    let b = Box { value: 100 };
+    return b.value;
+}
+
+test "sibling functions may declare same-named local generic structs" {
+    struct Box<T> {
+        value: T,
+        extra: T,
+    }
+    let b = Box { value: 5, extra: 6 };
+    assert b.value + b.extra == 11;
+    assert make_one() == 100;
+}

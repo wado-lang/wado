@@ -339,7 +339,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn bare_generic_type_arity(&self, name: &str) -> Option<usize> {
-        if self.sem.decls.generic_struct_names.contains(name)
+        // `generic_struct_names` only tracks module-level structs; a local
+        // generic struct (`Stmt::Item`) is recognised instead by its
+        // presence in the function-scoped `fn_local_struct_fields` registry
+        // (see `resolve_local_struct`).
+        if (self.sem.decls.generic_struct_names.contains(name)
+            || self.sem.decls.fn_local_struct_fields.contains_key(name))
             && let Some(info) = self.lookup_struct_fields(name)
             && !info.type_param_bounds.is_empty()
         {
@@ -444,14 +449,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .make_builtin_array(element_type)
             }
             _ => {
-                // Check if it's a user-defined generic struct
-                if self.sem.decls.generic_struct_names.contains(name) {
+                // Check if it's a user-defined generic struct. A local
+                // generic struct (`Stmt::Item`) is not in `generic_struct_names`
+                // (module-level only — see `bare_generic_type_arity`), so also
+                // accept a `fn_local_struct_fields` hit with type params.
+                let local_generic_struct = self
+                    .sem
+                    .decls
+                    .fn_local_struct_fields
+                    .get(name)
+                    .is_some_and(|info| !info.type_param_bounds.is_empty());
+                if self.sem.decls.generic_struct_names.contains(name) || local_generic_struct {
                     // Resolve type arguments
                     let type_args: Vec<TypeId> =
                         args.iter().map(|t| self.resolve_type(t)).collect();
 
-                    // Get struct info for module source and bounds checking
+                    // Get struct info for module source and bounds checking.
+                    // `info.name` is the type's storage identity — the bare
+                    // declared name for a module-level struct, or the
+                    // internal mangled name for a local one (so the
+                    // `GenericInstance` below carries a name that
+                    // `struct_fields_in` can find later, the same way a
+                    // concrete local struct's `TypeId` does — see
+                    // `resolve_local_struct`).
                     let struct_info = self.lookup_struct_fields(name).cloned();
+                    let identity_name = struct_info
+                        .as_ref()
+                        .map(|info| info.name.clone())
+                        .unwrap_or_else(|| name.to_string());
                     let module_source = struct_info
                         .as_ref()
                         .map(|info| info.module_source.clone())
@@ -487,7 +512,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     // Create a GenericInstance type
                     self.tysys.type_table.borrow_mut().make_generic_instance(
-                        name.to_string(),
+                        identity_name,
                         module_source,
                         type_args,
                     )

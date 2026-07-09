@@ -3462,11 +3462,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Stage 7-B: reify rebuilds the mangled name + fields; the combined
         // walk only needs the substitution / coercion side effects below and
         // the resulting struct type.
+        // A local generic struct (`Stmt::Item`) is not in `generic_struct_names`
+        // (module-level only) — see `resolve_generic_type` for the same
+        // widening. `struct_name` was just reassigned (above) to the
+        // canonical storage name from `StructFieldInfo` — the internal
+        // mangled name for a local struct — so check the durable,
+        // mangled-name-keyed `local_struct_fields`, not the bare-name-keyed
+        // `fn_local_struct_fields`.
+        let is_local_generic_struct = self
+            .sem
+            .decls
+            .local_struct_fields
+            .get(&struct_name)
+            .is_some_and(|info| !info.type_param_bounds.is_empty());
         let (struct_type, _mangled_struct_name, _fields) = if self
             .sem
             .decls
             .generic_struct_names
             .contains(&struct_name)
+            || is_local_generic_struct
         {
             // This is a generic struct - infer type arguments from field values.
             // `expected_type` lets the caller's annotation (e.g.
