@@ -14,8 +14,15 @@ indented and the deterministic (sorted-key) forms.
 ## Synopsis
 
 ```wado
-assert to_string(&[1, 2, 3]) matches { Ok(s) && s == "[1,2,3]" };
-assert from_string::<List<i32>>("[1,2,3]") matches { Ok(v) && v == [1, 2, 3] };
+struct Point {
+    x: i32,
+    y: i32,
+}
+impl Serialize for Point;
+impl Deserialize for Point;
+
+assert to_string(&Point { x: 1, y: 2 }) matches { Ok(s) && s == "{\"x\":1,\"y\":2}" };
+assert from_string::<Point>("{\"x\":1,\"y\":2}") matches { Ok(p) && p.x == 1 && p.y == 2 };
 ```
 
 ## Functions

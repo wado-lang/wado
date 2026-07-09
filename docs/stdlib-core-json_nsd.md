@@ -12,6 +12,13 @@ Payload variants are encoded as `[disc, payload]`.
 ## Synopsis
 
 ```wado
+struct Point {
+    x: i32,
+    y: i32,
+}
+impl Serialize for Point;
+impl Deserialize for Point;
+
 assert to_string(&Point { x: 1, y: 2 }) matches { Ok(s) && s == "[1,2]" };
 assert from_string::<Point>("[1,2]") matches { Ok(p) && p.x == 1 && p.y == 2 };
 ```

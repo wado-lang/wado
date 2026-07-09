@@ -1063,7 +1063,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         name: &str,
         module_source: &ModuleSource,
     ) -> Option<&StructFieldInfo> {
-        self.type_lookup().struct_fields_in_scope(name, module_source)
+        self.type_lookup()
+            .struct_fields_in_scope(name, module_source)
     }
 
     pub(super) fn lookup_variant_case_in(

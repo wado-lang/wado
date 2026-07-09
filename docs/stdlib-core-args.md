@@ -55,6 +55,14 @@ not their types or arity, so it cannot self-check (only over-supply —
 ## Synopsis
 
 ```wado
+struct Options {
+    #[serde(positional)]
+    input: String,
+    verbose: bool = false,
+    jobs: i32 = 1,
+}
+impl Deserialize for Options;
+
 assert parse::<Options>(["in.txt", "--verbose", "--jobs", "4"]) matches { Ok(opts) && opts.input == "in.txt"
     && opts.verbose
     && opts.jobs == 4 };

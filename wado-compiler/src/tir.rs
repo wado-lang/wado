@@ -2449,7 +2449,9 @@ impl TypeTable {
                     )
                 }
             }
-            ResolvedType::Newtype { name, .. } => crate::name::strip_local_item_id(name).to_string(),
+            ResolvedType::Newtype { name, .. } => {
+                crate::name::strip_local_item_id(name).to_string()
+            }
             ResolvedType::Flags { name, .. } => name.clone(),
             ResolvedType::TypePack { name, .. } => format!("..{name}"),
         }

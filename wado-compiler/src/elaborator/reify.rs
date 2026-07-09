@@ -861,7 +861,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// doesn't carry attributes, only `(name, type, visibility)`.
     fn reify_local_struct(&mut self, struct_decl: &ast::StructDecl) {
         let mangled_name = crate::name::mangle_local_item_name(&struct_decl.name, struct_decl.id);
-        let Some(info) = self.sem.decls.local_struct_fields.get(&mangled_name).cloned() else {
+        let Some(info) = self
+            .sem
+            .decls
+            .local_struct_fields
+            .get(&mangled_name)
+            .cloned()
+        else {
             // `resolve_local_struct` inserts this unconditionally for every
             // local struct declaration annotate resolved.
             return;
@@ -879,9 +885,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .map(|(index, (name, type_id, visibility))| {
                 let field = struct_decl.fields.get(index);
                 let attrs: &[ast::Attribute] = field.map_or(&[], |f| &f.attrs);
-                let default_expr: Option<Box<TirExpr>> = field
-                    .and_then(|f| f.default.as_ref())
-                    .map(|default_ast| {
+                let default_expr: Option<Box<TirExpr>> =
+                    field.and_then(|f| f.default.as_ref()).map(|default_ast| {
                         Box::new(self.reify_expr(default_ast, &mut field_ctx, Some(*type_id)))
                     });
                 crate::tir::TirField {
@@ -932,8 +937,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // Generic local newtypes are unresolved (see `resolve_local_newtype`).
             return;
         }
-        let mangled_name =
-            crate::name::mangle_local_item_name(&newtype_decl.name, newtype_decl.id);
+        let mangled_name = crate::name::mangle_local_item_name(&newtype_decl.name, newtype_decl.id);
         let Some(&type_id) = self.sem.decls.local_newtypes.get(&mangled_name) else {
             return;
         };

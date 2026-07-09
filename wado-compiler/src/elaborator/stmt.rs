@@ -7,7 +7,9 @@ use crate::ast::{
 };
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::tir::{PrimitiveType, ResolvedType, TirExpr, TirExprKind, TirPattern, TypeId, TypeTable};
+use crate::tir::{
+    PrimitiveType, ResolvedType, TirExpr, TirExprKind, TirPattern, TypeId, TypeTable,
+};
 use crate::token::Span;
 
 use super::Elaborator;
@@ -306,8 +308,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let module_source = self.current_module_source.clone();
         let base_type_id = self.resolve_type(&newtype_decl.ty);
-        let mangled_name =
-            crate::name::mangle_local_item_name(&newtype_decl.name, newtype_decl.id);
+        let mangled_name = crate::name::mangle_local_item_name(&newtype_decl.name, newtype_decl.id);
         let type_id = self.tysys.type_table.borrow_mut().make_newtype(
             mangled_name.clone(),
             module_source,
