@@ -854,10 +854,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Field types and type-param bounds come from `sem.decls.local_struct_fields`
-    /// — the durable, mangled-name-keyed fact `resolve_local_struct` recorded;
-    /// this only re-derives the parts that fact doesn't carry (a type param's
-    /// own `is_effect`/`is_pack`/`default`, straight from the AST, matching
-    /// `resolve_local_struct`'s construction byte-for-byte).
+    /// — the durable, mangled-name-keyed fact `resolve_local_struct` recorded.
+    /// Field attributes (`#[serde(...)]`, `#[hidden]`) and default-value
+    /// expressions are read straight from the AST here, exactly matching
+    /// `reify_struct`'s handling for a top-level struct — `StructFieldInfo`
+    /// doesn't carry attributes, only `(name, type, visibility)`.
     fn reify_local_struct(&mut self, struct_decl: &ast::StructDecl) {
         let mangled_name = crate::name::mangle_local_item_name(&struct_decl.name, struct_decl.id);
         let Some(info) = self.sem.decls.local_struct_fields.get(&mangled_name).cloned() else {
@@ -865,24 +866,38 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // local struct declaration annotate resolved.
             return;
         };
+        // Field-default expressions resolve in a per-struct `FunctionContext`
+        // (no self, no other fields in scope), matching `reify_struct`.
+        let mut field_ctx = FunctionContext::new(
+            crate::tir::TypeTable::UNIT,
+            format!("struct:{}", struct_decl.name),
+        );
         let fields: Vec<crate::tir::TirField> = info
             .fields
             .iter()
             .enumerate()
-            .map(|(index, (name, type_id, visibility))| crate::tir::TirField {
-                name: name.clone(),
-                visibility: *visibility,
-                type_id: *type_id,
-                index: index as u32,
-                span: struct_decl
-                    .fields
-                    .get(index)
-                    .map_or(struct_decl.span, |f| f.span),
-                is_hidden: false,
-                serde_rename: None,
-                serde_default: false,
-                serde_positional: false,
-                default_expr: None,
+            .map(|(index, (name, type_id, visibility))| {
+                let field = struct_decl.fields.get(index);
+                let attrs: &[ast::Attribute] = field.map_or(&[], |f| &f.attrs);
+                let default_expr: Option<Box<TirExpr>> = field
+                    .and_then(|f| f.default.as_ref())
+                    .map(|default_ast| {
+                        Box::new(self.reify_expr(default_ast, &mut field_ctx, Some(*type_id)))
+                    });
+                crate::tir::TirField {
+                    name: name.clone(),
+                    visibility: *visibility,
+                    type_id: *type_id,
+                    index: index as u32,
+                    span: field.map_or(struct_decl.span, |f| f.span),
+                    is_hidden: attrs.iter().any(|a| a.name == "hidden"),
+                    serde_rename: serde_rename_of(attrs),
+                    serde_default: field.is_some_and(|f| f.default.is_some()),
+                    serde_positional: attrs
+                        .iter()
+                        .any(|a| a.name == "serde" && a.has_arg("positional")),
+                    default_expr,
+                }
             })
             .collect();
         let type_params: Vec<crate::tir::TirTypeParam> = struct_decl

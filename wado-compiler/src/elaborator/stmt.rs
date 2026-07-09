@@ -213,10 +213,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.register_generic_params(&struct_decl.type_params, 0);
 
-        // TODO(local types): field defaults are not resolved into a TIR
-        // expression (unlike top-level `resolve_struct`), so a local struct
-        // literal that omits a defaulted field will not yet get the right
-        // value. None of Task 5/6's fixtures exercise this.
+        // Field default expressions are recorded here (the raw AST, in
+        // `field_defaults` below) and resolved into TIR by
+        // `reify_local_struct`, matching `resolve_struct`/`reify_struct`'s
+        // split for a top-level struct.
         let mut fields = Vec::new();
         let mut field_ast_ids = Vec::new();
         let mut field_defaults = Vec::new();
