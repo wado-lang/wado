@@ -1,0 +1,48 @@
+// Regression: `value_copy_elide` used to refuse eliding a copy whose *target*
+// local is reassigned more than once in source (e.g. one `result = f();`
+// inside a loop plus another inside a nested loop, as in
+// `core:benchmark`'s `Benchmark::run`) — the Let-form binding was excluded
+// outright (`is_mut`) and the Assign-form capped the target's assign count
+// at 1. Neither restriction is load-bearing for soundness: a whole-value
+// reassignment only changes which object the local refers to, it never
+// mutates the object a still-live alias points at — only an in-place field
+// mutation (already tracked separately via `has_field_mutation`) can do
+// that. `is_target_read_only` now checks field mutation alone.
+//
+// `make` is `#[inline(never)]` so `f`'s `.unwrap()` inlines against a real
+// call result (bound to a named local, not a promoted pure value), which is
+// the shape that defeated the elider: `result = { let v = {match…}; v };`
+// surviving as an explicit `array_clone` of `v`.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn make(n: i32) -> Result<List<i32>, i32> {
+    return Result::<List<i32>, i32>::Ok([n, n + 1]);
+}
+
+fn f(n: i32) -> List<i32> {
+    return make(n).unwrap();
+}
+
+export fn run() with Stdout {
+    let mut result = f(0);
+    let mut i = 0;
+    loop {
+        if i >= 3 {
+            break;
+        }
+        result = f(i);
+        i += 1;
+    }
+    for let mut j = 0; j < 2; j += 1 {
+        result = f(j + 10);
+    }
+    println(`{result[0]} {result[1]}`);
+}
+
+__DATA__
+{
+    "stdout": "11 12\n",
+    "wir_not_expect:O2": ["array_clone"]
+}
