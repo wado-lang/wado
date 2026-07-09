@@ -919,13 +919,13 @@ type "functype//core:collections/TreeMap<core:prelude/string.wado/String,core:va
 
 type "functype//core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::insert" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>", ref "core:prelude/string.wado//String", ref "core:value//Value");  // TypeId(267)
 
-type "functype//core:value/Value^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "core:prelude/types.wado//Box<core:value/Value>", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(268)
+type "functype//core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(268)
 
-type "functype//core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(269)
+type "functype//core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>::grow" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>");  // TypeId(269)
 
-type "functype//core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>::grow" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>");  // TypeId(270)
+type "functype//core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow" = fn(ref "core:prelude//List<core:prelude/list.wado/List<u8>>");  // TypeId(270)
 
-type "functype//core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow" = fn(ref "core:prelude//List<core:prelude/list.wado/List<u8>>");  // TypeId(271)
+type "functype//core:value/Value^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "core:prelude/types.wado//Box<core:value/Value>", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(271)
 
 type "functype//core:prelude/list.wado/List<[core:prelude/string.wado/String,core:value/Value]>::push" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:value/Value]>", ref "tuple//[core:prelude/string.wado/String, core:value/Value]");  // TypeId(272)
 
@@ -6043,6 +6043,39 @@ condition: index < self.used
     self.size = self.size + 1;
 }
 
+fn "core:prelude/list.wado/List<u8>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref Array<u8>;
+    let a: i32;
+    capacity = builtin::array_len(self.repr);
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    self.repr = new_repr;
+}
+
+fn "core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref "Array<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";
+    let a: i32;
+    capacity = builtin::array_len(self.repr);
+    new_repr = builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    builtin::array_copy<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(new_repr, 0, self.repr, 0, self.used);
+    self.repr = new_repr;
+}
+
+fn "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref "Array<core:prelude/list.wado/List<u8>>";
+    let a: i32;
+    capacity = builtin::array_len(self.repr);
+    new_repr = builtin::array_new<ref "core:prelude//List<u8>">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    builtin::array_copy<ref "core:prelude//List<u8>">(new_repr, 0, self.repr, 0, self.used);
+    self.repr = new_repr;
+}
+
 fn "core:value/Value^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
     let n_5: ref "core:prelude/int128.wado//i128";
     let n_6: ref "core:prelude/int128.wado//u128";
@@ -6183,39 +6216,6 @@ fn "core:value/Value^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
     } else {
         struct.new "core:serde//SerializeError" { kind: 0, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Value::Unknown cannot be re-serialized through a generic Serializer"), used: 67 } };
     });
-}
-
-fn "core:prelude/list.wado/List<u8>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref Array<u8>;
-    let a: i32;
-    capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
-}
-
-fn "core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref "Array<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";
-    let a: i32;
-    capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
-    builtin::array_copy<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
-}
-
-fn "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref "Array<core:prelude/list.wado/List<u8>>";
-    let a: i32;
-    capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<ref "core:prelude//List<u8>">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
-    builtin::array_copy<ref "core:prelude//List<u8>">(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
 }
 
 fn "core:prelude/list.wado/List<[core:prelude/string.wado/String,core:value/Value]>::push"(self, value) {

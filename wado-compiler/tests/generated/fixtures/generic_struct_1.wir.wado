@@ -231,9 +231,9 @@ type "functype//core:collections/TreeMap<core:prelude/string.wado/String,i32>^In
 
 type "functype//core:collections/TreeMap<core:prelude/string.wado/String,i32>::find_index" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,i32>", ref "core:prelude/string.wado//String") -> i32;  // TypeId(83)
 
-type "functype//core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(84)
+type "functype//core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,i32>", ref "core:prelude/string.wado//String", i32);  // TypeId(84)
 
-type "functype//core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,i32>", ref "core:prelude/string.wado//String", i32);  // TypeId(85)
+type "functype//core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(85)
 
 type "functype//core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert_node" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,i32>", ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(86)
 
@@ -1376,17 +1376,6 @@ condition: index < self.used
     return -1;
 }
 
-fn "core:prelude/list.wado/List<i32>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref Array<i32>;
-    let a: i32;
-    capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<i32>(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
-    builtin::array_copy<i32>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
-}
-
 fn "core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert"(self, key, value) {
     let existing_index: i32;
     let new_index: i32;
@@ -1410,6 +1399,17 @@ condition: index < self.used
     "core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>::push"(self.entries, entry);
     self.root = ref.as_non_null("core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert_node"(self, self.root, "generic_struct_1.wado/$value_copy$T40"(key), new_index));
     self.size = self.size + 1;
+}
+
+fn "core:prelude/list.wado/List<i32>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref Array<i32>;
+    let a: i32;
+    capacity = builtin::array_len(self.repr);
+    new_repr = builtin::array_new<i32>(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    builtin::array_copy<i32>(new_repr, 0, self.repr, 0, self.used);
+    self.repr = new_repr;
 }
 
 fn "core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert_node"(self, node, key, index) {
