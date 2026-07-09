@@ -13,6 +13,19 @@ use super::context::WirContext;
 use super::translate::FunctionTranslator;
 use crate::nir_arena::{ArenaCallArg, Body, Operand};
 
+fn declare_and_set_local(name: String, ty: WirType, value: WirInstr) -> [WirInstr; 2] {
+    [
+        WirInstr::DeclareLocal {
+            name: name.clone(),
+            ty,
+        },
+        WirInstr::LocalSet {
+            name,
+            value: Box::new(value),
+        },
+    ]
+}
+
 /// The compile-time constant of a SIMD lane operand — a promoted
 /// `Operand::Value` int constant in the function's value pool.
 fn operand_lane_const(body: &Body, op: Operand) -> u8 {
@@ -180,81 +193,74 @@ impl FunctionTranslator<'_, '_> {
         Some(format!("$value_copy$T{}", elem.0))
     }
 
-    /// Build `{ let src = <src>; let len = src.len(); let dst = array.new_default(len); array.copy(dst, 0, src, 0, len); dst }`
-    /// for cloning an `Array<T>` whose slots need no per-element helper — a
-    /// plain ref/value copy suffices for every slot, whether `T` is a
-    /// primitive (`array_clone`'s ordinary case) or a value-typed struct
-    /// being deliberately shallow-copied (`array_clone_shallow`). Composed
-    /// from generic WIR primitives so the choice of native `array.copy` vs. a
-    /// loop stays `ArrayCopy`'s codegen call alone (see `-f no-array-copy`),
-    /// rather than a second copy of that decision inside `ArrayClone`'s.
+    fn translate_array_ref_operand(
+        &mut self,
+        args: &[ArenaCallArg],
+    ) -> Option<(WirTypeId, WirInstr, TypeId)> {
+        let src_expr = args[0].expr;
+        let src = self.translate_operand(src_expr);
+        let src_type_id = self.operand_type_id(src_expr);
+        let wir_type = self.ctx.type_id_to_wir_type(self.type_table, src_type_id);
+        let WirType::Ref { type_id, .. } = wir_type else {
+            return None;
+        };
+        Some((type_id, src, src_type_id))
+    }
+
     fn build_bulk_array_clone(&mut self, type_id: WirTypeId, src: WirInstr) -> WirInstr {
-        self.local_counter += 1;
-        let id = self.local_counter;
-        let src_name = format!("__array_clone_src_{id}");
-        let dst_name = format!("__array_clone_dst_{id}");
-        let len_name = format!("__array_clone_len_{id}");
+        let idx = type_id.index();
+        let src_name = format!("__array_clone_src_{idx}");
+        let dst_name = format!("__array_clone_dst_{idx}");
+        let len_name = format!("__array_clone_len_{idx}");
         let ref_ty = WirType::Ref {
             type_id: type_id.clone(),
             nullable: false,
         };
-        WirInstr::Seq(vec![
-            WirInstr::DeclareLocal {
+
+        let mut seq = Vec::new();
+        seq.extend(declare_and_set_local(src_name.clone(), ref_ty.clone(), src));
+        seq.extend(declare_and_set_local(
+            len_name.clone(),
+            WirType::I32,
+            WirInstr::ArrayLen(Box::new(WirInstr::LocalGet {
                 name: src_name.clone(),
-                ty: ref_ty.clone(),
-            },
-            WirInstr::LocalSet {
-                name: src_name.clone(),
-                value: Box::new(src),
-            },
-            WirInstr::DeclareLocal {
-                name: len_name.clone(),
-                ty: WirType::I32,
-            },
-            WirInstr::LocalSet {
-                name: len_name.clone(),
-                value: Box::new(WirInstr::ArrayLen(Box::new(WirInstr::LocalGet {
-                    name: src_name.clone(),
-                    result_ty: ref_ty.clone(),
-                }))),
-            },
-            WirInstr::DeclareLocal {
-                name: dst_name.clone(),
-                ty: ref_ty.clone(),
-            },
-            WirInstr::LocalSet {
-                name: dst_name.clone(),
-                value: Box::new(WirInstr::ArrayNewDefault {
-                    type_id: type_id.clone(),
-                    len: Box::new(WirInstr::LocalGet {
-                        name: len_name.clone(),
-                        result_ty: WirType::I32,
-                    }),
-                }),
-            },
-            WirInstr::ArrayCopy {
-                dest_type_id: type_id.clone(),
-                src_type_id: type_id,
-                dest: Box::new(WirInstr::LocalGet {
-                    name: dst_name.clone(),
-                    result_ty: ref_ty.clone(),
-                }),
-                dest_offset: Box::new(WirInstr::I32Const(0)),
-                src: Box::new(WirInstr::LocalGet {
-                    name: src_name,
-                    result_ty: ref_ty.clone(),
-                }),
-                src_offset: Box::new(WirInstr::I32Const(0)),
+                result_ty: ref_ty.clone(),
+            })),
+        ));
+        seq.extend(declare_and_set_local(
+            dst_name.clone(),
+            ref_ty.clone(),
+            WirInstr::ArrayNewDefault {
+                type_id: type_id.clone(),
                 len: Box::new(WirInstr::LocalGet {
-                    name: len_name,
+                    name: len_name.clone(),
                     result_ty: WirType::I32,
                 }),
             },
-            WirInstr::LocalGet {
-                name: dst_name,
-                result_ty: ref_ty,
-            },
-        ])
+        ));
+        seq.push(WirInstr::ArrayCopy {
+            dest_type_id: type_id.clone(),
+            src_type_id: type_id,
+            dest: Box::new(WirInstr::LocalGet {
+                name: dst_name.clone(),
+                result_ty: ref_ty.clone(),
+            }),
+            dest_offset: Box::new(WirInstr::I32Const(0)),
+            src: Box::new(WirInstr::LocalGet {
+                name: src_name,
+                result_ty: ref_ty.clone(),
+            }),
+            src_offset: Box::new(WirInstr::I32Const(0)),
+            len: Box::new(WirInstr::LocalGet {
+                name: len_name,
+                result_ty: WirType::I32,
+            }),
+        });
+        seq.push(WirInstr::LocalGet {
+            name: dst_name,
+            result_ty: ref_ty,
+        });
+        WirInstr::Seq(seq)
     }
 
     ///
@@ -525,50 +531,19 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
             "builtin::array_clone" => {
-                let src_expr = args[0].expr;
-                let src = self.translate_operand(src_expr);
-                let wir_type = self
-                    .ctx
-                    .type_id_to_wir_type(self.type_table, self.operand_type_id(src_expr));
-                if let WirType::Ref { type_id, .. } = wir_type {
-                    let element_copy_func =
-                        self.array_element_copy_func(self.operand_type_id(src_expr));
-                    match element_copy_func {
-                        Some(element_copy_func) => Some(WirInstr::ArrayClone {
-                            type_id,
-                            src: Box::new(src),
-                            element_copy_func: Some(element_copy_func),
-                        }),
-                        // No per-element helper to run: every slot is a
-                        // plain ref/value copy, so a fresh array plus a bulk
-                        // `ArrayCopy` is equivalent and reuses that
-                        // instruction's existing native-`array.copy`-by-
-                        // default codegen instead of `ArrayClone`'s
-                        // element-wise loop.
-                        None => Some(self.build_bulk_array_clone(type_id, src)),
-                    }
-                } else {
-                    None
+                let (type_id, src, src_type_id) = self.translate_array_ref_operand(args)?;
+                match self.array_element_copy_func(src_type_id) {
+                    Some(element_copy_func) => Some(WirInstr::ArrayClone {
+                        type_id,
+                        src: Box::new(src),
+                        element_copy_func: Some(element_copy_func),
+                    }),
+                    None => Some(self.build_bulk_array_clone(type_id, src)),
                 }
             }
-            // Spine-only array clone: copies the `repr` slots without the
-            // per-element deep copy `array_clone` would emit for value-typed
-            // elements. Emitted only by `value_copy_demote`, which proves the
-            // shared elements are never mutated through either alias. A raw
-            // bulk copy of the slots is exactly that, whatever the element
-            // type, so this always takes the same `ArrayCopy`-based lowering
-            // as the primitive-element case above.
             "builtin::array_clone_shallow" => {
-                let src_expr = args[0].expr;
-                let src = self.translate_operand(src_expr);
-                let wir_type = self
-                    .ctx
-                    .type_id_to_wir_type(self.type_table, self.operand_type_id(src_expr));
-                if let WirType::Ref { type_id, .. } = wir_type {
-                    Some(self.build_bulk_array_clone(type_id, src))
-                } else {
-                    None
-                }
+                let (type_id, src, _) = self.translate_array_ref_operand(args)?;
+                Some(self.build_bulk_array_clone(type_id, src))
             }
             "builtin::array_fill" => {
                 let arr = self.translate_operand(args[0].expr);

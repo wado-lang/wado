@@ -828,6 +828,9 @@ impl<'a> WirEmitter<'a> {
     ) {
         match instr {
             WirInstr::DeclareLocal { name, ty } => {
+                if !self.scratch_local_names.insert(name.clone()) {
+                    return;
+                }
                 let mut val_type = self.wir_type_to_val_type(ty);
                 // Non-null ref locals must be made nullable for Wasm defaultability.
                 // We track them and add ref.as_non_null on local.get.
@@ -2462,23 +2465,6 @@ impl<'a> WirEmitter<'a> {
                 src,
                 element_copy_func,
             } => {
-                // Allocate a fresh array the same length as `src` and copy
-                // every element with a JIT-compiled loop. This was the
-                // per-array-field code path inside the former
-                // `emit_value_copy` for raw `Array<T>` fields and is
-                // now reachable only via the synthesized `$value_copy$`
-                // helpers' explicit `builtin::array_clone::<T>(...)` calls.
-                //
-                // `element_copy_func` is always set here: the lowering that
-                // builds this node (`wir_build/calls.rs`) only emits
-                // `ArrayClone` for a value-typed element, which needs a
-                // per-element helper call between `array.get` and
-                // `array.set` — something `array.copy` cannot express. A
-                // primitive/non-value-typed element instead lowers directly
-                // to a `Seq` of `ArrayNewDefault` + `ArrayCopy`, reusing
-                // `ArrayCopy`'s existing native-instruction-by-default
-                // codegen instead of adding a second copy of that choice
-                // here.
                 let arr_wasm_idx = self.resolve_type_index(type_id.index());
                 let src_name = format!("__copy_arr_src_{}", type_id.index());
                 let dst_name = format!("__copy_arr_dst_{}", type_id.index());
@@ -2519,15 +2505,9 @@ impl<'a> WirEmitter<'a> {
                         f.instruction(&Instruction::ArrayGet(arr_wasm_idx));
                     }
                 }
-                // See the invariant note above: the lowering that builds this
-                // node only ever sets `element_copy_func`.
-                let func_name = element_copy_func.as_ref().unwrap_or_else(|| {
-                    panic!(
-                        "WirInstr::ArrayClone with no element_copy_func reached codegen; \
-                         a primitive/non-value-typed element clone should have lowered to \
-                         Seq(ArrayNewDefault + ArrayCopy) instead (wir_build/calls.rs)"
-                    )
-                });
+                let func_name = element_copy_func
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("WirInstr::ArrayClone with no element_copy_func"));
                 let func_idx = self
                     .resolve_function_index_by_suffix(func_name)
                     .unwrap_or_else(|| {
