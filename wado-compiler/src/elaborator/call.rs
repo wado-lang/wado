@@ -259,6 +259,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         CalleeIdentKind::AsIs(ident)
     }
 
+    /// Whether `name` is a declared effect (`interface`) or resource —
+    /// the set of identifiers `resolve_call`'s qualified-call fallback may
+    /// treat as a deferred effect operation (`Stdout::write()`, etc.).
+    fn is_declared_effect_or_resource(&self, name: &str) -> bool {
+        let key = self.canonical_decl_key(name);
+        self.tysys.trait_env.effect_decl_index.contains_key(&key)
+            || self.tysys.trait_env.resource_decl_index.contains_key(&key)
+    }
+
     pub(super) fn resolve_call(
         &mut self,
         call: &ast::CallExpr,
@@ -1068,11 +1077,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // caller falls through to the standard "unknown function" error
             // instead of deferring an unvalidated call to codegen, where it
             // would panic instead of failing cleanly.
-            else if {
-                let key = self.canonical_decl_key(prefix);
-                self.tysys.trait_env.effect_decl_index.contains_key(&key)
-                    || self.tysys.trait_env.resource_decl_index.contains_key(&key)
-            } {
+            else if self.is_declared_effect_or_resource(prefix) {
                 (
                     Some(CalleeRef::local_namespace(
                         &mut self.interner.borrow_mut(),
