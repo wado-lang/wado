@@ -72,6 +72,14 @@ pub(crate) struct ModuleDecls {
     /// [`super::super::Elaborator::resolve_module`].
     pub(crate) pending_anonymous_structs: Vec<crate::tir::TirStruct>,
 
+    /// Local newtype declarations (`Stmt::Item`), built eagerly during
+    /// annotate the same way `pending_anonymous_structs` is: a local item
+    /// has no `Item::Newtype` entry in `module.items` for reify to walk (it
+    /// lives inside a function body), so there is no other hook to emit its
+    /// `TirNewtype`. Flushed into the [`crate::tir::TirModule`] alongside
+    /// `pending_anonymous_structs`.
+    pub(crate) pending_local_newtypes: Vec<crate::tir::TirNewtype>,
+
     /// Synthesis requests recorded by `impl Trait for Type;`
     /// (Gap 12 / Stage 5). The elaborator pushes one per
     /// `is_synthesize_request` impl block; `reify_module` reads
@@ -91,6 +99,23 @@ pub(crate) struct ModuleDecls {
     pub(crate) local_enum_cases: IndexMap<String, EnumInfo>,
     pub(crate) local_flags_cases: IndexMap<String, FlagsInfo>,
     pub(crate) local_variant_cases: IndexMap<String, VariantInfo>,
+
+    /// Function-local item declarations (`Stmt::Item` — a `struct`/`enum`/
+    /// `variant`/`flags`/`type` declared inside a function body). Distinct
+    /// from `local_struct_fields` et al above, which are module-scoped
+    /// (anonymous struct literals, in-progress module decls): these are
+    /// scoped to a single function, populated sequentially by
+    /// `Elaborator::resolve_stmt` as it walks the body (no hoisting — a
+    /// local item is visible only after its own declaration statement,
+    /// matching `let`), and cleared at the start of every
+    /// `Elaborator::resolve_function` call so sibling functions never see
+    /// each other's local items. Consulted by `TypeLookup` with the highest
+    /// precedence, ahead of `local_struct_fields` et al.
+    pub(crate) fn_local_struct_fields: IndexMap<String, StructFieldInfo>,
+    pub(crate) fn_local_newtypes: IndexMap<String, TypeId>,
+    pub(crate) fn_local_enum_cases: IndexMap<String, EnumInfo>,
+    pub(crate) fn_local_flags_cases: IndexMap<String, FlagsInfo>,
+    pub(crate) fn_local_variant_cases: IndexMap<String, VariantInfo>,
 }
 
 impl ModuleDecls {

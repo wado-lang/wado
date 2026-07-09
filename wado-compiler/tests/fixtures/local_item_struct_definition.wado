@@ -1,0 +1,20 @@
+// A struct declared inside a function body (local item, scoped to that
+// function only) resolves, constructs, and supports field access.
+
+test "local struct definition" {
+    struct Point {
+        x: i32,
+        y: i32,
+    }
+    let p = Point { x: 1, y: 2 };
+    assert p.x == 1;
+    assert p.y == 2;
+}
+
+test "sibling functions may declare same-named local structs" {
+    struct Point {
+        x: i32,
+    }
+    let p = Point { x: 10 };
+    assert p.x == 10;
+}

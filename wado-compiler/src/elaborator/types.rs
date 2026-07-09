@@ -1456,6 +1456,13 @@ pub(crate) struct TypeLookup<'a> {
     pub(crate) local_flags_cases: &'a IndexMap<String, FlagsInfo>,
     pub(crate) local_generic_newtypes: &'a IndexMap<String, GenericNewtypeInfo>,
     pub(crate) local_variant_cases: &'a IndexMap<String, VariantInfo>,
+    /// Function-local item declarations (`Stmt::Item`), highest precedence.
+    /// See `ModuleDecls::fn_local_struct_fields` for the scoping rationale.
+    pub(crate) fn_local_struct_fields: &'a IndexMap<String, StructFieldInfo>,
+    pub(crate) fn_local_newtypes: &'a IndexMap<String, TypeId>,
+    pub(crate) fn_local_enum_cases: &'a IndexMap<String, EnumInfo>,
+    pub(crate) fn_local_flags_cases: &'a IndexMap<String, FlagsInfo>,
+    pub(crate) fn_local_variant_cases: &'a IndexMap<String, VariantInfo>,
 }
 
 impl<'a> TypeLookup<'a> {
@@ -1540,7 +1547,9 @@ impl<'a> TypeLookup<'a> {
     }
 
     pub(super) fn struct_fields(&self, name: &str) -> Option<&'a StructFieldInfo> {
-        self.lookup_ref(name, Some(self.local_struct_fields), self.all_struct_fields)
+        self.fn_local_struct_fields
+            .get(name)
+            .or_else(|| self.lookup_ref(name, Some(self.local_struct_fields), self.all_struct_fields))
     }
 
     pub(super) fn struct_fields_in(
@@ -1548,17 +1557,24 @@ impl<'a> TypeLookup<'a> {
         name: &str,
         module_source: &ModuleSource,
     ) -> Option<&'a StructFieldInfo> {
-        self.lookup_ref_in(
-            name,
-            module_source,
-            self.local_struct_fields,
-            self.all_struct_fields,
-            |info| &info.module_source,
-        )
+        self.fn_local_struct_fields
+            .get(name)
+            .filter(|info| info.module_source == *module_source)
+            .or_else(|| {
+                self.lookup_ref_in(
+                    name,
+                    module_source,
+                    self.local_struct_fields,
+                    self.all_struct_fields,
+                    |info| &info.module_source,
+                )
+            })
     }
 
     pub(super) fn variant_case(&self, name: &str) -> Option<&'a VariantInfo> {
-        self.lookup_ref(name, Some(self.local_variant_cases), self.all_variant_cases)
+        self.fn_local_variant_cases
+            .get(name)
+            .or_else(|| self.lookup_ref(name, Some(self.local_variant_cases), self.all_variant_cases))
     }
 
     pub(super) fn variant_case_in(
@@ -1566,17 +1582,24 @@ impl<'a> TypeLookup<'a> {
         name: &str,
         module_source: &ModuleSource,
     ) -> Option<&'a VariantInfo> {
-        self.lookup_ref_in(
-            name,
-            module_source,
-            self.local_variant_cases,
-            self.all_variant_cases,
-            |info| &info.module_source,
-        )
+        self.fn_local_variant_cases
+            .get(name)
+            .filter(|info| info.module_source == *module_source)
+            .or_else(|| {
+                self.lookup_ref_in(
+                    name,
+                    module_source,
+                    self.local_variant_cases,
+                    self.all_variant_cases,
+                    |info| &info.module_source,
+                )
+            })
     }
 
     pub(super) fn enum_case(&self, name: &str) -> Option<&'a EnumInfo> {
-        self.lookup_ref(name, Some(self.local_enum_cases), self.all_enum_cases)
+        self.fn_local_enum_cases
+            .get(name)
+            .or_else(|| self.lookup_ref(name, Some(self.local_enum_cases), self.all_enum_cases))
     }
 
     pub(super) fn enum_case_in(
@@ -1584,17 +1607,24 @@ impl<'a> TypeLookup<'a> {
         name: &str,
         module_source: &ModuleSource,
     ) -> Option<&'a EnumInfo> {
-        self.lookup_ref_in(
-            name,
-            module_source,
-            self.local_enum_cases,
-            self.all_enum_cases,
-            |info| &info.module_source,
-        )
+        self.fn_local_enum_cases
+            .get(name)
+            .filter(|info| info.module_source == *module_source)
+            .or_else(|| {
+                self.lookup_ref_in(
+                    name,
+                    module_source,
+                    self.local_enum_cases,
+                    self.all_enum_cases,
+                    |info| &info.module_source,
+                )
+            })
     }
 
     pub(super) fn flags_case(&self, name: &str) -> Option<&'a FlagsInfo> {
-        self.lookup_ref(name, Some(self.local_flags_cases), self.all_flags_cases)
+        self.fn_local_flags_cases
+            .get(name)
+            .or_else(|| self.lookup_ref(name, Some(self.local_flags_cases), self.all_flags_cases))
     }
 
     pub(super) fn flags_case_in(
@@ -1602,13 +1632,18 @@ impl<'a> TypeLookup<'a> {
         name: &str,
         module_source: &ModuleSource,
     ) -> Option<&'a FlagsInfo> {
-        self.lookup_ref_in(
-            name,
-            module_source,
-            self.local_flags_cases,
-            self.all_flags_cases,
-            |info| &info.module_source,
-        )
+        self.fn_local_flags_cases
+            .get(name)
+            .filter(|info| info.module_source == *module_source)
+            .or_else(|| {
+                self.lookup_ref_in(
+                    name,
+                    module_source,
+                    self.local_flags_cases,
+                    self.all_flags_cases,
+                    |info| &info.module_source,
+                )
+            })
     }
 
     pub(super) fn resource_type(&self, name: &str) -> Option<&'a ResourceInfo> {
@@ -1624,6 +1659,9 @@ impl<'a> TypeLookup<'a> {
     }
 
     pub(super) fn newtype(&self, name: &str) -> Option<TypeId> {
+        if let Some(id) = self.fn_local_newtypes.get(name) {
+            return Some(*id);
+        }
         self.lookup_ref(name, Some(self.local_newtypes), self.all_newtypes)
             .copied()
     }

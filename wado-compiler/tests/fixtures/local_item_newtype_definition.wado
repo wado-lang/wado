@@ -1,0 +1,10 @@
+// A newtype declared inside a function body (local item, scoped to that
+// function only) resolves, can be assigned/compared/asserted on, and
+// forwards its base type's auto-derived traits (e.g. `Display`).
+
+test "local newtype definition" {
+    type UserId = i32;
+    let id: UserId = 42;
+    assert id == 42;
+    assert `{id}` == "42";
+}

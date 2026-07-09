@@ -8,7 +8,8 @@ use crate::ast::{
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::tir::{
-    PrimitiveType, ResolvedType, TirExpr, TirExprKind, TirPattern, TypeId, TypeTable,
+    PrimitiveType, ResolvedType, TirExpr, TirExprKind, TirField, TirPattern, TirStruct, TypeId,
+    TypeTable,
 };
 use crate::token::Span;
 
@@ -139,15 +140,174 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Stmt::Continue(continue_stmt) => self.resolve_continue(continue_stmt, ctx),
             Stmt::Assert(a) => self.desugar_assert(a, ctx),
             Stmt::LabeledBlock(labeled_block) => self.resolve_labeled_block(labeled_block, ctx),
-            // TODO(local types): resolving the declaration itself (struct
-            // fields, impl methods, registering it so `resolve_named_type`
-            // can find it) is not yet implemented. A reference to the local
-            // type surfaces the normal "unknown type" error until then.
-            Stmt::Item(_) => {}
+            Stmt::Item(item) => self.resolve_local_item(item),
             // Parser error-recovery placeholder: the syntax error was already
             // reported, so there is nothing to record.
             Stmt::Error(_) => {}
         }
+    }
+
+    /// Resolve a local item declaration (`Stmt::Item`) — a struct/enum/
+    /// variant/flags/newtype/impl/trait declared inside a function body,
+    /// scoped to that function only (WEP local-item-definitions). Resolution
+    /// is sequential and forward-declaration-required, matching `let`: no
+    /// hoisting, no mutual reference between local declarations.
+    ///
+    /// Struct/newtype are minted under a mangled internal name
+    /// (`{name}@{AstId:?}`) so same-named locals in sibling functions never
+    /// collide in this module's shared `sem.decls.local_*` tables — the
+    /// durable storage reify recovers via `recorded_type` (see
+    /// `reify_struct_literal`). The bare declared name is additionally
+    /// registered in the function-scoped `fn_local_*` tables (cleared at the
+    /// top of every `resolve_function`), so `resolve_named_type` et al find
+    /// it by the name written in source, for the rest of this function only.
+    ///
+    /// Enum/variant/flags/impl/trait are parsed (Task #4) but not yet
+    /// resolved here: `Shape::Circle(1)`-style construction needs a
+    /// per-AstId recorded fact for reify's call/ident resolution, which
+    /// (unlike struct literals) does not go through `recorded_type` — a
+    /// follow-up. A reference to one of these local kinds still surfaces the
+    /// ordinary "unknown type"/"unknown function" error.
+    fn resolve_local_item(&mut self, item: &ast::Item) {
+        if let Some(vis) = item.visibility()
+            && vis != ast::Visibility::Private
+        {
+            let _ = self.logger.error(TypeError::InvalidLiteral {
+                message: "a local item declaration cannot be `pub` or `internal`; \
+                          it is always private to its enclosing function"
+                    .to_string(),
+                span: item.span(),
+            });
+        }
+
+        match item {
+            ast::Item::Struct(struct_decl) => self.resolve_local_struct(struct_decl),
+            ast::Item::Newtype(newtype_decl) => self.resolve_local_newtype(newtype_decl),
+            _ => {}
+        }
+    }
+
+    fn resolve_local_struct(&mut self, struct_decl: &ast::StructDecl) {
+        if !struct_decl.type_params.is_empty() {
+            // Generic local structs are a follow-up; left unresolved.
+            return;
+        }
+        let module_source = self.current_module_source.clone();
+        let mut fields = Vec::new();
+        let mut field_ast_ids = Vec::new();
+        let mut field_defaults = Vec::new();
+        let mut tir_fields = Vec::new();
+        for (index, field) in struct_decl.fields.iter().enumerate() {
+            let type_id = self.resolve_type(&field.ty);
+            fields.push((field.name.clone(), type_id, field.visibility));
+            field_ast_ids.push(field.id);
+            field_defaults.push(field.default.clone());
+            // TODO(local types): field defaults are not resolved into a TIR
+            // expression here (unlike top-level `resolve_struct`), so a local
+            // struct literal that omits a defaulted field will not yet get
+            // the right value. None of Task 5's fixtures exercise this.
+            tir_fields.push(TirField {
+                name: field.name.clone(),
+                visibility: field.visibility,
+                type_id,
+                index: index as u32,
+                span: field.span,
+                is_hidden: false,
+                serde_rename: None,
+                serde_default: false,
+                serde_positional: false,
+                default_expr: None,
+            });
+        }
+        let mangled_name = format!("{}@{:?}", struct_decl.name, struct_decl.id);
+        let type_id = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_struct(mangled_name.clone(), module_source.clone());
+        self.tysys
+            .type_table
+            .borrow_mut()
+            .register_decl_type(struct_decl.id, type_id);
+        let info = super::types::StructFieldInfo {
+            name: mangled_name.clone(),
+            module_source: module_source.clone(),
+            defined_at: struct_decl.id,
+            fields,
+            field_ast_ids,
+            field_defaults,
+            type_param_bounds: Vec::new(),
+            type_param_type_ids: Vec::new(),
+        };
+        self.sem
+            .decls
+            .local_struct_fields
+            .insert(mangled_name.clone(), info.clone());
+        self.sem
+            .decls
+            .fn_local_struct_fields
+            .insert(struct_decl.name.clone(), info);
+        // Local structs have no `Item::Struct` entry in `module.items` for
+        // reify to walk (they live inside a function body), so — like
+        // anonymous struct literals — the full `TirStruct` is built here,
+        // during annotate, and flushed into the module's TIR at the same
+        // point `pending_anonymous_structs` is.
+        self.sem.decls.pending_anonymous_structs.push(TirStruct {
+            name: mangled_name,
+            module_source,
+            visibility: ast::Visibility::Private,
+            type_params: Vec::new(),
+            monomorph_info: None,
+            fields: tir_fields,
+            span: struct_decl.span,
+            serde_rename_all: None,
+        });
+    }
+
+    fn resolve_local_newtype(&mut self, newtype_decl: &ast::Newtype) {
+        if !newtype_decl.type_params.is_empty() {
+            // Generic local newtypes are a follow-up; left unresolved.
+            return;
+        }
+        let module_source = self.current_module_source.clone();
+        let base_type_id = self.resolve_type(&newtype_decl.ty);
+        let mangled_name = format!("{}@{:?}", newtype_decl.name, newtype_decl.id);
+        let type_id = self.tysys.type_table.borrow_mut().make_newtype(
+            mangled_name.clone(),
+            module_source.clone(),
+            base_type_id,
+        );
+        self.tysys
+            .type_table
+            .borrow_mut()
+            .register_decl_type(newtype_decl.id, type_id);
+        // Durable (mangled-name) entry: some trait-bound synthesis (e.g. the
+        // auto-derived `Display` a template string needs) re-resolves a
+        // newtype's base type by name rather than reading `ResolvedType`
+        // directly, so it must be discoverable post-declaration the same way
+        // struct field info is (see `resolve_local_struct`).
+        self.sem
+            .decls
+            .local_newtypes
+            .insert(mangled_name.clone(), type_id);
+        // Ephemeral (bare-name) entry — visible only for the remainder of
+        // this function's own annotate walk.
+        self.sem
+            .decls
+            .fn_local_newtypes
+            .insert(newtype_decl.name.clone(), type_id);
+        // Local newtypes have no `Item::Newtype` entry in `module.items` for
+        // reify to walk — same reasoning as the `TirStruct` push above.
+        self.sem
+            .decls
+            .pending_local_newtypes
+            .push(crate::tir::TirNewtype {
+                name: mangled_name,
+                module_source,
+                visibility: ast::Visibility::Private,
+                type_id,
+                span: newtype_decl.span,
+            });
     }
 
     /// Resolve a labeled block statement (Stage 7-B: records-only).

@@ -1267,6 +1267,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let return_type = TypeTable::UNIT;
         let mut ctx = FunctionContext::new(return_type, function_name.clone());
 
+        // Local item declarations (`Stmt::Item`) are scoped to a single
+        // test body: clear the previous one's leftovers (mirrors
+        // `resolve_function`/`resolve_method`; a `test` block does not go
+        // through either).
+        self.sem.decls.fn_local_struct_fields.clear();
+        self.sem.decls.fn_local_newtypes.clear();
+        self.sem.decls.fn_local_enum_cases.clear();
+        self.sem.decls.fn_local_flags_cases.clear();
+        self.sem.decls.fn_local_variant_cases.clear();
+
         // Walk the test body for its side-effect fact recording (its
         // per-`AstId` expression types, recorded under the `function_name`
         // context so `#function` literals match what reify emits); the
@@ -1372,6 +1382,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // behavior.
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
+        // Local item declarations (`Stmt::Item`) are scoped to a single
+        // function/method: clear the previous one's leftovers.
+        scope.sem.decls.fn_local_struct_fields.clear();
+        scope.sem.decls.fn_local_newtypes.clear();
+        scope.sem.decls.fn_local_enum_cases.clear();
+        scope.sem.decls.fn_local_flags_cases.clear();
+        scope.sem.decls.fn_local_variant_cases.clear();
         let mut type_param_list = Vec::new();
 
         // Bare base trait name (e.g. `"Stream"` for an `impl Stream<u8>`).

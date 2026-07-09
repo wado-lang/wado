@@ -450,6 +450,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             local_flags_cases: &empty_flags,
                             local_generic_newtypes: &empty_gnt,
                             local_variant_cases: &empty_variant,
+                            fn_local_struct_fields: &empty_struct,
+                            fn_local_newtypes: &empty_newtype,
+                            fn_local_enum_cases: &empty_enum,
+                            fn_local_flags_cases: &empty_flags,
+                            fn_local_variant_cases: &empty_variant,
                         };
                         let base_type_id = Self::resolve_type_static(
                             &newtype_decl.ty,
@@ -548,6 +553,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     local_flags_cases: &empty_flags,
                     local_generic_newtypes: &empty_gnt,
                     local_variant_cases: &empty_variant,
+                    fn_local_struct_fields: &empty_struct,
+                    fn_local_newtypes: &empty_newtype,
+                    fn_local_enum_cases: &empty_enum,
+                    fn_local_flags_cases: &empty_flags,
+                    fn_local_variant_cases: &empty_variant,
                 };
                 match item {
                     Item::Struct(struct_decl) => {
@@ -1286,6 +1296,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     local_flags_cases: &empty_flags,
                     local_generic_newtypes: &empty_gnt,
                     local_variant_cases: &empty_variant,
+                    fn_local_struct_fields: &empty_struct,
+                    fn_local_newtypes: &empty_newtype,
+                    fn_local_enum_cases: &empty_enum,
+                    fn_local_flags_cases: &empty_flags,
+                    fn_local_variant_cases: &empty_variant,
                 };
                 for item in &module.items {
                     if let Item::Function(func) = item {
@@ -2023,16 +2038,79 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         type_params: &[&str],
         logger: &Logger<'_, H>,
     ) -> Result<(), Bail> {
+        // Local item declarations (`Stmt::Item`) are not in `known_type_names`
+        // (a module-wide set built before any function body is walked), so a
+        // reference to one would otherwise fail this fast pre-check before
+        // the real elaborator (which understands sequential, function-scoped
+        // visibility) ever runs. Widen the set with every local item name
+        // reachable from this block, recursively — a coarse over-approximation
+        // (it does not enforce forward-declaration order; the real elaborator
+        // still does) is fine here: this pass only exists to fail fast on
+        // *genuinely* unknown names.
+        let local_item_names = Self::collect_local_item_names(block);
+        let known_type_names = if local_item_names.is_empty() {
+            known_type_names.clone()
+        } else {
+            let mut widened = known_type_names.clone();
+            widened.extend(local_item_names);
+            widened
+        };
         for stmt in &block.stmts {
             Self::validate_stmt_type_names(
                 stmt,
-                known_type_names,
+                &known_type_names,
                 resource_type_names,
                 type_params,
                 logger,
             )?;
         }
         Ok(())
+    }
+
+    /// Collect the declared names of every local item (`Stmt::Item`)
+    /// reachable from `block`, recursing into nested blocks (`if`/`while`/
+    /// `for`/`loop`/labeled blocks). See `validate_block_type_names`.
+    fn collect_local_item_names(block: &ast::Block) -> IndexSet<String> {
+        fn visit_block(block: &ast::Block, out: &mut IndexSet<String>) {
+            for stmt in &block.stmts {
+                visit_stmt(stmt, out);
+            }
+        }
+        fn item_name(item: &Item) -> Option<&str> {
+            match item {
+                Item::Struct(d) => Some(&d.name),
+                Item::Enum(d) => Some(&d.name),
+                Item::Variant(d) => Some(&d.name),
+                Item::Flags(d) => Some(&d.name),
+                Item::Newtype(d) => Some(&d.name),
+                Item::Trait(d) => Some(&d.name),
+                _ => None,
+            }
+        }
+        fn visit_stmt(stmt: &ast::Stmt, out: &mut IndexSet<String>) {
+            match stmt {
+                ast::Stmt::Item(item) => {
+                    if let Some(name) = item_name(item) {
+                        out.insert(name.to_string());
+                    }
+                }
+                ast::Stmt::If(if_stmt) => {
+                    visit_block(&if_stmt.then_block, out);
+                    if let Some(else_block) = &if_stmt.else_block {
+                        visit_block(else_block, out);
+                    }
+                }
+                ast::Stmt::While(while_stmt) => visit_block(&while_stmt.body, out),
+                ast::Stmt::For(for_stmt) => visit_block(&for_stmt.body, out),
+                ast::Stmt::ForOf(for_of) => visit_block(&for_of.body, out),
+                ast::Stmt::Loop(loop_stmt) => visit_block(&loop_stmt.body, out),
+                ast::Stmt::LabeledBlock(labeled) => visit_block(&labeled.block, out),
+                _ => {}
+            }
+        }
+        let mut out = IndexSet::default();
+        visit_block(block, &mut out);
+        out
     }
 
     /// Validate type names in a statement.

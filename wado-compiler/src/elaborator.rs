@@ -241,6 +241,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             local_flags_cases: &self.sem.decls.local_flags_cases,
             local_generic_newtypes: &self.sem.decls.local_generic_newtypes,
             local_variant_cases: &self.sem.decls.local_variant_cases,
+            fn_local_struct_fields: &self.sem.decls.fn_local_struct_fields,
+            fn_local_newtypes: &self.sem.decls.fn_local_newtypes,
+            fn_local_enum_cases: &self.sem.decls.fn_local_enum_cases,
+            fn_local_flags_cases: &self.sem.decls.fn_local_flags_cases,
+            fn_local_variant_cases: &self.sem.decls.fn_local_variant_cases,
         }
     }
 

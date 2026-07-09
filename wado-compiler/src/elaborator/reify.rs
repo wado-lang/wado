@@ -378,6 +378,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             local_flags_cases: &self.sem.decls.local_flags_cases,
             local_generic_newtypes: &self.sem.decls.local_generic_newtypes,
             local_variant_cases: &self.sem.decls.local_variant_cases,
+            // Function-local item declarations resolve through the durable
+            // `local_*` tables above (keyed by their mangled storage name,
+            // recovered from `recorded_type` — see `reify_struct_literal`),
+            // not through this per-function ephemeral tier, which annotate
+            // clears between functions and reify never repopulates.
+            fn_local_struct_fields: &self.sem.decls.fn_local_struct_fields,
+            fn_local_newtypes: &self.sem.decls.fn_local_newtypes,
+            fn_local_enum_cases: &self.sem.decls.fn_local_enum_cases,
+            fn_local_flags_cases: &self.sem.decls.fn_local_flags_cases,
+            fn_local_variant_cases: &self.sem.decls.fn_local_variant_cases,
         }
     }
 
@@ -626,6 +636,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // because `sem` is `&` here.
         for anon_struct in &self.sem.decls.pending_anonymous_structs {
             tir_module.add_struct(anon_struct.clone());
+        }
+        // Local newtype declarations (`Stmt::Item`) — same reasoning as
+        // `pending_anonymous_structs` above.
+        for local_newtype in &self.sem.decls.pending_local_newtypes {
+            tir_module.add_newtype(local_newtype.clone());
         }
 
         // Stage 5 / Gap 12: forward the per-module synthesis requests
