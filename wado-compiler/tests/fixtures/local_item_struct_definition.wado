@@ -1,5 +1,11 @@
 // A struct declared inside a function body (local item, scoped to that
-// function only) resolves, constructs, and supports field access.
+// function only) resolves, constructs, and supports field access. Sibling
+// `test` blocks (not just sibling `fn`s — each compiles to its own
+// TirFunction, reified independently) may declare same-named local structs
+// with entirely different field sets/order without leaking into each other;
+// this specifically guards against field-reindexing corruption if a future
+// change regresses the fn_local_* / durable-table split (see
+// local_item_shadows_outer_struct.wado for the same-scope variant).
 
 test "local struct definition" {
     struct Point {
@@ -11,10 +17,14 @@ test "local struct definition" {
     assert p.y == 2;
 }
 
-test "sibling functions may declare same-named local structs" {
+test "sibling test blocks may declare same-named local structs with different fields" {
     struct Point {
+        y: i32,
         x: i32,
+        z: i32,
     }
-    let p = Point { x: 10 };
+    let p = Point { y: 20, x: 10, z: 30 };
     assert p.x == 10;
+    assert p.y == 20;
+    assert p.z == 30;
 }
