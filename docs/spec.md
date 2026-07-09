@@ -195,7 +195,7 @@ let x = |x: i32| x + 1;  // Error: the x inside is the closure parameter, not th
 ### Local Item Definitions
 
 `struct` and `type` (newtype) may be declared inside a function or method
-body, scoped to that function only:
+body, scoped to that function:
 
 ```wado
 fn area(width: i32, height: i32) -> i32 {
@@ -211,8 +211,8 @@ fn area(width: i32, height: i32) -> i32 {
 Local items follow `let`'s scoping rules, not a nested block's: a local item
 declared anywhere in the function — including inside a nested `if`/`while`/
 `for` — is visible for the rest of the function, but must be declared before
-its first use (no hoisting, no forward reference, no mutual reference between
-two local items). Two unrelated functions may declare same-named local items
+its first use (no hoisting, no forward references, including between two
+local items). Two unrelated functions may declare same-named local items
 without collision. A local item cannot be `pub` or `internal`: it is always
 private to its enclosing function.
 

@@ -4,10 +4,9 @@ use { parse } from "core:args";
 // Regression: `reify_local_struct` once hardcoded every field's serde
 // metadata (`#[serde(positional)]`, `serde_default`, `default_expr`) to
 // false/None instead of reading it off the AST like top-level
-// `reify_struct` does, so a local struct's `#[serde(positional)]` fields and
-// field defaults were silently dropped — `core:args::parse` then rejected
-// every positional token as `TooManyPositionals`. Mirrors the
-// `struct Options` pattern from `lib/core/args.wado`'s synopsis.
+// `reify_struct` does, silently dropping a local struct's positional fields
+// and defaults — `core:args::parse` then rejected every positional token as
+// `TooManyPositionals`.
 
 test "local struct field attributes (#[serde(positional)]) and defaults resolve" {
     struct Options {

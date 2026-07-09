@@ -1764,10 +1764,10 @@ pub enum Stmt {
     /// `enum`, `variant`, `flags`, `type` (newtype), `impl`, or `trait`.
     /// Scoped to the function body — not visible outside it — and resolved
     /// sequentially like a `let` binding (no forward reference, no mutual
-    /// reference between two local declarations). The parser accepts any
-    /// `Item` here and defers the "is this kind/visibility allowed locally"
-    /// check to `Parser::validate_local_item` so the diagnostic is uniform
-    /// regardless of which item kind was written.
+    /// reference between two local declarations). `Parser::at_local_item_start`
+    /// decides which keywords start one; `Parser::at_visibility_prefixed_local_item_start`
+    /// gives a dedicated error for a `pub`/`internal`/`export` prefix, since a
+    /// local item is always private.
     Item(Box<Item>),
     /// Placeholder for a statement that failed to parse, emitted by error
     /// recovery so a broken statement inside a block leaves a node (with a

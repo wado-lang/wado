@@ -17,7 +17,7 @@ nesting a function inside a function is a separate, unrelated feature this
 WEP does not attempt, and an effect interface has no meaningful function-local
 scope to speak of. Each of these produces the same parse error a missing `}`
 would ("expected `}`"), not a special-cased message — they were never valid
-here, same as before this WEP.
+here.
 
 Scoping rules, chosen for simplicity over expressiveness:
 
@@ -29,9 +29,9 @@ Scoping rules, chosen for simplicity over expressiveness:
   function's local items (an unhandled edge case, not a deliberate
   restriction).
 - **Sequential resolution, no hoisting.** A local item must be declared
-  before its first use, exactly like `let` — no forward reference, no mutual
-  reference between two local items (`struct A` referring to `struct B`
-  declared later in the same function, or vice versa, is unsupported).
+  before its first use, exactly like `let` — no forward reference, including
+  between two local items (`struct A` referring to a `struct B` declared
+  later in the same function, or vice versa, is unsupported).
 - **Always private.** A `pub`/`internal`/`export` prefix on a local item is a
   dedicated parse error (`at_visibility_prefixed_local_item_start`) rather
   than the generic "expected `}`" recovery every other invalid block-level
@@ -70,9 +70,9 @@ before the real elaborator, built from a flat module-wide name set) had no
 notion of function-scoped names and needed widening: it now also recognizes
 any name reachable via a local item declaration anywhere in the enclosing
 function, so it does not false-positive ahead of the real (correctly
-sequential) resolution. This a coarse over-approximation on purpose — it does
-not itself enforce declare-before-use ordering; the real elaborator still
-does.
+sequential) resolution. This is a coarse over-approximation on purpose — it
+does not itself enforce declare-before-use ordering; the real elaborator
+still does.
 
 Generic local structs (`struct Box<T> { value: T }`) reuse the module-level
 generic-struct machinery unchanged: the monomorphizer already treats any
@@ -83,13 +83,15 @@ whether reify or this WEP's eager annotate-time emission produced it.
 
 - Supported today: local `struct` (generic or not) and local non-generic
   `type` (newtype) — declare, construct, field/case access, comparison,
-  `assert`, auto-derived traits (`Display` etc. forward to the base type).
-- Not yet supported, parses but does not resolve (`unknown type`/`unknown
-  function` at the reference site): local `enum`/`variant`/`flags`, local
-  generic `type` (a different mechanism —
-  `GenericNewtypeInfo` + AST substitution, not a monomorphized template —
-  that this WEP does not wire up), and methods on any local type (a local
-  `impl`/`trait` block parses but is not connected to method dispatch, which
-  is a module-wide registry built once before any function body is walked).
-- Field defaults on a local struct's fields are not resolved into TIR (a
-  struct literal omitting a defaulted field will not get the right value).
+  `assert`, and auto-derived traits (`Display` etc.: structural for a
+  struct, forwarded from the base type for a newtype).
+- Not yet supported: parses, but a reference fails downstream with whatever
+  error fits how it was referenced, not a dedicated message. Local
+  `enum`/`variant`/`flags` surfaces as `unknown identifier` for a case path
+  (e.g. `Color::Red`) or `unknown function` for variant construction. Local
+  generic `type` surfaces as a type mismatch, since it needs a different
+  mechanism — `GenericNewtypeInfo` + AST substitution, not the monomorphized
+  template generic structs use — that this WEP does not wire up. Methods on
+  any local type surface as `no method 'x' found on type`, since a local
+  `impl`/`trait` block parses but is not connected to method dispatch, a
+  module-wide registry built once before any function body is walked.

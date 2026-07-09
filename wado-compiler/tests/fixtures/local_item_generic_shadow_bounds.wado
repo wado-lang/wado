@@ -1,11 +1,10 @@
 // A local, non-generic struct shadowing a same-named module-level generic
-// struct must not desync generic-struct dispatch from the info actually
-// used. Regression test for a bug where `resolve_generic_type`'s dispatch
-// condition (checking the module-level `generic_struct_names` registry) and
-// the `StructFieldInfo` it then used (from a separate, local-item-aware
-// lookup) could name two different structs once a same-named local shadow
-// was declared later in the function — corrupting the resulting type
-// identity and silently skipping trait-bound checks for an earlier
+// struct must not desync generic-struct dispatch. Regression test for a bug
+// where `resolve_generic_type`'s dispatch condition (the module-level
+// `generic_struct_names` registry) and the `StructFieldInfo` it used (from a
+// separate, local-item-aware lookup) could name two different structs once a
+// same-named local shadow appeared later in the function — corrupting the
+// type identity and silently skipping trait-bound checks for an earlier
 // reference to the outer generic struct.
 
 trait Numeric {

@@ -325,14 +325,11 @@ fn walk_into(
     Ok(())
 }
 
-// Directory discovery honouring the nearest enclosing package manifest.
-//
 // `[test].exclude`/`include` globs are written relative to the package root, so
 // when `dir` is a subdirectory *inside* a package we root the walk at that
 // package (making the globs match as authored) and keep only the files under
 // `dir`. When `dir` is itself the package root, or lies outside any package,
-// the walk is rooted at `dir` directly. A file argument never reaches here —
-// the caller passes explicit files through without consulting any manifest.
+// the walk is rooted at `dir` directly.
 fn discover_in_dir(dir: &Path, extra_excludes: &[String]) -> Result<Vec<PackageRun>, CliExit> {
     let enclosing = match project_manifest::discover(dir) {
         Ok(project) => project.map(|p| p.root),
@@ -347,8 +344,8 @@ fn discover_in_dir(dir: &Path, extra_excludes: &[String]) -> Result<Vec<PackageR
     }
 }
 
-// Keep only discovered files that live under `dir`, dropping now-empty runs.
-// Paths and `dir` are normalised the same way so the prefix test is stable.
+// Both `path` and `dir` must go through the same `display_path` normalisation
+// (forward slashes, no `./` prefix) before the prefix test below is valid.
 fn retain_under(runs: Vec<PackageRun>, dir: &Path) -> Vec<PackageRun> {
     let prefix = display_path(dir);
     runs.into_iter()
@@ -359,8 +356,9 @@ fn retain_under(runs: Vec<PackageRun>, dir: &Path) -> Vec<PackageRun> {
         .collect()
 }
 
-// True when file path `path` sits inside directory `dir` (a proper prefix at a
-// path-segment boundary), both already `display_path`-normalised.
+// A plain `starts_with(dir)` would wrongly match `core2/foo` against `core`;
+// requiring a `/` right after the prefix pins the match to a path-segment
+// boundary.
 fn path_under(path: &str, dir: &str) -> bool {
     path.strip_prefix(dir)
         .is_some_and(|rest| rest.starts_with('/'))
@@ -2432,8 +2430,8 @@ mod tests {
         assert!(!got.contains("impl.wado"), "{got:?}");
     }
 
-    // Invoking on the package root itself is unchanged: manifest applied,
-    // no subtree filtering.
+    // Invoking on the package root itself applies the manifest with no
+    // subtree filtering.
     #[test]
     fn package_root_invocation_applies_manifest_exclude() {
         let tmp = tempfile::tempdir().unwrap();

@@ -136,8 +136,7 @@ impl ModuleDecls {
     /// `resolve_function`, `resolve_method`, `resolve_test_decl` — so a
     /// local item declared in one function body never leaks into the next
     /// one's resolution. A single shared call makes it impossible for a new
-    /// entry point to forget this (see issue found in code review: a
-    /// hand-copied clear block was missing from `resolve_function`).
+    /// entry point to forget this.
     pub(crate) fn clear_fn_local_items(&mut self) {
         self.fn_local_struct_fields.clear();
         self.fn_local_newtypes.clear();

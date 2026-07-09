@@ -159,12 +159,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// top of every `resolve_function`), so `resolve_named_type` et al find
     /// it by the name written in source, for the rest of this function only.
     ///
-    /// Enum/variant/flags/impl/trait are parsed (Task #4) but not yet
-    /// resolved here: `Shape::Circle(1)`-style construction needs a
-    /// per-AstId recorded fact for reify's call/ident resolution, which
-    /// (unlike struct literals) does not go through `recorded_type` — a
-    /// follow-up. A reference to one of these local kinds still surfaces the
-    /// ordinary "unknown type"/"unknown function" error.
+    /// Enum/variant/flags/impl/trait are parsed but not yet resolved here:
+    /// `Shape::Circle(1)`-style construction needs a per-AstId recorded fact
+    /// for reify's call/ident resolution, which (unlike struct literals) does
+    /// not go through `recorded_type` — a follow-up. A reference to one of
+    /// these local kinds still surfaces a clear error (`unknown identifier`,
+    /// `unknown function`, a type mismatch, or `no method found`, depending
+    /// on how it's referenced), just not a dedicated "not supported yet" one.
     ///
     /// `item.visibility()` is always `Private` here: the parser rejects a
     /// `pub`/`internal`/`export` prefix before a local item with a dedicated
@@ -174,8 +175,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match item {
             ast::Item::Struct(struct_decl) => self.resolve_local_struct(struct_decl),
             ast::Item::Newtype(newtype_decl) => self.resolve_local_newtype(newtype_decl),
-            // Parsed (Task #4) but not yet resolved — see the module docs
-            // on `resolve_local_item` above.
+            // Parsed but not yet resolved — see the doc comment on
+            // `resolve_local_item` above.
             ast::Item::Enum(_)
             | ast::Item::Variant(_)
             | ast::Item::Flags(_)
