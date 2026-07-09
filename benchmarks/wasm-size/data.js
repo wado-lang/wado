@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783546653382,
+  "lastUpdate": 1783561933555,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -38821,6 +38821,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/483a510fc4d580ee0cfc4b503a754dabaa21689b"
         },
         "date": 1783546652737,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8246,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15624,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 267452,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "18d456f0beca3d2b1a5e2acfb63aca93c58cbf2e",
+          "message": "Merge pull request #1535 from wado-lang/claude/benchmark-zlib-perf-0ulif9\n\nperf(optimizer): elide value copies whose target is reassigned more than once",
+          "timestamp": "2026-07-09T10:42:40+09:00",
+          "tree_id": "683ac1c0009668d6bf74aa3b211533b0201a74c8",
+          "url": "https://github.com/wado-lang/wado/commit/18d456f0beca3d2b1a5e2acfb63aca93c58cbf2e"
+        },
+        "date": 1783561933219,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
