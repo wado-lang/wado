@@ -10,21 +10,8 @@ use crate::tir::{TypeId, TypeTable};
 use crate::wir::{WirInstr, WirType, WirTypeId};
 
 use super::context::WirContext;
-use super::translate::FunctionTranslator;
+use super::translate::{FunctionTranslator, declare_and_set_local};
 use crate::nir_arena::{ArenaCallArg, Body, Operand};
-
-fn declare_and_set_local(name: String, ty: WirType, value: WirInstr) -> [WirInstr; 2] {
-    [
-        WirInstr::DeclareLocal {
-            name: name.clone(),
-            ty,
-        },
-        WirInstr::LocalSet {
-            name,
-            value: Box::new(value),
-        },
-    ]
-}
 
 /// The compile-time constant of a SIMD lane operand — a promoted
 /// `Operand::Value` int constant in the function's value pool.
@@ -1137,20 +1124,16 @@ impl FunctionTranslator<'_, '_> {
 
         // Build: declare temp, cast callee from abstract structref to canonical closure,
         // store, extract env + args + funcref, call_ref
-        let mut stmts = vec![
-            WirInstr::DeclareLocal {
-                name: temp_name.clone(),
-                ty: callee_ref_type.clone(),
+        let mut stmts = declare_and_set_local(
+            temp_name.clone(),
+            callee_ref_type.clone(),
+            WirInstr::RefCast {
+                type_id: closure_struct_type_id.clone(),
+                nullable: false,
+                expr: Box::new(callee_wir),
             },
-            WirInstr::LocalSet {
-                name: temp_name.clone(),
-                value: Box::new(WirInstr::RefCast {
-                    type_id: closure_struct_type_id.clone(),
-                    nullable: false,
-                    expr: Box::new(callee_wir),
-                }),
-            },
-        ];
+        )
+        .to_vec();
 
         // Build args: env, then user args
         let env_result_ty = self.struct_field_wir_type(&closure_struct_type_id, "env");

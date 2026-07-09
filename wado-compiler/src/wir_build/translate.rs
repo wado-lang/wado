@@ -14,6 +14,19 @@ use crate::wir::{CanonicalIntrinsic, WirInstr, WirName, WirType, WirTypeDef, Wir
 use super::context::WirContext;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 
+pub(super) fn declare_and_set_local(name: String, ty: WirType, value: WirInstr) -> [WirInstr; 2] {
+    [
+        WirInstr::DeclareLocal {
+            name: name.clone(),
+            ty,
+        },
+        WirInstr::LocalSet {
+            name,
+            value: Box::new(value),
+        },
+    ]
+}
+
 /// Recursively collect variable names from Let statements.
 ///
 /// These names are gathered eagerly from the statement tree and preferred
