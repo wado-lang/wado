@@ -2537,9 +2537,7 @@ impl<'a> WirEmitter<'a> {
                         let func_idx = self
                             .resolve_function_index_by_suffix(func_name)
                             .unwrap_or_else(|| {
-                                panic!(
-                                    "WirInstr::ArrayClone references unknown helper {func_name}"
-                                )
+                                panic!("WirInstr::ArrayClone references unknown helper {func_name}")
                             });
                         // Wasm GC `array.get` produces `(ref null T)`; the
                         // synthesized `$value_copy$T<id>` expects a
