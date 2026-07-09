@@ -772,10 +772,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     // Infer variant type: use GenericInstance for generic variants
                     let variant_type = if variant_info.type_params.is_empty() {
-                        self.tysys.type_table.borrow_mut().make_variant(
-                            variant_info.name.clone(),
-                            variant_info.module_source.clone(),
-                        )
+                        self.tysys
+                            .type_table
+                            .borrow()
+                            .type_id_of_decl(variant_info.defined_at)
                     } else {
                         self.infer_variant_type_args(
                             &prefix_owned,
@@ -808,10 +808,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 // If no matching case, check for From<T> synthesis requests
                 else if suffix == "from" && args.len() == 1 {
-                    let target_type_id = self.tysys.type_table.borrow_mut().make_variant(
-                        variant_info.name.clone(),
-                        variant_info.module_source.clone(),
-                    );
+                    let target_type_id = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .type_id_of_decl(variant_info.defined_at);
                     let from_type = args[0].type_id;
                     let from_type_name = self.tysys.type_table.borrow().type_name(from_type);
                     let from_trait_name = self
@@ -912,10 +913,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             }
                             let payload = args.into_iter().next().map(Box::new);
                             let variant_type = if variant_info.type_params.is_empty() {
-                                self.tysys.type_table.borrow_mut().make_variant(
-                                    variant_info.name.clone(),
-                                    variant_info.module_source.clone(),
-                                )
+                                self.tysys
+                                    .type_table
+                                    .borrow()
+                                    .type_id_of_decl(variant_info.defined_at)
                             } else {
                                 self.infer_variant_type_args(
                                     type_name,
@@ -2718,10 +2719,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .any(|&t| self.tysys.type_table.borrow().contains_type_param(t));
 
         if has_unresolved && self.annotate_ctx.trait_ctx.type_params.is_empty() {
-            return self.tysys.type_table.borrow_mut().make_variant(
-                variant_info.name.clone(),
-                variant_info.module_source.clone(),
-            );
+            return self
+                .tysys
+                .type_table
+                .borrow()
+                .type_id_of_decl(variant_info.defined_at);
         }
 
         self.tysys.type_table.borrow_mut().make_generic_instance(

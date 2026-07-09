@@ -15,6 +15,10 @@ pub(crate) struct StructFieldInfo {
     /// Canonical type name (original declaration name, not import alias).
     pub(super) name: String,
     pub(super) module_source: ModuleSource,
+    /// `AstId` of the `struct` declaration (`StructDecl::id`). The canonical
+    /// identity: `TypeTable::type_of_symbol(defined_at)` gives the `TypeId`
+    /// directly, without re-interning by `(name, module_source)`.
+    pub(super) defined_at: AstId,
     /// Field definitions: (name, `type_id`, visibility) triples
     pub(super) fields: Vec<(String, TypeId, crate::ast::Visibility)>,
     /// Parallel array to `fields` holding each field's defining `AstId`.
@@ -49,6 +53,8 @@ pub(crate) struct VariantInfo {
     /// Canonical type name (original declaration name, not import alias).
     pub(super) name: String,
     pub(super) module_source: ModuleSource,
+    /// `AstId` of the `variant` declaration (`VariantDecl::id`).
+    pub(super) defined_at: AstId,
     pub(super) type_params: Vec<String>,
     /// Per-case data. `pub(crate)` so the Semantics-based effect checker can
     /// follow resources nested in variant case payloads.
@@ -72,19 +78,30 @@ pub(super) struct EnumCaseData {
 #[derive(Clone)]
 pub(crate) struct EnumInfo {
     /// Canonical type name (original declaration name, not import alias).
+    /// Needed by the `resolve_type_static*` bootstrap path, which resolves
+    /// types before `collect_types` has registered `defined_at` with the
+    /// `TypeTable` and so cannot use it yet.
     pub(super) name: String,
     pub(super) module_source: ModuleSource,
+    /// `AstId` of the `enum` declaration (`EnumDecl::id`).
+    pub(super) defined_at: AstId,
     pub(super) cases: Vec<EnumCaseData>,
     /// O(1) lookup from case name to discriminant index
     pub(super) case_index: crate::hashmap::IndexMap<String, u32>,
 }
 
 impl EnumInfo {
-    pub(super) fn new(name: String, module_source: ModuleSource, cases: Vec<EnumCaseData>) -> Self {
+    pub(super) fn new(
+        name: String,
+        module_source: ModuleSource,
+        defined_at: AstId,
+        cases: Vec<EnumCaseData>,
+    ) -> Self {
         let case_index = cases.iter().map(|c| (c.name.clone(), c.index)).collect();
         Self {
             name,
             module_source,
+            defined_at,
             cases,
             case_index,
         }
@@ -122,6 +139,8 @@ pub(crate) struct ResourceInfo {
     /// Canonical type name (original declaration name, not import alias).
     pub(super) name: String,
     pub(super) module_source: ModuleSource,
+    /// `AstId` of the `resource` declaration (`ResourceDecl::id`).
+    pub(super) defined_at: AstId,
 }
 
 /// Generic newtype definition: `type Foo<T> = Bar<T>`

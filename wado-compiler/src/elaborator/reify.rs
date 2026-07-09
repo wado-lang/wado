@@ -8398,8 +8398,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     let enum_type = self
                         .tysys
                         .type_table
-                        .borrow_mut()
-                        .make_enum(enum_info.name.clone(), enum_info.module_source);
+                        .borrow()
+                        .type_id_of_decl(enum_info.defined_at);
                     return TirExpr::new(
                         TirExprKind::EnumConstruct {
                             enum_type,

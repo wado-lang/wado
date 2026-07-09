@@ -305,8 +305,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !info.type_param_type_ids.is_empty() {
             return None;
         }
-        let (n, src) = (info.name.clone(), info.module_source.clone());
-        Some(self.tysys.type_table.borrow_mut().make_struct(n, src))
+        Some(
+            self.tysys
+                .type_table
+                .borrow()
+                .type_id_of_decl(info.defined_at),
+        )
     }
 
     /// Find the module source for a struct by name.

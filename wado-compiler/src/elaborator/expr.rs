@@ -759,10 +759,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // Infer variant type for generic variants
                 let variant_type = if variant_info.type_params.is_empty() {
-                    self.tysys.type_table.borrow_mut().make_variant(
-                        variant_info.name.clone(),
-                        variant_info.module_source.clone(),
-                    )
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .type_id_of_decl(variant_info.defined_at)
                 } else {
                     self.infer_variant_type_args(
                         prefix,
@@ -797,12 +797,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(case_data) = enum_info.find_case(suffix).cloned()
         {
             self.record_qualified_case(ident, prefix, case_data.ast_id);
-            // Use canonical name (not import alias) for consistent TypeId interning
             let enum_type = self
                 .tysys
                 .type_table
-                .borrow_mut()
-                .make_enum(enum_info.name.clone(), enum_info.module_source);
+                .borrow()
+                .type_id_of_decl(enum_info.defined_at);
 
             // Stage 7-B: reify rebuilds the `EnumConstruct`. Not an l-value.
             return Some(enum_type);
@@ -3584,11 +3583,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
             (struct_type, mangled_name, fields)
         } else {
-            let struct_type = self
-                .tysys
-                .type_table
-                .borrow_mut()
-                .make_struct(struct_name.clone(), struct_module_source);
+            let defined_at = self
+                .lookup_struct_fields_in(&struct_name, &struct_module_source)
+                .map(|info| info.defined_at);
+            let struct_type = match defined_at {
+                Some(defined_at) => self.tysys.type_table.borrow().type_id_of_decl(defined_at),
+                None => self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_struct(struct_name.clone(), struct_module_source),
+            };
             (struct_type, struct_name, fields)
         };
 
@@ -3865,6 +3870,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let field_info = super::types::StructFieldInfo {
             name: anon_name.clone(),
             module_source,
+            // Anonymous struct literals have no `StructDecl`; the literal
+            // expression's own `AstId` is the closest thing to a declaration
+            // site and is unique per literal, which is what matters here.
+            defined_at: struct_lit.id,
             fields: effective_fields
                 .iter()
                 .map(|(fname, fty)| (fname.clone(), *fty, crate::ast::Visibility::Public))

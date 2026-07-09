@@ -301,24 +301,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some(type_id) = self.lookup_newtype(name) {
                     type_id
                 } else if let Some(struct_info) = self.lookup_struct_fields(name) {
-                    // Use canonical name (not import alias) so interning produces the same TypeId
-                    let (n, src) = (struct_info.name.clone(), struct_info.module_source.clone());
-                    self.tysys.type_table.borrow_mut().make_struct(n, src)
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .type_id_of_decl(struct_info.defined_at)
                 } else if let Some(variant_info) = self.lookup_variant_case(name) {
-                    let (n, src) = (
-                        variant_info.name.clone(),
-                        variant_info.module_source.clone(),
-                    );
-                    self.tysys.type_table.borrow_mut().make_variant(n, src)
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .type_id_of_decl(variant_info.defined_at)
                 } else if let Some(enum_info) = self.lookup_enum_case(name) {
-                    let (n, src) = (enum_info.name.clone(), enum_info.module_source.clone());
-                    self.tysys.type_table.borrow_mut().make_enum(n, src)
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .type_id_of_decl(enum_info.defined_at)
                 } else if let Some(resource_info) = self.lookup_resource_type(name) {
-                    let (n, src) = (
-                        resource_info.name.clone(),
-                        resource_info.module_source.clone(),
-                    );
-                    self.tysys.type_table.borrow_mut().make_resource(n, src)
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .type_id_of_decl(resource_info.defined_at)
                 } else if let Some(scope_mod) = self.default_scope_module.clone()
                     && scope_mod != self.current_module_source
                 {

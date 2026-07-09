@@ -241,6 +241,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 StructFieldInfo {
                                     name: struct_decl.name.clone(),
                                     module_source: module_source.clone(),
+                                    defined_at: struct_decl.id,
                                     fields: Vec::new(),
                                     field_ast_ids: Vec::new(),
                                     field_defaults: Vec::new(),
@@ -272,6 +273,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 VariantInfo {
                                     name: variant_decl.name.clone(),
                                     module_source: module_source.clone(),
+                                    defined_at: variant_decl.id,
                                     type_params,
                                     cases: Vec::new(),
                                     type_param_type_ids: Vec::new(),
@@ -308,6 +310,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 EnumInfo::new(
                                     enum_decl.name.clone(),
                                     module_source.clone(),
+                                    enum_decl.id,
                                     Vec::new(),
                                 ),
                             );
@@ -341,6 +344,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 ResourceInfo {
                                     name: resource_decl.name.clone(),
                                     module_source: module_source.clone(),
+                                    defined_at: resource_decl.id,
                                 },
                             );
                     }
@@ -457,6 +461,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             module_source.clone(),
                             base_type_id,
                         );
+                        type_table
+                            .borrow_mut()
+                            .register_decl_type(newtype_decl.id, newtype_id);
                         all_newtypes
                             .entry(module_source.clone())
                             .or_default()
@@ -607,6 +614,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         let info = StructFieldInfo {
                             name: struct_decl.name.clone(),
                             module_source: module_source.clone(),
+                            defined_at: struct_decl.id,
                             fields,
                             field_ast_ids,
                             field_defaults,
@@ -631,6 +639,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 module_source.clone(),
                                 base_type_id,
                             );
+                            type_table
+                                .borrow_mut()
+                                .register_decl_type(newtype_decl.id, newtype_id);
                             all_newtypes
                                 .entry(module_source.clone())
                                 .or_default()
@@ -700,6 +711,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 VariantInfo {
                                     name: variant_decl.name.clone(),
                                     module_source: module_source.clone(),
+                                    defined_at: variant_decl.id,
                                     type_params,
                                     cases,
                                     type_param_type_ids,
@@ -723,7 +735,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .or_default()
                             .insert(
                                 enum_decl.name.clone(),
-                                EnumInfo::new(enum_decl.name.clone(), module_source.clone(), cases),
+                                EnumInfo::new(
+                                    enum_decl.name.clone(),
+                                    module_source.clone(),
+                                    enum_decl.id,
+                                    cases,
+                                ),
                             );
                     }
                     Item::Flags(flags_decl) => {
@@ -731,6 +748,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         let flags_type = type_table
                             .borrow_mut()
                             .make_flags(flags_decl.name.clone(), module_source.clone());
+                        type_table
+                            .borrow_mut()
+                            .register_decl_type(flags_decl.id, flags_type);
                         // Add to newtypes so it can be used as a type name in signatures
                         all_newtypes
                             .entry(module_source.clone())
@@ -1510,13 +1530,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .and_then(|m| m.get(&struct_decl.name))
                             .map(|info| (info.name.clone(), info.module_source.clone()))
                             .unwrap_or_else(|| (struct_decl.name.clone(), module_source.clone()));
-                        tt.make_struct(name, ms);
+                        let type_id = tt.make_struct(name, ms);
+                        tt.register_decl_type(struct_decl.id, type_id);
                     }
                     Item::Enum(enum_decl) => {
-                        tt.make_enum(enum_decl.name.clone(), module_source.clone());
+                        let type_id = tt.make_enum(enum_decl.name.clone(), module_source.clone());
+                        tt.register_decl_type(enum_decl.id, type_id);
                     }
                     Item::Variant(variant_decl) => {
-                        tt.make_variant(variant_decl.name.clone(), module_source.clone());
+                        let type_id =
+                            tt.make_variant(variant_decl.name.clone(), module_source.clone());
+                        tt.register_decl_type(variant_decl.id, type_id);
                     }
                     Item::Resource(resource_decl) => {
                         let (name, ms) = all_resource_types
@@ -1524,7 +1548,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .and_then(|m| m.get(&resource_decl.name))
                             .map(|info| (info.name.clone(), info.module_source.clone()))
                             .unwrap_or_else(|| (resource_decl.name.clone(), module_source.clone()));
-                        tt.make_resource(name, ms);
+                        let type_id = tt.make_resource(name, ms);
+                        tt.register_decl_type(resource_decl.id, type_id);
                     }
                     _ => {}
                 }
@@ -2931,6 +2956,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     "f64" => TypeTable::F64,
                     "()" => TypeTable::UNIT,
                     "!" => TypeTable::NEVER,
+                    // `resolve_type_static[_with_params]` runs before the
+                    // elaborator instance exists — including the newtype
+                    // pre-pass (`annotate_modules`), which resolves newtype
+                    // base types *before* `intern_all_decl_types` mints and
+                    // registers struct/variant/enum/resource `TypeId`s. So,
+                    // unlike the elaborator-instance-method reference sites
+                    // (which only ever run after `collect_types`), this one
+                    // cannot assume `register_decl_type` has already run and
+                    // must keep the self-sufficient name-based path.
                     _ => {
                         if let Some(info) = lookup.struct_fields(&named.name) {
                             type_table.make_struct(info.name.clone(), info.module_source.clone())
