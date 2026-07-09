@@ -1,5 +1,7 @@
 #![stdlib("core:collections")]
-//! Collection types: `TreeMap<K, V>` and `TreeSet<T>` (insertion-order preserved).
+//! Collection types: `TreeMap<K, V>` and `TreeSet<T>`, both iterating in
+//! insertion order. `TreeMap` has no `insert` method — write `map[key] = value`
+//! or build one from a `{ key: value, ... }` literal. `TreeSet` has `insert`.
 
 
 use {
@@ -15,10 +17,12 @@ use {
 
 #[synopsis]
 test {
-    let sizes = { small: 1, medium: 2, large: 3 } as TreeMap<String, i32>;
+    let mut sizes = { small: 1, medium: 2, large: 3 } as TreeMap<String, i32>;
     assert sizes.len() == 3;
     assert sizes["medium"] == 2;
     assert sizes.get("small") matches { Some(v) && v == 1 };
+    sizes["xlarge"] = 4;
+    assert sizes.len() == 4;
 
     let primes = [7, 2, 5, 2, 3] as TreeSet<i32>;
     assert primes.len() == 4;
@@ -26,9 +30,6 @@ test {
     assert !primes.contains(4);
 }
 
-// Collections module for Wado.
-//
-// This module provides collection types beyond the built-in List.//
 // TreeMap uses a two-part data structure inspired by Rust's indexmap crate:
 // 1. A self-balancing binary search tree (AA tree) for O(log n) key lookups
 // 2. A dense array (entries) for O(1) insertion-order iteration
@@ -39,7 +40,7 @@ test {
 // data structure value-semantic: a single Wado `let b = a;` produces a
 // fully independent copy via the synthesized `$value_copy$TreeMap` —
 // every shared `&mut` would be aliased on copy, which would break the
-// `b.insert(...)` ⇏ `a.contains(...)` invariant. Index-based pointers
+// `b[key] = ...` ⇏ `a.contains_key(key)` invariant. Index-based pointers
 // also have no rotation-time aliasing concerns: every `self.nodes[i]`
 // access goes through the same array and Wado has no borrow checker
 // to refuse two concurrent mutable handles to it.

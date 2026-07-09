@@ -3,9 +3,7 @@
 
 # core:simd
 
-# SIMD v128 Types
-
-This module provides type-safe wrappers over the WebAssembly 128-bit SIMD instruction set.
+Type-safe wrappers over the WebAssembly 128-bit SIMD instruction set.
 All types are newtypes of the primitive `v128` and can be freely reinterpreted via `as` cast.
 
 ## Types

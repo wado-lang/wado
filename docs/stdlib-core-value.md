@@ -22,6 +22,10 @@ be conflated.
 ```wado
 assert to_value(&[1, 2, 3]) matches { Ok(List(items)) && items.len() == 3 };
 assert to_value(&"wado") matches { Ok(String(s)) && s == "wado" };
+
+let v: Value = from_bytes("{\"x\":1,\"y\":[true,null]}").unwrap();
+assert v matches { Object(fields) && fields.len() == 2 };
+assert to_bytes::<Value>(&v) matches { Ok(bytes) && bytes.len() > 0 };
 ```
 
 ## Functions

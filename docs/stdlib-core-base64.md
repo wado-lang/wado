@@ -3,7 +3,10 @@
 
 # core:base64
 
-Base64 encoding and decoding (RFC 4648).
+Base64 encoding and decoding (RFC 4648): standard and URL-safe alphabets,
+configurable padding via `Encoding` flags, and lenient decoding that
+accepts either alphabet with or without padding. Entry points accept any
+`AsByteSlice` source (`ByteList`, `ByteArray`, `ByteSlice`, `List<u8>`, `String`).
 
 ## Synopsis
 
