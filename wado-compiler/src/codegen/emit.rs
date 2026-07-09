@@ -2462,26 +2462,18 @@ impl<'a> WirEmitter<'a> {
                 src,
                 element_copy_func,
             } => {
-                // Allocate a fresh array the same length as `src` and copy
-                // every element with a JIT-compiled loop. This was the
-                // per-array-field code path inside the former
+                // Allocate a fresh array the same length as `src`. This was
+                // the per-array-field code path inside the former
                 // `emit_value_copy` for raw `Array<T>` fields and is
                 // now reachable only via the synthesized `$value_copy$`
                 // helpers' explicit `builtin::array_clone::<T>(...)` calls.
-                //
-                // When `element_copy_func` is set the loop additionally
-                // calls the named `$value_copy$T<id>` helper between
-                // `array.get` and `array.set` so each destination element
-                // is a fresh struct, not an aliased ref into the source.
                 let arr_wasm_idx = self.resolve_type_index(type_id.index());
                 let src_name = format!("__copy_arr_src_{}", type_id.index());
                 let dst_name = format!("__copy_arr_dst_{}", type_id.index());
                 let len_name = format!("__copy_arr_len_{}", type_id.index());
-                let loop_idx_name = format!("__copy_arr_i_{}", type_id.index());
                 let src_local = self.resolve_local(&src_name);
                 let dst_local = self.resolve_local(&dst_name);
                 let len_local = self.resolve_local(&len_name);
-                let loop_idx_local = self.resolve_local(&loop_idx_name);
                 self.emit_instr(f, src);
                 f.instruction(&Instruction::LocalSet(src_local));
                 f.instruction(&Instruction::LocalGet(src_local));
@@ -2490,69 +2482,100 @@ impl<'a> WirEmitter<'a> {
                 f.instruction(&Instruction::LocalGet(len_local));
                 f.instruction(&Instruction::ArrayNewDefault(arr_wasm_idx));
                 f.instruction(&Instruction::LocalSet(dst_local));
-                f.instruction(&Instruction::I32Const(0));
-                f.instruction(&Instruction::LocalSet(loop_idx_local));
-                f.instruction(&Instruction::Block(BlockType::Empty));
-                f.instruction(&Instruction::Loop(BlockType::Empty));
-                f.instruction(&Instruction::LocalGet(loop_idx_local));
-                f.instruction(&Instruction::LocalGet(len_local));
-                f.instruction(&Instruction::I32GeS);
-                f.instruction(&Instruction::BrIf(1));
-                f.instruction(&Instruction::LocalGet(dst_local));
-                f.instruction(&Instruction::LocalGet(loop_idx_local));
-                f.instruction(&Instruction::LocalGet(src_local));
-                f.instruction(&Instruction::LocalGet(loop_idx_local));
-                match self.is_array_packed(type_id.index()) {
-                    Some(true) => {
-                        f.instruction(&Instruction::ArrayGetS(arr_wasm_idx));
+
+                if element_copy_func.is_none() && self.codegen_flags.array_copy {
+                    // No per-element helper to run, so every slot is a plain
+                    // ref/value copy — the same shape `WirInstr::ArrayCopy`
+                    // bulk-transfers via the native `array.copy` instruction
+                    // instead of a `array.get`/`array.set` loop. This is the
+                    // common case (`String`'s `Array<u8>`, `List<T>` for a
+                    // primitive `T`, ...), so cloning a collection-backed
+                    // value no longer costs one interpreted iteration per
+                    // element.
+                    f.instruction(&Instruction::LocalGet(dst_local));
+                    f.instruction(&Instruction::I32Const(0));
+                    f.instruction(&Instruction::LocalGet(src_local));
+                    f.instruction(&Instruction::I32Const(0));
+                    f.instruction(&Instruction::LocalGet(len_local));
+                    f.instruction(&Instruction::ArrayCopy {
+                        array_type_index_dst: arr_wasm_idx,
+                        array_type_index_src: arr_wasm_idx,
+                    });
+                    f.instruction(&Instruction::LocalGet(dst_local));
+                } else {
+                    // A value-typed element (`element_copy_func` set) needs a
+                    // per-element helper call between `array.get` and
+                    // `array.set`, which `array.copy` cannot express; fall
+                    // back to the JIT-compiled loop (also used when
+                    // `-f no-array-copy` disables the native instruction).
+                    let loop_idx_name = format!("__copy_arr_i_{}", type_id.index());
+                    let loop_idx_local = self.resolve_local(&loop_idx_name);
+                    f.instruction(&Instruction::I32Const(0));
+                    f.instruction(&Instruction::LocalSet(loop_idx_local));
+                    f.instruction(&Instruction::Block(BlockType::Empty));
+                    f.instruction(&Instruction::Loop(BlockType::Empty));
+                    f.instruction(&Instruction::LocalGet(loop_idx_local));
+                    f.instruction(&Instruction::LocalGet(len_local));
+                    f.instruction(&Instruction::I32GeS);
+                    f.instruction(&Instruction::BrIf(1));
+                    f.instruction(&Instruction::LocalGet(dst_local));
+                    f.instruction(&Instruction::LocalGet(loop_idx_local));
+                    f.instruction(&Instruction::LocalGet(src_local));
+                    f.instruction(&Instruction::LocalGet(loop_idx_local));
+                    match self.is_array_packed(type_id.index()) {
+                        Some(true) => {
+                            f.instruction(&Instruction::ArrayGetS(arr_wasm_idx));
+                        }
+                        Some(false) => {
+                            f.instruction(&Instruction::ArrayGetU(arr_wasm_idx));
+                        }
+                        None => {
+                            f.instruction(&Instruction::ArrayGet(arr_wasm_idx));
+                        }
                     }
-                    Some(false) => {
-                        f.instruction(&Instruction::ArrayGetU(arr_wasm_idx));
+                    if let Some(func_name) = element_copy_func {
+                        let func_idx = self
+                            .resolve_function_index_by_suffix(func_name)
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "WirInstr::ArrayClone references unknown helper {func_name}"
+                                )
+                            });
+                        // Wasm GC `array.get` produces `(ref null T)`; the
+                        // synthesized `$value_copy$T<id>` expects a
+                        // non-null `(ref T)`. `List<T>::repr` is sized to
+                        // capacity (≥ `used`), so the slots beyond `used`
+                        // hold `array.new_default`'s null. Branch on
+                        // null and short-circuit those slots — preserving
+                        // the null in the destination — instead of
+                        // unconditionally `ref.as_non_null` which would
+                        // trap on every empty trailing slot.
+                        let elem_name = format!("__copy_arr_elem_{}", type_id.index());
+                        let elem_local = self.resolve_local(&elem_name);
+                        let elem_val = self
+                            .array_element_val_type(type_id.index())
+                            .expect("array element val type known when element_copy_func is set");
+                        f.instruction(&Instruction::LocalSet(elem_local));
+                        f.instruction(&Instruction::LocalGet(elem_local));
+                        f.instruction(&Instruction::RefIsNull);
+                        f.instruction(&Instruction::If(BlockType::Result(elem_val)));
+                        f.instruction(&Instruction::LocalGet(elem_local));
+                        f.instruction(&Instruction::Else);
+                        f.instruction(&Instruction::LocalGet(elem_local));
+                        f.instruction(&Instruction::RefAsNonNull);
+                        f.instruction(&Instruction::Call(func_idx));
+                        f.instruction(&Instruction::End);
                     }
-                    None => {
-                        f.instruction(&Instruction::ArrayGet(arr_wasm_idx));
-                    }
-                }
-                if let Some(func_name) = element_copy_func {
-                    let func_idx = self
-                        .resolve_function_index_by_suffix(func_name)
-                        .unwrap_or_else(|| {
-                            panic!("WirInstr::ArrayClone references unknown helper {func_name}")
-                        });
-                    // Wasm GC `array.get` produces `(ref null T)`; the
-                    // synthesized `$value_copy$T<id>` expects a
-                    // non-null `(ref T)`. `List<T>::repr` is sized to
-                    // capacity (≥ `used`), so the slots beyond `used`
-                    // hold `array.new_default`'s null. Branch on
-                    // null and short-circuit those slots — preserving
-                    // the null in the destination — instead of
-                    // unconditionally `ref.as_non_null` which would
-                    // trap on every empty trailing slot.
-                    let elem_name = format!("__copy_arr_elem_{}", type_id.index());
-                    let elem_local = self.resolve_local(&elem_name);
-                    let elem_val = self
-                        .array_element_val_type(type_id.index())
-                        .expect("array element val type known when element_copy_func is set");
-                    f.instruction(&Instruction::LocalSet(elem_local));
-                    f.instruction(&Instruction::LocalGet(elem_local));
-                    f.instruction(&Instruction::RefIsNull);
-                    f.instruction(&Instruction::If(BlockType::Result(elem_val)));
-                    f.instruction(&Instruction::LocalGet(elem_local));
-                    f.instruction(&Instruction::Else);
-                    f.instruction(&Instruction::LocalGet(elem_local));
-                    f.instruction(&Instruction::RefAsNonNull);
-                    f.instruction(&Instruction::Call(func_idx));
+                    f.instruction(&Instruction::ArraySet(arr_wasm_idx));
+                    f.instruction(&Instruction::LocalGet(loop_idx_local));
+                    f.instruction(&Instruction::I32Const(1));
+                    f.instruction(&Instruction::I32Add);
+                    f.instruction(&Instruction::LocalSet(loop_idx_local));
+                    f.instruction(&Instruction::Br(0));
                     f.instruction(&Instruction::End);
+                    f.instruction(&Instruction::End);
+                    f.instruction(&Instruction::LocalGet(dst_local));
                 }
-                f.instruction(&Instruction::ArraySet(arr_wasm_idx));
-                f.instruction(&Instruction::LocalGet(loop_idx_local));
-                f.instruction(&Instruction::I32Const(1));
-                f.instruction(&Instruction::I32Add);
-                f.instruction(&Instruction::LocalSet(loop_idx_local));
-                f.instruction(&Instruction::Br(0));
-                f.instruction(&Instruction::End);
-                f.instruction(&Instruction::End);
-                f.instruction(&Instruction::LocalGet(dst_local));
             }
 
             // GC: Reference (casts, i31, extern)
@@ -3040,8 +3063,8 @@ mod tests {
     use super::emit_core_module;
     use crate::hashmap::{IndexMap, IndexSet};
     use crate::wir::{
-        WirComponent, WirField, WirGlobal, WirInstr, WirMeta, WirName, WirNames, WirPackage,
-        WirStructType, WirType, WirTypeDef, WirTypeId,
+        WirArrayType, WirComponent, WirField, WirFuncType, WirFunction, WirGlobal, WirInstr,
+        WirMeta, WirName, WirNames, WirPackage, WirStructType, WirType, WirTypeDef, WirTypeId,
     };
     use std::rc::Rc;
 
@@ -3125,5 +3148,106 @@ mod tests {
 
         let bytes = emit_core_module(&pkg, false, crate::codegen_flags::CodegenFlags::default());
         validate(&bytes).expect("const struct global init should validate as Wasm");
+    }
+
+    /// A minimal package with one function: clone a `(ref array)` parameter
+    /// via `WirInstr::ArrayClone` with no per-element copy helper (the shape
+    /// every `$value_copy$T` helper emits for a primitive-element `Array<T>`
+    /// field, e.g. `String`'s `Array<u8>` `repr`).
+    fn array_clone_package() -> WirPackage {
+        let array_tid = WirTypeId::new(0, Rc::from("test//IntArray"));
+        let array_ty = WirArrayType {
+            name: WirName {
+                fq: "test//IntArray".to_string(),
+            },
+            element_type: WirType::I32,
+            mutable: true,
+            meta: WirMeta::default(),
+            generic_origin: None,
+        };
+        let ref_ty = WirType::Ref {
+            type_id: array_tid.clone(),
+            nullable: false,
+        };
+        let func_tid = WirTypeId::new(1, Rc::from("test//clone_fn"));
+        let func_ty = WirFuncType {
+            name: WirName {
+                fq: "test//clone_fn".to_string(),
+            },
+            params: vec![ref_ty.clone()],
+            results: vec![ref_ty.clone()],
+        };
+        let func = WirFunction {
+            name: WirName {
+                fq: "test//clone_fn".to_string(),
+            },
+            type_id: func_tid,
+            param_names: vec!["src_param".to_string()],
+            body: Some(vec![WirInstr::Return {
+                value: Some(Box::new(WirInstr::ArrayClone {
+                    type_id: array_tid,
+                    src: Box::new(WirInstr::LocalGet {
+                        name: "src_param".to_string(),
+                        result_ty: ref_ty,
+                    }),
+                    element_copy_func: None,
+                })),
+            }]),
+            meta: WirMeta::default(),
+            generic_origin: None,
+            effects: Vec::new(),
+            stores: Vec::new(),
+            compiler_item: None,
+            export_name: None,
+        };
+
+        let mut pkg = empty_package();
+        pkg.types.push(WirTypeDef::Array(array_ty));
+        pkg.types.push(WirTypeDef::Func(func_ty));
+        pkg.functions.push(func);
+        pkg
+    }
+
+    /// `WirInstr::ArrayClone` of a primitive-element array must lower to a
+    /// single native `array.copy`, not a per-element `array.get`/`array.set`
+    /// loop: every `$value_copy$T` helper for a struct with an `Array<T>`
+    /// field (`String`, `List<T>` for a primitive `T`, ...) previously paid
+    /// one interpreted loop iteration per element on every deep copy.
+    #[test]
+    fn array_clone_primitive_elements_uses_native_array_copy() {
+        let pkg = array_clone_package();
+        let bytes = emit_core_module(&pkg, false, crate::codegen_flags::CodegenFlags::default());
+        validate(&bytes).expect("ArrayClone of a primitive array should validate as Wasm");
+
+        let text = wasmprinter::print_bytes(&bytes).expect("module should disassemble");
+        assert!(
+            text.contains("array.copy"),
+            "expected a native array.copy:\n{text}"
+        );
+        assert!(
+            !text.contains("loop"),
+            "should not fall back to a per-element loop:\n{text}"
+        );
+    }
+
+    /// `-f no-array-copy` must still fall back to the per-element loop for an
+    /// `ArrayClone`, matching `ArrayCopy`'s existing flag behavior.
+    #[test]
+    fn array_clone_falls_back_to_loop_without_native_array_copy() {
+        let pkg = array_clone_package();
+        let mut flags = crate::codegen_flags::CodegenFlags::default();
+        flags.array_copy = false;
+        let bytes = emit_core_module(&pkg, false, flags);
+        validate(&bytes).expect("ArrayClone loop fallback should validate as Wasm");
+
+        let text = wasmprinter::print_bytes(&bytes).expect("module should disassemble");
+        assert!(
+            text.contains("loop"),
+            "expected the per-element loop fallback:\n{text}"
+        );
+        assert!(
+            !text.contains("array.copy"),
+            "should not use the native instruction under -f no-array-copy:\n{text}"
+        );
     }
 }
