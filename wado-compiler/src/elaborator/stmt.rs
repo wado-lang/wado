@@ -168,18 +168,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// (unlike struct literals) does not go through `recorded_type` — a
     /// follow-up. A reference to one of these local kinds still surfaces the
     /// ordinary "unknown type"/"unknown function" error.
+    ///
+    /// `item.visibility()` is always `Private` here: the parser rejects a
+    /// `pub`/`internal`/`export` prefix before a local item with a dedicated
+    /// error (`at_visibility_prefixed_local_item_start`) rather than
+    /// producing a non-private `Item` for this to reject a second time.
     fn resolve_local_item(&mut self, item: &ast::Item) {
-        if let Some(vis) = item.visibility()
-            && vis != ast::Visibility::Private
-        {
-            let _ = self.logger.error(TypeError::InvalidLiteral {
-                message: "a local item declaration cannot be `pub` or `internal`; \
-                          it is always private to its enclosing function"
-                    .to_string(),
-                span: item.span(),
-            });
-        }
-
         match item {
             ast::Item::Struct(struct_decl) => self.resolve_local_struct(struct_decl),
             ast::Item::Newtype(newtype_decl) => self.resolve_local_newtype(newtype_decl),
@@ -240,7 +234,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_params
             .iter()
             .enumerate()
-            .map(|(i, p)| scope.tysys.type_table.borrow_mut().make_type_param(p.name.clone(), i as u32))
+            .map(|(i, p)| {
+                scope
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_type_param(p.name.clone(), i as u32)
+            })
             .collect();
         let tir_type_params: Vec<crate::tir::TirTypeParam> = struct_decl
             .type_params

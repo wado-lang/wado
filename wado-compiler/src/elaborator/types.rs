@@ -1547,9 +1547,9 @@ impl<'a> TypeLookup<'a> {
     }
 
     pub(super) fn struct_fields(&self, name: &str) -> Option<&'a StructFieldInfo> {
-        self.fn_local_struct_fields
-            .get(name)
-            .or_else(|| self.lookup_ref(name, Some(self.local_struct_fields), self.all_struct_fields))
+        self.fn_local_struct_fields.get(name).or_else(|| {
+            self.lookup_ref(name, Some(self.local_struct_fields), self.all_struct_fields)
+        })
     }
 
     pub(super) fn struct_fields_in(
@@ -1572,9 +1572,9 @@ impl<'a> TypeLookup<'a> {
     }
 
     pub(super) fn variant_case(&self, name: &str) -> Option<&'a VariantInfo> {
-        self.fn_local_variant_cases
-            .get(name)
-            .or_else(|| self.lookup_ref(name, Some(self.local_variant_cases), self.all_variant_cases))
+        self.fn_local_variant_cases.get(name).or_else(|| {
+            self.lookup_ref(name, Some(self.local_variant_cases), self.all_variant_cases)
+        })
     }
 
     pub(super) fn variant_case_in(
