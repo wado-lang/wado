@@ -1060,9 +1060,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     effective_name.to_string(),
                 )
             }
-            // Effect operations and module namespace calls - pass through to codegen.
-            // This covers Stdout::write(), etc.
-            else {
+            // Effect operations - pass through to codegen. This covers
+            // `Stdout::write()`, etc. Effects/resources have no static-method
+            // registration to check against above, so validate `prefix`
+            // against the declared effect/resource indices directly; a
+            // `prefix` that names neither leaves `callee_opt` `None` so the
+            // caller falls through to the standard "unknown function" error
+            // instead of deferring an unvalidated call to codegen, where it
+            // would panic instead of failing cleanly.
+            else if {
+                let key = self.canonical_decl_key(prefix);
+                self.tysys.trait_env.effect_decl_index.contains_key(&key)
+                    || self.tysys.trait_env.resource_decl_index.contains_key(&key)
+            } {
                 (
                     Some(CalleeRef::local_namespace(
                         &mut self.interner.borrow_mut(),
@@ -1071,6 +1081,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     )),
                     effective_name.to_string(),
                 )
+            } else {
+                (None, effective_name.to_string())
             }
         }
         // Check if it's a local function (defined in this module) or

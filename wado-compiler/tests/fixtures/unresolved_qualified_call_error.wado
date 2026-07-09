@@ -1,0 +1,15 @@
+// A qualified call `Prefix::name(...)` where `Prefix` names neither a known
+// type/static-method nor a declared effect/resource used to skip the
+// "unknown function" check: `resolve_call`'s catch-all fallback assumed any
+// unrecognised `Prefix::name` was a deferred effect operation (like
+// `Stdout::write()`) and passed it through unvalidated. It then reached WIR
+// build, which panics on a `Call` it cannot resolve to any real callee.
+// `Prefix` must now be checked against the effect/resource decl indices
+// before taking that path.
+
+export fn run() {
+    let x = NotAThing::Circle(1);
+}
+
+__DATA__
+{"compile_error": "unknown function 'NotAThing::Circle'"}
