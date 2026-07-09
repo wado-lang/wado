@@ -7,7 +7,7 @@
 
 use crate::module_source::ModuleSource;
 use crate::tir::{TypeId, TypeTable};
-use crate::wir::{WirInstr, WirType};
+use crate::wir::{WirInstr, WirType, WirTypeId};
 
 use super::context::WirContext;
 use super::translate::FunctionTranslator;
@@ -178,6 +178,83 @@ impl FunctionTranslator<'_, '_> {
             return None;
         }
         Some(format!("$value_copy$T{}", elem.0))
+    }
+
+    /// Build `{ let src = <src>; let len = src.len(); let dst = array.new_default(len); array.copy(dst, 0, src, 0, len); dst }`
+    /// for cloning an `Array<T>` whose slots need no per-element helper — a
+    /// plain ref/value copy suffices for every slot, whether `T` is a
+    /// primitive (`array_clone`'s ordinary case) or a value-typed struct
+    /// being deliberately shallow-copied (`array_clone_shallow`). Composed
+    /// from generic WIR primitives so the choice of native `array.copy` vs. a
+    /// loop stays `ArrayCopy`'s codegen call alone (see `-f no-array-copy`),
+    /// rather than a second copy of that decision inside `ArrayClone`'s.
+    fn build_bulk_array_clone(&mut self, type_id: WirTypeId, src: WirInstr) -> WirInstr {
+        self.local_counter += 1;
+        let id = self.local_counter;
+        let src_name = format!("__array_clone_src_{id}");
+        let dst_name = format!("__array_clone_dst_{id}");
+        let len_name = format!("__array_clone_len_{id}");
+        let ref_ty = WirType::Ref {
+            type_id: type_id.clone(),
+            nullable: false,
+        };
+        WirInstr::Seq(vec![
+            WirInstr::DeclareLocal {
+                name: src_name.clone(),
+                ty: ref_ty.clone(),
+            },
+            WirInstr::LocalSet {
+                name: src_name.clone(),
+                value: Box::new(src),
+            },
+            WirInstr::DeclareLocal {
+                name: len_name.clone(),
+                ty: WirType::I32,
+            },
+            WirInstr::LocalSet {
+                name: len_name.clone(),
+                value: Box::new(WirInstr::ArrayLen(Box::new(WirInstr::LocalGet {
+                    name: src_name.clone(),
+                    result_ty: ref_ty.clone(),
+                }))),
+            },
+            WirInstr::DeclareLocal {
+                name: dst_name.clone(),
+                ty: ref_ty.clone(),
+            },
+            WirInstr::LocalSet {
+                name: dst_name.clone(),
+                value: Box::new(WirInstr::ArrayNewDefault {
+                    type_id: type_id.clone(),
+                    len: Box::new(WirInstr::LocalGet {
+                        name: len_name.clone(),
+                        result_ty: WirType::I32,
+                    }),
+                }),
+            },
+            WirInstr::ArrayCopy {
+                dest_type_id: type_id.clone(),
+                src_type_id: type_id,
+                dest: Box::new(WirInstr::LocalGet {
+                    name: dst_name.clone(),
+                    result_ty: ref_ty.clone(),
+                }),
+                dest_offset: Box::new(WirInstr::I32Const(0)),
+                src: Box::new(WirInstr::LocalGet {
+                    name: src_name,
+                    result_ty: ref_ty.clone(),
+                }),
+                src_offset: Box::new(WirInstr::I32Const(0)),
+                len: Box::new(WirInstr::LocalGet {
+                    name: len_name,
+                    result_ty: WirType::I32,
+                }),
+            },
+            WirInstr::LocalGet {
+                name: dst_name,
+                result_ty: ref_ty,
+            },
+        ])
     }
 
     ///
@@ -456,11 +533,20 @@ impl FunctionTranslator<'_, '_> {
                 if let WirType::Ref { type_id, .. } = wir_type {
                     let element_copy_func =
                         self.array_element_copy_func(self.operand_type_id(src_expr));
-                    Some(WirInstr::ArrayClone {
-                        type_id,
-                        src: Box::new(src),
-                        element_copy_func,
-                    })
+                    match element_copy_func {
+                        Some(element_copy_func) => Some(WirInstr::ArrayClone {
+                            type_id,
+                            src: Box::new(src),
+                            element_copy_func: Some(element_copy_func),
+                        }),
+                        // No per-element helper to run: every slot is a
+                        // plain ref/value copy, so a fresh array plus a bulk
+                        // `ArrayCopy` is equivalent and reuses that
+                        // instruction's existing native-`array.copy`-by-
+                        // default codegen instead of `ArrayClone`'s
+                        // element-wise loop.
+                        None => Some(self.build_bulk_array_clone(type_id, src)),
+                    }
                 } else {
                     None
                 }
@@ -468,7 +554,10 @@ impl FunctionTranslator<'_, '_> {
             // Spine-only array clone: copies the `repr` slots without the
             // per-element deep copy `array_clone` would emit for value-typed
             // elements. Emitted only by `value_copy_demote`, which proves the
-            // shared elements are never mutated through either alias.
+            // shared elements are never mutated through either alias. A raw
+            // bulk copy of the slots is exactly that, whatever the element
+            // type, so this always takes the same `ArrayCopy`-based lowering
+            // as the primitive-element case above.
             "builtin::array_clone_shallow" => {
                 let src_expr = args[0].expr;
                 let src = self.translate_operand(src_expr);
@@ -476,11 +565,7 @@ impl FunctionTranslator<'_, '_> {
                     .ctx
                     .type_id_to_wir_type(self.type_table, self.operand_type_id(src_expr));
                 if let WirType::Ref { type_id, .. } = wir_type {
-                    Some(WirInstr::ArrayClone {
-                        type_id,
-                        src: Box::new(src),
-                        element_copy_func: None,
-                    })
+                    Some(self.build_bulk_array_clone(type_id, src))
                 } else {
                     None
                 }

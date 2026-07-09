@@ -2,7 +2,11 @@
 // `&List<String>` parameter that is only spine-mutated (`sort`) and read.
 // The deep per-element String copy is unnecessary — no element is mutated
 // through `sorted` — so the pass rewrites the copy to a shallow spine copy
-// (`array_clone_shallow`) via a synthesized `$shallow` sibling helper.
+// (`array_clone_shallow`) via a synthesized `$shallow` sibling helper. A
+// shallow copy needs no per-element helper either, so it lowers to the same
+// bulk `array.copy` as a primitive-element clone (see
+// `value_copy_builtin_array.wado`), not `array_clone_shallow`'s own element
+// loop.
 //
 // `sort` / `sort_by` verify as element-immutable (they only reorder spine
 // slots), which is the precondition that lets the demotion fire. The source
@@ -32,5 +36,6 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "3 pear fig\n",
+    "wir_expect:O2": ["builtin::array_copy<"],
     "wir_not_expect:O2": ["array_clone_deep"]
 }
