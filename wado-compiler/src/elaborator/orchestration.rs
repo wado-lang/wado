@@ -2234,7 +2234,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     logger,
                 )?;
             }
-            ast::Stmt::Break(_) | ast::Stmt::Continue(_) | ast::Stmt::Error(_) => {}
+            // A local item's own type references (struct fields, impl/trait
+            // method signatures) are validated by the regular elaboration
+            // pipeline once it resolves the item, not by this early pass.
+            ast::Stmt::Item(_)
+            | ast::Stmt::Break(_)
+            | ast::Stmt::Continue(_)
+            | ast::Stmt::Error(_) => {}
         }
         Ok(())
     }

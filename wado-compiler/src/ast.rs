@@ -660,6 +660,7 @@ pub fn walk_stmt<V: AstVisitor>(v: &mut V, stmt: &Stmt) {
             }
         }
         Stmt::LabeledBlock(s) => v.visit_block(&s.block),
+        Stmt::Item(item) => v.visit_item(item),
         Stmt::Error(_) => {}
     }
 }
@@ -1041,6 +1042,29 @@ impl Item {
             Item::Test(d) => d.id,
             Item::Global(d) => d.id,
             Item::Error(d) => d.id,
+        }
+    }
+
+    /// The source [`Span`] of this item's declaration.
+    pub fn span(&self) -> Span {
+        match self {
+            Item::Use(d) => d.span,
+            Item::Function(d) => d.span,
+            Item::Interface(d) => d.span,
+            Item::Struct(d) => d.span,
+            Item::Enum(d) => d.span,
+            Item::Variant(d) => d.span,
+            Item::Flags(d) => d.span,
+            Item::Newtype(d) => d.span,
+            Item::TupleTypeDecl(d) => d.span,
+            Item::BuiltinTypeDecl(d) => d.span,
+            Item::Impl(d) => d.span,
+            Item::Trait(d) => d.span,
+            Item::Resource(d) => d.span,
+            Item::World(d) => d.span,
+            Item::Test(d) => d.span,
+            Item::Global(d) => d.span,
+            Item::Error(d) => d.span,
         }
     }
 
@@ -1736,6 +1760,15 @@ pub enum Stmt {
     Continue(ContinueStmt),
     Assert(AssertStmt),
     LabeledBlock(LabeledBlockStmt),
+    /// A type/impl declaration local to the enclosing function: `struct`,
+    /// `enum`, `variant`, `flags`, `type` (newtype), `impl`, or `trait`.
+    /// Scoped to the function body — not visible outside it — and resolved
+    /// sequentially like a `let` binding (no forward reference, no mutual
+    /// reference between two local declarations). The parser accepts any
+    /// `Item` here and defers the "is this kind/visibility allowed locally"
+    /// check to `Parser::validate_local_item` so the diagnostic is uniform
+    /// regardless of which item kind was written.
+    Item(Box<Item>),
     /// Placeholder for a statement that failed to parse, emitted by error
     /// recovery so a broken statement inside a block leaves a node (with a
     /// stable span/id) instead of vanishing. Inert in every later phase; the
@@ -1933,6 +1966,7 @@ impl Stmt {
             Stmt::Continue(s) => s.id,
             Stmt::Assert(s) => s.id,
             Stmt::LabeledBlock(s) => s.id,
+            Stmt::Item(item) => item.id(),
             Stmt::Error(s) => s.id,
         }
     }
@@ -1954,6 +1988,7 @@ impl Stmt {
             Stmt::Continue(s) => s.span,
             Stmt::Assert(s) => s.span,
             Stmt::LabeledBlock(s) => s.span,
+            Stmt::Item(item) => item.span(),
             Stmt::Error(s) => s.span,
         }
     }

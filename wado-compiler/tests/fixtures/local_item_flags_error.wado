@@ -1,0 +1,13 @@
+// Flags declared inside a function body parse successfully (local item
+// support); resolution is a follow-up. See local_item_struct_error.wado.
+
+export fn run() {
+    flags Perm {
+        Read,
+        Write,
+    }
+    let p = Perm::Read;
+}
+
+__DATA__
+{"compile_error": "unknown identifier 'Perm::Read'"}

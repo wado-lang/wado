@@ -1871,6 +1871,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Stmt::For(f) => self.reify_for(f, ctx),
             ast::Stmt::Assert(assert_stmt) => self.reify_assert(assert_stmt, ctx),
             ast::Stmt::ForOf(for_of) => self.reify_for_of(for_of, ctx),
+            // A local type/impl declaration emits no runtime instruction —
+            // declaring a type has no effect at execution time. The
+            // declaration's own TIR (struct/enum/impl registration) is
+            // produced by the earlier elaboration passes that resolve local
+            // items, not here.
+            ast::Stmt::Item(_) => vec![],
             // `build_tir_from_state` skips reify for modules with syntax
             // errors, so reify never walks an `Error` placeholder.
             ast::Stmt::Error(_) => {

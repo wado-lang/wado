@@ -1284,6 +1284,7 @@ impl<'a> Unparser<'a> {
             Stmt::Continue(_) => self.unparse_continue(),
             Stmt::Assert(a) => self.unparse_assert(a),
             Stmt::LabeledBlock(lb) => self.unparse_labeled_block(lb),
+            Stmt::Item(item) => self.unparse_item(item),
             // The formatter is fail-fast on syntax errors, so this placeholder
             // is never reached; emit nothing to keep the match total.
             Stmt::Error(_) => {}
@@ -2853,6 +2854,7 @@ fn get_stmt_span(stmt: &Stmt) -> Span {
         Stmt::Continue(c) => c.span,
         Stmt::Assert(a) => a.span,
         Stmt::LabeledBlock(lb) => lb.span,
+        Stmt::Item(item) => item.span(),
         Stmt::Error(s) => s.span,
     }
 }
@@ -3437,6 +3439,11 @@ fn unparse_stmt_into(stmt: &Stmt, output: &mut String) {
             output.push_str(": ");
             unparse_block_expr_into(&lb.block, output);
         }
+        // A local type/impl declaration: this helper is a single-line,
+        // readability-first preview (used by diagnostics), not the real
+        // formatter (`unparse_stmt` / `Unparser::unparse_item` is), so a
+        // short marker is enough.
+        Stmt::Item(_) => output.push_str("<local item>;"),
         // Parser error-recovery placeholder; rendered as an empty marker for the
         // readability-first preview paths that use this helper.
         Stmt::Error(_) => output.push_str("<error>;"),

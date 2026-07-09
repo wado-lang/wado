@@ -1,0 +1,13 @@
+// A variant declared inside a function body parses successfully (local item
+// support); resolution is a follow-up. See local_item_struct_error.wado.
+
+export fn run() {
+    variant Shape {
+        Circle(i32),
+        Square(i32),
+    }
+    let s = Shape::Circle(1);
+}
+
+__DATA__
+{"compile_error": "unknown function 'Shape::Circle'"}

@@ -139,6 +139,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Stmt::Continue(continue_stmt) => self.resolve_continue(continue_stmt, ctx),
             Stmt::Assert(a) => self.desugar_assert(a, ctx),
             Stmt::LabeledBlock(labeled_block) => self.resolve_labeled_block(labeled_block, ctx),
+            // TODO(local types): resolving the declaration itself (struct
+            // fields, impl methods, registering it so `resolve_named_type`
+            // can find it) is not yet implemented. A reference to the local
+            // type surfaces the normal "unknown type" error until then.
+            Stmt::Item(_) => {}
             // Parser error-recovery placeholder: the syntax error was already
             // reported, so there is nothing to record.
             Stmt::Error(_) => {}

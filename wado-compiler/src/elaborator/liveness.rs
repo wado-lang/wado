@@ -477,6 +477,10 @@ impl LastUseAnalyzer<'_> {
                 self.walk_expr(&a.condition, live, record);
             }
             ast::Stmt::LabeledBlock(lb) => self.walk_block(&lb.block, live, record),
+            // A local type/impl declaration's methods aren't closures, so
+            // they can't read/write the enclosing function's locals; nothing
+            // here affects variable liveness.
+            ast::Stmt::Item(_) => {}
             ast::Stmt::Error(_) => {}
         }
     }

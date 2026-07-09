@@ -1,0 +1,22 @@
+// A trait and an impl block declared inside a function body parse
+// successfully (local item support); resolution is a follow-up. See
+// local_item_struct_error.wado.
+
+export fn run() {
+    struct Point {
+        x: i32,
+    }
+    trait Describe {
+        fn describe(&self) -> i32;
+    }
+    impl Describe for Point {
+        fn describe(&self) -> i32 {
+            return self.x;
+        }
+    }
+    let p = Point { x: 1 };
+    let d = p.describe();
+}
+
+__DATA__
+{"compile_error": "unknown type 'Point'"}

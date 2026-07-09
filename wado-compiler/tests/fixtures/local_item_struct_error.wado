@@ -1,0 +1,15 @@
+// A struct declared inside a function body parses successfully (local item
+// support), but is not yet resolvable — local-item elaboration is a
+// follow-up. Locks in the parser-level behavior: this must NOT be a parse
+// error ("expected `}`").
+
+export fn run() {
+    struct Point {
+        x: i32,
+        y: i32,
+    }
+    let p = Point { x: 1, y: 2 };
+}
+
+__DATA__
+{"compile_error": "unknown type 'Point'"}
