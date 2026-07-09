@@ -42,8 +42,15 @@ use {
 
 #[synopsis]
 test {
-    let encoded = to_bytes(&[1, 2, 3]);
-    assert encoded matches { Ok(b) && from_bytes::<List<i32>>(b) matches { Ok(v) && v == [1, 2, 3] } };
+    struct Point {
+        x: i32,
+        y: i32,
+    }
+    impl Serialize for Point;
+    impl Deserialize for Point;
+
+    let encoded = to_bytes(&Point { x: 1, y: 2 });
+    assert encoded matches { Ok(b) && from_bytes::<Point>(b) matches { Ok(p) && p.x == 1 && p.y == 2 } };
 }
 
 global SERIALIZE_BUFFER_CAPACITY: i32 = 64;

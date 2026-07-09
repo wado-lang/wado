@@ -31,16 +31,16 @@ use { write_escaped_string, JsonDeserializer } from "core:json";
 
 #[synopsis]
 test {
+    struct Point {
+        x: i32,
+        y: i32,
+    }
+    impl Serialize for Point;
+    impl Deserialize for Point;
+
     assert to_string(&Point { x: 1, y: 2 }) matches { Ok(s) && s == "[1,2]" };
     assert from_string::<Point>("[1,2]") matches { Ok(p) && p.x == 1 && p.y == 2 };
 }
-
-struct Point {
-    x: i32,
-    y: i32,
-}
-impl Serialize for Point;
-impl Deserialize for Point;
 
 // Sub-serializers hold `&mut String` so writes flow back to the
 // outer buffer the caller still owns. A value-typed `String` field
