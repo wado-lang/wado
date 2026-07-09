@@ -7,10 +7,7 @@ use crate::ast::{
 };
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::tir::{
-    PrimitiveType, ResolvedType, TirExpr, TirExprKind, TirField, TirPattern, TirStruct, TypeId,
-    TypeTable,
-};
+use crate::tir::{PrimitiveType, ResolvedType, TirExpr, TirExprKind, TirPattern, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
@@ -177,13 +174,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match item {
             ast::Item::Struct(struct_decl) => self.resolve_local_struct(struct_decl),
             ast::Item::Newtype(newtype_decl) => self.resolve_local_newtype(newtype_decl),
-            _ => {}
+            // Parsed (Task #4) but not yet resolved — see the module docs
+            // on `resolve_local_item` above.
+            ast::Item::Enum(_)
+            | ast::Item::Variant(_)
+            | ast::Item::Flags(_)
+            | ast::Item::Impl(_)
+            | ast::Item::Trait(_) => {}
+            // `at_local_item_start` never recognizes these at block
+            // position, so `parse_item` never produces one here — except
+            // `Error`, which parse-error recovery can still surface (see
+            // `Stmt::Error` handling in `resolve_stmt`, already a no-op).
+            // Listed explicitly (no wildcard) so a future `Item` variant
+            // forces a decision here instead of silently no-op'ing.
+            ast::Item::Use(_)
+            | ast::Item::Function(_)
+            | ast::Item::Interface(_)
+            | ast::Item::TupleTypeDecl(_)
+            | ast::Item::BuiltinTypeDecl(_)
+            | ast::Item::Resource(_)
+            | ast::Item::World(_)
+            | ast::Item::Test(_)
+            | ast::Item::Global(_)
+            | ast::Item::Error(_) => {}
         }
     }
 
     fn resolve_local_struct(&mut self, struct_decl: &ast::StructDecl) {
         let module_source = self.current_module_source.clone();
-        let mangled_name = format!("{}@{:?}", struct_decl.name, struct_decl.id);
+        let mangled_name = crate::name::mangle_local_item_name(&struct_decl.name, struct_decl.id);
 
         // Generic local structs need `T` etc. in scope while resolving field
         // types (so a field of type `T` becomes a `TypeParam`, not
@@ -194,31 +213,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.register_generic_params(&struct_decl.type_params, 0);
 
+        // TODO(local types): field defaults are not resolved into a TIR
+        // expression (unlike top-level `resolve_struct`), so a local struct
+        // literal that omits a defaulted field will not yet get the right
+        // value. None of Task 5/6's fixtures exercise this.
         let mut fields = Vec::new();
         let mut field_ast_ids = Vec::new();
         let mut field_defaults = Vec::new();
-        let mut tir_fields = Vec::new();
-        for (index, field) in struct_decl.fields.iter().enumerate() {
+        for field in &struct_decl.fields {
             let type_id = scope.resolve_type(&field.ty);
             fields.push((field.name.clone(), type_id, field.visibility));
             field_ast_ids.push(field.id);
             field_defaults.push(field.default.clone());
-            // TODO(local types): field defaults are not resolved into a TIR
-            // expression here (unlike top-level `resolve_struct`), so a local
-            // struct literal that omits a defaulted field will not yet get
-            // the right value. None of Task 5/6's fixtures exercise this.
-            tir_fields.push(TirField {
-                name: field.name.clone(),
-                visibility: field.visibility,
-                type_id,
-                index: index as u32,
-                span: field.span,
-                is_hidden: false,
-                serde_rename: None,
-                serde_default: false,
-                serde_positional: false,
-                default_expr: None,
-            });
         }
         let type_param_bounds: Vec<(String, Vec<String>)> = struct_decl
             .type_params
@@ -242,19 +248,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .make_type_param(p.name.clone(), i as u32)
             })
             .collect();
-        let tir_type_params: Vec<crate::tir::TirTypeParam> = struct_decl
-            .type_params
-            .iter()
-            .enumerate()
-            .map(|(i, p)| crate::tir::TirTypeParam {
-                name: p.name.clone(),
-                is_effect: p.is_effect,
-                is_pack: p.is_pack,
-                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
-                index: i as u32,
-            })
-            .collect();
         drop(scope);
 
         // Register a `TypeId` for the declaration itself, generic or not —
@@ -274,7 +267,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let info = super::types::StructFieldInfo {
             name: mangled_name.clone(),
-            module_source: module_source.clone(),
+            module_source,
             defined_at: struct_decl.id,
             fields,
             field_ast_ids,
@@ -285,30 +278,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.sem
             .decls
             .local_struct_fields
-            .insert(mangled_name.clone(), info.clone());
+            .insert(mangled_name, info.clone());
         self.sem
             .decls
             .fn_local_struct_fields
             .insert(struct_decl.name.clone(), info);
         // Local structs have no `Item::Struct` entry in `module.items` for
-        // reify to walk (they live inside a function body), so — like
-        // anonymous struct literals — the full `TirStruct` is built here,
-        // during annotate, and flushed into the module's TIR at the same
-        // point `pending_anonymous_structs` is. The monomorphizer treats any
-        // `TirStruct` with non-empty `type_params` as a generic template
-        // (see `monomorphize.rs`'s `resolved_generic_structs` scan) rather
-        // than an emittable concrete type, so no separate list is needed for
-        // the generic case.
-        self.sem.decls.pending_anonymous_structs.push(TirStruct {
-            name: mangled_name,
-            module_source,
-            visibility: ast::Visibility::Private,
-            type_params: tir_type_params,
-            monomorph_info: None,
-            fields: tir_fields,
-            span: struct_decl.span,
-            serde_rename_all: None,
-        });
+        // reify's per-item dispatch loop to walk — reify's own `Stmt::Item`
+        // statement handling (`reify_local_struct`) is what discovers and
+        // builds this declaration's `TirStruct`, from the `local_struct_fields`
+        // entry just recorded above (annotate records facts; reify is the
+        // sole TIR producer, matching every other declaration kind).
     }
 
     fn resolve_local_newtype(&mut self, newtype_decl: &ast::Newtype) {
@@ -325,10 +305,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let module_source = self.current_module_source.clone();
         let base_type_id = self.resolve_type(&newtype_decl.ty);
-        let mangled_name = format!("{}@{:?}", newtype_decl.name, newtype_decl.id);
+        let mangled_name =
+            crate::name::mangle_local_item_name(&newtype_decl.name, newtype_decl.id);
         let type_id = self.tysys.type_table.borrow_mut().make_newtype(
             mangled_name.clone(),
-            module_source.clone(),
+            module_source,
             base_type_id,
         );
         self.tysys
@@ -340,10 +321,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // newtype's base type by name rather than reading `ResolvedType`
         // directly, so it must be discoverable post-declaration the same way
         // struct field info is (see `resolve_local_struct`).
-        self.sem
-            .decls
-            .local_newtypes
-            .insert(mangled_name.clone(), type_id);
+        self.sem.decls.local_newtypes.insert(mangled_name, type_id);
         // Ephemeral (bare-name) entry — visible only for the remainder of
         // this function's own annotate walk.
         self.sem
@@ -351,17 +329,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .fn_local_newtypes
             .insert(newtype_decl.name.clone(), type_id);
         // Local newtypes have no `Item::Newtype` entry in `module.items` for
-        // reify to walk — same reasoning as the `TirStruct` push above.
-        self.sem
-            .decls
-            .pending_local_newtypes
-            .push(crate::tir::TirNewtype {
-                name: mangled_name,
-                module_source,
-                visibility: ast::Visibility::Private,
-                type_id,
-                span: newtype_decl.span,
-            });
+        // reify's per-item dispatch loop to walk — reify's own `Stmt::Item`
+        // handling (`reify_local_newtype`) discovers and builds this
+        // declaration's `TirNewtype`, from the `local_newtypes` entry just
+        // recorded above.
     }
 
     /// Resolve a labeled block statement (Stage 7-B: records-only).

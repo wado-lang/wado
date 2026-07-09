@@ -2048,17 +2048,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // still does) is fine here: this pass only exists to fail fast on
         // *genuinely* unknown names.
         let local_item_names = Self::collect_local_item_names(block);
+        let widened;
         let known_type_names = if local_item_names.is_empty() {
-            known_type_names.clone()
+            known_type_names
         } else {
-            let mut widened = known_type_names.clone();
-            widened.extend(local_item_names);
-            widened
+            let mut set = known_type_names.clone();
+            set.extend(local_item_names);
+            widened = set;
+            &widened
         };
         for stmt in &block.stmts {
             Self::validate_stmt_type_names(
                 stmt,
-                &known_type_names,
+                known_type_names,
                 resource_type_names,
                 type_params,
                 logger,
@@ -2105,6 +2107,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 ast::Stmt::ForOf(for_of) => visit_block(&for_of.body, out),
                 ast::Stmt::Loop(loop_stmt) => visit_block(&loop_stmt.body, out),
                 ast::Stmt::LabeledBlock(labeled) => visit_block(&labeled.block, out),
+                ast::Stmt::Match(match_expr) => {
+                    for arm in &match_expr.arms {
+                        if let ast::Expr::Block(block) = &arm.body {
+                            visit_block(block, out);
+                        }
+                    }
+                }
                 _ => {}
             }
         }

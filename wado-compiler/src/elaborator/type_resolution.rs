@@ -339,13 +339,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn bare_generic_type_arity(&self, name: &str) -> Option<usize> {
-        // `generic_struct_names` only tracks module-level structs; a local
-        // generic struct (`Stmt::Item`) is recognised instead by its
-        // presence in the function-scoped `fn_local_struct_fields` registry
-        // (see `resolve_local_struct`).
-        if (self.sem.decls.generic_struct_names.contains(name)
-            || self.sem.decls.fn_local_struct_fields.contains_key(name))
-            && let Some(info) = self.lookup_struct_fields(name)
+        // `lookup_struct_fields` alone decides whether `name` is generic:
+        // it already applies the correct precedence (a local struct —
+        // `Stmt::Item`, see `resolve_local_struct` — shadows a same-named
+        // module-level one), so basing this on `info.type_param_bounds`
+        // directly keeps the "is this generic" question and "which struct's
+        // info is this" question about the *same* struct. A separate
+        // `generic_struct_names.contains(name)` gate here previously let
+        // the two disagree: dispatch entered on the module-level struct's
+        // registration while `lookup_struct_fields` had already returned a
+        // same-named local, non-generic shadow's info.
+        if let Some(info) = self.lookup_struct_fields(name)
             && !info.type_param_bounds.is_empty()
         {
             return Some(info.type_param_bounds.len());
@@ -449,22 +453,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .make_builtin_array(element_type)
             }
             _ => {
-                // Check if it's a user-defined generic struct. A local
-                // generic struct (`Stmt::Item`) is not in `generic_struct_names`
-                // (module-level only — see `bare_generic_type_arity`), so also
-                // accept a `fn_local_struct_fields` hit with type params.
-                let local_generic_struct = self
-                    .sem
-                    .decls
-                    .fn_local_struct_fields
-                    .get(name)
-                    .is_some_and(|info| !info.type_param_bounds.is_empty());
-                if self.sem.decls.generic_struct_names.contains(name) || local_generic_struct {
+                // Check if it's a user-defined generic struct.
+                // `lookup_struct_fields` alone decides this (see
+                // `bare_generic_type_arity` for why a separate
+                // `generic_struct_names.contains(name)` gate is wrong: it
+                // can name a different struct than the one this lookup
+                // returns when a local struct — `Stmt::Item`, see
+                // `resolve_local_struct` — shadows a same-named
+                // module-level generic one).
+                let struct_info = self.lookup_struct_fields(name).cloned();
+                if struct_info
+                    .as_ref()
+                    .is_some_and(|info| !info.type_param_bounds.is_empty())
+                {
                     // Resolve type arguments
                     let type_args: Vec<TypeId> =
                         args.iter().map(|t| self.resolve_type(t)).collect();
 
-                    // Get struct info for module source and bounds checking.
                     // `info.name` is the type's storage identity — the bare
                     // declared name for a module-level struct, or the
                     // internal mangled name for a local one (so the
@@ -472,7 +477,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `struct_fields_in` can find later, the same way a
                     // concrete local struct's `TypeId` does — see
                     // `resolve_local_struct`).
-                    let struct_info = self.lookup_struct_fields(name).cloned();
                     let identity_name = struct_info
                         .as_ref()
                         .map(|info| info.name.clone())

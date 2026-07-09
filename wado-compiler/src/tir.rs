@@ -2399,7 +2399,7 @@ impl TypeTable {
             ResolvedType::BuiltinArray(elem) => {
                 format!("Array<{}>", self.type_name(*elem))
             }
-            ResolvedType::Struct { name, .. } => name.clone(),
+            ResolvedType::Struct { name, .. } => crate::name::strip_local_item_id(name).to_string(),
             ResolvedType::Enum { name, .. } => name.clone(),
             ResolvedType::Resource { name, .. } => name.clone(),
             ResolvedType::Function {
@@ -2442,10 +2442,15 @@ impl TypeTable {
                 if Self::is_tuple_type(name) {
                     format!("[{}]", arg_names.join(", "))
                 } else {
-                    format!("{}<{}>", name, arg_names.join(", "))
+                    format!(
+                        "{}<{}>",
+                        crate::name::strip_local_item_id(name),
+                        arg_names.join(", ")
+                    )
                 }
             }
-            ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => name.clone(),
+            ResolvedType::Newtype { name, .. } => crate::name::strip_local_item_id(name).to_string(),
+            ResolvedType::Flags { name, .. } => name.clone(),
             ResolvedType::TypePack { name, .. } => format!("..{name}"),
         }
     }

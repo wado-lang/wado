@@ -1546,13 +1546,68 @@ impl<'a> TypeLookup<'a> {
             .or_else(|| all_per_module.get(module_source).and_then(|m| m.get(name)))
     }
 
-    pub(super) fn struct_fields(&self, name: &str) -> Option<&'a StructFieldInfo> {
-        self.fn_local_struct_fields.get(name).or_else(|| {
-            self.lookup_ref(name, Some(self.local_struct_fields), self.all_struct_fields)
-        })
+    /// Resolve a *source-written* bare `name` with function-local
+    /// precedence: the current function's own local items (`fn_local`, see
+    /// `ModuleDecls::fn_local_struct_fields`) shadow everything else, ahead
+    /// of `lookup_ref`'s (local → current module → imports → any) chain.
+    /// Consolidates the identical wrapper every bare-name accessor below
+    /// used to duplicate by hand.
+    ///
+    /// Only for resolving a name as *written in source* — an already-known
+    /// `(name, module_source)` identity recovered from a resolved `TypeId`
+    /// (e.g. reify's `recorded_type`) must use [`Self::lookup_ref_in`]
+    /// directly (via the `_in` accessors below) and *not* this tier: the
+    /// function-local table is a flat, unordered map mutated in place as
+    /// annotate walks the function sequentially, so by the time a later,
+    /// independent pass (reify) looks up a name, it reflects the *end* of
+    /// that function's local declarations, not the position-appropriate
+    /// state — consulting it for an already-resolved identity risks
+    /// resolving to an unrelated later-declared local item that happens to
+    /// share the same bare name as an outer, non-local type.
+    fn fn_local_first<V>(
+        &self,
+        name: &str,
+        fn_local: &'a IndexMap<String, V>,
+        local: Option<&'a IndexMap<String, V>>,
+        all_per_module: &'a IndexMap<ModuleSource, IndexMap<String, V>>,
+    ) -> Option<&'a V> {
+        fn_local
+            .get(name)
+            .or_else(|| self.lookup_ref(name, local, all_per_module))
     }
 
+    pub(super) fn struct_fields(&self, name: &str) -> Option<&'a StructFieldInfo> {
+        self.fn_local_first(
+            name,
+            self.fn_local_struct_fields,
+            Some(self.local_struct_fields),
+            self.all_struct_fields,
+        )
+    }
+
+    /// Resolve `(name, module_source)` — an already-known type identity,
+    /// never a name written in source — to its field info. Deliberately
+    /// does *not* consult the function-local tier; see `fn_local_first`.
     pub(super) fn struct_fields_in(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<&'a StructFieldInfo> {
+        self.lookup_ref_in(
+            name,
+            module_source,
+            self.local_struct_fields,
+            self.all_struct_fields,
+            |info| &info.module_source,
+        )
+    }
+
+    /// Resolve a source-written struct-literal name against `module_source`,
+    /// including the current function's own local structs. The one caller
+    /// that needs function-local precedence for an `_in`-style (name,
+    /// module) lookup — determining what a struct literal's bare type name
+    /// currently means — rather than an already-resolved identity.
+    pub(super) fn struct_fields_in_scope(
         &self,
         name: &str,
         module_source: &ModuleSource,
@@ -1560,21 +1615,16 @@ impl<'a> TypeLookup<'a> {
         self.fn_local_struct_fields
             .get(name)
             .filter(|info| info.module_source == *module_source)
-            .or_else(|| {
-                self.lookup_ref_in(
-                    name,
-                    module_source,
-                    self.local_struct_fields,
-                    self.all_struct_fields,
-                    |info| &info.module_source,
-                )
-            })
+            .or_else(|| self.struct_fields_in(name, module_source))
     }
 
     pub(super) fn variant_case(&self, name: &str) -> Option<&'a VariantInfo> {
-        self.fn_local_variant_cases.get(name).or_else(|| {
-            self.lookup_ref(name, Some(self.local_variant_cases), self.all_variant_cases)
-        })
+        self.fn_local_first(
+            name,
+            self.fn_local_variant_cases,
+            Some(self.local_variant_cases),
+            self.all_variant_cases,
+        )
     }
 
     pub(super) fn variant_case_in(
@@ -1582,24 +1632,22 @@ impl<'a> TypeLookup<'a> {
         name: &str,
         module_source: &ModuleSource,
     ) -> Option<&'a VariantInfo> {
-        self.fn_local_variant_cases
-            .get(name)
-            .filter(|info| info.module_source == *module_source)
-            .or_else(|| {
-                self.lookup_ref_in(
-                    name,
-                    module_source,
-                    self.local_variant_cases,
-                    self.all_variant_cases,
-                    |info| &info.module_source,
-                )
-            })
+        self.lookup_ref_in(
+            name,
+            module_source,
+            self.local_variant_cases,
+            self.all_variant_cases,
+            |info| &info.module_source,
+        )
     }
 
     pub(super) fn enum_case(&self, name: &str) -> Option<&'a EnumInfo> {
-        self.fn_local_enum_cases
-            .get(name)
-            .or_else(|| self.lookup_ref(name, Some(self.local_enum_cases), self.all_enum_cases))
+        self.fn_local_first(
+            name,
+            self.fn_local_enum_cases,
+            Some(self.local_enum_cases),
+            self.all_enum_cases,
+        )
     }
 
     pub(super) fn enum_case_in(
@@ -1607,24 +1655,22 @@ impl<'a> TypeLookup<'a> {
         name: &str,
         module_source: &ModuleSource,
     ) -> Option<&'a EnumInfo> {
-        self.fn_local_enum_cases
-            .get(name)
-            .filter(|info| info.module_source == *module_source)
-            .or_else(|| {
-                self.lookup_ref_in(
-                    name,
-                    module_source,
-                    self.local_enum_cases,
-                    self.all_enum_cases,
-                    |info| &info.module_source,
-                )
-            })
+        self.lookup_ref_in(
+            name,
+            module_source,
+            self.local_enum_cases,
+            self.all_enum_cases,
+            |info| &info.module_source,
+        )
     }
 
     pub(super) fn flags_case(&self, name: &str) -> Option<&'a FlagsInfo> {
-        self.fn_local_flags_cases
-            .get(name)
-            .or_else(|| self.lookup_ref(name, Some(self.local_flags_cases), self.all_flags_cases))
+        self.fn_local_first(
+            name,
+            self.fn_local_flags_cases,
+            Some(self.local_flags_cases),
+            self.all_flags_cases,
+        )
     }
 
     pub(super) fn flags_case_in(
@@ -1632,18 +1678,13 @@ impl<'a> TypeLookup<'a> {
         name: &str,
         module_source: &ModuleSource,
     ) -> Option<&'a FlagsInfo> {
-        self.fn_local_flags_cases
-            .get(name)
-            .filter(|info| info.module_source == *module_source)
-            .or_else(|| {
-                self.lookup_ref_in(
-                    name,
-                    module_source,
-                    self.local_flags_cases,
-                    self.all_flags_cases,
-                    |info| &info.module_source,
-                )
-            })
+        self.lookup_ref_in(
+            name,
+            module_source,
+            self.local_flags_cases,
+            self.all_flags_cases,
+            |info| &info.module_source,
+        )
     }
 
     pub(super) fn resource_type(&self, name: &str) -> Option<&'a ResourceInfo> {
@@ -1659,11 +1700,13 @@ impl<'a> TypeLookup<'a> {
     }
 
     pub(super) fn newtype(&self, name: &str) -> Option<TypeId> {
-        if let Some(id) = self.fn_local_newtypes.get(name) {
-            return Some(*id);
-        }
-        self.lookup_ref(name, Some(self.local_newtypes), self.all_newtypes)
-            .copied()
+        self.fn_local_first(
+            name,
+            self.fn_local_newtypes,
+            Some(self.local_newtypes),
+            self.all_newtypes,
+        )
+        .copied()
     }
 }
 

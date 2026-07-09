@@ -1054,6 +1054,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.type_lookup().struct_fields_in(name, module_source)
     }
 
+    /// Like [`Self::lookup_struct_fields_in`], but also considers the
+    /// current function's own local structs — for resolving a
+    /// source-written struct-literal name against a module, not an
+    /// already-known type identity. See `TypeLookup::struct_fields_in_scope`.
+    pub(super) fn lookup_struct_fields_in_scope(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<&StructFieldInfo> {
+        self.type_lookup().struct_fields_in_scope(name, module_source)
+    }
+
     pub(super) fn lookup_variant_case_in(
         &self,
         name: &str,

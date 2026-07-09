@@ -72,14 +72,6 @@ pub(crate) struct ModuleDecls {
     /// [`super::super::Elaborator::resolve_module`].
     pub(crate) pending_anonymous_structs: Vec<crate::tir::TirStruct>,
 
-    /// Local newtype declarations (`Stmt::Item`), built eagerly during
-    /// annotate the same way `pending_anonymous_structs` is: a local item
-    /// has no `Item::Newtype` entry in `module.items` for reify to walk (it
-    /// lives inside a function body), so there is no other hook to emit its
-    /// `TirNewtype`. Flushed into the [`crate::tir::TirModule`] alongside
-    /// `pending_anonymous_structs`.
-    pub(crate) pending_local_newtypes: Vec<crate::tir::TirNewtype>,
-
     /// Synthesis requests recorded by `impl Trait for Type;`
     /// (Gap 12 / Stage 5). The elaborator pushes one per
     /// `is_synthesize_request` impl block; `reify_module` reads
@@ -137,5 +129,20 @@ impl ModuleDecls {
                     .get(name)
                     .map(|(src, orig, ty, mutable)| (src.clone(), orig.clone(), *ty, *mutable))
             })
+    }
+
+    /// Clear the function-scoped local-item registries (`fn_local_*`).
+    /// Called at the top of every function-body-walk entry point —
+    /// `resolve_function`, `resolve_method`, `resolve_test_decl` — so a
+    /// local item declared in one function body never leaks into the next
+    /// one's resolution. A single shared call makes it impossible for a new
+    /// entry point to forget this (see issue found in code review: a
+    /// hand-copied clear block was missing from `resolve_function`).
+    pub(crate) fn clear_fn_local_items(&mut self) {
+        self.fn_local_struct_fields.clear();
+        self.fn_local_newtypes.clear();
+        self.fn_local_enum_cases.clear();
+        self.fn_local_flags_cases.clear();
+        self.fn_local_variant_cases.clear();
     }
 }

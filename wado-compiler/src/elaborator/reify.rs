@@ -219,6 +219,17 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// outermost default walk (nested defaulted calls inherit it); `None`
     /// elsewhere. See [`Self::reify_pad_args_with_defaults`].
     pub(crate) call_site_location: Option<CallSiteLocation>,
+    /// Local struct declarations (`Stmt::Item`) built while walking a
+    /// function body's statements, flushed into the module's TIR at the
+    /// same point `pending_anonymous_structs` is. Reify-owned (not on
+    /// `sem.decls`, which is `&`-only from here) because a local item has
+    /// no `Item::Struct` entry in `module.items` for the per-item dispatch
+    /// loop to walk — `reify_stmt`'s `Stmt::Item` arm is the only place
+    /// that discovers it. See `reify_local_item`.
+    pub(crate) pending_local_structs: Vec<TirStruct>,
+    /// Local newtype declarations (`Stmt::Item`) — same reasoning as
+    /// `pending_local_structs`.
+    pub(crate) pending_local_newtypes: Vec<TirNewtype>,
 }
 
 /// Call site captured for location literals in defaults.
@@ -271,6 +282,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             live_items,
             default_arg_overrides: IndexMap::default(),
             call_site_location: None,
+            pending_local_structs: Vec::new(),
+            pending_local_newtypes: Vec::new(),
         }
     }
 
@@ -637,10 +650,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         for anon_struct in &self.sem.decls.pending_anonymous_structs {
             tir_module.add_struct(anon_struct.clone());
         }
-        // Local newtype declarations (`Stmt::Item`) — same reasoning as
-        // `pending_anonymous_structs` above.
-        for local_newtype in &self.sem.decls.pending_local_newtypes {
-            tir_module.add_newtype(local_newtype.clone());
+        // Local item declarations (`Stmt::Item`) discovered and built by
+        // `reify_local_item` while reifying the item loop above (function/
+        // method/test bodies). Reify-owned, so drained rather than cloned.
+        for local_struct in std::mem::take(&mut self.pending_local_structs) {
+            tir_module.add_struct(local_struct);
+        }
+        for local_newtype in std::mem::take(&mut self.pending_local_newtypes) {
+            tir_module.add_newtype(local_newtype);
         }
 
         // Stage 5 / Gap 12: forward the per-module synthesis requests
@@ -818,6 +835,100 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span: struct_decl.span,
             serde_rename_all,
         }
+    }
+
+    /// Reify a local item declaration (`Stmt::Item` — a `struct`/`type`
+    /// declared inside a function body). Unlike `reify_struct`/
+    /// `reify_newtype`, there is no `Item::Struct`/`Item::Newtype` entry in
+    /// `module.items` for the per-item dispatch loop (`reify_module`) to
+    /// walk — this `reify_stmt` arm is the only place a local item's TIR is
+    /// discovered — so the result accumulates on `self.pending_local_structs`
+    /// / `self.pending_local_newtypes`, flushed into the module's TIR
+    /// alongside `pending_anonymous_structs` at the end of `reify_module`.
+    fn reify_local_item(&mut self, item: &ast::Item) {
+        match item {
+            ast::Item::Struct(struct_decl) => self.reify_local_struct(struct_decl),
+            ast::Item::Newtype(newtype_decl) => self.reify_local_newtype(newtype_decl),
+            _ => {}
+        }
+    }
+
+    /// Field types and type-param bounds come from `sem.decls.local_struct_fields`
+    /// — the durable, mangled-name-keyed fact `resolve_local_struct` recorded;
+    /// this only re-derives the parts that fact doesn't carry (a type param's
+    /// own `is_effect`/`is_pack`/`default`, straight from the AST, matching
+    /// `resolve_local_struct`'s construction byte-for-byte).
+    fn reify_local_struct(&mut self, struct_decl: &ast::StructDecl) {
+        let mangled_name = crate::name::mangle_local_item_name(&struct_decl.name, struct_decl.id);
+        let Some(info) = self.sem.decls.local_struct_fields.get(&mangled_name).cloned() else {
+            // `resolve_local_struct` inserts this unconditionally for every
+            // local struct declaration annotate resolved.
+            return;
+        };
+        let fields: Vec<crate::tir::TirField> = info
+            .fields
+            .iter()
+            .enumerate()
+            .map(|(index, (name, type_id, visibility))| crate::tir::TirField {
+                name: name.clone(),
+                visibility: *visibility,
+                type_id: *type_id,
+                index: index as u32,
+                span: struct_decl
+                    .fields
+                    .get(index)
+                    .map_or(struct_decl.span, |f| f.span),
+                is_hidden: false,
+                serde_rename: None,
+                serde_default: false,
+                serde_positional: false,
+                default_expr: None,
+            })
+            .collect();
+        let type_params: Vec<crate::tir::TirTypeParam> = struct_decl
+            .type_params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| crate::tir::TirTypeParam {
+                name: p.name.clone(),
+                is_effect: p.is_effect,
+                is_pack: p.is_pack,
+                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
+                default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
+                index: i as u32,
+            })
+            .collect();
+        self.pending_local_structs.push(TirStruct {
+            name: mangled_name,
+            module_source: self.current_module_source.clone(),
+            visibility: ast::Visibility::Private,
+            type_params,
+            monomorph_info: None,
+            fields,
+            span: struct_decl.span,
+            serde_rename_all: None,
+        });
+    }
+
+    /// The base type comes from `sem.decls.local_newtypes` — the durable,
+    /// mangled-name-keyed fact `resolve_local_newtype` recorded.
+    fn reify_local_newtype(&mut self, newtype_decl: &ast::Newtype) {
+        if !newtype_decl.type_params.is_empty() {
+            // Generic local newtypes are unresolved (see `resolve_local_newtype`).
+            return;
+        }
+        let mangled_name =
+            crate::name::mangle_local_item_name(&newtype_decl.name, newtype_decl.id);
+        let Some(&type_id) = self.sem.decls.local_newtypes.get(&mangled_name) else {
+            return;
+        };
+        self.pending_local_newtypes.push(TirNewtype {
+            name: mangled_name,
+            module_source: self.current_module_source.clone(),
+            visibility: ast::Visibility::Private,
+            type_id,
+            span: newtype_decl.span,
+        });
     }
 
     /// Reify a `variant V<T> { … }` declaration. Cases' payload types
@@ -1887,11 +1998,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Stmt::Assert(assert_stmt) => self.reify_assert(assert_stmt, ctx),
             ast::Stmt::ForOf(for_of) => self.reify_for_of(for_of, ctx),
             // A local type/impl declaration emits no runtime instruction —
-            // declaring a type has no effect at execution time. The
-            // declaration's own TIR (struct/enum/impl registration) is
-            // produced by the earlier elaboration passes that resolve local
-            // items, not here.
-            ast::Stmt::Item(_) => vec![],
+            // declaring a type has no effect at execution time — but its
+            // own TIR (struct/newtype) is built here, in reify, from the
+            // durable facts `resolve_local_struct`/`resolve_local_newtype`
+            // recorded. See `reify_local_item`.
+            ast::Stmt::Item(item) => {
+                self.reify_local_item(item);
+                vec![]
+            }
             // `build_tir_from_state` skips reify for modules with syntax
             // errors, so reify never walks an `Error` placeholder.
             ast::Stmt::Error(_) => {

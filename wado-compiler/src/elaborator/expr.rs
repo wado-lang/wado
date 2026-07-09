@@ -3151,7 +3151,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Resolve struct name and module_source.
         // Local definitions shadow imported/prelude structs.
         let (struct_name, struct_module_source) = if self
-            .lookup_struct_fields_in(name, &self.current_module_source)
+            .lookup_struct_fields_in_scope(name, &self.current_module_source)
             .is_some()
         {
             (name.clone(), self.current_module_source.clone())
@@ -3188,9 +3188,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (name.clone(), self.current_module_source.clone())
         };
 
-        // Use canonical name from struct_fields info (not import alias) for consistent TypeId
+        // Use canonical name from struct_fields info (not import alias) for
+        // consistent TypeId. `struct_name` may still be a bare, pre-
+        // canonicalization name matched via the current function's own
+        // local structs above, so this lookup needs the same function-local
+        // awareness — its result's `info.name` is what makes it canonical
+        // (the internal mangled identity for a local struct).
         let struct_name = self
-            .lookup_struct_fields_in(&struct_name, &struct_module_source)
+            .lookup_struct_fields_in_scope(&struct_name, &struct_module_source)
             .map(|info| info.name.clone())
             .unwrap_or(struct_name);
 
@@ -3461,27 +3466,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Check if this is a generic struct and infer type arguments.
         // Stage 7-B: reify rebuilds the mangled name + fields; the combined
         // walk only needs the substitution / coercion side effects below and
-        // the resulting struct type.
-        // A local generic struct (`Stmt::Item`) is not in `generic_struct_names`
-        // (module-level only) — see `resolve_generic_type` for the same
-        // widening. `struct_name` was just reassigned (above) to the
-        // canonical storage name from `StructFieldInfo` — the internal
-        // mangled name for a local struct — so check the durable,
-        // mangled-name-keyed `local_struct_fields`, not the bare-name-keyed
-        // `fn_local_struct_fields`.
-        let is_local_generic_struct = self
-            .sem
-            .decls
-            .local_struct_fields
-            .get(&struct_name)
+        // the resulting struct type. `struct_name`/`struct_module_source`
+        // were just reassigned (above) to the canonical storage identity —
+        // the internal mangled name for a local struct (`Stmt::Item`, see
+        // `resolve_local_struct`), or the bare declared name for a
+        // module-level one — so a single `struct_fields_in` lookup on that
+        // identity decides "is this generic" the same way it decides "which
+        // struct's info is this", instead of checking `generic_struct_names`
+        // (module-level only) and a local-struct table separately: two
+        // lookups that could name different structs if a local struct
+        // shadows a same-named module-level generic one.
+        let is_generic_struct = self
+            .lookup_struct_fields_in(&struct_name, &struct_module_source)
             .is_some_and(|info| !info.type_param_bounds.is_empty());
-        let (struct_type, _mangled_struct_name, _fields) = if self
-            .sem
-            .decls
-            .generic_struct_names
-            .contains(&struct_name)
-            || is_local_generic_struct
-        {
+        let (struct_type, _mangled_struct_name, _fields) = if is_generic_struct {
             // This is a generic struct - infer type arguments from field values.
             // `expected_type` lets the caller's annotation (e.g.
             // `let x: Container<i32> = Container { value: 0 }`) fill phantom
