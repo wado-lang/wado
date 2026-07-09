@@ -403,7 +403,7 @@ fn remove_dead_bindings(engine: &mut Engine, block: BlockId, dead: &IndexSet<Stm
     let mut child_blocks = Vec::new();
     for s in stmts {
         engine.body.for_each_child(NodeRef::Stmt(s), |c| {
-            collect_child_blocks(engine.body, c, &mut child_blocks)
+            collect_child_blocks(engine.body, c, &mut child_blocks);
         });
     }
     for b in child_blocks {
