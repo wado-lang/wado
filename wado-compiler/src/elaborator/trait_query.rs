@@ -144,9 +144,9 @@ pub(crate) fn find_trait_decl_methods_with_module_with(
         symbols,
         trait_env,
     );
-    if let Some((module_src, item_idx)) = trait_env.decl_index.get(&canonical_key)
+    if let Some((module_src, item_id)) = trait_env.decl_index.get(&canonical_key)
         && let Some(module) = loaded_modules.get(module_src)
-        && let Some(Item::Trait(trait_decl)) = module.items.get(*item_idx)
+        && let Some(Item::Trait(trait_decl)) = module.item_by_id(*item_id)
     {
         return Some((trait_decl.methods.clone(), module_src.clone()));
     }

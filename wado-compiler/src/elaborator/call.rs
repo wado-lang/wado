@@ -1476,7 +1476,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         operation: &str,
     ) -> Option<(Vec<TypeId>, Option<TypeId>)> {
         let canonical_key = self.canonical_decl_key(effect);
-        let (module_source, item_idx) = self
+        let (module_source, item_id) = self
             .tysys
             .trait_env
             .effect_decl_index
@@ -1484,7 +1484,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .or_else(|| self.tysys.trait_env.resource_decl_index.get(&canonical_key))?
             .clone();
         let module = self.loaded_modules.get(&module_source)?;
-        let methods = match module.items.get(item_idx)? {
+        let methods = match module.item_by_id(item_id)? {
             crate::ast::Item::Interface(decl) => &decl.methods,
             crate::ast::Item::Resource(decl) => &decl.methods,
             _ => return None,

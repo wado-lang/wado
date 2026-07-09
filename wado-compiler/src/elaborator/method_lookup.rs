@@ -2,7 +2,7 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self, BinaryOp, Expr, Item, Type};
+use crate::ast::{self, AstId, BinaryOp, Expr, Item, Type};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
@@ -22,9 +22,9 @@ use super::tysys::TypeSystem;
 use super::util::placeholder;
 
 /// Lightweight reference to an impl block, avoiding deep clones. Stores
-/// `(module_source, item_idx)` into `loaded_modules`, re-accessed on demand
-/// instead of cloning the impl block's fields.
-struct ImplBlockRef(ModuleSource, usize);
+/// `(module_source, item_id)` into `loaded_modules`, re-accessed on demand
+/// via `Module::item_by_id` instead of cloning the impl block's fields.
+struct ImplBlockRef(ModuleSource, AstId);
 
 /// Inputs for [`Elaborator::infer_method_type_args`].
 ///
@@ -156,10 +156,10 @@ impl TypeSystem {
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Get a reference to the `ImplBlock` from an `ImplBlockRef`.
     fn get_impl_block<'b>(&'b self, r: &ImplBlockRef) -> &'b ast::ImplBlock {
-        let ImplBlockRef(module_src, item_idx) = r;
+        let ImplBlockRef(module_src, item_id) = r;
         let module = &self.loaded_modules[module_src];
-        match &module.items[*item_idx] {
-            Item::Impl(impl_block) => impl_block,
+        match module.item_by_id(*item_id) {
+            Some(Item::Impl(impl_block)) => impl_block,
             _ => unreachable!("ImplBlockRef points to non-impl item"),
         }
     }
@@ -578,10 +578,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // permits it), so search every module that hosts an
             // `impl <struct_name>` — disambiguated by type identity below so
             // a same-named type declared in a different module is not matched.
-            let entries: Vec<(ModuleSource, usize)> =
+            let entries: Vec<(ModuleSource, AstId)> =
                 self.tysys.trait_env.inherent_impl_keys(&struct_name);
-            for (impl_module, item_idx) in &entries {
-                let Item::Impl(impl_block) = &self.loaded_modules[impl_module].items[*item_idx]
+            for (impl_module, item_id) in &entries {
+                let Some(Item::Impl(impl_block)) =
+                    self.loaded_modules[impl_module].item_by_id(*item_id)
                 else {
                     continue;
                 };
@@ -785,11 +786,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if struct_module_source.is_none() {
             // No specific module: fetch every inherent impl registered for
             // this type name across all loaded modules from the index.
-            let entries: Vec<(ModuleSource, usize)> =
+            let entries: Vec<(ModuleSource, AstId)> =
                 self.tysys.trait_env.inherent_impl_keys(&struct_name);
-            for (search_module_source, item_idx) in &entries {
-                let Item::Impl(impl_block) =
-                    &self.loaded_modules[search_module_source].items[*item_idx]
+            for (search_module_source, item_id) in &entries {
+                let Some(Item::Impl(impl_block)) =
+                    self.loaded_modules[search_module_source].item_by_id(*item_id)
                 else {
                     continue;
                 };

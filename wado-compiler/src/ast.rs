@@ -341,6 +341,18 @@ impl Module {
         }
         finder.best.map(|(id, _)| id)
     }
+
+    /// Find the top-level [`Item`] whose own `AstId` (i.e. [`Item::id`])
+    /// equals `id`.
+    ///
+    /// Used to resolve an `AstId` recorded by an index (e.g.
+    /// `TraitEnv::impl_headers`) back to its declaration, instead of a
+    /// positional index into `items` that a reload could reorder. `id` must
+    /// name a top-level item, not a nested node (field, method, case, …) —
+    /// those have no entry here.
+    pub fn item_by_id(&self, id: AstId) -> Option<&Item> {
+        self.items.iter().find(|item| item.id() == id)
+    }
 }
 
 /// Returns true if `(line, column)` lies in `[span.line:column, span.end_line:end_column)`.
@@ -1005,6 +1017,33 @@ pub enum Item {
 }
 
 impl Item {
+    /// The `AstId` of this item's declaration node. Every variant carries
+    /// one — there is no id-less item — so this is the canonical way to
+    /// find an item by identity (e.g. resolving an index built during
+    /// `TraitEnv::build` back to the source item) instead of a positional
+    /// index into `Module::items`, which a reload can reorder.
+    pub fn id(&self) -> AstId {
+        match self {
+            Item::Use(d) => d.id,
+            Item::Function(d) => d.id,
+            Item::Interface(d) => d.id,
+            Item::Struct(d) => d.id,
+            Item::Enum(d) => d.id,
+            Item::Variant(d) => d.id,
+            Item::Flags(d) => d.id,
+            Item::Newtype(d) => d.id,
+            Item::TupleTypeDecl(d) => d.id,
+            Item::BuiltinTypeDecl(d) => d.id,
+            Item::Impl(d) => d.id,
+            Item::Trait(d) => d.id,
+            Item::Resource(d) => d.id,
+            Item::World(d) => d.id,
+            Item::Test(d) => d.id,
+            Item::Global(d) => d.id,
+            Item::Error(d) => d.id,
+        }
+    }
+
     /// Declared visibility, or `None` for items that carry no modifier.
     pub fn visibility(&self) -> Option<Visibility> {
         match self {
