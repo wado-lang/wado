@@ -2216,14 +2216,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // `resolve_named_type` maps primitives to their canonical
                 // TypeTable id rather than a struct wrapper.
                 let self_type_id = scope.resolve_named_type(struct_name, Span::default(), false);
-                let old_self = scope.annotate_ctx.trait_ctx.self_type;
                 scope.annotate_ctx.trait_ctx.self_type = Some(self_type_id);
                 let result = default_method
                     .return_type
                     .as_ref()
                     .map(|t| scope.resolve_type(t))
                     .unwrap_or(TypeTable::UNIT);
-                scope.annotate_ctx.trait_ctx.self_type = old_self;
+                // `trait_ctx` (including `self_type`) is auto-restored on `drop(scope)`.
                 drop(scope);
                 return result;
             }
