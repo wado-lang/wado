@@ -144,8 +144,7 @@ global ZERO_WIDTH_RANGES: List<[i32, i32]> = [
 ];
 
 fn in_ranges(ranges: &List<[i32, i32]>, cp: i32) -> bool {
-    for let mut i = 0; i < ranges.len(); i += 1 {
-        let r = ranges[i];
+    for let r of ranges {
         if r.0 <= cp <= r.1 {
             return true;
         }
@@ -157,22 +156,17 @@ fn in_ranges(ranges: &List<[i32, i32]>, cp: i32) -> bool {
 /// (Narrow/Neutral/Ambiguous/Halfwidth), or 2 (Wide/Fullwidth).
 pub fn char_display_width(c: char) -> i32 {
     let cp = c as i32;
+    // Zero-width codepoints (all above 0xA0) are checked before the range
+    // match so they don't fall through to the width-1 default.
     if in_ranges(&ZERO_WIDTH_RANGES, cp) {
         return 0;
     }
-    if cp < 0x20 {
-        return 0;
-    }
-    if cp < 0x7F {
-        return 1;
-    }
-    if cp < 0xA0 {
-        return 0;
-    }
-    if in_ranges(&WIDE_RANGES, cp) {
-        return 2;
-    }
-    return 1;
+    return match cp {
+        0x00..<0x20 => 0,  // C0 controls
+        0x20..<0x7F => 1,  // printable ASCII
+        0x7F..<0xA0 => 0,  // DEL + C1 controls
+        _ => if in_ranges(&WIDE_RANGES, cp) { 2 } else { 1 },
+    };
 }
 
 /// The display width of a string: the sum of its characters' widths. No

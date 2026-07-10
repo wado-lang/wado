@@ -713,18 +713,15 @@ fn is_space(c: char) -> bool {
 }
 
 fn is_ascii_punct(c: char) -> bool {
-    let v = c as i32;
-    return 33 <= v <= 47 || 58 <= v <= 64 || 91 <= v <= 96 || 123 <= v <= 126;
+    return c matches { '!'..='/' | ':'..='@' | '['..='`' | '{'..='~' };
 }
 
 fn is_ascii_alnum(c: char) -> bool {
-    let v = c as i32;
-    return 48 <= v <= 57 || 65 <= v <= 90 || 97 <= v <= 122;
+    return c matches { '0'..='9' | 'a'..='z' | 'A'..='Z' };
 }
 
 fn is_ascii_alpha(c: char) -> bool {
-    let v = c as i32;
-    return 65 <= v <= 90 || 97 <= v <= 122;
+    return c matches { 'a'..='z' | 'A'..='Z' };
 }
 
 fn is_scheme_char(c: char) -> bool {

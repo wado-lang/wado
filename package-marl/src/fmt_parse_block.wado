@@ -139,25 +139,12 @@ fn try_front_matter(lines: &List<String>) -> Option<[FrontMatterNode, i32]> {
         return null;
     }
     let first = lines[0].trim_end();
-    // Explicit annotation works around a compiler bug where an unannotated
-    // `let` bound to an if/else mixing `Option::Some(...)` and a bare `null`
-    // branch produces invalid Wasm (wado-lang/wado, filed separately).
-    let kind: Option<FrontMatterKind> = if first == "---" {
-        Option::Some(FrontMatterKind::Yaml);
-    } else if first == "+++" {
-        Option::Some(FrontMatterKind::Toml);
-    } else {
-        null;
-    };
-    let k = match kind {
-        Some(k) => k,
-        None => {
+    let [k, delim] = match first {
+        "---" => [FrontMatterKind::Yaml, "---"],
+        "+++" => [FrontMatterKind::Toml, "+++"],
+        _ => {
             return null;
         },
-    };
-    let delim = match k {
-        FrontMatterKind::Yaml => "---",
-        FrontMatterKind::Toml => "+++",
     };
     let mut i = 1;
     let mut body_lines: List<String> = [];
@@ -911,7 +898,7 @@ fn parse_table(lines: &List<String>, start: i32, end: i32, refs: &RefTable, out:
 
 fn cells_to_nodes(cells: &List<String>, ncol: i32, refs: &RefTable) -> List<List<Node>> {
     let mut out: List<List<Node>> = [];
-    for let mut idx = 0; idx < ncol; idx += 1 {
+    for let idx of 0..<ncol {
         let text = match cells.get(idx) {
             Some(c) => c,
             None => "",
@@ -928,18 +915,15 @@ fn is_blank(line: &String) -> bool {
 }
 
 fn is_digit(c: char) -> bool {
-    let v = c as i32;
-    return 48 <= v <= 57;
+    return c matches { '0'..='9' };
 }
 
 fn is_ascii_alnum(c: char) -> bool {
-    let v = c as i32;
-    return 48 <= v <= 57 || 65 <= v <= 90 || 97 <= v <= 122;
+    return c matches { '0'..='9' | 'a'..='z' | 'A'..='Z' };
 }
 
 fn is_ascii_alpha(c: char) -> bool {
-    let v = c as i32;
-    return 65 <= v <= 90 || 97 <= v <= 122;
+    return c matches { 'a'..='z' | 'A'..='Z' };
 }
 
 /// A leading-indentation whitespace column. A tab counts as one column, the

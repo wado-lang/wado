@@ -115,9 +115,7 @@ fn print_block(node: &Node, out: &mut String) {
 }
 
 fn print_heading(h: &Heading, out: &mut String) {
-    for let _ of 0..<h.level {
-        out.push('#');
-    }
+    out.push_str(&"#".repeat(h.level));
     out.push(' ');
     out.push_str(&print_inline_seq(&h.children));
 }
@@ -182,11 +180,7 @@ fn print_code_block(cb: &CodeBlock, out: &mut String) {
 fn fence_string(code: &String) -> String {
     let run = longest_backtick_run(code);
     let len = if run > 2 { run } else { 2 } + 1;
-    let mut s = String::new();
-    for let _ of 0..<len {
-        s.push('`');
-    }
-    return s;
+    return "`".repeat(len);
 }
 
 fn longest_backtick_run(code: &String) -> i32 {
@@ -208,18 +202,17 @@ fn longest_backtick_run(code: &String) -> i32 {
 // --- lists ---
 
 fn print_list(list: &MdList, out: &mut String) {
-    let mut first = true;
-    for let mut idx = 0; idx < list.items.len(); idx += 1 {
-        let item = list.items[idx];
-        if !first {
+    let mut idx = 0;
+    for let item of list.items {
+        if idx > 0 {
             out.push('\n');
             if item.loose {
                 out.push('\n');
             }
         }
-        first = false;
         let marker = if list.ordered { `{list.start + idx}.` } else { "-" };
         print_item(&item, &marker, out);
+        idx += 1;
     }
 }
 
@@ -270,7 +263,7 @@ fn print_table(t: &MdTable, out: &mut String) {
     }
 
     let mut widths: List<i32> = [];
-    for let mut c = 0; c < ncol; c += 1 {
+    for let c of 0..<ncol {
         let mut w = display_width(&header_texts[c]);
         for let row of rows_texts {
             let cw = display_width(&row[c]);
@@ -296,7 +289,7 @@ fn print_table(t: &MdTable, out: &mut String) {
 
 fn row_texts(row: &MdTableRow, ncol: i32) -> List<String> {
     let mut out: List<String> = [];
-    for let mut c = 0; c < ncol; c += 1 {
+    for let c of 0..<ncol {
         let text = match row.cells.get(c) {
             Some(cell) => print_inline_seq(&cell),
             None => "",
@@ -323,7 +316,7 @@ fn alignment_colon_count(a: &ColumnAlign) -> i32 {
 }
 
 fn print_table_row(cells: &List<String>, widths: &List<i32>, align: &List<ColumnAlign>, out: &mut String) {
-    for let mut c = 0; c < cells.len(); c += 1 {
+    for let c of 0..<cells.len() {
         if c == 0 {
             out.push_str(&"| ");
         } else {
@@ -354,7 +347,7 @@ fn print_table_row(cells: &List<String>, widths: &List<i32>, align: &List<Column
 }
 
 fn print_delimiter_row(widths: &List<i32>, align: &List<ColumnAlign>, out: &mut String) {
-    for let mut c = 0; c < widths.len(); c += 1 {
+    for let c of 0..<widths.len() {
         if c == 0 {
             out.push_str(&"| ");
         } else {
