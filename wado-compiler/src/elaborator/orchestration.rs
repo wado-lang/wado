@@ -1396,11 +1396,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 annotate_ctx: super::scope::Scope::default(),
                 invocations: Rc::clone(&state.invocations),
                 interner: Rc::clone(&state.interner),
-                pending_method_dispatch: None,
-                pending_operator_ast_id: None,
-                // Reify consumes the per-element tuple-for-of overlays the
-                // body walk captures here, so they are always recorded.
-                capture_tuple_overlays: true,
                 suppress_reference_recording: false,
                 infer_holes: super::infer_hole::InferHoleTable::default(),
             };

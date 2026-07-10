@@ -246,8 +246,13 @@ re-resolution (the reify Stage-7 precedent).
       `TraitContext` (restored by `TypeParamScope`; the reader-less
       `current_effect_params` set deleted), and `AnnotateCtx` is renamed to
       `Scope` ahead of S7's query signatures.
-- [ ] S2 Side channels: dispatch outcome as return value, operator `AstId` as
-      parameter; delete `capture_tuple_overlays`.
+- [x] S2 Side channels: dispatch outcome as return value, operator `AstId` as
+      parameter; delete `capture_tuple_overlays`. Landed:
+      `resolve_method_call_with` returns `MethodCallOutcome { expr, dispatch }`
+      (the for-of synthetic callers read `dispatch` instead of a field), and
+      the operator dispatcher takes `origin: Option<AstId>` threaded from
+      `resolve_binary` / unary / compound-assign / comparison-chain sites —
+      nested dispatches can no longer clobber a pending record.
 - [ ] S3 Decl work → decl pass: move the `resolve_module` preamble into
       `annotate_decls`; associated-const collection becomes O(N).
 - [ ] S4 `Signatures` stage A — free functions, globals, effect ops, resource
