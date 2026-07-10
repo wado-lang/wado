@@ -1,0 +1,49 @@
+// Deep copy of recursive types whose cycle runs through a variant payload
+// (struct -> Option<struct>). The synthesized $value_copy helpers are
+// mutually recursive; the old identity fallback aliased the whole chain
+// (WEP 2026-05-21).
+
+struct Node {
+    value: i32,
+    next: Option<Node>,
+}
+
+test "recursive struct copy is deep" {
+    let a = Node { value: 1, next: Option::Some(Node { value: 2, next: null }) };
+    let mut b = a;
+    b.value = 10;
+    if let Some(n) = &mut b.next {
+        n.value = 20;
+    }
+    assert a.value == 1;
+    if let Some(n) = &a.next {
+        assert n.value == 2;
+    }
+    assert b.value == 10;
+    if let Some(n) = &b.next {
+        assert n.value == 20;
+    }
+}
+
+variant Tree {
+    Branch(List<Tree>),
+    Leaf(i32),
+}
+
+test "recursive variant copy is deep" {
+    let leaves: List<Tree> = [Tree::Leaf(1)];
+    let a = Tree::Branch(leaves);
+    let mut b = a;
+    if let Branch(children) = &mut b {
+        children.push(Tree::Leaf(2));
+    }
+    if let Branch(children) = &a {
+        assert children.len() == 1;
+    }
+    if let Branch(children) = &b {
+        assert children.len() == 2;
+    }
+}
+
+__DATA__
+{"test": {}}

@@ -41,6 +41,7 @@ pub struct ValueCopyPlan {
 }
 
 pub fn plan(flat: &mut FlatPackage) -> ValueCopyPlan {
+    register_variant_cases(flat);
     let seed = analyze::collect_seed_types(flat);
     let name_for_type = synthesize::synthesize_helpers(flat, seed);
     // Computed after synthesis so the value-copy helpers (always owned) are
@@ -62,18 +63,62 @@ pub fn plan(flat: &mut FlatPackage) -> ValueCopyPlan {
     }
 }
 
+/// Publish every variant declaration's case templates to the type table, so
+/// [`needs_value_copy`] can classify variants by payload from a `&TypeTable`
+/// in every later phase (the seed walk here, the fold, `optimize`,
+/// `wir_build`).
+fn register_variant_cases(flat: &FlatPackage) {
+    let mut type_table = flat.type_table.borrow_mut();
+    for variant in &flat.variants {
+        let cases: Vec<(String, u32, TypeId)> = variant
+            .cases
+            .iter()
+            .map(|c| (c.name.clone(), c.index, c.payload))
+            .collect();
+        type_table.register_variant_cases(
+            variant.name.clone(),
+            variant.module_source.clone(),
+            cases,
+        );
+    }
+}
+
 /// True when a value of `type_id` must be deep-copied on assignment
 /// or parameter passing.
 ///
 /// `analyze::should_wrap` and `synthesize::make_field_copy` MUST
 /// agree: a `true` here means `synthesize::generate_copy_function`
 /// emits a non-identity helper, and every caller routes through it.
-/// Wrapping a type whose helper is identity (`return v;`) leaves the
-/// helper typed as `(T) -> T` non-null at the WIR level, and a
-/// nullable source (e.g. a `None`-initialised `Option<&T>` global,
-/// `ref.null` at lowering) trips a `(ref X) / (ref null X)`
-/// validation mismatch.
 pub fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
+    needs_copy_in_env(type_id, &[], type_table, 0)
+}
+
+/// A type reference paired with the environment its `TypeParam`s resolve in.
+/// Descending into a variant template's case payloads keeps each payload id
+/// in template terms and carries the instantiation's `type_args` (themselves
+/// paired with the outer environment) alongside, so the classification never
+/// has to intern substituted types — it can run through a `&TypeTable`.
+#[derive(Clone)]
+struct TypeInEnv {
+    type_id: TypeId,
+    env: Vec<TypeInEnv>,
+}
+
+/// Cycles are only possible through variant-payload chains; every other
+/// deep-copy carrier (struct, `List`, tuple, raw array) answers without
+/// recursing. A chain this deep is a degenerate recursive variant nest, and
+/// `true` (copy) is the safe answer for it.
+const NEEDS_COPY_DEPTH_LIMIT: usize = 32;
+
+fn needs_copy_in_env(
+    type_id: TypeId,
+    env: &[TypeInEnv],
+    type_table: &TypeTable,
+    depth: usize,
+) -> bool {
+    if depth > NEEDS_COPY_DEPTH_LIMIT {
+        return true;
+    }
     let items = type_table.compiler_items();
     let box_name = items.struct_name(crate::compiler_item::CompilerItem::Box);
     let list_name = items.struct_name(crate::compiler_item::CompilerItem::List);
@@ -98,27 +143,49 @@ pub fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
             if name == list_name {
                 return true;
             }
-            // `Option<T>` / `Result<T, E>` are reference-shaped variants
-            // at WIR level. Their synthesized helper is identity
-            // (`return v;`); a non-identity match body that
-            // deep-copies the payload would have to be typed at WIR
-            // level as `(ref X) -> (ref X)` non-null, but call sites
-            // routinely pass nullable sources (e.g. a `None`-initialised
-            // `Option<&T>` global lowers to `ref.null`), hitting a
-            // `(ref X) / (ref null X)` validation mismatch. References
-            // (`Option<&mut T>`) don't need deep-copy anyway — a ref
-            // copy intentionally shares the pointee. For value-typed
-            // payloads (`Option<String>`, `Option<MyStruct>`),
-            // shallow-sharing the payload across copies remains an
-            // open bug; tracked separately from the nested-struct /
-            // array-of-struct fixes that *are* landed here.
-            // Other generic instances: only generic-struct templates
-            // need deep copy. Generic-variant templates and
-            // generic-resource templates fall through to identity in
-            // `synthesize::build_copy_body`, so wrapping them is wasted
-            // and triggers the nullable-source mismatch described
-            // above.
-            type_table.find_struct_type(name, module_source).is_some()
+            if type_table.find_struct_type(name, module_source).is_some() {
+                // Generic-struct templates always need field-by-field copy.
+                return true;
+            }
+            if let Some(cases) = type_table.variant_template_cases(name, module_source) {
+                let case_env: Vec<TypeInEnv> = type_args
+                    .iter()
+                    .map(|arg| TypeInEnv {
+                        type_id: *arg,
+                        env: env.to_vec(),
+                    })
+                    .collect();
+                return cases.iter().any(|(_, _, payload)| {
+                    needs_copy_in_env(*payload, &case_env, type_table, depth + 1)
+                });
+            }
+            // Generic-resource templates and unmaterialised instances.
+            false
+        }
+        // A variant needs a deep copy exactly when one of its payloads
+        // does: the variant value itself is reference-shaped at the WIR
+        // level, so copying it shares the payload storage unless the
+        // synthesized helper re-constructs the matched case with a
+        // copied payload (`synthesize::build_variant_copy_body`).
+        // Payload-free and reference-payload variants stay share-safe.
+        ResolvedType::Variant {
+            name,
+            module_source,
+        } => type_table
+            .variant_template_cases(name, module_source)
+            .is_some_and(|cases| {
+                cases
+                    .iter()
+                    .any(|(_, _, payload)| needs_copy_in_env(*payload, &[], type_table, depth + 1))
+            }),
+        // A payload id in template terms: resolve the param through the
+        // instantiation environment. A bare param with no environment is
+        // an unmonomorphized template body — no copy decision applies.
+        ResolvedType::TypeParam { index, .. } => {
+            let i = *index as usize;
+            env.get(i).is_some_and(|entry| {
+                needs_copy_in_env(entry.type_id, &entry.env, type_table, depth + 1)
+            })
         }
         // The raw GC array is a value type: assignment / parameter
         // passing / return deep-copies it, like every other value.
@@ -136,11 +203,8 @@ pub fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
         // (which deep-copy via `array_clone` on their internal
         // `Array<T>`), not `&mut T`.
         ResolvedType::Ref(_) | ResolvedType::MutRef(_) => false,
-        // Variants and resources are reference-shaped at WIR level;
-        // their copy body is identity (`return v;`).
-        ResolvedType::Variant { .. }
-        | ResolvedType::Resource { .. }
-        | ResolvedType::GenericResource { .. } => false,
+        // Resources are opaque handles; copying shares the handle.
+        ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => false,
         _ => false,
     }
 }

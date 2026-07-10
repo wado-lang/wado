@@ -959,11 +959,14 @@ impl FunctionTranslator<'_, '_> {
                 value,
                 skip_value_copy,
             } => {
-                // Address-taken primitive locals are box-typed at the
-                // declaration site (via `shadow_params`); retype the
-                // Let to match and wrap its initial value. Mutually
-                // exclusive with the value-copy wrap below: primitives
-                // are not value-semantic.
+                // Address-taken replace-on-assign locals (primitives,
+                // variants, fn values) are box-typed at the declaration
+                // site (via `shadow_params`); retype the Let to match and
+                // wrap its initial value. The value-copy wrap composes
+                // with boxing: the payload is copied first, then boxed —
+                // a boxed variant is still value-semantic, only its
+                // storage cell changes. (For a boxed primitive the wrap
+                // predicate is false, so nothing extra is emitted.)
                 let (effective_type, box_wrap_type) = if self.address_taken.contains(local_index)
                     && let Some(&box_type) = self.base.box_plan.box_struct_types.get(type_id)
                 {
@@ -971,8 +974,7 @@ impl FunctionTranslator<'_, '_> {
                 } else {
                     (*type_id, None)
                 };
-                let needs_value_copy_wrap = box_wrap_type.is_none()
-                    && !*skip_value_copy
+                let needs_value_copy_wrap = !*skip_value_copy
                     && (*is_mut
                         || !value_copy::analyze::is_source_immutable(
                             value,
@@ -980,10 +982,13 @@ impl FunctionTranslator<'_, '_> {
                         ))
                     && self.should_wrap_value_copy(value);
                 let value_op = self.convert_operand(value);
+                let value_op = if needs_value_copy_wrap {
+                    self.wrap_value_copy_operand(value_op, *type_id)
+                } else {
+                    value_op
+                };
                 let value_op = if let Some(box_type) = box_wrap_type {
                     self.wrap_in_box(value_op, box_type, value.span).into()
-                } else if needs_value_copy_wrap {
-                    self.wrap_value_copy_operand(value_op, *type_id)
                 } else {
                     value_op
                 };
@@ -1510,7 +1515,9 @@ impl FunctionTranslator<'_, '_> {
                 variant_type: *variant_type,
                 case_index: *case_index,
                 case_name: case_name.clone(),
-                payload: payload.as_ref().map(|p| self.convert_operand(p)),
+                // A case payload is stored by value, like a struct field:
+                // constructing from a live binding deep-copies it.
+                payload: payload.as_ref().map(|p| self.convert_literal_element(p)),
             },
             TirExprKind::EnumConstruct {
                 enum_type,

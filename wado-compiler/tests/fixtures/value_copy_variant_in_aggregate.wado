@@ -1,0 +1,74 @@
+// Copying an aggregate that contains a variant must still deep-copy the
+// aggregate (and the variant's payload). Regression: any struct or List
+// transitively containing a variant used to fall back to an identity
+// $value_copy helper, aliasing every field (WEP 2026-05-21).
+
+struct Config {
+    count: i32,
+    tag: Option<String>,
+}
+
+struct Deep {
+    inner: Config,
+}
+
+test "struct with variant field copies independently" {
+    let a = Config { count: 1, tag: Option::Some("x") };
+    let mut b = a;
+    b.count = 99;
+    assert a.count == 1;
+    assert b.count == 99;
+}
+
+test "nested struct with variant field copies independently" {
+    let a = Deep { inner: Config { count: 1, tag: null } };
+    let mut b = a;
+    b.inner.count = 99;
+    assert a.inner.count == 1;
+}
+
+test "struct copy detaches variant payload" {
+    let list: List<i32> = [1];
+    let a = Holder { v: Option::Some(list) };
+    let mut b = a;
+    if let Some(payload) = &mut b.v {
+        payload.push(2);
+    }
+    if let Some(payload) = &a.v {
+        assert payload.len() == 1;
+    }
+}
+
+struct Holder {
+    v: Option<List<i32>>,
+}
+
+test "list of options copies independently" {
+    let one: List<i32> = [1];
+    let a: List<Option<List<i32>>> = [Option::Some(one)];
+    let mut b = a;
+    if let Some(v) = &mut b[0] {
+        v.push(2);
+    }
+    if let Some(v) = &a[0] {
+        assert v.len() == 1;
+    }
+    if let Some(v) = &b[0] {
+        assert v.len() == 2;
+    }
+}
+
+test "tuple with variant element copies independently" {
+    let list: List<i32> = [1];
+    let a = [Option::Some(list), 7];
+    let mut b = a;
+    if let Some(v) = &mut b.0 {
+        v.push(2);
+    }
+    if let Some(v) = &a.0 {
+        assert v.len() == 1;
+    }
+}
+
+__DATA__
+{"test": {}}

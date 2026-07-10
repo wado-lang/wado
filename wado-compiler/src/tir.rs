@@ -671,6 +671,14 @@ pub struct TypeTable {
     /// `synthesis::traits::synthesize_traits`, each filtering for the trait
     /// names it owns.
     bound_driven_synth_requests: IndexSet<(String, ModuleSource, String)>,
+    /// Variant case templates: `(variant name, module)` → `(case name, case
+    /// index, payload TypeId)` per case, with `TypeTable::UNIT` for unit
+    /// cases. Payload ids are in the declaring template's terms (they may be
+    /// `TypeParam`s). Registered from `FlatPackage::variants` at the start of
+    /// `lower::plan::value_copy::plan`, so `needs_value_copy` can classify a
+    /// variant by its payloads through a `&TypeTable` (`lower`, `optimize`,
+    /// and `wir_build` all query it there).
+    variant_case_index: IndexMap<(String, ModuleSource), Vec<(String, u32, TypeId)>>,
 }
 
 impl Default for TypeTable {
@@ -757,6 +765,7 @@ impl TypeTable {
             type_by_symbol: IndexMap::default(),
             symbol_by_type: TypeMap::default(),
             bound_driven_synth_requests: IndexSet::default(),
+            variant_case_index: IndexMap::default(),
         };
 
         // Pre-populate primitive types matching the constants above
@@ -1470,6 +1479,32 @@ impl TypeTable {
             base_name: None,
         };
         self.intern_map.get(&key).copied()
+    }
+
+    /// Register a variant declaration's case templates for
+    /// [`Self::variant_template_cases`].
+    pub fn register_variant_cases(
+        &mut self,
+        name: String,
+        module_source: ModuleSource,
+        cases: Vec<(String, u32, TypeId)>,
+    ) {
+        self.variant_case_index.insert((name, module_source), cases);
+    }
+
+    /// Case templates of a variant declaration: `(case name, case index,
+    /// payload TypeId)`, `TypeTable::UNIT` for unit cases. Payload ids are in
+    /// the template's terms — substitute a `GenericInstance`'s `type_args`
+    /// for its `TypeParam`s. `None` until the declaration is registered (see
+    /// `variant_case_index`) or when `(name, module)` is not a variant.
+    pub fn variant_template_cases(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<&[(String, u32, TypeId)]> {
+        self.variant_case_index
+            .get(&(name.to_string(), module_source.clone()))
+            .map(Vec::as_slice)
     }
 
     /// Find a variant type by (name, `module_source`) pair via `intern_map` (O(1)).
