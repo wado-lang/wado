@@ -613,25 +613,26 @@ fn "dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.
     let i: i32;
     let self_11: ref "core:prelude/string.wado//String";
     let len_a: i32;
-    let _licm_used_21: i32;
-    let _licm_repr_22: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
-    let _licm_used_31: i32;
+    let v: ref "core:prelude/string.wado//String";
+    let _licm_used_22: i32;
+    let _licm_repr_23: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
+    let _licm_used_32: i32;
     i = 0;
-    _licm_used_21 = self.used;
-    _licm_repr_22 = self.repr;
-    _licm_used_31 = key.used;
+    _licm_used_22 = self.used;
+    _licm_repr_23 = self.repr;
+    _licm_used_32 = key.used;
     b58: block {
         l59: loop {
-            break_if b58 i >= _licm_used_21;
+            break_if b58 i >= _licm_used_22;
             if __inline_String_Eq__eq_2: block -> bool {
-                self_11 = builtin::array_get<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(_licm_repr_22, i).0;
+                self_11 = builtin::array_get<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(_licm_repr_23, i).0;
                 len_a = self_11.used;
-                if len_a != _licm_used_31 {
+                if len_a != _licm_used_32 {
                     break __inline_String_Eq__eq_2: 0;
                 }
                 break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(self_11.repr, key.repr, len_a);
             } {
-                return builtin::array_get<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(_licm_repr_22, i).1;
+                return ref.as_non_null(v = builtin::array_get<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(_licm_repr_23, i).1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v.used });
             }
             i = i + 1;
             continue l59;

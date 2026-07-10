@@ -249,7 +249,8 @@ fn build_copy_body(
         return single_return_block(clone, span);
     }
     if let Some(cases) = variant_cases_concrete(resolved, project, type_table) {
-        let body = build_variant_copy_body(type_id, &cases, v_local, type_table, span, extra_locals);
+        let body =
+            build_variant_copy_body(type_id, &cases, v_local, type_table, span, extra_locals);
         let _ = address_taken;
         return body;
     }

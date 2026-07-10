@@ -341,9 +341,9 @@ fn struct_fields_contain_copy_needing_variant(
         .iter()
         .filter(|s| s.name == mangled)
         .any(|s| {
-            s.fields.iter().any(|f| {
-                contains_copy_needing_variant(f.type_id, project, type_table, depth + 1)
-            })
+            s.fields
+                .iter()
+                .any(|f| contains_copy_needing_variant(f.type_id, project, type_table, depth + 1))
         })
 }
 
