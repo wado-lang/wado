@@ -29,11 +29,9 @@ use { parse_inline } from "./fmt_parse_inline.wado";
 use { chars_of, slice_chars } from "./str_cursor.wado";
 
 pub fn parse_document(source: &String) -> Node {
-    let normalized = source.replace("\r\n", "\n");
-    let mut lines: List<String> = [];
-    for let line of normalized.split("\n") {
-        lines.push(line);
-    }
+    // `lines()` splits on `\n` and `\r\n` and drops a trailing newline's empty
+    // line — the parser treats a trailing blank as a no-op anyway.
+    let lines: List<String> = source.lines().collect();
 
     let refs = collect_ref_defs(&lines);
 
