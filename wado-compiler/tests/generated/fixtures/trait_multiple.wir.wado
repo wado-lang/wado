@@ -189,13 +189,15 @@ global global:core:prelude/fpfmt.wado::__const_obj_10: ref null "core:prelude/st
 global global:core:prelude/fpfmt.wado::__const_obj_11: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32)), used: 20 };
 global global:trait_multiple.wado::__const_obj_30: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(65, 32, 99, 97, 116, 32, 110, 97, 109, 101, 100, 32)), used: 12 };
 global global:trait_multiple.wado::__const_obj_31: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(65, 32, 100, 111, 103, 32, 110, 97, 109, 101, 100, 32)), used: 12 };
-global global:trait_multiple.wado::__const_obj_32: ref null "trait_multiple.wado//Cat" = struct.new "trait_multiple.wado//Cat" { name: ref.as_non_null(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(87, 104, 105, 115, 107, 101, 114, 115)), used: 8 }) };
-global global:trait_multiple.wado::__const_obj_33: ref null "trait_multiple.wado//Dog" = struct.new "trait_multiple.wado//Dog" { name: ref.as_non_null(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(66, 117, 100, 100, 121)), used: 5 }) };
+global mut global:trait_multiple.wado::__const_obj_32: ref null "trait_multiple.wado//Dog" = ref.null none;
+global mut global:trait_multiple.wado::__const_obj_33: ref null "trait_multiple.wado//Cat" = ref.null none;
 global global:trait_multiple.wado::__const_obj_34: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(80, 101, 114, 105, 109, 101, 116, 101, 114, 58, 32)), used: 11 };
 
 fn "trait_multiple.wado/trait_multiple_impls"() with Stdout {
-    "core:cli/println"("trait_multiple.wado/Cat^Describe::describe"(global:trait_multiple.wado::__const_obj_32));
-    "core:cli/println"("trait_multiple.wado/Dog^Describe::describe"(global:trait_multiple.wado::__const_obj_33));
+    global:trait_multiple.wado::__const_obj_33 = struct.new "trait_multiple.wado//Cat" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Whiskers"), used: 8 } };
+    global:trait_multiple.wado::__const_obj_32 = struct.new "trait_multiple.wado//Dog" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Buddy"), used: 5 } };
+    "core:cli/println"("trait_multiple.wado/Cat^Describe::describe"(global:trait_multiple.wado::__const_obj_33));
+    "core:cli/println"("trait_multiple.wado/Dog^Describe::describe"(global:trait_multiple.wado::__const_obj_32));
 }
 
 fn "trait_multiple.wado/trait_multiple_methods"() with Stdout {

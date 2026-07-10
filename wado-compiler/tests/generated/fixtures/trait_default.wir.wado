@@ -171,14 +171,15 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 global mut global:trait_default.wado::__modules_initialized: bool = 0;
 global global:trait_default.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(68, 101, 115, 99, 114, 105, 112, 116, 105, 111, 110, 58, 32)), used: 13 };
-global global:trait_default.wado::__const_obj_1: ref null "trait_default.wado//Person" = struct.new "trait_default.wado//Person" { name: ref.as_non_null(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(65, 108, 105, 99, 101)), used: 5 }) };
-global global:trait_default.wado::__const_obj_2: ref null "trait_default.wado//Robot" = struct.new "trait_default.wado//Robot" { id: 42 };
-global global:trait_default.wado::__const_obj_3: ref null "trait_default.wado//Article" = struct.new "trait_default.wado//Article" { headline: ref.as_non_null(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(66, 114, 101, 97, 107, 105, 110, 103, 32, 78, 101, 119, 115)), used: 13 }), content: ref.as_non_null(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(83, 111, 109, 101, 116, 104, 105, 110, 103, 32, 104, 97, 112, 112, 101, 110, 101, 100)), used: 18 }) };
-global global:trait_default.wado::__const_obj_4: ref null "trait_default.wado//Tweet" = struct.new "trait_default.wado//Tweet" { text: ref.as_non_null(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(72, 101, 108, 108, 111, 32, 119, 111, 114, 108, 100)), used: 11 }) };
+global global:trait_default.wado::__const_obj_1: ref null "trait_default.wado//Robot" = struct.new "trait_default.wado//Robot" { id: 42 };
+global mut global:trait_default.wado::__const_obj_2: ref null "trait_default.wado//Person" = ref.null none;
+global mut global:trait_default.wado::__const_obj_3: ref null "trait_default.wado//Tweet" = ref.null none;
+global mut global:trait_default.wado::__const_obj_4: ref null "trait_default.wado//Article" = ref.null none;
 
 fn "trait_default.wado/trait_default_basic"() with Stdout {
-    "core:cli/println"("trait_default.wado/Person^Greet::greet"(global:trait_default.wado::__const_obj_1));
-    "core:cli/println"("trait_default.wado/Robot^Greet::greet"(global:trait_default.wado::__const_obj_2));
+    global:trait_default.wado::__const_obj_2 = struct.new "trait_default.wado//Person" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 } };
+    "core:cli/println"("trait_default.wado/Person^Greet::greet"(global:trait_default.wado::__const_obj_2));
+    "core:cli/println"("trait_default.wado/Robot^Greet::greet"(global:trait_default.wado::__const_obj_1));
 }
 
 fn "trait_default.wado/trait_default_calls_default"() with Stdout {
@@ -221,8 +222,10 @@ fn "trait_default.wado/trait_default_count"() with Stdout {
 }
 
 fn "trait_default.wado/trait_default_override"() with Stdout {
-    "core:cli/println"("trait_default.wado/Article^Summary::summary"(global:trait_default.wado::__const_obj_3));
-    "core:cli/println"("trait_default.wado/Tweet^Summary::summary"(global:trait_default.wado::__const_obj_4));
+    global:trait_default.wado::__const_obj_4 = struct.new "trait_default.wado//Article" { headline: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Breaking News"), used: 13 }, content: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Something happened"), used: 18 } };
+    "core:cli/println"("trait_default.wado/Article^Summary::summary"(global:trait_default.wado::__const_obj_4));
+    global:trait_default.wado::__const_obj_3 = struct.new "trait_default.wado//Tweet" { text: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Hello world"), used: 11 } };
+    "core:cli/println"("trait_default.wado/Tweet^Summary::summary"(global:trait_default.wado::__const_obj_3));
 }
 
 fn "trait_default.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {

@@ -98,7 +98,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:scope_shadow_self_ref.wado::__modules_initialized: bool = 0;
-global global:scope_shadow_self_ref.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(104, 101, 108, 108, 111)), used: 5 };
+global mut global:scope_shadow_self_ref.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = ref.null none;
 
 fn "scope_shadow_self_ref.wado/run"() with Stdout {
     let __local_4: ref "core:prelude/string.wado//String";
@@ -111,6 +111,7 @@ fn "scope_shadow_self_ref.wado/run"() with Stdout {
         global:scope_shadow_self_ref.wado::__modules_initialized = 1;
     };
     "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/i32::fmt_decimal"(2, __local_5); __local_4);
+    global:scope_shadow_self_ref.wado::__const_obj_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     "core:prelude/string.wado/String::push_str"(__local_6, global:scope_shadow_self_ref.wado::__const_obj_0);
     "core:prelude/string.wado/String::push"(__local_6, 32);

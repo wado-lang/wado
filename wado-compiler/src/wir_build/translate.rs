@@ -969,17 +969,14 @@ pub(super) struct FunctionTranslator<'a, 'b> {
     /// (which would panic at codegen since `__tmp` was never assigned a
     /// struct ref).
     pub(super) multi_value_split_locals: IndexMap<u32, IndexMap<String, (String, WirType)>>,
-    /// True while translating the value of a `GlobalVarSet` to a
-    /// `const_object_globalization`-hoisted global (`__const_obj_*`).
-    /// Overrides `package.string_inline_max_bytes` in
-    /// [`Self::translate_packed_array`] so a hoisted `&`-literal (e.g. a
-    /// synthesized `serde` field key, rebuilt on every call until its global
-    /// promotes to an eager Wasm constant) gets the `array.new_fixed` repr
-    /// regardless of length — unlike an *ordinary* string literal at this
-    /// call site (an `assert` diagnostic template, say), which must keep the
-    /// package-wide threshold so it stays a byte-scannable `array.new_data`
-    /// segment. Scoped to just this subtree: saved/restored around the
-    /// `GlobalVarSet` case, so it never leaks into any other literal.
+    /// True while translating the value of a `GlobalVarSet` to a global with
+    /// [`crate::nir::NirGlobal::prefer_fixed_string_repr`] set. Overrides
+    /// `package.string_inline_max_bytes` in [`Self::translate_packed_array`]
+    /// (still bounded by `name::INLINE_REF_EAGER_MAX_BYTES`) so the literal
+    /// gets the `array.new_fixed` repr `wir_optimize::const_global` can
+    /// promote to an eager Wasm constant. Scoped to just this subtree:
+    /// saved/restored around the `GlobalVarSet` case, so it never leaks into
+    /// any other literal (an ordinary string, or another global's value).
     pub(super) force_fixed_string_repr: bool,
 }
 
@@ -2086,9 +2083,9 @@ impl FunctionTranslator<'_, '_> {
                 name,
                 value,
             } => {
-                let is_hoisted = name.starts_with(crate::name::CONST_OBJ_GLOBAL_PREFIX);
+                let prefer_fixed = self.ctx.eager_repr_globals.contains(name);
                 let prev_force = self.force_fixed_string_repr;
-                if is_hoisted {
+                if prefer_fixed {
                     self.force_fixed_string_repr = true;
                 }
                 let val = self.translate_operand(*value);

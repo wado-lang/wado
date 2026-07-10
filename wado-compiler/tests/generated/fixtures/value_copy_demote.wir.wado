@@ -144,7 +144,7 @@ global global:value_copy_demote.wado::__const_obj_2: ref null "core:prelude/stri
 global global:value_copy_demote.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(99, 111, 114, 101, 58, 112, 114, 101, 108, 117, 100, 101, 47, 108, 105, 115, 116, 46, 119, 97, 100, 111)), used: 22 };
 global global:value_copy_demote.wado::__const_obj_4: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 118, 97, 108, 117, 101)), used: 17 };
 global global:value_copy_demote.wado::__const_obj_5: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32)), used: 20 };
-global global:value_copy_demote.wado::__const_obj_6: ref null "core:prelude//List<core:prelude/string.wado/String>" = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(112, 101, 97, 114)), used: 4 }, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(97, 112, 112, 108, 101)), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(112, 101, 97, 114)), used: 4 }, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(102, 105, 103)), used: 3 })), used: 4 };
+global mut global:value_copy_demote.wado::__const_obj_18: ref null "core:prelude//List<core:prelude/string.wado/String>" = ref.null none;
 
 fn "value_copy_demote.wado/distinct_count"(tokens) {
     let sorted: ref "core:prelude//List<core:prelude/string.wado/String>";
@@ -196,6 +196,7 @@ fn "value_copy_demote.wado/distinct_count"(tokens) {
 }
 
 fn "value_copy_demote.wado/run"() with Stdout {
+    let __b: ref "core:prelude//List<core:prelude/string.wado/String>";
     let n: i32;
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
@@ -209,8 +210,10 @@ fn "value_copy_demote.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:value_copy_demote.wado::__modules_initialized = 1;
     };
-    n = "value_copy_demote.wado/distinct_count"(global:value_copy_demote.wado::__const_obj_6);
-    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:prelude/primitive.wado/i32::fmt_decimal"(n, __local_4); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, __v1_25 = global:value_copy_demote.wado::__const_obj_6.used; __cond_26 = 1; builtin::array_get<ref "core:prelude/string.wado//String">(global:value_copy_demote.wado::__const_obj_6.repr, 0)); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, __v1_32 = global:value_copy_demote.wado::__const_obj_6.used; __cond_33 = 1; builtin::array_get<ref "core:prelude/string.wado//String">(global:value_copy_demote.wado::__const_obj_6.repr, 3)); __local_3);
+    __b = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(112, 101, 97, 114), used: 4 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(112, 101, 97, 114), used: 4 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 105, 103), used: 3 }), used: 4 };
+    global:value_copy_demote.wado::__const_obj_18 = __b;
+    n = "value_copy_demote.wado/distinct_count"(global:value_copy_demote.wado::__const_obj_18);
+    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:prelude/primitive.wado/i32::fmt_decimal"(n, __local_4); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, __v1_25 = global:value_copy_demote.wado::__const_obj_18.used; __cond_26 = 1; builtin::array_get<ref "core:prelude/string.wado//String">(global:value_copy_demote.wado::__const_obj_18.repr, 0)); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, __v1_32 = global:value_copy_demote.wado::__const_obj_18.used; __cond_33 = 1; builtin::array_get<ref "core:prelude/string.wado//String">(global:value_copy_demote.wado::__const_obj_18.repr, 3)); __local_3);
 }
 
 fn "value_copy_demote.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {

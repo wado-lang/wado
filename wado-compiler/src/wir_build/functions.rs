@@ -552,9 +552,24 @@ fn register_globals(ctx: &mut WirContext<'_>) {
 
     for global in &ctx.package.globals {
         let module_source = &global.module_source;
-        if module_source.is_wasi() {
-            continue;
-        }
+        // A WASI module never hosts a `NirGlobal` (no `wasi/*.wado` stdlib
+        // file declares a top-level `global`, and every synthesized TIR
+        // global hardcodes `entry_source`) — the analogous exclusion in
+        // `register_loaded_functions` above skips WASI functions the same
+        // way. A pass that creates one anyway (e.g. a globalization pass
+        // hoisting from a WASI-sourced function) would leave the name
+        // unregistered here; `resolve_global` in `codegen::emit` cannot
+        // detect that at its own call site, so it silently falls back to
+        // Wasm global index 0 — the caller must know not to trigger this.
+        // Panic here instead, at the one place this invariant can be
+        // checked authoritatively, rather than let it corrupt silently.
+        assert!(
+            !module_source.is_wasi(),
+            "[WIR] global '{}' has a WASI module_source ({module_source}) — \
+             WASI modules cannot host globals; whichever pass created this \
+             global must exclude WASI-sourced functions from its candidates",
+            global.name
+        );
 
         let global_name = global_name(module_source, &global.name);
 

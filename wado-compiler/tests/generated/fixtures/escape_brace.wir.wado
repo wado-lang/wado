@@ -73,7 +73,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:escape_brace.wado::__modules_initialized: bool = 0;
-global global:escape_brace.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(119, 111, 114, 108, 100)), used: 5 };
+global mut global:escape_brace.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = ref.null none;
 
 fn "escape_brace.wado/run"() with Stdout {
     let __local_1: ref "core:prelude/string.wado//String";
@@ -83,6 +83,7 @@ fn "escape_brace.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:escape_brace.wado::__modules_initialized = 1;
     };
+    global:escape_brace.wado::__const_obj_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 };
     "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 }; "core:prelude/string.wado/String::push"(__local_1, 123); "core:prelude/string.wado/String::push"(__local_1, 34); "core:prelude/string.wado/String::push_str"(__local_1, global:escape_brace.wado::__const_obj_0); "core:prelude/string.wado/String::push"(__local_1, 34); "core:prelude/string.wado/String::push"(__local_1, 125); __local_1);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"key\": \"value\"}"), used: 16 });
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("plain { and }"), used: 13 });

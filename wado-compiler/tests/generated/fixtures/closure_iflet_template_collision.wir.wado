@@ -84,8 +84,8 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:closure_iflet_template_collision.wado::__modules_initialized: bool = 0;
-global global:closure_iflet_template_collision.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(101, 109, 112, 116, 121)), used: 5 };
-global global:closure_iflet_template_collision.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(80, 97, 114, 115, 101, 32, 101, 114, 114, 111, 114, 58, 32)), used: 13 };
+global global:closure_iflet_template_collision.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(80, 97, 114, 115, 101, 32, 101, 114, 114, 111, 114, 58, 32)), used: 13 };
+global mut global:closure_iflet_template_collision.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = ref.null none;
 
 fn "closure_iflet_template_collision.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
@@ -276,7 +276,8 @@ fn "closure_iflet_template_collision.wado/__Closure_2::__call"(self) {
     let __local_3: ref "core:prelude/string.wado//String";
     __fused___inline_parse_0: block {
         if @unlikely(self.__capture_0.used == 0) {
-            "core:rt/panic"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_3, global:closure_iflet_template_collision.wado::__const_obj_1); "core:prelude/string.wado/String::push_str"(__local_3, global:closure_iflet_template_collision.wado::__const_obj_0); __local_3);
+            global:closure_iflet_template_collision.wado::__const_obj_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("empty"), used: 5 };
+            "core:rt/panic"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_3, global:closure_iflet_template_collision.wado::__const_obj_0); "core:prelude/string.wado/String::push_str"(__local_3, global:closure_iflet_template_collision.wado::__const_obj_1); __local_3);
             unreachable;
             break __fused___inline_parse_0;
         }

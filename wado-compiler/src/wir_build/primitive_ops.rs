@@ -98,7 +98,7 @@ impl FunctionTranslator<'_, '_> {
                 len: Box::new(WirInstr::I32Const(0)),
             }
         } else if byte_len <= self.ctx.package.string_inline_max_bytes
-            || self.force_fixed_string_repr
+            || (self.force_fixed_string_repr && byte_len <= crate::name::INLINE_REF_EAGER_MAX_BYTES)
         {
             let elements = b
                 .iter()
