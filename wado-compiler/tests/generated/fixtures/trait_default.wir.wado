@@ -170,14 +170,15 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:trait_default.wado::__modules_initialized: bool = 0;
-global mut global:trait_default.wado::__const_obj_0: ref null "trait_default.wado//Person" = ref.null none;
+global global:trait_default.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(68, 101, 115, 99, 114, 105, 112, 116, 105, 111, 110, 58, 32)), used: 13 };
 global global:trait_default.wado::__const_obj_1: ref null "trait_default.wado//Robot" = struct.new "trait_default.wado//Robot" { id: 42 };
-global mut global:trait_default.wado::__const_obj_2: ref null "trait_default.wado//Article" = ref.null none;
+global mut global:trait_default.wado::__const_obj_2: ref null "trait_default.wado//Person" = ref.null none;
 global mut global:trait_default.wado::__const_obj_3: ref null "trait_default.wado//Tweet" = ref.null none;
+global mut global:trait_default.wado::__const_obj_4: ref null "trait_default.wado//Article" = ref.null none;
 
 fn "trait_default.wado/trait_default_basic"() with Stdout {
-    global:trait_default.wado::__const_obj_0 = struct.new "trait_default.wado//Person" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 } };
-    "core:cli/println"("trait_default.wado/Person^Greet::greet"(global:trait_default.wado::__const_obj_0));
+    global:trait_default.wado::__const_obj_2 = struct.new "trait_default.wado//Person" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 } };
+    "core:cli/println"("trait_default.wado/Person^Greet::greet"(global:trait_default.wado::__const_obj_2));
     "core:cli/println"("trait_default.wado/Robot^Greet::greet"(global:trait_default.wado::__const_obj_1));
 }
 
@@ -221,8 +222,8 @@ fn "trait_default.wado/trait_default_count"() with Stdout {
 }
 
 fn "trait_default.wado/trait_default_override"() with Stdout {
-    global:trait_default.wado::__const_obj_2 = struct.new "trait_default.wado//Article" { headline: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Breaking News"), used: 13 }, content: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Something happened"), used: 18 } };
-    "core:cli/println"("trait_default.wado/Article^Summary::summary"(global:trait_default.wado::__const_obj_2));
+    global:trait_default.wado::__const_obj_4 = struct.new "trait_default.wado//Article" { headline: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Breaking News"), used: 13 }, content: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Something happened"), used: 18 } };
+    "core:cli/println"("trait_default.wado/Article^Summary::summary"(global:trait_default.wado::__const_obj_4));
     global:trait_default.wado::__const_obj_3 = struct.new "trait_default.wado//Tweet" { text: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Hello world"), used: 11 } };
     "core:cli/println"("trait_default.wado/Tweet^Summary::summary"(global:trait_default.wado::__const_obj_3));
 }
@@ -491,7 +492,7 @@ fn "trait_default.wado/Item^Describable::short_desc"(self) {
 
 fn "trait_default.wado/Item^Describable::full_desc"(self) {
     let __local_1: ref "core:prelude/string.wado//String";
-    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 }, "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Description: "), used: 13 }), "core:prelude/string.wado/String::push_str"(__local_1, "trait_default.wado/Item^Describable::short_desc"(self)), __local_1;
+    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 }, "core:prelude/string.wado/String::push_str"(__local_1, global:trait_default.wado::__const_obj_0), "core:prelude/string.wado/String::push_str"(__local_1, "trait_default.wado/Item^Describable::short_desc"(self)), __local_1;
 }
 
 fn "trait_default.wado/Article^Summary::summary"(self) {

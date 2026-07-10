@@ -1,0 +1,42 @@
+// Constant Object Globalization for a `&`-referenced literal passed directly
+// as a call argument, with no enclosing `let` (WEP-2026-05-31, extended).
+//
+// `const_object_globalization` originally only matched a `let`-bound constant
+// aggregate. A literal like `byte_sum(&"hello")` — the exact shape a
+// synthesized `serde` field key (`st.field(&"id_str", &self.id_str)`) takes —
+// has no `let` to anchor on, so it was rebuilt on every call. The pass now
+// also matches a `Unary { op: Ref, .. }` node wrapping a closed constant
+// aggregate anywhere in a function body, hoisting it into the same kind of
+// shared immutable `__const_obj_*` global.
+//
+// `byte_sum` is `#[inline(never)]` so the call (and its literal argument)
+// survives to `const_object_globalization`, instead of the literal getting
+// substituted into an inlined copy and constant-folded away entirely.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn byte_sum(s: &String) -> i32 {
+    let mut total = 0;
+    for let i of 0..<s.len() {
+        total = total + s.get_byte_unchecked(i) as i32;
+    }
+    return total;
+}
+
+export fn run() with Stdout {
+    // 'h'+'e'+'l'+'l'+'o' = 104+101+108+108+111 = 532.
+    println(`{byte_sum(&"hello")}`);
+}
+
+__DATA__
+{
+    "stdout": "532\n",
+    "wir_expect:O2": [
+        "global global:const_object_globalization_call_arg.wado::__const_obj_0",
+        "array.new_fixed<u8>(104, 101, 108, 108, 111)"
+    ],
+    "wir_not_expect:O2": [
+        "global mut global:const_object_globalization_call_arg.wado::__const_obj_0"
+    ]
+}

@@ -110,6 +110,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:assert_inspect_mut_ref.wado::__modules_initialized: bool = 0;
+global global:core:prelude/format.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(38, 109, 117, 116, 32)), used: 5 };
 
 fn "assert_inspect_mut_ref.wado/__cm_export__run"() {
     let y: ref "core:prelude/types.wado//Box<i32>";
@@ -475,7 +476,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 
 fn "core:prelude/format.wado/&mut i32^Inspect::inspect"(self, f) {
     let s: ref "core:prelude/string.wado//String";
-    s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("&mut "), used: 5 };
+    s = global:core:prelude/format.wado::__const_obj_3;
     "core:prelude/string.wado/String::push_str"(f.buf, s);
     "core:prelude/primitive.wado/i32::fmt_decimal"(self.value, f);
 }

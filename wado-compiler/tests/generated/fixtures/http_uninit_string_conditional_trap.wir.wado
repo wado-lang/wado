@@ -339,6 +339,8 @@ import fn wasi/future-write from "wasi/future-write";
 import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 
 global mut global:http_uninit_string_conditional_trap.wado::__modules_initialized: bool = 0;
+global global:http_uninit_string_conditional_trap.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(10)), used: 1 };
+global global:http_uninit_string_conditional_trap.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(97, 98, 99)), used: 3 };
 
 fn "http_uninit_string_conditional_trap.wado/handle"(request) {
     let take_else: bool;
@@ -490,7 +492,7 @@ fn "http_uninit_string_conditional_trap.wado/handle"(request) {
     if take_else == 0 {
         body_str = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("fallback"), used: 8 };
     } else {
-        body_str = "core:prelude/string.wado/String^Add::add"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98, 99), used: 3 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 });
+        body_str = "core:prelude/string.wado/String^Add::add"(global:http_uninit_string_conditional_trap.wado::__const_obj_1, global:http_uninit_string_conditional_trap.wado::__const_obj_0);
     }
     rx_166 = builtin::i32_wrap_i64(local.tee packed_165("wasi/future-new"()));
     tx_167 = builtin::i32_wrap_i64(packed_165 >> 32_i64);

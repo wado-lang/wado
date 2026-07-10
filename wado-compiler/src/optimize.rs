@@ -205,6 +205,16 @@ pub enum OptLevel {
 /// constant; above it the compact data-segment repr is kept (and the global
 /// stays lazy). `-O3` trades a little code size for more eager string globals;
 /// the other levels (and `-Os`, which targets size) stay conservative.
+///
+/// This threshold applies to every *ordinary* string literal, including one
+/// with nothing to do with `const_object_globalization` (e.g. an `assert`
+/// diagnostic template, which `codegen_flags` tests require stay byte-scannable
+/// below this threshold). A global `const_object_globalization` hoists from an
+/// `InlineRef` candidate gets a separate, size-bounded override — see
+/// [`crate::nir::NirGlobal::prefer_fixed_string_repr`] — since such a hoist
+/// rewrites the literal's construction in place rather than moving it to
+/// `__initialize_module`, so only an eager repr lets the redundant re-assignment
+/// be recognized and dropped.
 fn string_inline_max_bytes(opt_level: OptLevel) -> usize {
     match opt_level {
         OptLevel::O3 => 8,

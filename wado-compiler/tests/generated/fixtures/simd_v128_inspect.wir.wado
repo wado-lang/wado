@@ -119,6 +119,11 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:simd_v128_inspect.wado::__modules_initialized: bool = 0;
+global global:core:simd::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(118, 49, 50, 56, 40, 48, 120)), used: 7 };
+global global:simd_v128_inspect.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(32, 97, 115, 32, 117, 56, 120, 49, 54)), used: 9 };
+global global:simd_v128_inspect.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(32, 125)), used: 2 };
+global global:simd_v128_inspect.wado::__const_obj_5: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(98, 121, 116, 101, 115, 58, 32)), used: 7 };
+global global:simd_v128_inspect.wado::__const_obj_6: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(87, 114, 97, 112, 32, 123, 32)), used: 7 };
 
 fn "simd_v128_inspect.wado/run"() with Stdout {
     let __b: ref "core:simd//U8x16Builder";
@@ -153,7 +158,7 @@ fn "simd_v128_inspect.wado/run"() with Stdout {
     "core:simd/U8x16Builder^SequenceLiteralBuilder::push_literal"(__b, 14);
     "core:simd/U8x16Builder^SequenceLiteralBuilder::push_literal"(__b, 15);
     v = __b.vec;
-    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:simd/v128^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<v128>" { value: v }, __local_4); s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" as u8x16"), used: 9 }; "core:prelude/string.wado/String::push_str"(__local_4.buf, s); __local_3);
+    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:simd/v128^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<v128>" { value: v }, __local_4); s = global:simd_v128_inspect.wado::__const_obj_2; "core:prelude/string.wado/String::push_str"(__local_4.buf, s); __local_3);
     w = struct.new "simd_v128_inspect.wado//Wrap" { bytes: v };
     "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; "simd_v128_inspect.wado/Wrap^Inspect::inspect"(w, __local_6); __local_5);
 }
@@ -573,7 +578,7 @@ fn "core:simd/v128^Inspect::inspect"(self, f) {
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let s_8: ref "core:prelude/string.wado//String";
     bytes = self.value;
-    s_8 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("v128(0x"), used: 7 };
+    s_8 = global:core:simd::__const_obj_0;
     "core:prelude/string.wado/String::push_str"(f.buf, s_8);
     i = 0;
     b63: block {
@@ -596,14 +601,14 @@ fn "simd_v128_inspect.wado/Wrap^Inspect::inspect"(self, f) {
     let s_5: ref "core:prelude/string.wado//String";
     let s_9: ref "core:prelude/string.wado//String";
     let s_11: ref "core:prelude/string.wado//String";
-    s_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Wrap { "), used: 7 };
+    s_3 = global:simd_v128_inspect.wado::__const_obj_6;
     "core:prelude/string.wado/String::push_str"(f.buf, s_3);
-    s_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bytes: "), used: 7 };
+    s_5 = global:simd_v128_inspect.wado::__const_obj_5;
     "core:prelude/string.wado/String::push_str"(f.buf, s_5);
     "core:simd/v128^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<v128>" { value: self.bytes }, f);
-    s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" as u8x16"), used: 9 };
+    s_9 = global:simd_v128_inspect.wado::__const_obj_2;
     "core:prelude/string.wado/String::push_str"(f.buf, s_9);
-    s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 };
+    s_11 = global:simd_v128_inspect.wado::__const_obj_3;
     "core:prelude/string.wado/String::push_str"(f.buf, s_11);
 }
 

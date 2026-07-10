@@ -79,6 +79,11 @@ pub struct WirContext<'a> {
     /// Shared by `String` and `List<u8>` literal `repr`s, which converge on the
     /// same `array.new_data` segment when their bytes match.
     pub packed_data_map: IndexMap<Vec<u8>, u32>,
+    /// Fully-unqualified names of globals with
+    /// [`crate::nir::NirGlobal::prefer_fixed_string_repr`] set, precomputed
+    /// once so [`FunctionTranslator`](super::translate::FunctionTranslator)
+    /// doesn't rescan `package.globals` per `GlobalVarSet`.
+    pub eager_repr_globals: IndexSet<String>,
     /// Name section entries.
     pub names: WirNames,
 
@@ -283,6 +288,12 @@ impl<'a> WirContext<'a> {
             exports: Vec::new(),
             data: Vec::new(),
             packed_data_map: IndexMap::default(),
+            eager_repr_globals: package
+                .globals
+                .iter()
+                .filter(|g| g.prefer_fixed_string_repr)
+                .map(|g| g.name.clone())
+                .collect(),
             names: WirNames {
                 module_name: Some(package.module_name.clone()),
                 ..WirNames::default()

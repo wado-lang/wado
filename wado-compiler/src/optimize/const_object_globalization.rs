@@ -42,21 +42,39 @@ use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::nir::{NirFunction, NirGlobal, NirUnaryOp};
 use crate::nir_arena::{
-    BlockId, Body, ExprBody, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
+    BlockId, BlockNode, Body, ExprBody, ExprId, ExprKind, ExprNode, NodeRef, Operand, StmtId,
+    StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::arena_query::{expr_mentions_local, is_local, strip_refs};
 
-/// A `let` binding selected for hoisting, identified by its owning function and
-/// the bound local index. Resolved in an immutable analysis phase, applied in a
-/// later mutation phase to avoid `RefCell` borrow conflicts.
+/// A hoisting candidate, identified by its owning function. Resolved in an
+/// immutable analysis phase, applied in a later mutation phase to avoid
+/// `RefCell` borrow conflicts.
 struct Candidate {
     func_idx: usize,
-    local_index: u32,
     ty: TypeId,
     module_source: ModuleSource,
+    kind: CandidateKind,
+}
+
+enum CandidateKind {
+    /// A `let` binding whose value is a closed constant aggregate.
+    LetBinding { local_index: u32 },
+    /// A constant aggregate literal referenced via `&` directly at an
+    /// expression position (typically a call argument) with no enclosing
+    /// `let` — e.g. the synthesized `serde` field key in
+    /// `st.field(&"id_str", &self.id_str)`. Hoisted in place: the
+    /// `Unary::Ref`'s inner literal is wrapped in a
+    /// `{ GlobalVarSet(G, <literal>); GlobalVarGet(G) }` block, so it's
+    /// nameable and promotable to an eager Wasm constant just like a hoisted
+    /// `let`, without moving it out of its original call site.
+    InlineRef {
+        /// The `Unary { op: Ref, .. }` node whose inner operand is hoisted.
+        ref_expr: ExprId,
+    },
 }
 
 pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
@@ -76,14 +94,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         let Some(body) = &f.body else {
             continue;
         };
-        collect_candidates(
-            body,
-            body.root,
-            &gate,
-            fi,
-            &f.module_source,
-            &mut candidates,
-        );
+        collect_candidates(body, &gate, fi, &f.module_source, &mut candidates);
     }
     if candidates.is_empty() {
         return false;
@@ -98,40 +109,196 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         .count();
     for (n, cand) in (base..).zip(candidates) {
         let name = format!("{}{n}", crate::name::CONST_OBJ_GLOBAL_PREFIX);
+        let Candidate {
+            func_idx,
+            ty,
+            module_source,
+            kind,
+        } = cand;
+        let is_inline_ref = matches!(kind, CandidateKind::InlineRef { .. });
 
-        let mut func = project.functions[cand.func_idx].borrow_mut();
+        let mut func = project.functions[func_idx].borrow_mut();
         let body = func.body.as_mut().expect("candidate function has a body");
-        // Rewrite reads first (the let's own value is const and references no
-        // local index, so it is untouched), then replace the binding.
-        rewrite_reads(body, cand.local_index, &cand.module_source, &name, cand.ty);
-        replace_let_with_set(
-            body,
-            body.root,
-            cand.local_index,
-            &cand.module_source,
-            &name,
-        );
+        match kind {
+            CandidateKind::LetBinding { local_index } => {
+                // Rewrite reads first (the let's own value is const and
+                // references no local index, so it is untouched), then
+                // replace the binding.
+                rewrite_reads(body, local_index, &module_source, &name, ty);
+                assert!(
+                    replace_let_with_set(body, local_index, &module_source, &name),
+                    "[NIR] const_object_globalization: LetBinding candidate's `let` \
+                     (local {local_index}) went missing between collection and mutation"
+                );
+            }
+            CandidateKind::InlineRef { ref_expr } => {
+                hoist_inline_ref(body, ref_expr, &module_source, &name, ty);
+            }
+        }
         drop(func);
 
         project.globals.push(NirGlobal {
             name,
-            ty: cand.ty,
+            ty,
             initializer: ExprBody::wrapping_value(
                 crate::nir_value_graph::ValueKind::Null,
-                cand.ty,
+                ty,
                 crate::token::Span::new(0, 0, 1, 1),
             ),
             mutable: true,
             wado_mutable: false,
             visibility: crate::ast::Visibility::Private,
-            module_source: cand.module_source,
+            module_source,
             span: crate::token::Span::new(0, 0, 1, 1),
             is_nullable: true,
             lazy_init: true,
             locals: Vec::new(),
+            prefer_fixed_string_repr: is_inline_ref,
         });
     }
     true
+}
+
+/// Find every hoisting candidate in `body`: a qualifying `let` binding
+/// ([`let_stmt_qualifies`]) or an unnested `Unary { op: Ref, expr: <closed
+/// const aggregate> }` node. Neither is recursed into further.
+fn collect_candidates(
+    body: &Body,
+    gate: &Gate<'_>,
+    func_idx: usize,
+    module_source: &ModuleSource,
+    out: &mut Vec<Candidate>,
+) {
+    let single_decl_locals = locals_declared_once(body);
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Stmt(s) = node
+            && let StmtKind::Let {
+                local_index,
+                type_id,
+                ..
+            } = &body.stmts[s].kind
+            && single_decl_locals.contains(local_index)
+            && let_stmt_qualifies(body, s, gate)
+        {
+            out.push(Candidate {
+                func_idx,
+                ty: *type_id,
+                module_source: module_source.clone(),
+                kind: CandidateKind::LetBinding {
+                    local_index: *local_index,
+                },
+            });
+            continue;
+        }
+        if let NodeRef::Expr(id) = node
+            && let ExprKind::Unary {
+                op: NirUnaryOp::Ref,
+                expr: Operand::Expr(inner),
+            } = &body.exprs[id].kind
+        {
+            let inner = *inner;
+            let inner_ty = body.exprs[inner].type_id;
+            if gate.is_reference_type(inner_ty)
+                && is_globalizable_const(body, inner, &mut IndexSet::default())
+                && contains_aggregate(body, inner)
+            {
+                out.push(Candidate {
+                    func_idx,
+                    ty: inner_ty,
+                    module_source: module_source.clone(),
+                    kind: CandidateKind::InlineRef { ref_expr: id },
+                });
+                continue;
+            }
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+}
+
+/// Local indices declared by exactly one `let` statement in `body`.
+/// `rewrite_reads`/`replace_let_with_set` operate on a local index across the
+/// whole body, so a locally-reused index (e.g. from `labeled_block_fusion`
+/// threading one arm into several mutually exclusive branches) must not be
+/// hoisted — it would leave some branches reading a global only a different
+/// branch ever sets.
+fn locals_declared_once(body: &Body) -> IndexSet<u32> {
+    let mut seen: IndexSet<u32> = IndexSet::default();
+    let mut dupes: IndexSet<u32> = IndexSet::default();
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Stmt(s) = node
+            && let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
+            && !seen.insert(*local_index)
+        {
+            dupes.insert(*local_index);
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    seen.retain(|idx| !dupes.contains(idx));
+    seen
+}
+
+/// Rewrite an `InlineRef` candidate in place: `Unary { op: Ref, expr: E }`
+/// becomes `Unary { op: Ref, expr: { GlobalVarSet(name, E); GlobalVarGet(name) } }`.
+/// `E` itself is untouched (moved, not copied) — it still runs exactly where
+/// it always did, but under a name `wir_optimize::const_global` can promote
+/// to a Wasm-instantiation-time constant, dropping the runtime assignment
+/// entirely when `E` is const-expressible.
+fn hoist_inline_ref(
+    body: &mut Body,
+    ref_expr: ExprId,
+    module_source: &ModuleSource,
+    name: &str,
+    ty: TypeId,
+) {
+    let ExprKind::Unary {
+        expr: Operand::Expr(inner),
+        ..
+    } = body.exprs[ref_expr].kind
+    else {
+        unreachable!("InlineRef candidate must still be a Unary{{ op: Ref, .. }} node")
+    };
+    let span = body.exprs[ref_expr].span;
+
+    let set_expr = body.exprs.push(ExprNode {
+        kind: ExprKind::GlobalVarSet {
+            module_source: module_source.clone(),
+            name: name.to_string(),
+            value: Operand::Expr(inner),
+        },
+        type_id: TypeTable::UNIT,
+        span,
+    });
+    let set_stmt = body.stmts.push(StmtNode {
+        kind: StmtKind::Expr(Operand::Expr(set_expr)),
+        span,
+    });
+    let get_expr = body.exprs.push(ExprNode {
+        kind: ExprKind::GlobalVarGet {
+            module_source: module_source.clone(),
+            name: name.to_string(),
+        },
+        type_id: ty,
+        span,
+    });
+    let get_stmt = body.stmts.push(StmtNode {
+        kind: StmtKind::Expr(Operand::Expr(get_expr)),
+        span,
+    });
+    let wrap_block = body.blocks.push(BlockNode {
+        stmts: vec![set_stmt, get_stmt],
+        span,
+    });
+    let block_expr = body.exprs.push(ExprNode {
+        kind: ExprKind::Block(wrap_block),
+        type_id: ty,
+        span,
+    });
+    let ExprKind::Unary { expr, .. } = &mut body.exprs[ref_expr].kind else {
+        unreachable!("checked above")
+    };
+    *expr = Operand::Expr(block_expr);
 }
 
 /// Skip synthesized init / CM-binding functions.
@@ -141,66 +308,39 @@ fn skip_function(f: &NirFunction) -> bool {
         || f.name == crate::name::MODULE_INIT_FUNCTION
         || f.name == crate::name::MODULES_INIT_FUNCTION
         || f.value_copy_type().is_some()
+        // `wir_build::register_globals` asserts no `NirGlobal` has a WASI
+        // `module_source` — a plain helper function can live in a
+        // `wasi:*`-namespaced file even though its own CM-binding glue is
+        // excluded above, so this still needs its own check.
+        || f.module_source.is_wasi()
 }
 
 // ---------------------------------------------------------------------------
 // Phase 1 — candidate collection
 // ---------------------------------------------------------------------------
 
-fn collect_candidates(
-    body: &Body,
-    block: BlockId,
-    gate: &Gate<'_>,
-    func_idx: usize,
-    module_source: &ModuleSource,
-    out: &mut Vec<Candidate>,
-) {
-    for &stmt in &body.blocks[block].stmts {
-        if let StmtKind::Let {
-            local_index,
-            value,
-            type_id,
-            ..
-        } = &body.stmts[stmt].kind
-        {
-            let (local_index, value, type_id) = (*local_index, *value, *type_id);
-            if gate.is_reference_type(type_id)
-                && is_globalizable_const_operand(body, value, &mut IndexSet::default())
-                && contains_aggregate_operand(body, value)
-                && is_readonly_body(body, local_index, gate)
-            {
-                out.push(Candidate {
-                    func_idx,
-                    local_index,
-                    ty: type_id,
-                    module_source: module_source.clone(),
-                });
-            }
-        }
-        // Recurse into nested scopes.
-        for inner in stmt_blocks(body, stmt) {
-            collect_candidates(body, inner, gate, func_idx, module_source, out);
-        }
-    }
-}
-
-/// The sub-blocks a statement owns (for candidate recursion).
-fn stmt_blocks(body: &Body, stmt: StmtId) -> Vec<BlockId> {
-    match &body.stmts[stmt].kind {
-        StmtKind::If {
-            then_block,
-            else_block,
-            ..
-        } => {
-            let mut v = vec![*then_block];
-            if let Some(eb) = else_block {
-                v.push(*eb);
-            }
-            v
-        }
-        StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => vec![*b],
-        _ => Vec::new(),
-    }
+/// True when `stmt` is a `let` binding [`collect_candidates`] hoists whole.
+/// Also consulted inline by [`collect_candidates`]'s own walk to decide
+/// whether to recurse into that same `let`'s value looking for a nested
+/// `&`-literal: the whole binding already subsumes it, and hoisting both
+/// would nest one global's `GlobalVarSet` inside another's initializer — a
+/// shape nothing downstream (`wir_optimize::const_global`'s
+/// single-assignment classifier, in particular) is prepared to see.
+fn let_stmt_qualifies(body: &Body, stmt: StmtId, gate: &Gate<'_>) -> bool {
+    let StmtKind::Let {
+        local_index,
+        value,
+        type_id,
+        ..
+    } = &body.stmts[stmt].kind
+    else {
+        return false;
+    };
+    let (local_index, value, type_id) = (*local_index, *value, *type_id);
+    gate.is_reference_type(type_id)
+        && is_globalizable_const_operand(body, value, &mut IndexSet::default())
+        && contains_aggregate_operand(body, value)
+        && is_readonly_body(body, local_index, gate)
 }
 
 fn is_globalizable_const_operand(body: &Body, op: Operand, bound: &mut IndexSet<u32>) -> bool {
@@ -566,44 +706,42 @@ fn rewrite_reads(
 }
 
 /// Replace the `let local_index = value` statement with an inline
-/// `GlobalVarSet(name, value)`, searching nested scopes.
+/// `GlobalVarSet(name, value)`, searching the whole body exhaustively —
+/// matching [`collect_candidates`]'s reach, so this always finds whatever it
+/// collected. Returns `false` if not found; the caller asserts on this,
+/// since a miss would leave the local's reads pointing at a global that's
+/// never set.
 fn replace_let_with_set(
     body: &mut Body,
-    block: BlockId,
     local_index: u32,
     module_source: &ModuleSource,
     name: &str,
 ) -> bool {
-    let stmts = body.blocks[block].stmts.clone();
-    for stmt in stmts {
-        if let StmtKind::Let {
-            local_index: li,
-            value,
-            ..
-        } = &body.stmts[stmt].kind
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Stmt(s) = node
+            && let StmtKind::Let {
+                local_index: li,
+                value,
+                ..
+            } = &body.stmts[s].kind
+            && *li == local_index
         {
-            if *li == local_index {
-                let value = *value;
-                let span = body.stmts[stmt].span;
-                let set = body.exprs.push(crate::nir_arena::ExprNode {
-                    kind: ExprKind::GlobalVarSet {
-                        module_source: module_source.clone(),
-                        name: name.to_string(),
-                        value,
-                    },
-                    type_id: TypeTable::UNIT,
-                    span,
-                });
-                body.stmts[stmt].kind = StmtKind::Expr(set.into());
-                return true;
-            }
-        } else {
-            for inner in stmt_blocks(body, stmt) {
-                if replace_let_with_set(body, inner, local_index, module_source, name) {
-                    return true;
-                }
-            }
+            let value = *value;
+            let span = body.stmts[s].span;
+            let set = body.exprs.push(ExprNode {
+                kind: ExprKind::GlobalVarSet {
+                    module_source: module_source.clone(),
+                    name: name.to_string(),
+                    value,
+                },
+                type_id: TypeTable::UNIT,
+                span,
+            });
+            body.stmts[s].kind = StmtKind::Expr(set.into());
+            return true;
         }
+        body.for_each_child(node, |c| stack.push(c));
     }
     false
 }
