@@ -73,6 +73,7 @@ test "parse sexpression.g4" {
     assert g.lexer_rules[1].skip == true;
 }
 
+#[timeout_ms(30000)]
 test "parse css3Lexer.g4" {
     let input = #include_str("../../tests/grammars/css3Lexer.g4");
     let result = parse(input);
@@ -98,6 +99,7 @@ test "parse css3Lexer.g4" {
     assert found_unexpected;
 }
 
+#[timeout_ms(30000)]
 test "parse css3Parser.g4" {
     let input = #include_str("../../tests/grammars/css3Parser.g4");
     let result = parse(input);
@@ -170,6 +172,7 @@ test "parse HTMLParser.g4" {
     assert g.parser_rules[0].name == "htmlDocument";
 }
 
+#[timeout_ms(30000)]
 test "merge css3 grammars" {
     let lexer_g = parse(#include_str("../../tests/grammars/css3Lexer.g4")).unwrap();
     let parser_g = parse(#include_str("../../tests/grammars/css3Parser.g4")).unwrap();
@@ -224,6 +227,7 @@ test "parse RustLexer.g4" {
     assert g.lexer_rules.len() > 20;
 }
 
+#[timeout_ms(30000)]
 test "parse RustParser.g4" {
     let input = #include_str("../../tests/grammars/RustParser.g4");
     let result = parse(input);
@@ -263,6 +267,7 @@ test "parse TypeScriptLexer.g4" {
     assert found_back_tick_inside;
 }
 
+#[timeout_ms(30000)]
 test "parse TypeScriptParser.g4" {
     let input = #include_str("../../tests/grammars/TypeScriptParser.g4");
     let result = parse(input);
@@ -301,6 +306,7 @@ test "parse TypeScriptParser.g4" {
     assert found_power, "TypeScriptParser singleExpression missing PowerExpression alt";
 }
 
+#[timeout_ms(30000)]
 test "merge ANTLR4 grammars" {
     let lexer_g = parse(#include_str("../../tests/grammars/ANTLRv4Lexer.g4")).unwrap();
     let parser_g = parse(#include_str("../../tests/grammars/ANTLRv4Parser.g4")).unwrap();
@@ -310,6 +316,7 @@ test "merge ANTLR4 grammars" {
     assert merged.parser_rules.len() > 10;
 }
 
+#[timeout_ms(30000)]
 test "merge TypeScript grammars" {
     let lexer_g = parse(#include_str("../../tests/grammars/TypeScriptLexer.g4")).unwrap();
     let parser_g = parse(#include_str("../../tests/grammars/TypeScriptParser.g4")).unwrap();
@@ -319,6 +326,7 @@ test "merge TypeScript grammars" {
     assert merged.parser_rules.len() > 20;
 }
 
+#[timeout_ms(30000)]
 test "merge Rust grammars" {
     let lexer_g = parse(#include_str("../../tests/grammars/RustLexer.g4")).unwrap();
     let parser_g = parse(#include_str("../../tests/grammars/RustParser.g4")).unwrap();

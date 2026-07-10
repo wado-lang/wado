@@ -1597,10 +1597,20 @@ impl FunctionTranslator<'_, '_> {
                 method_info: None,
             };
             let func_id = self.base.interner.borrow_mut().resolve(&func);
+            // The helper call IS the deep copy of its argument — routing the
+            // arg through `convert_call_arg`'s defensive wrap would emit
+            // copy(copy(x)), doubling every nested field copy (2^depth for
+            // nested aggregates).
             return ExprKind::Call {
                 func_id,
                 type_args: vec![],
-                args: args.iter().map(|a| self.convert_call_arg(a)).collect(),
+                args: args
+                    .iter()
+                    .map(|a| ArenaCallArg {
+                        expr: self.convert_specialized_arg_operand(&a.expr),
+                        is_mut: a.is_mut,
+                    })
+                    .collect(),
             };
         }
         let func = convert_function_ref(func);
