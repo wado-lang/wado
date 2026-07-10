@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783561933555,
+  "lastUpdate": 1783643590839,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -38865,6 +38865,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/18d456f0beca3d2b1a5e2acfb63aca93c58cbf2e"
         },
         "date": 1783561933219,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8246,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15624,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 267452,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fdcd0fd4a15333bd9481732cf55a1ddb104e890e",
+          "message": "Merge pull request #1537 from wado-lang/claude/stdlib-docs-synopsis-q7lqtc\n\nfeat(compiler): local item definitions",
+          "timestamp": "2026-07-10T09:23:45+09:00",
+          "tree_id": "1b4d4e251a144d3f4051507aa08bc797aed9aa33",
+          "url": "https://github.com/wado-lang/wado/commit/fdcd0fd4a15333bd9481732cf55a1ddb104e890e"
+        },
+        "date": 1783643590434,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
