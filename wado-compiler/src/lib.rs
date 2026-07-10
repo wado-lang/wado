@@ -1295,12 +1295,13 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // deep-clone fallback. The resolved modules are kept as-is for the
     // `--tir-resolved` dump view; the pipeline runs on its own snapshot
     // (below), so these stay frozen at the resolved stage.
-    let (tir_modules_by_source, trait_env): (
+    let (tir_modules_by_source, trait_env, moved_local_spans): (
         Option<IndexMap<ModuleSource, tir::TirModule>>,
         Option<std::sync::Arc<crate::elaborator::trait_env::TraitEnv>>,
+        IndexMap<ModuleSource, crate::hashmap::IndexSet<token::Span>>,
     ) = match resolve_output {
-        Some((modules, env)) => (Some(modules), Some(env)),
-        None => (None, None),
+        Some((modules, env, moved)) => (Some(modules), Some(env), moved),
+        None => (None, None, IndexMap::default()),
     };
 
     // === Phase 7b+8+9+10: Build Package and run remaining phases ===
@@ -1354,6 +1355,9 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
 
             // Apply target world override (must be before synthesis)
             let mut package = package;
+            // Last-use spans (WEP 2026-05-21), same as the compile path — the
+            // dumped IR must show the moves the real compilation performs.
+            package.moved_local_spans = moved_local_spans;
             if let Some(world) = target_world {
                 package.target_world = world.to_string();
             }

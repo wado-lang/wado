@@ -119,6 +119,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// This is a thin wrapper over [`Elaborator::annotate_modules`] +
     /// [`Elaborator::build_tir_from_state`]. Callers that want access to the
     /// annotate output (e.g. LSP) should call the two phases separately.
+    /// The returned move spans must reach `Package::moved_local_spans`, or
+    /// lowering degrades every last use to a defensive copy.
     pub(crate) fn elaborate_all_modules(
         symbols: &'a SymbolTable,
         modules: &'a IndexMap<ModuleSource, Module>,
@@ -127,7 +129,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         included_files: Rc<IndexMap<[String; 2], Vec<u8>>>,
         invocations: crate::kiln::InvocationIndex,
         interner: Rc<RefCell<ModuleSourceInterner>>,
-    ) -> Result<(IndexMap<ModuleSource, TirModule>, Arc<TraitEnv>), Bail> {
+    ) -> Result<
+        (
+            IndexMap<ModuleSource, TirModule>,
+            Arc<TraitEnv>,
+            IndexMap<ModuleSource, IndexSet<crate::token::Span>>,
+        ),
+        Bail,
+    > {
         let mut state = Self::annotate_modules(
             symbols,
             modules,
@@ -148,7 +157,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             None,
             true,
         )?;
-        Ok((tir_modules, trait_env))
+        let moved_spans = std::mem::take(&mut state.liveness.moved_spans);
+        Ok((tir_modules, trait_env, moved_spans))
     }
 
     /// Annotate phase: collect decl-level type information and intern every
