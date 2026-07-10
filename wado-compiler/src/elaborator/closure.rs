@@ -146,6 +146,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
 
         let body_expected = expected_fn.as_ref().map(|ef| ef.return_type);
+        // Seed the closure's return type from the expected fn type before
+        // walking the body, so a `?` operator in the body (which checks
+        // `ctx.return_type` for Result/Option) resolves against the real
+        // return type instead of the UNKNOWN placeholder. Symmetric to the
+        // same seeding in `reify_closure`.
+        if let Some(rt) = body_expected {
+            closure_ctx.return_type = rt;
+        }
         let body_type = self.resolve_expr(&closure.body, &mut closure_ctx, body_expected);
 
         // Build the recorded capture list from the closure scope's captures.
