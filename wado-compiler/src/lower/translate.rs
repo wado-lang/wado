@@ -512,6 +512,7 @@ impl Translator<'_> {
             is_nullable: global.is_nullable,
             lazy_init: global.lazy_init,
             locals: global.locals.iter().map(convert_local).collect(),
+            prefer_fixed_string_repr: false,
         }
     }
 

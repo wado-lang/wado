@@ -16,6 +16,7 @@ use super::infer::InferCtx;
 use super::types::{
     ArithmeticTraitInfo, FunctionContext, IndexAssignTraitInfo, IndexMutTraitInfo, IndexTraitInfo,
     IndexValueTraitInfo, KeyValueLiteralTraitInfo, MethodInfo, SequenceLiteralTraitInfo, TypeError,
+    TypeLookup,
 };
 use super::tysys::TypeSystem;
 
@@ -282,7 +283,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.find_arithmetic_trait_impl(&struct_name, rhs_type_id, &trait_name, method_name)?;
         Some(rhs_type_id)
     }
+}
 
+impl TypeSystem {
     /// Return `Some(struct_type)` when `struct_name` is a non-generic struct
     /// whose fields all carry a declared default expression, making it
     /// eligible for auto-derived `Default::default()` synthesis.
@@ -297,22 +300,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Does not check whether the user wrote their own `impl Default`;
     /// callers should consult this only as a fallback after the regular
     /// impl-lookup paths.
-    pub(super) fn auto_derive_default_struct_type(&self, struct_name: &str) -> Option<TypeId> {
-        let info = self.lookup_struct_fields(struct_name)?;
+    pub(super) fn auto_derive_default_struct_type(
+        &self,
+        scope: &TypeLookup,
+        struct_name: &str,
+    ) -> Option<TypeId> {
+        let info = scope.struct_fields(struct_name)?;
         if info.fields.is_empty() || !info.field_defaults.iter().all(Option::is_some) {
             return None;
         }
         if !info.type_param_type_ids.is_empty() {
             return None;
         }
-        Some(
-            self.tysys
-                .type_table
-                .borrow()
-                .type_id_of_decl(info.defined_at),
-        )
+        Some(self.type_table.borrow().type_id_of_decl(info.defined_at))
     }
+}
 
+impl<H: CompilerHost> Elaborator<'_, H> {
     /// Find the module source for a struct by name.
     pub(super) fn find_struct_module_source(&self, struct_name: &str) -> ModuleSource {
         // Check if it's a primitive type - impl blocks live in core:prelude/primitive.wado
@@ -618,7 +622,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &impl_block.type_params,
                     receiver_type_args.as_deref(),
                     impl_module,
-                ) && self.check_impl_block_bounds(
+                ) && self.tysys.check_impl_block_bounds(
+                    &self.annotate_ctx,
+                    &self.type_lookup(),
                     &impl_block.type_params,
                     &impl_block.ty,
                     receiver_type_args.as_deref(),
@@ -802,7 +808,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         receiver_type_args.as_deref(),
                         search_module_source,
                     )
-                    && self.check_impl_block_bounds(
+                    && self.tysys.check_impl_block_bounds(
+                        &self.annotate_ctx,
+                        &self.type_lookup(),
                         &impl_block.type_params,
                         &impl_block.ty,
                         receiver_type_args.as_deref(),
@@ -1787,6 +1795,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // type satisfies the bound.  e.g., `impl<I: Iterator> IntoIterator for I` matches
         // any concrete type that implements Iterator.
         let blanket_entries = self.tysys.trait_env.blanket_impl_index.clone();
+        let type_lookup = self.type_lookup();
         for entry in &blanket_entries {
             let Some(header) = self.tysys.trait_env.impl_headers.get(entry) else {
                 continue;
@@ -1805,9 +1814,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Check if the receiver type satisfies ALL trait bounds
                 let bounds_satisfied = param.bounds.iter().all(|bound| {
                     let bound_trait_name = &bound.name;
-                    names_to_check
-                        .iter()
-                        .any(|name| self.find_trait_impl_for_type(name, bound_trait_name))
+                    names_to_check.iter().any(|name| {
+                        self.tysys.find_trait_impl_for_type(
+                            &self.annotate_ctx,
+                            &type_lookup,
+                            name,
+                            bound_trait_name,
+                        )
+                    })
                 });
                 if bounds_satisfied {
                     impl_refs.push(ImplBlockRef(entry.0.clone(), entry.1));
@@ -1915,8 +1929,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return true;
         };
         param.bounds.iter().all(|bound| {
-            receiver_type_id
-                .is_some_and(|rt| self.type_implements_trait(&self.annotate_ctx, rt, &bound.name))
+            receiver_type_id.is_some_and(|rt| {
+                self.tysys.type_implements_trait(
+                    &self.annotate_ctx,
+                    &self.type_lookup(),
+                    rt,
+                    &bound.name,
+                )
+            })
         })
     }
 
@@ -2872,7 +2892,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // `find_trait_impl_for_type_with_args`, so a bound-checking
                 // fix for any AST shape applies to every caller.
                 let impl_block = s.get_impl_block(impl_ref);
-                if !s.check_impl_block_bounds(
+                if !s.tysys.check_impl_block_bounds(
+                    &s.annotate_ctx,
+                    &s.type_lookup(),
                     &impl_block.type_params,
                     &impl_block.ty,
                     Some(&concrete_type_args),

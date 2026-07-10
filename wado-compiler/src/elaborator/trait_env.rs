@@ -1565,7 +1565,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 }
 
 /// Extract a type name from an AST type without needing an Elaborator instance.
-fn get_type_name_static(ty: &ast::Type) -> String {
+pub(super) fn get_type_name_static(ty: &ast::Type) -> String {
     match ty {
         ast::Type::Named(named) if named.name == "()" => TypeTable::UNIT_TYPE_NAME.to_string(),
         ast::Type::Named(named) => named.name.clone(),

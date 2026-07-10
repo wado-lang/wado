@@ -143,8 +143,9 @@ fn no_branch_hinting_flag_drops_every_hint() {
 
 /// Indexing a `List` lowers to `assert i < used`, whose failure path formats
 /// the operands and so drags in the `Formatter` / `Inspect` stack. The
-/// `"\ncondition:"` literal is part of every power-assert diagnostic template,
-/// so its presence in the wasm is a reliable proxy for "the diagnostic shipped".
+/// `"\ncondition:"` literal is part of every power-assert diagnostic template;
+/// `ships_assert_diagnostic` checks for its presence in either Wasm repr the
+/// literal may take, so it's a reliable proxy for "the diagnostic shipped".
 const ASSERT_SOURCE: &str = r#"
 export fn run() {
     let xs = [1, 2, 3] as List<i32>;
@@ -173,9 +174,34 @@ fn compile_assert_source(opt_level: OptLevel, codegen_flags: Vec<String>) -> Vec
     .wasm
 }
 
+/// Detects the diagnostic template in either Wasm repr `const_object_globalization`
+/// may hoist it into: a contiguous `array.new_data` byte segment (the marker
+/// bytes appear verbatim), or a bounded-eager `array.new_fixed` (each byte is
+/// its own `i32.const` instruction, so the raw bytes never appear contiguous
+/// in the binary — check the disassembled text for the matching `i32.const`
+/// run instead).
 fn ships_assert_diagnostic(wasm: &[u8]) -> bool {
     let marker = b"\ncondition:";
-    wasm.windows(marker.len()).any(|w| w == marker)
+    if wasm.windows(marker.len()).any(|w| w == marker) {
+        return true;
+    }
+    let wat = wasmprinter::print_bytes(wasm).expect("disassemble wasm to WAT");
+    // wasmprinter folds function-body instructions into nested S-expressions
+    // (`(i32.const 10) (i32.const 99) …`) but prints a global's own init
+    // expression flat, Wasm-binary-order (`i32.const 10 i32.const 99 …`),
+    // since `array.new_fixed` promoted to an eager global constant. Check
+    // for either.
+    let folded: String = marker
+        .iter()
+        .map(|b| format!("(i32.const {b})"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let flat: String = marker
+        .iter()
+        .map(|b| format!("i32.const {b}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    wat.contains(&folded) || wat.contains(&flat)
 }
 
 #[test]

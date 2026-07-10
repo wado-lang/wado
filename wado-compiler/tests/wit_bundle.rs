@@ -38,6 +38,7 @@ fn import_plan(source: &str, world_fq: &str) -> Vec<String> {
         &[],
         &wado_compiler::hashmap::IndexMap::default(),
         wado_compiler::param_resolution::ParamPolicy::default(),
+        wado_compiler::kiln::InvocationIndex::default(),
     )) {
         Ok(dump) => dump
             .wir_package

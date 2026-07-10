@@ -94,6 +94,11 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:enum_display_template.wado::__modules_initialized: bool = 0;
+global global:enum_display_template.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(32, 105, 115, 32, 115, 109, 97, 108, 108)), used: 9 };
+global global:enum_display_template.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(32, 105, 115, 32, 121, 101, 108, 108, 111, 119)), used: 10 };
+global global:enum_display_template.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(70, 114, 117, 105, 116, 58, 58, 67, 104, 101, 114, 114, 121)), used: 13 };
+global global:enum_display_template.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(70, 114, 117, 105, 116, 58, 58, 66, 97, 110, 97, 110, 97)), used: 13 };
+global global:enum_display_template.wado::__const_obj_4: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(70, 114, 117, 105, 116, 58, 58, 65, 112, 112, 108, 101)), used: 12 };
 
 fn "enum_display_template.wado/describe"(f) {
     let __local_1: ref "core:prelude/string.wado//String";
@@ -123,14 +128,14 @@ fn "enum_display_template.wado/describe"(f) {
         __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 };
         self_13 = struct.new "core:prelude/types.wado//Box<enum_display_template.wado/Fruit>" { value: f };
         "enum_display_template.wado/Fruit^Inspect::inspect"(self_13, __local_4);
-        "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" is yellow"), used: 10 });
+        "core:prelude/string.wado/String::push_str"(__local_3, global:enum_display_template.wado::__const_obj_1);
         __local_3;
     } else {
         __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
         __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 };
         self_17 = struct.new "core:prelude/types.wado//Box<enum_display_template.wado/Fruit>" { value: f };
         "enum_display_template.wado/Fruit^Inspect::inspect"(self_17, __local_6);
-        "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" is small"), used: 9 });
+        "core:prelude/string.wado/String::push_str"(__local_5, global:enum_display_template.wado::__const_obj_0);
         __local_5;
     });
 }
@@ -326,13 +331,13 @@ fn "enum_display_template.wado/Fruit^Inspect::inspect"(self, f) {
     let s_5: ref "core:prelude/string.wado//String";
     let s_7: ref "core:prelude/string.wado//String";
     if self.value == 0 {
-        s_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Fruit::Apple"), used: 12 };
+        s_3 = global:enum_display_template.wado::__const_obj_4;
         "core:prelude/string.wado/String::push_str"(f.buf, s_3);
     } else if self.value == 1 {
-        s_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Fruit::Banana"), used: 13 };
+        s_5 = global:enum_display_template.wado::__const_obj_3;
         "core:prelude/string.wado/String::push_str"(f.buf, s_5);
     } else if self.value == 2 {
-        s_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Fruit::Cherry"), used: 13 };
+        s_7 = global:enum_display_template.wado::__const_obj_2;
         "core:prelude/string.wado/String::push_str"(f.buf, s_7);
     }
 }

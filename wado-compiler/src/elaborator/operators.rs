@@ -11,6 +11,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::types::{FunctionContext, ResolvedTraitMethod, TypeError};
+use super::tysys::TypeSystem;
 
 use super::util::placeholder;
 
@@ -203,14 +204,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => false,
         }
     }
+}
 
+impl TypeSystem {
     /// True when an operand type has no native Wasm binary-op instruction
     /// and must therefore dispatch through a trait implementation. Used to
     /// detect operator misuse symmetrically: either operand being such a
     /// type means the operator cannot fall through to a primitive
     /// instruction.
     fn binop_operand_requires_trait(&self, type_id: TypeId) -> bool {
-        let tt = self.tysys.type_table.borrow();
+        let tt = self.type_table.borrow();
         match tt.get(type_id) {
             ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
             ResolvedType::Newtype { base_type, .. } => {
@@ -243,7 +246,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => false,
         }
     }
+}
 
+impl<H: CompilerHost> Elaborator<'_, H> {
     /// Build a binary-op `TirExpr` given pre-resolved operands.
     ///
     /// Shared between [`Self::resolve_binary`] (the user-AST entry point)
@@ -791,8 +796,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the message symmetric: `a - lst` and `lst - a` report the same
         // error regardless of which side is the non-primitive one.
         {
-            let left_requires = self.binop_operand_requires_trait(left.type_id);
-            let right_requires = self.binop_operand_requires_trait(right.type_id);
+            let left_requires = self.tysys.binop_operand_requires_trait(left.type_id);
+            let right_requires = self.tysys.binop_operand_requires_trait(right.type_id);
             if (left_requires || right_requires)
                 && !matches!(op, BinaryOp::And | BinaryOp::Or)
                 && left.type_id != TypeTable::ERROR

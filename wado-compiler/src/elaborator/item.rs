@@ -1658,8 +1658,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Set up Self type for the impl block
         // This allows `&Self` to resolve correctly in method parameters
-        let old_self_type = scope.annotate_ctx.trait_ctx.self_type;
-        scope.annotate_ctx.trait_ctx.self_type = Some(scope.resolve_type(impl_type));
+        let resolved_self_type = scope.resolve_type(impl_type);
+        scope.annotate_ctx.trait_ctx.self_type = Some(resolved_self_type);
 
         // Resolve return type
         let return_type = func
@@ -1843,11 +1843,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let method_key = func.id;
         scope.sem.types.function_effects.insert(method_key, effects);
 
-        // Restore effect params and Self type. `trait_ctx` is auto-restored on
-        // `drop(scope)`, which replaces everything set up above.
         scope.current_effect_params = old_effect_params;
         scope.current_effect_param_decls = old_effect_param_decls;
-        scope.annotate_ctx.trait_ctx.self_type = old_self_type;
         drop(scope);
 
         // Record the resolved param/return types for reify to read back

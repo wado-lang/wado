@@ -118,6 +118,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:temporary_mut_array_arg.wado::__modules_initialized: bool = 0;
+global global:temporary_mut_array_arg.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(102, 111, 111)), used: 3 };
 
 fn "temporary_mut_array_arg.wado/helper"(name, counts) {
     let i: i32;
@@ -165,7 +166,7 @@ fn "temporary_mut_array_arg.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:temporary_mut_array_arg.wado::__modules_initialized = 1;
     };
-    result = "temporary_mut_array_arg.wado/helper"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 111, 111), used: 3 }, __b = struct.new "core:prelude//List<[core:prelude/string.wado/String,i32]>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, i32]">(0), used: 0 }; __b);
+    result = "temporary_mut_array_arg.wado/helper"(global:temporary_mut_array_arg.wado::__const_obj_0, __b = struct.new "core:prelude//List<[core:prelude/string.wado/String,i32]>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, i32]">(0), used: 0 }; __b);
     "core:cli/println"(result);
 }
 
