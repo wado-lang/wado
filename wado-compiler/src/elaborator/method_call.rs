@@ -1338,7 +1338,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
                             _ => Vec::new(),
                         };
-                        self.infer_variant_type_args(
+                        self.tysys.infer_variant_type_args(
                             &self.annotate_ctx.clone(),
                             &name,
                             &variant_info,

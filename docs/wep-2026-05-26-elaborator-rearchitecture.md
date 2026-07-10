@@ -585,14 +585,25 @@ Three independent tracks; each slice keeps `mise run test` green (E2E 2934/0).
       (contiguous) cluster run rather than cutting/pasting interleaved methods.
       Trait/type-implements resolution is now a `TypeSystem` operation, callable
       without an `Elaborator`.
-- [ ] **Track B Stage D — remaining targets.** `classify_call_callee`,
-      `infer_variant_type_args` (`call.rs`) already read only `self.tysys.* +
-      ctx` — straightforward moves, not yet done; `operators.rs` operator-trait
-      bound lookups un-audited. Still blocked and deferred: the `resolve_type`
-      family (mutates `ModuleSemantics.bindings` via
+- [x] **Track B Stage D — remaining pure-query moves done.**
+      `classify_call_callee`, `infer_variant_type_args` (`call.rs`) and
+      `binop_operand_requires_trait` (`operators.rs`) — each reading only
+      `self.tysys.*` (+ `ctx` for the first two) — moved to `impl TypeSystem`
+      via the same block-split; their call sites read `self.tysys.X(…)`. The
+      rest of `operators.rs` was audited and stays on `impl Elaborator`:
+      `resolve_binary(_operands_with_coercion)`, `build_binary_op_tir`,
+      `resolve_unary`, `resolve_assign`, `resolve_compound_assign`,
+      `desugar_comparison_chain`, `build_trait_op_method_call_on_resolved` are
+      dispatch/coercion methods that call `resolve_expr`, `record_*`,
+      `self.logger`, etc. — genuinely `Elaborator`-coupled, not pure trait
+      queries. `binop_operand_requires_trait` was the one pure trait-bound
+      predicate there.
+- [ ] **Track B Stage D — permanently deferred.** The `resolve_type` family
+      stays on `impl Elaborator`: it mutates `ModuleSemantics.bindings` via
       `record_type_name_reference`, and is `&mut self` for on-demand interning,
-      so a self-borrowing `&TypeLookup` param needs a different shape) and
-      `resolve_type_with_param_mapping` (calls it).
+      so a self-borrowing `&TypeLookup` param needs a different shape.
+      `resolve_type_with_param_mapping` calls it and is likewise deferred. These
+      are documented `Elaborator`-level exceptions, not pending work.
 - [ ] **Track B Stage E — fold the manual scope save/restores into the guard.**
       Replace the hand-rolled `trait_ctx` clone/restore in `resolve_module`'s
       `Item::Impl` arm (`elaborator.rs`) and the `self_type`-only save/restore in

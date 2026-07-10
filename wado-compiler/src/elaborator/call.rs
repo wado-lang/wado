@@ -13,6 +13,7 @@ use super::callee::{CalleeRef, StaticMethodRef};
 use super::infer::InferCtx;
 use super::trait_env::AnnotateCtx;
 use super::types::{FunctionContext, TypeError};
+use super::tysys::TypeSystem;
 use super::util::placeholder;
 
 /// Per-position `_` mask for a turbofish: `holes[i]` is true when argument `i`
@@ -211,7 +212,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span: root.span,
         });
     }
+}
 
+impl TypeSystem {
     /// Classify a call callee's prefix so `resolve_call` can rewrite
     /// `Self::` / `T::` (T bound to concrete) before any name lookup
     /// happens. `T::` (T abstract) is routed through its own static
@@ -230,7 +233,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if prefix == "Self"
             && let Some(self_type_id) = ctx.trait_ctx.self_type
         {
-            let self_name = self.tysys.type_table.borrow().type_name(self_type_id);
+            let self_name = self.type_table.borrow().type_name(self_type_id);
             return CalleeIdentKind::Rewritten(format!("{self_name}::{suffix}"));
         }
 
@@ -242,7 +245,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // abstract form and route through the trait-bound dispatch
             // path so the monomorphizer can substitute later.
             let is_abstract = matches!(
-                self.tysys.type_table.borrow().get(type_param_type_id),
+                self.type_table.borrow().get(type_param_type_id),
                 ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
             );
             if is_abstract {
@@ -253,7 +256,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
             }
             let concrete_name = self
-                .tysys
                 .type_table
                 .borrow()
                 .mangle_type_name(type_param_type_id);
@@ -262,7 +264,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         CalleeIdentKind::AsIs(ident)
     }
+}
 
+impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether `name` is a declared effect (`interface`) or resource —
     /// the set of identifiers `resolve_call`'s qualified-call fallback may
     /// treat as a deferred effect operation (`Stdout::write()`, etc.).
@@ -386,7 +390,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Expr::Ident(ident) = &call.callee else {
             unreachable!("non-Ident callees are handled by the indirect-call fast path above")
         };
-        let callee_kind = self.classify_call_callee(&self.annotate_ctx, ident);
+        let callee_kind = self.tysys.classify_call_callee(&self.annotate_ctx, ident);
 
         // Abstract `T::method(...)` takes its own dispatch path. Args
         // are resolved without coercion hints (the trait-bound dispatch
@@ -790,7 +794,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .borrow()
                             .type_id_of_decl(variant_info.defined_at)
                     } else {
-                        self.infer_variant_type_args(
+                        self.tysys.infer_variant_type_args(
                             &self.annotate_ctx.clone(),
                             &prefix_owned,
                             &variant_info,
@@ -932,7 +936,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     .borrow()
                                     .type_id_of_decl(variant_info.defined_at)
                             } else {
-                                self.infer_variant_type_args(
+                                self.tysys.infer_variant_type_args(
                                     &self.annotate_ctx.clone(),
                                     type_name,
                                     &variant_info,
@@ -2686,7 +2690,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|&pt| self.substitute_type_params(pt, type_args))
             .collect()
     }
+}
 
+impl TypeSystem {
     /// Infer type arguments for a variant constructor `Variant::Case(payload)`.
     ///
     /// Uses [`InferCtx`] with:
@@ -2713,10 +2719,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // which may differ from variant_info.module_source (e.g., prelude/types.wado).
         let mut canonical_module_source = None;
 
-        let mut infer = InferCtx::new(
-            &self.tysys.type_table,
-            variant_info.type_param_type_ids.clone(),
-        );
+        let mut infer = InferCtx::new(&self.type_table, variant_info.type_param_type_ids.clone());
 
         // Explicit turbofish args pin their slots as strong constraints; a `_`
         // slot is skipped so the payload/expected passes infer it. This is how
@@ -2739,7 +2742,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Queued through `add_expected_return` so it runs after the payload pass,
         // preserving the "stronger constraint wins" policy via `or_insert`.
         if let Some(expected) = expected_type {
-            let expected_resolved = self.tysys.type_table.borrow().get(expected).clone();
+            let expected_resolved = self.type_table.borrow().get(expected).clone();
             if let ResolvedType::GenericInstance {
                 name,
                 module_source,
@@ -2767,23 +2770,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // If unresolved type params remain in concrete code, fall back to bare Variant
         let has_unresolved = type_args
             .iter()
-            .any(|&t| self.tysys.type_table.borrow().contains_type_param(t));
+            .any(|&t| self.type_table.borrow().contains_type_param(t));
 
         if has_unresolved && ctx.trait_ctx.type_params.is_empty() {
             return self
-                .tysys
                 .type_table
                 .borrow()
                 .type_id_of_decl(variant_info.defined_at);
         }
 
-        self.tysys.type_table.borrow_mut().make_generic_instance(
+        self.type_table.borrow_mut().make_generic_instance(
             variant_info.name.clone(),
             module_source,
             type_args,
         )
     }
+}
 
+impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a static call through a type parameter: `T::method(args)`
     /// where T is bound by a trait (e.g., `T: Constructable`).
     fn resolve_type_param_static_call(
