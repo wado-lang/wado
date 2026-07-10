@@ -42,6 +42,7 @@ use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::escape::EscapeMap;
+use super::value_copy::{arg_source_root, carries_identity};
 
 /// Strips `$value_copy$T(arg)` wrappers off observably read-only bindings, run
 /// as a rule inside the unified peephole session (formerly the standalone
@@ -393,7 +394,7 @@ impl AliasWalk<'_> {
                 // cannot alias the copied aggregate.
                 ExprKind::Local { index, .. } => {
                     let ty = body.exprs[e].type_id;
-                    if super::escape::carries_identity(ty, self.type_table)
+                    if carries_identity(ty, self.type_table)
                         || self.type_table.box_payload_of(ty).is_some()
                     {
                         roots.push(*index);
@@ -645,7 +646,7 @@ fn is_mutable_witness_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     }
     type_table
         .box_payload_of(type_id)
-        .is_some_and(|payload| super::escape::carries_identity(payload, type_table))
+        .is_some_and(|payload| carries_identity(payload, type_table))
 }
 
 /// [`mark_root_field_mutated`] for an operand.
@@ -664,7 +665,7 @@ fn mark_root_field_mutated_operand(
 /// potentially field-mutated, following pure projections (`FieldAccess`,
 /// `VariantPayload`, `Cast`, `Unary`, `Index`) and, conservatively, a
 /// `MethodCall` receiver. Mirrors `copy_prop`'s `mark_potentially_mutated_local`
-/// (and this module's own [`arg_source_root`]) in which projections share
+/// (and [`super::value_copy::arg_source_root`]) in which projections share
 /// storage with their root; `Index` was previously missing here, which
 /// under-counted mutation through an indexed element (`x[i].field.push(...)`)
 /// as not touching `x`.
@@ -728,7 +729,7 @@ fn mark_identity_root_mutated(
     usage: &mut IndexMap<u32, LocalUsage>,
 ) {
     if let Some(e) = op.as_expr()
-        && (super::escape::carries_identity(body.exprs[e].type_id, type_table)
+        && (carries_identity(body.exprs[e].type_id, type_table)
             || type_table.box_payload_of(body.exprs[e].type_id).is_some())
     {
         mark_root_field_mutated(body, e, type_table, usage);
@@ -746,28 +747,6 @@ fn is_value_copy_call(body: &Body, expr: ExprId, value_copy_ids: &IndexSet<FuncI
         value_copy_ids.contains(func_id)
     } else {
         false
-    }
-}
-
-/// Find the root local that `arg` reads from, descending through projections
-/// and indexing that share storage with the container they read from. Returns
-/// `None` when no local root is reachable — a call result, a constant, or a
-/// bare literal. `None` does *not* by itself mean "fresh": an accessor call such
-/// as `container.index_value(i)` also returns `None` yet aliases the container's
-/// element, so callers pair it with a freshness gate (`EscapeMap::rvalue_is_fresh`
-/// or `yields_subexpression`).
-fn arg_source_root(body: &Body, expr: ExprId) -> Option<u32> {
-    match &body.exprs[expr].kind {
-        ExprKind::Local { index, .. } => Some(*index),
-        ExprKind::FieldAccess { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. }
-        | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::Unary { expr: inner, .. }
-        // An indexed element shares the container's storage.
-        | ExprKind::Index { expr: inner, .. } => {
-            inner.as_expr().and_then(|e| arg_source_root(body, e))
-        }
-        _ => None,
     }
 }
 

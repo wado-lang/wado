@@ -97,6 +97,7 @@ mod sroa_param;
 mod store_load_forward;
 mod string_push;
 mod tmpl_hoist;
+mod value_copy;
 mod value_copy_demote;
 mod value_copy_elide;
 

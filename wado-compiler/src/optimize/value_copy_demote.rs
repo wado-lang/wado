@@ -42,6 +42,7 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::arena_query::{expr_mentions_local, is_local, reachable_blocks, strip_refs};
 use super::gate::{FunctionGate, GatedPass};
+use super::value_copy::arg_source_root;
 use crate::nir::FuncId;
 use cranelift_entity::EntityRef;
 
@@ -436,25 +437,6 @@ fn collect_sites(
                 site_key.entry(loc).or_insert(key);
             }
         }
-    }
-}
-
-/// Walk the projections (`*`, `&`, `.field`, `[i]`, cast) that share storage
-/// with their inner expression to the local the value-copy argument reads
-/// from. `None` for a genuinely fresh rvalue (call result, literal,
-/// constructor) — those are uniquely owned, so a shallow copy of them is
-/// always safe.
-fn arg_source_root(body: &Body, id: ExprId) -> Option<u32> {
-    match &body.exprs[id].kind {
-        ExprKind::Local { index, .. } => Some(*index),
-        ExprKind::FieldAccess { expr: inner, .. }
-        | ExprKind::Index { expr: inner, .. }
-        | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::Unary { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. } => {
-            inner.as_expr().and_then(|ie| arg_source_root(body, ie))
-        }
-        _ => None,
     }
 }
 
