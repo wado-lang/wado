@@ -1,0 +1,333 @@
+use { parse_document } from "./fmt_parse_block.wado";
+use { Node, FrontMatterKind, ColumnAlign } from "./fmt_ast.wado";
+
+fn doc_children(source: &String) -> List<Node> {
+    return match parse_document(source) {
+        Node::Document(children) => children,
+        _ => panic("parse_document did not return a Document node"),
+    };
+}
+
+test "parse_document reads a paragraph" {
+    let children = doc_children(&"hello world");
+    assert children.len() == 1;
+    assert children.get(0) matches { Some(Node::Paragraph(_)) };
+}
+
+test "parse_document joins consecutive lines into one paragraph" {
+    let children = doc_children(&"line one\nline two");
+    assert children.len() == 1;
+    if let Some(Node::Paragraph(p)) = children.get(0) {
+        // Text, SoftBreak, Text
+        assert p.children.len() == 3;
+    } else {
+        panic("expected a Paragraph node");
+    }
+}
+
+test "parse_document separates paragraphs on a blank line" {
+    let children = doc_children(&"first\n\nsecond");
+    assert children.len() == 2;
+    assert children.get(0) matches { Some(Node::Paragraph(_)) };
+    assert children.get(1) matches { Some(Node::Paragraph(_)) };
+}
+
+test "parse_document reads ATX headings by level" {
+    let children = doc_children(&"# Title\n\n## Sub");
+    assert children.len() == 2;
+    if let Some(Node::Heading(h)) = children.get(0) {
+        assert h.level == 1;
+    } else {
+        panic("expected a Heading node");
+    }
+    if let Some(Node::Heading(h)) = children.get(1) {
+        assert h.level == 2;
+    } else {
+        panic("expected a Heading node");
+    }
+}
+
+test "parse_document strips a closing ATX sequence" {
+    let children = doc_children(&"## Spaced ##");
+    if let Some(Node::Heading(h)) = children.get(0) {
+        assert h.children.len() == 1;
+        if let Some(Node::Text(s)) = h.children.get(0) {
+            assert s == "Spaced";
+        }
+    } else {
+        panic("expected a Heading node");
+    }
+}
+
+test "parse_document reads a thematic break" {
+    let children = doc_children(&"first\n\n---\n\nsecond");
+    assert children.len() == 3;
+    assert children.get(1) matches { Some(Node::ThematicBreak) };
+}
+
+test "parse_document reads a fenced code block with a language tag" {
+    let children = doc_children(&"```wado\nlet x = 1;\n```");
+    assert children.len() == 1;
+    if let Some(Node::CodeBlock(cb)) = children.get(0) {
+        assert cb.fenced == true;
+        assert cb.tag == "wado";
+        assert cb.code == "let x = 1;\n";
+    } else {
+        panic("expected a CodeBlock node");
+    }
+}
+
+test "parse_document reads an indented code block" {
+    let children = doc_children(&"    let x = 1;\n    let y = 2;");
+    assert children.len() == 1;
+    if let Some(Node::CodeBlock(cb)) = children.get(0) {
+        assert cb.fenced == false;
+        assert cb.code == "let x = 1;\nlet y = 2;\n";
+    } else {
+        panic("expected a CodeBlock node");
+    }
+}
+
+test "parse_document reads a blockquote recursively" {
+    let children = doc_children(&"> a\n> b\n\nc");
+    assert children.len() == 2;
+    if let Some(Node::BlockQuote(inner)) = children.get(0) {
+        assert inner.len() == 1;
+        assert inner.get(0) matches { Some(Node::Paragraph(_)) };
+    } else {
+        panic("expected a BlockQuote node");
+    }
+}
+
+test "parse_document reads a tight unordered list" {
+    let children = doc_children(&"- a\n- b\n- c");
+    assert children.len() == 1;
+    if let Some(Node::List(list)) = children.get(0) {
+        assert list.ordered == false;
+        assert list.items.len() == 3;
+        if let Some(first) = list.items.get(0) {
+            assert first.loose == false;
+        }
+    } else {
+        panic("expected a List node");
+    }
+}
+
+test "parse_document reads a loose list separated by blank lines" {
+    let children = doc_children(&"- a\n\n- b");
+    if let Some(Node::List(list)) = children.get(0) {
+        assert list.items.len() == 2;
+        if let Some(second) = list.items.get(1) {
+            assert second.loose == true;
+        }
+    } else {
+        panic("expected a List node");
+    }
+}
+
+test "parse_document renumbers an ordered list from its start index" {
+    let children = doc_children(&"3. a\n4. b\n5. c");
+    if let Some(Node::List(list)) = children.get(0) {
+        assert list.ordered == true;
+        assert list.start == 3;
+        assert list.items.len() == 3;
+    } else {
+        panic("expected a List node");
+    }
+}
+
+test "parse_document nests a sub-list inside a list item" {
+    let children = doc_children(&"- a\n  - nested\n- b");
+    if let Some(Node::List(list)) = children.get(0) {
+        assert list.items.len() == 2;
+        if let Some(first) = list.items.get(0) {
+            // paragraph "a" then a nested List
+            assert first.children.len() == 2;
+            assert first.children.get(1) matches { Some(Node::List(_)) };
+        }
+    } else {
+        panic("expected a List node");
+    }
+}
+
+test "parse_document reads a task list item" {
+    let children = doc_children(&"- [ ] todo\n- [x] done");
+    if let Some(Node::List(list)) = children.get(0) {
+        if let Some(a) = list.items.get(0) {
+            assert a.marker matches { Some(_) };
+            if let Some(m) = a.marker {
+                assert m.checked == false;
+            }
+        }
+        if let Some(b) = list.items.get(1) {
+            assert b.marker matches { Some(_) };
+            if let Some(m) = b.marker {
+                assert m.checked == true;
+            }
+        }
+    } else {
+        panic("expected a List node");
+    }
+}
+
+test "parse_document rejects a table whose delimiter row column count differs from the header" {
+    // GFM requires the header and delimiter rows to have equal cell counts;
+    // otherwise it is not a table and stays a paragraph (matches
+    // pulldown-cmark / dprint). Here the header has 3 columns, the delimiter 2.
+    let source = "| a | b | c |\n| - | - |\n| 1 | 2 | 3 |";
+    let children = doc_children(&source);
+    assert children.len() == 1;
+    assert children.get(0) matches { Some(Node::Paragraph(_)) };
+}
+
+test "parse_document reads a GFM table with alignment" {
+    let source = "| a | b | c |\n| :-- | :-: | --: |\n| 1 | 2 | 3 |";
+    let children = doc_children(&source);
+    assert children.len() == 1;
+    if let Some(Node::Table(t)) = children.get(0) {
+        assert t.align.len() == 3;
+        assert t.align.get(0) matches { Some(ColumnAlign::Left) };
+        assert t.align.get(1) matches { Some(ColumnAlign::Center) };
+        assert t.align.get(2) matches { Some(ColumnAlign::Right) };
+        assert t.header.cells.len() == 3;
+        assert t.rows.len() == 1;
+    } else {
+        panic("expected a Table node");
+    }
+}
+
+test "parse_document does not split a table row on a pipe inside a code span" {
+    // A `|` inside `` `...` `` must not be mistaken for a column boundary —
+    // found via a real corpus idempotency check against
+    // docs/operator-precedence-research.md's "`&` (8), `^` (9), `|` (10)"
+    // cell.
+    let source = "| a | b |\n| - | - |\n| `x \\| y` | 2 |";
+    let children = doc_children(&source);
+    if let Some(Node::Table(t)) = children.get(0) {
+        assert t.rows.len() == 1;
+        if let Some(row) = t.rows.get(0) {
+            assert row.cells.len() == 2;
+        }
+    } else {
+        panic("expected a Table node");
+    }
+}
+
+test "parse_document keeps a backslash-escaped pipe in a table cell's plain text" {
+    // A `\|` outside any code span must stay escaped through to the cell's
+    // inline content (not resolve to a bare `|`, which would itself look
+    // like an unintended column separator once printed back out) — found
+    // via a real corpus idempotency check against
+    // docs/operator-precedence-research.md's "Mixed (& > ==, \| < =)" cell.
+    let source = "| a | b |\n| - | - |\n| x \\| y | 2 |";
+    let children = doc_children(&source);
+    if let Some(Node::Table(t)) = children.get(0) {
+        assert t.rows.len() == 1;
+        if let Some(row) = t.rows.get(0) {
+            assert row.cells.len() == 2;
+            if let Some(cell) = row.cells.get(0) {
+                if let Some(Node::Text(s)) = cell.get(0) {
+                    assert s == "x \\| y";
+                } else {
+                    panic("expected a Text node");
+                }
+            }
+        }
+    } else {
+        panic("expected a Table node");
+    }
+}
+
+test "parse_document lazily continues a nested list item's paragraph at less than its content column" {
+    // A continuation line only needs to clear the OUTER container's indent,
+    // not the nested item's own content column, to remain part of the same
+    // paragraph — CommonMark's "lazy continuation line" rule. Found via a
+    // real corpus idempotency check against wado-lsp/AGENTS.md's nested
+    // `use { Eff::{f, g} }` list item, whose second line is indented only
+    // to the outer task item's column.
+    let source = "- [ ] outer\n      - inner one line\n      - inner two lines\n      continued\n";
+    let children = doc_children(&source);
+    if let Some(Node::List(outer)) = children.get(0) {
+        if let Some(outer_item) = outer.items.get(0) {
+            // children[0] is the item's own "outer" paragraph; the nested
+            // list is its second child (see "parse_document nests a
+            // sub-list inside a list item" above for the same shape).
+            if let Some(Node::List(inner)) = outer_item.children.get(1) {
+                assert inner.items.len() == 2;
+                if let Some(second) = inner.items.get(1) {
+                    // One Paragraph with a SoftBreak joining both lines, not
+                    // a Paragraph followed by a stray sibling paragraph.
+                    assert second.children.len() == 1;
+                    assert second.children.get(0) matches { Some(Node::Paragraph(_)) };
+                } else {
+                    panic("expected a second inner item");
+                }
+            } else {
+                panic("expected a nested List as the outer item's first child");
+            }
+        } else {
+            panic("expected an outer item");
+        }
+    } else {
+        panic("expected a List node");
+    }
+}
+
+test "parse_document reads YAML front matter only at document start" {
+    let source = "---\ntitle: x\n---\n\nBody.";
+    let children = doc_children(&source);
+    assert children.len() == 2;
+    if let Some(Node::FrontMatter(fm)) = children.get(0) {
+        assert fm.kind matches { FrontMatterKind::Yaml };
+        assert fm.body == "title: x";
+    } else {
+        panic("expected a FrontMatter node");
+    }
+    assert children.get(1) matches { Some(Node::Paragraph(_)) };
+}
+
+test "parse_document reads a raw HTML block" {
+    let source = "<div class=\"x\">\n  <span>y</span>\n</div>\n\nBody.";
+    let children = doc_children(&source);
+    assert children.len() == 2;
+    if let Some(Node::Html(s)) = children.get(0) {
+        assert s == "<div class=\"x\">\n  <span>y</span>\n</div>";
+    } else {
+        panic("expected an Html node");
+    }
+}
+
+test "parse_document does not treat a standalone autolink line as an HTML block" {
+    let source = "See docs:\n<https://example.com/x>";
+    let children = doc_children(&source);
+    assert children.len() == 1;
+    assert children.get(0) matches { Some(Node::Paragraph(_)) };
+}
+
+test "parse_document resolves a forward-referenced link reference definition" {
+    let source = "See [the WEP][cli-wep] for details.\n\n[cli-wep]: ./wep.md";
+    let children = doc_children(&source);
+    // The definition still resolves the forward reference in the paragraph,
+    // but is also emitted as its own node (in its original position) rather
+    // than being dropped — otherwise the printer would have nothing to
+    // reproduce and the reference would go undefined in the output.
+    assert children.len() == 2;
+    if let Some(Node::Paragraph(p)) = children.get(0) {
+        assert p.children.get(1) matches { Some(Node::ReferenceLink(_)) };
+    } else {
+        panic("expected a Paragraph node");
+    }
+    if let Some(Node::LinkReferenceDef(def)) = children.get(1) {
+        assert def.label == "cli-wep";
+        assert def.url == "./wep.md";
+    } else {
+        panic("expected a LinkReferenceDef node");
+    }
+}
+
+test "parse_document does not treat a footnote-shaped line as a link reference definition" {
+    let source = "[^note]: this stays literal text, not a link reference";
+    let children = doc_children(&source);
+    assert children.len() == 1;
+    assert children.get(0) matches { Some(Node::Paragraph(_)) };
+}

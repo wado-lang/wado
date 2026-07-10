@@ -1,0 +1,92 @@
+//! Link reference definitions: label normalization, the definition table
+//! resolved shortcut/collapsed/reference links are looked up against, and
+//! destination/title parsing shared between definitions and inline links.
+
+use { TreeMap } from "core:collections";
+use { LinkReferenceDef } from "./fmt_ast.wado";
+use { StrCursor, chars_of, slice_chars } from "./str_cursor.wado";
+
+internal struct RefTable {
+    internal defs: TreeMap<String, LinkReferenceDef>,
+}
+
+pub fn new_ref_table() -> RefTable {
+    return RefTable { defs: TreeMap::<String, LinkReferenceDef>::new() };
+}
+
+/// Registers a definition. `def.label` is the label as written (raw, not
+/// normalized) — preserved so printing can echo the author's original
+/// spelling; the table key is normalized internally. The first definition
+/// for a given normalized label wins, per CommonMark.
+pub fn ref_table_insert(table: &mut RefTable, def: LinkReferenceDef) {
+    let key = normalize_label(&def.label);
+    if !table.defs.contains_key(key) {
+        table.defs[key] = def;
+    }
+}
+
+/// Looks up a raw (not-yet-normalized) label.
+pub fn ref_table_get(table: &RefTable, raw_label: &String) -> Option<LinkReferenceDef> {
+    return table.defs.get(normalize_label(raw_label));
+}
+
+/// A case-folded, whitespace-collapsed label, per CommonMark's link
+/// reference matching rule. Case folding is ASCII-only — full Unicode case
+/// folding is out of scope (see `docs/wep-2026-07-10-marl-format.md`).
+pub fn normalize_label(raw: &String) -> String {
+    let words: List<String> = raw.trim().to_ascii_lowercase().split_whitespace().collect();
+    return words.join(" ");
+}
+
+/// Splits a link/image destination field (the text between `(` and `)`,
+/// after any inline text, or the text after a reference definition's `:`)
+/// into `[url, title]` (`title` is `""` when absent). The destination is a
+/// bare run up to the first space, or an angle-bracketed `<...>` run that may
+/// contain spaces; the title is an optional `"..."`, `'...'`, or `(...)`
+/// string after it.
+pub fn parse_dest_and_title(raw: &String) -> [String, String] {
+    let trimmed = raw.trim();
+    let chars = chars_of(&trimmed);
+    let len = chars.len();
+    let mut dest = String::new();
+    let mut p = 0;
+    if p < len && chars[p] == '<' {
+        p += 1;
+        while p < len && chars[p] != '>' {
+            dest.push(chars[p]);
+            p += 1;
+        }
+        if p < len {
+            p += 1;
+        }
+    } else {
+        while p < len && !chars[p] matches { ' ' | '\t' } {
+            dest.push(chars[p]);
+            p += 1;
+        }
+    }
+    while p < len && chars[p] matches { ' ' | '\t' } {
+        p += 1;
+    }
+    let title = if p < len { read_title(&chars, p) } else { "" };
+    return [dest, title];
+}
+
+fn read_title(chars: &List<char>, start: i32) -> String {
+    let closing = match chars[start] {
+        '"' => '"',
+        '\'' => '\'',
+        '(' => ')',
+        _ => {
+            return "";
+        },
+    };
+    let len = chars.len();
+    let mut title = String::new();
+    let mut p = start + 1;
+    while p < len && chars[p] != closing {
+        title.push(chars[p]);
+        p += 1;
+    }
+    return title;
+}

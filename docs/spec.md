@@ -1925,53 +1925,34 @@ Name resolution in a default otherwise uses the callee's scope; only these three
 
 Closures are anonymous function expressions with `|params| body` syntax.
 
-**Expression Body (no braces):**
+An expression body returns its value implicitly:
 
 ```wado
-// Single expression, implicit return
 let add_one = |x: i32| x + 1;
-let result = add_one(5);  // 6
-
-// Multiple parameters
-let add = |a: i32, b: i32| a + b;
-let sum = add(3, 4);  // 7
-
-// Returning different types
-let is_even = |x: i32| x % 2 == 0;
-let check = is_even(4);  // true
-
-// Struct literal as expression body
 let make_point = |x: i32, y: i32| Point { x, y };
-let p = make_point(10, 20);
 ```
 
-**Block Body (with braces):**
-
-Block body closures require explicit `return` statements:
+A block body requires explicit `return`:
 
 ```wado
 let compute = |x: i32| {
     let doubled = x * 2;
-    let tripled = x * 3;
-    return doubled + tripled;
+    return doubled + x * 3;
 };
-let result = compute(4);  // 20
 ```
 
-**Current Limitations:**
-
-- **Type annotations required**: Parameter types must be explicitly specified
-- **No inference**: Unlike some languages, closure parameter types are not inferred
+An optional `-> Type` declares the return type, and is what a `?` in the body
+resolves against:
 
 ```wado
-// Pure closure (no captures)
-let pure = |x: i32| x * 2;
-
-// Capturing outer variables: auto-by-reference
-let outer = 10;
-let capture = |x: i32| x + outer;  // captures &outer
-capture(5);  // Returns 15
+let parse = |s: String| -> Result<i32, String> {
+    let n = to_int(s)?;
+    return Result::Ok(n + 1);
+};
 ```
+
+Parameter types are always required (never inferred). A `?` in the body needs
+the return type known — via `-> Type` or an expected `fn(..) -> R`.
 
 Closures auto-capture each free variable by reference; the reference kind is inferred from body usage (`&T` for read-only, `&mut T` for mutating). Pure read-only captures keep the closure type at `fn`; any `&mut` capture promotes it to `fn mut`. Calling a `fn mut` closure requires the _root_ of the callee place to be a mutable binding (mirrors Rust's `FnMut` rule); this applies whether the closure is called directly (`f()`) or reached through field access or indexing (`(h.f)()`, `arr[i]()`). A temporary root — a call result, a literal — has no binding and is always accepted.
 

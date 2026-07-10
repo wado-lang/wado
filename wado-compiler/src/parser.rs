@@ -3957,6 +3957,7 @@ impl Parser {
     /// no left operand for the binary operator.
     fn parse_zero_arg_closure_expr(&mut self, start_span: Span) -> ParseResult<Expr> {
         self.advance(); // consume `||`
+        let return_type = self.parse_optional_closure_return_type()?;
         let body = if self.check(&TokenKind::LBrace) {
             let block = self.parse_block()?;
             Expr::Block(Box::new(block))
@@ -3967,6 +3968,7 @@ impl Parser {
         Ok(Expr::Closure(Box::new(ClosureExpr {
             id: self.alloc_ast_id(),
             params: vec![],
+            return_type,
             body,
             span: start_span.merge(&body_span),
         })))
@@ -4436,6 +4438,8 @@ impl Parser {
 
         self.expect(&TokenKind::Pipe)?;
 
+        let return_type = self.parse_optional_closure_return_type()?;
+
         // Check for block body: |params| { ... }
         let body = if self.check(&TokenKind::LBrace) {
             let block = self.parse_block()?;
@@ -4448,9 +4452,21 @@ impl Parser {
         Ok(Expr::Closure(Box::new(ClosureExpr {
             id: self.alloc_ast_id(),
             params,
+            return_type,
             body,
             span: start_span.merge(&body_span),
         })))
+    }
+
+    /// Parse an optional `-> Type` closure return-type annotation, mirroring
+    /// the function-signature form (`|x| -> i32 x + 1`, `|x| -> T { ... }`).
+    fn parse_optional_closure_return_type(&mut self) -> ParseResult<Option<crate::ast::Type>> {
+        if self.check(&TokenKind::Arrow) {
+            self.advance();
+            Ok(Some(self.parse_type()?))
+        } else {
+            Ok(None)
+        }
     }
 
     fn parse_closure_param(&mut self) -> ParseResult<ClosureParam> {

@@ -1,0 +1,484 @@
+//! AST -> canonical Markdown string.
+//!
+//! Mirrors dprint's `generate.rs` node-by-node walk (see
+//! `docs/wep-2026-07-10-marl-format.md`, "Printing"): a state machine over
+//! adjacent block siblings deciding how much vertical space belongs between
+//! them, plus per-node-kind rendering. Rules are adopted because they are
+//! good defaults, not because matching dprint exactly is required — a few
+//! places deliberately diverge (noted inline).
+
+use {
+    Node,
+    FrontMatterKind,
+    Heading,
+    CodeBlock,
+    MdList,
+    MdItem,
+    MdTable,
+    MdTableRow,
+    ColumnAlign,
+    LinkReferenceDef,
+    EmphasisNode,
+    LinkNode,
+    ImageNode,
+    ReferenceLinkNode,
+    ReferenceImageNode,
+} from "./fmt_ast.wado";
+use { display_width } from "./unicode_width.wado";
+
+pub fn print_document(doc: &Node) -> String {
+    let children = match doc {
+        Node::Document(c) => c,
+        _ => panic("marl-format: print_document expects a Document node"),
+    };
+    let mut out = String::new();
+    print_block_sequence(children, &mut out, false);
+    let trimmed = out.trim_end();
+    if trimmed.len() == 0 {
+        return "";
+    }
+    let mut result = trimmed;
+    result.push('\n');
+    return result;
+}
+
+// --- block sequencing ---
+
+/// `tight` allows single-newline (no blank line) spacing between sibling
+/// blocks, used for a list item's own children — but never between two
+/// adjacent paragraphs (would merge into one on re-parse) or before an
+/// indented code block (would become paragraph lazy-continuation instead of
+/// code on re-parse): both are genuine round-trip-safety hazards, not a
+/// style choice, so they always keep their blank line regardless of `tight`.
+fn print_block_sequence(nodes: &List<Node>, out: &mut String, tight: bool) {
+    let mut first = true;
+    let mut prev_is_paragraph = false;
+    let mut prev_is_ref_def = false;
+    let mut prev_needs_boundary = false;
+    for let node of nodes {
+        let is_ref_def = node matches { Node::LinkReferenceDef(_) };
+        let is_paragraph = node matches { Node::Paragraph(_) };
+        let is_indented_code = match node {
+            Node::CodeBlock(cb) => !cb.fenced,
+            _ => false,
+        };
+        if !first {
+            if prev_is_ref_def && is_ref_def {
+                out.push('\n');
+            } else if tight && !(prev_is_paragraph && is_paragraph) && !is_indented_code && !prev_needs_boundary {
+                out.push('\n');
+            } else {
+                out.push_str(&"\n\n");
+            }
+        }
+        first = false;
+        print_block(node, out);
+        prev_is_paragraph = is_paragraph;
+        prev_is_ref_def = is_ref_def;
+        // A List, Table, BlockQuote, or Html block doesn't reliably
+        // self-terminate on reparse: without a blank line, a following
+        // under-indented line can be lazily absorbed as more content of the
+        // block's own last (still "open") leaf, rather than starting the
+        // next sibling — found via a real corpus idempotency check where a
+        // dropped blank line let a List's trailing paragraph get reparsed as
+        // part of the list's last item. Always force the boundary for these.
+        prev_needs_boundary = node matches { Node::List(_) | Node::Table(_) | Node::BlockQuote(_) | Node::Html(_) };
+    }
+}
+
+fn print_block(node: &Node, out: &mut String) {
+    match node {
+        Node::FrontMatter(fm) => {
+            let delim = match fm.kind {
+                FrontMatterKind::Yaml => "---",
+                FrontMatterKind::Toml => "+++",
+            };
+            out.push_str(&delim);
+            if fm.body.len() > 0 {
+                out.push('\n');
+                out.push_str(&fm.body);
+            }
+            out.push('\n');
+            out.push_str(&delim);
+        },
+        Node::Heading(h) => print_heading(h, out),
+        Node::Paragraph(p) => out.push_str(&print_inline_seq(&p.children)),
+        Node::BlockQuote(children) => print_blockquote(children, out),
+        Node::CodeBlock(cb) => print_code_block(cb, out),
+        Node::List(list) => print_list(list, out),
+        Node::Table(t) => print_table(t, out),
+        Node::ThematicBreak => out.push_str(&"---"),
+        Node::Html(s) => out.push_str(s),
+        Node::LinkReferenceDef(def) => print_link_ref_def(def, out),
+        _ => panic("marl-format: unexpected node in block position"),
+    }
+}
+
+fn print_heading(h: &Heading, out: &mut String) {
+    out.push_str(&"#".repeat(h.level));
+    out.push(' ');
+    out.push_str(&print_inline_seq(&h.children));
+}
+
+fn print_blockquote(children: &List<Node>, out: &mut String) {
+    let mut inner = String::new();
+    print_block_sequence(children, &mut inner, false);
+    let mut first = true;
+    for let line of inner.split("\n") {
+        if !first {
+            out.push('\n');
+        }
+        first = false;
+        if line.len() == 0 {
+            out.push('>');
+        } else {
+            out.push_str(&"> ");
+            out.push_str(&line);
+        }
+    }
+}
+
+fn print_link_ref_def(def: &LinkReferenceDef, out: &mut String) {
+    out.push('[');
+    out.push_str(&def.label);
+    out.push_str(&"]: ");
+    out.push_str(&def.url);
+    if def.title.len() > 0 {
+        out.push_str(&" \"");
+        out.push_str(&def.title);
+        out.push('"');
+    }
+}
+
+// --- fenced and indented code ---
+
+fn print_code_block(cb: &CodeBlock, out: &mut String) {
+    let trimmed = cb.code.trim_end();
+    if cb.fenced {
+        let fence = fence_string(&trimmed);
+        out.push_str(&fence);
+        out.push_str(&cb.tag);
+        if trimmed.len() > 0 {
+            out.push('\n');
+            out.push_str(&trimmed);
+        }
+        out.push('\n');
+        out.push_str(&fence);
+    } else {
+        let mut first = true;
+        for let line of trimmed.split("\n") {
+            if !first {
+                out.push('\n');
+            }
+            first = false;
+            out.push_str(&"    ");
+            out.push_str(&line);
+        }
+    }
+}
+
+fn fence_string(code: &String) -> String {
+    let run = longest_backtick_run(code);
+    let len = if run > 2 { run } else { 2 } + 1;
+    return "`".repeat(len);
+}
+
+fn longest_backtick_run(code: &String) -> i32 {
+    let mut max_run = 0;
+    let mut run = 0;
+    for let c of code.chars() {
+        if c == '`' {
+            run += 1;
+            if run > max_run {
+                max_run = run;
+            }
+        } else {
+            run = 0;
+        }
+    }
+    return max_run;
+}
+
+// --- lists ---
+
+fn print_list(list: &MdList, out: &mut String) {
+    let mut idx = 0;
+    for let item of list.items {
+        if idx > 0 {
+            out.push('\n');
+            if item.loose {
+                out.push('\n');
+            }
+        }
+        let marker = if list.ordered { `{list.start + idx}.` } else { "-" };
+        print_item(&item, &marker, out);
+        idx += 1;
+    }
+}
+
+fn print_item(item: &MdItem, marker: &String, out: &mut String) {
+    out.push_str(marker);
+    out.push(' ');
+    // Continuation lines are indented to `marker.len() + 1` regardless of a
+    // task checkbox: the checkbox is ordinary paragraph content, not part of
+    // the list marker, so it doesn't extend the item's required content
+    // column (`parse_list`'s `content_col` agrees). Aligning continuation
+    // text under the checkbox instead would look nicer but would leave
+    // residual indentation on reparse — enough, in one real corpus item, to
+    // be mistaken for a 4-space indented code block.
+    let indent_width = marker.len() + 1;
+    match item.marker {
+        Some(m) => {
+            out.push_str(&if m.checked { "[x] " } else { "[ ] " });
+        },
+        None => {
+        },
+    }
+    let mut body = String::new();
+    print_block_sequence(&item.children, &mut body, true);
+    let indent = " ".repeat(indent_width);
+    let mut first_line = true;
+    for let line of body.split("\n") {
+        if first_line {
+            out.push_str(&line);
+            first_line = false;
+        } else {
+            out.push('\n');
+            if line.len() > 0 {
+                out.push_str(&indent);
+                out.push_str(&line);
+            }
+        }
+    }
+}
+
+// --- tables ---
+
+fn print_table(t: &MdTable, out: &mut String) {
+    let ncol = t.header.cells.len();
+    let header_texts = row_texts(&t.header, ncol);
+    let mut rows_texts: List<List<String>> = [];
+    for let row of t.rows {
+        rows_texts.push(row_texts(&row, ncol));
+    }
+
+    let mut widths: List<i32> = [];
+    for let c of 0..<ncol {
+        let mut w = display_width(&header_texts[c]);
+        for let row of rows_texts {
+            let cw = display_width(&row[c]);
+            if cw > w {
+                w = cw;
+            }
+        }
+        let min_w = alignment_colon_count(&align_at(&t.align, c)) + 1;
+        if min_w > w {
+            w = min_w;
+        }
+        widths.push(w);
+    }
+
+    print_table_row(&header_texts, &widths, &t.align, out);
+    out.push('\n');
+    print_delimiter_row(&widths, &t.align, out);
+    for let row of rows_texts {
+        out.push('\n');
+        print_table_row(&row, &widths, &t.align, out);
+    }
+}
+
+fn row_texts(row: &MdTableRow, ncol: i32) -> List<String> {
+    let mut out: List<String> = [];
+    for let c of 0..<ncol {
+        let text = match row.cells.get(c) {
+            Some(cell) => print_inline_seq(&cell),
+            None => "",
+        };
+        out.push(text);
+    }
+    return out;
+}
+
+fn align_at(align: &List<ColumnAlign>, idx: i32) -> ColumnAlign {
+    return match align.get(idx) {
+        Some(a) => a,
+        None => ColumnAlign::None,
+    };
+}
+
+fn alignment_colon_count(a: &ColumnAlign) -> i32 {
+    return match a {
+        ColumnAlign::Center => 2,
+        ColumnAlign::Left => 1,
+        ColumnAlign::Right => 1,
+        ColumnAlign::None => 0,
+    };
+}
+
+fn print_table_row(cells: &List<String>, widths: &List<i32>, align: &List<ColumnAlign>, out: &mut String) {
+    for let c of 0..<cells.len() {
+        if c == 0 {
+            out.push_str(&"| ");
+        } else {
+            out.push(' ');
+        }
+        let text = cells[c];
+        let diff = widths[c] - display_width(&text);
+        let a = align_at(align, c);
+        let mut left_pad = 0;
+        let mut right_pad = 0;
+        match a {
+            ColumnAlign::Right => {
+                left_pad = diff;
+            },
+            ColumnAlign::Center => {
+                left_pad = diff / 2;
+                right_pad = diff - left_pad;
+            },
+            _ => {
+                right_pad = diff;
+            },
+        }
+        out.push_str(&" ".repeat(left_pad));
+        out.push_str(&text);
+        out.push_str(&" ".repeat(right_pad));
+        out.push_str(&" |");
+    }
+}
+
+fn print_delimiter_row(widths: &List<i32>, align: &List<ColumnAlign>, out: &mut String) {
+    for let c of 0..<widths.len() {
+        if c == 0 {
+            out.push_str(&"| ");
+        } else {
+            out.push(' ');
+        }
+        let a = align_at(align, c);
+        let dashes = widths[c] - alignment_colon_count(&a);
+        let has_left = a matches { ColumnAlign::Left | ColumnAlign::Center };
+        let has_right = a matches { ColumnAlign::Right | ColumnAlign::Center };
+        if has_left {
+            out.push(':');
+        }
+        out.push_str(&"-".repeat(dashes));
+        if has_right {
+            out.push(':');
+        }
+        out.push_str(&" |");
+    }
+}
+
+// --- inline ---
+
+pub fn print_inline_seq(nodes: &List<Node>) -> String {
+    let mut out = String::new();
+    for let node of nodes {
+        print_inline_node(node, &mut out);
+    }
+    return out;
+}
+
+fn print_inline_node(node: &Node, out: &mut String) {
+    match node {
+        Node::Text(s) => out.push_str(s),
+        Node::SoftBreak => out.push('\n'),
+        Node::HardBreak => out.push_str(&"\\\n"),
+        Node::Emphasis(em) => print_emphasis(em, out),
+        Node::Strong(children) => {
+            out.push_str(&"**");
+            out.push_str(&print_inline_seq(children));
+            out.push_str(&"**");
+        },
+        Node::Strikethrough(children) => {
+            out.push_str(&"~~");
+            out.push_str(&print_inline_seq(children));
+            out.push_str(&"~~");
+        },
+        Node::Code(s) => print_code_span(s, out),
+        Node::InlineLink(link) => print_inline_link(link, out),
+        Node::ReferenceLink(link) => print_reference_link(link, out),
+        Node::ShortcutLink(link) => print_shortcut_link(link, out),
+        Node::AutoLink(link) => {
+            if link.bracketed {
+                out.push('<');
+                out.push_str(&link.url);
+                out.push('>');
+            } else {
+                out.push_str(&link.url);
+            }
+        },
+        Node::InlineImage(img) => print_inline_image(img, out),
+        Node::ReferenceImage(img) => print_reference_image(img, out),
+        Node::Html(s) => out.push_str(s),
+        _ => panic("marl-format: unexpected node in inline position"),
+    }
+}
+
+fn print_emphasis(em: &EmphasisNode, out: &mut String) {
+    let marker = if em.keep_asterisk { "*" } else { "_" };
+    out.push_str(&marker);
+    out.push_str(&print_inline_seq(&em.children));
+    out.push_str(&marker);
+}
+
+fn print_code_span(s: &String, out: &mut String) {
+    let has_backtick = s.contains("`");
+    let backtick_text = if has_backtick { "``" } else { "`" };
+    let needs_space = has_backtick && (s.starts_with("`") || s.ends_with("`"));
+    out.push_str(&backtick_text);
+    if needs_space {
+        out.push(' ');
+    }
+    out.push_str(s);
+    if needs_space {
+        out.push(' ');
+    }
+    out.push_str(&backtick_text);
+}
+
+fn print_dest_and_title(url: &String, title: &String, out: &mut String) {
+    out.push_str(&"(");
+    out.push_str(url);
+    if title.len() > 0 {
+        out.push_str(&" \"");
+        out.push_str(title);
+        out.push('"');
+    }
+    out.push(')');
+}
+
+fn print_inline_link(link: &LinkNode, out: &mut String) {
+    out.push('[');
+    out.push_str(&print_inline_seq(&link.children));
+    out.push(']');
+    print_dest_and_title(&link.url, &link.title, out);
+}
+
+fn print_reference_link(link: &ReferenceLinkNode, out: &mut String) {
+    out.push('[');
+    out.push_str(&print_inline_seq(&link.children));
+    out.push_str(&"][");
+    out.push_str(&link.label);
+    out.push(']');
+}
+
+fn print_shortcut_link(link: &ReferenceLinkNode, out: &mut String) {
+    out.push('[');
+    out.push_str(&print_inline_seq(&link.children));
+    out.push(']');
+}
+
+fn print_inline_image(img: &ImageNode, out: &mut String) {
+    out.push_str(&"![");
+    out.push_str(&img.alt);
+    out.push(']');
+    print_dest_and_title(&img.url, &img.title, out);
+}
+
+fn print_reference_image(img: &ReferenceImageNode, out: &mut String) {
+    out.push_str(&"![");
+    out.push_str(&img.alt);
+    out.push_str(&"][");
+    out.push_str(&img.label);
+    out.push(']');
+}

@@ -1,0 +1,239 @@
+//! Marl Format's standalone CLI — a `wasi:cli/command` program, run the same
+//! way as Sheaf (`wado run`, or compiled and run with any Component-Model
+//! runtime). See `docs/wep-2026-07-10-marl-format.md`, "A standalone CLI".
+
+use { println, eprintln, exit_error, Stdout, Stderr, Environment, Exit } from "core:cli";
+use { from_env } from "core:args";
+use { TreeSet } from "core:collections";
+use {
+    Preopens,
+    Descriptor,
+    DescriptorType,
+    DirectoryEntry,
+    Filesize,
+    PathFlags,
+    OpenFlags,
+    DescriptorFlags,
+    ErrorCode,
+} from "wasi:filesystem";
+use { format } from "./format.wado";
+
+struct Cli {
+    /// Files or directories to format; empty means the whole preopened tree.
+    #[serde(positional)]
+    paths: List<String> = [],
+    check: bool = false,
+}
+impl Deserialize for Cli;
+
+global EXCLUDED_DIRS: List<String> = [".vscode-test", "vendor", "target", "node_modules", ".git"];
+
+export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
+    let cli = match from_env::<Cli>() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln(`marl-format: {e.message}`);
+            exit_error();
+        },
+    };
+    let dirs = Preopens::get_directories();
+    if dirs.is_empty() {
+        eprintln("marl-format: no preopened directory available");
+        exit_error();
+    }
+    let root = dirs[0].0;
+
+    let files = if cli.paths.is_empty() {
+        let mut all = collect_md_files(&root, "");
+        all.sort();
+        all;
+    } else {
+        resolve_paths(&root, &cli.paths);
+    };
+
+    let mut had_changes = false;
+    let mut had_errors = false;
+    for let path of files {
+        let original = match read_file(&root, path) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln(`marl-format: cannot read {path}: {e:?}`);
+                had_errors = true;
+                continue;
+            },
+        };
+        let formatted = format(&original);
+        if formatted == original {
+            continue;
+        }
+        had_changes = true;
+        if cli.check {
+            println(`would reformat: {path}`);
+        } else {
+            match write_file(&root, path, &formatted) {
+                Ok(_) => println(`formatted: {path}`),
+                Err(e) => {
+                    eprintln(`marl-format: cannot write {path}: {e:?}`);
+                    had_errors = true;
+                },
+            }
+        }
+    }
+
+    if had_errors || cli.check && had_changes {
+        exit_error();
+    }
+}
+
+/// Recursively collects `*.md` files under `dir`, skipping `EXCLUDED_DIRS`.
+/// `prefix` is the path from the preopened root to `dir` (empty at the
+/// root), joined onto each discovered file's name.
+fn collect_md_files(dir: &Descriptor, prefix: String) -> List<String> with Stderr {
+    let mut out: List<String> = [];
+    let entries = match read_dir_entries(dir) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln(`marl-format: cannot read directory {prefix}: {e:?}`);
+            return out;
+        },
+    };
+    for let entry of entries {
+        if is_excluded_dir(&entry.name) {
+            continue;
+        }
+        let path = join_path(&prefix, &entry.name);
+        if entry.type matches { DescriptorType::Directory } {
+            match open_dir(dir, entry.name) {
+                Ok(sub) => out.extend(&collect_md_files(&sub, path)),
+                Err(e) => eprintln(`marl-format: cannot open {path}: {e:?}`),
+            }
+        } else if entry.name.ends_with(".md") {
+            out.push(path);
+        }
+    }
+    return out;
+}
+
+fn is_excluded_dir(name: &String) -> bool {
+    for let excluded of EXCLUDED_DIRS {
+        if *name == excluded {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn join_path(prefix: &String, name: &String) -> String {
+    if prefix.len() == 0 {
+        return *name;
+    }
+    return `{prefix}/{name}`;
+}
+
+/// Resolves explicit CLI path arguments: a `.md`-suffixed path is treated as
+/// a single file, anything else as a directory to walk recursively.
+fn resolve_paths(root: &Descriptor, paths: &List<String>) -> List<String> with Stderr {
+    let mut out: List<String> = [];
+    for let path of paths {
+        if path.ends_with(".md") {
+            out.push(*path);
+            continue;
+        }
+        match open_dir(root, *path) {
+            Ok(dir) => out.extend(&collect_md_files(&dir, *path)),
+            Err(e) => eprintln(`marl-format: cannot open {path}: {e:?}`),
+        }
+    }
+    return unique_sorted(out);
+}
+
+/// Returns the paths in sorted order with duplicates removed, so overlapping
+/// arguments (a directory plus a file inside it, or the same path twice) don't
+/// format or report the same file more than once. `seen` drops a path the
+/// first time it recurs.
+fn unique_sorted(items: List<String>) -> List<String> {
+    let mut seen: TreeSet<String> = TreeSet::new();
+    let mut out: List<String> = [];
+    for let item of items {
+        if seen.insert(item) {
+            out.push(item);
+        }
+    }
+    out.sort();
+    return out;
+}
+
+test "unique_sorted removes duplicates and sorts" {
+    let items: List<String> = ["sub/c.md", "a.md", "a.md", "b.md", "sub/c.md"];
+    assert unique_sorted(items) == ["a.md", "b.md", "sub/c.md"];
+}
+
+test "unique_sorted leaves a distinct list sorted" {
+    let items: List<String> = ["b.md", "a.md", "c.md"];
+    assert unique_sorted(items) == ["a.md", "b.md", "c.md"];
+}
+
+fn read_dir_entries(dir: &Descriptor) -> Result<List<DirectoryEntry>, ErrorCode> {
+    let mut entries: List<DirectoryEntry> = [];
+    let [stream, done] = dir.read_directory();
+    loop {
+        let chunk = stream.read(64);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let e of chunk {
+            entries.push(e);
+        }
+    }
+    stream.drop();
+    let read_result = done.read();
+    done.drop();
+    if let Some(Err(e)) = read_result {
+        return Result::Err(e);
+    }
+    return Result::Ok(entries);
+}
+
+fn open_dir(root: &Descriptor, name: String) -> Result<Descriptor, ErrorCode> {
+    return root.open_at(PathFlags::none(), name, OpenFlags::Directory, DescriptorFlags::Read).wait();
+}
+
+fn read_file(dir: &Descriptor, path: String) -> Result<String, ErrorCode> {
+    let file = dir.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait()?;
+    let [stream, done] = file.read_via_stream(0 as Filesize);
+    let mut bytes: List<u8> = [];
+    loop {
+        let chunk = stream.read(8192);
+        if chunk.len() == 0 {
+            break;
+        }
+        bytes.extend(&chunk);
+    }
+    stream.drop();
+    let read_result = done.read();
+    done.drop();
+    if let Some(Err(e)) = read_result {
+        return Result::Err(e);
+    }
+    return Result::Ok(String::from_utf8_lossy(bytes));
+}
+
+fn write_file(dir: &Descriptor, path: String, content: &String) -> Result<(), ErrorCode> {
+    let file = dir.open_at(
+        PathFlags::none(),
+        path,
+        OpenFlags::Create | OpenFlags::Truncate,
+        DescriptorFlags::Write | DescriptorFlags::Read,
+    ).wait()?;
+    let bytes: List<u8> = content.bytes().collect();
+    let [rx, tx] = Stream::<u8>::new();
+    let sub = file.write_via_stream(rx, 0 as Filesize);
+    tx.write(bytes);
+    tx.drop();
+    let write_result = sub.read();
+    sub.drop();
+    if let Some(Err(e)) = write_result {
+        return Result::Err(e);
+    }
+    return Result::Ok(());
+}

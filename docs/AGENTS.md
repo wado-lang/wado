@@ -139,3 +139,4 @@ It may include TODOs on WIP.
 - [Sheaf & Marl — A Minimal Blog System](./wep-2026-07-05-sheaf.md)
 - [Iterator Reference Model](./wep-2026-07-05-iterator-reference-model.md)
 - [Local Item Definitions](./wep-2026-07-09-local-item-definitions.md)
+- [Marl Format — A Standalone Markdown Formatter CLI for Wado](./wep-2026-07-10-marl-format.md)

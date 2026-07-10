@@ -1,0 +1,52 @@
+// Regression for wado-lang/wado#1539: an unannotated `let` bound to an
+// `if`/`else` (or `match`) mixing `Option::Some(v)` and a bare `null` branch
+// produced invalid Wasm. `resolve_if_expr` correctly unified the expression's
+// own type to `Option<T>` via branch agreement, but `reify_if_expr` reified
+// both branches against the raw (here, absent) `expected_type` instead of
+// falling back to that already-unified `recorded_type`, so the `null` branch
+// reified as untyped `UNKNOWN` — an inconsistency that survived into NIR/WIR
+// as a Wasm `if`/`else` block whose declared (non-null) result type
+// disagreed with the `else` arm's untyped `ref.null`. `reify_match_expr` had
+// the identical gap for the analogous `match` shape.
+
+enum Kind {
+    Yaml,
+    Toml,
+}
+
+fn classify_if(s: String) -> Option<Kind> {
+    // No annotation on `kind` — the bug required inferring its type purely
+    // from the if/else branches, not from a propagated expected type.
+    let kind = if s == "---" {
+        Option::Some(Kind::Yaml)
+    } else if s == "+++" {
+        Option::Some(Kind::Toml)
+    } else {
+        null
+    };
+    return kind;
+}
+
+fn classify_match(s: String) -> Option<Kind> {
+    let kind = match s {
+        "---" => Option::Some(Kind::Yaml),
+        "+++" => Option::Some(Kind::Toml),
+        _ => null,
+    };
+    return kind;
+}
+
+test "unannotated let over if/else unifies Option::Some and null (#1539)" {
+    assert classify_if("---") matches { Some(Kind::Yaml) };
+    assert classify_if("+++") matches { Some(Kind::Toml) };
+    assert classify_if("other") matches { None };
+}
+
+test "unannotated let over match unifies Option::Some and null (#1539)" {
+    assert classify_match("---") matches { Some(Kind::Yaml) };
+    assert classify_match("+++") matches { Some(Kind::Toml) };
+    assert classify_match("other") matches { None };
+}
+
+__DATA__
+{"test": {}}

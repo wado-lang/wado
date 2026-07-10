@@ -1,0 +1,33 @@
+// A `?` operator inside a closure body must resolve against the closure's
+// return type. `resolve_closure` (annotate) and `reify_closure` (reify) both
+// opened the closure context with return_type = UNKNOWN and only computed the
+// real return type after walking/reifying the body, so a `?` inside the body
+// saw UNKNOWN and was rejected with "? requires function to return Result or
+// Option". Both now seed the closure's return type from the expected fn type
+// (here from the `let f: fn(...) -> Result<...>` binding) before the body is
+// processed. See #1540.
+fn div(a: i32, b: i32) -> Result<i32, String> {
+    if b == 0 {
+        return Result::Err("div by zero");
+    }
+    return Result::Ok(a / b);
+}
+
+fn run(a: i32, b: i32) -> i32 {
+    let f: fn(i32, i32) -> Result<i32, String> = |x: i32, y: i32| {
+        let q = div(x, y)?;
+        return Result::Ok(q + 1);
+    };
+    return match f(a, b) {
+        Ok(v) => v,
+        Err(_) => -1,
+    };
+}
+
+test "? inside a typed-binding closure resolves against the closure return type" {
+    assert run(10, 2) == 6;
+    assert run(10, 0) == -1;
+}
+
+__DATA__
+{"test": {}}

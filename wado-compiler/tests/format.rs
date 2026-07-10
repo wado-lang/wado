@@ -233,6 +233,25 @@ fn test_format_field_visibility_modifiers_roundtrip() {
     assert_eq!(formatted, formatted2, "format should be idempotent");
 }
 
+/// A closure return-type annotation (`|x| -> T body`) must survive formatting,
+/// for block, expression, and zero-arg bodies, and normalize its spacing.
+#[test]
+fn test_format_closure_return_type_roundtrips() {
+    let source = "fn run() {\n    let f = |x: i32|  ->  i32 {\n        return x + 1;\n    };\n    let g = ||->i32 42;\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("|x: i32| -> i32 {"),
+        "block-body closure return type dropped/misformatted, got:\n{formatted}"
+    );
+    assert!(
+        formatted.contains("|| -> i32 42"),
+        "zero-arg closure return type dropped/misformatted, got:\n{formatted}"
+    );
+    assert_format_preserves_ast(source);
+    let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
 /// `reactive` is a prefix keyword that must precede `let`. The formatter used
 /// to emit `let reactive ...`, which the parser rejects ("expected pattern,
 /// found Reactive"), so formatting any `reactive let` binding produced output
