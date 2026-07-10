@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783701889629,
+  "lastUpdate": 1783702525121,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -39061,6 +39061,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 266646,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a8d025cdd344786ef389393bc00547aa0e35fb8e",
+          "message": "Merge pull request #1542 from wado-lang/claude/benchmark-json-twitter-perf-x97916\n\nperf(optimizer): hoist inline `&`-literal call arguments to shared globals",
+          "timestamp": "2026-07-11T01:36:26+09:00",
+          "tree_id": "cde31f949bc161160f3a0ae66a53a823ed67075e",
+          "url": "https://github.com/wado-lang/wado/commit/a8d025cdd344786ef389393bc00547aa0e35fb8e"
+        },
+        "date": 1783702524545,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16351,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 266775,
             "unit": "bytes"
           }
         ]
