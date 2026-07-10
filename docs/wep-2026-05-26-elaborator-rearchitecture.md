@@ -549,39 +549,43 @@ Three independent tracks; each slice keeps `mise run test` green (E2E 2934/0).
 
 ### Remaining (next to pick up, in order)
 
-- [ ] **Track B Stage D — move the now-Elaborator-free queries to
-      `impl TypeSystem`.** Unblocked, not yet moved: `classify_call_callee`,
-      `infer_variant_type_args` (`call.rs`) read only `self.tysys.* + ctx`;
-      `operators.rs` operator-trait bound lookups un-audited. Blocked (need the
-      `TypeLookup`-coupling decision below): the `resolve_type` family (mutates
-      `ModuleSemantics.bindings` via `record_type_name_reference`, reads
-      module-scoped `TypeLookup` registries, falls back through
-      `with_module_perspective_for`), `resolve_type_with_param_mapping` (calls
-      both), and the whole trait-impl-lookup cluster.
-  - **Blocker: the trait-impl-lookup cluster and the `resolve_type` family are
-    coupled to module-scoped `TypeLookup`** (found 2026-07-10).
-    `type_implements_trait_inner`'s structural-derive walk
-    resolves struct/variant field types via `Elaborator::lookup_struct_fields_in`
-    / `lookup_variant_case_in` (`self.type_lookup()`), which reads
-    `ModuleSemantics.decls.local_struct_fields` /
-    `local_variant_cases` — the _current module's_ not-yet-flushed top-level
-    declarations, via `TypeLookup::lookup_ref_in`'s local-then-`all_*` chain
-    (`elaborator/types.rs`). That local tier is genuinely module-scoped, not
-    pipeline-wide, so this cluster cannot read `self.tysys.*` alone no matter
-    how the `ctx` parameter is shaped. The mutual recursion
-    (`find_trait_impl_for_type_with_args` → `check_impl_block_bounds` →
-    `type_implements_trait` → `find_trait_impl_for_type_with_args`) means the
-    whole cluster moves together or not at all. Options, undecided: (a) pass an
-    explicit `&TypeLookup`-shaped parameter alongside `ctx` into the whole
-    cluster (mirrors how `ctx` bundles `trait_ctx` + `trait_check_stack`); (b)
-    fold `local_struct_fields` / `local_variant_cases` into `TypeSystem` itself
-    once a struct/variant decl is confirmed (would need the flush-timing
-    question answered — why they are staged in `ModuleSemantics` before
-    promotion to `all_*` in the first place); (c) accept this cluster as a
-    permanent `Elaborator`-level exception, documented as such rather than
-    chased further. Needs a decision before Stage D proceeds on this cluster;
-    unrelated Stage D targets (`type_resolution.rs`, `operators.rs`) are not
-    blocked by this.
+- [x] **Blocker resolved — option (a) chosen and implemented for the
+      trait-impl-lookup cluster.** The blocker (found 2026-07-10) was that the
+      cluster is coupled to module-scoped `TypeLookup`:
+      `type_implements_trait_inner`'s structural-derive walk resolves
+      struct/variant field types via `self.type_lookup()`, which reads
+      `ModuleSemantics.decls.local_struct_fields` / `local_variant_cases` (the
+      current module's not-yet-flushed top-level decls) — genuinely
+      module-scoped, not pipeline-wide, and the mutual recursion
+      (`find_trait_impl_for_type_with_args` → `check_impl_block_bounds` →
+      `type_implements_trait` → …) means the whole cluster moves together.
+      Three options were weighed — (a) pass an explicit `&TypeLookup` alongside
+      `ctx`, (b) fold `local_*` into `TypeSystem`, (c) permanent `Elaborator`
+      exception. **(a) was chosen.** The whole cluster (plus
+      `auto_derive_default_struct_type`) now takes `scope: &TypeLookup` and
+      reads it for `current_module_source` / imports / struct-and-variant
+      lookups; it no longer reads `self.sem` / `self.current_module_source` /
+      `self.type_lookup()`. The cluster is decoupled: it reads only
+      `self.tysys.*` + the passed `ctx` + `scope`. Behaviour-preserving (`scope`
+      is `self.type_lookup()` at every call site). Methods stay on
+      `impl Elaborator` for now — the physical relocation is the remaining step
+      below.
+- [ ] **Track B Stage D — relocate the decoupled queries to `impl TypeSystem`.**
+      Now mechanical for the trait-impl-lookup cluster (decoupled above): move
+      the ~14 cluster methods + `auto_derive_default_struct_type` from
+      `impl Elaborator` to `impl TypeSystem` (`self.tysys.X` → `self.X`), and
+      flip the ~25 call sites `self.X(ctx, scope, …)` → `self.tysys.X(ctx,
+      scope, …)`. One frontier fix: `blanket_trait_impl_applies` calls the
+      `H`-generic `Elaborator::get_type_name_static`; use a free /
+      `TypeSystem`-associated form instead (a free `get_type_name_static`
+      already exists privately in `trait_env.rs`). Also straightforward:
+      `classify_call_callee`, `infer_variant_type_args` (`call.rs`) already read
+      only `self.tysys.* + ctx`; `operators.rs` operator-trait bound lookups are
+      un-audited. Still blocked and deferred: the `resolve_type` family (mutates
+      `ModuleSemantics.bindings` via `record_type_name_reference`, and is
+      `&mut self` for on-demand interning, so a self-borrowing `&TypeLookup`
+      param needs a different shape) and `resolve_type_with_param_mapping`
+      (calls it).
 - [ ] **Track B Stage E — fold the manual scope save/restores into the guard.**
       Replace the hand-rolled `trait_ctx` clone/restore in `resolve_module`'s
       `Item::Impl` arm (`elaborator.rs`) and the `self_type`-only save/restore in
