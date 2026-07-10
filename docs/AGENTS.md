@@ -138,4 +138,4 @@ It may include TODOs on WIP.
 - [Wasm CM Component Import (`use`-based)](./wep-2026-06-26-wasm-cm-component-import.md)
 - [Sheaf & Marl — A Minimal Blog System](./wep-2026-07-05-sheaf.md)
 - [Iterator Reference Model](./wep-2026-07-05-iterator-reference-model.md)
-- [Marl Format — A Self-Hosted Markdown Formatter, Replacing dprint](./wep-2026-07-10-marl-format.md)
+- [Marl Format — A Standalone Markdown Formatter CLI for Wado](./wep-2026-07-10-marl-format.md)

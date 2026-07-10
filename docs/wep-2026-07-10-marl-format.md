@@ -1,31 +1,37 @@
-# Marl Format — A Self-Hosted Markdown Formatter, Replacing dprint
+# Marl Format — A Standalone Markdown Formatter CLI for Wado
 
 ## Context
 
 `wado-dev-tools format-md` (invoked by `mise run format`) currently formats every
 `*.md` file in the repository by embedding the `dprint-plugin-markdown` Rust
-crate (`wado-dev-tools/src/format_md.rs`). The goal is to replace it with a
-formatter written in Wado, living in `package-marl` — the GFM-subset
-Markdown-to-HTML renderer introduced by
-[WEP: Sheaf & Marl](./wep-2026-07-05-sheaf.md) — so that formatting Markdown
-becomes another instance of Wado dogfooding its own toolchain, alongside Sheaf
-and Kiln.
+crate (`wado-dev-tools/src/format_md.rs`). Marl Format is a Markdown formatter
+written in Wado, living in `package-marl` — the GFM-subset Markdown-to-HTML
+renderer introduced by [WEP: Sheaf & Marl](./wep-2026-07-05-sheaf.md) — shipped
+as its own standalone CLI (a `wasi:cli/command` world, run the same way as
+Sheaf), independent of `wado-dev-tools` and the Rust toolchain entirely. It is
+another instance of Wado dogfooding its own toolchain, alongside Sheaf and
+Kiln. Whether and how it eventually becomes `mise run format`'s default (in
+place of dprint) is explicitly out of scope for this iteration — see
+Non-goals.
 
-The bar is "at least byte-identical to dprint's current output for every
-Markdown file in this repository," not general CommonMark-formatter parity.
-That is a real, checkable target: `cargo run -p wado-dev-tools -- format-md
---check` exits 0 today, with zero diffs, across every `*.md` file the walk
-discovers (`DEFAULT_EXCLUDED_DIRS` in `format_md.rs`: `.vscode-test`, `vendor`,
-`target`, `node_modules`, `.git` — notably `.claude/` is _not_ excluded). That
-corpus is large and non-trivial: 201 files, ~4.1 MB, ~80,000 lines, including
-hand-written docs and WEPs, `.claude/skills/*/SKILL.md` (YAML front matter),
-`wado-lsp/lsp.md` (a copy of the LSP specification, raw HTML badges), and
-`wado-compiler/ref/tc39-temporal.md` (a copy of the TC39 Temporal proposal,
-~9,200 lines of deeply nested numbered lists). Because the corpus is already
-canonical, **it doubles as the golden oracle**: a differential test that runs
-both formatters over every file and asserts identical output is the concrete,
-automatable definition of "compatible" (see Testing below), not a matter of
-manual judgment.
+The target is "sufficiently reasonable Markdown output," not byte-for-byte
+parity with dprint. dprint's actual behavior is still the primary design
+reference throughout this document — it is a mature, widely-used formatter,
+and this repository's entire Markdown corpus already happens to be in its
+canonical form, which makes it an unusually good source of "what does
+sensible Markdown formatting look like" and a convenient corpus for
+round-trip and idempotency testing (see Testing). But matching it exactly is
+not a goal, and a handful of dprint's more idiosyncratic byte-level quirks are
+deliberately _not_ replicated below, in favor of simpler, equally-reasonable
+choices. The corpus itself is large and non-trivial: 201 `*.md` files (per
+`DEFAULT_EXCLUDED_DIRS` in `format_md.rs`: excludes `.vscode-test`, `vendor`,
+`target`, `node_modules`, `.git`; notably not `.claude/`), ~4.1 MB, ~80,000
+lines, including hand-written docs and WEPs, `.claude/skills/*/SKILL.md`
+(YAML front matter), `wado-lsp/lsp.md` (a copy of the LSP specification, raw
+HTML badges), and `wado-compiler/ref/tc39-temporal.md` (a copy of the TC39
+Temporal proposal, ~9,200 lines of deeply nested numbered lists) — broad
+enough to exercise real CommonMark/GFM breadth, not just a handful of
+hand-picked examples.
 
 ### What dprint-plugin-markdown actually does
 
@@ -238,7 +244,11 @@ serialize shape, retargeted to emit AST nodes:
 
 ### Printing
 
-The generation algorithm mirrors `generate.rs`'s node-by-node walk
+The rules below are adopted because they are good defaults — a mature
+formatter's already-settled answers to "how should this look" — not because
+matching dprint exactly is required. Where a simpler, equally reasonable
+choice exists, it's taken in preference to a dprint-specific quirk (noted
+inline). The generation algorithm mirrors `generate.rs`'s node-by-node walk
 (`generate.rs::gen_nodes`), which is really a state machine over adjacent
 sibling pairs deciding how much vertical space belongs between them:
 
@@ -270,40 +280,46 @@ sibling pairs deciding how much vertical space belongs between them:
 - Fenced code: fence character is always backtick; fence length is
   `max(2, longest run of consecutive backticks in the body) + 1`, so a body
   containing its own triple-backtick fence still round-trips.
-- Link text: single line if its **UTF-8 byte length** is under
-  `line_width / 2` (80 / 2 = 40 by default), else spread across the source's
-  original line breaks — the specific byte-vs-width quirk noted above,
-  replicated deliberately rather than "fixed."
+- Link text: single line if its **display width** (see Unicode width below)
+  is under `line_width / 2` (80 / 2 = 40 by default), else spread across the
+  source's original line breaks. dprint compares **UTF-8 byte length**
+  instead of display width here (see Context) — a small, arguably-accidental
+  quirk not worth replicating now that exactness isn't the bar; display width
+  is the more defensible measurement and this is the one place it's used in
+  preference to dprint's own choice.
 
 ### Unicode width
 
 Table-column alignment is the one place display width — not byte length, not
-codepoint count — determines the exact bytes emitted, so it is the one place
-matching dprint means matching `unicode-width` 0.1.10 specifically, quirks
-included, not a "more correct" modern width algorithm.
+codepoint count — determines the exact bytes emitted. dprint's own
+`unicode-width` 0.1.10 dependency does a pure East Asian Width lookup with no
+zero-width case at all for combining marks or variation selectors (see
+Context) — a known gap in that specific old crate version, not a considered
+design choice. Since exactness isn't the bar, Marl Format's own width table
+fixes that gap rather than replicating it: Wide/Fullwidth ⇒ 2, a small set of
+genuinely-zero-width codepoints (combining marks, variation selectors
+`U+FE00`–`U+FE0F`, zero-width joiner/non-joiner) ⇒ 0, everything else ⇒ 1.
+This keeps output correct for the "⬆️"-style cells the corpus survey actually
+found (see Context) without inheriting an unrelated old-crate quirk.
 
-Given `unicode-width` 0.1.10's algorithm is `is_control ? 0 : (is_wide_or_fullwidth
-? 2 : 1)` with no zero-width special case (confirmed by reading its
-generated table, see Context), a faithful implementation only needs the East
-Asian Width **Wide + Fullwidth** range set. Fetching `EastAsianWidth.txt`
-(Unicode 15.0 — the version `unicode-width` 0.1.10 is generated from) and
-merging adjacent ranges gives exactly **121 ranges** (59 in the BMP, 62
-above it — mostly emoji blocks, plus a handful of rare historic scripts:
-Tangut, Nüshu, CJK Extension B–I). That is small enough to encode in full
-rather than hand-curate a "CJK / Latin-1 / emoji only" approximation: an
-exact replica costs barely more than a partial one, so `unicode_width.wado`
-ships the complete Wide+Fullwidth table rather than a lossy subset —
-directly answering the brief's "decide the width ranges by hand" with a
-byte-exact table instead of a guess.
+The East Asian Width **Wide + Fullwidth** range set (fetched
+`EastAsianWidth.txt`, Unicode 15.0, merged into contiguous ranges) is exactly
+**121 ranges** (59 in the BMP, 62 above it — mostly emoji blocks, plus a
+handful of rare historic scripts: Tangut, Nüshu, CJK Extension B–I). Small
+enough to encode in full rather than hand-curate a "CJK / Latin-1 / emoji
+only" approximation — the brief allows an approximation, but an exact table
+costs barely more than a partial one, so `unicode_width.wado` ships the
+complete Wide+Fullwidth table.
 
 ```wado
 pub fn char_display_width(c: char) -> i32 {
     let cp = c as i32;
-    if cp < 0x20 { return 0; }        // C0 control (and NUL)
-    if cp < 0x7F { return 1; }        // ASCII printable
-    if cp < 0xA0 { return 0; }        // DEL + C1 control
-    if is_wide(cp) { return 2; }      // binary search over the 121-range table
-    return 1;                          // Narrow / Neutral / Ambiguous / Halfwidth
+    if is_zero_width(cp) { return 0; }  // combining marks, variation selectors, ZWJ/ZWNJ
+    if cp < 0x20 { return 0; }          // C0 control (and NUL)
+    if cp < 0x7F { return 1; }          // ASCII printable
+    if cp < 0xA0 { return 0; }          // DEL + C1 control
+    if is_wide(cp) { return 2; }        // binary search over the 121-range table
+    return 1;                            // Narrow / Neutral / Ambiguous / Halfwidth
 }
 
 pub fn display_width(s: &String) -> i32 {
@@ -313,107 +329,149 @@ pub fn display_width(s: &String) -> i32 {
 }
 ```
 
-No grapheme clustering, no ZWJ/skin-tone-modifier sequence handling — matching
-`unicode-width` 0.1.10, which also sums per-codepoint with no clustering.
-Being "more correct" here would make output diverge from dprint, which is the
-opposite of the goal.
+No grapheme clustering (multi-codepoint emoji sequences sum their parts
+rather than measuring as one cluster) — a known, acceptable simplification
+for this repo's actual usage (see Context: CJK, Latin-1, emoji), not a
+correctness target worth a full text-segmentation implementation.
 
 This is a hand-rolled table rather than a call into the bundled-ICU data
 pipeline ([WEP: Compile-Time Data Providers](./wep-2026-06-13-compile-time-data-providers.md)):
 `core:text`'s properties component is not shipped yet (absent from the
 current stdlib module list in `docs/cheatsheet.md`), so there's nothing to
-call into today. If/when it ships an East Asian Width property, revisit —
-the mismatch-with-dprint risk of a hand-rolled table is already fully mapped
-by the differential test (see Testing), so there is no correctness reason to
-block on it.
+call into today. Revisit if/when it ships an East Asian Width property.
 
-### Integration with wado-dev-tools
+### A standalone CLI, no host-language integration
 
-Confirmed feasible against this codebase's actual mechanisms, not by
-analogy:
+Marl Format ships as an ordinary Wado CLI program — no Rust code, no
+`wado-dev-tools` dependency, no host-side Component Model plumbing. This was
+the original plan's most complex section (compiling to a library-world
+component and hosting it from Rust via `wasmtime`'s component API); dropping
+the wado-dev-tools integration requirement removes that whole layer, and
+what's left is exactly `package-sheaf`'s existing shape:
 
-- `package-marl/wado.toml` already declares `lib = "src/lib.wado"`. `wado
-  build --lib` (`wado-compiler/src/wit_emit.rs::wit_contract`) already
-  synthesizes a minimal Component Model world from a package's `pub` exports
-  — no `wasi:cli/command` or HTTP semantics, no compiler changes needed.
-  Adding `format` next to the existing `render` export is enough; this was
-  verified directly (`wado build --lib -o marl-lib.wasm` against
-  `package-marl` compiles cleanly today).
-- A Rust host loading a Wado-compiled component and calling one exported
-  function with typed arguments is an established, production pattern in
-  this codebase, not a new one: `wado-cli/src/kiln_runtime.rs` does exactly
-  this for Kiln generators (`docs/wep-2026-04-12-kiln.md`: "generators are
-  ordinary Wado packages compiled to components … executed by the host");
-  `wado-compiler/tests/cm_catalog.rs` does the same dynamically
-  (`get_typed_func`/`Val`-based marshaling) for test harnesses; `wado test`
-  itself (`wado-cli/src/test.rs`) calls
-  `instance.get_typed_func::<(), (Result<(), ()>,)>(...)` per test block.
-  The same `get_typed_func::<(String,), (String,)>(&mut store,
-  "format")` shape applies directly to `format(source: String) -> String`.
-  `&String` at a Wado function boundary already lowers to WIT `string` at
-  the CM boundary today (true of `render` already).
-- wasmtime's **sync** component API (`Linker::instantiate`, `TypedFunc::call`)
-  needs no tokio runtime, unlike the async API the CLI's WASI-import-heavy
-  commands need — a good fit here, since a pure `format` has no WASI imports
-  of substance. (One caveat: even a `--lib` component still imports
-  `wasi:cli/stderr` for `assert`/`panic` diagnostics — needs a small
-  host-side stub, or reuse of `wasmtime-wasi`, already a workspace
-  dependency either way.) `wasmtime` is pinned at the workspace level
-  (`=46.0.1`) and already a dependency of `wado-compiler`, which
-  `wado-dev-tools` already depends on — no new crate.
-- **Precompile and check in the `.wasm` artifact**, rebuilt by a mise task
-  mirroring `update-bundled` (`mise.toml:478`, which does the same for
-  `wado-bundled-libm`), rather than compiling `package-marl` fresh on every
-  `mise run format`. Measured: `wado build --lib` on `package-marl` costs
-  ~1.3–1.4 s wall, and that cost is **dominated by fixed per-process
-  overhead** (stdlib snapshot construction, ~440 ms; monomorphize/lower/NIR
-  optimize, ~350 ms) rather than input size — so it would not amortize away
-  even as the package grows, and would eat most of the format command's
-  budget before touching a single file. It would also couple `mise run
-  format`'s availability to the compiler's correctness on every invocation,
-  which is the wrong dependency direction for developer tooling that other
-  tasks (`on-task-done`) depend on running reliably. A checked-in `.wasm`,
-  instantiated once and called ~200 times (sync API), keeps the runtime
-  format cost to the tens-of-milliseconds range.
-- `wado-dev-tools/src/format_md.rs`'s existing Rust logic — CLI parsing,
-  directory walk, exclusion list, `--check` semantics — is untouched. Only
-  the innermost call (`format_text(&original, &config, …)` from
-  `dprint_plugin_markdown`) is replaced with a call through the
-  instantiated `format` export.
+`package-marl/wado.toml` gains a `[world]` entry alongside its existing
+`lib = "src/lib.wado"` — a package can declare both (`docs/wep-2026-02-14-package-manifest.md`:
+"a package must declare at least one world: a `[world]` entry,
+`[package].lib`, or both"), exactly like `render`/`format` stay importable as
+a library while the package is _also_ directly runnable:
 
-```
-mise run update-marl-format-wasm   # wado build --lib package-marl -> checked-in .wasm
-                                     # (mirrors mise.toml:478's update-bundled task)
+```toml
+[world]
+"wasi:cli/command" = "src/main.wado"
 ```
 
-### Testing — the actual definition of "100% compatible"
+`package-marl/src/main.wado` (new file) is the CLI entry point, following
+`package-sheaf/src/main.wado`'s existing WASI I/O style directly (same
+`Preopens`/`Descriptor`/`read_via_stream`/`write_via_stream` calls Sheaf
+already uses):
 
-1. **Differential oracle.** While `dprint-plugin-markdown` remains available
-   (moved to a dev-only dependency, not deleted yet), a test drives the same
-   file-discovery walk `format_md.rs` uses today, runs _both_ formatters over
-   every file, and asserts byte-identical output. This is what makes "100%
-   compatible in this repo" a CI-checked fact rather than a one-time manual
-   comparison — every future doc edit or new file gets re-verified for free
-   for as long as the oracle dependency stays.
-2. **Idempotency**, over the same corpus: `format(format(x)) == format(x)`,
-   mirroring the existing invariant-testing pattern for `wado format`
-   (`mise.toml`'s `test-format` task: "idempotency, AST round-trip, no
-   comment drop" over the fixtures + stdlib corpus).
-3. **Per-construct unit tests** in `fmt_*_test.wado`, one file per module
+```wado
+use { println, eprintln, args, Stdout, Stderr } from "core:cli";
+use { parse } from "core:args";
+use { Preopens, Descriptor, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use { format } from "./format.wado";
+
+struct Cli {
+    #[serde(positional)]
+    paths: List<String> = [],   // files or directories; empty = whole preopened tree
+    check: bool = false,
+}
+impl Deserialize for Cli;
+
+const EXCLUDED_DIRS: List<String> = [".vscode-test", "vendor", "target", "node_modules", ".git"];
+
+export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
+    let cli = match parse::<Cli>(args()) {
+        Ok(c) => c,
+        Err(e) => { eprintln(`marl-format: {e.message}`); exit_error(); },
+    };
+    let root = Preopens::get_directories()[0].0;
+    let files = collect_md_files(&root, &cli.paths);   // recursive walk + EXCLUDED_DIRS + *.md filter
+    let mut had_changes = false;
+    for let path of files {
+        let original = read_file(&root, &path);        // as Sheaf::read_file
+        let formatted = format(&original);
+        if formatted == original { continue; }
+        had_changes = true;
+        if cli.check {
+            println(`would reformat: {path}`);
+        } else {
+            write_file(&root, &path, &formatted);       // as Sheaf::write_file
+            println(`formatted: {path}`);
+        }
+    }
+    if cli.check && had_changes { exit_error(); }
+}
+```
+
+(`collect_md_files` is a straightforward recursive extension of Sheaf's
+`read_dir_names` — walk every preopened subdirectory, skip `EXCLUDED_DIRS` by
+name, collect `*.md` paths; full implementation is mechanical, not designed
+here.) `core:args`' `#[serde(positional)] paths: List<String>` plus a `check:
+bool` flag directly matches `format_md.rs`'s existing CLI shape (bare path
+arguments, `--check`), so the command-line surface stays familiar.
+
+Running it needs nothing beyond what any other Wado program in this repo
+already needs:
+
+```sh
+# from source, like any other Wado CLI program (recompiles each run, paying
+# `wado build`'s fixed ~1.3-1.5s compiler startup cost — dominated by stdlib
+# snapshot construction, not input size; a known, accepted cost since this
+# tool isn't wired into a hot path):
+wado run --dir . package-marl/src/main.wado -- --check
+
+# or compiled once, then run with any Component-Model-capable Wasm runtime
+# (wasmtime, or `wado`'s own bundled one via a future `wado run <wasm>` path):
+wado compile -o marl-format.wasm package-marl/src/main.wado
+wasmtime run --dir . marl-format.wasm -- --check
+```
+
+No mise task, no CI wiring, and no change to `wado-dev-tools` or the existing
+`mise run format` task are part of this design — see Non-goals.
+
+### Testing — "sufficiently reasonable," checked rather than assumed
+
+The bar is no longer bytewise dprint parity, but "reasonable" still needs a
+concrete, checkable meaning rather than a vibe:
+
+1. **Idempotency**, over the real corpus (all 201 files, read-only —
+   `format(format(x)) == format(x)`): mirrors the existing invariant-testing
+   pattern already used for `wado format` (`mise.toml`'s `test-format` task:
+   "idempotency, AST round-trip, no comment drop" over the fixtures + stdlib
+   corpus). This is the strongest cheap invariant a formatter can have and
+   catches most real bugs (an unstable formatter is a broken one, regardless
+   of how close it is to any reference output).
+2. **Per-construct unit tests** in `fmt_*_test.wado`, one file per module
    (existing package-marl convention — see `marl_test.wado`), covering each
    node kind plus the specific edge cases the corpus survey surfaced:
    reference/collapsed/shortcut links (including a code span as link text),
    front matter, raw HTML blocks and inline HTML, wide-table cells
-   (`char_display_width` against the exact `tc39-temporal.md` case worked
-   out above), deeply nested mixed-marker ordered lists, and adjacent
-   same-kind lists separated by no blank line (the "alternate marker" case).
-4. **Cutover**, once the differential oracle is green across the whole
-   corpus and stays green through a soak period of ordinary doc edits:
-   `format-md` switches to the compiled Marl formatter by default,
-   `dprint-plugin-markdown` is deleted from `Cargo.toml` entirely.
+   (`char_display_width` against the `tc39-temporal.md` case worked out
+   above), deeply nested mixed-marker ordered lists, and adjacent same-kind
+   lists separated by no blank line (the "alternate marker" case).
+3. **A non-blocking reference diff against dprint**, run manually or as a
+   dev-time script (not CI) over the real corpus: not a pass/fail gate, but
+   the fastest way to spot-check "does this look reasonable" against a
+   corpus that's already known-good, and to catch accidental regressions
+   during development. Differences are expected and fine; large or
+   structural differences (wrong nesting, dropped content, corrupted links)
+   are the signal to actually look at.
+4. Since Marl Format never ships wired into `mise run format` in this
+   iteration (see Non-goals), there is no cutover step and no requirement to
+   ever remove `dprint-plugin-markdown` — that question is deferred entirely
+   to whenever (if ever) this tool is proposed as the project's default.
 
 ### Non-goals (this iteration)
 
+- **Wiring into `wado-dev-tools` or `mise run format`**: this design ships
+  Marl Format as a standalone, independently runnable and testable CLI only.
+  Whether it ever becomes the project's default Markdown formatter (replacing
+  `dprint-plugin-markdown` in `wado-dev-tools`) is a separate, later decision
+  — deliberately decoupled from building and validating the tool itself, so
+  neither is blocked on the other.
+- **Byte-for-byte dprint parity**: see Context. dprint's behavior is the
+  design reference, not a compatibility contract.
 - **Footnotes** (`[^id]` / `[^id]:`) and **inline/display math** (`$...$`):
   zero genuine occurrences in the corpus (see survey). Not fully formatted;
   a footnote-definition line is still recognized well enough to avoid being
@@ -439,19 +497,19 @@ mise run update-marl-format-wasm   # wado build --lib package-marl -> checked-in
 
 ### Positive
 
-- One fewer external Rust dependency (`dprint-plugin-markdown` and its
-  transitive `dprint-core`/`pulldown-cmark`/`regex` tree) in favor of Wado
-  dogfooding its own compiler and Component Model tooling for a real,
-  daily-used developer tool — matching Sheaf's and Kiln's precedent.
-  `Cargo.toml`'s existing `[profile.dev.package.dprint-*]` opt-level
-  workaround (for an upstream `dprint-core` panic on certain inputs) also
-  disappears with the dependency.
-- The differential-oracle test doubles as an unusually strong, continuously
-  re-verified CommonMark/GFM conformance suite for Marl Format — most
-  formatter test suites don't get a second independent implementation to
-  diff against for free.
-- `unicode_width.wado`'s exact East-Asian-Width table is independently
-  reusable (table formatting, terminal-width alignment) well beyond Marl.
+- Zero host-language integration: a normal Wado CLI package, runnable and
+  testable the moment it's implemented, with no Rust code, no new crate
+  dependency, and no coupling to `wado-dev-tools`'s build or release
+  process — matching Sheaf's and Kiln's precedent for dogfooding Wado's own
+  toolchain on a real, standalone developer tool.
+- The corpus being already dprint-canonical means the reference-diff check
+  (see Testing) is essentially free to run and immediately informative —
+  most formatter projects don't get a large, real, already-known-good corpus
+  to compare against on day one.
+- `unicode_width.wado`'s East-Asian-Width table is independently reusable
+  (table formatting, terminal-width alignment) well beyond Marl, and is more
+  correct than the reference implementation it's informed by (see Unicode
+  width above), not merely a copy of it.
 
 ### Negative
 
@@ -465,18 +523,19 @@ mise run update-marl-format-wasm   # wado build --lib package-marl -> checked-in
   forcing a shared AST that would compromise one consumer or the other; the
   cost is some duplicated low-level scanning logic between `inline.wado` and
   `fmt_parse_inline.wado`.
-- A precompiled `.wasm` artifact is a new category of checked-in generated
-  file, needing the same discipline as `wado-bundled-libm`'s (`mise run
-  update-marl-format-wasm`, CI-verified freshness) — one more thing that can
-  go stale if a change to `package-marl` lands without regenerating it.
+- Running from source costs the same fixed ~1.3–1.5 s compiler startup every
+  invocation as any other `wado run` program (see Integration) — fine for a
+  standalone tool run occasionally by hand, but a real cost if this is ever
+  wired into a hot path (another reason that's explicitly out of scope here
+  rather than half-solved now).
 
 ### Trade-offs
 
-Precompiled artifact vs. compile-on-the-fly: covered under Integration above
-— fixed ~1.3–1.4 s per-invocation compiler overhead (measured, not
-estimated) makes on-the-fly compilation both slow and a bad dependency
-direction for developer tooling; precompiling is the established pattern in
-this codebase already.
+Standalone CLI vs. wado-dev-tools integration: covered under Non-goals and
+Integration — building and validating the formatter doesn't need to be
+gated on solving host-language embedding, artifact caching, or CI wiring;
+those are real questions but separable ones, deferred until the tool exists
+and is worth wiring in.
 
 Exact vs. approximate Unicode width table: the brief explicitly allows a
 hardcoded approximation, but the exact Wide+Fullwidth table turned out to be
@@ -508,19 +567,14 @@ preserve source fidelity), so sharing would have compromised one of them.
 - [ ] `format.wado` — `pub fn format(source: &String) -> String`; re-exported
       from `lib.wado`
 
-### Phase 2: integration
+### Phase 2: standalone CLI
 
-- [ ] `mise run update-marl-format-wasm` task (`wado build --lib
-      package-marl` → checked-in `.wasm`, mirroring `update-bundled`)
-- [ ] `wado-dev-tools`: sync wasmtime component instantiation + `format`
-      `TypedFunc` call, replacing the `dprint_plugin_markdown::format_text`
-      call in `format_md.rs`; `wasi:cli/stderr` host stub
-- [ ] Differential-oracle test (both formatters, whole corpus, byte-identical)
+- [ ] `package-marl/wado.toml`: add `[world]."wasi:cli/command" =
+      "src/main.wado"` alongside the existing `lib`
+- [ ] `package-marl/src/main.wado`: `core:args` CLI parsing (`--check`,
+      positional paths), recursive `wasi:filesystem` directory walk with
+      `EXCLUDED_DIRS`, read/format/compare/write, `would reformat:` /
+      `formatted:` messages, non-zero exit on `--check` with pending changes
 - [ ] Idempotency test over the corpus
-
-### Phase 3: cutover
-
-- [ ] Differential oracle green across the full corpus
-- [ ] `dprint-plugin-markdown` moved to a dev-only oracle dependency, then
-      deleted once confidence holds
-- [ ] `Cargo.toml`'s `[profile.dev.package.dprint-*]` workaround removed
+- [ ] Manual reference-diff pass against dprint's current output across the
+      real corpus, reviewing for reasonableness (not requiring a match)
