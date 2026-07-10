@@ -7728,11 +7728,11 @@ pub fn char::is_whitespace(self: Box<char>) -> bool {
 }
 
 pub fn char::is_ascii_lowercase(self: Box<char>) -> bool {
-    return ((self.value >= 'a') && (self.value <= 'z'));
+    return ((self.value as u32 - 'a' as u32) < 26);
 }
 
 pub fn char::is_ascii_uppercase(self: Box<char>) -> bool {
-    return ((self.value >= 'A') && (self.value <= 'Z'));
+    return ((self.value as u32 - 'A' as u32) < 26);
 }
 
 pub fn char::to_ascii_lowercase(self: Box<char>) -> char {
