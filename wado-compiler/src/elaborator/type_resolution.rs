@@ -7,6 +7,7 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
+use super::trait_env::AnnotateCtx;
 use super::types::TypeError;
 use crate::symbol::SymbolKind;
 
@@ -51,23 +52,23 @@ pub(super) fn substitute_type_params(ty: &Type, params: &[String], args: &[Type]
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    pub(super) fn resolve_type(&mut self, ty: &Type) -> TypeId {
+    pub(super) fn resolve_type(&mut self, ctx: &AnnotateCtx, ty: &Type) -> TypeId {
         match ty {
             Type::Named(named) => {
                 self.record_type_name_reference(named.id, &named.name);
-                self.resolve_named_type(&named.name, named.span, true)
+                self.resolve_named_type(ctx, &named.name, named.span, true)
             }
             Type::Generic(generic) => {
                 self.record_type_name_reference(generic.id, &generic.name);
-                self.resolve_generic_type(&generic.name, &generic.args, generic.span)
+                self.resolve_generic_type(ctx, &generic.name, &generic.args, generic.span)
             }
             Type::Function(func_ty) => {
                 let params: Vec<TypeId> = func_ty
                     .params
                     .iter()
-                    .map(|p| self.resolve_type(p))
+                    .map(|p| self.resolve_type(ctx, p))
                     .collect();
-                let return_type = self.resolve_type(&func_ty.return_type);
+                let return_type = self.resolve_type(ctx, &func_ty.return_type);
                 let stores: Vec<u32> = func_ty
                     .stores
                     .iter()
@@ -88,21 +89,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Type::Tuple(elements) => {
                 let elem_types: Vec<TypeId> =
-                    elements.iter().map(|e| self.resolve_type(e)).collect();
+                    elements.iter().map(|e| self.resolve_type(ctx, e)).collect();
                 self.tysys.type_table.borrow_mut().make_tuple(elem_types)
             }
             Type::Reference(inner) => {
-                let inner_type = self.resolve_type(inner);
+                let inner_type = self.resolve_type(ctx, inner);
                 self.tysys.type_table.borrow_mut().make_ref(inner_type)
             }
             Type::MutReference(inner) => {
-                let inner_type = self.resolve_type(inner);
+                let inner_type = self.resolve_type(ctx, inner);
                 self.tysys.type_table.borrow_mut().make_mut_ref(inner_type)
             }
-            Type::NamespacedGeneric(namespaced) => self.resolve_namespaced_generic_type(namespaced),
+            Type::NamespacedGeneric(namespaced) => {
+                self.resolve_namespaced_generic_type(ctx, namespaced)
+            }
             Type::TypePackSpread(name, span) => {
                 // Look up the type pack parameter
-                if let Some((index, _type_id)) = self.annotate_ctx.trait_ctx.type_params.get(name) {
+                if let Some((index, _type_id)) = ctx.trait_ctx.type_params.get(name) {
                     self.tysys
                         .type_table
                         .borrow_mut()
@@ -129,17 +132,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a namespaced generic type like `ns::Type<T>` or `Self::Output`
     pub(super) fn resolve_namespaced_generic_type(
         &mut self,
+        ctx: &AnnotateCtx,
         namespaced: &crate::ast::NamespacedGenericType,
     ) -> TypeId {
         // Handle Self::AssociatedType
         if namespaced.namespace.as_str() == "Self" {
             // Look up the associated type binding
-            if let Some(&type_id) = self
-                .annotate_ctx
-                .trait_ctx
-                .assoc_type_bindings
-                .get(&namespaced.name)
-            {
+            if let Some(&type_id) = ctx.trait_ctx.assoc_type_bindings.get(&namespaced.name) {
                 return type_id;
             }
             // If not found, it's an unknown associated type
@@ -151,12 +150,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Handle T::AssociatedType where T is a type parameter in scope
-        if let Some(&(_, param_type_id)) = self
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .get(&namespaced.namespace)
-        {
+        if let Some(&(_, param_type_id)) = ctx.trait_ctx.type_params.get(&namespaced.namespace) {
             // If the param is bound to a concrete type (not a TypeParam), look up the assoc
             // type from the TypeTable directly. This handles cases like blanket impl resolution
             // where we temporarily bind e.g. I = StrUtf8ByteIter (concrete struct), and
@@ -195,7 +189,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // First, check if the current bounds directly specify this assoc type.
             // e.g., I: IntoIterator<Item = u8> → I::Item resolves directly to u8.
             if let Some(direct_type) =
-                self.find_direct_assoc_type_binding(&namespaced.namespace, &namespaced.name)
+                self.find_direct_assoc_type_binding(ctx, &namespaced.namespace, &namespaced.name)
             {
                 return direct_type;
             }
@@ -209,7 +203,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // With I: IntoIterator<Item = u8>, Self::Item = I::Item = u8,
             // so I::Iter.assoc_type_bindings = [("Item", u8_typeid)].
             let assoc_type_bindings =
-                self.compute_assoc_type_bindings(&namespaced.namespace.clone(), &assoc_bounds);
+                self.compute_assoc_type_bindings(ctx, &namespaced.namespace.clone(), &assoc_bounds);
 
             return self
                 .tysys
@@ -236,9 +230,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let alias =
                 crate::name::namespace_member_alias(&namespaced.namespace, &namespaced.name);
             if namespaced.args.is_empty() {
-                self.resolve_named_type(&alias, namespaced.span, true)
+                self.resolve_named_type(ctx, &alias, namespaced.span, true)
             } else {
-                self.resolve_generic_type(&alias, &namespaced.args, namespaced.span)
+                self.resolve_generic_type(ctx, &alias, &namespaced.args, namespaced.span)
             }
         } else {
             let _ = self.logger.error(TypeError::UnknownType {
@@ -252,13 +246,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a named type
     pub(super) fn resolve_named_type(
         &mut self,
+        ctx: &AnnotateCtx,
         name: &str,
         span: Span,
         enforce_arity: bool,
     ) -> TypeId {
         // Handle `Self` type reference in impl blocks
         if name == "Self" {
-            if let Some(self_type) = self.annotate_ctx.trait_ctx.self_type {
+            if let Some(self_type) = ctx.trait_ctx.self_type {
                 return self_type;
             }
             // Self used outside of impl block - return Unknown
@@ -266,7 +261,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // First check if it's a type parameter in scope
-        if let Some(&(_, type_id)) = self.annotate_ctx.trait_ctx.type_params.get(name) {
+        if let Some(&(_, type_id)) = ctx.trait_ctx.type_params.get(name) {
             return type_id;
         }
 
@@ -328,7 +323,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // cross-module); the caller can't name it, so retry in the
                     // callee's perspective. Mirrors the ident / call fallback.
                     self.with_module_perspective_for(&scope_mod, |s| {
-                        s.resolve_named_type(name, span, enforce_arity)
+                        s.resolve_named_type(ctx, name, span, enforce_arity)
                     })
                 } else {
                     // Unknown type
@@ -368,7 +363,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve a generic type
-    pub(super) fn resolve_generic_type(&mut self, name: &str, args: &[Type], span: Span) -> TypeId {
+    pub(super) fn resolve_generic_type(
+        &mut self,
+        ctx: &AnnotateCtx,
+        name: &str,
+        args: &[Type],
+        span: Span,
+    ) -> TypeId {
         // Prelude module path for looking up Option/Result
         let prelude_source = ModuleSource::prelude();
 
@@ -391,21 +392,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 let inner = args
                     .first()
-                    .map(|t| self.resolve_type(t))
+                    .map(|t| self.resolve_type(ctx, t))
                     .unwrap_or(TypeTable::UNKNOWN);
                 self.tysys.type_table.borrow_mut().make_option(inner)
             }
             "Stream" => {
                 let elem = args
                     .first()
-                    .map(|t| self.resolve_type(t))
+                    .map(|t| self.resolve_type(ctx, t))
                     .unwrap_or(TypeTable::UNKNOWN);
                 self.tysys.type_table.borrow_mut().make_stream(elem)
             }
             "StreamWritable" => {
                 let elem = args
                     .first()
-                    .map(|t| self.resolve_type(t))
+                    .map(|t| self.resolve_type(ctx, t))
                     .unwrap_or(TypeTable::UNKNOWN);
                 self.tysys
                     .type_table
@@ -415,14 +416,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             "Future" => {
                 let elem = args
                     .first()
-                    .map(|t| self.resolve_type(t))
+                    .map(|t| self.resolve_type(ctx, t))
                     .unwrap_or(TypeTable::UNKNOWN);
                 self.tysys.type_table.borrow_mut().make_future(elem)
             }
             "FutureWritable" => {
                 let elem = args
                     .first()
-                    .map(|t| self.resolve_type(t))
+                    .map(|t| self.resolve_type(ctx, t))
                     .unwrap_or(TypeTable::UNKNOWN);
                 self.tysys
                     .type_table
@@ -446,7 +447,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                     return TypeTable::ERROR;
                 }
-                let element_type = self.resolve_type(&args[0]);
+                let element_type = self.resolve_type(ctx, &args[0]);
                 self.tysys
                     .type_table
                     .borrow_mut()
@@ -468,7 +469,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     // Resolve type arguments
                     let type_args: Vec<TypeId> =
-                        args.iter().map(|t| self.resolve_type(t)).collect();
+                        args.iter().map(|t| self.resolve_type(ctx, t)).collect();
 
                     // `info.name` is the type's storage identity — the bare
                     // declared name for a module-level struct, or the
@@ -491,11 +492,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         for (i, (param_name, bounds)) in info.type_param_bounds.iter().enumerate() {
                             if let Some(&type_arg) = type_args.get(i) {
                                 for bound in bounds {
-                                    if !self.type_implements_trait(
-                                        &self.annotate_ctx,
-                                        type_arg,
-                                        bound,
-                                    ) {
+                                    if !self.type_implements_trait(ctx, type_arg, bound) {
                                         // Get the type name for the error message
                                         let type_name = self.tysys.type_id_to_string(type_arg);
                                         let reason =
@@ -526,7 +523,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         TypeTable::UNKNOWN
                     } else {
                         let type_args: Vec<TypeId> =
-                            args.iter().map(|t| self.resolve_type(t)).collect();
+                            args.iter().map(|t| self.resolve_type(ctx, t)).collect();
                         self.tysys.type_table.borrow_mut().make_generic_instance(
                             name.to_string(),
                             variant_info.module_source,
@@ -538,10 +535,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Substitute type params in the base type AST, then resolve
                     let concrete_base_ast =
                         substitute_type_params(&gn_info.base_type_ast, &gn_info.type_params, args);
-                    let base_type_id = self.resolve_type(&concrete_base_ast);
+                    let base_type_id = self.resolve_type(ctx, &concrete_base_ast);
                     // Build a display name like "MyArray<i32>"
                     let resolved_args: Vec<TypeId> =
-                        args.iter().map(|t| self.resolve_type(t)).collect();
+                        args.iter().map(|t| self.resolve_type(ctx, t)).collect();
                     let arg_names: Vec<String> = resolved_args
                         .iter()
                         .map(|&tid| self.tysys.type_id_to_string(tid))
@@ -601,19 +598,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// e.g., I: `IntoIterator`<Item = u8> → `find_direct_assoc_type_binding("I`", "Item") = Some(u8)
     fn find_direct_assoc_type_binding(
         &mut self,
+        ctx: &AnnotateCtx,
         param_name: &str,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        let bounds = self
-            .annotate_ctx
-            .trait_ctx
-            .type_param_bounds
-            .get(param_name)?
-            .clone();
+        let bounds = ctx.trait_ctx.type_param_bounds.get(param_name)?.clone();
         for bound in &bounds {
             for assoc in &bound.assoc_types {
                 if assoc.name == assoc_name {
-                    return Some(self.resolve_type(&assoc.ty));
+                    return Some(self.resolve_type(ctx, &assoc.ty));
                 }
             }
         }
@@ -626,6 +619,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Result: [("Item", `u8_typeid`)].
     fn compute_assoc_type_bindings(
         &mut self,
+        ctx: &AnnotateCtx,
         source_param_name: &str,
         assoc_bounds: &[crate::ast::TraitBound],
     ) -> Vec<(String, TypeId)> {
@@ -636,7 +630,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let crate::ast::Type::NamespacedGeneric(ns) = &assoc.ty
                     && ns.namespace == "Self"
                     && let Some(direct) =
-                        self.find_direct_assoc_type_binding(source_param_name, &ns.name)
+                        self.find_direct_assoc_type_binding(ctx, source_param_name, &ns.name)
                 {
                     bindings.push((assoc.name.clone(), direct));
                 }

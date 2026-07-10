@@ -223,8 +223,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut fields = Vec::new();
         let mut field_ast_ids = Vec::new();
         let mut field_defaults = Vec::new();
+        let field_ty_ctx = scope.annotate_ctx.clone();
         for field in &struct_decl.fields {
-            let type_id = scope.resolve_type(&field.ty);
+            let type_id = scope.resolve_type(&field_ty_ctx, &field.ty);
             fields.push((field.name.clone(), type_id, field.visibility));
             field_ast_ids.push(field.id);
             field_defaults.push(field.default.clone());
@@ -307,7 +308,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         let module_source = self.current_module_source.clone();
-        let base_type_id = self.resolve_type(&newtype_decl.ty);
+        let base_type_id = self.resolve_type(&self.annotate_ctx.clone(), &newtype_decl.ty);
         let mangled_name = crate::name::mangle_local_item_name(&newtype_decl.name, newtype_decl.id);
         let type_id = self.tysys.type_table.borrow_mut().make_newtype(
             mangled_name.clone(),
@@ -372,7 +373,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Check for tuple literal to array coercion when type annotation is present
         let (value_type, type_id) = if let Some(annotated_type) = &let_stmt.ty {
-            let resolved = self.resolve_type(annotated_type);
+            let resolved = self.resolve_type(&self.annotate_ctx.clone(), annotated_type);
             let target_type = if Self::first_infer_span(annotated_type).is_some() {
                 TypeTable::ERROR
             } else {
@@ -656,6 +657,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn resolve_uninit_let(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) {
         // Type annotation is guaranteed by the parser when there is no initializer.
         let type_id = self.resolve_type(
+            &self.annotate_ctx.clone(),
             let_stmt
                 .ty
                 .as_ref()

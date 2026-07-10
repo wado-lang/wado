@@ -823,7 +823,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if let ast::Type::Generic(generic) = trait_type
             && generic.args.len() == 1
         {
-            let source = self.resolve_type(&generic.args[0]);
+            let source = self.resolve_type(&self.annotate_ctx.clone(), &generic.args[0]);
             Some(tir::SynthTrait::From { source })
         } else {
             None
@@ -891,7 +891,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return;
         };
         if let Some(trait_name) = self.classify_on_bound_marker(trait_type) {
-            let target_type_id = self.resolve_type(&impl_block.ty);
+            let target_type_id = self.resolve_type(&self.annotate_ctx.clone(), &impl_block.ty);
             self.record_explicit_derive_request(
                 trait_type,
                 &trait_name,
@@ -900,7 +900,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 impl_block.span,
             );
         } else if let Some(trait_ref) = self.classify_from_marker(trait_type) {
-            let target_type_id = self.resolve_type(&impl_block.ty);
+            let target_type_id = self.resolve_type(&self.annotate_ctx.clone(), &impl_block.ty);
             let type_params: Vec<_> = self
                 .annotate_ctx
                 .trait_ctx
@@ -1383,7 +1383,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.decls.imported_globals.clear();
         for item in &module.items {
             if let Item::Global(global_decl) = item {
-                let ty = self.resolve_type(&global_decl.ty);
+                let ty = self.resolve_type(&self.annotate_ctx.clone(), &global_decl.ty);
                 self.sem
                     .decls
                     .current_module_globals
@@ -1452,7 +1452,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             if let Item::Global(global_decl) = src_item
                                 && global_decl.name == source_name
                             {
-                                let ty = self.resolve_type(&global_decl.ty);
+                                let ty =
+                                    self.resolve_type(&self.annotate_ctx.clone(), &global_decl.ty);
                                 self.sem.decls.imported_globals.insert(
                                     local_name,
                                     (
@@ -1527,7 +1528,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .map(|(ns, src)| (ns.clone(), src.clone()))
             .collect();
         for (src, key, ty, value) in assoc_const_inputs {
-            let type_id = self.resolve_type(&ty);
+            let type_id = self.resolve_type(&self.annotate_ctx.clone(), &ty);
             for (ns, ns_src) in &ns_aliases {
                 if *ns_src == src {
                     self.sem.decls.associated_constants.insert(
@@ -1675,7 +1676,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     self.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
                     if impl_block.trait_type.is_some() {
                         // Resolve the target type for registering associated type resolutions
-                        let target_type_id = self.resolve_type(&impl_block.ty);
+                        let target_type_id =
+                            self.resolve_type(&self.annotate_ctx.clone(), &impl_block.ty);
                         let is_concrete = !self
                             .tysys
                             .type_table
@@ -1683,7 +1685,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .contains_type_param(target_type_id);
 
                         for binding in &impl_block.associated_types {
-                            let type_id = self.resolve_type(&binding.ty);
+                            let type_id =
+                                self.resolve_type(&self.annotate_ctx.clone(), &binding.ty);
                             self.annotate_ctx
                                 .trait_ctx
                                 .assoc_type_bindings
@@ -1724,7 +1727,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // TIR type-param projection, the assoc-type
                     // bindings, and the handler / ref-impl flags.
                     {
-                        let self_type = self.resolve_type(&impl_block.ty);
+                        let self_type =
+                            self.resolve_type(&self.annotate_ctx.clone(), &impl_block.ty);
                         let trait_canonical = impl_block.trait_type.as_ref().map(|t| {
                             let base = self.get_type_name(t);
                             self.canonical_decl_key(&base)
@@ -1750,7 +1754,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             Some(ast::Type::Generic(generic)) => generic
                                 .args
                                 .iter()
-                                .map(|arg| self.resolve_type(arg))
+                                .map(|arg| self.resolve_type(&self.annotate_ctx.clone(), arg))
                                 .collect(),
                             _ => Vec::new(),
                         };

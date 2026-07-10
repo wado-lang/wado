@@ -618,22 +618,59 @@ Three independent tracks; each slice keeps `mise run test` green (E2E 2934/0).
       callers) are left reading `&self.annotate_ctx` at their own call sites —
       they are true leaves of the query graph, not part of the cluster moving to
       `TypeSystem`, so passing the field directly there is the terminal shape.
+- [x] **Track B Stage C, `resolve_type` family** — `resolve_type`,
+      `resolve_named_type`, `resolve_namespaced_generic_type`,
+      `resolve_generic_type`, `find_direct_assoc_type_binding`, and
+      `compute_assoc_type_bindings` (`type_resolution.rs`) now take
+      `ctx: &AnnotateCtx` explicitly. `resolve_type` alone had 118 external call
+      sites — the true shape of the WEP's original "~120 read sites" estimate:
+      one hot, deeply-recursive function threaded everywhere, not 120
+      independent judgment calls. All call sites across the tree updated
+      (mechanical, `cargo check`-driven).
+  - **`AnnotateCtx` gained `#[derive(Clone)]`** (`trait_env.rs`). Required
+    because `resolve_type` takes `&mut self`: `self.resolve_type(&self.annotate_ctx, …)`
+    does not compile (E0502 — two-phase borrows don't cover a `&mut self`
+    receiver reached through `TypeParamScope`'s `Deref`/`DerefMut`, nor a
+    plain `&mut self` call whose argument borrows a _different_ field
+    indefinitely). The fix clones `AnnotateCtx` at each read point:
+    `self.resolve_type(&self.annotate_ctx.clone(), x)` compiles (the clone is
+    a temporary, not a borrow of `self`) for plain `self`/`s` receivers; a
+    `scope: TypeParamScope` receiver additionally needs the clone hoisted
+    into its own `let` statement first (`Deref`/`DerefMut` are opaque to the
+    borrow checker's field-sensitivity, so even the temporary-producing
+    `.clone()` call conflicts with the receiver's `DerefMut` reservation).
+    Hoisted once above a loop only where no intervening call (`resolve_expr`,
+    a scope mutation) could change `trait_ctx` between reads; otherwise
+    cloned fresh at each read to preserve exact original read timing.
+    Cost: one small-`IndexMap` clone per top-level `resolve_type` invocation
+    (not per recursive sub-call — the family threads the same `ctx` through
+    its own recursion by reference), matching the WEP's accepted
+    migration-time trade-off (see Trade-offs).
+  - **Also blocked from Stage D**, joining the trait-impl-lookup cluster
+    below: `resolve_type` calls `record_type_name_reference` (mutates
+    `ModuleSemantics.bindings`), reads module-scoped struct/newtype/variant
+    registries via `self.lookup_*` (`TypeLookup`, same `local_*` coupling as
+    the trait-impl cluster), and falls back through
+    `with_module_perspective_for` (an `Elaborator`-only mechanism) for
+    cross-module defaults. None of these have a `TypeSystem`-only shape.
 - [ ] **Track B Stage C, remaining** — thread `&AnnotateCtx` through the rest of
       the connected query graph: the `self.annotate_ctx.trait_ctx` readers
       (`self_type`, `type_params`, `assoc_type_bindings`, `type_param_bounds`)
       still read directly across `method_lookup` / `method_call` / `item` /
-      `module` / `call` / `type_resolution` / `operators` / `expr` (~50 methods /
-      ~120 read sites total, minus the cluster done above). Leaf-first, one file
-      per commit, green at each step. Scope **mutation**
+      `call` / `operators` / `expr` — largely non-`resolve_type` mutation and
+      accessor sites the two clusters above didn't already convert. Leaf-first,
+      one file per commit, green at each step. Scope **mutation**
       (`enter_inherited_type_param_scope`, `register_generic_params`,
-      `bind_trait_type_params_from_impl`) stays on `Elaborator` and owns/produces
-      the scope.
+      `bind_trait_type_params_from_impl`) stays on `Elaborator` and
+      owns/produces the scope.
 - [ ] **Track B Stage D — move the now-Elaborator-free queries to
-      `impl TypeSystem`.** Once they read only `self.tysys.*` + the passed `ctx`:
-      `find_trait_impl_for_type(_with_args)`, `check_impl_block_bounds`, the
-      type-param-bound resolver in `type_resolution.rs`, and the operator-trait
-      bound lookups in `operators.rs`. Signature
-      `fn …(&self /* TypeSystem */, ctx: &AnnotateCtx, …)`.
+      `impl TypeSystem`.** Once they read only `self.tysys.*` + the passed
+      `ctx`: the operator-trait bound lookups in `operators.rs` are the
+      remaining candidate not yet known to be blocked. `find_trait_impl_for_type(_with_args)`,
+      `check_impl_block_bounds`, and the whole `resolve_type` family are
+      blocked per the entries above — Stage D needs a decision on the
+      `TypeLookup` coupling (see the blocker note under the trait-impl-lookup
+      cluster) before it can proceed on either.
   - **Blocked for `type_implements_trait(_inner)` and, transitively,
     `check_impl_block_bounds` / `find_trait_impl_for_type(_with_args)` /
     `blanket_trait_impl_applies` / `has_real_trait_impl_for_type`** (found

@@ -55,7 +55,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_fn: Option<&ExpectedFn>,
     ) -> TypeId {
         if let Some(ty) = &param.ty {
-            return self.resolve_type(ty);
+            return self.resolve_type(&self.annotate_ctx.clone(), ty);
         }
         if let Some(ef) = expected_fn
             && let Some(t) = ef.params.get(index)

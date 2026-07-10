@@ -441,7 +441,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let variant_type_args: Vec<TypeId> = call
                         .type_args
                         .iter()
-                        .map(|ty| self.resolve_type(ty))
+                        .map(|ty| self.resolve_type(&self.annotate_ctx.clone(), ty))
                         .collect();
                     let mut payload_type = case_data.payload;
                     if !variant_type_args.is_empty() {
@@ -551,7 +551,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let mut method_type_args: Vec<TypeId> = call
                     .type_args
                     .iter()
-                    .map(|ty| self.resolve_type(ty))
+                    .map(|ty| self.resolve_type(&self.annotate_ctx.clone(), ty))
                     .collect();
                 // Impl-level type args inferred from the LHS / receiver type.
                 // Only populated by `infer_static_method_type_args`; the
@@ -960,7 +960,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let method_type_args: Vec<TypeId> = call
                         .type_args
                         .iter()
-                        .map(|ty| self.resolve_type(ty))
+                        .map(|ty| self.resolve_type(&self.annotate_ctx.clone(), ty))
                         .collect();
 
                     // Find the impl module via the trait env (global index)
@@ -1200,7 +1200,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut type_args: Vec<TypeId> = call
             .type_args
             .iter()
-            .map(|ty| self.resolve_type(ty))
+            .map(|ty| self.resolve_type(&self.annotate_ctx.clone(), ty))
             .collect();
         // Fill inference slots from the argument / expected types. One path
         // serves three forms — a fully omitted turbofish, omitted trailing args
@@ -1461,14 +1461,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Resolve in the live scope. Reconstructing a perspective for
                     // the module already being walked would only replace it with
                     // a lossier copy that drops namespace imports (issue #1415).
-                    scope.resolve_type(&return_type_ast)
+                    let ctx = scope.annotate_ctx.clone();
+                    scope.resolve_type(&ctx, &return_type_ast)
                 } else {
                     // Swap to the callee's perspective so its signature's type
                     // names resolve to the callee's types, not same-named caller
                     // types; the scope carries the callee's namespace imports.
                     let callee_scope = scope.tysys.trait_env.import_scope(callee_module);
                     scope.with_module_perspective(callee_module.clone(), callee_scope, |s| {
-                        s.resolve_type(&return_type_ast)
+                        s.resolve_type(&s.annotate_ctx.clone(), &return_type_ast)
                     })
                 };
                 drop(scope);
@@ -1511,8 +1512,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let return_ast = method.return_type.clone();
         let scope = self.tysys.trait_env.import_scope(&module_source);
         Some(self.with_module_perspective(module_source, scope, |s| {
-            let params = param_asts.iter().map(|ty| s.resolve_type(ty)).collect();
-            let ret = return_ast.as_ref().map(|ty| s.resolve_type(ty));
+            let params = param_asts
+                .iter()
+                .map(|ty| s.resolve_type(&s.annotate_ctx.clone(), ty))
+                .collect();
+            let ret = return_ast
+                .as_ref()
+                .map(|ty| s.resolve_type(&s.annotate_ctx.clone(), ty));
             (params, ret)
         }))
     }
@@ -1561,7 +1567,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
                 .map(|func| func.params.clone());
                 if let Some(params) = params {
-                    return params.iter().map(|p| self.resolve_type(&p.ty)).collect();
+                    return params
+                        .iter()
+                        .map(|p| self.resolve_type(&self.annotate_ctx.clone(), &p.ty))
+                        .collect();
                 }
             }
 
@@ -1599,7 +1608,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .map(|p| (p.name.clone(), p.id))
                     .collect();
                 scope.register_generic_params(&type_params, 0);
-                let result = params.iter().map(|p| scope.resolve_type(&p.ty)).collect();
+                let ctx = scope.annotate_ctx.clone();
+                let result = params
+                    .iter()
+                    .map(|p| scope.resolve_type(&ctx, &p.ty))
+                    .collect();
                 scope.current_effect_params = old_effect_params;
                 scope.current_effect_param_decls = old_effect_param_decls;
                 drop(scope);
@@ -1625,7 +1638,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // (e.g., "Direction" resolves to module B's Direction, not module A's)
                 let scope = self.tysys.trait_env.import_scope(&src);
                 return self.with_module_perspective(src, scope, |s| {
-                    params.iter().map(|p| s.resolve_type(&p.ty)).collect()
+                    params
+                        .iter()
+                        .map(|p| s.resolve_type(&s.annotate_ctx.clone(), &p.ty))
+                        .collect()
                 });
             }
         }
@@ -1647,7 +1663,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(params) = params {
                 let scope = self.tysys.trait_env.import_scope(&fallback);
                 return self.with_module_perspective(fallback, scope, |s| {
-                    params.iter().map(|p| s.resolve_type(&p.ty)).collect()
+                    params
+                        .iter()
+                        .map(|p| s.resolve_type(&s.annotate_ctx.clone(), &p.ty))
+                        .collect()
                 });
             }
         }
@@ -2085,9 +2104,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut scope = self.enter_inherited_type_param_scope();
             scope.annotate_ctx.trait_ctx.type_params.clear();
             scope.register_generic_params(&params, 0);
+            let ctx = scope.annotate_ctx.clone();
             let resolved = space
                 .iter()
-                .map(|p| p.default.as_ref().map(|ty| scope.resolve_type(ty)))
+                .map(|p| p.default.as_ref().map(|ty| scope.resolve_type(&ctx, ty)))
                 .collect();
             drop(scope);
             self.default_scope_module = saved_scope_module;
@@ -2339,13 +2359,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|(name, &(_, id))| (name.clone(), id))
             .collect();
 
+        let ctx = scope.annotate_ctx.clone();
         let resolved_param_types: Vec<TypeId> = params
             .iter()
             .filter(|p| p.self_kind == ast::SelfKind::None)
-            .map(|p| scope.resolve_type(&p.ty))
+            .map(|p| scope.resolve_type(&ctx, &p.ty))
             .collect();
 
-        let decl_return_type = return_type_ast.as_ref().map(|t| scope.resolve_type(t));
+        let decl_return_type = return_type_ast
+            .as_ref()
+            .map(|t| scope.resolve_type(&ctx, t));
 
         drop(scope);
         Some((type_param_list, resolved_param_types, decl_return_type))
@@ -2539,13 +2562,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_param_ids.push(type_id);
         }
 
+        let ctx = scope.annotate_ctx.clone();
         let resolved_param_types: Vec<TypeId> = params
             .iter()
             .filter(|p| p.self_kind == ast::SelfKind::None)
-            .map(|p| scope.resolve_type(&p.ty))
+            .map(|p| scope.resolve_type(&ctx, &p.ty))
             .collect();
 
-        let decl_return_type = return_type_ast.as_ref().map(|t| scope.resolve_type(t));
+        let decl_return_type = return_type_ast
+            .as_ref()
+            .map(|t| scope.resolve_type(&ctx, t));
 
         drop(scope);
 
@@ -2639,9 +2665,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|p| (p.name.clone(), p.id))
             .collect();
         scope.register_generic_params(&fn_type_params, 0);
+        let ctx = scope.annotate_ctx.clone();
         let param_types: Vec<TypeId> = fn_params
             .iter()
-            .map(|p| scope.resolve_type(&p.ty))
+            .map(|p| scope.resolve_type(&ctx, &p.ty))
             .collect();
         scope.current_effect_params = old_effect_params;
         scope.current_effect_param_decls = old_effect_param_decls;
@@ -2780,7 +2807,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut method_type_args: Vec<TypeId> = call
                 .type_args
                 .iter()
-                .map(|ty| self.resolve_type(ty))
+                .map(|ty| self.resolve_type(&self.annotate_ctx.clone(), ty))
                 .collect();
 
             // If no explicit type args, infer method-level type params from argument

@@ -970,7 +970,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         for pb in &param_bounds {
                             for ab in &pb.assoc_types {
                                 if ab.name == ns.name {
-                                    let resolved_ty = self.resolve_type(&ab.ty.clone());
+                                    let resolved_ty = self
+                                        .resolve_type(&self.annotate_ctx.clone(), &ab.ty.clone());
                                     bindings.push((assoc.name.clone(), resolved_ty));
                                 }
                             }
@@ -1140,10 +1141,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
 
+                let return_ctx = scope.annotate_ctx.clone();
                 let return_type = method
                     .return_type
                     .as_ref()
-                    .map(|t| scope.resolve_type(t))
+                    .map(|t| scope.resolve_type(&return_ctx, t))
                     .unwrap_or(TypeTable::UNIT);
                 let self_kind = method
                     .params
@@ -1481,8 +1483,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             // Resolve and register each associated type in this substituted context
+            let assoc_ctx = scope.annotate_ctx.clone();
             for binding in &info.assoc_types {
-                let resolved_id = scope.resolve_type(&binding.ty);
+                let resolved_id = scope.resolve_type(&assoc_ctx, &binding.ty);
                 if !scope
                     .tysys
                     .type_table
@@ -1565,8 +1568,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .insert(info.blanket_param_name.clone(), info.blanket_param_bounds);
 
             // Resolve and register each associated type
+            let assoc_ctx = scope.annotate_ctx.clone();
             for binding in &info.assoc_types {
-                let resolved_id = scope.resolve_type(&binding.ty);
+                let resolved_id = scope.resolve_type(&assoc_ctx, &binding.ty);
                 if !scope
                     .tysys
                     .type_table

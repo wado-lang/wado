@@ -704,7 +704,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 true,
                             )
                         } else if let Some(sig) = fn_bound_sig {
-                            (s.resolve_type(&ast::Type::Function(sig.clone())), false)
+                            (
+                                s.resolve_type(
+                                    &s.annotate_ctx.clone(),
+                                    &ast::Type::Function(sig.clone()),
+                                ),
+                                false,
+                            )
                         } else {
                             (
                                 s.tysys
@@ -726,7 +732,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let return_type = method
                         .return_type
                         .as_ref()
-                        .map(|t| s.resolve_type(t))
+                        .map(|t| s.resolve_type(&s.annotate_ctx.clone(), t))
                         .unwrap_or(TypeTable::UNIT);
                     let self_kind = method
                         .params
@@ -851,10 +857,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     .insert(type_param.name.clone(), (index, type_param_id));
                             }
 
+                            let return_ctx = scope.annotate_ctx.clone();
                             let return_type = method
                                 .return_type
                                 .as_ref()
-                                .map(|t| scope.resolve_type(t))
+                                .map(|t| scope.resolve_type(&return_ctx, t))
                                 .unwrap_or(TypeTable::UNIT);
                             let self_kind = method
                                 .params
@@ -997,7 +1004,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let return_type = method
                         .return_type
                         .as_ref()
-                        .map(|t| s.resolve_type(t))
+                        .map(|t| s.resolve_type(&s.annotate_ctx.clone(), t))
                         .unwrap_or(TypeTable::UNIT);
                     let param_types = s.extract_param_types(&method.params);
                     let param_is_mut: Vec<bool> = method
@@ -1058,7 +1065,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         params
             .iter()
             .filter(|p| p.name != "self")
-            .map(|p| self.resolve_type(&p.ty))
+            .map(|p| self.resolve_type(&self.annotate_ctx.clone(), &p.ty))
             .collect()
     }
 
@@ -1962,8 +1969,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let impl_module = impl_ref.0.clone();
         let impl_scope = self.tysys.trait_env.import_scope(&impl_module);
-        let impl_recv_id = self
-            .with_module_perspective(impl_module, impl_scope, |s| s.resolve_type(&impl_ty_clone));
+        let impl_recv_id = self.with_module_perspective(impl_module, impl_scope, |s| {
+            s.resolve_type(&s.annotate_ctx.clone(), &impl_ty_clone)
+        });
         let tt = self.tysys.type_table.borrow();
         let target = tt.peel_refs(impl_recv_id);
         let mut current = tt.peel_refs(receiver);
@@ -2194,8 +2202,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // module (`type Iter = TreeSetIter<T>`) is not re-resolved by name in
         // the caller's perspective, where it is invisible (issue #1416).
         for (name, ty) in &assoc_bindings {
-            let type_id =
-                scope.with_module_perspective_for(&impl_module_source, |s| s.resolve_type(ty));
+            let type_id = scope.with_module_perspective_for(&impl_module_source, |s| {
+                s.resolve_type(&s.annotate_ctx.clone(), ty)
+            });
             scope
                 .annotate_ctx
                 .trait_ctx
@@ -2302,7 +2311,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 scope.with_module_perspective_for(&impl_module_source, |s| {
                     let return_type = return_type_ast
                         .as_ref()
-                        .map(|t| s.resolve_type(t))
+                        .map(|t| s.resolve_type(&s.annotate_ctx.clone(), t))
                         .unwrap_or(TypeTable::UNIT);
                     // Extract param_types while method-level type params are
                     // still in scope — otherwise `&T` in a parameter would not
@@ -2431,10 +2440,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             }
                         }
 
+                        let return_ctx = scope.annotate_ctx.clone();
                         let return_type = default_method
                             .return_type
                             .as_ref()
-                            .map(|t| scope.resolve_type(t))
+                            .map(|t| scope.resolve_type(&return_ctx, t))
                             .unwrap_or(TypeTable::UNIT);
                         let self_kind = default_method
                             .params
@@ -3109,7 +3119,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return self_type;
                 }
                 // Otherwise, resolve normally
-                self.resolve_type(ty)
+                self.resolve_type(&self.annotate_ctx.clone(), ty)
             }
             Type::Generic(g) => {
                 // Resolve generic type with substituted arguments
@@ -3164,10 +3174,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     return assoc_id;
                 }
-                self.resolve_type(ty)
+                self.resolve_type(&self.annotate_ctx.clone(), ty)
             }
             // For other types, fall back to normal resolution
-            _ => self.resolve_type(ty),
+            _ => self.resolve_type(&self.annotate_ctx.clone(), ty),
         }
     }
 
@@ -3406,7 +3416,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let type_args: Vec<TypeId> = method_call
             .type_args
             .iter()
-            .map(|ty| self.resolve_type(ty))
+            .map(|ty| self.resolve_type(&self.annotate_ctx.clone(), ty))
             .collect();
 
         let mangled_method_name = MethodName::format_local(
