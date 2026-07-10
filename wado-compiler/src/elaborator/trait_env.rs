@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
-use crate::ast::{self, Item, Module, Type};
+use crate::ast::{self, AstId, Item, Module, Type};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
@@ -224,15 +224,15 @@ pub(crate) type DeclKey = (ModuleSource, String);
 ///
 /// Keyed by the bare receiver type name on purpose: the lookup iterates the
 /// candidate `Vec` and disambiguates each entry via its `(ModuleSource,
-/// item_idx)` payload plus the elaborator's per-call type-id comparison, so
+/// AstId)` payload plus the elaborator's per-call type-id comparison, so
 /// two `struct Widget` declarations in different modules share one bucket
 /// without ambiguity.
-pub(super) type TraitImplIndex = IndexMap<String, Vec<(ModuleSource, usize)>>;
+pub(super) type TraitImplIndex = IndexMap<String, Vec<(ModuleSource, AstId)>>;
 
 /// Digested header of an `impl` block, pre-extracted at [`TraitEnv::build`]
 /// time so trait/method queries read its trait name, target type, methods,
 /// and type parameters without re-fetching the impl block from
-/// `loaded_modules`. Keyed by `(ModuleSource, item_idx)` in
+/// `loaded_modules`. Keyed by `(ModuleSource, AstId)` in
 /// [`TraitEnv::impl_headers`].
 #[derive(Clone, Debug)]
 pub(super) struct ImplHeader {
@@ -267,7 +267,7 @@ pub(super) struct ImplMethodHeader {
 
 /// Digested header of a `trait` declaration: its name plus per-method
 /// signatures method-lookup queries read off the AST. Built in
-/// [`TraitEnv::build`] and keyed by `(ModuleSource, item_idx)` in
+/// [`TraitEnv::build`] and keyed by `(ModuleSource, AstId)` in
 /// [`TraitEnv::trait_decl_headers`]. Reuses [`ImplMethodHeader`] for the
 /// per-method digest (name + type parameters).
 #[derive(Clone, Debug)]
@@ -278,19 +278,19 @@ pub(super) struct TraitDeclHeader {
     pub(super) methods: Vec<ImplMethodHeader>,
 }
 
-/// Pre-built index: `(declaring module, trait name)` → (`ModuleSource`, item index)
+/// Pre-built index: `(declaring module, trait name)` → (`ModuleSource`, `AstId`)
 /// for trait declarations.
-pub(super) type TraitDeclIndex = IndexMap<DeclKey, (ModuleSource, usize)>;
+pub(super) type TraitDeclIndex = IndexMap<DeclKey, (ModuleSource, AstId)>;
 
-/// Pre-built index: `(declaring module, effect name)` → (`ModuleSource`, item
-/// index) for effect declarations. Effects are first-class citizens distinct
+/// Pre-built index: `(declaring module, effect name)` → (`ModuleSource`,
+/// `AstId`) for effect declarations. Effects are first-class citizens distinct
 /// from traits and have their own impl form (`impl Effect for Type`)
 /// interpreted as installable handlers, so the elaborator and dispatch
 /// synthesis need to distinguish them quickly.
-pub(super) type EffectDeclIndex = IndexMap<DeclKey, (ModuleSource, usize)>;
+pub(super) type EffectDeclIndex = IndexMap<DeclKey, (ModuleSource, AstId)>;
 
 /// Pre-built index: `(declaring module, resource name)` → (`ModuleSource`,
-/// item index) for resource declarations. Resources participate in
+/// `AstId`) for resource declarations. Resources participate in
 /// `with R => h do` / `impl R for Type` exactly like effects (see WEP
 /// 2026-04-11): both kinds of declaration carry a list of operations that
 /// user handler implementations satisfy and that the dispatch-synthesis
@@ -298,31 +298,34 @@ pub(super) type EffectDeclIndex = IndexMap<DeclKey, (ModuleSource, usize)>;
 /// elaborator can keep diagnostics ("not an effect", "not a resource")
 /// truthful and so the dispatch synthesis can know not to declare the
 /// resource on its wrapper's `effects` list (resources are not effects).
-pub(super) type ResourceDeclIndex = IndexMap<DeclKey, (ModuleSource, usize)>;
+pub(super) type ResourceDeclIndex = IndexMap<DeclKey, (ModuleSource, AstId)>;
 
 /// Pre-built list of blanket trait impls: `impl<T: Trait> OtherTrait for T`.
 /// These are impl blocks where the impl type is a free type parameter with trait bounds.
 /// Stored separately because they can't be indexed by concrete type name.
-pub(super) type BlanketTraitImplIndex = Vec<(ModuleSource, usize)>;
+pub(super) type BlanketTraitImplIndex = Vec<(ModuleSource, AstId)>;
 
 /// Pre-built index of static methods (no `self` parameter) from impl blocks.
 /// Key: canonical receiver [`DeclKey`] → list of
-/// `(method_name, impl_module_source, item_index, method_index)`.
+/// `(method_name, impl_module_source, item_ast_id, method_index)`.
 /// Enables O(1) lookup of static methods instead of scanning all modules.
 ///
 /// Keyed by canonical declaration key (rather than bare type name) so that
 /// `impl Counter { fn make(...) }` declared in two different modules with
 /// same-named `struct Counter` produces two distinct buckets — the lookup
 /// at `CounterA::make(...)` resolves through the call-site's import context
-/// and dispatches to the right module's impl.
-pub(super) type StaticMethodIndex = IndexMap<DeclKey, Vec<(String, ModuleSource, usize, usize)>>;
+/// and dispatches to the right module's impl. `item_ast_id` identifies the
+/// impl block itself (an `AstId`); `method_index` stays a bare position
+/// into that block's own, TraitEnv-owned `ImplHeader::methods` — not a
+/// window into the mutable `module.items` a reload could reorder.
+pub(super) type StaticMethodIndex = IndexMap<DeclKey, Vec<(String, ModuleSource, AstId, usize)>>;
 
 /// Pre-built index of static methods from resource declarations.
 /// Key: canonical receiver [`DeclKey`] → `[(method_name, ModuleSource,
-/// item_index, method_index)]`. Same disambiguation rationale as
+/// item_ast_id, method_index)]`. Same disambiguation rationale as
 /// [`StaticMethodIndex`].
 pub(super) type ResourceStaticMethodIndex =
-    IndexMap<DeclKey, Vec<(String, ModuleSource, usize, usize)>>;
+    IndexMap<DeclKey, Vec<(String, ModuleSource, AstId, usize)>>;
 
 /// `(type_name, trait_name)` → modules whose `impl <trait_name> for <type_name>`
 /// block exists.
@@ -373,14 +376,14 @@ pub struct TraitEnv {
     /// Blanket impls (`impl<T: Bound> Trait for T`), checked as fallback.
     pub(super) blanket_impl_index: BlanketTraitImplIndex,
     /// Digested headers for every indexed impl block, keyed by
-    /// `(ModuleSource, item_idx)`. Trait/method queries read this instead of
+    /// `(ModuleSource, AstId)`. Trait/method queries read this instead of
     /// re-fetching the impl block AST from `loaded_modules`. See [`ImplHeader`].
-    pub(super) impl_headers: IndexMap<(ModuleSource, usize), ImplHeader>,
+    pub(super) impl_headers: IndexMap<(ModuleSource, AstId), ImplHeader>,
     /// Digested headers for every `trait` declaration, keyed by
-    /// `(ModuleSource, item_idx)`. Lets method-lookup queries read trait
+    /// `(ModuleSource, AstId)`. Lets method-lookup queries read trait
     /// method signatures without re-fetching the trait AST. See
     /// [`TraitDeclHeader`].
-    pub(super) trait_decl_headers: IndexMap<(ModuleSource, usize), TraitDeclHeader>,
+    pub(super) trait_decl_headers: IndexMap<(ModuleSource, AstId), TraitDeclHeader>,
     /// Free-function type parameters keyed by `(declaring module, function
     /// name)`. Lets `lookup_function_type_params` read a callee's type params
     /// without scanning the module AST.
@@ -412,9 +415,9 @@ pub struct TraitEnv {
     /// `TraitEnv::build`. The multi-value `Vec<ModuleSource>` plus the
     /// `type_module` hint at the call site handles the common case.
     pub(crate) blanket_trait_impl_modules: IndexMap<String, Vec<ModuleSource>>,
-    /// `type_name` → `[(method_name, ModuleSource, item_idx, method_idx)]` for static methods.
+    /// `type_name` → `[(method_name, ModuleSource, item_ast_id, method_idx)]` for static methods.
     pub(super) static_method_index: StaticMethodIndex,
-    /// `type_name` → `[(method_name, ModuleSource, item_idx, method_idx)]` for resource static methods.
+    /// `type_name` → `[(method_name, ModuleSource, item_ast_id, method_idx)]` for resource static methods.
     pub(super) resource_static_method_index: ResourceStaticMethodIndex,
     /// `(type_name, trait_name)` → `ModuleSource` of the non-blanket impl.
     /// Consumed by template synthesis to route trait-method calls to the
@@ -547,8 +550,8 @@ impl TraitEnv {
         let mut effect_decl_index: EffectDeclIndex = IndexMap::default();
         let mut resource_decl_index: ResourceDeclIndex = IndexMap::default();
         let mut blanket_impl_index: BlanketTraitImplIndex = Vec::new();
-        let mut impl_headers: IndexMap<(ModuleSource, usize), ImplHeader> = IndexMap::default();
-        let mut trait_decl_headers: IndexMap<(ModuleSource, usize), TraitDeclHeader> =
+        let mut impl_headers: IndexMap<(ModuleSource, AstId), ImplHeader> = IndexMap::default();
+        let mut trait_decl_headers: IndexMap<(ModuleSource, AstId), TraitDeclHeader> =
             IndexMap::default();
         let mut function_type_params: IndexMap<(ModuleSource, String), Vec<ast::GenericParam>> =
             IndexMap::default();
@@ -574,7 +577,7 @@ impl TraitEnv {
         // per-module symbol table misses (typical for prelude-implicit
         // names that no `use` declaration explicitly threads).
         for (module_source, module) in modules {
-            for (item_idx, item) in module.items.iter().enumerate() {
+            for item in &module.items {
                 match item {
                     Item::Trait(trait_decl) => {
                         // `(module_source, name)` key: two modules can declare
@@ -583,19 +586,19 @@ impl TraitEnv {
                         // both declarations to the same entry.
                         decl_index.insert(
                             (module_source.clone(), trait_decl.name.clone()),
-                            (module_source.clone(), item_idx),
+                            (module_source.clone(), trait_decl.id),
                         );
                     }
                     Item::Interface(effect_decl) => {
                         effect_decl_index.insert(
                             (module_source.clone(), effect_decl.name.clone()),
-                            (module_source.clone(), item_idx),
+                            (module_source.clone(), effect_decl.id),
                         );
                     }
                     Item::Resource(resource) => {
                         let resource_key = (module_source.clone(), resource.name.clone());
                         resource_decl_index
-                            .insert(resource_key.clone(), (module_source.clone(), item_idx));
+                            .insert(resource_key.clone(), (module_source.clone(), resource.id));
                         // Index static methods from resource declarations.
                         // The resource declaration itself is the canonical
                         // receiver, so key by the declaration's own
@@ -613,7 +616,7 @@ impl TraitEnv {
                                     .push((
                                         method.name.clone(),
                                         module_source.clone(),
-                                        item_idx,
+                                        resource.id,
                                         method_idx,
                                     ));
                             }
@@ -705,7 +708,7 @@ impl TraitEnv {
         // populated, so the per-impl canonicalisation above can resolve
         // every PascalCase reference to its declaring module.
         for (module_source, module) in modules {
-            for (item_idx, item) in module.items.iter().enumerate() {
+            for item in &module.items {
                 // Digest the per-item facts that `lookup_function_type_params`
                 // and `find_struct_module_source` read, so neither needs to
                 // re-scan `loaded_modules`. (Non-impl items fall through to the
@@ -745,7 +748,7 @@ impl TraitEnv {
                 }
                 if let Item::Trait(trait_decl) = item {
                     trait_decl_headers.insert(
-                        (module_source.clone(), item_idx),
+                        (module_source.clone(), trait_decl.id),
                         TraitDeclHeader {
                             name: trait_decl.name.clone(),
                             type_params: trait_decl.type_params.clone(),
@@ -767,7 +770,7 @@ impl TraitEnv {
                 };
                 let type_name = get_type_name_static(&impl_block.ty);
                 impl_headers.insert(
-                    (module_source.clone(), item_idx),
+                    (module_source.clone(), impl_block.id),
                     ImplHeader {
                         trait_name: impl_block.trait_type.as_ref().map(get_type_name_static),
                         ty: impl_block.ty.clone(),
@@ -789,7 +792,7 @@ impl TraitEnv {
                 all_impl_index
                     .entry(type_name.clone())
                     .or_default()
-                    .push((module_source.clone(), item_idx));
+                    .push((module_source.clone(), impl_block.id));
                 if let Some(trait_type) = &impl_block.trait_type {
                     let trait_name = get_type_name_static(trait_type);
                     let is_blanket = impl_block
@@ -797,7 +800,7 @@ impl TraitEnv {
                         .iter()
                         .any(|tp| tp.name == type_name && !tp.bounds.is_empty());
                     if is_blanket {
-                        blanket_impl_index.push((module_source.clone(), item_idx));
+                        blanket_impl_index.push((module_source.clone(), impl_block.id));
                         let modules = blanket_trait_impl_modules.entry(trait_name).or_default();
                         if !modules.contains(module_source) {
                             modules.push(module_source.clone());
@@ -826,7 +829,7 @@ impl TraitEnv {
                     impl_index
                         .entry(type_name.clone())
                         .or_default()
-                        .push((module_source.clone(), item_idx));
+                        .push((module_source.clone(), impl_block.id));
                     // Static methods on trait impl blocks (no `self`
                     // parameter) join the same canonical bucket as
                     // inherent statics. `f64::from_bits` and friends in
@@ -844,7 +847,7 @@ impl TraitEnv {
                                 .push((
                                     method.name.clone(),
                                     module_source.clone(),
-                                    item_idx,
+                                    impl_block.id,
                                     method_idx,
                                 ));
                         }
@@ -865,7 +868,7 @@ impl TraitEnv {
                                 .push((
                                     method.name.clone(),
                                     module_source.clone(),
-                                    item_idx,
+                                    impl_block.id,
                                     method_idx,
                                 ));
                         }
@@ -928,7 +931,7 @@ impl TraitEnv {
     /// Keys of the **inherent** impls on `type_name`, in global build order —
     /// the `trait_name.is_none()` subset of [`Self::all_impl_index`]. Used by
     /// instance-method lookup, which must not treat trait impls as inherent.
-    pub(super) fn inherent_impl_keys(&self, type_name: &str) -> Vec<(ModuleSource, usize)> {
+    pub(super) fn inherent_impl_keys(&self, type_name: &str) -> Vec<(ModuleSource, AstId)> {
         self.all_impl_index
             .get(type_name)
             .map(|keys| {
@@ -980,7 +983,7 @@ impl TraitEnv {
         })
     }
 
-    fn methodful_header_matches(&self, entry: &(ModuleSource, usize), trait_name: &str) -> bool {
+    fn methodful_header_matches(&self, entry: &(ModuleSource, AstId), trait_name: &str) -> bool {
         self.impl_headers.get(entry).is_some_and(|header| {
             header.trait_name.as_deref() == Some(trait_name) && !header.methods.is_empty()
         })
@@ -1562,7 +1565,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 }
 
 /// Extract a type name from an AST type without needing an Elaborator instance.
-fn get_type_name_static(ty: &ast::Type) -> String {
+pub(super) fn get_type_name_static(ty: &ast::Type) -> String {
     match ty {
         ast::Type::Named(named) if named.name == "()" => TypeTable::UNIT_TYPE_NAME.to_string(),
         ast::Type::Named(named) => named.name.clone(),

@@ -139,10 +139,202 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Stmt::Continue(continue_stmt) => self.resolve_continue(continue_stmt, ctx),
             Stmt::Assert(a) => self.desugar_assert(a, ctx),
             Stmt::LabeledBlock(labeled_block) => self.resolve_labeled_block(labeled_block, ctx),
+            Stmt::Item(item) => self.resolve_local_item(item),
             // Parser error-recovery placeholder: the syntax error was already
             // reported, so there is nothing to record.
             Stmt::Error(_) => {}
         }
+    }
+
+    /// Resolve a local item declaration (`Stmt::Item`) — a struct/enum/
+    /// variant/flags/newtype/impl/trait declared inside a function body,
+    /// scoped to that function only (WEP local-item-definitions). Resolution
+    /// is sequential and forward-declaration-required, matching `let`: no
+    /// hoisting, no mutual reference between local declarations.
+    ///
+    /// Struct/newtype are minted under a mangled internal name
+    /// (`{name}@{AstId:?}`) so same-named locals in sibling functions never
+    /// collide in this module's shared `sem.decls.local_*` tables — the
+    /// durable storage reify recovers via `recorded_type` (see
+    /// `reify_struct_literal`). The bare declared name is additionally
+    /// registered in the function-scoped `fn_local_*` tables (cleared at the
+    /// top of every `resolve_function`), so `resolve_named_type` et al find
+    /// it by the name written in source, for the rest of this function only.
+    ///
+    /// Enum/variant/flags/impl/trait are parsed but not yet resolved here:
+    /// `Shape::Circle(1)`-style construction needs a per-AstId recorded fact
+    /// for reify's call/ident resolution, which (unlike struct literals) does
+    /// not go through `recorded_type` — a follow-up. A reference to one of
+    /// these local kinds still surfaces a clear error (`unknown identifier`,
+    /// `unknown function`, a type mismatch, or `no method found`, depending
+    /// on how it's referenced), just not a dedicated "not supported yet" one.
+    ///
+    /// `item.visibility()` is always `Private` here: the parser rejects a
+    /// `pub`/`internal`/`export` prefix before a local item with a dedicated
+    /// error (`at_visibility_prefixed_local_item_start`) rather than
+    /// producing a non-private `Item` for this to reject a second time.
+    fn resolve_local_item(&mut self, item: &ast::Item) {
+        match item {
+            ast::Item::Struct(struct_decl) => self.resolve_local_struct(struct_decl),
+            ast::Item::Newtype(newtype_decl) => self.resolve_local_newtype(newtype_decl),
+            // Parsed but not yet resolved — see the doc comment on
+            // `resolve_local_item` above.
+            ast::Item::Enum(_)
+            | ast::Item::Variant(_)
+            | ast::Item::Flags(_)
+            | ast::Item::Impl(_)
+            | ast::Item::Trait(_) => {}
+            // `at_local_item_start` never recognizes these at block
+            // position, so `parse_item` never produces one here — except
+            // `Error`, which parse-error recovery can still surface (see
+            // `Stmt::Error` handling in `resolve_stmt`, already a no-op).
+            // Listed explicitly (no wildcard) so a future `Item` variant
+            // forces a decision here instead of silently no-op'ing.
+            ast::Item::Use(_)
+            | ast::Item::Function(_)
+            | ast::Item::Interface(_)
+            | ast::Item::TupleTypeDecl(_)
+            | ast::Item::BuiltinTypeDecl(_)
+            | ast::Item::Resource(_)
+            | ast::Item::World(_)
+            | ast::Item::Test(_)
+            | ast::Item::Global(_)
+            | ast::Item::Error(_) => {}
+        }
+    }
+
+    fn resolve_local_struct(&mut self, struct_decl: &ast::StructDecl) {
+        let module_source = self.current_module_source.clone();
+        let mangled_name = crate::name::mangle_local_item_name(&struct_decl.name, struct_decl.id);
+
+        // Generic local structs need `T` etc. in scope while resolving field
+        // types (so a field of type `T` becomes a `TypeParam`, not
+        // `UNKNOWN`), mirroring `resolve_struct`'s top-level handling. The
+        // scope is entered unconditionally — harmless no-op when there are
+        // no type params — and dropped before the type is registered below.
+        let mut scope = self.enter_inherited_type_param_scope();
+        scope.annotate_ctx.trait_ctx.type_params.clear();
+        scope.register_generic_params(&struct_decl.type_params, 0);
+
+        // Field default expressions are recorded here (the raw AST, in
+        // `field_defaults` below) and resolved into TIR by
+        // `reify_local_struct`, matching `resolve_struct`/`reify_struct`'s
+        // split for a top-level struct.
+        let mut fields = Vec::new();
+        let mut field_ast_ids = Vec::new();
+        let mut field_defaults = Vec::new();
+        for field in &struct_decl.fields {
+            let type_id = scope.resolve_type(&field.ty);
+            fields.push((field.name.clone(), type_id, field.visibility));
+            field_ast_ids.push(field.id);
+            field_defaults.push(field.default.clone());
+        }
+        let type_param_bounds: Vec<(String, Vec<String>)> = struct_decl
+            .type_params
+            .iter()
+            .map(|p| {
+                (
+                    p.name.clone(),
+                    p.bounds.iter().map(|b| b.name.clone()).collect(),
+                )
+            })
+            .collect();
+        let type_param_type_ids: Vec<TypeId> = struct_decl
+            .type_params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                scope
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_type_param(p.name.clone(), i as u32)
+            })
+            .collect();
+        drop(scope);
+
+        // Register a `TypeId` for the declaration itself, generic or not —
+        // mirrors `intern_all_decl_types`'s "base entry" for a module-level
+        // generic struct (its own usage sites mint separate
+        // `GenericInstance` TypeIds; this one exists so bare-name lookups
+        // like `type_id_of_decl` have something to find).
+        let type_id = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_struct(mangled_name.clone(), module_source.clone());
+        self.tysys
+            .type_table
+            .borrow_mut()
+            .register_decl_type(struct_decl.id, type_id);
+
+        let info = super::types::StructFieldInfo {
+            name: mangled_name.clone(),
+            module_source,
+            defined_at: struct_decl.id,
+            fields,
+            field_ast_ids,
+            field_defaults,
+            type_param_bounds,
+            type_param_type_ids,
+        };
+        self.sem
+            .decls
+            .local_struct_fields
+            .insert(mangled_name, info.clone());
+        self.sem
+            .decls
+            .fn_local_struct_fields
+            .insert(struct_decl.name.clone(), info);
+        // Local structs have no `Item::Struct` entry in `module.items` for
+        // reify's per-item dispatch loop to walk — reify's own `Stmt::Item`
+        // statement handling (`reify_local_struct`) is what discovers and
+        // builds this declaration's `TirStruct`, from the `local_struct_fields`
+        // entry just recorded above (annotate records facts; reify is the
+        // sole TIR producer, matching every other declaration kind).
+    }
+
+    fn resolve_local_newtype(&mut self, newtype_decl: &ast::Newtype) {
+        if !newtype_decl.type_params.is_empty() {
+            // Generic local newtypes (`type Wrapper<T> = List<T>;`) are a
+            // follow-up, unlike generic local structs (see
+            // `resolve_local_struct`): they go through a different
+            // mechanism (`GenericNewtypeInfo` + AST-level substitution in
+            // `resolve_generic_type`, keyed by `local_generic_newtypes`,
+            // rather than a `TirStruct` template the monomorphizer expands)
+            // that this WEP hasn't wired up. Left unresolved — a reference
+            // still surfaces the ordinary "unknown type" error.
+            return;
+        }
+        let module_source = self.current_module_source.clone();
+        let base_type_id = self.resolve_type(&newtype_decl.ty);
+        let mangled_name = crate::name::mangle_local_item_name(&newtype_decl.name, newtype_decl.id);
+        let type_id = self.tysys.type_table.borrow_mut().make_newtype(
+            mangled_name.clone(),
+            module_source,
+            base_type_id,
+        );
+        self.tysys
+            .type_table
+            .borrow_mut()
+            .register_decl_type(newtype_decl.id, type_id);
+        // Durable (mangled-name) entry: some trait-bound synthesis (e.g. the
+        // auto-derived `Display` a template string needs) re-resolves a
+        // newtype's base type by name rather than reading `ResolvedType`
+        // directly, so it must be discoverable post-declaration the same way
+        // struct field info is (see `resolve_local_struct`).
+        self.sem.decls.local_newtypes.insert(mangled_name, type_id);
+        // Ephemeral (bare-name) entry — visible only for the remainder of
+        // this function's own annotate walk.
+        self.sem
+            .decls
+            .fn_local_newtypes
+            .insert(newtype_decl.name.clone(), type_id);
+        // Local newtypes have no `Item::Newtype` entry in `module.items` for
+        // reify's per-item dispatch loop to walk — reify's own `Stmt::Item`
+        // handling (`reify_local_newtype`) discovers and builds this
+        // declaration's `TirNewtype`, from the `local_newtypes` entry just
+        // recorded above.
     }
 
     /// Resolve a labeled block statement (Stage 7-B: records-only).
@@ -1920,17 +2112,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 inner_type_id = t;
             }
-            let implements_into_iter =
-                self.type_implements_trait(&self.annotate_ctx, iterable_type_id, "IntoIterator")
-                    || self.type_implements_trait(
-                        &self.annotate_ctx,
-                        inner_type_id,
-                        "IntoIterator",
-                    )
-                    || matches!(
-                        self.tysys.type_table.borrow().get(iterable_type_id),
-                        ResolvedType::Unknown | ResolvedType::TypeParam { .. }
-                    );
+            let implements_into_iter = self.tysys.type_implements_trait(
+                &self.annotate_ctx,
+                &self.type_lookup(),
+                iterable_type_id,
+                "IntoIterator",
+            ) || self.tysys.type_implements_trait(
+                &self.annotate_ctx,
+                &self.type_lookup(),
+                inner_type_id,
+                "IntoIterator",
+            ) || matches!(
+                self.tysys.type_table.borrow().get(iterable_type_id),
+                ResolvedType::Unknown | ResolvedType::TypeParam { .. }
+            );
             if !implements_into_iter {
                 let type_name = self.tysys.type_table.borrow().type_name(iterable_type_id);
                 let _ = self.logger.error(TypeError::MissingTraitImpl {
@@ -2291,12 +2486,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Iterator-trait conformance check, mirroring the pre-refactor
         // surface error.
-        if !self.type_implements_trait(&self.annotate_ctx, iter_type, "Iterator")
-            && !matches!(
-                self.tysys.type_table.borrow().get(iter_type),
-                ResolvedType::Unknown | ResolvedType::TypeParam { .. }
-            )
-        {
+        if !self.tysys.type_implements_trait(
+            &self.annotate_ctx,
+            &self.type_lookup(),
+            iter_type,
+            "Iterator",
+        ) && !matches!(
+            self.tysys.type_table.borrow().get(iter_type),
+            ResolvedType::Unknown | ResolvedType::TypeParam { .. }
+        ) {
             let type_name = self.tysys.type_table.borrow().type_name(iter_type);
             let _ = self.logger.error(TypeError::MissingTraitImpl {
                 type_name,

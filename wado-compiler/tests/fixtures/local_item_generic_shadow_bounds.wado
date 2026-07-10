@@ -1,0 +1,32 @@
+// A local, non-generic struct shadowing a same-named module-level generic
+// struct must not desync generic-struct dispatch. Regression test for a bug
+// where `resolve_generic_type`'s dispatch condition (the module-level
+// `generic_struct_names` registry) and the `StructFieldInfo` it used (from a
+// separate, local-item-aware lookup) could name two different structs once a
+// same-named local shadow appeared later in the function — corrupting the
+// type identity and silently skipping trait-bound checks for an earlier
+// reference to the outer generic struct.
+
+trait Numeric {
+    fn zero() -> Self;
+}
+
+struct Wrapper<T: Numeric> {
+    value: T,
+}
+
+struct NotNumeric {
+    tag: i32,
+}
+
+export fn run() {
+    let w: Wrapper<NotNumeric> = Wrapper { value: NotNumeric { tag: 1 } };
+    struct Wrapper {
+        value: i32,
+    }
+    let local = Wrapper { value: 5 };
+    assert local.value == 5;
+}
+
+__DATA__
+{"compile_error": "does not implement trait 'Numeric'"}

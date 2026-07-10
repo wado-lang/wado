@@ -15,6 +15,10 @@ pub(crate) struct StructFieldInfo {
     /// Canonical type name (original declaration name, not import alias).
     pub(super) name: String,
     pub(super) module_source: ModuleSource,
+    /// `AstId` of the `struct` declaration (`StructDecl::id`). The canonical
+    /// identity: `TypeTable::type_of_symbol(defined_at)` gives the `TypeId`
+    /// directly, without re-interning by `(name, module_source)`.
+    pub(super) defined_at: AstId,
     /// Field definitions: (name, `type_id`, visibility) triples
     pub(super) fields: Vec<(String, TypeId, crate::ast::Visibility)>,
     /// Parallel array to `fields` holding each field's defining `AstId`.
@@ -49,6 +53,8 @@ pub(crate) struct VariantInfo {
     /// Canonical type name (original declaration name, not import alias).
     pub(super) name: String,
     pub(super) module_source: ModuleSource,
+    /// `AstId` of the `variant` declaration (`VariantDecl::id`).
+    pub(super) defined_at: AstId,
     pub(super) type_params: Vec<String>,
     /// Per-case data. `pub(crate)` so the Semantics-based effect checker can
     /// follow resources nested in variant case payloads.
@@ -72,19 +78,30 @@ pub(super) struct EnumCaseData {
 #[derive(Clone)]
 pub(crate) struct EnumInfo {
     /// Canonical type name (original declaration name, not import alias).
+    /// Needed by the `resolve_type_static*` bootstrap path, which resolves
+    /// types before `collect_types` has registered `defined_at` with the
+    /// `TypeTable` and so cannot use it yet.
     pub(super) name: String,
     pub(super) module_source: ModuleSource,
+    /// `AstId` of the `enum` declaration (`EnumDecl::id`).
+    pub(super) defined_at: AstId,
     pub(super) cases: Vec<EnumCaseData>,
     /// O(1) lookup from case name to discriminant index
     pub(super) case_index: crate::hashmap::IndexMap<String, u32>,
 }
 
 impl EnumInfo {
-    pub(super) fn new(name: String, module_source: ModuleSource, cases: Vec<EnumCaseData>) -> Self {
+    pub(super) fn new(
+        name: String,
+        module_source: ModuleSource,
+        defined_at: AstId,
+        cases: Vec<EnumCaseData>,
+    ) -> Self {
         let case_index = cases.iter().map(|c| (c.name.clone(), c.index)).collect();
         Self {
             name,
             module_source,
+            defined_at,
             cases,
             case_index,
         }
@@ -122,6 +139,8 @@ pub(crate) struct ResourceInfo {
     /// Canonical type name (original declaration name, not import alias).
     pub(super) name: String,
     pub(super) module_source: ModuleSource,
+    /// `AstId` of the `resource` declaration (`ResourceDecl::id`).
+    pub(super) defined_at: AstId,
 }
 
 /// Generic newtype definition: `type Foo<T> = Bar<T>`
@@ -1437,6 +1456,13 @@ pub(crate) struct TypeLookup<'a> {
     pub(crate) local_flags_cases: &'a IndexMap<String, FlagsInfo>,
     pub(crate) local_generic_newtypes: &'a IndexMap<String, GenericNewtypeInfo>,
     pub(crate) local_variant_cases: &'a IndexMap<String, VariantInfo>,
+    /// Function-local item declarations (`Stmt::Item`), highest precedence.
+    /// See `ModuleDecls::fn_local_struct_fields` for the scoping rationale.
+    pub(crate) fn_local_struct_fields: &'a IndexMap<String, StructFieldInfo>,
+    pub(crate) fn_local_newtypes: &'a IndexMap<String, TypeId>,
+    pub(crate) fn_local_enum_cases: &'a IndexMap<String, EnumInfo>,
+    pub(crate) fn_local_flags_cases: &'a IndexMap<String, FlagsInfo>,
+    pub(crate) fn_local_variant_cases: &'a IndexMap<String, VariantInfo>,
 }
 
 impl<'a> TypeLookup<'a> {
@@ -1520,10 +1546,48 @@ impl<'a> TypeLookup<'a> {
             .or_else(|| all_per_module.get(module_source).and_then(|m| m.get(name)))
     }
 
-    pub(super) fn struct_fields(&self, name: &str) -> Option<&'a StructFieldInfo> {
-        self.lookup_ref(name, Some(self.local_struct_fields), self.all_struct_fields)
+    /// Resolve a *source-written* bare `name` with function-local
+    /// precedence: the current function's own local items (`fn_local`, see
+    /// `ModuleDecls::fn_local_struct_fields`) shadow everything else, ahead
+    /// of `lookup_ref`'s (local → current module → imports → any) chain.
+    /// Consolidates the identical wrapper every bare-name accessor below
+    /// used to duplicate by hand.
+    ///
+    /// Only for resolving a name as *written in source* — an already-known
+    /// `(name, module_source)` identity recovered from a resolved `TypeId`
+    /// (e.g. reify's `recorded_type`) must use [`Self::lookup_ref_in`]
+    /// directly (via the `_in` accessors below) and *not* this tier: the
+    /// function-local table is a flat, unordered map mutated in place as
+    /// annotate walks the function sequentially, so by the time a later,
+    /// independent pass (reify) looks up a name, it reflects the *end* of
+    /// that function's local declarations, not the position-appropriate
+    /// state — consulting it for an already-resolved identity risks
+    /// resolving to an unrelated later-declared local item that happens to
+    /// share the same bare name as an outer, non-local type.
+    fn fn_local_first<V>(
+        &self,
+        name: &str,
+        fn_local: &'a IndexMap<String, V>,
+        local: Option<&'a IndexMap<String, V>>,
+        all_per_module: &'a IndexMap<ModuleSource, IndexMap<String, V>>,
+    ) -> Option<&'a V> {
+        fn_local
+            .get(name)
+            .or_else(|| self.lookup_ref(name, local, all_per_module))
     }
 
+    pub(super) fn struct_fields(&self, name: &str) -> Option<&'a StructFieldInfo> {
+        self.fn_local_first(
+            name,
+            self.fn_local_struct_fields,
+            Some(self.local_struct_fields),
+            self.all_struct_fields,
+        )
+    }
+
+    /// Resolve `(name, module_source)` — an already-known type identity,
+    /// never a name written in source — to its field info. Deliberately
+    /// does *not* consult the function-local tier; see `fn_local_first`.
     pub(super) fn struct_fields_in(
         &self,
         name: &str,
@@ -1538,8 +1602,29 @@ impl<'a> TypeLookup<'a> {
         )
     }
 
+    /// Resolve a source-written struct-literal name against `module_source`,
+    /// including the current function's own local structs. The one caller
+    /// that needs function-local precedence for an `_in`-style (name,
+    /// module) lookup — determining what a struct literal's bare type name
+    /// currently means — rather than an already-resolved identity.
+    pub(super) fn struct_fields_in_scope(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<&'a StructFieldInfo> {
+        self.fn_local_struct_fields
+            .get(name)
+            .filter(|info| info.module_source == *module_source)
+            .or_else(|| self.struct_fields_in(name, module_source))
+    }
+
     pub(super) fn variant_case(&self, name: &str) -> Option<&'a VariantInfo> {
-        self.lookup_ref(name, Some(self.local_variant_cases), self.all_variant_cases)
+        self.fn_local_first(
+            name,
+            self.fn_local_variant_cases,
+            Some(self.local_variant_cases),
+            self.all_variant_cases,
+        )
     }
 
     pub(super) fn variant_case_in(
@@ -1557,7 +1642,12 @@ impl<'a> TypeLookup<'a> {
     }
 
     pub(super) fn enum_case(&self, name: &str) -> Option<&'a EnumInfo> {
-        self.lookup_ref(name, Some(self.local_enum_cases), self.all_enum_cases)
+        self.fn_local_first(
+            name,
+            self.fn_local_enum_cases,
+            Some(self.local_enum_cases),
+            self.all_enum_cases,
+        )
     }
 
     pub(super) fn enum_case_in(
@@ -1575,7 +1665,12 @@ impl<'a> TypeLookup<'a> {
     }
 
     pub(super) fn flags_case(&self, name: &str) -> Option<&'a FlagsInfo> {
-        self.lookup_ref(name, Some(self.local_flags_cases), self.all_flags_cases)
+        self.fn_local_first(
+            name,
+            self.fn_local_flags_cases,
+            Some(self.local_flags_cases),
+            self.all_flags_cases,
+        )
     }
 
     pub(super) fn flags_case_in(
@@ -1605,8 +1700,13 @@ impl<'a> TypeLookup<'a> {
     }
 
     pub(super) fn newtype(&self, name: &str) -> Option<TypeId> {
-        self.lookup_ref(name, Some(self.local_newtypes), self.all_newtypes)
-            .copied()
+        self.fn_local_first(
+            name,
+            self.fn_local_newtypes,
+            Some(self.local_newtypes),
+            self.all_newtypes,
+        )
+        .copied()
     }
 }
 

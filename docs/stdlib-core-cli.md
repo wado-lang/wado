@@ -3,7 +3,8 @@
 
 # core:cli
 
-CLI helpers: `println`, `eprintln`, `args`, `env`, `exit`, etc.
+CLI helpers: `println`, `eprintln`, `args`, `env`, `exit`, etc. For raw
+WASI CLI interfaces, use `wasi:cli` directly.
 
 ## Synopsis
 

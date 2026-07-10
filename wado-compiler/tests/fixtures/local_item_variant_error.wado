@@ -1,0 +1,15 @@
+// A local variant parses, but resolving case construction is not yet
+// implemented (unlike local struct/newtype — see
+// local_item_struct_definition.wado), so it surfaces as an unknown function
+// rather than a dedicated error.
+
+export fn run() {
+    variant Shape {
+        Circle(i32),
+        Square(i32),
+    }
+    let s = Shape::Circle(1);
+}
+
+__DATA__
+{"compile_error": "unknown function 'Shape::Circle'"}

@@ -204,6 +204,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 
 global mut global:wasi_tls_mock_recv.wado::__modules_initialized: bool = 0;
+global global:wasi_tls_mock_recv.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(117, 110, 101, 120, 112, 101, 99, 116, 101, 100, 32, 104, 97, 110, 100, 115, 104, 97, 107, 101, 32, 102, 97, 105, 108, 117, 114, 101, 58, 32)), used: 30 };
 
 fn "wasi_tls_mock_recv.wado/run"() with Stdout, Connector, Error {
     let conn: i32;
@@ -245,7 +246,7 @@ fn "wasi_tls_mock_recv.wado/run"() with Stdout, Connector, Error {
     if @likely(__match_19.discriminant == 0) {
     } else {
         e = ref.cast "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>::Err"(__match_19).payload_0;
-        "core:rt/panic"(__local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(46), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_14, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected handshake failure: "), used: 30 }); "core:prelude/string.wado/String::push_str"(__local_14, "wasi_tls_mock_recv.wado/__cm_binding__Error_to_debug_string"(e)); __local_14);
+        "core:rt/panic"(__local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(46), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_14, global:wasi_tls_mock_recv.wado::__const_obj_0); "core:prelude/string.wado/String::push_str"(__local_14, "wasi_tls_mock_recv.wado/__cm_binding__Error_to_debug_string"(e)); __local_14);
         unreachable;
     }
     __b = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };

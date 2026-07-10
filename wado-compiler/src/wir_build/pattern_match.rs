@@ -10,7 +10,7 @@ use crate::nir::NirLiteralPattern;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirType};
 
-use super::translate::{FunctionTranslator, LabelEntry};
+use super::translate::{FunctionTranslator, LabelEntry, declare_and_set_local};
 use crate::nir_arena::{ArmData, BlockId, Body, Operand, PatId, PatKind};
 
 /// Build `if condition { then_body } else { else_body }`, collapsing the
@@ -477,18 +477,9 @@ impl FunctionTranslator<'_, '_> {
             }
         }
 
-        // Wrap everything: declare local, set, then the if-else chain
-        WirInstr::Seq(vec![
-            WirInstr::DeclareLocal {
-                name: scrut_local_name.clone(),
-                ty: scrut_wir_type,
-            },
-            WirInstr::LocalSet {
-                name: scrut_local_name,
-                value: Box::new(scrut),
-            },
-            result,
-        ])
+        let mut seq = declare_and_set_local(scrut_local_name, scrut_wir_type, scrut).to_vec();
+        seq.push(result);
+        WirInstr::Seq(seq)
     }
 
     /// Returns, per source-order arm, whether that arm will be lowered as
@@ -1008,24 +999,21 @@ impl FunctionTranslator<'_, '_> {
                     let cast_local = if consumers >= 2 {
                         self.local_counter += 1;
                         let cast_local = format!("__cast_{}", self.local_counter);
-                        instrs.push(WirInstr::DeclareLocal {
-                            name: cast_local.clone(),
-                            ty: WirType::Ref {
+                        instrs.extend(declare_and_set_local(
+                            cast_local.clone(),
+                            WirType::Ref {
                                 type_id: case_type_id.clone(),
                                 nullable: false,
                             },
-                        });
-                        instrs.push(WirInstr::LocalSet {
-                            name: cast_local.clone(),
-                            value: Box::new(WirInstr::RefCast {
+                            WirInstr::RefCast {
                                 type_id: case_type_id.clone(),
                                 nullable: false,
                                 expr: Box::new(WirInstr::LocalGet {
                                     name: scrut_local.to_string(),
                                     result_ty: self.wir_type(scrut_type),
                                 }),
-                            }),
-                        });
+                            },
+                        ));
                         Some(cast_local)
                     } else {
                         None
@@ -1108,14 +1096,11 @@ impl FunctionTranslator<'_, '_> {
                                 self.ctx.type_id_to_wir_type(self.type_table, payload_tid);
                             self.local_counter += 1;
                             let temp_name = format!("__variant_payload_{}", self.local_counter);
-                            instrs.push(WirInstr::DeclareLocal {
-                                name: temp_name.clone(),
-                                ty: payload_wir,
-                            });
-                            instrs.push(WirInstr::LocalSet {
-                                name: temp_name.clone(),
-                                value: Box::new(payload_get),
-                            });
+                            instrs.extend(declare_and_set_local(
+                                temp_name.clone(),
+                                payload_wir,
+                                payload_get,
+                            ));
                             self.emit_pattern_bindings(*binding, &temp_name, payload_tid, instrs);
                         }
                     }
@@ -1193,14 +1178,11 @@ impl FunctionTranslator<'_, '_> {
                                     element_types.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
                                 let elem_wir_type =
                                     self.ctx.type_id_to_wir_type(self.type_table, elem_type);
-                                instrs.push(WirInstr::DeclareLocal {
-                                    name: temp_name.clone(),
-                                    ty: elem_wir_type,
-                                });
-                                instrs.push(WirInstr::LocalSet {
-                                    name: temp_name.clone(),
-                                    value: Box::new(field_get),
-                                });
+                                instrs.extend(declare_and_set_local(
+                                    temp_name.clone(),
+                                    elem_wir_type,
+                                    field_get,
+                                ));
                                 self.emit_pattern_bindings(
                                     *sub_pattern,
                                     &temp_name,
@@ -1244,14 +1226,11 @@ impl FunctionTranslator<'_, '_> {
                                     self.resolve_struct_field_type(scrut_type, &field.field_name);
                                 let field_wir_type =
                                     self.ctx.type_id_to_wir_type(self.type_table, field_type);
-                                instrs.push(WirInstr::DeclareLocal {
-                                    name: temp_name.clone(),
-                                    ty: field_wir_type,
-                                });
-                                instrs.push(WirInstr::LocalSet {
-                                    name: temp_name.clone(),
-                                    value: Box::new(field_get),
-                                });
+                                instrs.extend(declare_and_set_local(
+                                    temp_name.clone(),
+                                    field_wir_type,
+                                    field_get,
+                                ));
                                 self.emit_pattern_bindings(
                                     field.pattern,
                                     &temp_name,

@@ -1018,6 +1018,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
+        // Local item declarations (`Stmt::Item`) are scoped to a single
+        // function: clear the previous function's leftovers so sibling
+        // functions never see each other's local items.
+        scope.sem.decls.clear_fn_local_items();
 
         // Set effect params in scope before `register_generic_params`. Eager
         // `<F: fn() with E>` bound resolution runs inside
@@ -1267,6 +1271,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let return_type = TypeTable::UNIT;
         let mut ctx = FunctionContext::new(return_type, function_name.clone());
 
+        // Local item declarations (`Stmt::Item`) are scoped to a single
+        // test body: clear the previous one's leftovers (mirrors
+        // `resolve_function`/`resolve_method`; a `test` block does not go
+        // through either).
+        self.sem.decls.clear_fn_local_items();
+
         // Walk the test body for its side-effect fact recording (its
         // per-`AstId` expression types, recorded under the `function_name`
         // context so `#function` literals match what reify emits); the
@@ -1372,6 +1382,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // behavior.
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
+        // Local item declarations (`Stmt::Item`) are scoped to a single
+        // function/method: clear the previous one's leftovers.
+        scope.sem.decls.clear_fn_local_items();
         let mut type_param_list = Vec::new();
 
         // Bare base trait name (e.g. `"Stream"` for an `impl Stream<u8>`).
@@ -1645,8 +1658,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Set up Self type for the impl block
         // This allows `&Self` to resolve correctly in method parameters
-        let old_self_type = scope.annotate_ctx.trait_ctx.self_type;
-        scope.annotate_ctx.trait_ctx.self_type = Some(scope.resolve_type(impl_type));
+        let resolved_self_type = scope.resolve_type(impl_type);
+        scope.annotate_ctx.trait_ctx.self_type = Some(resolved_self_type);
 
         // Resolve return type
         let return_type = func
@@ -1830,11 +1843,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let method_key = func.id;
         scope.sem.types.function_effects.insert(method_key, effects);
 
-        // Restore effect params and Self type. `trait_ctx` is auto-restored on
-        // `drop(scope)`, which replaces everything set up above.
         scope.current_effect_params = old_effect_params;
         scope.current_effect_param_decls = old_effect_param_decls;
-        scope.annotate_ctx.trait_ctx.self_type = old_self_type;
         drop(scope);
 
         // Record the resolved param/return types for reify to read back

@@ -11,7 +11,9 @@ use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TirExpr, TypeId, Type
 use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
 use super::infer::InferCtx;
+use super::trait_env::AnnotateCtx;
 use super::types::{FunctionContext, TypeError};
+use super::tysys::TypeSystem;
 use super::util::placeholder;
 
 /// Per-position `_` mask for a turbofish: `holes[i]` is true when argument `i`
@@ -210,12 +212,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span: root.span,
         });
     }
+}
 
+impl TypeSystem {
     /// Classify a call callee's prefix so `resolve_call` can rewrite
     /// `Self::` / `T::` (T bound to concrete) before any name lookup
     /// happens. `T::` (T abstract) is routed through its own static
     /// dispatch path; everything else is left as written.
-    fn classify_call_callee<'a>(&self, ident: &'a ast::IdentExpr) -> CalleeIdentKind<'a> {
+    fn classify_call_callee<'a>(
+        &self,
+        ctx: &AnnotateCtx,
+        ident: &'a ast::IdentExpr,
+    ) -> CalleeIdentKind<'a> {
         let Some(pos) = ident.name.find("::") else {
             return CalleeIdentKind::AsIs(ident);
         };
@@ -223,14 +231,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let suffix = &ident.name[pos + 2..];
 
         if prefix == "Self"
-            && let Some(self_type_id) = self.annotate_ctx.trait_ctx.self_type
+            && let Some(self_type_id) = ctx.trait_ctx.self_type
         {
-            let self_name = self.tysys.type_table.borrow().type_name(self_type_id);
+            let self_name = self.type_table.borrow().type_name(self_type_id);
             return CalleeIdentKind::Rewritten(format!("{self_name}::{suffix}"));
         }
 
-        if let Some(&(_, type_param_type_id)) = self.annotate_ctx.trait_ctx.type_params.get(prefix)
-        {
+        if let Some(&(_, type_param_type_id)) = ctx.trait_ctx.type_params.get(prefix) {
             // If the type parameter is bound to a concrete type (e.g. a
             // trait default method synthesised for an impl binds the
             // trait's `T` to the impl's concrete arg), dispatch
@@ -238,7 +245,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // abstract form and route through the trait-bound dispatch
             // path so the monomorphizer can substitute later.
             let is_abstract = matches!(
-                self.tysys.type_table.borrow().get(type_param_type_id),
+                self.type_table.borrow().get(type_param_type_id),
                 ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
             );
             if is_abstract {
@@ -249,7 +256,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
             }
             let concrete_name = self
-                .tysys
                 .type_table
                 .borrow()
                 .mangle_type_name(type_param_type_id);
@@ -257,6 +263,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         CalleeIdentKind::AsIs(ident)
+    }
+}
+
+impl<H: CompilerHost> Elaborator<'_, H> {
+    /// Whether `name` is a declared effect (`interface`) or resource —
+    /// the set of identifiers `resolve_call`'s qualified-call fallback may
+    /// treat as a deferred effect operation (`Stdout::write()`, etc.).
+    fn is_declared_effect_or_resource(&self, name: &str) -> bool {
+        let key = self.canonical_decl_key(name);
+        self.tysys.trait_env.effect_decl_index.contains_key(&key)
+            || self.tysys.trait_env.resource_decl_index.contains_key(&key)
     }
 
     pub(super) fn resolve_call(
@@ -373,7 +390,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Expr::Ident(ident) = &call.callee else {
             unreachable!("non-Ident callees are handled by the indirect-call fast path above")
         };
-        let callee_kind = self.classify_call_callee(ident);
+        let callee_kind = self.tysys.classify_call_callee(&self.annotate_ctx, ident);
 
         // Abstract `T::method(...)` takes its own dispatch path. Args
         // are resolved without coercion hints (the trait-bound dispatch
@@ -772,12 +789,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     // Infer variant type: use GenericInstance for generic variants
                     let variant_type = if variant_info.type_params.is_empty() {
-                        self.tysys.type_table.borrow_mut().make_variant(
-                            variant_info.name.clone(),
-                            variant_info.module_source.clone(),
-                        )
+                        self.tysys
+                            .type_table
+                            .borrow()
+                            .type_id_of_decl(variant_info.defined_at)
                     } else {
-                        self.infer_variant_type_args(
+                        self.tysys.infer_variant_type_args(
+                            &self.annotate_ctx,
                             &prefix_owned,
                             &variant_info,
                             &case_data,
@@ -808,10 +826,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 // If no matching case, check for From<T> synthesis requests
                 else if suffix == "from" && args.len() == 1 {
-                    let target_type_id = self.tysys.type_table.borrow_mut().make_variant(
-                        variant_info.name.clone(),
-                        variant_info.module_source.clone(),
-                    );
+                    let target_type_id = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .type_id_of_decl(variant_info.defined_at);
                     let from_type = args[0].type_id;
                     let from_type_name = self.tysys.type_table.borrow().type_name(from_type);
                     let from_trait_name = self
@@ -912,12 +931,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             }
                             let payload = args.into_iter().next().map(Box::new);
                             let variant_type = if variant_info.type_params.is_empty() {
-                                self.tysys.type_table.borrow_mut().make_variant(
-                                    variant_info.name.clone(),
-                                    variant_info.module_source.clone(),
-                                )
+                                self.tysys
+                                    .type_table
+                                    .borrow()
+                                    .type_id_of_decl(variant_info.defined_at)
                             } else {
-                                self.infer_variant_type_args(
+                                self.tysys.infer_variant_type_args(
+                                    &self.annotate_ctx,
                                     type_name,
                                     &variant_info,
                                     &case_data,
@@ -1059,9 +1079,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     effective_name.to_string(),
                 )
             }
-            // Effect operations and module namespace calls - pass through to codegen.
-            // This covers Stdout::write(), etc.
-            else {
+            // Effect operations - pass through to codegen. This covers
+            // `Stdout::write()`, etc. Effects/resources have no static-method
+            // registration to check against above, so validate `prefix`
+            // against the declared effect/resource indices directly; a
+            // `prefix` that names neither leaves `callee_opt` `None` so the
+            // caller falls through to the standard "unknown function" error
+            // instead of deferring an unvalidated call to codegen, where it
+            // would panic instead of failing cleanly.
+            else if self.is_declared_effect_or_resource(prefix) {
                 (
                     Some(CalleeRef::local_namespace(
                         &mut self.interner.borrow_mut(),
@@ -1070,6 +1096,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     )),
                     effective_name.to_string(),
                 )
+            } else {
+                (None, effective_name.to_string())
             }
         }
         // Check if it's a local function (defined in this module) or
@@ -1475,7 +1503,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         operation: &str,
     ) -> Option<(Vec<TypeId>, Option<TypeId>)> {
         let canonical_key = self.canonical_decl_key(effect);
-        let (module_source, item_idx) = self
+        let (module_source, item_id) = self
             .tysys
             .trait_env
             .effect_decl_index
@@ -1483,7 +1511,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .or_else(|| self.tysys.trait_env.resource_decl_index.get(&canonical_key))?
             .clone();
         let module = self.loaded_modules.get(&module_source)?;
-        let methods = match module.items.get(item_idx)? {
+        let methods = match module.item_by_id(item_id)? {
             crate::ast::Item::Interface(decl) => &decl.methods,
             crate::ast::Item::Resource(decl) => &decl.methods,
             _ => return None,
@@ -2635,7 +2663,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|&pt| self.substitute_type_params(pt, type_args))
             .collect()
     }
+}
 
+impl TypeSystem {
     /// Infer type arguments for a variant constructor `Variant::Case(payload)`.
     ///
     /// Uses [`InferCtx`] with:
@@ -2647,6 +2677,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// and we are in a non-generic context — preserving the legacy behaviour.
     pub(super) fn infer_variant_type_args(
         &mut self,
+        ctx: &AnnotateCtx,
         variant_name: &str,
         variant_info: &super::types::VariantInfo,
         case_data: &super::types::VariantCaseData,
@@ -2661,10 +2692,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // which may differ from variant_info.module_source (e.g., prelude/types.wado).
         let mut canonical_module_source = None;
 
-        let mut infer = InferCtx::new(
-            &self.tysys.type_table,
-            variant_info.type_param_type_ids.clone(),
-        );
+        let mut infer = InferCtx::new(&self.type_table, variant_info.type_param_type_ids.clone());
 
         // Explicit turbofish args pin their slots as strong constraints; a `_`
         // slot is skipped so the payload/expected passes infer it. This is how
@@ -2687,7 +2715,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Queued through `add_expected_return` so it runs after the payload pass,
         // preserving the "stronger constraint wins" policy via `or_insert`.
         if let Some(expected) = expected_type {
-            let expected_resolved = self.tysys.type_table.borrow().get(expected).clone();
+            let expected_resolved = self.type_table.borrow().get(expected).clone();
             if let ResolvedType::GenericInstance {
                 name,
                 module_source,
@@ -2715,22 +2743,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // If unresolved type params remain in concrete code, fall back to bare Variant
         let has_unresolved = type_args
             .iter()
-            .any(|&t| self.tysys.type_table.borrow().contains_type_param(t));
+            .any(|&t| self.type_table.borrow().contains_type_param(t));
 
-        if has_unresolved && self.annotate_ctx.trait_ctx.type_params.is_empty() {
-            return self.tysys.type_table.borrow_mut().make_variant(
-                variant_info.name.clone(),
-                variant_info.module_source.clone(),
-            );
+        if has_unresolved && ctx.trait_ctx.type_params.is_empty() {
+            return self
+                .type_table
+                .borrow()
+                .type_id_of_decl(variant_info.defined_at);
         }
 
-        self.tysys.type_table.borrow_mut().make_generic_instance(
+        self.type_table.borrow_mut().make_generic_instance(
             variant_info.name.clone(),
             module_source,
             type_args,
         )
     }
+}
 
+impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a static call through a type parameter: `T::method(args)`
     /// where T is bound by a trait (e.g., `T: Constructable`).
     fn resolve_type_param_static_call(

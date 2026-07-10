@@ -241,6 +241,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             local_flags_cases: &self.sem.decls.local_flags_cases,
             local_generic_newtypes: &self.sem.decls.local_generic_newtypes,
             local_variant_cases: &self.sem.decls.local_variant_cases,
+            fn_local_struct_fields: &self.sem.decls.fn_local_struct_fields,
+            fn_local_newtypes: &self.sem.decls.fn_local_newtypes,
+            fn_local_enum_cases: &self.sem.decls.fn_local_enum_cases,
+            fn_local_flags_cases: &self.sem.decls.fn_local_flags_cases,
+            fn_local_variant_cases: &self.sem.decls.fn_local_variant_cases,
         }
     }
 
@@ -469,7 +474,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// the `<T>` declaration rather than on a top-level item that happens
     /// to share the name. Falls through to the symbol-table lookup
     /// otherwise.
-    pub(super) fn record_type_name_reference(&mut self, use_id: crate::ast::AstId, name: &str) {
+    pub(in crate::elaborator) fn record_type_name_reference(
+        &mut self,
+        use_id: crate::ast::AstId,
+        name: &str,
+    ) {
         if let Some(&decl_id) = self.annotate_ctx.trait_ctx.type_param_decls.get(name) {
             self.record_reference(use_id, decl_id);
         } else {
@@ -827,7 +836,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     fn classify_on_bound_marker(&self, trait_type: &ast::Type) -> Option<String> {
         let base = trait_type.head_base_name()?;
-        self.classify_on_bound_trait(base).map(|_| base.to_string())
+        self.tysys
+            .classify_on_bound_trait(&self.type_lookup(), base)
+            .map(|_| base.to_string())
     }
 
     fn record_explicit_derive_request(
@@ -841,8 +852,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if target_type_id == tir::TypeTable::ERROR {
             return;
         }
-        if self.structurally_derivable_for_explicit_request(
+        if self.tysys.structurally_derivable_for_explicit_request(
             &self.annotate_ctx,
+            &self.type_lookup(),
             target_type_id,
             trait_name,
         ) {
@@ -863,10 +875,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .record_bound_driven_synth_request(target_type_name, &module_source, trait_name);
             return;
         }
-        if self.has_real_trait_impl_for_type(target_type_name, trait_name) {
+        if self.tysys.has_real_trait_impl_for_type(
+            &self.annotate_ctx,
+            &self.type_lookup(),
+            target_type_name,
+            trait_name,
+        ) {
             return;
         }
-        let reason = self.trait_unimpl_reason_chain(target_type_id, trait_name);
+        let reason = self.tysys.trait_unimpl_reason_chain(
+            &self.annotate_ctx,
+            &self.type_lookup(),
+            target_type_id,
+            trait_name,
+        );
         let _ = self
             .logger
             .error(types::TypeError::ExplicitDeriveNotEligible {
@@ -1047,6 +1069,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         module_source: &ModuleSource,
     ) -> Option<&StructFieldInfo> {
         self.type_lookup().struct_fields_in(name, module_source)
+    }
+
+    /// Like [`Self::lookup_struct_fields_in`], but also considers the
+    /// current function's own local structs — for resolving a
+    /// source-written struct-literal name against a module, not an
+    /// already-known type identity. See `TypeLookup::struct_fields_in_scope`.
+    pub(super) fn lookup_struct_fields_in_scope(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<&StructFieldInfo> {
+        self.type_lookup()
+            .struct_fields_in_scope(name, module_source)
     }
 
     pub(super) fn lookup_variant_case_in(

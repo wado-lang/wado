@@ -18,6 +18,7 @@
 //! | `cleanup`         | Nop/dead-code removal, normalization        |
 //! | `branch_hint`     | `br_if` selection + trap-based hint inference |
 //! | `init_guard`      | Trivial init-guard global removal           |
+//! | `prune_dead_data` | Unreferenced passive data segment removal   |
 //! | `dce`             | Dead code / type / global elimination       |
 //!
 //! Related passes live elsewhere: dead-arg/-return elim and single-field param
@@ -38,6 +39,7 @@ mod elide_struct;
 mod init_guard;
 mod nullable_ref;
 mod peephole;
+mod prune_dead_data;
 mod sroa_variant_return;
 mod util;
 
@@ -62,6 +64,7 @@ use elide_struct::{
 use init_guard::remove_trivial_init_globals;
 use nullable_ref::lower_nullable_refs;
 use peephole::run_peephole;
+use prune_dead_data::prune_dead_data;
 use sroa_variant_return::{flatten_nested_variant_slots, sroa_variant_returns};
 
 /// Run a single WIR optimization pass with profiling.
@@ -204,6 +207,12 @@ pub fn optimize_wir(
     });
     remove_trivial_init_globals(module);
     cleanup(module);
+    // Drop data segments `register_literal_data` registered speculatively
+    // but no surviving `array.new_data` ended up reading (a bounded
+    // force-eager global promoted to `array.new_fixed` instead).
+    wir_pass("wir/prune_dead_data", module, profiler, |m| {
+        prune_dead_data(m);
+    });
     // Collapse `if cond { br N }` guards into `br_if` (after `init_guard`, which
     // keys on the `If { GlobalGet, [Br] }` shape), then infer trap-based hints.
     wir_pass("wir/select_br_if", module, profiler, |m| {

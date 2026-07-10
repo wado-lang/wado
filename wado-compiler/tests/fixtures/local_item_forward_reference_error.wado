@@ -1,0 +1,14 @@
+// Local items are resolved sequentially, like `let`: no hoisting, no
+// forward reference. A use before the declaration statement is an error,
+// even though the declaration appears later in the same function.
+
+export fn run() {
+    let p = Point { x: 1, y: 2 };
+    struct Point {
+        x: i32,
+        y: i32,
+    }
+}
+
+__DATA__
+{"compile_error": "unknown type 'Point'"}

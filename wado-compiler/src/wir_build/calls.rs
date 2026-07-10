@@ -7,10 +7,10 @@
 
 use crate::module_source::ModuleSource;
 use crate::tir::{TypeId, TypeTable};
-use crate::wir::{WirInstr, WirType};
+use crate::wir::{WirInstr, WirType, WirTypeId};
 
 use super::context::WirContext;
-use super::translate::FunctionTranslator;
+use super::translate::{FunctionTranslator, declare_and_set_local};
 use crate::nir_arena::{ArenaCallArg, Body, Operand};
 
 /// The compile-time constant of a SIMD lane operand — a promoted
@@ -178,6 +178,76 @@ impl FunctionTranslator<'_, '_> {
             return None;
         }
         Some(format!("$value_copy$T{}", elem.0))
+    }
+
+    fn translate_array_ref_operand(
+        &mut self,
+        args: &[ArenaCallArg],
+    ) -> Option<(WirTypeId, WirInstr, TypeId)> {
+        let src_expr = args[0].expr;
+        let src = self.translate_operand(src_expr);
+        let src_type_id = self.operand_type_id(src_expr);
+        let wir_type = self.ctx.type_id_to_wir_type(self.type_table, src_type_id);
+        let WirType::Ref { type_id, .. } = wir_type else {
+            return None;
+        };
+        Some((type_id, src, src_type_id))
+    }
+
+    fn build_bulk_array_clone(&mut self, type_id: WirTypeId, src: WirInstr) -> WirInstr {
+        let idx = type_id.index();
+        let src_name = format!("__array_clone_src_{idx}");
+        let dst_name = format!("__array_clone_dst_{idx}");
+        let len_name = format!("__array_clone_len_{idx}");
+        let ref_ty = WirType::Ref {
+            type_id: type_id.clone(),
+            nullable: false,
+        };
+
+        let mut seq = Vec::new();
+        seq.extend(declare_and_set_local(src_name.clone(), ref_ty.clone(), src));
+        seq.extend(declare_and_set_local(
+            len_name.clone(),
+            WirType::I32,
+            WirInstr::ArrayLen(Box::new(WirInstr::LocalGet {
+                name: src_name.clone(),
+                result_ty: ref_ty.clone(),
+            })),
+        ));
+        seq.extend(declare_and_set_local(
+            dst_name.clone(),
+            ref_ty.clone(),
+            WirInstr::ArrayNewDefault {
+                type_id: type_id.clone(),
+                len: Box::new(WirInstr::LocalGet {
+                    name: len_name.clone(),
+                    result_ty: WirType::I32,
+                }),
+            },
+        ));
+        seq.push(WirInstr::ArrayCopy {
+            dest_type_id: type_id.clone(),
+            src_type_id: type_id,
+            dest: Box::new(WirInstr::LocalGet {
+                name: dst_name.clone(),
+                result_ty: ref_ty.clone(),
+            }),
+            dest_offset: Box::new(WirInstr::I32Const(0)),
+            src: Box::new(WirInstr::LocalGet {
+                name: src_name,
+                result_ty: ref_ty.clone(),
+            }),
+            src_offset: Box::new(WirInstr::I32Const(0)),
+            len: Box::new(WirInstr::LocalGet {
+                name: len_name,
+                result_ty: WirType::I32,
+            }),
+        });
+        seq.push(WirInstr::LocalGet {
+            name: dst_name,
+            result_ty: ref_ty,
+        });
+        WirInstr::Seq(seq)
     }
 
     ///
@@ -448,42 +518,19 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
             "builtin::array_clone" => {
-                let src_expr = args[0].expr;
-                let src = self.translate_operand(src_expr);
-                let wir_type = self
-                    .ctx
-                    .type_id_to_wir_type(self.type_table, self.operand_type_id(src_expr));
-                if let WirType::Ref { type_id, .. } = wir_type {
-                    let element_copy_func =
-                        self.array_element_copy_func(self.operand_type_id(src_expr));
-                    Some(WirInstr::ArrayClone {
+                let (type_id, src, src_type_id) = self.translate_array_ref_operand(args)?;
+                match self.array_element_copy_func(src_type_id) {
+                    Some(element_copy_func) => Some(WirInstr::ArrayClone {
                         type_id,
                         src: Box::new(src),
-                        element_copy_func,
-                    })
-                } else {
-                    None
+                        element_copy_func: Some(element_copy_func),
+                    }),
+                    None => Some(self.build_bulk_array_clone(type_id, src)),
                 }
             }
-            // Spine-only array clone: copies the `repr` slots without the
-            // per-element deep copy `array_clone` would emit for value-typed
-            // elements. Emitted only by `value_copy_demote`, which proves the
-            // shared elements are never mutated through either alias.
             "builtin::array_clone_shallow" => {
-                let src_expr = args[0].expr;
-                let src = self.translate_operand(src_expr);
-                let wir_type = self
-                    .ctx
-                    .type_id_to_wir_type(self.type_table, self.operand_type_id(src_expr));
-                if let WirType::Ref { type_id, .. } = wir_type {
-                    Some(WirInstr::ArrayClone {
-                        type_id,
-                        src: Box::new(src),
-                        element_copy_func: None,
-                    })
-                } else {
-                    None
-                }
+                let (type_id, src, _) = self.translate_array_ref_operand(args)?;
+                Some(self.build_bulk_array_clone(type_id, src))
             }
             "builtin::array_fill" => {
                 let arr = self.translate_operand(args[0].expr);
@@ -1077,20 +1124,16 @@ impl FunctionTranslator<'_, '_> {
 
         // Build: declare temp, cast callee from abstract structref to canonical closure,
         // store, extract env + args + funcref, call_ref
-        let mut stmts = vec![
-            WirInstr::DeclareLocal {
-                name: temp_name.clone(),
-                ty: callee_ref_type.clone(),
+        let mut stmts = declare_and_set_local(
+            temp_name.clone(),
+            callee_ref_type.clone(),
+            WirInstr::RefCast {
+                type_id: closure_struct_type_id.clone(),
+                nullable: false,
+                expr: Box::new(callee_wir),
             },
-            WirInstr::LocalSet {
-                name: temp_name.clone(),
-                value: Box::new(WirInstr::RefCast {
-                    type_id: closure_struct_type_id.clone(),
-                    nullable: false,
-                    expr: Box::new(callee_wir),
-                }),
-            },
-        ];
+        )
+        .to_vec();
 
         // Build args: env, then user args
         let env_result_ty = self.struct_field_wir_type(&closure_struct_type_id, "env");

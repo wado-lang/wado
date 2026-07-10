@@ -118,6 +118,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:temporary_mut_array_arg.wado::__modules_initialized: bool = 0;
+global global:temporary_mut_array_arg.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(102, 111, 111)), used: 3 };
 
 fn "temporary_mut_array_arg.wado/helper"(name, counts) {
     let i: i32;
@@ -144,7 +145,7 @@ fn "temporary_mut_array_arg.wado/helper"(name, counts) {
                 break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(self_14.repr, name.repr, len_a);
             } {
                 prev = builtin::array_get<ref "tuple//[core:prelude/string.wado/String, i32]">(_licm_repr_52, i).1;
-                value_42 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: ref.as_non_null(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(name.repr)), used: name.used }), 1: prev + 1 };
+                value_42 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: ref.as_non_null(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = name.repr; let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__array_clone_src_1); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __array_clone_src_1, 0, __array_clone_len_1); __array_clone_dst_1), used: name.used }), 1: prev + 1 };
                 builtin::array_set<ref "tuple//[core:prelude/string.wado/String, i32]">(_licm_repr_52, i, value_42);
                 return __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }, "core:prelude/string.wado/String::push_str"(__local_4, name), "core:prelude/string.wado/String::push"(__local_4, 95), __local_5_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }, "core:prelude/primitive.wado/i32::fmt_decimal"(prev + 1, __local_5_5), __local_4;
             }
@@ -152,7 +153,7 @@ fn "temporary_mut_array_arg.wado/helper"(name, counts) {
             continue l1;
         };
     };
-    "core:prelude/list.wado/List<[core:prelude/string.wado/String,i32]>::push"(counts, struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: ref.as_non_null(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(name.repr)), used: name.used }), 1: 1 });
+    "core:prelude/list.wado/List<[core:prelude/string.wado/String,i32]>::push"(counts, struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: ref.as_non_null(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = name.repr; let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__array_clone_src_1); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __array_clone_src_1, 0, __array_clone_len_1); __array_clone_dst_1), used: name.used }), 1: 1 });
     return name;
 }
 
@@ -165,7 +166,7 @@ fn "temporary_mut_array_arg.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:temporary_mut_array_arg.wado::__modules_initialized = 1;
     };
-    result = "temporary_mut_array_arg.wado/helper"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 111, 111), used: 3 }, __b = struct.new "core:prelude//List<[core:prelude/string.wado/String,i32]>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, i32]">(0), used: 0 }; __b);
+    result = "temporary_mut_array_arg.wado/helper"(global:temporary_mut_array_arg.wado::__const_obj_0, __b = struct.new "core:prelude//List<[core:prelude/string.wado/String,i32]>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, i32]">(0), used: 0 }; __b);
     "core:cli/println"(result);
 }
 

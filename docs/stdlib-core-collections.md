@@ -3,15 +3,19 @@
 
 # core:collections
 
-Collection types: `TreeMap<K, V>` and `TreeSet<T>` (insertion-order preserved).
+Collection types: `TreeMap<K, V>` and `TreeSet<T>`, both iterating in
+insertion order. `TreeMap` has no `insert` method — write `map[key] = value`
+or build one from a `{ key: value, ... }` literal. `TreeSet` has `insert`.
 
 ## Synopsis
 
 ```wado
-let sizes = { small: 1, medium: 2, large: 3 } as TreeMap<String, i32>;
+let mut sizes = { small: 1, medium: 2, large: 3 } as TreeMap<String, i32>;
 assert sizes.len() == 3;
 assert sizes["medium"] == 2;
 assert sizes.get("small") matches { Some(v) && v == 1 };
+sizes["xlarge"] = 4;
+assert sizes.len() == 4;
 
 let primes = [7, 2, 5, 2, 3] as TreeSet<i32>;
 assert primes.len() == 4;

@@ -1,0 +1,13 @@
+// Local item support (struct/enum/variant/flags/newtype/impl/trait) does
+// NOT extend to nested `fn` declarations: a block-level `fn` is still a
+// parse error, same as before local items existed.
+
+export fn run() {
+    fn helper() -> i32 {
+        return 1;
+    }
+    let x = helper();
+}
+
+__DATA__
+{"compile_error": "expected `}`"}

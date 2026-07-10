@@ -194,8 +194,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
             if is_real_type
                 && (is_type_param
-                    || !self.type_implements_trait(
+                    || !self.tysys.type_implements_trait(
                         &self.annotate_ctx,
+                        &self.type_lookup(),
                         handler_type,
                         interface_name,
                     ))
@@ -383,9 +384,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `current_module_items`.
         let mut trait_types: Vec<ast::Type> = Vec::new();
         if let Some(entries) = self.tysys.trait_env.impl_index.get(type_name) {
-            for (module_src, item_idx) in entries {
+            for (module_src, item_id) in entries {
                 let module = &self.loaded_modules[module_src];
-                if let Item::Impl(impl_block) = &module.items[*item_idx]
+                if let Some(Item::Impl(impl_block)) = module.item_by_id(*item_id)
                     && let Some(trait_type) = &impl_block.trait_type
                 {
                     trait_types.push(trait_type.clone());

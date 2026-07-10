@@ -1,23 +1,8 @@
 #![stdlib("core:base64")]
-//! Base64 encoding and decoding (RFC 4648).
-
-// Base64 encoding/decoding module for Wado.
-//
-// Implements RFC 4648 Base64 encoding with:
-//   - Standard alphabet (+/) and URL-safe alphabet (-_)
-//   - Configurable padding via Encoding flags
-//   - Lenient decode: accepts both alphabets and with/without padding
-//
-// All entry points accept any byte source via `AsByteSlice` (a `ByteList`,
-// `ByteArray`, `ByteSlice`, `List<u8>`, or a `String`'s UTF-8 bytes).
-//
-// Usage:
-//   use { encode, decode, encode_url, encode_with, Encoding } from "core:base64";
-//
-//   let data: ByteList = [72, 101, 108, 108, 111];
-//   let b64 = encode(&data);           // "SGVsbG8="
-//   let url = encode_url(&data);       // "SGVsbG8"
-//   if let Some(decoded) = decode(&b64) { ... }
+//! Base64 encoding and decoding (RFC 4648): standard and URL-safe alphabets,
+//! configurable padding via `Encoding` flags, and lenient decoding that
+//! accepts either alphabet with or without padding. Entry points accept any
+//! `AsByteSlice` source (`ByteList`, `ByteArray`, `ByteSlice`, `List<u8>`, `String`).
 
 
 #[synopsis]

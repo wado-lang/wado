@@ -11,19 +11,6 @@ peer to `core:json_nsd`. Argument types are ordinary `struct`s with
 options; fields marked `#[serde(positional)]` are filled from bare tokens in
 declaration order. Scalar tokens are converted with `LenientFromStr`.
 
-Usage:
-use { parse } from "core:args";
-
-struct Cli {
-#[serde(positional)] input: String,
-
-jobs: i32 = 1,
-verbose: bool = false,
-}
-impl Deserialize for Cli;
-
-let cli = parse::<Cli>(["in.txt", "--jobs", "4", "--verbose"]);
-
 Supported: `--name value`, `--name=value`, `bool` flags (`--name`),
 `Option<T> = null`, required/optional/variadic positionals, repeatable
 `List<T>` options (`--inc a --inc b`, interspersing allowed), and the `--`
@@ -68,10 +55,17 @@ not their types or arity, so it cannot self-check (only over-supply —
 ## Synopsis
 
 ```wado
-let opts = parse::<Options>(["in.txt", "--verbose", "--jobs", "4"]).unwrap();
-assert opts.input == "in.txt";
-assert opts.verbose;
-assert opts.jobs == 4;
+struct Options {
+    #[serde(positional)]
+    input: String,
+    verbose: bool = false,
+    jobs: i32 = 1,
+}
+impl Deserialize for Options;
+
+assert parse::<Options>(["in.txt", "--verbose", "--jobs", "4"]) matches { Ok(opts) && opts.input == "in.txt"
+    && opts.verbose
+    && opts.jobs == 4 };
 ```
 
 ## Functions

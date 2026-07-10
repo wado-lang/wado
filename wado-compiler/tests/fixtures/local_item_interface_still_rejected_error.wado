@@ -1,0 +1,12 @@
+// Local item support does not extend to `interface` (effect declarations):
+// like `fn`, it is module-level only. A block-level `interface` is still a
+// parse error, same as before local items existed.
+
+export fn run() {
+    interface Greeter {
+        fn greet() -> i32;
+    }
+}
+
+__DATA__
+{"compile_error": "expected `}`"}

@@ -1,0 +1,24 @@
+// A trait and an impl block declared inside a function body parse
+// successfully (local item support). The struct itself now resolves
+// (local_item_struct_definition.wado); methods on a local type are a
+// follow-up (local impl blocks are not wired into method dispatch yet), so
+// the call below still fails, just further downstream than a parse error.
+
+export fn run() {
+    struct Point {
+        x: i32,
+    }
+    trait Describe {
+        fn describe(&self) -> i32;
+    }
+    impl Describe for Point {
+        fn describe(&self) -> i32 {
+            return self.x;
+        }
+    }
+    let p = Point { x: 1 };
+    let d = p.describe();
+}
+
+__DATA__
+{"compile_error": "no method 'describe' found on type"}

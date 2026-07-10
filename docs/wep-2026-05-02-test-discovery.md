@@ -125,6 +125,17 @@ labelled with the package's relative path, and the parent walk does not
 descend into the sub-package's source. Explicit path arguments collapse to a
 single root run; sub-package recursion only fires for the project-wide case.
 
+Manifest filters are then resolved by the argument's kind:
+
+- A directory argument honours the nearest enclosing package's
+  `[test].exclude`/`include`, even when the directory sits below the package
+  root. Those globs are package-root-relative, so discovery roots the walk at
+  the package and keeps only the files under the requested directory:
+  `wado test pkg/lib/core` excludes exactly what `wado test pkg` would in that
+  subtree.
+- An explicit file argument bypasses manifest filtering — naming a file is an
+  unambiguous request to run it. (`--exclude` still applies.)
+
 ### CLI flags
 
 | Flag                    | Effect                                                                  |

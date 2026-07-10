@@ -481,7 +481,7 @@ fn "stream_http_echo.wado/handle"(request) {
         l1: loop {
             chunk_7 = "core:rt/cm_stream_read_u8"(body_stream, 4096);
             break_if b0 chunk_7.used == 0;
-            "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::push"(__b, struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(builtin::array_clone<u8>(chunk_7.repr)), used: chunk_7.used });
+            "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::push"(__b, struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = chunk_7.repr; let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__array_clone_src_1); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __array_clone_src_1, 0, __array_clone_len_1); __array_clone_dst_1), used: chunk_7.used });
             continue l1;
         };
     };

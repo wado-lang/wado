@@ -132,6 +132,12 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:deref_assign_tuple_writeback.wado::__modules_initialized: bool = 0;
+global global:deref_assign_tuple_writeback.wado::__const_obj_12: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 112, 46, 48, 32, 61, 61, 32, 34, 110, 101, 119, 34, 10)), used: 25 };
+global global:deref_assign_tuple_writeback.wado::__const_obj_13: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(100, 101, 114, 101, 102, 95, 97, 115, 115, 105, 103, 110, 95, 116, 117, 112, 108, 101, 95, 119, 114, 105, 116, 101, 98, 97, 99, 107, 46, 119, 97, 100, 111)), used: 33 };
+global mut global:deref_assign_tuple_writeback.wado::__const_obj_14: ref null "core:prelude/string.wado//String" = ref.null none;
+global global:deref_assign_tuple_writeback.wado::__const_obj_15: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32)), used: 20 };
+global global:core:prelude/format.wado::__const_obj_16: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(46, 46, 46)), used: 3 };
+global global:core:prelude/format.wado::__const_obj_17: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(92, 117, 123)), used: 3 };
 
 fn "deref_assign_tuple_writeback.wado/__test_0_deref_assign_of_a_tuple_literal_writes_back"() {
 }
@@ -147,7 +153,7 @@ fn "deref_assign_tuple_writeback.wado/__test_1_deref_assign_of_a_tuple_with_a_st
     __sroa_p_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 108, 100), used: 3 };
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 101, 119), used: 3 };
     __sroa_p_0 = s;
-    __v0_1 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__sroa_p_0.repr)), used: __sroa_p_0.used };
+    __v0_1 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = __sroa_p_0.repr; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: __sroa_p_0.used };
     __cond_2 = __inline_String_Eq__eq_1: block -> bool {
         len_a = __v0_1.used;
         if len_a != 3 {
@@ -157,9 +163,7 @@ fn "deref_assign_tuple_writeback.wado/__test_1_deref_assign_of_a_tuple_with_a_st
     };
     if @unlikely(__cond_2 == 0) {
         cold_path;
-        "core:rt/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(120); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_deref_assign_of_a_tuple_with_a_string_element_writes_back"), used: 66 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("deref_assign_tuple_writeback.wado"), used: 33 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 25 }, __local_6); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-condition: p.0 == \"new\"
-"), used: 25 }); "core:prelude/string.wado/String::push"(__local_5, 112); "core:prelude/string.wado/String::push"(__local_5, 46); "core:prelude/string.wado/String::push"(__local_5, 48); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/format.wado/String^Inspect::inspect"(__v0_1, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); __local_5);
+        "core:rt/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(120); "core:prelude/string.wado/String::push_str"(__local_5, global:deref_assign_tuple_writeback.wado::__const_obj_15); "core:prelude/string.wado/String::push_str"(__local_5, global:deref_assign_tuple_writeback.wado::__const_obj_14 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_deref_assign_of_a_tuple_with_a_string_element_writes_back"), used: 66 }; global:deref_assign_tuple_writeback.wado::__const_obj_14); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, global:deref_assign_tuple_writeback.wado::__const_obj_13); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 25 }, __local_6); "core:prelude/string.wado/String::push_str"(__local_5, global:deref_assign_tuple_writeback.wado::__const_obj_12); "core:prelude/string.wado/String::push"(__local_5, 112); "core:prelude/string.wado/String::push"(__local_5, 46); "core:prelude/string.wado/String::push"(__local_5, 48); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/format.wado/String^Inspect::inspect"(__v0_1, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); __local_5);
         unreachable;
     }
 }
@@ -724,7 +728,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
                 } else {
                     __sroa___match_10_payload_0 == 127;
                 }) {
-                    s_37 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(92, 117, 123), used: 3 };
+                    s_37 = global:core:prelude/format.wado::__const_obj_17;
                     "core:prelude/string.wado/String::push_str"(f.buf, s_37);
                     __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
                     __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 };
@@ -743,7 +747,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     };
     "core:prelude/string.wado/String::push"(f.buf, 34);
     if truncated {
-        s_51 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
+        s_51 = global:core:prelude/format.wado::__const_obj_16;
         "core:prelude/string.wado/String::push_str"(f.buf, s_51);
     }
 }

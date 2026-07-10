@@ -76,6 +76,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:match_literal_i128_guarded.wado::__modules_initialized: bool = 0;
+global global:match_literal_i128_guarded.wado::__const_obj_0: ref null "core:prelude/int128.wado//i128" = struct.new "core:prelude/int128.wado//i128" { low: 10_i64, high: 0_i64 };
 
 fn "match_literal_i128_guarded.wado/run"() with Stdout {
     let r1: ref "core:prelude/string.wado//String";
@@ -99,7 +100,7 @@ fn "match_literal_i128_guarded.wado/run"() with Stdout {
     r4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
     "core:cli/println"(r4);
     bind = struct.new "core:prelude/int128.wado//i128" { low: 99_i64, high: 0_i64 };
-    r5 = (if "core:prelude/int128.wado/i128^Ord::cmp"(bind, struct.new "core:prelude/int128.wado//i128" { low: 10_i64, high: 0_i64 }) == 2 -> ref "core:prelude/string.wado//String" {
+    r5 = (if "core:prelude/int128.wado/i128^Ord::cmp"(bind, global:match_literal_i128_guarded.wado::__const_obj_0) == 2 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 105, 103), used: 3 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };

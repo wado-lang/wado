@@ -420,6 +420,46 @@ impl Parser {
         )
     }
 
+    /// True when the current token starts a type/impl declaration valid
+    /// *inside* a function body (a local `struct`/`enum`/`variant`/`flags`/
+    /// `type`/`impl`/`trait`; see `Stmt::Item`). Excludes `use`/`fn`/
+    /// `interface`/`resource`/`world`/`global` — never locally valid — and
+    /// any visibility prefix (`pub`/`internal`/`export`) — a local item is
+    /// always private, so a prefixed form is left to fall through to the
+    /// pre-existing "probably a missing `}`" recovery, same as today.
+    ///
+    /// `struct`/`enum`/`variant`/`impl`/`trait` are hard keywords, safe to
+    /// treat unconditionally. `flags`/`type` are contextual (valid as plain
+    /// identifiers, e.g. `flags = flags | 1;`), so they need one token of
+    /// lookahead: only `flags <IDENT>`/`type <IDENT>` — the declaration
+    /// name position — counts as starting a declaration.
+    fn at_local_item_start(&self) -> bool {
+        match self.peek_kind() {
+            T::Struct | T::Enum | T::Variant | T::Impl | T::Trait => true,
+            T::Flags | T::Type => matches!(self.peek_nth(1).kind, TokenKind::Ident(_)),
+            _ => false,
+        }
+    }
+
+    /// True when the current token is a visibility modifier (`pub`/
+    /// `internal`/`export`) immediately followed by a local-item-start
+    /// keyword — e.g. `pub struct` or `internal type Foo` in block/statement
+    /// position. A local item is always private (see `at_local_item_start`'s
+    /// doc), so this shape is never valid; it exists only so
+    /// `parse_stmt_in_block` can give it a clear, dedicated parse error
+    /// instead of silently falling through to the generic "expected `}`"
+    /// recovery.
+    fn at_visibility_prefixed_local_item_start(&self) -> bool {
+        if !matches!(self.peek_kind(), T::Pub | T::Internal | T::Export) {
+            return false;
+        }
+        match self.peek_nth(1).kind {
+            T::Struct | T::Enum | T::Variant | T::Impl | T::Trait => true,
+            T::Flags | T::Type => matches!(self.peek_nth(2).kind, TokenKind::Ident(_)),
+            _ => false,
+        }
+    }
+
     /// True when the current token can begin a top-level item. This is the sync
     /// set for the item-loop's panic-mode recovery, where (unlike inside a
     /// block) every item keyword — including the contextual `flags` / `type` /
@@ -1976,7 +2016,23 @@ impl Parser {
         // excluded. Trade-off: a brace-less block right before a `#[attr]` item
         // still over-reads `#` as a compile-time literal, blurring that one
         // diagnostic — the following item still recovers.
-        while !self.check(&TokenKind::RBrace) && !self.is_at_end() && !self.at_hard_item_keyword() {
+        //
+        // `at_local_item_start` is checked first and, when true, wins over
+        // `at_hard_item_keyword`: `struct`/`enum`/`variant`/`impl`/`trait`
+        // are members of both sets, but inside a block they are a valid
+        // local declaration (`Stmt::Item`), not a "missing `}`" signal.
+        // `at_visibility_prefixed_local_item_start` also wins, for the same
+        // reason `pub`/`internal`/`export` (also hard item keywords) are in
+        // that set: `pub struct` inside a block should reach
+        // `parse_stmt_in_block`'s dedicated "cannot be `pub`" error, not the
+        // generic "missing `}`" this loop would otherwise report by
+        // stopping here.
+        while !self.check(&TokenKind::RBrace)
+            && !self.is_at_end()
+            && (self.at_local_item_start()
+                || self.at_visibility_prefixed_local_item_start()
+                || !self.at_hard_item_keyword())
+        {
             let before = self.pos;
             match self.parse_stmt_in_block() {
                 Ok(stmt) => stmts.push(stmt),
@@ -2028,6 +2084,26 @@ impl Parser {
             && matches!(self.peek_nth(1).kind, TokenKind::Return)
         {
             return self.parse_task_return_stmt();
+        }
+
+        // A local type/impl declaration (`struct`/`enum`/`variant`/`flags`/
+        // `type`/`impl`/`trait`). `parse_item` handles the full item grammar;
+        // no visibility prefix precedes the keyword here (see
+        // `at_local_item_start`'s doc), so the parsed item is always private.
+        if self.at_local_item_start() {
+            return self.parse_item().map(|item| Stmt::Item(Box::new(item)));
+        }
+
+        // `pub struct`/`internal type Foo`/etc: give this shape a clear,
+        // dedicated error instead of falling through to the generic
+        // "expected `}`" the caller's recovery would otherwise report.
+        if self.at_visibility_prefixed_local_item_start() {
+            let span = self.peek().span;
+            return Err(self.error_at_span(
+                span,
+                "a local item cannot be `pub`, `internal`, or `export`; \
+                 it is always private to its enclosing function",
+            ));
         }
 
         match self.peek_kind() {

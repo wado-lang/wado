@@ -14,6 +14,19 @@ use crate::wir::{CanonicalIntrinsic, WirInstr, WirName, WirType, WirTypeDef, Wir
 use super::context::WirContext;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 
+pub(super) fn declare_and_set_local(name: String, ty: WirType, value: WirInstr) -> [WirInstr; 2] {
+    [
+        WirInstr::DeclareLocal {
+            name: name.clone(),
+            ty,
+        },
+        WirInstr::LocalSet {
+            name,
+            value: Box::new(value),
+        },
+    ]
+}
+
 /// Recursively collect variable names from Let statements.
 ///
 /// These names are gathered eagerly from the statement tree and preferred
@@ -901,6 +914,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                     resolved_local_names,
                     immutable_locals: IndexSet::default(),
                     multi_value_split_locals: IndexMap::default(),
+                    force_fixed_string_repr: false,
                 };
                 translator.translate_block(body.root)
             };
@@ -955,6 +969,13 @@ pub(super) struct FunctionTranslator<'a, 'b> {
     /// (which would panic at codegen since `__tmp` was never assigned a
     /// struct ref).
     pub(super) multi_value_split_locals: IndexMap<u32, IndexMap<String, (String, WirType)>>,
+    /// True while translating the value of a `GlobalVarSet` to a global with
+    /// [`crate::nir::NirGlobal::prefer_fixed_string_repr`] set. Bounds-overrides
+    /// `package.string_inline_max_bytes` in [`Self::translate_packed_array`]
+    /// so `wir_optimize::const_global` can promote the literal eager.
+    /// Saved/restored around the `GlobalVarSet` case, so it never leaks into
+    /// a sibling literal.
+    pub(super) force_fixed_string_repr: bool,
 }
 
 impl FunctionTranslator<'_, '_> {
@@ -2060,7 +2081,13 @@ impl FunctionTranslator<'_, '_> {
                 name,
                 value,
             } => {
+                let prefer_fixed = self.ctx.eager_repr_globals.contains(name);
+                let prev_force = self.force_fixed_string_repr;
+                if prefer_fixed {
+                    self.force_fixed_string_repr = true;
+                }
                 let val = self.translate_operand(*value);
+                self.force_fixed_string_repr = prev_force;
                 WirInstr::GlobalSet {
                     name: WirName {
                         fq: global_name(module_source, name),

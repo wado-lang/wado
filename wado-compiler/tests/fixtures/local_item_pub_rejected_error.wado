@@ -1,0 +1,12 @@
+// A local item is always private to its enclosing function; a `pub`
+// (or `internal`) prefix on one is a dedicated parse error, not the
+// generic "expected `}`" recovery.
+
+export fn run() {
+    pub struct Point {
+        x: i32,
+    }
+}
+
+__DATA__
+{"compile_error": "a local item cannot be `pub`, `internal`, or `export`"}

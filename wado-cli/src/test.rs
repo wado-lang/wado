@@ -325,6 +325,45 @@ fn walk_into(
     Ok(())
 }
 
+// `[test].exclude`/`include` globs are written relative to the package root, so
+// when `dir` is a subdirectory *inside* a package we root the walk at that
+// package (making the globs match as authored) and keep only the files under
+// `dir`. When `dir` is itself the package root, or lies outside any package,
+// the walk is rooted at `dir` directly.
+fn discover_in_dir(dir: &Path, extra_excludes: &[String]) -> Result<Vec<PackageRun>, CliExit> {
+    let enclosing = match project_manifest::discover(dir) {
+        Ok(project) => project.map(|p| p.root),
+        Err(e) => return Err(CliExit::error(e)),
+    };
+    match enclosing {
+        Some(pkg_root) if pkg_root != dir => {
+            let runs = discover_packages(&pkg_root, true, extra_excludes)?;
+            Ok(retain_under(runs, dir))
+        }
+        _ => discover_packages(dir, true, extra_excludes),
+    }
+}
+
+// Both `path` and `dir` must go through the same `display_path` normalisation
+// (forward slashes, no `./` prefix) before the prefix test below is valid.
+fn retain_under(runs: Vec<PackageRun>, dir: &Path) -> Vec<PackageRun> {
+    let prefix = display_path(dir);
+    runs.into_iter()
+        .filter_map(|mut run| {
+            run.paths.retain(|p| path_under(p, &prefix));
+            (!run.paths.is_empty()).then_some(run)
+        })
+        .collect()
+}
+
+// A plain `starts_with(dir)` would wrongly match `core2/foo` against `core`;
+// requiring a `/` right after the prefix pins the match to a path-segment
+// boundary.
+fn path_under(path: &str, dir: &str) -> bool {
+    path.strip_prefix(dir)
+        .is_some_and(|rest| rest.starts_with('/'))
+}
+
 // Returns `(exclude, include)` from the `wado.toml` rooted exactly at
 // `pkg_root`. Sub-packages without their own manifest contribute nothing.
 fn package_manifest_test_filters(pkg_root: &Path) -> Result<(Vec<String>, Vec<String>), CliExit> {
@@ -370,7 +409,7 @@ fn resolve_paths(paths: Vec<String>, extra_excludes: &[String]) -> Result<Vec<St
     for path in paths {
         let p = Path::new(&path);
         if p.is_dir() {
-            let runs = discover_packages(p, true, extra_excludes)?;
+            let runs = discover_in_dir(p, extra_excludes)?;
             let total: usize = runs.iter().map(|r| r.paths.len()).sum();
             if total == 0 {
                 return Err(CliExit::error(format!(
@@ -2326,5 +2365,90 @@ mod tests {
         assert_eq!(parse("test-0-").display, "<test 0>");
         assert_eq!(parse("test-trap-3-").display, "<test 3>");
         assert_eq!(parse("test-tm2000-0-").display, "<test 0>");
+    }
+
+    fn touch(path: &Path) {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(path, "").unwrap();
+    }
+
+    fn discovered_names(dir: &Path) -> std::collections::BTreeSet<String> {
+        discover_in_dir(dir, &[])
+            .unwrap()
+            .into_iter()
+            .flat_map(|r| r.paths)
+            .map(|p| {
+                Path::new(&p)
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect()
+    }
+
+    fn write_manifest(dir: &Path, test_section: &str) {
+        std::fs::write(
+            dir.join("wado.toml"),
+            format!("[package]\nname = \"p\"\nversion = \"0.0.0\"\n\n{test_section}"),
+        )
+        .unwrap();
+    }
+
+    // A subdirectory below the package root still honours the enclosing
+    // manifest's `[test].exclude` (globs are package-root-relative).
+    #[test]
+    fn subdir_invocation_honours_enclosing_manifest_exclude() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        write_manifest(root, "[test]\nexclude = [\"sub/skip.wado\"]\n");
+        touch(&root.join("sub/keep.wado"));
+        touch(&root.join("sub/skip.wado"));
+
+        let got = discovered_names(&root.join("sub"));
+        assert!(got.contains("keep.wado"), "{got:?}");
+        assert!(!got.contains("skip.wado"), "{got:?}");
+    }
+
+    // `[test].include` re-includes files inside an excluded directory even when
+    // discovery is invoked on a subdirectory below the package root.
+    #[test]
+    fn subdir_invocation_honours_enclosing_manifest_include() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        write_manifest(
+            root,
+            "[test]\nexclude = [\"sub/gen/**\"]\ninclude = [\"sub/**/*_test.wado\"]\n",
+        );
+        touch(&root.join("sub/gen/impl.wado"));
+        touch(&root.join("sub/gen/impl_test.wado"));
+
+        let got = discovered_names(&root.join("sub"));
+        assert!(got.contains("impl_test.wado"), "{got:?}");
+        assert!(!got.contains("impl.wado"), "{got:?}");
+    }
+
+    // Invoking on the package root itself applies the manifest with no
+    // subtree filtering.
+    #[test]
+    fn package_root_invocation_applies_manifest_exclude() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        write_manifest(root, "[test]\nexclude = [\"skip.wado\"]\n");
+        touch(&root.join("keep.wado"));
+        touch(&root.join("skip.wado"));
+
+        let got = discovered_names(root);
+        assert!(got.contains("keep.wado"), "{got:?}");
+        assert!(!got.contains("skip.wado"), "{got:?}");
+    }
+
+    #[test]
+    fn path_under_respects_segment_boundary() {
+        assert!(path_under("pkg/lib/core/a.wado", "pkg/lib/core"));
+        assert!(!path_under("pkg/lib/core2/a.wado", "pkg/lib/core"));
+        assert!(!path_under("pkg/lib/core", "pkg/lib/core"));
     }
 }
