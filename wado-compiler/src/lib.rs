@@ -1180,6 +1180,7 @@ pub async fn dump_with_host<H: CompilerHost>(
         &[],
         &crate::hashmap::IndexMap::default(),
         param_resolution::ParamPolicy::default(),
+        kiln::InvocationIndex::default(),
     )
     .await
 }
@@ -1187,7 +1188,11 @@ pub async fn dump_with_host<H: CompilerHost>(
 /// Dump compiler internal state with an explicit target world.
 ///
 /// Like [`dump_with_host`] but allows specifying the target world so that
-/// DCE and other world-aware passes produce the correct output.
+/// DCE and other world-aware passes produce the correct output. `invocations`
+/// redirects `use ... from "<schema>" with { generator: ... }` clauses to
+/// their Kiln-generated output, exactly as [`compile_with_options`]'s
+/// `CompilerOptions::invocations` does — the caller is responsible for
+/// running the Kiln pipeline first (see `wado-cli`'s `maybe_run_pipeline`).
 #[allow(clippy::too_many_arguments)]
 pub async fn dump_with_host_and_world<H: CompilerHost>(
     source: &str,
@@ -1201,6 +1206,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     codegen_flags: &[String],
     param_overrides: &crate::hashmap::IndexMap<String, String>,
     param_policy: param_resolution::ParamPolicy,
+    invocations: kiln::InvocationIndex,
 ) -> Result<DumpResult, Bail> {
     let logger = Logger::new(host, compiler_host::LogLevel::default());
     let filename = filename.map(String::from);
@@ -1245,7 +1251,8 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
 
     // === Phase 4: Load all modules ===
     let load_result = {
-        let module_loader = loader::ModuleLoader::new(host, compiler_host::LogLevel::default());
+        let module_loader = loader::ModuleLoader::new(host, compiler_host::LogLevel::default())
+            .with_invocations(invocations);
         module_loader
             .load_all(source, filename.as_deref())
             .await
@@ -1261,7 +1268,9 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // === Phase 6: Analyze all modules ===
     let symbols = {
         let _span = logger.span("analyze");
-        let mut analyzer = Analyzer::new(&logger).with_interner(interner.clone());
+        let mut analyzer = Analyzer::new(&logger)
+            .with_invocations(load_result.invocations.clone())
+            .with_interner(interner.clone());
         analyzer.analyze_loaded_modules(
             &load_result.modules,
             &load_result.entry_module_source,

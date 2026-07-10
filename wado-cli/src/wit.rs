@@ -277,6 +277,7 @@ async fn resolve_world_imports(
         &[],
         &wado_compiler::hashmap::IndexMap::default(),
         wado_compiler::param_resolution::ParamPolicy::default(),
+        wado_compiler::kiln::InvocationIndex::default(),
     )
     .await;
     imports_or_warn(result, |r| wir_imports(r.wir_package))
