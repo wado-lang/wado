@@ -159,18 +159,9 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
     true
 }
 
-/// Find every hoisting candidate anywhere in `body`, in one exhaustive
-/// [`Body::for_each_child`] walk: a qualifying `let` binding
-/// ([`let_stmt_qualifies`]), or a `Unary { op: Ref, expr: <closed const
-/// aggregate> }` node not nested inside one — most commonly a call argument.
-/// Neither is recursed into further: a closed literal has no more hoistable
-/// sub-parts, and a qualifying `let`'s value is already subsumed by hoisting
-/// the whole binding (see `let_stmt_qualifies`).
-///
-/// One walk rather than two independently-scoped ones, so every node is
-/// reached exactly once — a `let` nested in an expression-position block
-/// (a `match` arm's body, say) is just as reachable as one at statement
-/// top-level.
+/// Find every hoisting candidate in `body`: a qualifying `let` binding
+/// ([`let_stmt_qualifies`]) or an unnested `Unary { op: Ref, expr: <closed
+/// const aggregate> }` node. Neither is recursed into further.
 fn collect_candidates(
     body: &Body,
     gate: &Gate<'_>,
@@ -178,6 +169,7 @@ fn collect_candidates(
     module_source: &ModuleSource,
     out: &mut Vec<Candidate>,
 ) {
+    let single_decl_locals = locals_declared_once(body);
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Stmt(s) = node
@@ -186,6 +178,7 @@ fn collect_candidates(
                 type_id,
                 ..
             } = &body.stmts[s].kind
+            && single_decl_locals.contains(local_index)
             && let_stmt_qualifies(body, s, gate)
         {
             out.push(Candidate {
@@ -221,6 +214,29 @@ fn collect_candidates(
         }
         body.for_each_child(node, |c| stack.push(c));
     }
+}
+
+/// Local indices declared by exactly one `let` statement in `body`.
+/// `rewrite_reads`/`replace_let_with_set` operate on a local index across the
+/// whole body, so a locally-reused index (e.g. from `labeled_block_fusion`
+/// threading one arm into several mutually exclusive branches) must not be
+/// hoisted — it would leave some branches reading a global only a different
+/// branch ever sets.
+fn locals_declared_once(body: &Body) -> IndexSet<u32> {
+    let mut seen: IndexSet<u32> = IndexSet::default();
+    let mut dupes: IndexSet<u32> = IndexSet::default();
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Stmt(s) = node
+            && let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
+            && !seen.insert(*local_index)
+        {
+            dupes.insert(*local_index);
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    seen.retain(|idx| !dupes.contains(idx));
+    seen
 }
 
 /// Rewrite an `InlineRef` candidate in place: `Unary { op: Ref, expr: E }`
