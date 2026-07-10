@@ -196,6 +196,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && (is_type_param
                     || !self.type_implements_trait(
                         &self.annotate_ctx,
+                        &self.type_lookup(),
                         handler_type,
                         interface_name,
                     ))

@@ -3557,9 +3557,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 for (i, (param_name, bounds)) in struct_info.type_param_bounds.iter().enumerate() {
                     if let Some(&type_arg) = type_args.get(i) {
                         for bound in bounds {
-                            if !self.type_implements_trait(&self.annotate_ctx, type_arg, bound) {
+                            if !self.type_implements_trait(
+                                &self.annotate_ctx,
+                                &self.type_lookup(),
+                                type_arg,
+                                bound,
+                            ) {
                                 let type_name = self.tysys.type_id_to_string(type_arg);
-                                let reason = self.trait_unimpl_reason_chain(type_arg, bound);
+                                let reason = self.trait_unimpl_reason_chain(
+                                    &self.annotate_ctx,
+                                    &self.type_lookup(),
+                                    type_arg,
+                                    bound,
+                                );
                                 let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
                                     type_name,
                                     trait_name: bound.clone(),
@@ -3755,7 +3765,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let base_info: Vec<BaseSpreadInfo> = spread_base_types
             .iter()
             .map(|&t| {
-                let is_map = self.type_implements_trait(&self.annotate_ctx, t, "KeyValueLiteral");
+                let is_map = self.type_implements_trait(
+                    &self.annotate_ctx,
+                    &self.type_lookup(),
+                    t,
+                    "KeyValueLiteral",
+                );
                 let fields = if is_map {
                     None
                 } else {
@@ -3768,8 +3783,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let has_spread = !struct_lit.spreads.is_empty();
         let compose_union = has_spread && base_info.iter().all(|(m, f)| !m && f.is_some());
         let all_map = base_info.iter().all(|(m, _)| *m);
-        let expected_is_map = expected_type
-            .is_some_and(|t| self.type_implements_trait(&self.annotate_ctx, t, "KeyValueLiteral"));
+        let expected_is_map = expected_type.is_some_and(|t| {
+            self.type_implements_trait(
+                &self.annotate_ctx,
+                &self.type_lookup(),
+                t,
+                "KeyValueLiteral",
+            )
+        });
         // A pure key-value merge with a map-typed target is the only valid
         // non-composition spread.
         let is_kv_merge = has_spread && all_map && expected_is_map;
@@ -4551,10 +4572,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .compiler_trait_name(crate::compiler_item::CompilerItem::Ord)
             .to_string();
         if element_type != TypeTable::ERROR
-            && !self.type_implements_trait(&self.annotate_ctx, element_type, &ord_trait_name)
+            && !self.type_implements_trait(
+                &self.annotate_ctx,
+                &self.type_lookup(),
+                element_type,
+                &ord_trait_name,
+            )
         {
             let type_name = self.tysys.type_id_to_string(element_type);
-            let reason = self.trait_unimpl_reason_chain(element_type, &ord_trait_name);
+            let reason = self.trait_unimpl_reason_chain(
+                &self.annotate_ctx,
+                &self.type_lookup(),
+                element_type,
+                &ord_trait_name,
+            );
             let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
                 type_name,
                 trait_name: ord_trait_name,

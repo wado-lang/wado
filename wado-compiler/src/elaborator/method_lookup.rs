@@ -17,6 +17,7 @@ use super::trait_env::AnnotateCtx;
 use super::types::{
     ArithmeticTraitInfo, FunctionContext, IndexAssignTraitInfo, IndexMutTraitInfo, IndexTraitInfo,
     IndexValueTraitInfo, KeyValueLiteralTraitInfo, MethodInfo, SequenceLiteralTraitInfo, TypeError,
+    TypeLookup,
 };
 use super::tysys::TypeSystem;
 
@@ -298,8 +299,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Does not check whether the user wrote their own `impl Default`;
     /// callers should consult this only as a fallback after the regular
     /// impl-lookup paths.
-    pub(super) fn auto_derive_default_struct_type(&self, struct_name: &str) -> Option<TypeId> {
-        let info = self.lookup_struct_fields(struct_name)?;
+    pub(super) fn auto_derive_default_struct_type(
+        &self,
+        scope: &TypeLookup,
+        struct_name: &str,
+    ) -> Option<TypeId> {
+        let info = scope.struct_fields(struct_name)?;
         if info.fields.is_empty() || !info.field_defaults.iter().all(Option::is_some) {
             return None;
         }
@@ -621,6 +626,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     impl_module,
                 ) && self.check_impl_block_bounds(
                     &self.annotate_ctx,
+                    &self.type_lookup(),
                     &impl_block.type_params,
                     &impl_block.ty,
                     receiver_type_args.as_deref(),
@@ -812,6 +818,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     )
                     && self.check_impl_block_bounds(
                         &self.annotate_ctx,
+                        &self.type_lookup(),
                         &impl_block.type_params,
                         &impl_block.ty,
                         receiver_type_args.as_deref(),
@@ -1816,7 +1823,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let bounds_satisfied = param.bounds.iter().all(|bound| {
                     let bound_trait_name = &bound.name;
                     names_to_check.iter().any(|name| {
-                        self.find_trait_impl_for_type(&self.annotate_ctx, name, bound_trait_name)
+                        self.find_trait_impl_for_type(
+                            &self.annotate_ctx,
+                            &self.type_lookup(),
+                            name,
+                            bound_trait_name,
+                        )
                     })
                 });
                 if bounds_satisfied {
@@ -1925,8 +1937,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return true;
         };
         param.bounds.iter().all(|bound| {
-            receiver_type_id
-                .is_some_and(|rt| self.type_implements_trait(&self.annotate_ctx, rt, &bound.name))
+            receiver_type_id.is_some_and(|rt| {
+                self.type_implements_trait(&self.annotate_ctx, &self.type_lookup(), rt, &bound.name)
+            })
         })
     }
 
@@ -2888,6 +2901,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let impl_block = s.get_impl_block(impl_ref);
                 if !s.check_impl_block_bounds(
                     &s.annotate_ctx,
+                    &s.type_lookup(),
                     &impl_block.type_params,
                     &impl_block.ty,
                     Some(&concrete_type_args),

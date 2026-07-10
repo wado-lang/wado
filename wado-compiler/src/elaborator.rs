@@ -837,7 +837,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     fn classify_on_bound_marker(&self, trait_type: &ast::Type) -> Option<String> {
         let base = trait_type.head_base_name()?;
-        self.classify_on_bound_trait(base).map(|_| base.to_string())
+        self.classify_on_bound_trait(&self.type_lookup(), base)
+            .map(|_| base.to_string())
     }
 
     fn record_explicit_derive_request(
@@ -853,6 +854,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
         if self.structurally_derivable_for_explicit_request(
             &self.annotate_ctx,
+            &self.type_lookup(),
             target_type_id,
             trait_name,
         ) {
@@ -873,10 +875,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .record_bound_driven_synth_request(target_type_name, &module_source, trait_name);
             return;
         }
-        if self.has_real_trait_impl_for_type(&self.annotate_ctx, target_type_name, trait_name) {
+        if self.has_real_trait_impl_for_type(
+            &self.annotate_ctx,
+            &self.type_lookup(),
+            target_type_name,
+            trait_name,
+        ) {
             return;
         }
-        let reason = self.trait_unimpl_reason_chain(target_type_id, trait_name);
+        let reason = self.trait_unimpl_reason_chain(
+            &self.annotate_ctx,
+            &self.type_lookup(),
+            target_type_id,
+            trait_name,
+        );
         let _ = self
             .logger
             .error(types::TypeError::ExplicitDeriveNotEligible {
