@@ -672,12 +672,8 @@ pub struct TypeTable {
     /// names it owns.
     bound_driven_synth_requests: IndexSet<(String, ModuleSource, String)>,
     /// Variant case templates: `(variant name, module)` → `(case name, case
-    /// index, payload TypeId)` per case, with `TypeTable::UNIT` for unit
-    /// cases. Payload ids are in the declaring template's terms (they may be
-    /// `TypeParam`s). Registered from `FlatPackage::variants` at the start of
-    /// `lower::plan::value_copy::plan`, so `needs_value_copy` can classify a
-    /// variant by its payloads through a `&TypeTable` (`lower`, `optimize`,
-    /// and `wir_build` all query it there).
+    /// index, payload TypeId)`. Payload ids are in the declaring template's
+    /// terms; unit cases use `TypeTable::UNIT`.
     variant_case_index: IndexMap<(String, ModuleSource), Vec<(String, u32, TypeId)>>,
 }
 
@@ -837,9 +833,7 @@ impl TypeTable {
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
     }
 
-    /// [`Self::get`] for ids that may have been pruned by DCE's `retain` —
-    /// a dead function's recorded type, for example. Returns `None` instead
-    /// of panicking on a punched-out id.
+    /// [`Self::get`] returning `None` for ids pruned by DCE's `retain`.
     pub fn get_pruned(&self, id: TypeId) -> Option<&ResolvedType> {
         let id = self.redirects.get(id).copied().unwrap_or(id);
         self.types.get(id)
@@ -1500,11 +1494,8 @@ impl TypeTable {
         self.variant_case_index.insert((name, module_source), cases);
     }
 
-    /// Case templates of a variant declaration: `(case name, case index,
-    /// payload TypeId)`, `TypeTable::UNIT` for unit cases. Payload ids are in
-    /// the template's terms — substitute a `GenericInstance`'s `type_args`
-    /// for its `TypeParam`s. `None` until the declaration is registered (see
-    /// `variant_case_index`) or when `(name, module)` is not a variant.
+    /// Case templates of a variant declaration (see `variant_case_index`).
+    /// `None` when `(name, module)` is not a registered variant.
     pub fn variant_template_cases(
         &self,
         name: &str,

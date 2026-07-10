@@ -585,13 +585,8 @@ fn may_mutate_through_arg(body: &Body, expr: ExprId, type_table: &TypeTable) -> 
     )
 }
 
-/// Shape-level "is this a value type whose object can be mutated in place"
-/// gate. Coarser than the canonical `lower::plan::value_copy::needs_value_copy`
-/// (which also excludes `Box` and payload-free variants) — this pass only uses
-/// it to be conservative, so over-approximating costs a missed propagation,
-/// never a miscompile. Variants and raw arrays joined the set when variant
-/// payloads became really copied (they are reference-shaped objects a pattern
-/// binding can mutate through).
+/// Over-approximation of `lower::plan::value_copy::needs_value_copy`;
+/// a `true` here can only cost a missed propagation.
 fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
     matches!(
         type_table.get(type_id),

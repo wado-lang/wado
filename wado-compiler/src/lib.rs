@@ -1355,8 +1355,6 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
 
             // Apply target world override (must be before synthesis)
             let mut package = package;
-            // Last-use spans (WEP 2026-05-21), same as the compile path — the
-            // dumped IR must show the moves the real compilation performs.
             package.moved_local_spans = moved_local_spans;
             if let Some(world) = target_world {
                 package.target_world = world.to_string();

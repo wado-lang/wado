@@ -959,14 +959,8 @@ impl FunctionTranslator<'_, '_> {
                 value,
                 skip_value_copy,
             } => {
-                // Address-taken replace-on-assign locals (primitives,
-                // variants, fn values) are box-typed at the declaration
-                // site (via `shadow_params`); retype the Let to match and
-                // wrap its initial value. The value-copy wrap composes
-                // with boxing: the payload is copied first, then boxed —
-                // a boxed variant is still value-semantic, only its
-                // storage cell changes. (For a boxed primitive the wrap
-                // predicate is false, so nothing extra is emitted.)
+                // Copy first, then box: a boxed local changes only its
+                // storage cell, not its value semantics.
                 let (effective_type, box_wrap_type) = if self.address_taken.contains(local_index)
                     && let Some(&box_type) = self.base.box_plan.box_struct_types.get(type_id)
                 {
@@ -1515,8 +1509,6 @@ impl FunctionTranslator<'_, '_> {
                 variant_type: *variant_type,
                 case_index: *case_index,
                 case_name: case_name.clone(),
-                // A case payload is stored by value, like a struct field:
-                // constructing from a live binding deep-copies it.
                 payload: payload.as_ref().map(|p| self.convert_literal_element(p)),
             },
             TirExprKind::EnumConstruct {
@@ -1597,10 +1589,8 @@ impl FunctionTranslator<'_, '_> {
                 method_info: None,
             };
             let func_id = self.base.interner.borrow_mut().resolve(&func);
-            // The helper call IS the deep copy of its argument — routing the
-            // arg through `convert_call_arg`'s defensive wrap would emit
-            // copy(copy(x)), doubling every nested field copy (2^depth for
-            // nested aggregates).
+            // Bypass `convert_call_arg`: wrapping a copy helper's own
+            // argument would emit copy(copy(x)).
             return ExprKind::Call {
                 func_id,
                 type_args: vec![],

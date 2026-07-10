@@ -79,14 +79,9 @@ impl<'a> ValueCopyElideRule<'a> {
     }
 }
 
-/// Per-function usage facts plus the alias relation they were closed over.
-///
-/// `locals` carries the flat profile with `has_field_mutation` already closed
-/// over the undirected alias relation: locals that may share storage (pattern
-/// bindings, projection temps, non-fresh call results) form components, and a
-/// field mutation observed on any member marks every member. `alias_rep` maps
-/// each local to its component representative so consumers can also ask
-/// "may these two locals share storage" (see `scan_call_args`).
+/// Per-function usage facts plus the alias relation they were closed
+/// over: `has_field_mutation` marks every member of an alias component,
+/// and `alias_rep` answers "may these two locals share storage".
 pub(super) struct UsageInfo {
     locals: IndexMap<u32, LocalUsage>,
     alias_rep: IndexMap<u32, u32>,
@@ -97,13 +92,10 @@ impl UsageInfo {
         self.locals.get(&index)
     }
 
-    /// Component representative of `index`; a local with no alias edges is its
-    /// own representative.
     fn rep(&self, index: u32) -> u32 {
         self.alias_rep.get(&index).copied().unwrap_or(index)
     }
 
-    /// Whether the two locals may share storage.
     fn may_alias(&self, a: u32, b: u32) -> bool {
         a == b || self.rep(a) == self.rep(b)
     }
@@ -138,12 +130,8 @@ pub(super) fn build_receiver_mut(
             continue;
         }
         let Some(id) = func.id else { continue };
-        // A replace-on-assign receiver (`&self` / `&mut self` on a variant,
-        // primitive, or fn value) is boxed by the boxing plan, so its param
-        // type is `Box<T>` rather than `&mut T` — and the box erases the
-        // mutability witness entirely. Treat any boxed receiver as mutating;
-        // under-marking here let a variant's `&mut self` method mutate the
-        // payload behind an elided copy.
+        // A replace-on-assign receiver is boxed, erasing the `&`/`&mut`
+        // distinction — treat any boxed receiver as mutating.
         let mutates = func
             .params
             .first()
@@ -271,9 +259,8 @@ fn analyze_usage(
     }
 }
 
-/// Union-find over the undirected alias relation: locals connected by an
-/// alias edge may share one object's storage. Returns each connected local's
-/// component representative (fully path-compressed).
+/// Union-find over the undirected alias relation; returns each connected
+/// local's component representative.
 fn alias_components(edges: &[(u32, u32)]) -> IndexMap<u32, u32> {
     let mut parent: IndexMap<u32, u32> = IndexMap::default();
     fn find(parent: &mut IndexMap<u32, u32>, x: u32) -> u32 {
@@ -299,12 +286,9 @@ fn alias_components(edges: &[(u32, u32)]) -> IndexMap<u32, u32> {
     parent
 }
 
-/// Close `has_field_mutation` over the alias components: locals in one
-/// component may share storage, so a field mutation observed on any member is
-/// a mutation of every member's object. The closure must be symmetric — a
-/// sibling pattern binding (`match b { Some(t) => c = t }`) shares the payload
-/// with `b`, so a later mutation through `&mut b` reaches `t` too; the earlier
-/// alias→root-only propagation stripped `c`'s copy in exactly that shape.
+/// Close `has_field_mutation` over the alias components. The closure must
+/// be symmetric: a sibling pattern binding shares the payload with the
+/// scrutinee, so a mutation through either reaches both.
 fn close_alias_mutation(alias_rep: &IndexMap<u32, u32>, usage: &mut IndexMap<u32, LocalUsage>) {
     let mut mutated_reps: IndexSet<u32> = IndexSet::default();
     for (local, rep) in alias_rep {
@@ -319,9 +303,9 @@ fn close_alias_mutation(alias_rep: &IndexMap<u32, u32>, usage: &mut IndexMap<u32
     }
 }
 
-/// Alias-edge collection over the pristine body. Shares the escape map so a
-/// call whose result may alias its inputs (an accessor such as
-/// `index_value(&self, i)`) contributes edges from its receiver / arguments.
+/// Alias-edge collection over the pristine body. Uses the escape map so a
+/// call whose result may alias its inputs contributes edges from its
+/// receiver / arguments.
 struct AliasWalk<'a> {
     body: &'a Body,
     type_table: &'a TypeTable,
@@ -329,12 +313,8 @@ struct AliasWalk<'a> {
 }
 
 impl AliasWalk<'_> {
-    /// Record `alias local → root local` for a `let x = <projection of r>;`.
-    /// Pattern lowering binds a match scrutinee and its payload through chains
-    /// of such temps (`__match = b; __scrut = __match.value; v =
-    /// as_non_null(__scrut)`), so a mutation through the last temp is a
-    /// mutation of the root's object — [`propagate_alias_mutation`] carries
-    /// `has_field_mutation` back to the root.
+    /// Record `alias local → root local` for a `let x = <projection of r>;`
+    /// (pattern lowering chains such temps from scrutinee to binding).
     fn collect_stmt_alias_edge(&self, stmt: StmtId, edges: &mut Vec<(u32, u32)>) {
         match &self.body.stmts[stmt].kind {
             StmtKind::Let {
@@ -361,11 +341,9 @@ impl AliasWalk<'_> {
         }
     }
 
-    /// Same as [`Self::collect_stmt_alias_edge`] for the `x = <projection of
-    /// r>` form — pattern lowering pre-declares its temps and assigns them —
-    /// and for `match` arms, whose pattern bindings alias the scrutinee's
-    /// payload storage (`match b.value { Some(v) => v.push(4) }` mutates `b`'s
-    /// object).
+    /// [`Self::collect_stmt_alias_edge`] for the `x = <projection of r>`
+    /// form and for `match` arms, whose pattern bindings alias the
+    /// scrutinee's payload storage.
     fn collect_expr_alias_edge(&self, id: ExprId, edges: &mut Vec<(u32, u32)>) {
         match &self.body.exprs[id].kind {
             ExprKind::Assign { target, value } => {
@@ -389,14 +367,9 @@ impl AliasWalk<'_> {
     }
 
     /// Every local whose storage the value of a binding may share: the
-    /// projection roots of the value itself, plus — unlike
-    /// [`arg_source_root`] — the roots of every field / element / payload
-    /// stored into an aggregate literal, of every `if` / `match` arm value,
-    /// and of the receiver / arguments of a call whose result is not provably
-    /// fresh (an accessor returns a projection of its receiver). The `&mut
-    /// <place>` carve-out wraps a place projection in a `Box { value: b.v }`
-    /// literal, so a chain-of-custody walk that stops at the literal would
-    /// lose the `b` alias.
+    /// value's projection roots, plus roots stored into aggregate
+    /// literals, `if` / `match` arm values, and the receiver / arguments
+    /// of a call whose result is not provably fresh.
     fn value_alias_roots(&self, value: Operand) -> Vec<u32> {
         let body = self.body;
         let mut roots = Vec::new();
@@ -406,10 +379,8 @@ impl AliasWalk<'_> {
         let mut stack = vec![e];
         while let Some(e) = stack.pop() {
             match &body.exprs[e].kind {
-                // A local roots the value only when its type can carry
-                // identity — a scalar (an `i32` call argument, a loop
-                // counter) cannot alias the copied aggregate. Boxed
-                // replace-on-assign wrappers carry their payload's identity.
+                // Only identity-carrying locals root the value — a scalar
+                // cannot alias the copied aggregate.
                 ExprKind::Local { index, .. } => {
                     let ty = body.exprs[e].type_id;
                     if super::escape::carries_identity(ty, self.type_table)
@@ -506,10 +477,8 @@ impl AliasWalk<'_> {
         roots
     }
 
-    /// Push the tail expression of a block (its value position) for the alias
-    /// walk. A `$value_copy` call in tail position is fresh per
-    /// [`EscapeMap::rvalue_is_fresh`], so it roots nothing, matching the
-    /// treatment of copies everywhere else.
+    /// Push the tail expression of a block (its value position) for the
+    /// alias walk.
     fn push_block_tail_expr(&self, block: BlockId, stack: &mut Vec<ExprId>) {
         if let Some(last) = self.body.blocks[block].stmts.last()
             && let StmtKind::Expr(op) = &self.body.stmts[*last].kind
@@ -520,7 +489,7 @@ impl AliasWalk<'_> {
     }
 
     /// Push every value a labeled block can yield: each `break … <value>`
-    /// anywhere inside it (any label — conservative) plus the tail expression.
+    /// inside it (any label — conservative) plus the tail expression.
     fn push_block_value_exprs(&self, block: BlockId, stack: &mut Vec<ExprId>) {
         let mut nodes = vec![NodeRef::Block(block)];
         while let Some(n) = nodes.pop() {
@@ -536,9 +505,7 @@ impl AliasWalk<'_> {
     }
 
     /// Collect an `alias local → scrutinee root` edge for every local a
-    /// pattern binds. A binding captures (a projection of) the matched value,
-    /// so it shares the root's storage unless a defensive copy intervenes —
-    /// which this analysis must not assume.
+    /// pattern binds: a binding shares the matched value's storage.
     fn collect_pattern_binding_edges(&self, pat: PatId, root: u32, edges: &mut Vec<(u32, u32)>) {
         match &self.body.pats[pat].kind {
             PatKind::Binding { local_index, .. } => {
@@ -646,14 +613,10 @@ fn classify_expr(
     }
 }
 
-/// Whether an argument of this type can carry a mutation into the caller's
-/// storage: a `&mut T`, or a `Box<T>` wrapper whose payload carries identity
-/// (a copyable variant, an aggregate). The boxing plan lowers both `&` and
-/// `&mut` to a replace-on-assign value into the same `Box<T>` shape, erasing
-/// the mutability witness — so such a boxed argument is conservatively
-/// treated as mutable. A box over an identity-less payload (`Box<i32>`
-/// formatter shims) shares nothing the callee could corrupt: interior
-/// mutation through it lands on the box cell, not on any caller object.
+/// Whether an argument of this type can carry a mutation into the
+/// caller's storage: a `&mut T`, or a `Box<T>` whose payload carries
+/// identity — the boxing plan lowers `&` and `&mut` to the same `Box<T>`
+/// shape, erasing the mutability witness.
 fn is_mutable_witness_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     if is_mut_ref_type(type_id, type_table) {
         return true;
@@ -712,12 +675,8 @@ fn mark_root_field_mutated(
         ExprKind::MethodCall { receiver, .. } => {
             mark_root_field_mutated_operand(body, *receiver, type_table, usage);
         }
-        // An aggregate literal in a mutation-witness position wraps its
-        // sources: the boxing plan passes a boxed receiver / argument as
-        // `Box { value: a }`, so the mutation lands on `a`'s object. Only
-        // identity-carrying element values can be so shared — a scalar
-        // element (`Box<i32> { value: result[0] }` formatter shims) is a
-        // by-value copy the callee cannot reach `result` through.
+        // A literal in a mutation-witness position (`Box { value: a }`)
+        // wraps its sources; only identity-carrying elements are shared.
         ExprKind::StructLiteral { fields, .. } => {
             for field in fields {
                 mark_identity_root_mutated(body, field.value, type_table, usage);
@@ -927,10 +886,8 @@ impl ValueCopyElideRule<'_> {
                 if self.elision_safe(body, *local_index, ve) {
                     return vec![ve];
                 }
-                // `let c = Struct { f: $value_copy$T(arg), … }` — when the
-                // container `c` is never field-mutated its fields never change
-                // in place, so the copies stored into them may be elided
-                // (source-side check per copy).
+                // `let c = Struct { f: $value_copy$T(arg), … }` — a never
+                // field-mutated container's element copies may be elided.
                 if is_target_read_only(*local_index, &self.usage) {
                     let mut out = Vec::new();
                     self.collect_literal_element_copies(body, ve, &mut out);

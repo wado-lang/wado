@@ -1,9 +1,7 @@
-//! `wado dump` must lower with the same last-use move analysis as `compile`.
-//!
-//! Regression: the dump pipeline built its `Package` without threading
-//! `liveness.moved_spans` into `moved_local_spans`, so every last use lowered
-//! as a defensive `$value_copy$` — the dumped IR showed copies the real
-//! compilation never emits.
+//! `wado dump` must lower with the same last-use move analysis as
+//! `compile`. Regression: the dump pipeline never set
+//! `Package::moved_local_spans`, so every last use lowered as a
+//! defensive `$value_copy$` the real compilation never emits.
 
 #![allow(unused_crate_dependencies)]
 

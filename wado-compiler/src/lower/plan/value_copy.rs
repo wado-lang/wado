@@ -63,10 +63,8 @@ pub fn plan(flat: &mut FlatPackage) -> ValueCopyPlan {
     }
 }
 
-/// Publish every variant declaration's case templates to the type table, so
-/// [`needs_value_copy`] can classify variants by payload from a `&TypeTable`
-/// in every later phase (the seed walk here, the fold, `optimize`,
-/// `wir_build`).
+/// Publish every variant declaration's case templates to the type table,
+/// so [`needs_value_copy`] can classify variants from a `&TypeTable`.
 fn register_variant_cases(flat: &FlatPackage) {
     let mut type_table = flat.type_table.borrow_mut();
     for variant in &flat.variants {
@@ -94,24 +92,19 @@ pub fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
 }
 
 /// The instantiation environment a template-term payload id resolves its
-/// `TypeParam`s in: the instantiation's type args, each of which is itself in
-/// the parent frame's terms. Borrowed frames chain per descent instead of
-/// cloning environment vectors, so the classification stays allocation-free
-/// and can run through a `&TypeTable` without interning substituted types.
+/// `TypeParam`s in. Each arg is in the parent frame's terms; frames borrow
+/// per descent, so classification never interns substituted types.
 struct EnvFrame<'a> {
     args: &'a [TypeId],
     parent: Option<&'a EnvFrame<'a>>,
 }
 
-/// Cycles are only possible through variant-payload chains; every other
-/// deep-copy carrier (struct, `List`, tuple, raw array) answers without
-/// recursing. A chain this deep is a degenerate recursive variant nest, and
-/// `true` (copy) is the safe answer for it.
+/// Recursion is bounded by variant-payload chains only; past this depth
+/// `true` (copy) is the safe answer.
 const NEEDS_COPY_DEPTH_LIMIT: usize = 32;
 
-/// Resolve `param::assoc_name` to a concrete type through the frame chain and
-/// the table's recorded impl resolutions, without interning. `None` when the
-/// param stays abstract or the resolution was never recorded.
+/// Resolve `param::assoc_name` to a concrete type without interning.
+/// `None` when the param stays abstract or the resolution is unrecorded.
 fn resolve_projection_in_env(
     param_id: TypeId,
     assoc_name: &str,
@@ -123,7 +116,6 @@ fn resolve_projection_in_env(
     if let Some(resolved) = type_table.resolve_assoc_type(concrete, assoc_name) {
         return Some(resolved);
     }
-    // Newtypes inherit associated types from their base type.
     let base = type_table.get_ultimate_base_type(concrete);
     (base != concrete)
         .then(|| type_table.resolve_assoc_type(base, assoc_name))
@@ -177,7 +169,6 @@ fn needs_copy_in_env(
                 return true;
             }
             if type_table.find_struct_type(name, module_source).is_some() {
-                // Generic-struct templates always need field-by-field copy.
                 return true;
             }
             if let Some(cases) = type_table.variant_template_cases(name, module_source) {
@@ -189,15 +180,11 @@ fn needs_copy_in_env(
                     needs_copy_in_env(*payload, Some(&frame), type_table, depth + 1)
                 });
             }
-            // Generic-resource templates and unmaterialised instances.
             false
         }
-        // A variant needs a deep copy exactly when one of its payloads
-        // does: the variant value itself is reference-shaped at the WIR
-        // level, so copying it shares the payload storage unless the
-        // synthesized helper re-constructs the matched case with a
-        // copied payload (`synthesize::build_variant_copy_body`).
-        // Payload-free and reference-payload variants stay share-safe.
+        // A variant is reference-shaped at the WIR level, so copying it
+        // shares the payload storage: it needs a deep copy exactly when
+        // one of its payloads does.
         ResolvedType::Variant {
             name,
             module_source,
@@ -208,10 +195,8 @@ fn needs_copy_in_env(
                     .iter()
                     .any(|(_, _, payload)| needs_copy_in_env(*payload, None, type_table, depth + 1))
             }),
-        // A projected payload in template terms (`Data(T::Output)`): resolve
-        // the param through the frame, then the projection through the
-        // table's recorded impl resolutions. An unresolvable projection gets
-        // `true` — a spurious copy is safe, a missed one aliases.
+        // An unresolvable projection gets `true`: a spurious copy is
+        // safe, a missed one aliases.
         ResolvedType::AssocTypeProjection {
             param_id,
             assoc_name,
@@ -220,10 +205,8 @@ fn needs_copy_in_env(
             Some(payload) => needs_copy_in_env(payload, None, type_table, depth + 1),
             None => true,
         },
-        // A payload id in template terms: resolve the param through the
-        // instantiation frame — the arg is in the parent frame's terms. A
-        // bare param with no frame is an unmonomorphized template body — no
-        // copy decision applies.
+        // A bare param with no frame is an unmonomorphized template
+        // body — no copy decision applies.
         ResolvedType::TypeParam { index, .. } => {
             let i = *index as usize;
             env.is_some_and(|frame| {
@@ -249,7 +232,6 @@ fn needs_copy_in_env(
         // (which deep-copy via `array_clone` on their internal
         // `Array<T>`), not `&mut T`.
         ResolvedType::Ref(_) | ResolvedType::MutRef(_) => false,
-        // Resources are opaque handles; copying shares the handle.
         ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => false,
         _ => false,
     }

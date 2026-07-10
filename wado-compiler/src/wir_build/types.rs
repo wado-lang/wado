@@ -812,9 +812,8 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
             substitution: IndexMap<u32, TypeId>,
         }
 
-        // Phase 1: collect unregistered instantiations of generic variant
-        // declarations, with their template case payloads and the
-        // param-index → type-arg substitution.
+        // Phase 1: collect unregistered instantiations of generic
+        // variant declarations.
         let mut candidates: Vec<Candidate> = Vec::new();
         {
             let type_table = &*ctx.package.type_table.borrow();
@@ -880,10 +879,8 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
             }
         }
 
-        // Phase 2: substitute each template payload against the instance's
-        // type args. `substitute_type_params` resolves `TypeParam` and
-        // `AssocTypeProjection` alike and interns the substituted types, so
-        // it needs the mutable borrow.
+        // Phase 2: substitute each template payload against the
+        // instance's type args (interns, hence the mutable borrow).
         let substituted: Vec<(String, ModuleSource, Vec<(String, TypeId)>)> = {
             let type_table = &mut *ctx.package.type_table.borrow_mut();
             candidates

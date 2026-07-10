@@ -6,12 +6,11 @@
 //!
 //! For struct types the body is a `StructLiteral` with field-by-field
 //! shallow projections, plus `builtin::array_clone::<T>` for raw
-//! `Array<T>` fields — a one-level shallow copy that does not
-//! recurse into nested aggregates. For variant types the body is a
-//! `match` that re-constructs the matched case with a copied payload.
-//! Fall-through types (references, resources) keep `return v;`
-//! (identity). Recursive types work because nested copies are calls to
-//! the nested type's own helper — the helpers are mutually recursive.
+//! `Array<T>` fields. For variant types it is a `match` re-constructing
+//! the matched case with a copied payload. Fall-through types
+//! (references, resources) keep `return v;` (identity). Nested copies
+//! are calls to the nested type's own helper, so the helpers are
+//! mutually recursive.
 //!
 //! Synthesized helper bodies contain `builtin::copy_value::<NestedT>(x)`
 //! markers for nested value-typed fields. The translator rewrites those
@@ -252,17 +251,13 @@ fn build_copy_body(
     if let Some(expr) = return_expr {
         return single_return_block(expr, span);
     }
-    // References and resources intentionally share: identity.
     single_return_block(v_local.clone(), span)
 }
 
-/// Concrete `(case name, case index, payload type)` list for a variant type:
-/// a non-generic `variant` declaration as-is, a `GenericInstance` of a
-/// variant template with its `type_args` substituted into each payload.
-/// `None` when `resolved` is not a variant. Reads the case templates
-/// `register_variant_cases` published on the type table — the same source
-/// `needs_value_copy` classifies from, so classification and synthesis
-/// cannot drift.
+/// Concrete `(case name, case index, payload type)` list for a variant
+/// type; `None` when `resolved` is not a variant. Reads the same case
+/// templates `needs_value_copy` classifies from, so classification and
+/// synthesis cannot drift.
 fn variant_cases_concrete(
     resolved: &ResolvedType,
     type_table: &Rc<RefCell<TypeTable>>,
@@ -304,13 +299,9 @@ fn variant_cases_concrete(
     }
 }
 
-/// The variant deep-copy body: match each case and re-construct it, routing
-/// value-typed payloads through their own `$value_copy$T` helpers. Recursive
-/// variants terminate because the reconstruction of a payload is a call to
-/// the payload type's helper, not an inline expansion — the helpers are
-/// mutually recursive functions. A payload-free case has nothing to detach
-/// and its value is immutable, so its arm returns the input unchanged rather
-/// than allocating a fresh tag struct per copy.
+/// Match each case and re-construct it, routing value-typed payloads
+/// through their own `$value_copy$T` helpers. A payload-free case is
+/// immutable, so its arm returns the input unchanged.
 fn build_variant_copy_body(
     type_id: TypeId,
     cases: &[(String, u32, TypeId)],
@@ -325,7 +316,7 @@ fn build_variant_copy_body(
             let (bindings, body) = if *payload_ty == TypeTable::UNIT {
                 (vec![], v_local.clone())
             } else {
-                // Local 0 is the `v` parameter; payload temps follow it.
+                // Local 0 is the `v` parameter.
                 let local_index =
                     u32::try_from(extra_locals.len() + 1).expect("local index fits u32");
                 let local_name = format!("__vc_payload_{case_index}");
@@ -503,10 +494,9 @@ fn lookup_struct<'a>(
 /// generic instances. The downstream `StructLiteral` translation
 /// only knows how to handle a concrete `WirType::Ref`, so we skip
 /// the non-identity body and fall through to identity for those `T`s.
-/// Built-in primitives, ordinary structs, variants (whose element
-/// copies route through their own `$value_copy$T` helpers inside the
-/// `array_clone` loop), and known wrapper shapes (`List<T>`, `String`,
-/// tuples) all have concrete WIR registrations and are passed through.
+/// Built-in primitives, ordinary structs, variants, and known wrapper
+/// shapes (`List<T>`, `String`, tuples) all have concrete WIR
+/// registrations and are passed through.
 fn is_synth_safe_element(
     elem_type: TypeId,
     type_table: &Rc<RefCell<TypeTable>>,
@@ -555,9 +545,6 @@ fn is_synth_safe_element(
             if lookup_struct(project, &mangled, Some(&module_source)).is_some() {
                 return true;
             }
-            // Generic-variant instances (`Option<T>` / `Result<T, E>` /
-            // user-defined variants) are reference-shaped at WIR; their
-            // element copies route through their own helpers.
             project.find_variant(&module_source, &name).is_some()
         }
         _ => true,
@@ -780,13 +767,10 @@ fn make_field_copy(
     make_value_copy(field_access, field.type_id, type_table, span)
 }
 
-/// Route an already-projected value (a struct field, a tuple element, a
-/// variant payload binding) through the deep-copy machinery: a raw
-/// `Array<T>` via `array_clone`, a value-semantic type via its
-/// `$value_copy$T` helper (emitted as a `builtin::copy_value::<T>(...)`
-/// marker the TIR → NIR translator resolves), everything else as-is.
-/// Without the wrap the generated body would do a one-level shallow copy
-/// and mutations through the copy would alias the original.
+/// Route an already-projected value through the deep-copy machinery: a
+/// raw `Array<T>` via `array_clone`, a value-semantic type via its
+/// `$value_copy$T` helper (a `builtin::copy_value::<T>(...)` marker the
+/// TIR → NIR translator resolves), everything else as-is.
 fn make_value_copy(
     expr: TirExpr,
     type_id: TypeId,

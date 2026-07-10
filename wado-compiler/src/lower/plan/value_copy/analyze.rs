@@ -143,8 +143,6 @@ impl TirRefVisitor for SeedWalker<'_> {
                     self.record_if_wrap(element);
                 }
             }
-            // A variant case owns its payload the same way a struct owns its
-            // fields: constructing from a live binding deep-copies it.
             TirExprKind::VariantConstruct {
                 payload: Some(payload),
                 ..

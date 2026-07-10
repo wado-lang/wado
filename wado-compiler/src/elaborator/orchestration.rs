@@ -119,8 +119,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// This is a thin wrapper over [`Elaborator::annotate_modules`] +
     /// [`Elaborator::build_tir_from_state`]. Callers that want access to the
     /// annotate output (e.g. LSP) should call the two phases separately.
-    /// The returned move spans must reach `Package::moved_local_spans`, or
-    /// lowering degrades every last use to a defensive copy.
+    /// The returned move spans belong in `Package::moved_local_spans`.
     pub(crate) fn elaborate_all_modules(
         symbols: &'a SymbolTable,
         modules: &'a IndexMap<ModuleSource, Module>,

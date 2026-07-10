@@ -76,9 +76,8 @@ pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) ->
     let descriptors = super::dce::build_callee_descriptors(project);
 
     // Identify `$value_copy$T` helpers whose body is an `List<E>` wrapper
-    // copy: `return StructLiteral { repr: array_clone(v.repr), used: ... }`.
-    // Helpers whose deep copy transitively runs a variant deep-copy are never
-    // demoted — see `helpers_reaching_variant_copies`.
+    // copy: `return StructLiteral { repr: array_clone(v.repr), used: ... }`,
+    // excluding helpers that reach a variant deep-copy.
     let mut list_wrapper_copies: IndexSet<FuncKey> = IndexSet::default();
     {
         let type_table = project.type_table.borrow();
@@ -264,14 +263,11 @@ fn body_is_list_wrapper_copy(body: &Body, descriptors: &[FunctionRef]) -> bool {
     false
 }
 
-/// Value-copy helpers whose deep copy transitively runs a variant deep-copy.
-/// A `match` payload binding aliases a variant's payload storage instead of
-/// copying it (`if let Some(v) = &mut xs[i]` reaches the element in place
-/// through a synthesized box), a flow the element-cleanliness analysis cannot
-/// see — so a wrapper whose deep helper reaches a variant copy must stay
-/// deep. Derived from the helper bodies themselves (direct `$value_copy$T`
-/// calls plus `array_clone` per-element helpers), so it tracks exactly what
-/// the deep copy does; no parallel type walk that could drift.
+/// Value-copy helpers whose deep copy transitively runs a variant
+/// deep-copy. A `match` payload binding aliases the payload storage in
+/// place, a flow the element-cleanliness analysis cannot see, so such
+/// wrappers must stay deep. Derived from the helper bodies themselves,
+/// so it cannot drift from what the deep copy does.
 fn helpers_reaching_variant_copies(
     project: &NirPackage,
     descriptors: &[FunctionRef],
@@ -290,7 +286,6 @@ fn helpers_reaching_variant_copies(
             seeds.insert(id);
         }
     }
-    // caller helper → callee helpers, from the helper bodies.
     let mut edges: IndexMap<FuncKey, IndexSet<FuncKey>> = IndexMap::default();
     for f in &project.functions {
         let f = f.borrow();
@@ -311,7 +306,6 @@ fn helpers_reaching_variant_copies(
             }
         }
     }
-    // Reverse closure: a helper reaching a seed is itself leaky.
     let mut leaky = seeds;
     let mut changed = true;
     while changed {
@@ -326,9 +320,8 @@ fn helpers_reaching_variant_copies(
     leaky
 }
 
-/// Whether a value-copy helper's recorded type is a variant. Dead helpers can
-/// outlive their type's DCE pruning, so the pruned form is a (conservative)
-/// variant.
+/// Dead helpers can outlive their type's DCE pruning; a pruned id counts
+/// as a variant (conservative).
 fn is_variant_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get_pruned(type_id) {
         Some(ResolvedType::Variant { .. }) => true,
@@ -344,8 +337,6 @@ fn is_variant_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     }
 }
 
-/// The element type of a `builtin::array_clone::<T>` call, off its stamped
-/// monomorph info.
 fn array_clone_element_type(body: &Body, call: ExprId) -> Option<TypeId> {
     if let ExprKind::Call { type_args, .. } = &body.exprs[call].kind {
         type_args.first().copied()
