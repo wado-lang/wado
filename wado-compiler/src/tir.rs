@@ -4128,6 +4128,11 @@ pub struct TirParam {
     pub type_id: TypeId,
     pub local_index: u32,
     pub is_mut: bool,
+    /// The parameter is a `&mut T` borrow (captured here before the boxing
+    /// plan rewrites `&mut T` and `&T` to the same `Box<T>` type, erasing the
+    /// distinction). A `&T` cannot be written through, so only a `&mut`
+    /// parameter can mutate the caller's argument storage.
+    pub is_mut_ref: bool,
     pub span: Span,
 }
 

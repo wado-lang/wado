@@ -180,6 +180,7 @@ fn generate_copy_function(
         type_id,
         local_index: 0,
         is_mut: false,
+        is_mut_ref: false,
         span,
     };
 

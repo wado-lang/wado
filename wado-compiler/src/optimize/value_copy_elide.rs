@@ -57,6 +57,7 @@ pub(super) struct ValueCopyElideRule<'a> {
     value_copy_ids: &'a IndexSet<FuncId>,
     escape: &'a EscapeMap,
     type_table: &'a TypeTable,
+    param_mut: &'a IndexMap<FuncId, Vec<bool>>,
     n_params: u32,
     usage: UsageInfo,
 }
@@ -66,6 +67,7 @@ impl<'a> ValueCopyElideRule<'a> {
         value_copy_ids: &'a IndexSet<FuncId>,
         escape: &'a EscapeMap,
         type_table: &'a TypeTable,
+        param_mut: &'a IndexMap<FuncId, Vec<bool>>,
         n_params: u32,
         usage: UsageInfo,
     ) -> Self {
@@ -73,6 +75,7 @@ impl<'a> ValueCopyElideRule<'a> {
             value_copy_ids,
             escape,
             type_table,
+            param_mut,
             n_params,
             usage,
         }
@@ -106,39 +109,46 @@ impl UsageInfo {
 pub(super) fn build_usage(
     body: &Body,
     type_table: &TypeTable,
-    receiver_mut: &IndexMap<FuncId, bool>,
+    param_mut: &IndexMap<FuncId, Vec<bool>>,
     escape: &EscapeMap,
 ) -> UsageInfo {
-    analyze_usage(body, type_table, receiver_mut, escape)
+    analyze_usage(body, type_table, param_mut, escape)
 }
 
-/// Whether each function mutates its receiver, keyed by id: `true` when the
-/// first parameter is `&mut T`. A method call's receiver is auto-referenced to
-/// `T` regardless of the callee's `self` mode, so the receiver expression's
-/// type can't tell `&self` from `&mut self` — the callee signature is the only
-/// witness. Ids absent from the map are treated conservatively as mutating.
-pub(super) fn build_receiver_mut(
-    project: &NirPackage,
-    type_table: &TypeTable,
-) -> IndexMap<FuncId, bool> {
+/// Per-parameter `&mut`-ness of every callee, keyed by id: bit `i` is `true`
+/// when parameter `i` is a `&mut T` borrow — the only kind that can mutate the
+/// caller's argument storage (a `&T` cannot be written through). `NirParam`
+/// records this before boxing collapses `&mut T` / `&T` onto the same
+/// `Box<T>`, so it stays precise where the parameter type no longer is. A
+/// callee absent from the map is bodyless (its argument mutability falls back
+/// to the argument expression's own type at the call site).
+pub(super) fn build_param_mut(project: &NirPackage) -> IndexMap<FuncId, Vec<bool>> {
     let mut map = IndexMap::default();
     for func in &project.functions {
         let func = func.borrow();
-        // Only bodied functions carry monomorphized parameter type ids valid in
-        // this table; bodyless callees stay absent (conservatively mutating).
+        // Only bodied functions are addressable callees whose parameter
+        // metadata we can trust here; bodyless callees stay absent.
         if func.body.is_none() {
             continue;
         }
         let Some(id) = func.id else { continue };
-        // A replace-on-assign receiver is boxed, erasing the `&`/`&mut`
-        // distinction — treat any boxed receiver as mutating.
-        let mutates = func
-            .params
-            .first()
-            .is_some_and(|p| is_mutable_witness_type(p.type_id, type_table));
-        map.insert(id, mutates);
+        map.insert(id, func.params.iter().map(|p| p.is_mut_ref).collect());
     }
     map
+}
+
+/// Whether parameter `idx` of `func_id` is a `&mut` borrow, or `None` when the
+/// callee is bodyless (its parameter mutability is unknown here). A present
+/// callee with `idx` past its parameter count answers `false` — cannot happen
+/// for a well-formed call.
+fn callee_param_mut_ref(
+    param_mut: &IndexMap<FuncId, Vec<bool>>,
+    func_id: FuncId,
+    idx: usize,
+) -> Option<bool> {
+    param_mut
+        .get(&func_id)
+        .map(|bits| bits.get(idx).copied().unwrap_or(false))
 }
 
 impl Rule for ValueCopyElideRule<'_> {
@@ -229,7 +239,7 @@ impl LocalUsage {
 fn analyze_usage(
     body: &Body,
     type_table: &TypeTable,
-    receiver_mut: &IndexMap<FuncId, bool>,
+    param_mut: &IndexMap<FuncId, Vec<bool>>,
     escape: &EscapeMap,
 ) -> UsageInfo {
     let mut usage: IndexMap<u32, LocalUsage> = IndexMap::default();
@@ -243,7 +253,7 @@ fn analyze_usage(
     while let Some(node) = stack.pop() {
         match node {
             NodeRef::Expr(id) => {
-                classify_expr(body, id, type_table, receiver_mut, &mut usage);
+                classify_expr(body, id, type_table, param_mut, &mut usage);
                 aliasing.collect_expr_alias_edge(id, &mut alias_edges);
             }
             NodeRef::Stmt(id) => aliasing.collect_stmt_alias_edge(id, &mut alias_edges),
@@ -543,12 +553,21 @@ fn classify_expr(
     body: &Body,
     id: ExprId,
     type_table: &TypeTable,
-    receiver_mut: &IndexMap<FuncId, bool>,
+    param_mut: &IndexMap<FuncId, Vec<bool>>,
     usage: &mut IndexMap<u32, LocalUsage>,
 ) {
     if let ExprKind::Local { index, .. } = &body.exprs[id].kind {
         usage.entry(*index).or_default().occurrences += 1;
     }
+    // Whether the callee mutates the caller's storage through argument `idx`:
+    // the callee's parameter `&mut`-ness when known, else (bodyless callee) a
+    // fall-back on the argument expression's own reference type.
+    let arg_mutates = |func_id: FuncId, idx: usize, ae: ExprId, arg_is_mut: bool| {
+        match callee_param_mut_ref(param_mut, func_id, idx) {
+            Some(mutates) => mutates,
+            None => arg_is_mut || is_mutable_witness_type(body.exprs[ae].type_id, type_table),
+        }
+    };
     match &body.exprs[id].kind {
         ExprKind::Assign { target, .. } => match &body.exprs[*target].kind {
             ExprKind::Local { index, .. } => {
@@ -567,10 +586,10 @@ fn classify_expr(
                 mark_root_field_mutated(body, e, type_table, usage);
             }
         }
-        ExprKind::Call { args, .. } => {
-            for arg in args {
+        ExprKind::Call { func_id, args, .. } => {
+            for (i, arg) in args.iter().enumerate() {
                 if let Some(ae) = arg.expr.as_expr()
-                    && (arg.is_mut || is_mutable_witness_type(body.exprs[ae].type_id, type_table))
+                    && arg_mutates(*func_id, i, ae, arg.is_mut)
                 {
                     mark_root_field_mutated(body, ae, type_table, usage);
                 }
@@ -584,17 +603,19 @@ fn classify_expr(
         } => {
             // Auto-ref carries the receiver as `T` even for `&mut self`
             // methods, so its expr type can't witness the `self` mode; consult
-            // the callee (unknown ids treated conservatively as mutating). A
-            // `&self` / by-value method never mutates the caller's receiver, so
-            // its receiver stays read-only and a binding copy of it can strip.
-            if receiver_mut.get(func_id).copied().unwrap_or(true)
+            // the callee's parameter 0 (unknown ids treated conservatively as
+            // mutating). A `&self` / by-value method never mutates the caller's
+            // receiver, so its receiver stays read-only and a binding copy of
+            // it can strip.
+            if callee_param_mut_ref(param_mut, *func_id, 0).unwrap_or(true)
                 && let Some(re) = receiver.as_expr()
             {
                 mark_root_field_mutated(body, re, type_table, usage);
             }
-            for arg in args {
+            // Method arguments occupy parameters 1.. (parameter 0 is `self`).
+            for (i, arg) in args.iter().enumerate() {
                 if let Some(ae) = arg.expr.as_expr()
-                    && (arg.is_mut || is_mutable_witness_type(body.exprs[ae].type_id, type_table))
+                    && arg_mutates(*func_id, i + 1, ae, arg.is_mut)
                 {
                     mark_root_field_mutated(body, ae, type_table, usage);
                 }
@@ -996,10 +1017,14 @@ impl ValueCopyElideRule<'_> {
         };
         let mut_roots: Vec<u32> = args
             .iter()
-            .filter_map(|a| {
+            .enumerate()
+            .filter_map(|(i, a)| {
                 let e = a.expr.as_expr()?;
-                is_mutable_witness_type(body.exprs[e].type_id, self.type_table)
-                    .then(|| aliasing.value_alias_roots(a.expr))
+                let mutates = match callee_param_mut_ref(self.param_mut, func_id, param_offset + i) {
+                    Some(m) => m,
+                    None => is_mutable_witness_type(body.exprs[e].type_id, self.type_table),
+                };
+                mutates.then(|| aliasing.value_alias_roots(a.expr))
             })
             .flatten()
             .collect();

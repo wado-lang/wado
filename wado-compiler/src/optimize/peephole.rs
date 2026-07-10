@@ -55,7 +55,7 @@ use super::labeled_block_fusion::build_labeled_block_fusion;
 use super::match_to_switch::MatchToSwitchRule;
 use super::ref_elim::build_ref_elim;
 use super::string_push::{ShortPushStrRule, resolve_ctx};
-use super::value_copy_elide::{ValueCopyElideRule, build_receiver_mut, build_usage};
+use super::value_copy_elide::{ValueCopyElideRule, build_param_mut, build_usage};
 
 /// Run the unified peephole rule set over every function body. Returns whether
 /// any rule fired. Gated: skips functions unchanged since this pass last ran.
@@ -91,11 +91,11 @@ pub(super) fn run_peephole(
     // stays empty so only literal arithmetic and pure CTFE fold here, leaving
     // the flow-sensitive folds to the standalone `const_folding` walker.
     let type_table = project.type_table.borrow();
-    // Per-callee receiver-mutation bits, so the value-copy usage analysis can
-    // keep a `&self`-only receiver read-only (its binding copy is then
-    // strippable). Built once (pre-inline only, where the elide rule runs).
-    let receiver_mut = (pre_inline && !value_copy_ids.is_empty())
-        .then(|| build_receiver_mut(project, &type_table));
+    // Per-callee parameter `&mut`-ness, so the value-copy usage analysis knows
+    // which call arguments a callee can mutate through — precisely, even after
+    // boxing has erased the `&mut`/`&` distinction from the parameter type.
+    // Built once (pre-inline only, where the elide rule runs).
+    let param_mut = (pre_inline && !value_copy_ids.is_empty()).then(|| build_param_mut(project));
     let callees = build_callee_map(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let const_fold_rule = ConstFoldRule::new(&type_table, &callees);
@@ -119,16 +119,17 @@ pub(super) fn run_peephole(
             .then(|| {
                 func.body
                     .as_ref()
-                    .zip(receiver_mut.as_ref())
+                    .zip(param_mut.as_ref())
                     .zip(escape_map.as_ref())
-                    .map(|((b, rm), escape)| build_usage(b, &type_table, rm, escape))
+                    .map(|((b, pm), escape)| build_usage(b, &type_table, pm, escape))
             })
             .flatten();
         let n_params = func.params.len() as u32;
         let value_copy_rule = value_copy_usage
             .zip(escape_map.as_ref())
-            .map(|(u, escape)| {
-                ValueCopyElideRule::new(&value_copy_ids, escape, &type_table, n_params, u)
+            .zip(param_mut.as_ref())
+            .map(|((u, escape), pm)| {
+                ValueCopyElideRule::new(&value_copy_ids, escape, &type_table, pm, n_params, u)
             });
         // Reference elimination runs post-inline only (it cleans up the ref
         // bindings inlining exposes). Its maps are built from the pristine

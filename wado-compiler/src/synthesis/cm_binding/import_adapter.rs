@@ -309,6 +309,7 @@ fn synthesize_async_lift_function(
         type_id: TypeTable::I32,
         local_index: outptr_local,
         is_mut: false,
+        is_mut_ref: false,
         span: synth_span(),
     }];
 
@@ -447,6 +448,7 @@ pub(super) fn synthesize_adapter(
                     type_id: TypeTable::I32,
                     local_index: next_local,
                     is_mut: false,
+                    is_mut_ref: false,
                     span: synth_span(),
                 });
                 locals.push(TirLocal::synth(next_local, TypeTable::I32, false));
@@ -464,6 +466,7 @@ pub(super) fn synthesize_adapter(
                     type_id: TypeTable::I32,
                     local_index: next_local,
                     is_mut: false,
+                    is_mut_ref: false,
                     span: synth_span(),
                 });
                 locals.push(TirLocal::synth(next_local, TypeTable::I32, false));
@@ -477,6 +480,7 @@ pub(super) fn synthesize_adapter(
                     type_id: TypeTable::I32,
                     local_index: next_local,
                     is_mut: false,
+                    is_mut_ref: false,
                     span: synth_span(),
                 });
                 locals.push(TirLocal::synth(next_local, TypeTable::I32, false));
@@ -505,6 +509,7 @@ pub(super) fn synthesize_adapter(
                     type_id: struct_type_id,
                     local_index: next_local,
                     is_mut: false,
+                    is_mut_ref: false,
                     span: synth_span(),
                 });
                 locals.push(TirLocal::synth(next_local, struct_type_id, false));
@@ -533,6 +538,7 @@ pub(super) fn synthesize_adapter(
                     type_id: variant_type_id,
                     local_index: next_local,
                     is_mut: false,
+                    is_mut_ref: false,
                     span: synth_span(),
                 });
                 locals.push(TirLocal::synth(next_local, variant_type_id, false));
@@ -555,6 +561,7 @@ pub(super) fn synthesize_adapter(
                     type_id: option_type_id,
                     local_index: next_local,
                     is_mut: false,
+                    is_mut_ref: false,
                     span: synth_span(),
                 });
                 locals.push(TirLocal::synth(next_local, option_type_id, false));
@@ -576,6 +583,7 @@ pub(super) fn synthesize_adapter(
                     type_id: result_type_id,
                     local_index: next_local,
                     is_mut: false,
+                    is_mut_ref: false,
                     span: synth_span(),
                 });
                 locals.push(TirLocal::synth(next_local, result_type_id, false));
@@ -598,6 +606,7 @@ pub(super) fn synthesize_adapter(
                     type_id: tuple_type_id,
                     local_index: next_local,
                     is_mut: false,
+                    is_mut_ref: false,
                     span: synth_span(),
                 });
                 locals.push(TirLocal::synth(next_local, tuple_type_id, false));
@@ -617,6 +626,7 @@ pub(super) fn synthesize_adapter(
                         type_id: *flat_ty,
                         local_index: next_local,
                         is_mut: false,
+                        is_mut_ref: false,
                         span: synth_span(),
                     });
                     locals.push(TirLocal::synth(next_local, *flat_ty, false));

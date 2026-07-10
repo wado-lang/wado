@@ -1868,6 +1868,7 @@ impl FunctionTranslator<'_, '_> {
             type_id: param.type_id,
             local_index: param.local_index,
             is_mut: param.is_mut,
+            is_mut_ref: param.is_mut_ref,
             span: param.span,
         }
     }
