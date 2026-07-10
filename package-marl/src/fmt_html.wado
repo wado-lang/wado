@@ -1,0 +1,308 @@
+//! AST -> HTML.
+//!
+//! The HTML backend of the Markdown pipeline: `render` parses source into
+//! `fmt_ast.wado`'s tree — the same parser `format` uses — then walks it to
+//! HTML. Output is safe by construction: text and raw HTML are escaped, and
+//! link/image/autolink destinations are scheme-filtered (see
+//! `docs/wep-2026-07-05-sheaf.md`, "HTML safety").
+
+use {
+    Node,
+    Heading,
+    CodeBlock,
+    MdList,
+    MdItem,
+    MdTable,
+    MdTableRow,
+    ColumnAlign,
+    ReferenceLinkNode,
+    ReferenceImageNode,
+} from "./fmt_ast.wado";
+use { escape_text, escape_attr, sanitize_url } from "./html.wado";
+use { RefTable, ref_table_get } from "./fmt_links.wado";
+use { parse } from "./fmt_parse_block.wado";
+use { chars_of, slice_chars } from "./str_cursor.wado";
+
+pub fn render(source: &String) -> String {
+    let parsed = parse(source);
+    let children = match parsed.document {
+        Node::Document(c) => c,
+        _ => panic("marl-html: render expects a Document node"),
+    };
+    return render_blocks(&children, &parsed.refs);
+}
+
+// --- blocks ---
+
+/// Blocks join with a single newline, and front matter / reference
+/// definitions contribute no output — they are metadata, not content.
+fn render_blocks(nodes: &List<Node>, refs: &RefTable) -> String {
+    let mut parts: List<String> = [];
+    for let node of nodes {
+        if node matches { Node::FrontMatter(_) | Node::LinkReferenceDef(_) } {
+            continue;
+        }
+        parts.push(render_block(node, refs));
+    }
+    return parts.join("\n");
+}
+
+fn render_block(node: &Node, refs: &RefTable) -> String {
+    return match node {
+        Node::Heading(h) => render_heading(h, refs),
+        Node::Paragraph(p) => `<p>{render_inline_seq(&p.children, refs)}</p>`,
+        Node::BlockQuote(children) => `<blockquote>\n{render_blocks(children, refs)}\n</blockquote>`,
+        Node::CodeBlock(cb) => render_code_block(cb),
+        Node::List(list) => render_list(list, refs),
+        Node::Table(t) => render_table(t, refs),
+        Node::ThematicBreak => "<hr />",
+        Node::Html(s) => escape_text(s),
+        _ => panic("marl-html: unexpected node in block position"),
+    };
+}
+
+fn render_heading(h: &Heading, refs: &RefTable) -> String {
+    return `<h{h.level}>{render_inline_seq(&h.children, refs)}</h{h.level}>`;
+}
+
+fn render_code_block(cb: &CodeBlock) -> String {
+    let mut out = String::new();
+    out.push_str(&"<pre><code");
+    if cb.tag.len() > 0 {
+        out.push_str(&` class="language-{escape_attr(&cb.tag)}"`);
+    }
+    out.push('>');
+    out.push_str(&escape_text(&cb.code));
+    out.push_str(&"</code></pre>");
+    return out;
+}
+
+// --- lists ---
+
+fn render_list(list: &MdList, refs: &RefTable) -> String {
+    let loose = list_is_loose(list);
+    let mut parts: List<String> = [];
+    for let item of list.items {
+        parts.push(render_item(&item, loose, refs));
+    }
+    let inner = parts.join("\n");
+    let [open, close] = list_tags(list);
+    return `{open}\n{inner}\n{close}`;
+}
+
+fn list_is_loose(list: &MdList) -> bool {
+    for let item of list.items {
+        if item.loose {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn list_tags(list: &MdList) -> [String, String] {
+    if !list.ordered {
+        return ["<ul>", "</ul>"];
+    }
+    if list.start != 1 {
+        return [`<ol start="{list.start}">`, "</ol>"];
+    }
+    return ["<ol>", "</ol>"];
+}
+
+fn render_item(item: &MdItem, loose: bool, refs: &RefTable) -> String {
+    let marker = match item.marker {
+        Some(m) => if m.checked { "[x] " } else { "[ ] " },
+        None => "",
+    };
+    let content = apply_marker(&render_item_children(&item.children, loose, refs), &marker);
+    if loose {
+        return `<li>\n{content}\n</li>`;
+    }
+    return `<li>{content}</li>`;
+}
+
+/// In a tight list a paragraph item contributes its inline content directly;
+/// in a loose list it is wrapped in `<p>`. Nested blocks render normally.
+fn render_item_children(children: &List<Node>, loose: bool, refs: &RefTable) -> String {
+    let mut parts: List<String> = [];
+    for let child of children {
+        parts.push(render_item_child(child, loose, refs));
+    }
+    return parts.join("\n");
+}
+
+fn render_item_child(child: &Node, loose: bool, refs: &RefTable) -> String {
+    match child {
+        Node::Paragraph(p) => {
+            let inline = render_inline_seq(&p.children, refs);
+            if loose {
+                return `<p>{inline}</p>`;
+            }
+            return inline;
+        },
+        _ => {
+            return render_block(child, refs);
+        },
+    }
+}
+
+/// Insert a task-list marker (`[ ] ` / `[x] `) at the start of the item's
+/// text, inside the leading `<p>` for a loose item.
+fn apply_marker(content: &String, marker: &String) -> String {
+    if marker.len() == 0 {
+        return *content;
+    }
+    if content.starts_with("<p>") {
+        let chars = chars_of(content);
+        let rest = slice_chars(&chars, 3, chars.len());
+        return `<p>{marker}{rest}`;
+    }
+    return `{marker}{content}`;
+}
+
+// --- tables ---
+
+fn render_table(t: &MdTable, refs: &RefTable) -> String {
+    let ncol = t.header.cells.len();
+    let mut out = String::new();
+    out.push_str(&"<table>\n<thead>\n<tr>\n");
+    render_cells(&"th", &t.header, ncol, &t.align, refs, &mut out);
+    out.push_str(&"</tr>\n</thead>\n<tbody>\n");
+    for let row of t.rows {
+        out.push_str(&"<tr>\n");
+        render_cells(&"td", &row, ncol, &t.align, refs, &mut out);
+        out.push_str(&"</tr>\n");
+    }
+    out.push_str(&"</tbody>\n</table>");
+    return out;
+}
+
+fn render_cells(tag: &String, row: &MdTableRow, ncol: i32, align: &List<ColumnAlign>, refs: &RefTable, out: &mut String) {
+    for let c of 0..<ncol {
+        let inner = match row.cells.get(c) {
+            Some(cell) => render_inline_seq(&cell, refs),
+            None => "",
+        };
+        let a = align_str(&align_at(align, c));
+        if a.len() > 0 {
+            out.push_str(&`<{tag} align="{a}">{inner}</{tag}>`);
+        } else {
+            out.push_str(&`<{tag}>{inner}</{tag}>`);
+        }
+        out.push('\n');
+    }
+}
+
+fn align_at(align: &List<ColumnAlign>, idx: i32) -> ColumnAlign {
+    return match align.get(idx) {
+        Some(a) => a,
+        None => ColumnAlign::None,
+    };
+}
+
+fn align_str(a: &ColumnAlign) -> String {
+    return match a {
+        ColumnAlign::Left => "left",
+        ColumnAlign::Center => "center",
+        ColumnAlign::Right => "right",
+        ColumnAlign::None => "",
+    };
+}
+
+// --- inline ---
+
+fn render_inline_seq(nodes: &List<Node>, refs: &RefTable) -> String {
+    let mut out = String::new();
+    for let node of nodes {
+        render_inline_node(node, refs, &mut out);
+    }
+    return out;
+}
+
+fn render_inline_node(node: &Node, refs: &RefTable, out: &mut String) {
+    match node {
+        Node::Text(s) => out.push_str(&text_to_html(s)),
+        Node::SoftBreak => out.push('\n'),
+        Node::HardBreak => out.push_str(&"<br />\n"),
+        Node::Emphasis(em) => wrap_inline(&"em", &em.children, refs, out),
+        Node::Strong(children) => wrap_inline(&"strong", children, refs, out),
+        Node::Strikethrough(children) => wrap_inline(&"del", children, refs, out),
+        Node::Code(s) => out.push_str(&`<code>{escape_text(s)}</code>`),
+        Node::InlineLink(link) => render_link(&link.url, &link.title, &link.children, refs, out),
+        Node::ReferenceLink(link) => render_reference_link(link, refs, out),
+        Node::ShortcutLink(link) => render_reference_link(link, refs, out),
+        Node::AutoLink(url) => render_autolink(url, out),
+        Node::InlineImage(img) => render_image(&img.alt, &img.url, &img.title, out),
+        Node::ReferenceImage(img) => render_reference_image(img, refs, out),
+        Node::Html(s) => out.push_str(&escape_text(s)),
+        _ => panic("marl-html: unexpected node in inline position"),
+    }
+}
+
+fn wrap_inline(tag: &String, children: &List<Node>, refs: &RefTable, out: &mut String) {
+    out.push_str(&`<{tag}>{render_inline_seq(children, refs)}</{tag}>`);
+}
+
+/// HTML-escape text after resolving backslash escapes: the AST keeps the
+/// source spelling (`\*`) so the formatter round-trips it, but HTML output
+/// wants the escaped character itself (`*`).
+fn text_to_html(s: &String) -> String {
+    return escape_text(&unescape_backslashes(s));
+}
+
+fn unescape_backslashes(s: &String) -> String {
+    let chars = chars_of(s);
+    let len = chars.len();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while i < len {
+        if chars[i] == '\\' && i + 1 < len && is_ascii_punct(chars[i + 1]) {
+            out.push(chars[i + 1]);
+            i += 2;
+        } else {
+            out.push(chars[i]);
+            i += 1;
+        }
+    }
+    return out;
+}
+
+fn render_link(url: &String, title: &String, children: &List<Node>, refs: &RefTable, out: &mut String) {
+    let href = escape_attr(&sanitize_url(url));
+    out.push_str(&`<a href="{href}"{title_attr(title)}>{render_inline_seq(children, refs)}</a>`);
+}
+
+fn render_reference_link(link: &ReferenceLinkNode, refs: &RefTable, out: &mut String) {
+    match ref_table_get(refs, &link.label) {
+        Some(def) => render_link(&def.url, &def.title, &link.children, refs, out),
+        None => out.push_str(&render_inline_seq(&link.children, refs)),
+    }
+}
+
+fn render_autolink(url: &String, out: &mut String) {
+    let href = escape_attr(&sanitize_url(url));
+    out.push_str(&`<a href="{href}">{escape_text(url)}</a>`);
+}
+
+fn render_image(alt: &String, url: &String, title: &String, out: &mut String) {
+    let src = escape_attr(&sanitize_url(url));
+    out.push_str(&`<img src="{src}" alt="{escape_attr(alt)}"{title_attr(title)} />`);
+}
+
+fn render_reference_image(img: &ReferenceImageNode, refs: &RefTable, out: &mut String) {
+    match ref_table_get(refs, &img.label) {
+        Some(def) => render_image(&img.alt, &def.url, &def.title, out),
+        None => out.push_str(&escape_text(&img.alt)),
+    }
+}
+
+fn title_attr(title: &String) -> String {
+    if title.len() == 0 {
+        return "";
+    }
+    return ` title="{escape_attr(title)}"`;
+}
+
+fn is_ascii_punct(c: char) -> bool {
+    return c matches { '!'..='/' | ':'..='@' | '['..='`' | '{'..='~' };
+}

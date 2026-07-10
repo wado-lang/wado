@@ -1,12 +1,12 @@
 //! Inline parsing: text, emphasis/strong/strikethrough (delimiter-stack
 //! resolution), code spans, links, images, autolinks, raw HTML spans, and
-//! hard/soft breaks — producing `fmt_ast.wado` nodes rather than HTML.
+//! hard/soft breaks — producing `fmt_ast.wado` nodes.
 //!
-//! Follows the same tokenize -> resolve -> serialize shape as `inline.wado`
-//! (see `docs/wep-2026-07-10-marl-format.md`, "Parsing"), retargeted to
-//! build a tree: tokenize into a flat stream, resolve the delimiter stack in
-//! place (turning matched delimiter runs into `Open`/`Close` markers), then
-//! walk the flat stream once more with an explicit stack to build the tree.
+//! A tokenize -> resolve -> build-tree pipeline (see
+//! `docs/wep-2026-07-10-marl-format.md`, "Parsing"): tokenize into a flat
+//! stream, resolve the delimiter stack in place (turning matched delimiter
+//! runs into `Open`/`Close` markers), then walk the flat stream once more
+//! with an explicit stack to build the tree.
 
 use { Node, EmphasisNode, LinkNode, ImageNode, ReferenceLinkNode, ReferenceImageNode } from "./fmt_ast.wado";
 use { RefTable, ref_table_get, parse_dest_and_title } from "./fmt_links.wado";

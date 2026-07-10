@@ -1,10 +1,11 @@
-//! Marl Format AST.
+//! Marl AST.
 //!
-//! Package-local to `package-marl` (see `docs/wep-2026-07-10-marl-format.md`,
-//! "A separate AST and pipeline") — a Markdown document tree that preserves
-//! enough of the original source (delimiter choices, marker characters,
-//! table alignment) to round-trip through formatting, unlike `render`'s
-//! HTML-focused model in `marl.wado`/`inline.wado`.
+//! The shared Markdown document tree for `package-marl` (see
+//! `docs/wep-2026-07-10-marl-format.md`): both the HTML renderer
+//! (`fmt_html.wado`) and the formatter (`fmt_print.wado`) walk it. It
+//! preserves enough of the original source (delimiter choices, marker
+//! characters, table alignment) for the formatter to round-trip rather than
+//! merely echo it.
 //!
 //! Container nodes (`MdList`, `MdTable`, …) hold their own concretely typed
 //! children rather than wrapping everything in `Node`, since printing

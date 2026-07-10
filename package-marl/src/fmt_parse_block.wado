@@ -2,12 +2,11 @@
 //! fenced and indented code, thematic breaks, lists, tables, raw HTML
 //! blocks, and link reference definitions.
 //!
-//! Follows the same recursive, line-array structure as `marl.wado`'s
-//! `render_blocks` (see `docs/wep-2026-07-10-marl-format.md`, "Parsing"):
-//! blocks are scanned from a `List<String>` of lines with an explicit index,
-//! sub-ranges recurse for blockquotes and list items, and reference
-//! definitions are collected in a first pass over the whole document so
-//! forward references resolve.
+//! A recursive, line-array scan (see `docs/wep-2026-07-10-marl-format.md`,
+//! "Parsing"): blocks are read from a `List<String>` of lines with an
+//! explicit index, sub-ranges recurse for blockquotes and list items, and
+//! reference definitions are collected in a first pass over the whole
+//! document so forward references resolve.
 
 use {
     Node,
@@ -28,7 +27,15 @@ use { RefTable, new_ref_table, ref_table_insert, parse_dest_and_title } from "./
 use { parse_inline } from "./fmt_parse_inline.wado";
 use { chars_of, slice_chars } from "./str_cursor.wado";
 
-pub fn parse_document(source: &String) -> Node {
+/// A parsed document together with its link reference definition table. The
+/// HTML backend (`fmt_html.wado`) needs the table to resolve reference-style
+/// links; the formatter (`format.wado`) discards it.
+internal struct Parsed {
+    internal document: Node,
+    internal refs: RefTable,
+}
+
+pub fn parse(source: &String) -> Parsed {
     let lines: List<String> = source.lines().collect();
 
     let refs = collect_ref_defs(&lines);
@@ -40,7 +47,11 @@ pub fn parse_document(source: &String) -> Node {
         start = consumed;
     }
     children.extend(&parse_blocks(&lines, start, lines.len(), &refs));
-    return Node::Document(children);
+    return Parsed { document: Node::Document(children), refs };
+}
+
+pub fn parse_document(source: &String) -> Node {
+    return parse(source).document;
 }
 
 // --- link reference definitions (first pass) ---
@@ -918,7 +929,7 @@ fn is_ascii_alpha(c: char) -> bool {
 }
 
 /// A leading-indentation whitespace column. A tab counts as one column, the
-/// same as a space (no tab-stop expansion) — matches `marl.wado`.
+/// same as a space (no tab-stop expansion) — an intentional simplification.
 fn is_indent(c: char) -> bool {
     return c matches { ' ' | '\t' };
 }
