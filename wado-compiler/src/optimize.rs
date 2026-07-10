@@ -205,6 +205,15 @@ pub enum OptLevel {
 /// constant; above it the compact data-segment repr is kept (and the global
 /// stays lazy). `-O3` trades a little code size for more eager string globals;
 /// the other levels (and `-Os`, which targets size) stay conservative.
+///
+/// This threshold applies to *every* string literal, including one that has
+/// nothing to do with `const_object_globalization` (e.g. an `assert`
+/// diagnostic template, which `codegen_flags` tests require stay a raw,
+/// byte-scannable `array.new_data` segment). A hoisted `&`-literal call
+/// argument (`const_object_globalization`'s `InlineRef` candidates) needs a
+/// much higher bar to promote to eager — see
+/// `wir_build::translate::FunctionTranslator::force_fixed_string_repr` for
+/// the narrower override scoped to just those globals.
 fn string_inline_max_bytes(opt_level: OptLevel) -> usize {
     match opt_level {
         OptLevel::O3 => 8,

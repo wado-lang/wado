@@ -144,6 +144,8 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:wasi_cli.wado::__modules_initialized: bool = 0;
+global global:wasi_cli.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(116, 101, 115, 116, 58, 32, 69, 110, 118, 105, 114, 111, 110, 109, 101, 110, 116, 58, 58, 103, 101, 116, 95, 101, 110, 118, 105, 114, 111, 110, 109, 101, 110, 116, 40, 41, 46, 108, 101, 110, 32, 61, 32)), used: 43 };
+global global:wasi_cli.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(116, 101, 115, 116, 58, 32, 69, 110, 118, 105, 114, 111, 110, 109, 101, 110, 116, 58, 58, 103, 101, 116, 95, 97, 114, 103, 117, 109, 101, 110, 116, 115, 40, 41, 46, 108, 101, 110, 32, 61, 32)), used: 41 };
 
 fn "wasi_cli.wado/run"() with Stdout, Stderr, Environment {
     let arguments: ref "core:prelude//List<core:prelude/string.wado/String>";
@@ -161,9 +163,9 @@ fn "wasi_cli.wado/run"() with Stdout, Stderr, Environment {
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: stdout works"), used: 18 });
     "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: stderr works"), used: 18 });
     arguments = "wasi_cli.wado/__cm_binding__Environment_get_arguments"();
-    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(57), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: Environment::get_arguments().len = "), used: 41 }); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(arguments.used, __local_3); __local_2);
+    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(57), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_2, global:wasi_cli.wado::__const_obj_1); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(arguments.used, __local_3); __local_2);
     env_vars = "wasi_cli.wado/__cm_binding__Environment_get_environment"();
-    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(59), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: Environment::get_environment().len = "), used: 43 }); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/i32::fmt_decimal"(env_vars.used, __local_5); __local_4);
+    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(59), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_4, global:wasi_cli.wado::__const_obj_0); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/i32::fmt_decimal"(env_vars.used, __local_5); __local_4);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all cli tests passed"), used: 20 });
 }
 

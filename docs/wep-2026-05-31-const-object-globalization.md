@@ -212,6 +212,27 @@ Landed:
 - [x] E2E fixtures: `const_global_object` (struct/array/short-string eager,
       long-string lazy),
       `const_global_entry` (inlined-init promotion).
+- [x] Inline-`&`-literal hoisting: `const_object_globalization` also matches a
+      constant aggregate referenced via `&` directly at an expression position
+      with no enclosing `let` — the shape a synthesized `serde` field key
+      takes (`st.field(&"id_str", …)`), rebuilt on every call under the
+      original `let`-only matcher. Rewritten in place (`Unary::Ref`'s inner
+      literal becomes `{ GlobalVarSet(G, …); GlobalVarGet(G) }`) rather than
+      replacing a statement. Skips a `let` whose value already qualifies for
+      the whole-binding case — hoisting both nests one global's `GlobalVarSet`
+      inside another's initializer, a shape `wir_optimize::const_global`'s
+      single-assignment classifier cannot see through. A hoisted string
+      literal is exempted from the shared `string_inline_max_bytes`
+      threshold (`FunctionTranslator::force_fixed_string_repr`, scoped to a
+      hoisted global's own `GlobalVarSet` value) so a realistic field name
+      (e.g. 34 bytes) still promotes eager — the shared threshold itself stays
+      conservative since it also governs string literals with no relation to
+      this pass (an `assert` diagnostic template must stay a byte-scannable
+      `array.new_data` segment). E2E fixture `const_object_globalization_call_arg`.
+      Also gated off any `wasi:*`-namespaced module: `wir_build::register_globals`
+      never emits a `WirGlobal` for one (its only candidates used to be
+      CM-binding glue, already excluded), so a hoisted global in an ordinary
+      WASI-binding-file helper function would dangle.
 
 Deferred:
 

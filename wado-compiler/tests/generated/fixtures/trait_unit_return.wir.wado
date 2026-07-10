@@ -75,6 +75,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:trait_unit_return.wado::__modules_initialized: bool = 0;
+global global:trait_unit_return.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(77, 101, 115, 115, 97, 103, 101, 58, 32)), used: 9 };
 
 fn "trait_unit_return.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
@@ -228,7 +229,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 
 fn "trait_unit_return.wado/Message^Printable::print"(self) with Stdout {
     let __local_1: ref "core:prelude/string.wado//String";
-    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Message: "), used: 9 }); "core:prelude/string.wado/String::push_str"(__local_1, self.text); __local_1);
+    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_1, global:trait_unit_return.wado::__const_obj_0); "core:prelude/string.wado/String::push_str"(__local_1, self.text); __local_1);
 }
 
 export fn "trait_unit_return.wado/__cm_export__run" as "run"

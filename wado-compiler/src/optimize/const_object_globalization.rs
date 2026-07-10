@@ -42,21 +42,42 @@ use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::nir::{NirFunction, NirGlobal, NirUnaryOp};
 use crate::nir_arena::{
-    BlockId, Body, ExprBody, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
+    BlockId, BlockNode, Body, ExprBody, ExprId, ExprKind, ExprNode, NodeRef, Operand, StmtId,
+    StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::arena_query::{expr_mentions_local, is_local, strip_refs};
 
-/// A `let` binding selected for hoisting, identified by its owning function and
-/// the bound local index. Resolved in an immutable analysis phase, applied in a
-/// later mutation phase to avoid `RefCell` borrow conflicts.
-struct Candidate {
-    func_idx: usize,
-    local_index: u32,
-    ty: TypeId,
-    module_source: ModuleSource,
+/// A hoisting candidate, identified by its owning function. Resolved in an
+/// immutable analysis phase, applied in a later mutation phase to avoid
+/// `RefCell` borrow conflicts.
+enum Candidate {
+    /// A `let` binding whose value is a closed constant aggregate.
+    LetBinding {
+        func_idx: usize,
+        local_index: u32,
+        ty: TypeId,
+        module_source: ModuleSource,
+    },
+    /// A constant aggregate literal referenced via `&` directly at an
+    /// expression position (typically a call argument) with no enclosing
+    /// `let` — e.g. the synthesized `serde` field key in
+    /// `st.field(&"id_str", &self.id_str)`. Every call site rebuilds the
+    /// literal, even though the argument is always the same bytes. Hoisted
+    /// in place: the `Unary::Ref`'s inner literal is wrapped in a
+    /// `{ GlobalVarSet(G, <literal>); GlobalVarGet(G) }` block, so the
+    /// literal is (re)built at most where it already was, but is now
+    /// nameable and promotable to an eager Wasm constant by
+    /// `wir_optimize::const_global` exactly like a hoisted `let`.
+    InlineRef {
+        func_idx: usize,
+        /// The `Unary { op: Ref, .. }` node whose inner operand is hoisted.
+        ref_expr: ExprId,
+        ty: TypeId,
+        module_source: ModuleSource,
+    },
 }
 
 pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
@@ -84,6 +105,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
             &f.module_source,
             &mut candidates,
         );
+        collect_inline_ref_candidates(body, &gate, fi, &f.module_source, &mut candidates);
     }
     if candidates.is_empty() {
         return false;
@@ -99,32 +121,49 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
     for (n, cand) in (base..).zip(candidates) {
         let name = format!("{}{n}", crate::name::CONST_OBJ_GLOBAL_PREFIX);
 
-        let mut func = project.functions[cand.func_idx].borrow_mut();
+        let (func_idx, ty, module_source) = match &cand {
+            Candidate::LetBinding {
+                func_idx,
+                ty,
+                module_source,
+                ..
+            }
+            | Candidate::InlineRef {
+                func_idx,
+                ty,
+                module_source,
+                ..
+            } => (*func_idx, *ty, module_source.clone()),
+        };
+
+        let mut func = project.functions[func_idx].borrow_mut();
         let body = func.body.as_mut().expect("candidate function has a body");
-        // Rewrite reads first (the let's own value is const and references no
-        // local index, so it is untouched), then replace the binding.
-        rewrite_reads(body, cand.local_index, &cand.module_source, &name, cand.ty);
-        replace_let_with_set(
-            body,
-            body.root,
-            cand.local_index,
-            &cand.module_source,
-            &name,
-        );
+        match cand {
+            Candidate::LetBinding { local_index, .. } => {
+                // Rewrite reads first (the let's own value is const and
+                // references no local index, so it is untouched), then
+                // replace the binding.
+                rewrite_reads(body, local_index, &module_source, &name, ty);
+                replace_let_with_set(body, body.root, local_index, &module_source, &name);
+            }
+            Candidate::InlineRef { ref_expr, .. } => {
+                hoist_inline_ref(body, ref_expr, &module_source, &name, ty);
+            }
+        }
         drop(func);
 
         project.globals.push(NirGlobal {
             name,
-            ty: cand.ty,
+            ty,
             initializer: ExprBody::wrapping_value(
                 crate::nir_value_graph::ValueKind::Null,
-                cand.ty,
+                ty,
                 crate::token::Span::new(0, 0, 1, 1),
             ),
             mutable: true,
             wado_mutable: false,
             visibility: crate::ast::Visibility::Private,
-            module_source: cand.module_source,
+            module_source,
             span: crate::token::Span::new(0, 0, 1, 1),
             is_nullable: true,
             lazy_init: true,
@@ -134,6 +173,116 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
     true
 }
 
+/// Find every `Unary { op: Ref, expr: <closed const aggregate> }` node
+/// anywhere in `body` — most commonly a call argument, since a `let`-bound
+/// occurrence is already covered by [`collect_candidates`]. Does not recurse
+/// into a match's inner literal once found: a closed literal has no further
+/// hoistable sub-parts. Skips a `let` statement's value entirely when the
+/// `let` itself [`let_stmt_qualifies`] — the whole binding already subsumes
+/// any `&`-literal nested inside it (see that function's doc for why hoisting
+/// both is unsound), so this walk must not also match one.
+fn collect_inline_ref_candidates(
+    body: &Body,
+    gate: &Gate<'_>,
+    func_idx: usize,
+    module_source: &ModuleSource,
+    out: &mut Vec<Candidate>,
+) {
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Stmt(s) = node
+            && matches!(body.stmts[s].kind, StmtKind::Let { .. })
+            && let_stmt_qualifies(body, s, gate)
+        {
+            continue;
+        }
+        if let NodeRef::Expr(id) = node
+            && let ExprKind::Unary {
+                op: NirUnaryOp::Ref,
+                expr: Operand::Expr(inner),
+            } = &body.exprs[id].kind
+        {
+            let inner = *inner;
+            let inner_ty = body.exprs[inner].type_id;
+            if gate.is_reference_type(inner_ty)
+                && is_globalizable_const(body, inner, &mut IndexSet::default())
+                && contains_aggregate(body, inner)
+            {
+                out.push(Candidate::InlineRef {
+                    func_idx,
+                    ref_expr: id,
+                    ty: inner_ty,
+                    module_source: module_source.clone(),
+                });
+                continue;
+            }
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+}
+
+/// Rewrite an `InlineRef` candidate in place: `Unary { op: Ref, expr: E }`
+/// becomes `Unary { op: Ref, expr: { GlobalVarSet(name, E); GlobalVarGet(name) } }`.
+/// `E` itself is untouched (moved, not copied) — it still runs exactly where
+/// it always did, but under a name `wir_optimize::const_global` can promote
+/// to a Wasm-instantiation-time constant, dropping the runtime assignment
+/// entirely when `E` is const-expressible.
+fn hoist_inline_ref(
+    body: &mut Body,
+    ref_expr: ExprId,
+    module_source: &ModuleSource,
+    name: &str,
+    ty: TypeId,
+) {
+    let ExprKind::Unary {
+        expr: Operand::Expr(inner),
+        ..
+    } = body.exprs[ref_expr].kind
+    else {
+        unreachable!("InlineRef candidate must still be a Unary{{ op: Ref, .. }} node")
+    };
+    let span = body.exprs[ref_expr].span;
+
+    let set_expr = body.exprs.push(ExprNode {
+        kind: ExprKind::GlobalVarSet {
+            module_source: module_source.clone(),
+            name: name.to_string(),
+            value: Operand::Expr(inner),
+        },
+        type_id: TypeTable::UNIT,
+        span,
+    });
+    let set_stmt = body.stmts.push(StmtNode {
+        kind: StmtKind::Expr(Operand::Expr(set_expr)),
+        span,
+    });
+    let get_expr = body.exprs.push(ExprNode {
+        kind: ExprKind::GlobalVarGet {
+            module_source: module_source.clone(),
+            name: name.to_string(),
+        },
+        type_id: ty,
+        span,
+    });
+    let get_stmt = body.stmts.push(StmtNode {
+        kind: StmtKind::Expr(Operand::Expr(get_expr)),
+        span,
+    });
+    let wrap_block = body.blocks.push(BlockNode {
+        stmts: vec![set_stmt, get_stmt],
+        span,
+    });
+    let block_expr = body.exprs.push(ExprNode {
+        kind: ExprKind::Block(wrap_block),
+        type_id: ty,
+        span,
+    });
+    let ExprKind::Unary { expr, .. } = &mut body.exprs[ref_expr].kind else {
+        unreachable!("checked above")
+    };
+    *expr = Operand::Expr(block_expr);
+}
+
 /// Skip synthesized init / CM-binding functions.
 fn skip_function(f: &NirFunction) -> bool {
     f.is_cm_binding
@@ -141,11 +290,44 @@ fn skip_function(f: &NirFunction) -> bool {
         || f.name == crate::name::MODULE_INIT_FUNCTION
         || f.name == crate::name::MODULES_INIT_FUNCTION
         || f.value_copy_type().is_some()
+        // `wir_build::register_globals` never emits a `WirGlobal` for a WASI
+        // module (`if module_source.is_wasi() { continue; }`) since a WASI
+        // binding file's only candidates used to be its (excluded, above)
+        // CM-binding glue. A plain helper function can still live in a
+        // `wasi:*`-namespaced file, so without this check a hoisted global
+        // there would be referenced by `GlobalVarGet`/`Set` but never
+        // registered — a silent dangling reference resolved to index 0 at
+        // emission (wrong global, corrupt state) instead of a compile error.
+        || f.module_source.is_wasi()
 }
 
 // ---------------------------------------------------------------------------
 // Phase 1 — candidate collection
 // ---------------------------------------------------------------------------
+
+/// True when `stmt` is a `let` binding [`collect_candidates`] would hoist
+/// whole. Shared with [`collect_inline_ref_candidates`], which must not
+/// separately hoist an `&`-literal nested inside such a `let`'s value: the
+/// whole binding already subsumes it, and hoisting both would nest one
+/// global's `GlobalVarSet` inside another's initializer — a shape nothing
+/// downstream (`wir_optimize::const_global`'s single-assignment classifier,
+/// in particular) is prepared to see.
+fn let_stmt_qualifies(body: &Body, stmt: StmtId, gate: &Gate<'_>) -> bool {
+    let StmtKind::Let {
+        local_index,
+        value,
+        type_id,
+        ..
+    } = &body.stmts[stmt].kind
+    else {
+        return false;
+    };
+    let (local_index, value, type_id) = (*local_index, *value, *type_id);
+    gate.is_reference_type(type_id)
+        && is_globalizable_const_operand(body, value, &mut IndexSet::default())
+        && contains_aggregate_operand(body, value)
+        && is_readonly_body(body, local_index, gate)
+}
 
 fn collect_candidates(
     body: &Body,
@@ -158,24 +340,17 @@ fn collect_candidates(
     for &stmt in &body.blocks[block].stmts {
         if let StmtKind::Let {
             local_index,
-            value,
             type_id,
             ..
         } = &body.stmts[stmt].kind
+            && let_stmt_qualifies(body, stmt, gate)
         {
-            let (local_index, value, type_id) = (*local_index, *value, *type_id);
-            if gate.is_reference_type(type_id)
-                && is_globalizable_const_operand(body, value, &mut IndexSet::default())
-                && contains_aggregate_operand(body, value)
-                && is_readonly_body(body, local_index, gate)
-            {
-                out.push(Candidate {
-                    func_idx,
-                    local_index,
-                    ty: type_id,
-                    module_source: module_source.clone(),
-                });
-            }
+            out.push(Candidate::LetBinding {
+                func_idx,
+                local_index: *local_index,
+                ty: *type_id,
+                module_source: module_source.clone(),
+            });
         }
         // Recurse into nested scopes.
         for inner in stmt_blocks(body, stmt) {

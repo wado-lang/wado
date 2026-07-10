@@ -110,7 +110,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:serde_serialize_trait.wado::__modules_initialized: bool = 0;
-global mut global:serde_serialize_trait.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = ref.null none;
+global global:serde_serialize_trait.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(104, 101, 108, 108, 111)), used: 5 };
 
 fn "serde_serialize_trait.wado/run"() with Stdout {
     let ser: ref "serde_serialize_trait.wado//TextSerializer";
@@ -126,7 +126,6 @@ fn "serde_serialize_trait.wado/run"() with Stdout {
     drop("serde_serialize_trait.wado/TextSerializer^Serializer::serialize_i32"(ser, 42));
     "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }; "core:prelude/string.wado/String::push"(__local_3, 105); "core:prelude/string.wado/String::push"(__local_3, 51); "core:prelude/string.wado/String::push"(__local_3, 50); "core:prelude/string.wado/String::push"(__local_3, 58); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, ser.buf); __local_3);
     ser.buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    global:serde_serialize_trait.wado::__const_obj_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     drop("serde_serialize_trait.wado/TextSerializer^Serializer::serialize_string"(ser, global:serde_serialize_trait.wado::__const_obj_0));
     "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }; "core:prelude/string.wado/String::push"(__local_4, 83); "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 114); "core:prelude/string.wado/String::push"(__local_4, 105); "core:prelude/string.wado/String::push"(__local_4, 110); "core:prelude/string.wado/String::push"(__local_4, 103); "core:prelude/string.wado/String::push"(__local_4, 58); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push_str"(__local_4, ser.buf); __local_4);
 }

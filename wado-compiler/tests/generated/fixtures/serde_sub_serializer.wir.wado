@@ -156,6 +156,8 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:serde_sub_serializer.wado::__modules_initialized: bool = 0;
+global global:serde_sub_serializer.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(97, 103, 101)), used: 3 };
+global global:serde_sub_serializer.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(110, 97, 109, 101)), used: 4 };
 
 fn "serde_sub_serializer.wado/run"() with Stdout {
     let ser: ref "serde_sub_serializer.wado//TextSerializer";
@@ -195,8 +197,8 @@ fn "serde_sub_serializer.wado/run"() with Stdout {
         __local_13 = ref.cast "core:prelude/types.wado//Result<serde_sub_serializer.wado/TextStructSerializer,serde_sub_serializer.wado/SerializeError>::Ok"(st).payload_0;
         s_7 = struct.new "serde_sub_serializer.wado//TextStructSerializer" { parent: __local_13.parent, count: __local_13.count };
         name_8 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 };
-        drop("serde_sub_serializer.wado/TextStructSerializer^SerializeStruct::field<core:prelude/string.wado/String>"(s_7, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 97, 109, 101), used: 4 }, name_8));
-        drop("serde_sub_serializer.wado/TextStructSerializer^SerializeStruct::field<i32>"(s_7, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 103, 101), used: 3 }, 30));
+        drop("serde_sub_serializer.wado/TextStructSerializer^SerializeStruct::field<core:prelude/string.wado/String>"(s_7, global:serde_sub_serializer.wado::__const_obj_1, name_8));
+        drop("serde_sub_serializer.wado/TextStructSerializer^SerializeStruct::field<i32>"(s_7, global:serde_sub_serializer.wado::__const_obj_0, 30));
         "core:prelude/string.wado/String::push"(s_7.parent.buf, 125);
         drop(ref.null none);
     } else {

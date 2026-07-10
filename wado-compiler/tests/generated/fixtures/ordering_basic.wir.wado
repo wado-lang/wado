@@ -86,7 +86,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 global mut global:ordering_basic.wado::__modules_initialized: bool = 0;
 global global:ordering_basic.wado::__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(1, 2, 3)), used: 3 };
 global global:ordering_basic.wado::__const_obj_1: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(1, 2, 4)), used: 3 };
-global mut global:ordering_basic.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = ref.null none;
+global global:ordering_basic.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(98, 97, 110, 97, 110, 97)), used: 6 };
 
 fn "ordering_basic.wado/run"() with Stdout {
     let s1: ref "core:prelude/string.wado//String";
@@ -123,7 +123,6 @@ fn "ordering_basic.wado/run"() with Stdout {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr1 == arr3"), used: 12 });
     }
     s1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 };
-    global:ordering_basic.wado::__const_obj_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana"), used: 6 };
     s3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 };
     if "core:prelude/string.wado/String^Ord::cmp"(s1, global:ordering_basic.wado::__const_obj_3) == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple < banana"), used: 14 });
