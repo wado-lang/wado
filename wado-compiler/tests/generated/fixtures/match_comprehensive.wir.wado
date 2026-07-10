@@ -470,7 +470,7 @@ fn "match_comprehensive.wado/$value_copy$T51"(v) {
         __vc_payload_1 = ref.cast "match_comprehensive.wado//Tree::Node"(v).payload_0;
         struct.new "match_comprehensive.wado//Tree::Node" { discriminant: 1, payload_0: struct.new "tuple//[i32, i32]" { 0: __vc_payload_1.0, 1: __vc_payload_1.1 } };
     } else {
-        struct.new "match_comprehensive.wado//Tree" { 2 };
+        v;
     });
 }
 
@@ -833,7 +833,7 @@ fn "core:prelude/slice.wado/ArrayIter<match_comprehensive.wado/Tree>^Iterator::n
     if self.index >= self.end {
         return ref.null none;
     }
-    item = builtin::array_get<ref "match_comprehensive.wado//Tree">(self.repr, self.index);
+    item = "match_comprehensive.wado/$value_copy$T51"(builtin::array_get<ref "match_comprehensive.wado//Tree">(self.repr, self.index));
     self.index = self.index + 1;
     return ref.as_non_null("match_comprehensive.wado/$value_copy$T51"(item));
 }

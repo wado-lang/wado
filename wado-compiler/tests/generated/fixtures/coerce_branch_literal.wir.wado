@@ -262,27 +262,25 @@ global mut global:coerce_branch_literal.wado::__modules_initialized: bool = 0;
 fn "coerce_branch_literal.wado/__test_2_match_arm_literal_adopts_i128_sibling"() {
     let opt: ref null "core:prelude/int128.wado//i128";
     let x: ref "core:prelude/int128.wado//i128";
-    let v_2: ref "core:prelude/int128.wado//i128";
+    let v: ref "core:prelude/int128.wado//i128";
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    let v_9: ref "core:prelude/int128.wado//i128";
     opt = struct.new "core:prelude/int128.wado//i128" { low: 5_i64, high: 0_i64 };
-    v_9 = (if ref.is_null(opt) == 0 -> ref "core:prelude/int128.wado//i128" {
+    v = (if ref.is_null(opt) == 0 -> ref "core:prelude/int128.wado//i128" {
         x = ref.as_non_null(opt);
         x;
     } else {
         struct.new "core:prelude/int128.wado//i128" { low: 0_i64, high: 0_i64 };
     });
-    v_2 = struct.new "core:prelude/int128.wado//i128" { low: v_9.low, high: v_9.high };
-    if @unlikely((if v_2.low == 5_i64 -> i32 {
-        v_2.high == 0_i64;
+    if @unlikely((if v.low == 5_i64 -> i32 {
+        v.high == 0_i64;
     } else {
         0;
     }) == 0) {
         cold_path;
         "core:rt/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(112); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_2_match_arm_literal_adopts_i128_sibling"), used: 46 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("coerce_branch_literal.wado"), used: 26 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 21 }, __local_6); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: v == 5
-"), used: 19 }); "core:prelude/string.wado/String::push"(__local_5, 118); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/int128.wado/i128^Inspect::inspect"(v_2, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); __local_5);
+"), used: 19 }); "core:prelude/string.wado/String::push"(__local_5, 118); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/int128.wado/i128^Inspect::inspect"(v, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); __local_5);
         unreachable;
     }
 }
@@ -1365,7 +1363,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
     b142: block {
         l143: loop {
             break_if b142 i < 0;
-            remainder = "core:prelude/int128.wado/u128^Shl::shl"(remainder, 1);
+            remainder = "coerce_branch_literal.wado/$value_copy$T50"("core:prelude/int128.wado/u128^Shl::shl"(remainder, 1));
             bit = "core:prelude/int128.wado/u128::get_bit"(self, i);
             if bit {
                 remainder = struct.new "core:prelude/int128.wado//u128" { low: remainder.low | 1_i64, high: remainder.high | 0_i64 };

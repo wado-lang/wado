@@ -1040,26 +1040,26 @@ fn "wasi_filesystem_dir_ops.wado/$value_copy$T61"(v) {
     let v_3: ref "core:prelude/string.wado//String";
     let __vc_payload_0: ref "core:prelude/string.wado//String";
     return struct.new "wasi:filesystem/types.wado//DirectoryEntry" { type: ref.as_non_null(v_1 = v.type; (if v_1.discriminant == 0 -> ref "wasi:filesystem/types.wado//DescriptorType" {
-        struct.new "wasi:filesystem/types.wado//DescriptorType" { 0 };
+        v_1;
     } else if v_1.discriminant == 1 -> ref "wasi:filesystem/types.wado//DescriptorType" {
-        struct.new "wasi:filesystem/types.wado//DescriptorType" { 1 };
+        v_1;
     } else if v_1.discriminant == 2 -> ref "wasi:filesystem/types.wado//DescriptorType" {
-        struct.new "wasi:filesystem/types.wado//DescriptorType" { 2 };
+        v_1;
     } else if v_1.discriminant == 3 -> ref "wasi:filesystem/types.wado//DescriptorType" {
-        struct.new "wasi:filesystem/types.wado//DescriptorType" { 3 };
+        v_1;
     } else if v_1.discriminant == 4 -> ref "wasi:filesystem/types.wado//DescriptorType" {
-        struct.new "wasi:filesystem/types.wado//DescriptorType" { 4 };
+        v_1;
     } else if v_1.discriminant == 5 -> ref "wasi:filesystem/types.wado//DescriptorType" {
-        struct.new "wasi:filesystem/types.wado//DescriptorType" { 5 };
+        v_1;
     } else if v_1.discriminant == 6 -> ref "wasi:filesystem/types.wado//DescriptorType" {
-        struct.new "wasi:filesystem/types.wado//DescriptorType" { 6 };
+        v_1;
     } else {
         __vc_payload_7 = ref.cast "wasi:filesystem/types.wado//DescriptorType::Other"(v_1).payload_0;
         struct.new "wasi:filesystem/types.wado//DescriptorType::Other" { discriminant: 7, payload_0: (if ref.is_null(__vc_payload_7) == 0 -> ref null "core:prelude/string.wado//String" {
             __vc_payload_0 = ref.as_non_null(__vc_payload_7);
             struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = __vc_payload_0.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: __vc_payload_0.used };
         } else {
-            ref.null none;
+            __vc_payload_7;
         }) };
     })), name: ref.as_non_null(v_3 = v.name; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_3.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_3.used }) };
 }
@@ -1519,7 +1519,7 @@ fn "core:prelude/slice.wado/ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>
     if self.index >= self.end {
         return ref.null none;
     }
-    item = builtin::array_get<ref "wasi:filesystem/types.wado//DirectoryEntry">(self.repr, self.index);
+    item = "wasi_filesystem_dir_ops.wado/$value_copy$T61"(builtin::array_get<ref "wasi:filesystem/types.wado//DirectoryEntry">(self.repr, self.index));
     self.index = self.index + 1;
     return ref.as_non_null("wasi_filesystem_dir_ops.wado/$value_copy$T61"(item));
 }

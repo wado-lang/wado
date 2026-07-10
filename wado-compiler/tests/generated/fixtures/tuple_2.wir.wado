@@ -213,7 +213,7 @@ fn "tuple_2.wado/describe"(a, b) {
     let f_43: ref "core:prelude/format.wado//Formatter";
     let f_48: ref "core:prelude/format.wado//Formatter";
     return let __match_scrut_2: ref "tuple//[tuple_2.wado/TupleValue, tuple_2.wado/TupleValue]", __match_scrut_2 = struct.new "tuple//[tuple_2.wado/TupleValue, tuple_2.wado/TupleValue]" { 0: ref.as_non_null((if a.discriminant == 0 -> ref "tuple_2.wado//TupleValue" {
-        struct.new "tuple_2.wado//TupleValue" { 0 };
+        a;
     } else if ref.test "tuple_2.wado//TupleValue::Bool"(a) -> ref "tuple_2.wado//TupleValue" {
         __vc_payload_1_22 = ref.cast "tuple_2.wado//TupleValue::Bool"(a).payload_0;
         struct.new "tuple_2.wado//TupleValue::Bool" { discriminant: 1, payload_0: __vc_payload_1_22 };
@@ -224,7 +224,7 @@ fn "tuple_2.wado/describe"(a, b) {
         __vc_payload_3_24 = ref.cast "tuple_2.wado//TupleValue::Text"(a).payload_0;
         struct.new "tuple_2.wado//TupleValue::Text" { discriminant: 3, payload_0: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = __vc_payload_3_24.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: __vc_payload_3_24.used } };
     })), 1: ref.as_non_null((if b.discriminant == 0 -> ref "tuple_2.wado//TupleValue" {
-        struct.new "tuple_2.wado//TupleValue" { 0 };
+        b;
     } else if ref.test "tuple_2.wado//TupleValue::Bool"(b) -> ref "tuple_2.wado//TupleValue" {
         __vc_payload_1_26 = ref.cast "tuple_2.wado//TupleValue::Bool"(b).payload_0;
         struct.new "tuple_2.wado//TupleValue::Bool" { discriminant: 1, payload_0: __vc_payload_1_26 };
@@ -1068,7 +1068,7 @@ fn "core:prelude/slice.wado/ArrayIter<[i32,core:prelude/string.wado/String]>^Ite
     if self.index >= self.end {
         return ref.null none;
     }
-    item = builtin::array_get<ref "tuple//[i32, core:prelude/string.wado/String]">(self.repr, self.index);
+    item = "tuple_2.wado/$value_copy$T464"(builtin::array_get<ref "tuple//[i32, core:prelude/string.wado/String]">(self.repr, self.index));
     self.index = self.index + 1;
     return ref.as_non_null("tuple_2.wado/$value_copy$T464"(item));
 }

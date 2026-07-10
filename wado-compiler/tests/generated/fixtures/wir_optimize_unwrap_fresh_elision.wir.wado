@@ -165,13 +165,9 @@ fn "wir_optimize_unwrap_fresh_elision.wado/run"() with Stdout {
     let d1: ref "wir_optimize_unwrap_fresh_elision.wado//Data";
     let __v0_1: i32;
     let opt: ref null "wir_optimize_unwrap_fresh_elision.wado//Data";
-    let d2: ref "wir_optimize_unwrap_fresh_elision.wado//Data";
-    let __v0_5: i32;
     let d3: ref "wir_optimize_unwrap_fresh_elision.wado//Data";
     let __v0_8: i32;
     let opt2: ref null "wir_optimize_unwrap_fresh_elision.wado//Data";
-    let d4: ref "wir_optimize_unwrap_fresh_elision.wado//Data";
-    let __v0_12: i32;
     let __cond_14: bool;
     let __local_15: ref "core:prelude/string.wado//String";
     let __local_16: ref "core:prelude/format.wado//Formatter";
@@ -185,11 +181,17 @@ fn "wir_optimize_unwrap_fresh_elision.wado/run"() with Stdout {
     let __local_24: ref "core:prelude/format.wado//Formatter";
     let self_25: ref null "wir_optimize_unwrap_fresh_elision.wado//Data";
     let v_26: ref "wir_optimize_unwrap_fresh_elision.wado//Data";
-    let v_29: ref "wir_optimize_unwrap_fresh_elision.wado//Data";
-    let self_31: ref "core:prelude/types.wado//Result<wir_optimize_unwrap_fresh_elision.wado/Data,core:prelude/string.wado/String>";
-    let v_32: ref "wir_optimize_unwrap_fresh_elision.wado//Data";
+    let v_28: ref "wir_optimize_unwrap_fresh_elision.wado//Data";
+    let v_30: ref "wir_optimize_unwrap_fresh_elision.wado//Data";
+    let v_32: ref "core:prelude/string.wado//String";
+    let self_33: ref "core:prelude/types.wado//Result<wir_optimize_unwrap_fresh_elision.wado/Data,core:prelude/string.wado/String>";
+    let v_34: ref "wir_optimize_unwrap_fresh_elision.wado//Data";
     let e: ref "core:prelude/string.wado//String";
-    let v_35: ref "wir_optimize_unwrap_fresh_elision.wado//Data";
+    let v_36: ref "wir_optimize_unwrap_fresh_elision.wado//Data";
+    let v_38: ref "wir_optimize_unwrap_fresh_elision.wado//Data";
+    let v_40: ref "core:prelude/string.wado//String";
+    let __sroa_d4_x: i32;
+    let __sroa_d2_x: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:wir_optimize_unwrap_fresh_elision.wado::__modules_initialized);
         cold_path;
@@ -215,29 +217,31 @@ condition: d1.x == 1
         unreachable;
     }
     opt = struct.new "wir_optimize_unwrap_fresh_elision.wado//Data" { x: 1, y: 2, name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
-    d2 = __inline_Option_wir_optimize_unwrap_fresh_elision_wado_Data___unwrap_4: block -> ref "wir_optimize_unwrap_fresh_elision.wado//Data" {
+    v_28 = __inline_Option_wir_optimize_unwrap_fresh_elision_wado_Data___unwrap_5: block -> ref "wir_optimize_unwrap_fresh_elision.wado//Data" {
         if ref.is_null(opt) == 0 {
-            v_29 = ref.as_non_null(opt);
-            break __inline_Option_wir_optimize_unwrap_fresh_elision_wado_Data___unwrap_4: v_29;
+            v_30 = ref.as_non_null(opt);
+            break __inline_Option_wir_optimize_unwrap_fresh_elision_wado_Data___unwrap_5: v_30;
         } else {
         }
         "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("called Option::unwrap() on a None value"), used: 39 });
         unreachable;
     };
-    __v0_5 = d2.x;
-    if @unlikely(__v0_5 != 1) {
+    __sroa_d2_x = v_28.x;
+    v_32 = v_28.name;
+    drop(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = v_32.repr; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: v_32.used });
+    if @unlikely(__sroa_d2_x != 1) {
         cold_path;
         "core:rt/panic"(__local_17 = "core:prelude/string.wado/String::with_capacity"(118); "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_17, 114); "core:prelude/string.wado/String::push"(__local_17, 117); "core:prelude/string.wado/String::push"(__local_17, 110); "core:prelude/string.wado/String::push"(__local_17, 32); "core:prelude/string.wado/String::push"(__local_17, 97); "core:prelude/string.wado/String::push"(__local_17, 116); "core:prelude/string.wado/String::push"(__local_17, 32); "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wir_optimize_unwrap_fresh_elision.wado"), used: 38 }); "core:prelude/string.wado/String::push"(__local_17, 58); __local_18 = "core:prelude/format.wado/Formatter::new"(__local_17); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 34 }, __local_18); "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: d2.x == 1
-"), used: 22 }); "core:prelude/string.wado/String::push"(__local_17, 100); "core:prelude/string.wado/String::push"(__local_17, 50); "core:prelude/string.wado/String::push"(__local_17, 46); "core:prelude/string.wado/String::push"(__local_17, 120); "core:prelude/string.wado/String::push"(__local_17, 58); "core:prelude/string.wado/String::push"(__local_17, 32); __local_18 = "core:prelude/format.wado/Formatter::new"(__local_17); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_5 }, __local_18); "core:prelude/string.wado/String::push"(__local_17, 10); __local_17);
+"), used: 22 }); "core:prelude/string.wado/String::push"(__local_17, 100); "core:prelude/string.wado/String::push"(__local_17, 50); "core:prelude/string.wado/String::push"(__local_17, 46); "core:prelude/string.wado/String::push"(__local_17, 120); "core:prelude/string.wado/String::push"(__local_17, 58); "core:prelude/string.wado/String::push"(__local_17, 32); __local_18 = "core:prelude/format.wado/Formatter::new"(__local_17); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __sroa_d2_x }, __local_18); "core:prelude/string.wado/String::push"(__local_17, 10); __local_17);
         unreachable;
     }
-    self_31 = struct.new "core:prelude/types.wado//Result<wir_optimize_unwrap_fresh_elision.wado/Data,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: struct.new "wir_optimize_unwrap_fresh_elision.wado//Data" { x: 10, y: 20, name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 } } };
-    d3 = (if @likely(ref.test "core:prelude/types.wado//Result<wir_optimize_unwrap_fresh_elision.wado/Data,core:prelude/string.wado/String>::Ok"(self_31)) -> ref "wir_optimize_unwrap_fresh_elision.wado//Data" {
-        v_32 = ref.cast "core:prelude/types.wado//Result<wir_optimize_unwrap_fresh_elision.wado/Data,core:prelude/string.wado/String>::Ok"(self_31).payload_0;
-        v_32;
+    self_33 = struct.new "core:prelude/types.wado//Result<wir_optimize_unwrap_fresh_elision.wado/Data,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: struct.new "wir_optimize_unwrap_fresh_elision.wado//Data" { x: 10, y: 20, name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 } } };
+    d3 = (if @likely(ref.test "core:prelude/types.wado//Result<wir_optimize_unwrap_fresh_elision.wado/Data,core:prelude/string.wado/String>::Ok"(self_33)) -> ref "wir_optimize_unwrap_fresh_elision.wado//Data" {
+        v_34 = ref.cast "core:prelude/types.wado//Result<wir_optimize_unwrap_fresh_elision.wado/Data,core:prelude/string.wado/String>::Ok"(self_33).payload_0;
+        v_34;
     } else {
-        e = ref.cast "core:prelude/types.wado//Result<wir_optimize_unwrap_fresh_elision.wado/Data,core:prelude/string.wado/String>::Err"(self_31).payload_0;
+        e = ref.cast "core:prelude/types.wado//Result<wir_optimize_unwrap_fresh_elision.wado/Data,core:prelude/string.wado/String>::Err"(self_33).payload_0;
         "core:prelude/types.wado/core/prelude/types.wado/unwrap_failed<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("called Result::unwrap() on an Err value"), used: 39 }, e);
         unreachable;
     });
@@ -250,21 +254,23 @@ condition: d3.x == 10
         unreachable;
     }
     opt2 = struct.new "wir_optimize_unwrap_fresh_elision.wado//Data" { x: 1, y: 2, name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
-    d4 = __inline_Option_wir_optimize_unwrap_fresh_elision_wado_Data___unwrap_8: block -> ref "wir_optimize_unwrap_fresh_elision.wado//Data" {
+    v_36 = __inline_Option_wir_optimize_unwrap_fresh_elision_wado_Data___unwrap_11: block -> ref "wir_optimize_unwrap_fresh_elision.wado//Data" {
         if ref.is_null(opt2) == 0 {
-            v_35 = ref.as_non_null(opt2);
-            break __inline_Option_wir_optimize_unwrap_fresh_elision_wado_Data___unwrap_8: v_35;
+            v_38 = ref.as_non_null(opt2);
+            break __inline_Option_wir_optimize_unwrap_fresh_elision_wado_Data___unwrap_11: v_38;
         } else {
         }
         "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("called Option::unwrap() on a None value"), used: 39 });
         unreachable;
     };
-    __v0_12 = d4.x;
-    if @unlikely(__v0_12 != 1) {
+    __sroa_d4_x = v_36.x;
+    v_40 = v_36.name;
+    drop(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = v_40.repr; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: v_40.used });
+    if @unlikely(__sroa_d4_x != 1) {
         cold_path;
         "core:rt/panic"(__local_21 = "core:prelude/string.wado/String::with_capacity"(118); "core:prelude/string.wado/String::push_str"(__local_21, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_21, 114); "core:prelude/string.wado/String::push"(__local_21, 117); "core:prelude/string.wado/String::push"(__local_21, 110); "core:prelude/string.wado/String::push"(__local_21, 32); "core:prelude/string.wado/String::push"(__local_21, 97); "core:prelude/string.wado/String::push"(__local_21, 116); "core:prelude/string.wado/String::push"(__local_21, 32); "core:prelude/string.wado/String::push_str"(__local_21, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wir_optimize_unwrap_fresh_elision.wado"), used: 38 }); "core:prelude/string.wado/String::push"(__local_21, 58); __local_22 = "core:prelude/format.wado/Formatter::new"(__local_21); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 44 }, __local_22); "core:prelude/string.wado/String::push_str"(__local_21, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: d4.x == 1
-"), used: 22 }); "core:prelude/string.wado/String::push"(__local_21, 100); "core:prelude/string.wado/String::push"(__local_21, 52); "core:prelude/string.wado/String::push"(__local_21, 46); "core:prelude/string.wado/String::push"(__local_21, 120); "core:prelude/string.wado/String::push"(__local_21, 58); "core:prelude/string.wado/String::push"(__local_21, 32); __local_22 = "core:prelude/format.wado/Formatter::new"(__local_21); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_12 }, __local_22); "core:prelude/string.wado/String::push"(__local_21, 10); __local_21);
+"), used: 22 }); "core:prelude/string.wado/String::push"(__local_21, 100); "core:prelude/string.wado/String::push"(__local_21, 52); "core:prelude/string.wado/String::push"(__local_21, 46); "core:prelude/string.wado/String::push"(__local_21, 120); "core:prelude/string.wado/String::push"(__local_21, 58); "core:prelude/string.wado/String::push"(__local_21, 32); __local_22 = "core:prelude/format.wado/Formatter::new"(__local_21); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __sroa_d4_x }, __local_22); "core:prelude/string.wado/String::push"(__local_21, 10); __local_21);
         unreachable;
     }
     __cond_14 = ref.is_null(opt2) == 0;

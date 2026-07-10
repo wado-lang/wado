@@ -609,7 +609,7 @@ fn "core:prelude/slice.wado/ArrayRefIter<single_module_variant_iter.wado/Choice>
     if self.index >= self.end {
         return ref.null none;
     }
-    val = struct.new "core:prelude/types.wado//Box<single_module_variant_iter.wado/Choice>" { value: builtin::array_get<ref "single_module_variant_iter.wado//Choice">(self.repr, self.index) };
+    val = struct.new "core:prelude/types.wado//Box<single_module_variant_iter.wado/Choice>" { value: ref.as_non_null("single_module_variant_iter.wado/$value_copy$T29"(builtin::array_get<ref "single_module_variant_iter.wado//Choice">(self.repr, self.index))) };
     self.index = self.index + 1;
     return val;
 }
