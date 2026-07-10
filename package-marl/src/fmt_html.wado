@@ -21,15 +21,15 @@ use {
 use { escape_text, escape_attr, sanitize_url } from "./html.wado";
 use { RefTable, ref_table_get } from "./fmt_links.wado";
 use { parse } from "./fmt_parse_block.wado";
-use { chars_of, slice_chars } from "./str_cursor.wado";
+use { is_ascii_punct } from "./fmt_parse_inline.wado";
+use { chars_of } from "./str_cursor.wado";
 
 pub fn render(source: &String) -> String {
     let parsed = parse(source);
-    let children = match parsed.document {
-        Node::Document(c) => c,
+    return match &parsed.document {
+        Node::Document(children) => render_blocks(children, &parsed.refs),
         _ => panic("marl-html: render expects a Document node"),
     };
-    return render_blocks(&children, &parsed.refs);
 }
 
 // --- blocks ---
@@ -114,7 +114,7 @@ fn render_item(item: &MdItem, loose: bool, refs: &RefTable) -> String {
         Some(m) => if m.checked { "[x] " } else { "[ ] " },
         None => "",
     };
-    let content = apply_marker(&render_item_children(&item.children, loose, refs), &marker);
+    let content = render_item_children(&item.children, loose, marker, refs);
     if loose {
         return `<li>\n{content}\n</li>`;
     }
@@ -122,42 +122,33 @@ fn render_item(item: &MdItem, loose: bool, refs: &RefTable) -> String {
 }
 
 /// In a tight list a paragraph item contributes its inline content directly;
-/// in a loose list it is wrapped in `<p>`. Nested blocks render normally.
-fn render_item_children(children: &List<Node>, loose: bool, refs: &RefTable) -> String {
+/// in a loose list it is wrapped in `<p>`. Nested blocks render normally. A
+/// task-list marker (`[ ] ` / `[x] `) leads the first child's content, so it
+/// lands inside the `<p>` of a loose item without inspecting the output.
+fn render_item_children(children: &List<Node>, loose: bool, marker: String, refs: &RefTable) -> String {
     let mut parts: List<String> = [];
+    let mut first = true;
     for let child of children {
-        parts.push(render_item_child(child, loose, refs));
+        let lead = if first { marker } else { "" };
+        parts.push(render_item_child(child, loose, &lead, refs));
+        first = false;
     }
     return parts.join("\n");
 }
 
-fn render_item_child(child: &Node, loose: bool, refs: &RefTable) -> String {
+fn render_item_child(child: &Node, loose: bool, lead: &String, refs: &RefTable) -> String {
     match child {
         Node::Paragraph(p) => {
             let inline = render_inline_seq(&p.children, refs);
             if loose {
-                return `<p>{inline}</p>`;
+                return `<p>{lead}{inline}</p>`;
             }
-            return inline;
+            return `{lead}{inline}`;
         },
         _ => {
-            return render_block(child, refs);
+            return `{lead}{render_block(child, refs)}`;
         },
     }
-}
-
-/// Insert a task-list marker (`[ ] ` / `[x] `) at the start of the item's
-/// text, inside the leading `<p>` for a loose item.
-fn apply_marker(content: &String, marker: &String) -> String {
-    if marker.len() == 0 {
-        return *content;
-    }
-    if content.starts_with("<p>") {
-        let chars = chars_of(content);
-        let rest = slice_chars(&chars, 3, chars.len());
-        return `<p>{marker}{rest}`;
-    }
-    return `{marker}{content}`;
 }
 
 // --- tables ---
@@ -275,7 +266,9 @@ fn render_link(url: &String, title: &String, children: &List<Node>, refs: &RefTa
 fn render_reference_link(link: &ReferenceLinkNode, refs: &RefTable, out: &mut String) {
     match ref_table_get(refs, &link.label) {
         Some(def) => render_link(&def.url, &def.title, &link.children, refs, out),
-        None => out.push_str(&render_inline_seq(&link.children, refs)),
+        // The parser emits a reference/shortcut link only for a label that
+        // already resolves, so a miss here is an invariant violation.
+        None => panic("marl-html: reference link label has no definition"),
     }
 }
 
@@ -292,7 +285,7 @@ fn render_image(alt: &String, url: &String, title: &String, out: &mut String) {
 fn render_reference_image(img: &ReferenceImageNode, refs: &RefTable, out: &mut String) {
     match ref_table_get(refs, &img.label) {
         Some(def) => render_image(&img.alt, &def.url, &def.title, out),
-        None => out.push_str(&escape_text(&img.alt)),
+        None => panic("marl-html: reference image label has no definition"),
     }
 }
 
@@ -301,8 +294,4 @@ fn title_attr(title: &String) -> String {
         return "";
     }
     return ` title="{escape_attr(title)}"`;
-}
-
-fn is_ascii_punct(c: char) -> bool {
-    return c matches { '!'..='/' | ':'..='@' | '['..='`' | '{'..='~' };
 }

@@ -710,7 +710,10 @@ fn is_space(c: char) -> bool {
     return c matches { ' ' | '\t' | '\n' };
 }
 
-fn is_ascii_punct(c: char) -> bool {
+/// A backslash-escapable character, per CommonMark. `fmt_html.wado` shares
+/// this to reverse the escapes the tokenizer keeps in `Text` nodes, so the
+/// escapable set has a single definition.
+internal fn is_ascii_punct(c: char) -> bool {
     return c matches { '!'..='/' | ':'..='@' | '['..='`' | '{'..='~' };
 }
 

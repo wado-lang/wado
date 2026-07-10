@@ -37,21 +37,25 @@ internal struct Parsed {
 
 pub fn parse(source: &String) -> Parsed {
     let lines: List<String> = source.lines().collect();
-
     let refs = collect_ref_defs(&lines);
-
-    let mut children: List<Node> = [];
-    let mut start = 0;
-    if let Some([fm, consumed]) = try_front_matter(&lines) {
-        children.push(Node::FrontMatter(fm));
-        start = consumed;
-    }
-    children.extend(&parse_blocks(&lines, start, lines.len(), &refs));
-    return Parsed { document: Node::Document(children), refs };
+    return Parsed { document: build_document(&lines, &refs), refs };
 }
 
 pub fn parse_document(source: &String) -> Node {
-    return parse(source).document;
+    let lines: List<String> = source.lines().collect();
+    let refs = collect_ref_defs(&lines);
+    return build_document(&lines, &refs);
+}
+
+fn build_document(lines: &List<String>, refs: &RefTable) -> Node {
+    let mut children: List<Node> = [];
+    let mut start = 0;
+    if let Some([fm, consumed]) = try_front_matter(lines) {
+        children.push(Node::FrontMatter(fm));
+        start = consumed;
+    }
+    children.extend(&parse_blocks(lines, start, lines.len(), refs));
+    return Node::Document(children);
 }
 
 // --- link reference definitions (first pass) ---

@@ -150,6 +150,19 @@ test "render prints task-list markers as literal text" {
 </ul>";
 }
 
+test "render keeps task-list markers inside p for a loose list" {
+    assert render(&"- [ ] todo
+
+- [x] done") == "<ul>
+<li>
+<p>[ ] todo</p>
+</li>
+<li>
+<p>[x] done</p>
+</li>
+</ul>";
+}
+
 // --- tables ---
 
 test "render emits a GFM table" {
