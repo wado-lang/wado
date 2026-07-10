@@ -531,7 +531,6 @@ fn "http_base64_decode.wado/handle"(request) {
     let rx_177: i32;
     let tx_178: i32;
     let v: ref "core:prelude/string.wado//String";
-    let __sroa_text_repr: ref Array<u8>;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:http_base64_decode.wado::__modules_initialized);
         cold_path;
@@ -857,8 +856,14 @@ condition: result matches { Some(bytes) && bytes.len() == 3 }
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(70, 65, 73, 76), used: 4 };
     });
-    __sroa_text_repr = builtin::array_clone<u8>(v.repr);
-    "core:rt/cm_stream_write_u8"(tx_178, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __sroa_text_repr, used: v.used, index: 0 }));
+    let __array_clone_src_2: ref Array<u8>;
+    __array_clone_src_2 = v.repr;
+    let __array_clone_len_2: i32;
+    __array_clone_len_2 = builtin::array_len(__array_clone_src_2);
+    let __array_clone_dst_2: ref Array<u8>;
+    __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2);
+    builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2);
+    "core:rt/cm_stream_write_u8"(tx_178, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __array_clone_dst_2, used: v.used, index: 0 }));
     "wasi/stream-drop-writable"(tx_178);
     let __fw_write_ptr_1: i32;
     let __fw_result_1: i32;

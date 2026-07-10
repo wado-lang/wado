@@ -641,7 +641,7 @@ condition: append_result matches { Err(_) }
     }
     __b = struct.new "core:prelude//List<core:prelude/list.wado/List<u8>>" { repr: builtin::array_new<ref "core:prelude//List<u8>">(1), used: 0 };
     v = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_fixed<u8>(118, 97, 108), used: 3, index: 0 });
-    value = struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used };
+    value = struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v.used };
     "core:prelude/list.wado/List<wasi:http/types.wado/FieldValue>::push"(__b, value);
     set_result = "http_fields_immutable_errors.wado/__cm_binding__Fields_set"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 111, 115, 116), used: 4 }, __b);
     __cond_9 = ref.is_null(set_result) == 0;
@@ -1046,7 +1046,7 @@ fn "http_fields_immutable_errors.wado/__cm_binding__Fields_get"(self, name) with
             if __count_10 > 0 {
                 drop("mem/realloc"(__base_9, __count_10 * 1, 1, 0));
             }
-            "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::push"(__result_6, struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(builtin::array_clone<u8>(__result_11.repr)), used: __result_11.used });
+            "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::push"(__result_6, struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = __result_11.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: __result_11.used });
             __i_7 = __i_7 + 1;
             continue l68;
         };
@@ -1305,7 +1305,7 @@ fn "http_fields_immutable_errors.wado/__cm_binding__Fields_get_and_delete"(self,
                 if __count_12 > 0 {
                     drop("mem/realloc"(__base_11, __count_12 * 1, 1, 0));
                 }
-                "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::push"(__result_8, struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(builtin::array_clone<u8>(__result_13.repr)), used: __result_13.used });
+                "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::push"(__result_8, struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = __result_13.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: __result_13.used });
                 __i_9 = __i_9 + 1;
                 continue l99;
             };
@@ -1381,7 +1381,7 @@ fn "http_fields_immutable_errors.wado/__cm_binding__Fields_copy_all"(self) with 
             if __count_9 > 0 {
                 drop("mem/realloc"(__base_8, __count_9 * 1, 1, 0));
             }
-            "core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>::push"(__result_4, struct.new "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]" { 0: __lifted_result_7, 1: struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(builtin::array_clone<u8>(__result_10.repr)), used: __result_10.used } });
+            "core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>::push"(__result_4, struct.new "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]" { 0: __lifted_result_7, 1: struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = __result_10.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: __result_10.used } });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 0), builtin::load_i32((__elem_addr + 0) + 4), 1, 0));
             __i_5 = __i_5 + 1;
             continue l110;

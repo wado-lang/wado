@@ -152,7 +152,7 @@ fn "wir_optimize_labeled_block_copy_prop_safety.wado/run"() with Stdout {
         global:wir_optimize_labeled_block_copy_prop_safety.wado::__modules_initialized = 1;
     };
     greeting = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-    s = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(greeting.repr)), used: greeting.used };
+    s = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = greeting.repr; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: greeting.used };
     "core:prelude/string.wado/String::push"(s, 33);
     __cond_2 = __inline_String_Eq__eq_3: block -> bool {
         len_a_22 = s.used;

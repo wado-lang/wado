@@ -228,7 +228,6 @@ fn "cm_stream_read_record_in_branch.wado/run"() with Stdout, Stderr, Preopens {
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let v: ref "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>";
     let len_a: i32;
-    let __sroa_entries_repr: ref "Array<wasi:filesystem/types.wado/DirectoryEntry>";
     let __sroa_entries_used: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:cm_stream_read_record_in_branch.wado::__modules_initialized);
@@ -255,10 +254,16 @@ condition: index < self.used
     } else {
         "cm_stream_read_record_in_branch.wado/__cm_stream_read_DirectoryEntry"(dir_stream, 0);
     });
-    __sroa_entries_repr = builtin::array_clone<ref "wasi:filesystem/types.wado//DirectoryEntry">(v.repr);
+    let __array_clone_src_12: ref "Array<wasi:filesystem/types.wado/DirectoryEntry>";
+    __array_clone_src_12 = v.repr;
+    let __array_clone_len_12: i32;
+    __array_clone_len_12 = builtin::array_len(__array_clone_src_12);
+    let __array_clone_dst_12: ref "Array<wasi:filesystem/types.wado/DirectoryEntry>";
+    __array_clone_dst_12 = builtin::array_new<ref "wasi:filesystem/types.wado//DirectoryEntry">(__array_clone_len_12);
+    builtin::array_copy<ref "wasi:filesystem/types.wado//DirectoryEntry">(__array_clone_dst_12, 0, __array_clone_src_12, 0, __array_clone_len_12);
     __sroa_entries_used = v.used;
     found_hello = 0;
-    __iter_6 = struct.new "core:prelude/slice.wado//ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>" { repr: __sroa_entries_repr, index: 0, end: __sroa_entries_used };
+    __iter_6 = struct.new "core:prelude/slice.wado//ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>" { repr: __array_clone_dst_12, index: 0, end: __sroa_entries_used };
     b3: block {
         l4: loop {
             __match_9 = "core:prelude/slice.wado/ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>^Iterator::next"(__iter_6);

@@ -147,7 +147,7 @@ fn "deref_assign_tuple_writeback.wado/__test_1_deref_assign_of_a_tuple_with_a_st
     __sroa_p_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 108, 100), used: 3 };
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 101, 119), used: 3 };
     __sroa_p_0 = s;
-    __v0_1 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__sroa_p_0.repr)), used: __sroa_p_0.used };
+    __v0_1 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = __sroa_p_0.repr; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: __sroa_p_0.used };
     __cond_2 = __inline_String_Eq__eq_1: block -> bool {
         len_a = __v0_1.used;
         if len_a != 3 {
