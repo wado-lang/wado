@@ -545,7 +545,8 @@ Three independent tracks; each slice keeps `mise run test` green (E2E 2934/0).
 - [x] **`TraitEnv` build-time decl digests** — `TraitEnv::build` pre-computes `ImplHeader` / `TraitDeclHeader` / `function_type_params` / import scopes, so resolution queries read digests instead of scanning `loaded_modules`.
 - [x] **Track B Stage A** — `AnnotateCtx { trait_ctx, trait_check_stack }` bundles the per-function scope into one `annotate_ctx` field; `TypeParamScope` guard save/restores it.
 - [x] **Track B Stage B** — `type_implements_trait(_inner)` take explicit `ctx: &AnnotateCtx` (recursion guard + type-param bound check); callers pass `&self.annotate_ctx`.
-- [x] **Track B Stage C — done.** Every `trait_ctx` _query_ now takes `ctx: &AnnotateCtx` explicitly: the trait-impl-lookup cluster (`find_trait_impl_for_type(_with_args)`, `has_real_trait_impl_for_type`, `blanket_trait_impl_applies`, `check_impl_block_bounds`), the `resolve_type` family (6 fns, 118 call sites; `AnnotateCtx` gained `#[derive(Clone)]` and is cloned at each read point to satisfy the `&mut self` borrow), `classify_call_callee`, `infer_variant_type_args`, `resolve_type_with_param_mapping`, and `record_type_name_reference`. Scope _producers_ (`register_generic_params`, `bind_trait_type_params_from_impl`, `enter_inherited_type_param_scope`, the `Item::Impl` / `self_type` save-restores) keep `&mut self.annotate_ctx` — they build the scope, can't take `&AnnotateCtx`, and are reworked in Stage E. Membership criterion: query (reads `trait_ctx` to answer) threads `ctx`; producer (builds `trait_ctx`) stays on `Elaborator`. Audited over all five `TraitContext` fields; per-fn detail in git.
+- [x] **Track B Stage C — done.** Every `trait_ctx` _query_ that moves onto the shared `TypeSystem` takes `ctx: &AnnotateCtx` explicitly (`TypeSystem` has no `annotate_ctx` to read): the trait-impl-lookup cluster (`find_trait_impl_for_type(_with_args)`, `has_real_trait_impl_for_type`, `blanket_trait_impl_applies`, `check_impl_block_bounds`), `classify_call_callee`, `infer_variant_type_args`. Scope _producers_ (`register_generic_params`, `bind_trait_type_params_from_impl`, `enter_inherited_type_param_scope`, the `Item::Impl` / `self_type` save-restores) keep `&mut self.annotate_ctx` — they build the scope, can't take `&AnnotateCtx`, and are reworked in Stage E. Membership criterion: a query that moves to `TypeSystem` threads `ctx`; a query that stays on `Elaborator` reads `self.annotate_ctx` (see the refinement below); a producer (builds `trait_ctx`) stays on `Elaborator`. Audited over all five `TraitContext` fields; per-fn detail in git.
+- [x] **Stage C refinement — no `AnnotateCtx` clone.** An intermediate form threaded `ctx` through the `Elaborator`-resident `resolve_type` family (`resolve_type`, `resolve_named_type`, `resolve_generic_type`, `resolve_namespaced_generic_type`, `find_direct_assoc_type_binding`, `compute_assoc_type_bindings`, `resolve_type_with_param_mapping`, `record_type_name_reference`), which forced `AnnotateCtx: Clone` and a `&self.annotate_ctx.clone()` at every call site (~96 sites) to satisfy the `&mut self` receiver. That `ctx` was redundant: for an `Elaborator`-resident method `ctx` is _always_ `self.annotate_ctx` at the point of use, so the family now reads `self.annotate_ctx` directly and the param is gone — the clones (and the `#[derive(Clone)]` on `AnnotateCtx`) are removed. `trait_check_stack` is therefore no longer copied anywhere; it stays a pure per-call recursion guard (`TypeParamScope` already save/restores only `trait_ctx`). Behaviour-preserving: the snapshots the clones captured equalled the live `self.annotate_ctx` at every use (verified by `mise run test`).
 
 ### Remaining (next to pick up, in order)
 
@@ -598,12 +599,13 @@ Three independent tracks; each slice keeps `mise run test` green (E2E 2934/0).
       `self.logger`, etc. — genuinely `Elaborator`-coupled, not pure trait
       queries. `binop_operand_requires_trait` was the one pure trait-bound
       predicate there.
-- [ ] **Track B Stage D — permanently deferred.** The `resolve_type` family
-      stays on `impl Elaborator`: it mutates `ModuleSemantics.bindings` via
-      `record_type_name_reference`, and is `&mut self` for on-demand interning,
-      so a self-borrowing `&TypeLookup` param needs a different shape.
-      `resolve_type_with_param_mapping` calls it and is likewise deferred. These
-      are documented `Elaborator`-level exceptions, not pending work.
+- [x] **Track B Stage D — `resolve_type` family stays on `impl Elaborator` (settled).**
+      It mutates `ModuleSemantics.bindings` via `record_type_name_reference` and
+      is `&mut self` for on-demand interning, so a self-borrowing `&TypeLookup`
+      param needs a different shape. It reads `self.annotate_ctx` directly (no
+      `ctx` param — see the Stage C refinement), so there is no clone cost to the
+      exception. `resolve_type_with_param_mapping` is in the same family. These
+      are settled `Elaborator`-level members, not pending work.
 - [ ] **Track B Stage E — fold the manual scope save/restores into the guard.**
       Replace the hand-rolled `trait_ctx` clone/restore in `resolve_module`'s
       `Item::Impl` arm (`elaborator.rs`) and the `self_type`-only save/restore in

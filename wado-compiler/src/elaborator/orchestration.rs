@@ -1660,7 +1660,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .unwrap_or_default();
         self.with_module_perspective(module_source.clone(), scope, |s| {
             return_type
-                .map(|t| s.resolve_type(&s.annotate_ctx.clone(), t))
+                .map(|t| s.resolve_type(t))
                 .unwrap_or(crate::tir::TypeTable::UNIT)
         })
     }

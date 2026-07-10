@@ -13,7 +13,6 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::infer::InferCtx;
-use super::trait_env::AnnotateCtx;
 use super::types::{
     ArithmeticTraitInfo, FunctionContext, IndexAssignTraitInfo, IndexMutTraitInfo, IndexTraitInfo,
     IndexValueTraitInfo, KeyValueLiteralTraitInfo, MethodInfo, SequenceLiteralTraitInfo, TypeError,
@@ -710,13 +709,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 true,
                             )
                         } else if let Some(sig) = fn_bound_sig {
-                            (
-                                s.resolve_type(
-                                    &s.annotate_ctx.clone(),
-                                    &ast::Type::Function(sig.clone()),
-                                ),
-                                false,
-                            )
+                            (s.resolve_type(&ast::Type::Function(sig.clone())), false)
                         } else {
                             (
                                 s.tysys
@@ -738,7 +731,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let return_type = method
                         .return_type
                         .as_ref()
-                        .map(|t| s.resolve_type(&s.annotate_ctx.clone(), t))
+                        .map(|t| s.resolve_type(t))
                         .unwrap_or(TypeTable::UNIT);
                     let self_kind = method
                         .params
@@ -864,11 +857,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     .insert(type_param.name.clone(), (index, type_param_id));
                             }
 
-                            let return_ctx = scope.annotate_ctx.clone();
                             let return_type = method
                                 .return_type
                                 .as_ref()
-                                .map(|t| scope.resolve_type(&return_ctx, t))
+                                .map(|t| scope.resolve_type(t))
                                 .unwrap_or(TypeTable::UNIT);
                             let self_kind = method
                                 .params
@@ -1011,7 +1003,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let return_type = method
                         .return_type
                         .as_ref()
-                        .map(|t| s.resolve_type(&s.annotate_ctx.clone(), t))
+                        .map(|t| s.resolve_type(t))
                         .unwrap_or(TypeTable::UNIT);
                     let param_types = s.extract_param_types(&method.params);
                     let param_is_mut: Vec<bool> = method
@@ -1072,7 +1064,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         params
             .iter()
             .filter(|p| p.name != "self")
-            .map(|p| self.resolve_type(&self.annotate_ctx.clone(), &p.ty))
+            .map(|p| self.resolve_type(&p.ty))
             .collect()
     }
 
@@ -1803,6 +1795,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // type satisfies the bound.  e.g., `impl<I: Iterator> IntoIterator for I` matches
         // any concrete type that implements Iterator.
         let blanket_entries = self.tysys.trait_env.blanket_impl_index.clone();
+        let type_lookup = self.type_lookup();
         for entry in &blanket_entries {
             let Some(header) = self.tysys.trait_env.impl_headers.get(entry) else {
                 continue;
@@ -1824,7 +1817,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     names_to_check.iter().any(|name| {
                         self.tysys.find_trait_impl_for_type(
                             &self.annotate_ctx,
-                            &self.type_lookup(),
+                            &type_lookup,
                             name,
                             bound_trait_name,
                         )
@@ -1987,9 +1980,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let impl_module = impl_ref.0.clone();
         let impl_scope = self.tysys.trait_env.import_scope(&impl_module);
-        let impl_recv_id = self.with_module_perspective(impl_module, impl_scope, |s| {
-            s.resolve_type(&s.annotate_ctx.clone(), &impl_ty_clone)
-        });
+        let impl_recv_id = self
+            .with_module_perspective(impl_module, impl_scope, |s| s.resolve_type(&impl_ty_clone));
         let tt = self.tysys.type_table.borrow();
         let target = tt.peel_refs(impl_recv_id);
         let mut current = tt.peel_refs(receiver);
@@ -2220,9 +2212,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // module (`type Iter = TreeSetIter<T>`) is not re-resolved by name in
         // the caller's perspective, where it is invisible (issue #1416).
         for (name, ty) in &assoc_bindings {
-            let type_id = scope.with_module_perspective_for(&impl_module_source, |s| {
-                s.resolve_type(&s.annotate_ctx.clone(), ty)
-            });
+            let type_id =
+                scope.with_module_perspective_for(&impl_module_source, |s| s.resolve_type(ty));
             scope
                 .annotate_ctx
                 .trait_ctx
@@ -2329,7 +2320,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 scope.with_module_perspective_for(&impl_module_source, |s| {
                     let return_type = return_type_ast
                         .as_ref()
-                        .map(|t| s.resolve_type(&s.annotate_ctx.clone(), t))
+                        .map(|t| s.resolve_type(t))
                         .unwrap_or(TypeTable::UNIT);
                     // Extract param_types while method-level type params are
                     // still in scope — otherwise `&T` in a parameter would not
@@ -2458,11 +2449,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             }
                         }
 
-                        let return_ctx = scope.annotate_ctx.clone();
                         let return_type = default_method
                             .return_type
                             .as_ref()
-                            .map(|t| scope.resolve_type(&return_ctx, t))
+                            .map(|t| scope.resolve_type(t))
                             .unwrap_or(TypeTable::UNIT);
                         let self_kind = default_method
                             .params
@@ -2712,8 +2702,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let impl_module = impl_ref.0.clone();
                 let mapping = mapping.clone();
                 Some(s.with_module_perspective_for(&impl_module, move |s| {
-                    let ctx = s.annotate_ctx.clone();
-                    s.resolve_type_with_param_mapping(&ctx, &binding_ty, &mapping)
+                    s.resolve_type_with_param_mapping(&binding_ty, &mapping)
                 }))
             },
         )
@@ -2939,13 +2928,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 let saved_self_type = s.annotate_ctx.trait_ctx.self_type;
                 s.annotate_ctx.trait_ctx.self_type = Some(base_type_id);
-                let self_bound_ctx = s.annotate_ctx.clone();
 
                 // Process associated types (e.g., `type Output = Self`)
                 let mut assoc_type_map: IndexMap<String, TypeId> = IndexMap::default();
                 for (name, ty) in &assoc_types {
-                    let resolved_type =
-                        s.resolve_type_with_param_mapping(&self_bound_ctx, ty, mapping);
+                    let resolved_type = s.resolve_type_with_param_mapping(ty, mapping);
                     assoc_type_map.insert(name.clone(), resolved_type);
                 }
 
@@ -2957,7 +2944,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Resolve the rhs parameter type (first non-self parameter)
                 let rhs_type = rhs_param_ty
                     .as_ref()
-                    .map(|ty| s.resolve_type_with_param_mapping(&self_bound_ctx, ty, mapping));
+                    .map(|ty| s.resolve_type_with_param_mapping(ty, mapping));
 
                 s.annotate_ctx.trait_ctx.self_type = saved_self_type;
 
@@ -3052,11 +3039,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                     });
                     if let Some(ref arg) = trait_index_arg {
-                        let resolved_trait_idx = s.resolve_type_with_param_mapping(
-                            &s.annotate_ctx.clone(),
-                            arg,
-                            mapping,
-                        );
+                        let resolved_trait_idx = s.resolve_type_with_param_mapping(arg, mapping);
                         if resolved_trait_idx != expected_idx_type {
                             return None;
                         }
@@ -3094,9 +3077,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let mut scope = s.enter_inherited_type_param_scope();
                 scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
                 for (name, ty) in &assoc_bindings {
-                    let assoc_binding_ctx = scope.annotate_ctx.clone();
-                    let type_id =
-                        scope.resolve_type_with_param_mapping(&assoc_binding_ctx, ty, mapping);
+                    let type_id = scope.resolve_type_with_param_mapping(ty, mapping);
                     scope
                         .annotate_ctx
                         .trait_ctx
@@ -3123,7 +3104,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a type, substituting type parameters using the provided mapping.
     pub(super) fn resolve_type_with_param_mapping(
         &mut self,
-        ctx: &AnnotateCtx,
         ty: &Type,
         type_param_mapping: &IndexMap<String, TypeId>,
     ) -> TypeId {
@@ -3143,19 +3123,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // that could drift.  Channeling Self through `trait_ctx`
                 // here closes that gap.
                 if n.name == "Self"
-                    && let Some(self_type) = ctx.trait_ctx.self_type
+                    && let Some(self_type) = self.annotate_ctx.trait_ctx.self_type
                 {
                     return self_type;
                 }
                 // Otherwise, resolve normally
-                self.resolve_type(ctx, ty)
+                self.resolve_type(ty)
             }
             Type::Generic(g) => {
                 // Resolve generic type with substituted arguments
                 let resolved_args: Vec<TypeId> = g
                     .args
                     .iter()
-                    .map(|arg| self.resolve_type_with_param_mapping(ctx, arg, type_param_mapping))
+                    .map(|arg| self.resolve_type_with_param_mapping(arg, type_param_mapping))
                     .collect();
 
                 // Special-case Option to use its dedicated type
@@ -3188,11 +3168,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             Type::Reference(inner) => {
-                let inner_id = self.resolve_type_with_param_mapping(ctx, inner, type_param_mapping);
+                let inner_id = self.resolve_type_with_param_mapping(inner, type_param_mapping);
                 self.tysys.type_table.borrow_mut().make_ref(inner_id)
             }
             Type::MutReference(inner) => {
-                let inner_id = self.resolve_type_with_param_mapping(ctx, inner, type_param_mapping);
+                let inner_id = self.resolve_type_with_param_mapping(inner, type_param_mapping);
                 self.tysys.type_table.borrow_mut().make_mut_ref(inner_id)
             }
             Type::NamespacedGeneric(n) => {
@@ -3203,10 +3183,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     return assoc_id;
                 }
-                self.resolve_type(ctx, ty)
+                self.resolve_type(ty)
             }
             // For other types, fall back to normal resolution
-            _ => self.resolve_type(ctx, ty),
+            _ => self.resolve_type(ty),
         }
     }
 
@@ -3256,11 +3236,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             }
 
-            return Some(self.resolve_type_with_param_mapping(
-                &self.annotate_ctx.clone(),
-                &binding_ty,
-                &type_param_mapping,
-            ));
+            return Some(self.resolve_type_with_param_mapping(&binding_ty, &type_param_mapping));
         }
 
         None
@@ -3449,7 +3425,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let type_args: Vec<TypeId> = method_call
             .type_args
             .iter()
-            .map(|ty| self.resolve_type(&self.annotate_ctx.clone(), ty))
+            .map(|ty| self.resolve_type(ty))
             .collect();
 
         let mangled_method_name = MethodName::format_local(

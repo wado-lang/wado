@@ -553,8 +553,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
         let mut struct_field_types: Vec<TypeId> = Vec::with_capacity(struct_decl.fields.len());
         for field in &struct_decl.fields {
-            let field_ty_ctx = scope.annotate_ctx.clone();
-            let type_id = scope.resolve_type(&field_ty_ctx, &field.ty);
+            let type_id = scope.resolve_type(&field.ty);
             if let Some(serde_default) = field
                 .attrs
                 .iter()
@@ -573,7 +572,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Convert AST type params to TIR type params (while type params still in scope)
-        let type_param_default_ctx = scope.annotate_ctx.clone();
         let type_params: Vec<crate::tir::TirTypeParam> = struct_decl
             .type_params
             .iter()
@@ -583,10 +581,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 is_effect: p.is_effect,
                 is_pack: p.is_pack,
                 bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                default: p
-                    .default
-                    .as_ref()
-                    .map(|ty| scope.resolve_type(&type_param_default_ctx, ty)),
+                default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
                 index: i as u32,
             })
             .collect();
@@ -689,14 +684,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         });
 
-        let effect_op_ctx = scope.annotate_ctx.clone();
         let mut ops = Vec::with_capacity(methods.len());
         for method in methods {
             let mut params = Vec::with_capacity(method.params.len());
             let mut next_local: u32 = 0;
             for p in &method.params {
                 let type_id = match (p.self_kind, self_type) {
-                    (SelfKind::None, _) => scope.resolve_type(&effect_op_ctx, &p.ty),
+                    (SelfKind::None, _) => scope.resolve_type(&p.ty),
                     // `&self` / `&mut self` on a resource method:
                     // synthesise the receiver as a first regular
                     // parameter so the dispatch wrapper and the
@@ -740,7 +734,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let return_type = method
                 .return_type
                 .as_ref()
-                .map(|ty| scope.resolve_type(&effect_op_ctx, ty))
+                .map(|ty| scope.resolve_type(ty))
                 .unwrap_or(TypeTable::UNIT);
             // Extract `#[cm("...")]` attribute payload, if any, so the
             // dispatch synthesis can map raw resource call sites back
@@ -808,7 +802,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// expression types, so the combined walk builds no TIR here.
     pub(super) fn resolve_global(&mut self, global_decl: &GlobalDecl) {
         // Resolve the type
-        let ty = self.resolve_type(&self.annotate_ctx.clone(), &global_decl.ty);
+        let ty = self.resolve_type(&global_decl.ty);
 
         // Global initialization has no locals; the context only carries the
         // `#function` label. Reify must reproduce it byte-for-byte so the
@@ -841,7 +835,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scope.register_generic_params(&variant_decl.type_params, 0);
 
         // Convert AST type params to TIR type params (while type params still in scope)
-        let type_param_default_ctx = scope.annotate_ctx.clone();
         let type_params: Vec<crate::tir::TirTypeParam> = variant_decl
             .type_params
             .iter()
@@ -851,10 +844,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 is_effect: p.is_effect,
                 is_pack: p.is_pack,
                 bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                default: p
-                    .default
-                    .as_ref()
-                    .map(|ty| scope.resolve_type(&type_param_default_ctx, ty)),
+                default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
                 index: i as u32,
             })
             .collect();
@@ -997,12 +987,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .params
             .iter()
             .filter(|p| p.self_kind == SelfKind::None)
-            .map(|p| self.resolve_type(&self.annotate_ctx.clone(), &p.ty))
+            .map(|p| self.resolve_type(&p.ty))
             .collect();
         let declared_return_type = func
             .return_type
             .as_ref()
-            .map(|t| self.resolve_type(&self.annotate_ctx.clone(), t))
+            .map(|t| self.resolve_type(t))
             .unwrap_or(TypeTable::UNIT);
         self.sem
             .decls
@@ -1072,10 +1062,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let declared_return_type = if has_real_type_params {
             scope.populate_generic_function_cache(func)
         } else {
-            let ctx = scope.annotate_ctx.clone();
             func.return_type
                 .as_ref()
-                .map(|t| scope.resolve_type(&ctx, t))
+                .map(|t| scope.resolve_type(t))
                 .unwrap_or(TypeTable::UNIT)
         };
 
@@ -1121,8 +1110,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let mut params = Vec::new();
         for param in &func.params {
-            let param_ty_ctx = scope.annotate_ctx.clone();
-            let type_id = scope.resolve_type(&param_ty_ctx, &param.ty);
+            let type_id = scope.resolve_type(&param.ty);
             // Closures cannot cross the Component Model boundary.
             if crosses_cm_boundary && scope.type_contains_closure(type_id) {
                 let _ = scope.logger.error(TypeError::ClosureAtCmBoundary {
@@ -1193,7 +1181,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // index, which matches both the `TypeParam(name, index)` entries in
         // the type table and the positional order of the inference cache.
         let mut non_effect_non_fn_idx: u32 = 0;
-        let type_param_default_ctx = scope.annotate_ctx.clone();
         let type_params: Vec<crate::tir::TirTypeParam> = func
             .type_params
             .iter()
@@ -1211,10 +1198,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     is_effect: p.is_effect,
                     is_pack: p.is_pack,
                     bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                    default: p
-                        .default
-                        .as_ref()
-                        .map(|ty| scope.resolve_type(&type_param_default_ctx, ty)),
+                    default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
                     index: idx,
                 })
             })
@@ -1630,11 +1614,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     true,
                 )
             } else if let Some(sig) = fn_bound_sig {
-                let fn_bound_ctx = scope.annotate_ctx.clone();
-                (
-                    scope.resolve_type(&fn_bound_ctx, &ast::Type::Function(sig.clone())),
-                    false,
-                )
+                (scope.resolve_type(&ast::Type::Function(sig.clone())), false)
             } else {
                 (
                     scope
@@ -1679,16 +1659,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Set up Self type for the impl block
         // This allows `&Self` to resolve correctly in method parameters
         let old_self_type = scope.annotate_ctx.trait_ctx.self_type;
-        let self_type_ctx = scope.annotate_ctx.clone();
-        let resolved_self_type = scope.resolve_type(&self_type_ctx, impl_type);
+        let resolved_self_type = scope.resolve_type(impl_type);
         scope.annotate_ctx.trait_ctx.self_type = Some(resolved_self_type);
 
         // Resolve return type
-        let return_type_ctx = scope.annotate_ctx.clone();
         let return_type = func
             .return_type
             .as_ref()
-            .map(|t| scope.resolve_type(&return_type_ctx, t))
+            .map(|t| scope.resolve_type(t))
             .unwrap_or(TypeTable::UNIT);
 
         // Update the function_return_types with the resolved return type
@@ -1755,20 +1733,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let type_id = match param.self_kind {
                 ast::SelfKind::Ref => {
                     // &self: wrap impl type in immutable reference
-                    let self_param_ctx = scope.annotate_ctx.clone();
-                    let inner_type = scope.resolve_type(&self_param_ctx, impl_type);
+                    let inner_type = scope.resolve_type(impl_type);
                     scope.tysys.type_table.borrow_mut().make_ref(inner_type)
                 }
                 ast::SelfKind::MutRef => {
                     // &mut self: wrap impl type in mutable reference
-                    let self_param_ctx = scope.annotate_ctx.clone();
-                    let inner_type = scope.resolve_type(&self_param_ctx, impl_type);
+                    let inner_type = scope.resolve_type(impl_type);
                     scope.tysys.type_table.borrow_mut().make_mut_ref(inner_type)
                 }
                 ast::SelfKind::None => {
                     // Regular parameter
-                    let param_ctx = scope.annotate_ctx.clone();
-                    scope.resolve_type(&param_ctx, &param.ty)
+                    scope.resolve_type(&param.ty)
                 }
             };
             // Reject parameter defaults on trait-impl methods: defaults live
@@ -1824,7 +1799,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // generic list; the remaining real type params use dense indices so
         // the substitution map in `substitute_type_params` lines up.
         let mut non_effect_non_fn_idx: u32 = 0;
-        let type_param_default_ctx = scope.annotate_ctx.clone();
         let type_params: Vec<crate::tir::TirTypeParam> = func
             .type_params
             .iter()
@@ -1842,10 +1816,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     is_effect: p.is_effect,
                     is_pack: p.is_pack,
                     bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                    default: p
-                        .default
-                        .as_ref()
-                        .map(|ty| scope.resolve_type(&type_param_default_ctx, ty)),
+                    default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
                     index: idx,
                 })
             })
@@ -1856,11 +1827,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let method_resolved_param_types: Vec<TypeId> = if func.type_params.is_empty() {
             vec![]
         } else {
-            let method_param_ctx = scope.annotate_ctx.clone();
             func.params
                 .iter()
                 .filter(|p| p.self_kind == SelfKind::None)
-                .map(|p| scope.resolve_type(&method_param_ctx, &p.ty))
+                .map(|p| scope.resolve_type(&p.ty))
                 .collect()
         };
 

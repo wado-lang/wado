@@ -76,7 +76,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let type_args: Vec<TypeId> = method_call
             .type_args
             .iter()
-            .map(|ty| self.resolve_type(&self.annotate_ctx.clone(), ty))
+            .map(|ty| self.resolve_type(ty))
             .collect();
         // Build the mask only for the `_` case; an empty vec (no allocation)
         // marks "no holes" for the fully-explicit common path.
@@ -1009,8 +1009,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TypeId {
         // Resolve the target type first to get struct name for parameter type lookup
-        let target_type_id =
-            self.resolve_type(&self.annotate_ctx.clone(), &static_call.target_type);
+        let target_type_id = self.resolve_type(&static_call.target_type);
 
         // Extract struct name AND canonical decl key for parameter type
         // lookup (follow newtypes to base). The canonical key disambiguates
@@ -1089,7 +1088,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let method_type_args: Vec<TypeId> = static_call
             .type_args
             .iter()
-            .map(|ty| self.resolve_type(&self.annotate_ctx.clone(), ty))
+            .map(|ty| self.resolve_type(ty))
             .collect();
 
         // Re-resolve param types with concrete type args in scope for literal coercion.
@@ -1110,11 +1109,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
                 if let Some((impl_type_param_names, method_def)) = method_def {
                     let call_site_impl_args: Vec<TypeId> = match &static_call.target_type {
-                        ast::Type::Generic(g) => g
-                            .args
-                            .iter()
-                            .map(|t| self.resolve_type(&self.annotate_ctx.clone(), t))
-                            .collect(),
+                        ast::Type::Generic(g) => {
+                            g.args.iter().map(|t| self.resolve_type(t)).collect()
+                        }
                         _ => vec![],
                     };
 
@@ -1148,10 +1145,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .iter()
                         .filter(|p| p.self_kind == ast::SelfKind::None)
                         .collect();
-                    let reresolve_ctx = scope.annotate_ctx.clone();
                     for (i, param_type) in param_types.iter_mut().enumerate() {
                         if let Some(param) = non_self_params.get(i) {
-                            *param_type = scope.resolve_type(&reresolve_ctx, &param.ty);
+                            *param_type = scope.resolve_type(&param.ty);
                         }
                     }
 
@@ -1339,7 +1335,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             _ => Vec::new(),
                         };
                         self.tysys.infer_variant_type_args(
-                            &self.annotate_ctx.clone(),
+                            &self.annotate_ctx,
                             &name,
                             &variant_info,
                             &case_data,
@@ -2158,11 +2154,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                     }
 
-                    let return_type_ctx = scope.annotate_ctx.clone();
                     let result = method
                         .return_type
                         .as_ref()
-                        .map(|t| scope.resolve_type(&return_type_ctx, t))
+                        .map(|t| scope.resolve_type(t))
                         .unwrap_or(TypeTable::UNIT);
 
                     drop(scope);
@@ -2210,8 +2205,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // impl block that connects this trait to this type.
                 let impl_assoc_types = scope.find_impl_assoc_types(struct_name, &trait_name);
                 for binding in &impl_assoc_types {
-                    let assoc_ctx = scope.annotate_ctx.clone();
-                    let type_id = scope.resolve_type(&assoc_ctx, &binding.ty);
+                    let type_id = scope.resolve_type(&binding.ty);
                     scope
                         .annotate_ctx
                         .trait_ctx
@@ -2221,16 +2215,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Resolve `Self` to the concrete type at the call site.
                 // `resolve_named_type` maps primitives to their canonical
                 // TypeTable id rather than a struct wrapper.
-                let self_ctx = scope.annotate_ctx.clone();
-                let self_type_id =
-                    scope.resolve_named_type(&self_ctx, struct_name, Span::default(), false);
+                let self_type_id = scope.resolve_named_type(struct_name, Span::default(), false);
                 let old_self = scope.annotate_ctx.trait_ctx.self_type;
                 scope.annotate_ctx.trait_ctx.self_type = Some(self_type_id);
-                let return_ctx = scope.annotate_ctx.clone();
                 let result = default_method
                     .return_type
                     .as_ref()
-                    .map(|t| scope.resolve_type(&return_ctx, t))
+                    .map(|t| scope.resolve_type(t))
                     .unwrap_or(TypeTable::UNIT);
                 scope.annotate_ctx.trait_ctx.self_type = old_self;
                 drop(scope);
@@ -2552,7 +2543,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let result = scope.with_module_perspective(impl_module.clone(), impl_scope, |s| {
             params
                 .iter()
-                .map(|t| s.resolve_type(&s.annotate_ctx.clone(), t))
+                .map(|t| s.resolve_type(t))
                 .collect::<Vec<TypeId>>()
         });
 

@@ -1361,7 +1361,7 @@ pub(super) struct TraitContext {
 /// may move onto the shared `TypeSystem`: `trait_ctx` is per-function and
 /// `trait_check_stack` is a per-call frame stack whose sharing would leak
 /// frames across module walks.
-#[derive(Clone, Default)]
+#[derive(Default)]
 pub(super) struct AnnotateCtx {
     pub(super) trait_ctx: TraitContext,
     pub(super) trait_check_stack: RefCell<Vec<(TypeId, String)>>,
@@ -1470,13 +1470,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     true,
                 )
             } else if let Some(sig) = fn_bound_sig {
-                (
-                    self.resolve_type(
-                        &self.annotate_ctx.clone(),
-                        &ast::Type::Function(sig.clone()),
-                    ),
-                    false,
-                )
+                (self.resolve_type(&ast::Type::Function(sig.clone())), false)
             } else {
                 (
                     self.tysys
@@ -1552,7 +1546,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let Some(arg_ast) = trait_args.get(i) else {
                 continue;
             };
-            let resolved_arg = self.resolve_type(&self.annotate_ctx.clone(), arg_ast);
+            let resolved_arg = self.resolve_type(arg_ast);
             let idx = self.annotate_ctx.trait_ctx.type_params.len() as u32;
             self.annotate_ctx
                 .trait_ctx

@@ -219,7 +219,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::Type::Generic(generic) => generic
                 .args
                 .iter()
-                .map(|arg| self.resolve_type(&self.annotate_ctx.clone(), arg))
+                .map(|arg| self.resolve_type(arg))
                 .collect(),
             _ => Vec::new(),
         };
@@ -437,7 +437,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ast::Type::Generic(generic) => generic
                     .args
                     .iter()
-                    .map(|arg| self.resolve_type(&self.annotate_ctx.clone(), arg))
+                    .map(|arg| self.resolve_type(arg))
                     .collect(),
                 _ => Vec::new(),
             };

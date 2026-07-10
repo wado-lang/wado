@@ -36,8 +36,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                     } else if self.lookup_newtype(&newtype_decl.name).is_none() {
                         // Concrete newtype: resolve immediately
-                        let base_type_id =
-                            self.resolve_type(&self.annotate_ctx.clone(), &newtype_decl.ty);
+                        let base_type_id = self.resolve_type(&newtype_decl.ty);
                         let newtype_id = self.tysys.type_table.borrow_mut().make_newtype(
                             newtype_decl.name.clone(),
                             module_source.clone(),
@@ -98,9 +97,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let mut fields = Vec::new();
                     let mut field_ast_ids = Vec::new();
                     let mut field_defaults: Vec<Option<ast::Expr>> = Vec::new();
-                    let field_ty_ctx = scope.annotate_ctx.clone();
                     for field in &struct_decl.fields {
-                        let type_id = scope.resolve_type(&field_ty_ctx, &field.ty);
+                        let type_id = scope.resolve_type(&field.ty);
                         fields.push((field.name.clone(), type_id, field.visibility));
                         field_ast_ids.push(field.id);
                         field_defaults.push(field.default.clone());
@@ -150,8 +148,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Item::Newtype(newtype_decl) => {
                     if newtype_decl.type_params.is_empty() {
                         // Concrete newtype: resolve immediately
-                        let base_type_id =
-                            self.resolve_type(&self.annotate_ctx.clone(), &newtype_decl.ty);
+                        let base_type_id = self.resolve_type(&newtype_decl.ty);
                         let newtype_id = self.tysys.type_table.borrow_mut().make_newtype(
                             newtype_decl.name.clone(),
                             self.current_module_source.clone(),
@@ -212,12 +209,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     // Collect variant cases with resolved payload types
                     let mut cases = Vec::new();
-                    let payload_ctx = scope.annotate_ctx.clone();
                     for case in &variant_decl.cases {
                         // Each variant case has exactly one payload type.
                         // Unit variants have `()` (unit type) payload.
                         let payload = if let Some(payload_ty) = &case.payload {
-                            scope.resolve_type(&payload_ctx, payload_ty)
+                            scope.resolve_type(payload_ty)
                         } else {
                             TypeTable::UNIT
                         };
@@ -395,11 +391,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     scope.annotate_ctx.trait_ctx.type_params.clear();
                     scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
                     scope.register_generic_params(&func.type_params, 0);
-                    let return_ctx = scope.annotate_ctx.clone();
                     let return_type = func
                         .return_type
                         .as_ref()
-                        .map(|t| scope.resolve_type(&return_ctx, t))
+                        .map(|t| scope.resolve_type(t))
                         .unwrap_or(TypeTable::UNIT);
                     drop(scope);
                     self.sem
@@ -499,8 +494,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Set up associated type bindings for trait implementations
                     if impl_block.trait_type.is_some() {
                         for binding in &impl_block.associated_types {
-                            let assoc_ctx = scope.annotate_ctx.clone();
-                            let type_id = scope.resolve_type(&assoc_ctx, &binding.ty);
+                            let type_id = scope.resolve_type(&binding.ty);
                             scope
                                 .annotate_ctx
                                 .trait_ctx
@@ -514,15 +508,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // impl header (`impl Greet for Bot`) to the trait decl. The
                     // resulting TypeId is unused because trait bounds are
                     // checked via trait_query, not via type substitution.
-                    let post_assoc_ctx = scope.annotate_ctx.clone();
                     if let Some(trait_type) = &impl_block.trait_type {
-                        let _ = scope.resolve_type(&post_assoc_ctx, trait_type);
+                        let _ = scope.resolve_type(trait_type);
                     }
                     // Resolve the implementing type for its reference-recording
                     // side effect (already performed when method signatures are
                     // later resolved, but doing it here ensures the ref is
                     // recorded even for impls with no methods referencing it).
-                    let _ = scope.resolve_type(&post_assoc_ctx, &impl_block.ty);
+                    let _ = scope.resolve_type(&impl_block.ty);
 
                     // Collect method signatures with mangled names
                     let struct_name = scope.get_type_name(&impl_block.ty);
@@ -579,11 +572,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             method_type_param_names.push(param.name.clone());
                         }
 
-                        let method_return_ctx = scope.annotate_ctx.clone();
                         let return_type = method
                             .return_type
                             .as_ref()
-                            .map(|t| scope.resolve_type(&method_return_ctx, t))
+                            .map(|t| scope.resolve_type(t))
                             .unwrap_or(TypeTable::UNIT);
 
                         // Remove method-level type params from scope

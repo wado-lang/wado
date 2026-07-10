@@ -658,7 +658,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for item in &module.items {
             match item {
                 crate::ast::Item::Global(global_decl) if global_decl.name == name => {
-                    let ty = self.resolve_type(&self.annotate_ctx.clone(), &global_decl.ty);
+                    let ty = self.resolve_type(&global_decl.ty);
                     // Stage 7-B: reify resolves the fallback-module global from
                     // the same AST items (`reify_ident` branch 3b). Project the
                     // type only; this default-expr path is never an assignment
@@ -765,7 +765,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .type_id_of_decl(variant_info.defined_at)
                 } else {
                     self.tysys.infer_variant_type_args(
-                        &self.annotate_ctx.clone(),
+                        &self.annotate_ctx,
                         prefix,
                         &variant_info,
                         &case_data,
@@ -876,11 +876,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let inner = |inner_self: &mut Self| {
                 let param_types: Vec<TypeId> = func_params
                     .iter()
-                    .map(|p| inner_self.resolve_type(&inner_self.annotate_ctx.clone(), &p.ty))
+                    .map(|p| inner_self.resolve_type(&p.ty))
                     .collect();
                 let return_type = func_return_type
                     .as_ref()
-                    .map(|t| inner_self.resolve_type(&inner_self.annotate_ctx.clone(), t))
+                    .map(|t| inner_self.resolve_type(t))
                     .unwrap_or(TypeTable::UNIT);
                 let effects = inner_self.resolve_effects(&func_effects, &func_effect_ids);
                 (param_types, return_type, effects)
@@ -966,7 +966,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let resolved_args: Vec<TypeId> = ident
                 .type_args
                 .iter()
-                .map(|t| self.resolve_type(&self.annotate_ctx.clone(), t))
+                .map(|t| self.resolve_type(t))
                 .collect();
             let type_id = self
                 .compute_func_ref_type_from_ast_with_args(&func_ast, &def_module, &resolved_args)
@@ -1149,15 +1149,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .map(|(_, &(_, id))| id)
                 .collect();
-            let ctx = scope.annotate_ctx.clone();
             let param_types: Vec<TypeId> = func_params
                 .iter()
                 .filter(|p| matches!(p.self_kind, crate::ast::SelfKind::None))
-                .map(|p| scope.resolve_type(&ctx, &p.ty))
+                .map(|p| scope.resolve_type(&p.ty))
                 .collect();
             let return_type = func_return_type
                 .as_ref()
-                .map(|t| scope.resolve_type(&ctx, t))
+                .map(|t| scope.resolve_type(t))
                 .unwrap_or(TypeTable::UNIT);
             (param_types, return_type, type_param_ids)
         };
@@ -2907,7 +2906,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         cast: &ast::CastExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        let target_type = self.resolve_type(&self.annotate_ctx.clone(), &cast.target_type);
+        let target_type = self.resolve_type(&cast.target_type);
 
         // Special case: tuple literal cast to a type implementing SequenceLiteralBuilder
         // [1, 2, 3] as List<i32>, [1, 2, 3] as SeqVec<i32>
