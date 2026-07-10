@@ -273,16 +273,13 @@ pub struct NirGlobal {
     /// coercion). Indexed by local index, like `NirFunction::locals`.
     pub locals: Vec<NirLocal>,
     /// True for a global `const_object_globalization` created from an
-    /// [`crate::optimize::const_object_globalization`] `InlineRef` candidate
-    /// (a hoisted `&`-literal call argument, rebuilt at its original call
-    /// site on every use until the global is promoted eager). Such a
-    /// `GlobalVarSet` needs a higher, but still bounded, byte threshold than
-    /// `NirPackage::string_inline_max_bytes` to promote to a Wasm-const
-    /// `array.new_fixed` — otherwise `wir_optimize::const_global` can never
-    /// prove the repeated assignment redundant, and the literal is rebuilt
-    /// on every call exactly as before hoisting. `false` for every other
-    /// global (including an ordinary `let`-hoisted `LetBinding` candidate,
-    /// which keeps the package-wide threshold).
+    /// `InlineRef` candidate (a hoisted `&`-literal call argument, rebuilt
+    /// at its call site on every use until promoted eager). Such a
+    /// `GlobalVarSet` needs a higher, bounded byte threshold than
+    /// `NirPackage::string_inline_max_bytes` to promote to `array.new_fixed`
+    /// — otherwise `wir_optimize::const_global` can't prove the repeated
+    /// assignment redundant, and hoisting buys nothing. `false` for every
+    /// other global, including a `LetBinding` candidate.
     pub prefer_fixed_string_repr: bool,
 }
 

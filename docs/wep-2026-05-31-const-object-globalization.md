@@ -220,31 +220,26 @@ Landed:
       literal becomes `{ GlobalVarSet(G, …); GlobalVarGet(G) }`) rather than
       replacing a statement. A single exhaustive walk collects both the
       whole-binding and inline-literal shapes together, skipping into a
-      qualifying `let`'s own value — hoisting both nests one global's
+      qualifying `let`'s own value — hoisting both would nest one global's
       `GlobalVarSet` inside another's initializer, a shape
       `wir_optimize::const_global`'s single-assignment classifier cannot see
-      through. A hoisted global this walk creates from the inline-literal
-      case is marked `NirGlobal::prefer_fixed_string_repr`; WIR build gives
-      only such a global's `GlobalVarSet` value a size-bounded
+      through. Also gated off any `wasi:*`-namespaced module:
+      `wir_build::register_globals` asserts a `NirGlobal` never has a WASI
+      `module_source`, so a hoisted global in an ordinary WASI-binding-file
+      helper function fails loudly at build time instead of dangling
+      silently. E2E fixture `const_object_globalization_call_arg`.
+- [x] Bounded eager repr for inline-hoisted globals: a global created from
+      the inline-literal case above is marked
+      `NirGlobal::prefer_fixed_string_repr`, a field (not a name-prefix
+      guess) so it can't misidentify a user-declared global sharing the
+      pass's `__const_obj_*` naming convention. WIR build gives only such a
+      global's `GlobalVarSet` value a size-bounded
       (`name::INLINE_REF_EAGER_MAX_BYTES`, 64 bytes) override of the shared
       `string_inline_max_bytes` threshold, so a realistic field name (e.g. 34
-      bytes) still promotes eager without an unbounded override forcing
-      arbitrarily large hoisted literals eager too. The marker is a field on
-      the `NirGlobal` itself, not a name-prefix guess, so it can't
-      misidentify a user-declared global that happens to share the pass's
-      `__const_obj_*` naming convention. The override still applies to any
-      other `__const_obj_*` global reachable via `&"literal"` at a call site —
-      including an `assert` diagnostic's template fragments, built the same
-      way — so `wir_optimize::prune_dead_data` drops the passive data segment
-      `register_literal_data` speculatively registers for such a literal but
-      no surviving `array.new_data` ends up reading (bounded-eager
-      `array.new_fixed` reads nothing). E2E fixture
-      `const_object_globalization_call_arg`. Also gated off any
-      `wasi:*`-namespaced module: `wir_build::register_globals` asserts a
-      `NirGlobal` never has a WASI `module_source` (its only candidates used
-      to be CM-binding glue, already excluded), so a hoisted global in an
-      ordinary WASI-binding-file helper function fails loudly at build time
-      instead of dangling silently.
+      bytes) promotes eager without forcing arbitrarily large literals eager
+      too. `wir_optimize::prune_dead_data` drops any passive data segment
+      `register_literal_data` speculatively registered for a literal that
+      ends up wholly `array.new_fixed`.
 
 Deferred:
 

@@ -970,13 +970,11 @@ pub(super) struct FunctionTranslator<'a, 'b> {
     /// struct ref).
     pub(super) multi_value_split_locals: IndexMap<u32, IndexMap<String, (String, WirType)>>,
     /// True while translating the value of a `GlobalVarSet` to a global with
-    /// [`crate::nir::NirGlobal::prefer_fixed_string_repr`] set. Overrides
+    /// [`crate::nir::NirGlobal::prefer_fixed_string_repr`] set. Bounds-overrides
     /// `package.string_inline_max_bytes` in [`Self::translate_packed_array`]
-    /// (still bounded by `name::INLINE_REF_EAGER_MAX_BYTES`) so the literal
-    /// gets the `array.new_fixed` repr `wir_optimize::const_global` can
-    /// promote to an eager Wasm constant. Scoped to just this subtree:
-    /// saved/restored around the `GlobalVarSet` case, so it never leaks into
-    /// any other literal (an ordinary string, or another global's value).
+    /// so `wir_optimize::const_global` can promote the literal eager.
+    /// Saved/restored around the `GlobalVarSet` case, so it never leaks into
+    /// a sibling literal.
     pub(super) force_fixed_string_repr: bool,
 }
 

@@ -168,14 +168,11 @@ pub const MODULES_INIT_FUNCTION: &str = "__initialize_modules";
 /// these names, so the prefix lives here rather than as a repeated literal.
 pub const CONST_OBJ_GLOBAL_PREFIX: &str = "__const_obj_";
 
-/// Maximum UTF-8 byte length for a `const_object_globalization` `InlineRef`
-/// global (see [`crate::nir::NirGlobal::prefer_fixed_string_repr`]) to
-/// materialize with a constant `array.new_fixed<u8>` repr, overriding the
-/// package-wide `string_inline_max_bytes` threshold. Bounded — not
-/// unconditional — so a large hoisted literal still falls back to the
-/// compact `array.new_data` repr rather than bloating `-Os` builds; the
-/// bound comfortably covers the motivating case (a synthesized `serde`
-/// field key, realistically well under 64 bytes).
+/// Maximum UTF-8 byte length for an `InlineRef`-hoisted global (see
+/// [`crate::nir::NirGlobal::prefer_fixed_string_repr`]) to override the
+/// package-wide `string_inline_max_bytes` threshold and materialize as a
+/// constant `array.new_fixed<u8>`. Bounded so a large hoisted literal still
+/// falls back to compact `array.new_data` instead of bloating `-Os` builds.
 pub const INLINE_REF_EAGER_MAX_BYTES: usize = 64;
 
 /// A free function name (not a method on a struct).
