@@ -868,7 +868,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .record_bound_driven_synth_request(target_type_name, &module_source, trait_name);
             return;
         }
-        if self.has_real_trait_impl_for_type(target_type_name, trait_name) {
+        if self.has_real_trait_impl_for_type(&self.annotate_ctx, target_type_name, trait_name) {
             return;
         }
         let reason = self.trait_unimpl_reason_chain(target_type_id, trait_name);

@@ -606,24 +606,59 @@ Three independent tracks; each slice keeps `mise run test` green (E2E 2934/0).
 
 ### Remaining (next to pick up, in order)
 
-- [ ] **Track B Stage C — thread `&AnnotateCtx` through the resolution
-      subgraph.** Convert the connected query graph
-      (`find_trait_impl_for_type_with_args` → `check_impl_block_bounds` →
-      `type_implements_trait`, plus the `self.annotate_ctx.trait_ctx` readers:
-      `self_type`, `type_params`, `assoc_type_bindings`, `type_param_bounds` —
-      ~50 methods / ~120 read sites across `method_lookup` / `method_call` /
-      `item` / `module` / `call` / `type_resolution` / `operators` / `expr`) to
-      take `ctx: &AnnotateCtx` instead of reading `self.annotate_ctx`. Leaf-first,
-      one file per commit, green at each step. Scope **mutation**
+- [x] **Track B Stage C, trait-impl-lookup cluster** — `find_trait_impl_for_type`,
+      `find_trait_impl_for_type_with_args`, `has_real_trait_impl_for_type`,
+      `blanket_trait_impl_applies`, and `check_impl_block_bounds` now take
+      `ctx: &AnnotateCtx` explicitly instead of reading `self.annotate_ctx`
+      internally (`trait_query.rs`); every call site across `trait_query.rs`,
+      `method_lookup.rs`, and `elaborator.rs` passes `ctx` (usually
+      `&self.annotate_ctx` at the outer leaf). `type_implements_trait(_inner)`
+      already took `ctx` explicitly from Stage B. Diagnostic-only readers
+      (`collect_trait_unimpl_reason`, `structurally_derivable_for_explicit_request`
+      callers) are left reading `&self.annotate_ctx` at their own call sites —
+      they are true leaves of the query graph, not part of the cluster moving to
+      `TypeSystem`, so passing the field directly there is the terminal shape.
+- [ ] **Track B Stage C, remaining** — thread `&AnnotateCtx` through the rest of
+      the connected query graph: the `self.annotate_ctx.trait_ctx` readers
+      (`self_type`, `type_params`, `assoc_type_bindings`, `type_param_bounds`)
+      still read directly across `method_lookup` / `method_call` / `item` /
+      `module` / `call` / `type_resolution` / `operators` / `expr` (~50 methods /
+      ~120 read sites total, minus the cluster done above). Leaf-first, one file
+      per commit, green at each step. Scope **mutation**
       (`enter_inherited_type_param_scope`, `register_generic_params`,
       `bind_trait_type_params_from_impl`) stays on `Elaborator` and owns/produces
       the scope.
 - [ ] **Track B Stage D — move the now-Elaborator-free queries to
       `impl TypeSystem`.** Once they read only `self.tysys.*` + the passed `ctx`:
-      `type_implements_trait(_inner)`, `find_trait_impl_for_type(_with_args)`,
-      `check_impl_block_bounds`, the type-param-bound resolver in
-      `type_resolution.rs`, and the operator-trait bound lookups in
-      `operators.rs`. Signature `fn …(&self /* TypeSystem */, ctx: &AnnotateCtx, …)`.
+      `find_trait_impl_for_type(_with_args)`, `check_impl_block_bounds`, the
+      type-param-bound resolver in `type_resolution.rs`, and the operator-trait
+      bound lookups in `operators.rs`. Signature
+      `fn …(&self /* TypeSystem */, ctx: &AnnotateCtx, …)`.
+  - **Blocked for `type_implements_trait(_inner)` and, transitively,
+    `check_impl_block_bounds` / `find_trait_impl_for_type(_with_args)` /
+    `blanket_trait_impl_applies` / `has_real_trait_impl_for_type`** (found
+    2026-07-10): `type_implements_trait_inner`'s structural-derive walk
+    resolves struct/variant field types via `Elaborator::lookup_struct_fields_in`
+    / `lookup_variant_case_in` (`self.type_lookup()`), which reads
+    `ModuleSemantics.decls.local_struct_fields` /
+    `local_variant_cases` — the _current module's_ not-yet-flushed top-level
+    declarations, via `TypeLookup::lookup_ref_in`'s local-then-`all_*` chain
+    (`elaborator/types.rs`). That local tier is genuinely module-scoped, not
+    pipeline-wide, so this cluster cannot read `self.tysys.*` alone no matter
+    how the `ctx` parameter is shaped. The mutual recursion
+    (`find_trait_impl_for_type_with_args` → `check_impl_block_bounds` →
+    `type_implements_trait` → `find_trait_impl_for_type_with_args`) means the
+    whole cluster moves together or not at all. Options, undecided: (a) pass an
+    explicit `&TypeLookup`-shaped parameter alongside `ctx` into the whole
+    cluster (mirrors how `ctx` bundles `trait_ctx` + `trait_check_stack`); (b)
+    fold `local_struct_fields` / `local_variant_cases` into `TypeSystem` itself
+    once a struct/variant decl is confirmed (would need the flush-timing
+    question answered — why they are staged in `ModuleSemantics` before
+    promotion to `all_*` in the first place); (c) accept this cluster as a
+    permanent `Elaborator`-level exception, documented as such rather than
+    chased further. Needs a decision before Stage D proceeds on this cluster;
+    unrelated Stage D targets (`type_resolution.rs`, `operators.rs`) are not
+    blocked by this.
 - [ ] **Track B Stage E — fold the manual scope save/restores into the guard.**
       Replace the hand-rolled `trait_ctx` clone/restore in `resolve_module`'s
       `Item::Impl` arm (`elaborator.rs`) and the `self_type`-only save/restore in

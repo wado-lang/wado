@@ -619,6 +619,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     receiver_type_args.as_deref(),
                     impl_module,
                 ) && self.check_impl_block_bounds(
+                    &self.annotate_ctx,
                     &impl_block.type_params,
                     &impl_block.ty,
                     receiver_type_args.as_deref(),
@@ -803,6 +804,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         search_module_source,
                     )
                     && self.check_impl_block_bounds(
+                        &self.annotate_ctx,
                         &impl_block.type_params,
                         &impl_block.ty,
                         receiver_type_args.as_deref(),
@@ -1805,9 +1807,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Check if the receiver type satisfies ALL trait bounds
                 let bounds_satisfied = param.bounds.iter().all(|bound| {
                     let bound_trait_name = &bound.name;
-                    names_to_check
-                        .iter()
-                        .any(|name| self.find_trait_impl_for_type(name, bound_trait_name))
+                    names_to_check.iter().any(|name| {
+                        self.find_trait_impl_for_type(&self.annotate_ctx, name, bound_trait_name)
+                    })
                 });
                 if bounds_satisfied {
                     impl_refs.push(ImplBlockRef(entry.0.clone(), entry.1));
@@ -2873,6 +2875,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // fix for any AST shape applies to every caller.
                 let impl_block = s.get_impl_block(impl_ref);
                 if !s.check_impl_block_bounds(
+                    &s.annotate_ctx,
                     &impl_block.type_params,
                     &impl_block.ty,
                     Some(&concrete_type_args),

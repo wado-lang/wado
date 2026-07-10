@@ -681,7 +681,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // For other traits, check the type name
             let type_name = format!("{prim:?}").to_lowercase();
-            return self.find_trait_impl_for_type(&type_name, trait_name);
+            return self.find_trait_impl_for_type(ctx, &type_name, trait_name);
         }
 
         if let Some(tr) = on_bound
@@ -710,7 +710,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } = resolved
         {
             let serde_blocked =
-                tr.is_serde() && self.has_real_trait_impl_for_type(name, trait_name);
+                tr.is_serde() && self.has_real_trait_impl_for_type(ctx, name, trait_name);
             if !serde_blocked
                 && self.walk_structural_derive_members(resolved, tr, &mut |_, member| {
                     self.type_implements_trait(ctx, member, trait_name)
@@ -776,7 +776,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 // Check for a specific impl Trait for &T first (e.g., impl Inspect for &T)
                 let inner_id = *inner;
-                if self.find_trait_impl_for_type_with_args("&", trait_name, Some(&[inner_id])) {
+                if self.find_trait_impl_for_type_with_args(ctx, "&", trait_name, Some(&[inner_id]))
+                {
                     return true;
                 }
                 return self.type_implements_trait(ctx, inner_id, trait_name);
@@ -787,7 +788,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return true;
                 }
                 let inner_id = *inner;
-                if self.find_trait_impl_for_type_with_args("&mut", trait_name, Some(&[inner_id])) {
+                if self.find_trait_impl_for_type_with_args(
+                    ctx,
+                    "&mut",
+                    trait_name,
+                    Some(&[inner_id]),
+                ) {
                     return true;
                 }
                 return self.type_implements_trait(ctx, inner_id, trait_name);
@@ -802,7 +808,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name, base_type, ..
             } => {
                 // Check for a direct impl on the newtype first (e.g., impl Describe for Meters)
-                if self.find_trait_impl_for_type(name, trait_name) {
+                if self.find_trait_impl_for_type(ctx, name, trait_name) {
                     return true;
                 }
                 // Fall back to base type's trait implementation
@@ -810,7 +816,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return self.type_implements_trait(ctx, base_id, trait_name);
             }
             ResolvedType::Flags { name, .. } => {
-                if self.find_trait_impl_for_type(name, trait_name) {
+                if self.find_trait_impl_for_type(ctx, name, trait_name) {
                     return true;
                 }
                 return self.type_implements_trait(ctx, TypeTable::U32, trait_name);
@@ -818,25 +824,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => return false,
         };
 
-        self.find_trait_impl_for_type_with_args(&type_name, trait_name, type_args.as_deref())
+        self.find_trait_impl_for_type_with_args(ctx, &type_name, trait_name, type_args.as_deref())
     }
 
     /// Helper to check if there's an impl block for a type implementing a trait
-    pub(super) fn find_trait_impl_for_type(&self, type_name: &str, trait_name: &str) -> bool {
-        self.find_trait_impl_for_type_with_args(type_name, trait_name, None)
+    pub(super) fn find_trait_impl_for_type(
+        &self,
+        ctx: &AnnotateCtx,
+        type_name: &str,
+        trait_name: &str,
+    ) -> bool {
+        self.find_trait_impl_for_type_with_args(ctx, type_name, trait_name, None)
     }
 
-    pub(super) fn has_real_trait_impl_for_type(&self, type_name: &str, trait_name: &str) -> bool {
+    pub(super) fn has_real_trait_impl_for_type(
+        &self,
+        ctx: &AnnotateCtx,
+        type_name: &str,
+        trait_name: &str,
+    ) -> bool {
         self.tysys
             .trait_env
             .has_any_methodful_impl(type_name, trait_name)
-            || self.blanket_trait_impl_applies(type_name, trait_name)
+            || self.blanket_trait_impl_applies(ctx, type_name, trait_name)
     }
 
     /// Check if there's a trait impl for a type, with optional type args for bounds checking.
     /// For `impl<T: Eq> Eq for List<T>`, when checking `List<Foo>`, passes `[Foo]` as `type_args`.
     pub(super) fn find_trait_impl_for_type_with_args(
         &self,
+        ctx: &AnnotateCtx,
         type_name: &str,
         trait_name: &str,
         type_args: Option<&[TypeId]>,
@@ -858,7 +875,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         type_args,
                         module_src,
                     )
-                    && self.check_impl_block_bounds(&header.type_params, &header.ty, type_args)
+                    && self.check_impl_block_bounds(ctx, &header.type_params, &header.ty, type_args)
                 {
                     return true;
                 }
@@ -869,10 +886,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `impl_index` above (the index is built from every loaded module,
         // including this one), so no separate current-module scan is needed.
 
-        self.blanket_trait_impl_applies(type_name, trait_name)
+        self.blanket_trait_impl_applies(ctx, type_name, trait_name)
     }
 
-    fn blanket_trait_impl_applies(&self, type_name: &str, trait_name: &str) -> bool {
+    fn blanket_trait_impl_applies(
+        &self,
+        ctx: &AnnotateCtx,
+        type_name: &str,
+        trait_name: &str,
+    ) -> bool {
         let trait_env = self.tysys.trait_env.clone();
         for entry in &trait_env.blanket_impl_index {
             let Some(header) = trait_env.impl_headers.get(entry) else {
@@ -891,7 +913,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let bounds_satisfied = param
                         .bounds
                         .iter()
-                        .all(|bound| self.find_trait_impl_for_type(type_name, &bound.name));
+                        .all(|bound| self.find_trait_impl_for_type(ctx, type_name, &bound.name));
                     if bounds_satisfied {
                         return true;
                     }
@@ -1177,6 +1199,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// For `impl<T: Ord> List<T>`, checks that the concrete type substituted for T implements Ord.
     pub(super) fn check_impl_block_bounds(
         &self,
+        ctx: &AnnotateCtx,
         type_params: &[ast::GenericParam],
         impl_ty: &ast::Type,
         type_args: Option<&[TypeId]>,
@@ -1231,7 +1254,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         continue;
                     }
                     for bound in bounds {
-                        if !self.type_implements_trait(&self.annotate_ctx, type_arg, bound) {
+                        if !self.type_implements_trait(ctx, type_arg, bound) {
                             return false;
                         }
                     }
@@ -1248,7 +1271,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             {
                 for bound in bounds {
-                    if !self.type_implements_trait(&self.annotate_ctx, type_arg, bound) {
+                    if !self.type_implements_trait(ctx, type_arg, bound) {
                         return false;
                     }
                 }
@@ -1273,7 +1296,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         continue;
                     }
                     for bound in bounds {
-                        if !self.type_implements_trait(&self.annotate_ctx, type_arg, bound) {
+                        if !self.type_implements_trait(ctx, type_arg, bound) {
                             return false;
                         }
                     }
