@@ -90,18 +90,17 @@ fn register_variant_cases(flat: &FlatPackage) {
 /// agree: a `true` here means `synthesize::generate_copy_function`
 /// emits a non-identity helper, and every caller routes through it.
 pub fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
-    needs_copy_in_env(type_id, &[], type_table, 0)
+    needs_copy_in_env(type_id, None, type_table, 0)
 }
 
-/// A type reference paired with the environment its `TypeParam`s resolve in.
-/// Descending into a variant template's case payloads keeps each payload id
-/// in template terms and carries the instantiation's `type_args` (themselves
-/// paired with the outer environment) alongside, so the classification never
-/// has to intern substituted types — it can run through a `&TypeTable`.
-#[derive(Clone)]
-struct TypeInEnv {
-    type_id: TypeId,
-    env: Vec<TypeInEnv>,
+/// The instantiation environment a template-term payload id resolves its
+/// `TypeParam`s in: the instantiation's type args, each of which is itself in
+/// the parent frame's terms. Borrowed frames chain per descent instead of
+/// cloning environment vectors, so the classification stays allocation-free
+/// and can run through a `&TypeTable` without interning substituted types.
+struct EnvFrame<'a> {
+    args: &'a [TypeId],
+    parent: Option<&'a EnvFrame<'a>>,
 }
 
 /// Cycles are only possible through variant-payload chains; every other
@@ -110,9 +109,43 @@ struct TypeInEnv {
 /// `true` (copy) is the safe answer for it.
 const NEEDS_COPY_DEPTH_LIMIT: usize = 32;
 
+/// Resolve `param::assoc_name` to a concrete type through the frame chain and
+/// the table's recorded impl resolutions, without interning. `None` when the
+/// param stays abstract or the resolution was never recorded.
+fn resolve_projection_in_env(
+    param_id: TypeId,
+    assoc_name: &str,
+    env: Option<&EnvFrame<'_>>,
+    type_table: &TypeTable,
+) -> Option<TypeId> {
+    let concrete = resolve_param_in_env(param_id, env, type_table)?;
+    let concrete = type_table.peel_refs(concrete);
+    if let Some(resolved) = type_table.resolve_assoc_type(concrete, assoc_name) {
+        return Some(resolved);
+    }
+    // Newtypes inherit associated types from their base type.
+    let base = type_table.get_ultimate_base_type(concrete);
+    (base != concrete)
+        .then(|| type_table.resolve_assoc_type(base, assoc_name))
+        .flatten()
+}
+
+fn resolve_param_in_env(
+    type_id: TypeId,
+    env: Option<&EnvFrame<'_>>,
+    type_table: &TypeTable,
+) -> Option<TypeId> {
+    if let ResolvedType::TypeParam { index, .. } = type_table.get(type_id) {
+        let frame = env?;
+        let arg = *frame.args.get(*index as usize)?;
+        return resolve_param_in_env(arg, frame.parent, type_table);
+    }
+    (!type_table.contains_type_param(type_id)).then_some(type_id)
+}
+
 fn needs_copy_in_env(
     type_id: TypeId,
-    env: &[TypeInEnv],
+    env: Option<&EnvFrame<'_>>,
     type_table: &TypeTable,
     depth: usize,
 ) -> bool {
@@ -148,15 +181,12 @@ fn needs_copy_in_env(
                 return true;
             }
             if let Some(cases) = type_table.variant_template_cases(name, module_source) {
-                let case_env: Vec<TypeInEnv> = type_args
-                    .iter()
-                    .map(|arg| TypeInEnv {
-                        type_id: *arg,
-                        env: env.to_vec(),
-                    })
-                    .collect();
+                let frame = EnvFrame {
+                    args: type_args,
+                    parent: env,
+                };
                 return cases.iter().any(|(_, _, payload)| {
-                    needs_copy_in_env(*payload, &case_env, type_table, depth + 1)
+                    needs_copy_in_env(*payload, Some(&frame), type_table, depth + 1)
                 });
             }
             // Generic-resource templates and unmaterialised instances.
@@ -176,15 +206,31 @@ fn needs_copy_in_env(
             .is_some_and(|cases| {
                 cases
                     .iter()
-                    .any(|(_, _, payload)| needs_copy_in_env(*payload, &[], type_table, depth + 1))
+                    .any(|(_, _, payload)| needs_copy_in_env(*payload, None, type_table, depth + 1))
             }),
+        // A projected payload in template terms (`Data(T::Output)`): resolve
+        // the param through the frame, then the projection through the
+        // table's recorded impl resolutions. An unresolvable projection gets
+        // `true` — a spurious copy is safe, a missed one aliases.
+        ResolvedType::AssocTypeProjection {
+            param_id,
+            assoc_name,
+            ..
+        } => match resolve_projection_in_env(*param_id, assoc_name, env, type_table) {
+            Some(payload) => needs_copy_in_env(payload, None, type_table, depth + 1),
+            None => true,
+        },
         // A payload id in template terms: resolve the param through the
-        // instantiation environment. A bare param with no environment is
-        // an unmonomorphized template body — no copy decision applies.
+        // instantiation frame — the arg is in the parent frame's terms. A
+        // bare param with no frame is an unmonomorphized template body — no
+        // copy decision applies.
         ResolvedType::TypeParam { index, .. } => {
             let i = *index as usize;
-            env.get(i).is_some_and(|entry| {
-                needs_copy_in_env(entry.type_id, &entry.env, type_table, depth + 1)
+            env.is_some_and(|frame| {
+                frame
+                    .args
+                    .get(i)
+                    .is_some_and(|arg| needs_copy_in_env(*arg, frame.parent, type_table, depth + 1))
             })
         }
         // The raw GC array is a value type: assignment / parameter

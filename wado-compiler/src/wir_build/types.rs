@@ -179,8 +179,6 @@ fn sort_types_topologically<'a>(
 /// This follows a multi-phase registration order to ensure type dependencies
 /// are satisfied.
 pub fn register_types(ctx: &mut WirContext<'_>) {
-    let _type_table = &*ctx.package.type_table.borrow();
-
     // Phase 0: Internal Box<T> structs
     register_box_structs(ctx);
 
@@ -807,155 +805,141 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
     // Option<Option<i32>> needs Option<i32> registered first so its payload
     // resolves to a concrete type rather than abstract structref.
     loop {
+        struct Candidate {
+            mangled: String,
+            module_source: ModuleSource,
+            template_cases: Vec<(String, TypeId)>,
+            substitution: IndexMap<u32, TypeId>,
+        }
+
+        // Phase 1: collect unregistered instantiations of generic variant
+        // declarations, with their template case payloads and the
+        // param-index → type-arg substitution.
+        let mut candidates: Vec<Candidate> = Vec::new();
+        {
+            let type_table = &*ctx.package.type_table.borrow();
+            for type_id in type_table.iter_type_ids() {
+                let ResolvedType::GenericInstance {
+                    name,
+                    module_source,
+                    type_args,
+                } = type_table.get(type_id)
+                else {
+                    continue;
+                };
+                // Option is now handled as a regular variant (SubtypeHierarchy).
+                // TODO: NullableRef optimization — when T is non-nullable (ref type,
+                // not another Option), skip variant registration and represent
+                // Option<T> as (ref null T) instead. This avoids the discriminant
+                // struct overhead. See wep-2026-02-09-variant-independent-types.md.
+
+                // Skip unresolved generic instances (e.g. Option<unknown>
+                // from unresolved null literals, or Result<S::Assoc, E>
+                // from generic trait method signatures)
+                if type_args.iter().any(|t| type_table.contains_type_param(*t)) {
+                    continue;
+                }
+
+                // Use module-qualified type-arg names so that two
+                // distinct types with the same simple name (e.g.
+                // `wasi:filesystem` `pub variant ErrorCode` vs
+                // `wasi:cli` `pub enum ErrorCode`) produce distinct
+                // generic-instance fqs and therefore distinct WIR
+                // type registrations.
+                let type_arg_names: Vec<String> = type_args
+                    .iter()
+                    .map(|t| type_table.mangle_type_arg_for_generic(*t))
+                    .collect();
+                let mangled = crate::name::mangle_generic_name(name, &type_arg_names);
+                let fq = format!("{module_source}//{mangled}");
+                if ctx.variant_type_map.contains_key(&fq) {
+                    continue;
+                }
+                // Find the base variant declaration using module_source directly.
+                let Some(base) = ctx
+                    .package
+                    .find_variant(module_source, name)
+                    .filter(|v| !v.type_params.is_empty())
+                else {
+                    continue;
+                };
+                candidates.push(Candidate {
+                    mangled,
+                    module_source: module_source.clone(),
+                    template_cases: base
+                        .cases
+                        .iter()
+                        .map(|case| (case.name.clone(), case.payload))
+                        .collect(),
+                    substitution: type_args
+                        .iter()
+                        .enumerate()
+                        .map(|(i, arg)| (u32::try_from(i).expect("too many type params"), *arg))
+                        .collect(),
+                });
+            }
+        }
+
+        // Phase 2: substitute each template payload against the instance's
+        // type args. `substitute_type_params` resolves `TypeParam` and
+        // `AssocTypeProjection` alike and interns the substituted types, so
+        // it needs the mutable borrow.
+        let substituted: Vec<(String, ModuleSource, Vec<(String, TypeId)>)> = {
+            let type_table = &mut *ctx.package.type_table.borrow_mut();
+            candidates
+                .into_iter()
+                .map(|c| {
+                    let cases = c
+                        .template_cases
+                        .into_iter()
+                        .map(|(name, payload)| {
+                            (
+                                name,
+                                type_table.substitute_type_params(payload, &c.substitution),
+                            )
+                        })
+                        .collect();
+                    (c.mangled, c.module_source, cases)
+                })
+                .collect()
+        };
+
+        // Phase 3: convert the concrete payloads to WIR types.
         let mut to_register: Vec<(
             String,                                  // mangled name
             ModuleSource,                            // module source of the base variant
             Vec<(String, Vec<crate::wir::WirType>)>, // cases: (name, payload types)
         )> = Vec::new();
-
         {
             let type_table = &*ctx.package.type_table.borrow();
-            for type_id in type_table.iter_type_ids() {
-                if let ResolvedType::GenericInstance {
-                    name,
-                    module_source,
-                    type_args,
-                } = type_table.get(type_id)
-                {
-                    // Option is now handled as a regular variant (SubtypeHierarchy).
-                    // TODO: NullableRef optimization — when T is non-nullable (ref type,
-                    // not another Option), skip variant registration and represent
-                    // Option<T> as (ref null T) instead. This avoids the discriminant
-                    // struct overhead. See wep-2026-02-09-variant-independent-types.md.
+            for (mangled, module_source, cases) in substituted {
+                let cases: Vec<(String, Vec<crate::wir::WirType>)> = cases
+                    .into_iter()
+                    .map(|(name, payload)| {
+                        let wir_payload = match type_table.get(payload) {
+                            ResolvedType::Unit => Vec::new(),
+                            _ => vec![ctx.type_id_to_wir_type(type_table, payload)],
+                        };
+                        (name, wir_payload)
+                    })
+                    .collect();
 
-                    // Skip unresolved generic instances (e.g. Option<unknown>
-                    // from unresolved null literals, or Result<S::Assoc, E>
-                    // from generic trait method signatures)
-                    if type_args.iter().any(|t| type_table.contains_type_param(*t)) {
-                        continue;
-                    }
-
-                    // Use module-qualified type-arg names so that two
-                    // distinct types with the same simple name (e.g.
-                    // `wasi:filesystem` `pub variant ErrorCode` vs
-                    // `wasi:cli` `pub enum ErrorCode`) produce distinct
-                    // generic-instance fqs and therefore distinct WIR
-                    // type registrations.
-                    let type_arg_names: Vec<String> = type_args
-                        .iter()
-                        .map(|t| type_table.mangle_type_arg_for_generic(*t))
-                        .collect();
-                    let mangled = crate::name::mangle_generic_name(name, &type_arg_names);
-                    let fq = format!("{module_source}//{mangled}");
-                    if ctx.variant_type_map.contains_key(&fq) {
-                        continue;
-                    }
-                    // Find the base variant declaration using module_source directly.
-                    let base = ctx
-                        .package
-                        .find_variant(module_source, name)
-                        .filter(|v| !v.type_params.is_empty());
-                    if let Some(base) = base {
-                        let variant_tt = type_table;
-                        let type_args = type_args.clone();
-                        let cases: Vec<(String, Vec<crate::wir::WirType>)> = base
-                            .cases
-                            .iter()
-                            .map(|case| {
-                                let payload_resolved = variant_tt.get(case.payload);
-                                let payload = match payload_resolved {
-                                    ResolvedType::Unit => Vec::new(),
-                                    ResolvedType::TypeParam { index, .. } => {
-                                        let idx = *index as usize;
-                                        if idx < type_args.len() {
-                                            let sub_ty = type_table.get(type_args[idx]);
-                                            if matches!(sub_ty, ResolvedType::Unit) {
-                                                Vec::new()
-                                            } else {
-                                                vec![ctx.type_id_to_wir_type(
-                                                    type_table,
-                                                    type_args[idx],
-                                                )]
-                                            }
-                                        } else {
-                                            Vec::new()
-                                        }
-                                    }
-                                    ResolvedType::GenericInstance {
-                                        name: inner_name,
-                                        type_args: inner_type_args,
-                                        ..
-                                    } if inner_type_args.iter().any(|a| {
-                                        matches!(variant_tt.get(*a), ResolvedType::TypeParam { .. })
-                                    }) =>
-                                    {
-                                        // Payload is a GenericInstance containing TypeParams
-                                        // (e.g., Payload<T>). Substitute type params with
-                                        // concrete type args and resolve in the consumer's
-                                        // type table.
-                                        let sub_arg_names: Vec<String> = inner_type_args
-                                            .iter()
-                                            .map(|arg| {
-                                                if let ResolvedType::TypeParam { index, .. } =
-                                                    variant_tt.get(*arg)
-                                                {
-                                                    let idx = *index as usize;
-                                                    if idx < type_args.len() {
-                                                        type_table.mangle_type_arg_for_generic(
-                                                            type_args[idx],
-                                                        )
-                                                    } else {
-                                                        variant_tt.mangle_type_arg_for_generic(*arg)
-                                                    }
-                                                } else {
-                                                    variant_tt.mangle_type_arg_for_generic(*arg)
-                                                }
-                                            })
-                                            .collect();
-                                        let mangled = crate::name::mangle_generic_name(
-                                            inner_name,
-                                            &sub_arg_names,
-                                        );
-                                        // Find the concrete TypeId in the consumer's type table.
-                                        // `mangle_type_name` of a GenericInstance after the bug-2
-                                        // fix recursively qualifies its type args via
-                                        // `mangle_type_arg_for_generic`, matching the
-                                        // qualified `mangled` name we just built.
-                                        let concrete_id = type_table.iter_type_ids().find(|tid| {
-                                            type_table.mangle_type_name(*tid) == mangled
-                                        });
-                                        if let Some(cid) = concrete_id {
-                                            vec![ctx.type_id_to_wir_type(type_table, cid)]
-                                        } else {
-                                            vec![ctx.type_id_to_wir_type(variant_tt, case.payload)]
-                                        }
-                                    }
-                                    _ => {
-                                        vec![ctx.type_id_to_wir_type(variant_tt, case.payload)]
-                                    }
-                                };
-                                (case.name.clone(), payload)
-                            })
-                            .collect();
-
-                        // Skip variants with unresolved payload types (abstract
-                        // structref). They will be resolved in a subsequent pass
-                        // after their dependencies are registered.
-                        let has_unresolved = cases.iter().any(|(_, payloads)| {
-                            payloads.iter().any(|ty| {
-                                matches!(
-                                    ty,
-                                    crate::wir::WirType::AbstractRef {
-                                        heap_type: crate::wir::WirAbstractHeapType::Struct,
-                                        ..
-                                    }
-                                )
-                            })
-                        });
-                        if !has_unresolved {
-                            to_register.push((mangled, module_source.clone(), cases));
-                        }
-                    }
+                // Skip variants with unresolved payload types (abstract
+                // structref). They will be resolved in a subsequent pass
+                // after their dependencies are registered.
+                let has_unresolved = cases.iter().any(|(_, payloads)| {
+                    payloads.iter().any(|ty| {
+                        matches!(
+                            ty,
+                            crate::wir::WirType::AbstractRef {
+                                heap_type: crate::wir::WirAbstractHeapType::Struct,
+                                ..
+                            }
+                        )
+                    })
+                });
+                if !has_unresolved {
+                    to_register.push((mangled, module_source, cases));
                 }
             }
         }
