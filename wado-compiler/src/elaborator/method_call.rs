@@ -1334,7 +1334,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
                             _ => Vec::new(),
                         };
-                        self.infer_variant_type_args(
+                        self.tysys.infer_variant_type_args(
+                            &self.annotate_ctx,
                             &name,
                             &variant_info,
                             &case_data,
@@ -2168,7 +2169,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Auto-derived `Default::default()` returns the struct type itself.
         if method_name == "default"
-            && let Some(struct_type) = self.auto_derive_default_struct_type(struct_name)
+            && let Some(struct_type) = self
+                .tysys
+                .auto_derive_default_struct_type(&self.type_lookup(), struct_name)
         {
             return struct_type;
         }
@@ -2213,14 +2216,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // `resolve_named_type` maps primitives to their canonical
                 // TypeTable id rather than a struct wrapper.
                 let self_type_id = scope.resolve_named_type(struct_name, Span::default(), false);
-                let old_self = scope.annotate_ctx.trait_ctx.self_type;
                 scope.annotate_ctx.trait_ctx.self_type = Some(self_type_id);
                 let result = default_method
                     .return_type
                     .as_ref()
                     .map(|t| scope.resolve_type(t))
                     .unwrap_or(TypeTable::UNIT);
-                scope.annotate_ctx.trait_ctx.self_type = old_self;
                 drop(scope);
                 return result;
             }
@@ -2902,7 +2903,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        if method_name == "default" && self.auto_derive_default_struct_type(struct_name).is_some() {
+        if method_name == "default"
+            && self
+                .tysys
+                .auto_derive_default_struct_type(&self.type_lookup(), struct_name)
+                .is_some()
+        {
             let default_trait_name = self
                 .tysys
                 .type_table
@@ -3002,7 +3008,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Auto-derived `Default::default()` for structs whose fields all have
         // default expressions. No user impl exists (previous checks would have
         // caught it), but `synthesis::traits` will emit the body.
-        if method_name == "default" && self.auto_derive_default_struct_type(struct_name).is_some() {
+        if method_name == "default"
+            && self
+                .tysys
+                .auto_derive_default_struct_type(&self.type_lookup(), struct_name)
+                .is_some()
+        {
             return true;
         }
 

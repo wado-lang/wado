@@ -97,7 +97,7 @@ matches the work.
 
 ### Three load-bearing types
 
-**`TypeSystem`** — the pipeline-wide type knowledge. Owned by the
+`TypeSystem` — the pipeline-wide type knowledge. Owned by the
 batch driver and by `Semantics`; passed by `&mut` reference into
 every per-module phase. Holds the `TypeTable` arena, the
 `TraitEnv`, the builtin / WASI / world registries, the included-files
@@ -112,25 +112,25 @@ context." The naming criterion — "would a new field belong in the
 type system itself?" — gates membership and prevents drift back into
 God-Object behaviour.
 
-**`ModuleSemantics`** — per-module semantic facts produced by the
+`ModuleSemantics` — per-module semantic facts produced by the
 elaborator. One instance per loaded module. Owned by `Semantics` in
 an `IndexMap<ModuleSource, ModuleSemantics>`. Built incrementally by
 `annotate` and extended by the body walk. Decomposed into four
 sub-structs with explicit membership rules:
 
-- **`bindings`** — `use → def` edges (`references`) and locally
+- `bindings` — `use → def` edges (`references`) and locally
   defined symbols (`local_symbols`). What the LSP reads to answer
   go-to-definition, find-references, and hover-on-local queries.
-- **`imports`** — per-module name resolution context derived from
+- `imports` — per-module name resolution context derived from
   `use` declarations: `imported_type_sources`,
   `import_original_names`, `namespace_imports`, `effect_sources`.
-- **`types`** — per-`AstId` type annotations and dispatch decisions
+- `types` — per-`AstId` type annotations and dispatch decisions
   recorded during the body walk: the `TypeId` of every typed
   expression, the resolved target of each method call, the chosen
   coercion at each conversion site, the desugar kind for each
   TIR-direct rewrite (`assert`, `matches`, comparison chain,
   for-of, while, compound assignment).
-- **`decls`** — module-internal declarations confirmed by
+- `decls` — module-internal declarations confirmed by
   elaboration: `function_return_types`, `imported_functions`,
   `current_module_globals`, `imported_globals`,
   `associated_constants`, `generic_function_*`,
@@ -142,7 +142,7 @@ sub-struct's responsibility?" has a clear yes/no answer. A field
 that cannot be placed is a design question, not a default-into-the-
 catch-all.
 
-**`Reify`** — the AST + `ModuleSemantics` → `TirModule` walker.
+`Reify` — the AST + `ModuleSemantics` → `TirModule` walker.
 Mechanical: it reads annotations placed by `annotate` and emits the
 corresponding TIR nodes. It does not perform type inference, name
 resolution, or method dispatch; those decisions were already made
@@ -192,8 +192,8 @@ reachable closure of the program, not the full source.
 
 ### What changes about elaborate's name
 
-`elaborate` survives as the **umbrella term and physical directory
-name**. `wado-compiler/src/elaborator/` continues to host the three
+`elaborate` survives as the umbrella term and physical directory
+name. `wado-compiler/src/elaborator/` continues to host the three
 new layers as submodules (`tysys/`, `sem/`, `reify/`). The phase
 names exposed in pipeline diagrams and entry points become
 `annotate` and `reify`; `elaborate` is the name of the directory and
@@ -240,20 +240,20 @@ The crate uses the no-`mod.rs` convention (a `foo.rs` next to a
 `TypeSystem` exposes the operations that the rest of the compiler
 asks of "the type system":
 
-- **Interning** — `intern_*`, `make_type_param`, `make_type_pack`,
+- Interning — `intern_*`, `make_type_param`, `make_type_pack`,
   registration of associated-type resolutions.
-- **Coercion** — `coerce`, the numeric-literal and tuple-to-sequence
+- Coercion — `coerce`, the numeric-literal and tuple-to-sequence
   coercions, struct-to-map coercion. Inputs are `TypeId`s and
   expression contexts; the operation returns a coerced expression or
   rejection.
-- **Inference** — `InferCtx` is constructed from `&mut TypeSystem`
+- Inference — `InferCtx` is constructed from `&mut TypeSystem`
   rather than from an `Elaborator`. Inference results are reported
   back as type substitutions.
-- **Type checking** — `typecheck`, `typecheck_return`.
-- **Trait queries** — `implements`, impl resolution by trait and
+- Type checking — `typecheck`, `typecheck_return`.
+- Trait queries — `implements`, impl resolution by trait and
   target, blanket-impl resolution, bound checking, associated-type
   binding lookup.
-- **Method lookup** — `lookup_method_info`, indexing-trait impls,
+- Method lookup — `lookup_method_info`, indexing-trait impls,
   arithmetic-trait impls, key-value / sequence-literal trait impls,
   trait-method resolution.
 
@@ -514,34 +514,12 @@ null/unknown reader had to be ported before the block-result-type reader.
 
 ## Status
 
-- [x] **Stages 1–4** — God Object decomposed; `TypeAnnotations` is the
-      per-`AstId` fact store (bare `AstId`-keyed since the identity rework).
-- [x] **Stage 5** — reify is the sole TIR source for every module (incl. trait
-      default-method synthesis, via per-impl `ModuleSemantics` snapshots on
-      `default_method_semantics`).
-- [x] **Stage 7a** — routing removed; the combined walk survives only as the
-      `annotate` fact-recorder.
-- [x] **Stage 6** — Liveness / DCE: landed and the reify gate is enabled
-      (`reify_module` skips dead user free functions; globals stay ungated). Both
-      prerequisites — diagnostics from `Semantics`, cross-module graph
-      completeness — are in place.
-- [x] **Stage 7-A — reify is mechanical.** Every decision-bearing read goes
-      through a recorded fact (signatures, effect/resource ops, decl type-param
-      defaults, struct field types, method-call/free-call type args, const and
-      let-annotated types, closure param types, cast targets, the mangled-name
-      class, from-conversion shapes, namespace/static-method dispatch). Per-fact
-      detail in git.
-- [x] **Stage 5 completions.** Trait default-method synthesis moved to reify
-      (the body walk snapshots a per-impl `ModuleSemantics` on
-      `default_method_semantics`; `reify_impl_default_methods` consumes it —
-      reify is the sole `TirFunction` producer). Missing-return analysis ported
-      off the combined walk's body TIR onto the parsed AST
-      (`elaborator/control_flow.rs` via `CtrlFlowCtx`).
-- [x] **Stage 7-B — `annotate` builds no TIR; LSP runs `annotate` only.** Every
-      expression resolver returns a `TypeId` and every statement is records-only;
-      `resolve_module` assembles no `TirModule`; `build_tir_from_state` gates
-      reify on a `build_tir` flag (LSP passes `false`). Reify is the sole TIR
-      producer; the duplicate combined-walk TIR construction is deleted.
+- [x] Stages 1–4 — God Object decomposed; `TypeAnnotations` is the per-`AstId` fact store.
+- [x] Stage 5 — reify is the sole TIR producer (incl. trait default-method synthesis via per-impl `default_method_semantics`); missing-return ported onto the AST (`CtrlFlowCtx`).
+- [x] Stage 6 — Liveness / DCE landed; reify gate enabled (dead user free functions skipped, globals ungated); both prerequisites in place.
+- [x] Stage 7a — routing removed; the combined walk survives only as the `annotate` fact-recorder.
+- [x] Stage 7-A — reify is mechanical: every decision-bearing read goes through a recorded fact.
+- [x] Stage 7-B — `annotate` builds no TIR; `resolve_*` return only `TypeId`; LSP runs `annotate` alone; the duplicate combined-walk TIR construction is deleted.
 
 ### Landing log
 
@@ -551,8 +529,8 @@ header note); every per-`AstId` fact map keys by bare `AstId`.
 
 ## Phase 2 — God Object operation decomposition (2026-06)
 
-Phase 1 (above) split the **data** out of the `Elaborator` God Object
-(`TypeSystem`, `ModuleSemantics`, `reify`). Phase 2 moves the **operations**:
+Phase 1 (above) split the _data_ out of the `Elaborator` God Object
+(`TypeSystem`, `ModuleSemantics`, `reify`). Phase 2 moves the _operations_:
 the trait/method-resolution queries still live as `impl Elaborator` methods and
 still read the borrowed `loaded_modules` AST map and the per-function
 `trait_ctx` scope, so none of them can move to `TypeSystem`. Phase 2 removes
@@ -563,73 +541,25 @@ Three independent tracks; each slice keeps `mise run test` green (E2E 2934/0).
 
 ### Done
 
-- [x] **Pure type-system ops → `impl TypeSystem`.** Operations answerable from
-      the type table alone moved off `impl Elaborator`: impl-type matching
-      (`build_type_param_mapping`, `verify_impl_type_compatibility`,
-      `impl_type_matches_concrete`), the type-shape helpers
-      (`struct_name_for_type`, `get_base_type`, `get_ultimate_base_struct_name`,
-      `newtype_base_lookup`, `substitute_newtype_in_type`, `type_id_to_string`,
-      `build_declared_type_params`, `auto_derive_eligible_kind`), and
-      `inherent_impl_type_args_match` / `concrete_arg_mangled`. They read
-      `self.type_table` directly; both the body walk and reify reach them via
-      `self.tysys`.
-- [x] **`TraitEnv` build-time decl digests (the "read facts, not ASTs" track).**
-      So resolution queries stop scanning `loaded_modules`, `TraitEnv::build`
-      now pre-computes, keyed by `(ModuleSource, item_idx)` or type/fn name:
-      `ImplHeader` (trait_name / ty / type_params / methods / associated_types),
-      `TraitDeclHeader` (name / type_params / methods{name,type_params,has_body}),
-      `function_type_params`, `struct_like_decl_modules` + `newtype_decl_modules`,
-      and `module_import_scopes` (the per-module `use`-derived
-      `imported_type_sources` / `import_original_names`, lifted to the free fn
-      `trait_env::module_import_scope`). Queries converted to read the digests:
-      `find_trait_impl_for_type_with_args` (+ blanket loop),
-      `register_assoc_types_for_concrete_type_and_trait`,
-      `find_method_type_params_in_trait_bounds`, `find_method_type_param_names`,
-      `find_struct_module_source`, `lookup_function_type_params`,
-      `find_trait_decl_type_params`, `collect_trait_impl_refs(_multi)`,
-      `lookup_static_method_type_params`, the `find_trait_method_for_type_uncached`
-      blanket loop, and the **nine dispatch-core import-context sites**
-      (`lookup_method_info_uncached`, `method_call`, `call`, `expr`) now read
-      `trait_env.import_scope(module)`. `check_impl_block_bounds` takes the
-      digest fields (`&type_params`, `&impl_ty`) rather than `&ImplBlock`.
-- [x] **Track B Stage A — bundle the per-function scope.**
-      `trait_env::AnnotateCtx { trait_ctx, trait_check_stack }` replaces the two
-      Elaborator fields with a single `annotate_ctx`; the `TypeParamScope` guard
-      saves/restores `annotate_ctx.trait_ctx`.
-- [x] **Track B Stage B — thread the scope through the recursion guard.**
-      `type_implements_trait` / `type_implements_trait_inner` take an explicit
-      `ctx: &AnnotateCtx` (recursion guard = `ctx.trait_check_stack`, type-param
-      bound check = `ctx.trait_ctx.type_param_bounds`); the inner fn forwards
-      `ctx` through its nine recursive calls; every external caller passes
-      `&self.annotate_ctx` (identical behaviour, since `ctx` _is_
-      `&self.annotate_ctx` until Stage D).
+- [x] Pure type-system ops → `impl TypeSystem`: impl-type matching, type-shape helpers, `inherent_impl_type_args_match` etc. read `self.type_table` via `self.tysys`.
+- [x] `TraitEnv` build-time decl digests: `TraitEnv::build` pre-computes `ImplHeader` / `TraitDeclHeader` / `function_type_params` / import scopes, so queries read digests instead of scanning `loaded_modules`.
+- [x] Track B Stage A: `AnnotateCtx { trait_ctx, trait_check_stack }` bundles the per-function scope into one `annotate_ctx` field, save/restored by the `TypeParamScope` guard.
+- [x] Track B Stage B: `type_implements_trait(_inner)` take explicit `ctx: &AnnotateCtx` (recursion guard + type-param bound check).
+- [x] Track B Stage C: every `trait_ctx` query that moves onto `TypeSystem` takes explicit `ctx: &AnnotateCtx` (the trait-impl-lookup cluster, `classify_call_callee`, `infer_variant_type_args`); scope producers keep `&mut self.annotate_ctx`. Criterion: a query moving to `TypeSystem` threads `ctx`, one staying on `Elaborator` reads `self.annotate_ctx`, a producer stays on `Elaborator`.
+- [x] Stage C refinement: the `Elaborator`-resident `resolve_type` family reads `self.annotate_ctx` directly (no `ctx` param), removing ~96 `AnnotateCtx` clones and the `#[derive(Clone)]`; `trait_check_stack` is no longer copied anywhere.
+- [x] Stage D blocker (option a): the trait-impl-lookup cluster takes an explicit `scope: &TypeLookup` for module-scoped `current_module_source` / imports / struct-and-variant lookups, decoupling it from `self.sem` / `self.type_lookup()`.
+- [x] Track B Stage D: the ~14 decoupled cluster methods plus `auto_derive_default_struct_type` moved to `impl TypeSystem`; call sites read `self.tysys.X(ctx, scope, …)`. Trait/type-implements resolution is now callable without an `Elaborator`.
+- [x] Track B Stage D: `classify_call_callee`, `infer_variant_type_args`, `binop_operand_requires_trait` moved to `impl TypeSystem`; the rest of `operators.rs` stays on `impl Elaborator` (dispatch/coercion methods calling `resolve_expr` / `record_*` / `self.logger`).
+- [x] Track B Stage D: the `resolve_type` family stays on `impl Elaborator` by design (mutates `ModuleSemantics.bindings`, `&mut self` for on-demand interning, reads `self.annotate_ctx` so no clone cost) — a settled member, not pending work.
 
 ### Remaining (next to pick up, in order)
 
-- [ ] **Track B Stage C — thread `&AnnotateCtx` through the resolution
-      subgraph.** Convert the connected query graph
-      (`find_trait_impl_for_type_with_args` → `check_impl_block_bounds` →
-      `type_implements_trait`, plus the `self.annotate_ctx.trait_ctx` readers:
-      `self_type`, `type_params`, `assoc_type_bindings`, `type_param_bounds` —
-      ~50 methods / ~120 read sites across `method_lookup` / `method_call` /
-      `item` / `module` / `call` / `type_resolution` / `operators` / `expr`) to
-      take `ctx: &AnnotateCtx` instead of reading `self.annotate_ctx`. Leaf-first,
-      one file per commit, green at each step. Scope **mutation**
-      (`enter_inherited_type_param_scope`, `register_generic_params`,
-      `bind_trait_type_params_from_impl`) stays on `Elaborator` and owns/produces
-      the scope.
-- [ ] **Track B Stage D — move the now-Elaborator-free queries to
-      `impl TypeSystem`.** Once they read only `self.tysys.*` + the passed `ctx`:
-      `type_implements_trait(_inner)`, `find_trait_impl_for_type(_with_args)`,
-      `check_impl_block_bounds`, the type-param-bound resolver in
-      `type_resolution.rs`, and the operator-trait bound lookups in
-      `operators.rs`. Signature `fn …(&self /* TypeSystem */, ctx: &AnnotateCtx, …)`.
-- [ ] **Track B Stage E — fold the manual scope save/restores into the guard.**
+- [ ] Track B Stage E — fold the manual scope save/restores into the guard.
       Replace the hand-rolled `trait_ctx` clone/restore in `resolve_module`'s
       `Item::Impl` arm (`elaborator.rs`) and the `self_type`-only save/restore in
       `method_lookup.rs` with `enter_inherited_type_param_scope` (clearing the
       relevant fields after entry), for one panic-safe restore path.
-- [ ] **Remaining `loaded_modules` consumers needing a method/body digest.**
+- [ ] Remaining `loaded_modules` consumers needing a method/body digest.
       `lookup_method_info_uncached` and the `call.rs` / `method_call.rs` dispatch
       paths still fetch the impl block + method-signature AST to `resolve_type`
       it — they need a method-signature digest on `ImplHeader` (params / return /
@@ -646,29 +576,29 @@ Three independent tracks; each slice keeps `mise run test` green (E2E 2934/0).
 
 ### Benefits
 
-- **The God Object is gone.** Every new field has a sub-struct it
+- The God Object is gone. Every new field has a sub-struct it
   belongs to, and the membership criterion is mechanical.
-- **`annotate` actually annotates.** The phase name matches its
+- `annotate` actually annotates. The phase name matches its
   work, and `Semantics` is genuinely complete after `annotate`
   returns. The LSP no longer pays for thrown-away TIR.
-- **`reify` is mechanical.** It can be tested in isolation against
+- `reify` is mechanical. It can be tested in isolation against
   hand-built `ModuleSemantics` fixtures, and the type boundary
   ensures it cannot reach for inference state.
-- **DCE has a place to live.** The `liveness` pass slots cleanly
+- DCE has a place to live. The `liveness` pass slots cleanly
   between `annotate` and `reify`, gives the LSP its unused
   diagnostics, and lets `reify` shrink its output before
   monomorphization sees it.
-- **`Rc<RefCell<…>>` retreats to where it is genuinely needed.**
+- `Rc<RefCell<…>>` retreats to where it is genuinely needed.
   The `TypeTable` remains shared (anonymous structs and
   monomorphic instances intern through both `annotate` and
   `reify`); the `references` / `local_symbols` plumbing simplifies
   to `&mut ModuleSemantics`.
-- **Plain Rust ownership.** Borrow-check pressure now reflects the
+- Plain Rust ownership. Borrow-check pressure now reflects the
   conceptual model rather than working around it.
 
 ### Trade-offs
 
-- **Batch compilation walks bodies twice.** Once in
+- Batch compilation walks bodies twice. Once in
   `annotate_bodies` (the heavy walk that does inference,
   resolution, and dispatch) and once in `reify` (the mechanical
   walk that reads the annotations). Performance is not optimised
@@ -676,27 +606,27 @@ Three independent tracks; each slice keeps `mise run test` green (E2E 2934/0).
   remedy is to specialise `reify` over the recorded annotations,
   not to merge the phases back. The clean phase boundary is
   the load-bearing decision.
-- **Bigger up-front design surface.** The four sub-structs and
+- Bigger up-front design surface. The four sub-structs and
   their membership rules need to be respected when adding fields.
   This is a feature, not a bug — the membership rule replaces
   the current absence of any rule.
-- **Migration is long.** The change touches roughly the entire
+- Migration is long. The change touches roughly the entire
   `elaborator/` tree. Stages 4 and 5 are the riskiest because
   they restructure the body walk; the WIR golden fixtures and
   E2E suite carry the equivalence guarantee.
 
 ### Risks and mitigations
 
-- **`ModuleSemantics` becomes another God Object.** Mitigation:
+- `ModuleSemantics` becomes another God Object. Mitigation:
   the four sub-structs are non-optional, and every field added
   during or after migration must justify its sub-struct. Reviews
   reject "just put it on `ModuleSemantics` directly."
-- **The `annotate` / `reify` split leaks during migration.**
+- The `annotate` / `reify` split leaks during migration.
   Mitigation: stage 4 introduces the annotation storage _before_
   stage 5 splits the walk. Any annotation reify needs but
   `annotate` does not record is a stage-4 omission, surfaced as a
   panic in stage 5.
-- **DCE breaks a previously-reachable item.** Mitigation: the
+- DCE breaks a previously-reachable item. Mitigation: the
   unused-diagnostics WEP owns the reachability rules; stage 6
   switches the source of truth from `optimize/dce.rs` to the
   elaborator-time pass, with the same E2E and WIR fixtures

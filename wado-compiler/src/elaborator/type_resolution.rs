@@ -491,15 +491,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         for (i, (param_name, bounds)) in info.type_param_bounds.iter().enumerate() {
                             if let Some(&type_arg) = type_args.get(i) {
                                 for bound in bounds {
-                                    if !self.type_implements_trait(
+                                    if !self.tysys.type_implements_trait(
                                         &self.annotate_ctx,
+                                        &self.type_lookup(),
                                         type_arg,
                                         bound,
                                     ) {
                                         // Get the type name for the error message
                                         let type_name = self.tysys.type_id_to_string(type_arg);
-                                        let reason =
-                                            self.trait_unimpl_reason_chain(type_arg, bound);
+                                        let reason = self.tysys.trait_unimpl_reason_chain(
+                                            &self.annotate_ctx,
+                                            &self.type_lookup(),
+                                            type_arg,
+                                            bound,
+                                        );
                                         let _ =
                                             self.logger.error(TypeError::TraitBoundNotSatisfied {
                                                 type_name,
