@@ -319,11 +319,7 @@ fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 fn "core:prelude/primitive.wado/char::to_ascii_lowercase"(self) {
-    return self | ((if self >=u 65 -> i32 {
-        self <=u 90;
-    } else {
-        0;
-    }) * 32);
+    return self | (((self - 65) <u 26) * 32);
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
@@ -429,12 +425,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b26: block {
-        l27: loop {
-            break_if b26 i >= n;
+    b25: block {
+        l26: loop {
+            break_if b25 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l27;
+            continue l26;
         };
     };
 }
