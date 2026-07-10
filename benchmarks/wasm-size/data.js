@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783680576361,
+  "lastUpdate": 1783701889629,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -38997,6 +38997,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d911743604a004d42b5a3c44ba0365a93ee5e809"
         },
         "date": 1783680576136,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8246,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15624,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 266646,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "385b81bf0825de32c30044b33cc6d3c017bd8fbc",
+          "message": "Merge pull request #1543 from wado-lang/claude/wado-elaborator-refactor-x3bmgp\n\nrefactor(compiler): move elaborator trait/type queries onto TypeSystem",
+          "timestamp": "2026-07-11T01:35:41+09:00",
+          "tree_id": "fcb465ebbb421f6284dd6f864f6e99910e3c47d3",
+          "url": "https://github.com/wado-lang/wado/commit/385b81bf0825de32c30044b33cc6d3c017bd8fbc"
+        },
+        "date": 1783701888913,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
