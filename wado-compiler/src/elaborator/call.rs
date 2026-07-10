@@ -11,6 +11,7 @@ use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TirExpr, TypeId, Type
 use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
 use super::infer::InferCtx;
+use super::trait_env::AnnotateCtx;
 use super::types::{FunctionContext, TypeError};
 use super::util::placeholder;
 
@@ -215,7 +216,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `Self::` / `T::` (T bound to concrete) before any name lookup
     /// happens. `T::` (T abstract) is routed through its own static
     /// dispatch path; everything else is left as written.
-    fn classify_call_callee<'a>(&self, ident: &'a ast::IdentExpr) -> CalleeIdentKind<'a> {
+    fn classify_call_callee<'a>(
+        &self,
+        ctx: &AnnotateCtx,
+        ident: &'a ast::IdentExpr,
+    ) -> CalleeIdentKind<'a> {
         let Some(pos) = ident.name.find("::") else {
             return CalleeIdentKind::AsIs(ident);
         };
@@ -223,14 +228,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let suffix = &ident.name[pos + 2..];
 
         if prefix == "Self"
-            && let Some(self_type_id) = self.annotate_ctx.trait_ctx.self_type
+            && let Some(self_type_id) = ctx.trait_ctx.self_type
         {
             let self_name = self.tysys.type_table.borrow().type_name(self_type_id);
             return CalleeIdentKind::Rewritten(format!("{self_name}::{suffix}"));
         }
 
-        if let Some(&(_, type_param_type_id)) = self.annotate_ctx.trait_ctx.type_params.get(prefix)
-        {
+        if let Some(&(_, type_param_type_id)) = ctx.trait_ctx.type_params.get(prefix) {
             // If the type parameter is bound to a concrete type (e.g. a
             // trait default method synthesised for an impl binds the
             // trait's `T` to the impl's concrete arg), dispatch
@@ -382,7 +386,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Expr::Ident(ident) = &call.callee else {
             unreachable!("non-Ident callees are handled by the indirect-call fast path above")
         };
-        let callee_kind = self.classify_call_callee(ident);
+        let callee_kind = self.classify_call_callee(&self.annotate_ctx, ident);
 
         // Abstract `T::method(...)` takes its own dispatch path. Args
         // are resolved without coercion hints (the trait-bound dispatch
@@ -787,6 +791,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .type_id_of_decl(variant_info.defined_at)
                     } else {
                         self.infer_variant_type_args(
+                            &self.annotate_ctx.clone(),
                             &prefix_owned,
                             &variant_info,
                             &case_data,
@@ -928,6 +933,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     .type_id_of_decl(variant_info.defined_at)
                             } else {
                                 self.infer_variant_type_args(
+                                    &self.annotate_ctx.clone(),
                                     type_name,
                                     &variant_info,
                                     &case_data,
@@ -2692,6 +2698,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// and we are in a non-generic context — preserving the legacy behaviour.
     pub(super) fn infer_variant_type_args(
         &mut self,
+        ctx: &AnnotateCtx,
         variant_name: &str,
         variant_info: &super::types::VariantInfo,
         case_data: &super::types::VariantCaseData,
@@ -2762,7 +2769,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .any(|&t| self.tysys.type_table.borrow().contains_type_param(t));
 
-        if has_unresolved && self.annotate_ctx.trait_ctx.type_params.is_empty() {
+        if has_unresolved && ctx.trait_ctx.type_params.is_empty() {
             return self
                 .tysys
                 .type_table

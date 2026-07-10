@@ -1339,6 +1339,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             _ => Vec::new(),
                         };
                         self.infer_variant_type_args(
+                            &self.annotate_ctx.clone(),
                             &name,
                             &variant_info,
                             &case_data,

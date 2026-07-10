@@ -653,24 +653,38 @@ Three independent tracks; each slice keeps `mise run test` green (E2E 2934/0).
     the trait-impl cluster), and falls back through
     `with_module_perspective_for` (an `Elaborator`-only mechanism) for
     cross-module defaults. None of these have a `TypeSystem`-only shape.
-- [ ] **Track B Stage C, remaining** — thread `&AnnotateCtx` through the rest of
-      the connected query graph: the `self.annotate_ctx.trait_ctx` readers
-      (`self_type`, `type_params`, `assoc_type_bindings`, `type_param_bounds`)
-      still read directly across `method_lookup` / `method_call` / `item` /
-      `call` / `operators` / `expr` — largely non-`resolve_type` mutation and
-      accessor sites the two clusters above didn't already convert. Leaf-first,
-      one file per commit, green at each step. Scope **mutation**
-      (`enter_inherited_type_param_scope`, `register_generic_params`,
-      `bind_trait_type_params_from_impl`) stays on `Elaborator` and
-      owns/produces the scope.
+- [x] **Track B Stage C, complete** — the last three direct
+      `self.annotate_ctx.trait_ctx` readers outside scope-mutation code now take
+      `ctx: &AnnotateCtx` explicitly: `classify_call_callee` (`call.rs`, its
+      one call site), `infer_variant_type_args` (`call.rs`, 4 call sites across
+      `call.rs` / `expr.rs` / `method_call.rs`), and
+      `resolve_type_with_param_mapping` (`method_lookup.rs`, mutually
+      recursive with itself, 5 external call sites). A full audit of every
+      remaining `self.annotate_ctx.trait_ctx.{self_type,type_params,
+      assoc_type_bindings,type_param_bounds}` read across the tree turned up
+      only comments and scope-mutation sites (`bind_trait_type_params_from_impl`,
+      `resolve_module`'s `Item::Impl` arm) — both explicitly exempt per the
+      "Scope mutation … stays on `Elaborator`" carve-out below. The WEP's
+      original "~50 methods / ~120 read sites" estimate was almost entirely
+      the `resolve_type` family's fan-out (118 call sites on one function);
+      the actual number of distinct query _functions_ needing conversion
+      across all of Stage C was five: the trait-impl-lookup cluster (one
+      unit), the `resolve_type` family (one unit), plus these three.
+      Scope **mutation** (`enter_inherited_type_param_scope`,
+      `register_generic_params`, `bind_trait_type_params_from_impl`) stays on
+      `Elaborator` and owns/produces the scope — never converted, by design.
 - [ ] **Track B Stage D — move the now-Elaborator-free queries to
       `impl TypeSystem`.** Once they read only `self.tysys.*` + the passed
-      `ctx`: the operator-trait bound lookups in `operators.rs` are the
-      remaining candidate not yet known to be blocked. `find_trait_impl_for_type(_with_args)`,
+      `ctx`: `classify_call_callee` and `infer_variant_type_args` (`call.rs`)
+      read only `self.tysys.*` already — genuinely unblocked candidates, not
+      yet moved. The operator-trait bound lookups in `operators.rs` are
+      un-audited. `resolve_type_with_param_mapping` joins the blocked list
+      below (it calls the blocked `resolve_type` and the module-scoped
+      `lookup_struct_fields` / `lookup_variant_case`). `find_trait_impl_for_type(_with_args)`,
       `check_impl_block_bounds`, and the whole `resolve_type` family are
       blocked per the entries above — Stage D needs a decision on the
       `TypeLookup` coupling (see the blocker note under the trait-impl-lookup
-      cluster) before it can proceed on either.
+      cluster) before it can proceed on any of them.
   - **Blocked for `type_implements_trait(_inner)` and, transitively,
     `check_impl_block_bounds` / `find_trait_impl_for_type(_with_args)` /
     `blanket_trait_impl_applies` / `has_real_trait_impl_for_type`** (found

@@ -765,6 +765,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .type_id_of_decl(variant_info.defined_at)
                 } else {
                     self.infer_variant_type_args(
+                        &self.annotate_ctx.clone(),
                         prefix,
                         &variant_info,
                         &case_data,
