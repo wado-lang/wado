@@ -5473,11 +5473,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .collect();
 
         // Step 4: reify the body in the closure scope.
-        let body_expected =
+        // An explicit `|params| -> Type ...` annotation is the authoritative
+        // return type; otherwise use the expected fn type's return.
+        let declared_return = closure.return_type.as_ref().map(|ty| self.resolve_type(ty));
+        let body_expected = declared_return.or_else(|| {
             expected_fn_type.and_then(|t| match self.tysys.type_table.borrow().get(t) {
                 ResolvedType::Function { return_type, .. } => Some(*return_type),
                 _ => None,
-            });
+            })
+        });
 
         // A block body with explicit `return X` has a NEVER/UNIT tail, so its
         // logical return type comes from the returned expressions, which
@@ -5515,10 +5519,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             })
             .collect();
 
-        // Single-expression closure bodies (e.g. `|c| c.method()`) take their
-        // body's type as the return type directly; block bodies use the
-        // return-expression type computed above.
-        let return_type = block_return_type.unwrap_or(body.type_id);
+        // An explicit annotation wins; otherwise single-expression closure
+        // bodies (e.g. `|c| c.method()`) take their body's type as the return
+        // type directly, and block bodies use the return-expression type
+        // computed above.
+        let return_type = declared_return
+            .or(block_return_type)
+            .unwrap_or(body.type_id);
 
         let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
         let func_type = self.tysys.type_table.borrow_mut().make_function_with_mut(

@@ -1,0 +1,48 @@
+// Closure return-type annotation: `|params| -> Type body` (Rust parity).
+// The explicit return type is authoritative — it feeds both annotate's and
+// reify's closure-return seeding, so it also makes a `?` inside the body
+// resolve without needing a `let f: fn(..) -> R = ..` binding. See #1540.
+
+fn div(a: i32, b: i32) -> Result<i32, String> {
+    if b == 0 {
+        return Result::Err("div by zero");
+    }
+    return Result::Ok(a / b);
+}
+
+test "block-body closure with an explicit return type" {
+    let double = |x: i32| -> i32 {
+        return x * 2;
+    };
+    assert double(21) == 42;
+}
+
+test "expression-body closure with an explicit return type" {
+    let inc = |x: i32| -> i32 x + 1;
+    assert inc(41) == 42;
+}
+
+test "zero-arg closure with an explicit return type" {
+    let answer = || -> i32 {
+        return 42;
+    };
+    assert answer() == 42;
+}
+
+test "? inside an explicitly-typed closure resolves against its return type" {
+    let f = |x: i32, y: i32| -> Result<i32, String> {
+        let q = div(x, y)?;
+        return Result::Ok(q + 1);
+    };
+    assert match f(10, 2) {
+        Ok(v) => v,
+        Err(_) => -1,
+    } == 6;
+    assert match f(10, 0) {
+        Ok(_) => -1,
+        Err(_) => -99,
+    } == -99;
+}
+
+__DATA__
+{"test": {}}

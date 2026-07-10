@@ -1917,10 +1917,27 @@ let compute = |x: i32| {
 let result = compute(4);  // 20
 ```
 
+**Return type annotation:**
+
+A closure may declare its return type with `|params| -> Type body`, mirroring
+the function-signature form. The annotation is authoritative, so it also lets a
+`?` operator inside the body resolve against the closure's own return type
+without a `let f: fn(..) -> R = ..` binding:
+
+```wado
+let parse = |s: String| -> Result<i32, String> {
+    let n = to_int(s)?;   // ? resolves against the declared Result return type
+    return Result::Ok(n + 1);
+};
+```
+
 **Current Limitations:**
 
 - **Type annotations required**: Parameter types must be explicitly specified
 - **No inference**: Unlike some languages, closure parameter types are not inferred
+- **`?` needs a known return type**: a `?` in a closure body requires the
+  closure's return type to be known — from a `-> Type` annotation or an
+  expected `fn(..) -> R` type — since it is not inferred from the body
 
 ```wado
 // Pure closure (no captures)

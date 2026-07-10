@@ -771,6 +771,9 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
                     v.visit_type(ty);
                 }
             }
+            if let Some(ty) = &c.return_type {
+                v.visit_type(ty);
+            }
             v.visit_expr(&c.body);
         }
         Expr::TemplateString(t) => {
@@ -2777,6 +2780,8 @@ pub struct StructPatternField {
 pub struct ClosureExpr {
     pub id: AstId,
     pub params: Vec<ClosureParam>,
+    /// Explicit return type from `|params| -> Type body`, if written.
+    pub return_type: Option<Type>,
     pub body: Expr,
     pub span: Span,
 }

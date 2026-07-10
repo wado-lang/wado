@@ -2371,6 +2371,11 @@ impl<'a> Unparser<'a> {
                 s.unparse_type(ty);
             }
         });
+        if let Some(ty) = &c.return_type {
+            self.output.push_str("-> ");
+            self.unparse_type(ty);
+            self.output.push(' ');
+        }
         self.unparse_expr(&c.body);
     }
 
@@ -3288,6 +3293,11 @@ fn unparse_closure_into(c: &ClosureExpr, output: &mut String) {
             unparse_type_into(ty, o);
         }
     });
+    if let Some(ty) = &c.return_type {
+        output.push_str("-> ");
+        unparse_type_into(ty, output);
+        output.push(' ');
+    }
     unparse_expr_into(&c.body, output);
 }
 

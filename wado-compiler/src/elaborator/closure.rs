@@ -145,12 +145,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
 
-        let body_expected = expected_fn.as_ref().map(|ef| ef.return_type);
-        // Seed the closure's return type from the expected fn type before
-        // walking the body, so a `?` operator in the body (which checks
-        // `ctx.return_type` for Result/Option) resolves against the real
-        // return type instead of the UNKNOWN placeholder. Symmetric to the
-        // same seeding in `reify_closure`.
+        // An explicit `|params| -> Type ...` annotation is the authoritative
+        // return type; otherwise fall back to the expected fn type from the
+        // surrounding context (e.g. a `let f: fn(..) -> R = ..` binding).
+        let declared_return = closure.return_type.as_ref().map(|ty| self.resolve_type(ty));
+        let body_expected =
+            declared_return.or_else(|| expected_fn.as_ref().map(|ef| ef.return_type));
+        // Seed the closure's return type before walking the body, so a `?`
+        // operator in the body (which checks `ctx.return_type` for
+        // Result/Option) resolves against the real return type instead of the
+        // UNKNOWN placeholder. Symmetric to the same seeding in
+        // `reify_closure`.
         if let Some(rt) = body_expected {
             closure_ctx.return_type = rt;
         }
@@ -187,7 +192,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // TIR. Single-expression closure bodies (e.g.
         // `|c: char| c.to_ascii_uppercase()`) take the body's type as
         // the return type directly — no missing-return check applies.
-        let return_type = if let ast::Expr::Block(ref block) = closure.body {
+        let return_type = if let Some(dt) = declared_return {
+            dt
+        } else if let ast::Expr::Block(ref block) = closure.body {
             match self.ast_find_return_type_in_block(block) {
                 Some(t) => {
                     if !self.ast_block_always_exits(block)
