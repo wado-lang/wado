@@ -471,7 +471,7 @@ condition: index < self.used
         unreachable;
     }
     v_32 = builtin::array_get<ref "core:prelude//List<i32>">(__b_0.repr, 0);
-    row = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(builtin::array_clone<i32>(v_32.repr)), used: v_32.used };
+    row = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_6: ref Array<i32>; __array_clone_src_6 = v_32.repr; let __array_clone_len_6: i32; __array_clone_len_6 = builtin::array_len(__array_clone_src_6); let __array_clone_dst_6: ref Array<i32>; __array_clone_dst_6 = builtin::array_new<i32>(__array_clone_len_6); builtin::array_copy<i32>(__array_clone_dst_6, 0, __array_clone_src_6, 0, __array_clone_len_6); __array_clone_dst_6), used: v_32.used };
     "core:prelude/list.wado/List<i32>::push"(row, 99);
     "core:cli/println"(__local_7_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7_7 }; "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>"(row.repr, row.used, __local_8, 1, __inline_Formatter__resolved_seq_limit_21: block -> i32 {
         if __local_8.precision == -2 {
@@ -480,7 +480,7 @@ condition: index < self.used
         break __inline_Formatter__resolved_seq_limit_21: __local_8.precision;
     }); __local_7_7);
     __b_5 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
-    value_64 = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(builtin::array_clone<i32>(__b_5.repr)), used: 3 };
+    value_64 = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_6: ref Array<i32>; __array_clone_src_6 = __b_5.repr; let __array_clone_len_6: i32; __array_clone_len_6 = builtin::array_len(__array_clone_src_6); let __array_clone_dst_6: ref Array<i32>; __array_clone_dst_6 = builtin::array_new<i32>(__array_clone_len_6); builtin::array_copy<i32>(__array_clone_dst_6, 0, __array_clone_src_6, 0, __array_clone_len_6); __array_clone_dst_6), used: 3 };
     __v1_66 = __b_0.used;
     if @unlikely(0 >= __v1_66) {
         cold_path;

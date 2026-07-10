@@ -1181,7 +1181,7 @@ fn "httpbin_status.wado/handle"(request) {
     method_str = "./sub/httpbin_handler.wado/method_name"("httpbin_status.wado/__cm_binding__Request_get_method"(request));
     let __pattern_temp_0_mv_0: ref "core:prelude/string.wado//String";
     let __pattern_temp_0_mv_1: ref "core:prelude/string.wado//String";
-    multivalue_bind [__pattern_temp_0_mv_0, __pattern_temp_0_mv_1] = "./sub/httpbin_handler.wado/split_path_query"(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(full_path.repr)), used: full_path.used });
+    multivalue_bind [__pattern_temp_0_mv_0, __pattern_temp_0_mv_1] = "./sub/httpbin_handler.wado/split_path_query"(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_7: ref Array<u8>; __array_clone_src_7 = full_path.repr; let __array_clone_len_7: i32; __array_clone_len_7 = builtin::array_len(__array_clone_src_7); let __array_clone_dst_7: ref Array<u8>; __array_clone_dst_7 = builtin::array_new<u8>(__array_clone_len_7); builtin::array_copy<u8>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7); __array_clone_dst_7), used: full_path.used });
     __pattern_temp_1 = "./sub/httpbin_handler.wado/route"(request, method_str, __pattern_temp_0_mv_0, __pattern_temp_0_mv_1);
     status = __pattern_temp_1.0;
     content_type = __pattern_temp_1.1;
@@ -1546,7 +1546,7 @@ fn "httpbin_status.wado/__cm_binding__Fields_copy_all"(self) with Fields {
             if __count_9 > 0 {
                 drop("mem/realloc"(__base_8, __count_9 * 1, 1, 0));
             }
-            "core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>::push"(__result_4, struct.new "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]" { 0: __lifted_result_7, 1: struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(builtin::array_clone<u8>(__result_10.repr)), used: __result_10.used } });
+            "core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>::push"(__result_4, struct.new "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]" { 0: __lifted_result_7, 1: struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let __array_clone_src_7: ref Array<u8>; __array_clone_src_7 = __result_10.repr; let __array_clone_len_7: i32; __array_clone_len_7 = builtin::array_len(__array_clone_src_7); let __array_clone_dst_7: ref Array<u8>; __array_clone_dst_7 = builtin::array_new<u8>(__array_clone_len_7); builtin::array_copy<u8>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7); __array_clone_dst_7), used: __result_10.used } });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 0), builtin::load_i32((__elem_addr + 0) + 4), 1, 0));
             __i_5 = __i_5 + 1;
             continue l64;
@@ -1594,7 +1594,7 @@ fn "httpbin_status.wado/__cm_binding__Fields_get"(self, name) with Fields {
             if __count_10 > 0 {
                 drop("mem/realloc"(__base_9, __count_10 * 1, 1, 0));
             }
-            "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::push"(__result_6, struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(builtin::array_clone<u8>(__result_11.repr)), used: __result_11.used });
+            "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::push"(__result_6, struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let __array_clone_src_7: ref Array<u8>; __array_clone_src_7 = __result_11.repr; let __array_clone_len_7: i32; __array_clone_len_7 = builtin::array_len(__array_clone_src_7); let __array_clone_dst_7: ref Array<u8>; __array_clone_dst_7 = builtin::array_new<u8>(__array_clone_len_7); builtin::array_copy<u8>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7); __array_clone_dst_7), used: __result_11.used });
             __i_7 = __i_7 + 1;
             continue l70;
         };
@@ -1774,7 +1774,7 @@ fn "httpbin_status.wado/__cm_export__handle"(request) {
 }
 
 fn "httpbin_status.wado/$value_copy$T29"(v) {
-    return builtin::array_clone<u8>(v);
+    return let __array_clone_len_7: i32, __array_clone_len_7 = builtin::array_len(v), let __array_clone_dst_7: ref Array<u8>, __array_clone_dst_7 = builtin::array_new<u8>(__array_clone_len_7), builtin::array_copy<u8>(__array_clone_dst_7, 0, v, 0, __array_clone_len_7), __array_clone_dst_7;
 }
 
 fn "httpbin_status.wado/$value_copy$T137"(v) {
@@ -1790,11 +1790,11 @@ fn "httpbin_status.wado/$value_copy$T56"(v) {
 }
 
 fn "httpbin_status.wado/$value_copy$T138"(v) {
-    return struct.new "core:prelude/string.wado//StrSplitIter" { repr: v.repr, used: v.used, pos: v.pos, sep_repr: ref.as_non_null(builtin::array_clone<u8>(v.sep_repr)), sep_len: v.sep_len, finished: v.finished };
+    return struct.new "core:prelude/string.wado//StrSplitIter" { repr: v.repr, used: v.used, pos: v.pos, sep_repr: ref.as_non_null(let __array_clone_src_7: ref Array<u8>; __array_clone_src_7 = v.sep_repr; let __array_clone_len_7: i32; __array_clone_len_7 = builtin::array_len(__array_clone_src_7); let __array_clone_dst_7: ref Array<u8>; __array_clone_dst_7 = builtin::array_new<u8>(__array_clone_len_7); builtin::array_copy<u8>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7); __array_clone_dst_7), sep_len: v.sep_len, finished: v.finished };
 }
 
 fn "httpbin_status.wado/$value_copy$T19"(v) {
-    return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used };
+    return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_7: ref Array<u8>; __array_clone_src_7 = v.repr; let __array_clone_len_7: i32; __array_clone_len_7 = builtin::array_len(__array_clone_src_7); let __array_clone_dst_7: ref Array<u8>; __array_clone_dst_7 = builtin::array_new<u8>(__array_clone_len_7); builtin::array_copy<u8>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7); __array_clone_dst_7), used: v.used };
 }
 
 fn "./sub/httpbin_handler.wado/method_name"(m) {

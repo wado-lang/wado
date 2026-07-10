@@ -828,6 +828,9 @@ impl<'a> WirEmitter<'a> {
     ) {
         match instr {
             WirInstr::DeclareLocal { name, ty } => {
+                if !self.scratch_local_names.insert(name.clone()) {
+                    return;
+                }
                 let mut val_type = self.wir_type_to_val_type(ty);
                 // Non-null ref locals must be made nullable for Wasm defaultability.
                 // We track them and add ref.as_non_null on local.get.
@@ -2462,17 +2465,6 @@ impl<'a> WirEmitter<'a> {
                 src,
                 element_copy_func,
             } => {
-                // Allocate a fresh array the same length as `src` and copy
-                // every element with a JIT-compiled loop. This was the
-                // per-array-field code path inside the former
-                // `emit_value_copy` for raw `Array<T>` fields and is
-                // now reachable only via the synthesized `$value_copy$`
-                // helpers' explicit `builtin::array_clone::<T>(...)` calls.
-                //
-                // When `element_copy_func` is set the loop additionally
-                // calls the named `$value_copy$T<id>` helper between
-                // `array.get` and `array.set` so each destination element
-                // is a fresh struct, not an aliased ref into the source.
                 let arr_wasm_idx = self.resolve_type_index(type_id.index());
                 let src_name = format!("__copy_arr_src_{}", type_id.index());
                 let dst_name = format!("__copy_arr_dst_{}", type_id.index());
@@ -2513,37 +2505,38 @@ impl<'a> WirEmitter<'a> {
                         f.instruction(&Instruction::ArrayGet(arr_wasm_idx));
                     }
                 }
-                if let Some(func_name) = element_copy_func {
-                    let func_idx = self
-                        .resolve_function_index_by_suffix(func_name)
-                        .unwrap_or_else(|| {
-                            panic!("WirInstr::ArrayClone references unknown helper {func_name}")
-                        });
-                    // Wasm GC `array.get` produces `(ref null T)`; the
-                    // synthesized `$value_copy$T<id>` expects a
-                    // non-null `(ref T)`. `List<T>::repr` is sized to
-                    // capacity (≥ `used`), so the slots beyond `used`
-                    // hold `array.new_default`'s null. Branch on
-                    // null and short-circuit those slots — preserving
-                    // the null in the destination — instead of
-                    // unconditionally `ref.as_non_null` which would
-                    // trap on every empty trailing slot.
-                    let elem_name = format!("__copy_arr_elem_{}", type_id.index());
-                    let elem_local = self.resolve_local(&elem_name);
-                    let elem_val = self
-                        .array_element_val_type(type_id.index())
-                        .expect("array element val type known when element_copy_func is set");
-                    f.instruction(&Instruction::LocalSet(elem_local));
-                    f.instruction(&Instruction::LocalGet(elem_local));
-                    f.instruction(&Instruction::RefIsNull);
-                    f.instruction(&Instruction::If(BlockType::Result(elem_val)));
-                    f.instruction(&Instruction::LocalGet(elem_local));
-                    f.instruction(&Instruction::Else);
-                    f.instruction(&Instruction::LocalGet(elem_local));
-                    f.instruction(&Instruction::RefAsNonNull);
-                    f.instruction(&Instruction::Call(func_idx));
-                    f.instruction(&Instruction::End);
-                }
+                let func_name = element_copy_func
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("WirInstr::ArrayClone with no element_copy_func"));
+                let func_idx = self
+                    .resolve_function_index_by_suffix(func_name)
+                    .unwrap_or_else(|| {
+                        panic!("WirInstr::ArrayClone references unknown helper {func_name}")
+                    });
+                // Wasm GC `array.get` produces `(ref null T)`; the
+                // synthesized `$value_copy$T<id>` expects a
+                // non-null `(ref T)`. `List<T>::repr` is sized to
+                // capacity (≥ `used`), so the slots beyond `used`
+                // hold `array.new_default`'s null. Branch on
+                // null and short-circuit those slots — preserving
+                // the null in the destination — instead of
+                // unconditionally `ref.as_non_null` which would
+                // trap on every empty trailing slot.
+                let elem_name = format!("__copy_arr_elem_{}", type_id.index());
+                let elem_local = self.resolve_local(&elem_name);
+                let elem_val = self
+                    .array_element_val_type(type_id.index())
+                    .expect("array element val type known when element_copy_func is set");
+                f.instruction(&Instruction::LocalSet(elem_local));
+                f.instruction(&Instruction::LocalGet(elem_local));
+                f.instruction(&Instruction::RefIsNull);
+                f.instruction(&Instruction::If(BlockType::Result(elem_val)));
+                f.instruction(&Instruction::LocalGet(elem_local));
+                f.instruction(&Instruction::Else);
+                f.instruction(&Instruction::LocalGet(elem_local));
+                f.instruction(&Instruction::RefAsNonNull);
+                f.instruction(&Instruction::Call(func_idx));
+                f.instruction(&Instruction::End);
                 f.instruction(&Instruction::ArraySet(arr_wasm_idx));
                 f.instruction(&Instruction::LocalGet(loop_idx_local));
                 f.instruction(&Instruction::I32Const(1));
