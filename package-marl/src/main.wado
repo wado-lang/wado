@@ -4,8 +4,17 @@
 
 use { println, eprintln, exit_error, Stdout, Stderr, Environment, Exit } from "core:cli";
 use { from_env } from "core:args";
+use { TreeSet } from "core:collections";
 use {
-    Preopens, Descriptor, DescriptorType, DirectoryEntry, Filesize, PathFlags, OpenFlags, DescriptorFlags, ErrorCode,
+    Preopens,
+    Descriptor,
+    DescriptorType,
+    DirectoryEntry,
+    Filesize,
+    PathFlags,
+    OpenFlags,
+    DescriptorFlags,
+    ErrorCode,
 } from "wasi:filesystem";
 use { format } from "./format.wado";
 
@@ -37,9 +46,9 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
     let files = if cli.paths.is_empty() {
         let mut all = collect_md_files(&root, "");
         all.sort();
-        all
+        all;
     } else {
-        resolve_paths(&root, &cli.paths)
+        resolve_paths(&root, &cli.paths);
     };
 
     let mut had_changes = false;
@@ -71,7 +80,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
         }
     }
 
-    if had_errors || (cli.check && had_changes) {
+    if had_errors || cli.check && had_changes {
         exit_error();
     }
 }
@@ -135,8 +144,33 @@ fn resolve_paths(root: &Descriptor, paths: &List<String>) -> List<String> with S
             Err(e) => eprintln(`marl-format: cannot open {path}: {e:?}`),
         }
     }
+    return unique_sorted(out);
+}
+
+/// Returns the paths in sorted order with duplicates removed, so overlapping
+/// arguments (a directory plus a file inside it, or the same path twice) don't
+/// format or report the same file more than once. `seen` drops a path the
+/// first time it recurs.
+fn unique_sorted(items: List<String>) -> List<String> {
+    let mut seen: TreeSet<String> = TreeSet::new();
+    let mut out: List<String> = [];
+    for let item of items {
+        if seen.insert(item) {
+            out.push(item);
+        }
+    }
     out.sort();
     return out;
+}
+
+test "unique_sorted removes duplicates and sorts" {
+    let items: List<String> = ["sub/c.md", "a.md", "a.md", "b.md", "sub/c.md"];
+    assert unique_sorted(items) == ["a.md", "b.md", "sub/c.md"];
+}
+
+test "unique_sorted leaves a distinct list sorted" {
+    let items: List<String> = ["b.md", "a.md", "c.md"];
+    assert unique_sorted(items) == ["a.md", "b.md", "c.md"];
 }
 
 fn read_dir_entries(dir: &Descriptor) -> Result<List<DirectoryEntry>, ErrorCode> {

@@ -616,7 +616,5 @@ this repo. Each was confirmed by running the code, not just by reading.
 - [ ] No shortcut-image form. `![alt]` (shortcut reference image) is always
       expanded to `![alt][alt]` on the first pass — there is no `ShortcutImage`
       node paralleling `ShortcutLink`.
-- [ ] The CLI does not deduplicate overlapping path arguments, so
-      `marl-format docs docs/foo.md` formats/reports `docs/foo.md` twice; and
-      `write_file` truncates the target before the new content is confirmed
+- [ ] `write_file` truncates the target before the new content is confirmed
       written, risking a truncated file on a mid-write I/O failure.
