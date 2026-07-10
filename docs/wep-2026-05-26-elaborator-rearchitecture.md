@@ -567,25 +567,32 @@ Three independent tracks; each slice keeps `mise run test` green (E2E 2934/0).
       lookups; it no longer reads `self.sem` / `self.current_module_source` /
       `self.type_lookup()`. The cluster is decoupled: it reads only
       `self.tysys.*` + the passed `ctx` + `scope`. Behaviour-preserving (`scope`
-      is `self.type_lookup()` at every call site). Methods stay on
-      `impl Elaborator` for now — the physical relocation is the remaining step
-      below.
-- [ ] **Track B Stage D — relocate the decoupled queries to `impl TypeSystem`.**
-      Now mechanical for the trait-impl-lookup cluster (decoupled above): move
-      the ~14 cluster methods + `auto_derive_default_struct_type` from
-      `impl Elaborator` to `impl TypeSystem` (`self.tysys.X` → `self.X`), and
-      flip the ~25 call sites `self.X(ctx, scope, …)` → `self.tysys.X(ctx,
-      scope, …)`. One frontier fix: `blanket_trait_impl_applies` calls the
-      `H`-generic `Elaborator::get_type_name_static`; use a free /
-      `TypeSystem`-associated form instead (a free `get_type_name_static`
-      already exists privately in `trait_env.rs`). Also straightforward:
-      `classify_call_callee`, `infer_variant_type_args` (`call.rs`) already read
-      only `self.tysys.* + ctx`; `operators.rs` operator-trait bound lookups are
-      un-audited. Still blocked and deferred: the `resolve_type` family (mutates
-      `ModuleSemantics.bindings` via `record_type_name_reference`, and is
-      `&mut self` for on-demand interning, so a self-borrowing `&TypeLookup`
-      param needs a different shape) and `resolve_type_with_param_mapping`
-      (calls it).
+      is `self.type_lookup()` at every call site).
+- [x] **Track B Stage D — trait-impl-lookup cluster moved to `impl TypeSystem`.**
+      The ~14 decoupled cluster methods (`type_implements_trait(_inner)`,
+      `find_trait_impl_for_type(_with_args)`, `has_real_trait_impl_for_type`,
+      `blanket_trait_impl_applies`, `check_impl_block_bounds`,
+      `classify_on_bound_trait`, `scoped_trait_decl_module`,
+      `walk_structural_derive_members`,
+      `structurally_derivable_for_explicit_request`, `is_defaultable_struct`,
+      `trait_unimpl_reason_chain`, `collect_trait_unimpl_reason`) plus
+      `auto_derive_default_struct_type` now live on `impl TypeSystem`
+      (`self.tysys.X` → `self.X`); the ~25 external call sites read
+      `self.tysys.X(ctx, scope, …)`. Frontier fix: `blanket_trait_impl_applies`
+      uses the now-`pub(super)` free `trait_env::get_type_name_static` instead
+      of the `H`-generic `Elaborator::get_type_name_static`. The impl-block
+      relocation was done by splitting the `impl Elaborator` block around the
+      (contiguous) cluster run rather than cutting/pasting interleaved methods.
+      Trait/type-implements resolution is now a `TypeSystem` operation, callable
+      without an `Elaborator`.
+- [ ] **Track B Stage D — remaining targets.** `classify_call_callee`,
+      `infer_variant_type_args` (`call.rs`) already read only `self.tysys.* +
+      ctx` — straightforward moves, not yet done; `operators.rs` operator-trait
+      bound lookups un-audited. Still blocked and deferred: the `resolve_type`
+      family (mutates `ModuleSemantics.bindings` via
+      `record_type_name_reference`, and is `&mut self` for on-demand interning,
+      so a self-borrowing `&TypeLookup` param needs a different shape) and
+      `resolve_type_with_param_mapping` (calls it).
 - [ ] **Track B Stage E — fold the manual scope save/restores into the guard.**
       Replace the hand-rolled `trait_ctx` clone/restore in `resolve_module`'s
       `Item::Impl` arm (`elaborator.rs`) and the `self_type`-only save/restore in

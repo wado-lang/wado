@@ -2174,8 +2174,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Auto-derived `Default::default()` returns the struct type itself.
         if method_name == "default"
-            && let Some(struct_type) =
-                self.auto_derive_default_struct_type(&self.type_lookup(), struct_name)
+            && let Some(struct_type) = self
+                .tysys
+                .auto_derive_default_struct_type(&self.type_lookup(), struct_name)
         {
             return struct_type;
         }
@@ -2915,6 +2916,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if method_name == "default"
             && self
+                .tysys
                 .auto_derive_default_struct_type(&self.type_lookup(), struct_name)
                 .is_some()
         {
@@ -3019,6 +3021,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // caught it), but `synthesis::traits` will emit the body.
         if method_name == "default"
             && self
+                .tysys
                 .auto_derive_default_struct_type(&self.type_lookup(), struct_name)
                 .is_some()
         {

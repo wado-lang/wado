@@ -2114,12 +2114,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 inner_type_id = t;
             }
-            let implements_into_iter = self.type_implements_trait(
+            let implements_into_iter = self.tysys.type_implements_trait(
                 &self.annotate_ctx,
                 &self.type_lookup(),
                 iterable_type_id,
                 "IntoIterator",
-            ) || self.type_implements_trait(
+            ) || self.tysys.type_implements_trait(
                 &self.annotate_ctx,
                 &self.type_lookup(),
                 inner_type_id,
@@ -2488,7 +2488,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Iterator-trait conformance check, mirroring the pre-refactor
         // surface error.
-        if !self.type_implements_trait(
+        if !self.tysys.type_implements_trait(
             &self.annotate_ctx,
             &self.type_lookup(),
             iter_type,

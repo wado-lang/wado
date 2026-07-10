@@ -3557,14 +3557,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 for (i, (param_name, bounds)) in struct_info.type_param_bounds.iter().enumerate() {
                     if let Some(&type_arg) = type_args.get(i) {
                         for bound in bounds {
-                            if !self.type_implements_trait(
+                            if !self.tysys.type_implements_trait(
                                 &self.annotate_ctx,
                                 &self.type_lookup(),
                                 type_arg,
                                 bound,
                             ) {
                                 let type_name = self.tysys.type_id_to_string(type_arg);
-                                let reason = self.trait_unimpl_reason_chain(
+                                let reason = self.tysys.trait_unimpl_reason_chain(
                                     &self.annotate_ctx,
                                     &self.type_lookup(),
                                     type_arg,
@@ -3765,7 +3765,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let base_info: Vec<BaseSpreadInfo> = spread_base_types
             .iter()
             .map(|&t| {
-                let is_map = self.type_implements_trait(
+                let is_map = self.tysys.type_implements_trait(
                     &self.annotate_ctx,
                     &self.type_lookup(),
                     t,
@@ -3784,7 +3784,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let compose_union = has_spread && base_info.iter().all(|(m, f)| !m && f.is_some());
         let all_map = base_info.iter().all(|(m, _)| *m);
         let expected_is_map = expected_type.is_some_and(|t| {
-            self.type_implements_trait(
+            self.tysys.type_implements_trait(
                 &self.annotate_ctx,
                 &self.type_lookup(),
                 t,
@@ -4572,7 +4572,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .compiler_trait_name(crate::compiler_item::CompilerItem::Ord)
             .to_string();
         if element_type != TypeTable::ERROR
-            && !self.type_implements_trait(
+            && !self.tysys.type_implements_trait(
                 &self.annotate_ctx,
                 &self.type_lookup(),
                 element_type,
@@ -4580,7 +4580,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         {
             let type_name = self.tysys.type_id_to_string(element_type);
-            let reason = self.trait_unimpl_reason_chain(
+            let reason = self.tysys.trait_unimpl_reason_chain(
                 &self.annotate_ctx,
                 &self.type_lookup(),
                 element_type,

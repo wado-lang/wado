@@ -194,7 +194,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
             if is_real_type
                 && (is_type_param
-                    || !self.type_implements_trait(
+                    || !self.tysys.type_implements_trait(
                         &self.annotate_ctx,
                         &self.type_lookup(),
                         handler_type,

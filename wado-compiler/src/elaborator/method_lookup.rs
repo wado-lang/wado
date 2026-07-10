@@ -284,7 +284,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.find_arithmetic_trait_impl(&struct_name, rhs_type_id, &trait_name, method_name)?;
         Some(rhs_type_id)
     }
+}
 
+impl TypeSystem {
     /// Return `Some(struct_type)` when `struct_name` is a non-generic struct
     /// whose fields all carry a declared default expression, making it
     /// eligible for auto-derived `Default::default()` synthesis.
@@ -311,14 +313,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !info.type_param_type_ids.is_empty() {
             return None;
         }
-        Some(
-            self.tysys
-                .type_table
-                .borrow()
-                .type_id_of_decl(info.defined_at),
-        )
+        Some(self.type_table.borrow().type_id_of_decl(info.defined_at))
     }
+}
 
+impl<H: CompilerHost> Elaborator<'_, H> {
     /// Find the module source for a struct by name.
     pub(super) fn find_struct_module_source(&self, struct_name: &str) -> ModuleSource {
         // Check if it's a primitive type - impl blocks live in core:prelude/primitive.wado
@@ -624,7 +623,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &impl_block.type_params,
                     receiver_type_args.as_deref(),
                     impl_module,
-                ) && self.check_impl_block_bounds(
+                ) && self.tysys.check_impl_block_bounds(
                     &self.annotate_ctx,
                     &self.type_lookup(),
                     &impl_block.type_params,
@@ -816,7 +815,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         receiver_type_args.as_deref(),
                         search_module_source,
                     )
-                    && self.check_impl_block_bounds(
+                    && self.tysys.check_impl_block_bounds(
                         &self.annotate_ctx,
                         &self.type_lookup(),
                         &impl_block.type_params,
@@ -1823,7 +1822,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let bounds_satisfied = param.bounds.iter().all(|bound| {
                     let bound_trait_name = &bound.name;
                     names_to_check.iter().any(|name| {
-                        self.find_trait_impl_for_type(
+                        self.tysys.find_trait_impl_for_type(
                             &self.annotate_ctx,
                             &self.type_lookup(),
                             name,
@@ -1938,7 +1937,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         param.bounds.iter().all(|bound| {
             receiver_type_id.is_some_and(|rt| {
-                self.type_implements_trait(&self.annotate_ctx, &self.type_lookup(), rt, &bound.name)
+                self.tysys.type_implements_trait(
+                    &self.annotate_ctx,
+                    &self.type_lookup(),
+                    rt,
+                    &bound.name,
+                )
             })
         })
     }
@@ -2899,7 +2903,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // `find_trait_impl_for_type_with_args`, so a bound-checking
                 // fix for any AST shape applies to every caller.
                 let impl_block = s.get_impl_block(impl_ref);
-                if !s.check_impl_block_bounds(
+                if !s.tysys.check_impl_block_bounds(
                     &s.annotate_ctx,
                     &s.type_lookup(),
                     &impl_block.type_params,

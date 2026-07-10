@@ -837,7 +837,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     fn classify_on_bound_marker(&self, trait_type: &ast::Type) -> Option<String> {
         let base = trait_type.head_base_name()?;
-        self.classify_on_bound_trait(&self.type_lookup(), base)
+        self.tysys
+            .classify_on_bound_trait(&self.type_lookup(), base)
             .map(|_| base.to_string())
     }
 
@@ -852,7 +853,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if target_type_id == tir::TypeTable::ERROR {
             return;
         }
-        if self.structurally_derivable_for_explicit_request(
+        if self.tysys.structurally_derivable_for_explicit_request(
             &self.annotate_ctx,
             &self.type_lookup(),
             target_type_id,
@@ -875,7 +876,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .record_bound_driven_synth_request(target_type_name, &module_source, trait_name);
             return;
         }
-        if self.has_real_trait_impl_for_type(
+        if self.tysys.has_real_trait_impl_for_type(
             &self.annotate_ctx,
             &self.type_lookup(),
             target_type_name,
@@ -883,7 +884,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ) {
             return;
         }
-        let reason = self.trait_unimpl_reason_chain(
+        let reason = self.tysys.trait_unimpl_reason_chain(
             &self.annotate_ctx,
             &self.type_lookup(),
             target_type_id,
