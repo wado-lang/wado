@@ -1393,10 +1393,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 current_module_source: ModuleSource::entry_point_uninitialized(), // Set in Elaborator::resolve_module
                 entry_module_source: entry_module_source.clone(),
                 current_module_items: &[], // Set in Elaborator::resolve_module
-                current_effect_params: IndexSet::default(),
-                current_effect_param_decls: IndexMap::default(),
-                annotate_ctx: super::trait_env::AnnotateCtx::default(),
-                default_scope_module: None,
+                annotate_ctx: super::scope::Scope::default(),
                 invocations: Rc::clone(&state.invocations),
                 interner: Rc::clone(&state.interner),
                 pending_method_dispatch: None,

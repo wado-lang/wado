@@ -940,19 +940,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
         // Install effect params before `register_generic_params` so eager
         // `<F: fn() with E>` bound resolution sees `E` as `EffectRef::Param`.
-        let old_effect_params = std::mem::take(&mut scope.current_effect_params);
-        let old_effect_param_decls = std::mem::take(&mut scope.current_effect_param_decls);
-        let effect_params: Vec<&ast::GenericParam> =
-            func.type_params.iter().filter(|p| p.is_effect).collect();
-        scope.current_effect_params = effect_params.iter().map(|p| p.name.clone()).collect();
-        scope.current_effect_param_decls = effect_params
-            .iter()
-            .map(|p| (p.name.clone(), p.id))
-            .collect();
+        scope
+            .annotate_ctx
+            .trait_ctx
+            .install_effect_params(&func.type_params);
         scope.register_generic_params(&func.type_params, 0);
         scope.populate_generic_function_cache(func);
-        scope.current_effect_params = old_effect_params;
-        scope.current_effect_param_decls = old_effect_param_decls;
     }
 
     /// Populate the three generic-function inference caches
@@ -1025,11 +1018,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Set effect params in scope before `register_generic_params`. Eager
         // `<F: fn() with E>` bound resolution runs inside
-        // `register_generic_params` and consults `current_effect_param_decls`
+        // `register_generic_params` and consults `trait_ctx.effect_params`
         // to recognise `E` as `EffectRef::Param` rather than re-resolving it
         // to a phantom `EffectRef::Concrete`.
-        let old_effect_params = std::mem::take(&mut scope.current_effect_params);
-        let old_effect_param_decls = std::mem::take(&mut scope.current_effect_param_decls);
         let effect_params: Vec<_> = func.type_params.iter().filter(|p| p.is_effect).collect();
         if effect_params.len() > 1 {
             let _ = scope.logger.error(TypeError::InvalidLiteral {
@@ -1037,11 +1028,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: effect_params[1].span,
             });
         }
-        scope.current_effect_params = effect_params.iter().map(|p| p.name.clone()).collect();
-        scope.current_effect_param_decls = effect_params
-            .iter()
-            .map(|p| (p.name.clone(), p.id))
-            .collect();
+        scope
+            .annotate_ctx
+            .trait_ctx
+            .install_effect_params(&func.type_params);
 
         scope.register_generic_params(&func.type_params, 0);
 
@@ -1209,7 +1199,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Stash the resolved `Vec<EffectRef>` for reify (Stage 5): reify
         // cannot reconstruct effect-param canonicalisation without
-        // `current_effect_param_decls`, so the annotate phase records
+        // `trait_ctx.effect_params`, so the annotate phase records
         // the already-resolved list here keyed by the function's `AstId`.
         let func_key = func.id;
         scope.sem.types.function_effects.insert(func_key, effects);
@@ -1226,9 +1216,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .insert(task_key, declared_return_type);
         }
 
-        // Restore effect params scope
-        scope.current_effect_params = old_effect_params;
-        scope.current_effect_param_decls = old_effect_param_decls;
         drop(scope);
 
         // Record the resolved signature for reify to read back (single source
@@ -1561,8 +1548,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Set effect params in scope (for resolving effect names in function types)
-        let old_effect_params = std::mem::take(&mut scope.current_effect_params);
-        let old_effect_param_decls = std::mem::take(&mut scope.current_effect_param_decls);
         let effect_params: Vec<_> = func.type_params.iter().filter(|p| p.is_effect).collect();
         if effect_params.len() > 1 {
             let _ = scope.logger.error(TypeError::InvalidLiteral {
@@ -1570,18 +1555,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: effect_params[1].span,
             });
         }
-        scope.current_effect_params = effect_params.iter().map(|p| p.name.clone()).collect();
-        scope.current_effect_param_decls = effect_params
-            .iter()
-            .map(|p| (p.name.clone(), p.id))
-            .collect();
+        scope
+            .annotate_ctx
+            .trait_ctx
+            .install_effect_params(&func.type_params);
 
         // Then, collect method-level type params. Mirrors
         // `register_generic_params` in `trait_env.rs`: `<F: fn(...)>` /
         // `<F: fn mut(...)>` bounds are realised eagerly to the bound's
         // function type and do NOT consume a `TypeParam` index slot, so the
         // index space stays dense for real type params. Effect params have
-        // their own channel (`current_effect_param_decls`, installed above).
+        // their own channel (`trait_ctx.effect_params`, installed above).
         // Method-level type params start after the impl block's own type
         // params (`impl_type_params`) — the SAME base the monomorphizer uses
         // when substituting (`impl_type_params.len() + param.index` in
@@ -1838,13 +1822,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Stash the resolved `Vec<EffectRef>` for reify (Stage 5): reify
         // cannot reconstruct effect-param canonicalisation without
-        // `current_effect_param_decls`, so the annotate phase records
+        // `trait_ctx.effect_params`, so the annotate phase records
         // the already-resolved list here keyed by the method's `AstId`.
         let method_key = func.id;
         scope.sem.types.function_effects.insert(method_key, effects);
 
-        scope.current_effect_params = old_effect_params;
-        scope.current_effect_param_decls = old_effect_param_decls;
         drop(scope);
 
         // Record the resolved param/return types for reify to read back

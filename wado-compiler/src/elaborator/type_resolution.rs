@@ -320,7 +320,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .type_table
                         .borrow()
                         .type_id_of_decl(resource_info.defined_at)
-                } else if let Some(scope_mod) = self.default_scope_module.clone()
+                } else if let Some(scope_mod) = self.annotate_ctx.default_scope_module.clone()
                     && scope_mod != self.current_module_source
                 {
                     // A default re-resolved at the caller may name a type

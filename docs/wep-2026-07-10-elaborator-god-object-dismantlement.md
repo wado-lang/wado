@@ -149,14 +149,20 @@ declaration" — anything else is rejected.
 
 ### Scope — transient walk state with RAII-only mutation
 
-One `Scope` struct absorbs `annotate_ctx` (trait context + recursion guard),
-`current_effect_params`, `current_effect_param_decls`, and
-`default_scope_module`. All mutation goes through guards, generalizing
-`TypeParamScope`: enter-impl, enter-function, enter-method-signature,
-with-self-type, with-default-scope. The manual save/restores (the
-`Item::Impl` arm, the `self_type` triple, the effect-param takes) are
-deleted. Enforceable by inspection: no `mem::replace` / manual clone-restore
-of scope fields outside `scope.rs`.
+One `Scope` struct (in `elaborator/scope.rs`) absorbs `annotate_ctx` and
+`default_scope_module`; effect parameters move into `TraitContext` itself —
+they are declared in a signature's `type_params` list, so they are
+generic-scope state and the existing `TypeParamScope` guard restores them
+with the rest of the context (S1 finding: the separate
+`current_effect_params` name set had no readers and was deleted; only the
+name → decl-`AstId` map is live). All mutation goes through guards:
+`TypeParamScope` (with `TraitContext::install_effect_params` for the
+install), `with_self_type_override`, `with_default_scope_module`, and the
+guard-managed `resolve_impl_item` extraction of the `Item::Impl` arm. The
+manual save/restores (the `Item::Impl` arm, the `self_type` triple, the
+effect-param and `default_scope_module` take/restore pairs) are deleted.
+Enforceable by inspection: no `mem::replace` / manual clone-restore of
+scope fields outside `scope.rs`.
 
 ### TypeSystem — completed query surface, and the no-logging rule
 
@@ -234,9 +240,12 @@ the LSP query tests green. Converted consumers read the digest via
 `.expect(…)` — a missing entry is a loud panic, never a fallback to AST
 re-resolution (the reify Stage-7 precedent).
 
-- [ ] S1 `Scope` + guards; convert the `Item::Impl` arm, the `self_type`
+- [x] S1 `Scope` + guards; convert the `Item::Impl` arm, the `self_type`
       triple, the effect-param takes. (Subsumes the parent WEP's Track B
-      Stage E.)
+      Stage E.) Landed with two refinements: effect params live on
+      `TraitContext` (restored by `TypeParamScope`; the reader-less
+      `current_effect_params` set deleted), and `AnnotateCtx` is renamed to
+      `Scope` ahead of S7's query signatures.
 - [ ] S2 Side channels: dispatch outcome as return value, operator `AstId` as
       parameter; delete `capture_tuple_overlays`.
 - [ ] S3 Decl work → decl pass: move the `resolve_module` preamble into

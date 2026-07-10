@@ -11,7 +11,7 @@ use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TirExpr, TypeId, Type
 use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
 use super::infer::InferCtx;
-use super::trait_env::AnnotateCtx;
+use super::scope::Scope;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util::placeholder;
@@ -221,7 +221,7 @@ impl TypeSystem {
     /// dispatch path; everything else is left as written.
     fn classify_call_callee<'a>(
         &self,
-        ctx: &AnnotateCtx,
+        ctx: &Scope,
         ident: &'a ast::IdentExpr,
     ) -> CalleeIdentKind<'a> {
         let Some(pos) = ident.name.find("::") else {
@@ -1174,7 +1174,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // site. The `CalleeRef`'s module drives `lookup_function_return_type`
         // / `lookup_function_param_types`, so the signature resolves in the
         // defining module too.
-        else if let Some(fallback) = self.default_scope_module.clone()
+        else if let Some(fallback) = self.annotate_ctx.default_scope_module.clone()
             && fallback != self.current_module_source
             && Self::lookup_func_in_loaded_module(
                 self.loaded_modules,
@@ -1590,30 +1590,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             if let Some((params, type_params)) = func_info {
                 // Set up the callee's generic-param scope before resolving
-                // its parameter types. Effect params have their own
-                // channel (`current_effect_param_decls`) and must be
-                // installed BEFORE `register_generic_params` — eager
-                // `<F: fn() with E>` bound resolution runs inside
-                // `register_generic_params` and consults that channel
-                // to recognise `E` as `EffectRef::Param`.
+                // its parameter types (`install_effect_params` runs before
+                // `register_generic_params` per its contract).
                 let mut scope = self.enter_inherited_type_param_scope();
                 scope.annotate_ctx.trait_ctx.type_params.clear();
-                let old_effect_params = std::mem::take(&mut scope.current_effect_params);
-                let old_effect_param_decls = std::mem::take(&mut scope.current_effect_param_decls);
-                let effect_params: Vec<&ast::GenericParam> =
-                    type_params.iter().filter(|p| p.is_effect).collect();
-                scope.current_effect_params =
-                    effect_params.iter().map(|p| p.name.clone()).collect();
-                scope.current_effect_param_decls = effect_params
-                    .iter()
-                    .map(|p| (p.name.clone(), p.id))
-                    .collect();
+                scope
+                    .annotate_ctx
+                    .trait_ctx
+                    .install_effect_params(&type_params);
                 scope.register_generic_params(&type_params, 0);
-                let result = params.iter().map(|p| scope.resolve_type(&p.ty)).collect();
-                scope.current_effect_params = old_effect_params;
-                scope.current_effect_param_decls = old_effect_param_decls;
-                drop(scope);
-                return result;
+                return params.iter().map(|p| scope.resolve_type(&p.ty)).collect();
             }
         }
 
@@ -1644,7 +1630,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // of its declaring module (see `default_scope_module`). Resolve its
         // parameter types in that module's perspective, mirroring the
         // callee-resolution fallback in `resolve_call`.
-        if let Some(fallback) = self.default_scope_module.clone()
+        if let Some(fallback) = self.annotate_ctx.default_scope_module.clone()
             && fallback != self.current_module_source
         {
             let params = Self::lookup_func_in_loaded_module(
@@ -1696,39 +1682,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 subs.insert(name.clone(), arg_ast.clone());
             }
         }
-        let saved_fallback = self.default_scope_module.take();
-        self.default_scope_module = callee_module;
-        for i in args.len()..param_types.len() {
-            let (name, default_ast) = match defaults.get(i) {
-                Some((n, Some(d))) => (n.clone(), d.clone()),
-                _ => break,
-            };
-            let mut default_expr = default_ast;
-            default_expr.substitute_idents(&subs);
-            let expected_type = param_types[i];
-            let resolved = self.resolve_expr(&default_expr, ctx, Some(expected_type));
-            if resolved == TypeTable::UNIT
-                && expected_type != TypeTable::UNIT
-                && expected_type != TypeTable::ERROR
-                && expected_type != TypeTable::UNKNOWN
-            {
-                let expected_name = self.tysys.type_table.borrow().type_name(expected_type);
-                panic!(
-                    "compiler bug: default expression for parameter '{name}' \
-                     re-resolved to () at call site but parameter expects '{expected_name}'. \
-                     Likely cause: the default references callee-only scope \
-                     (e.g. a callee type parameter like `T::default()`) that is \
-                     invisible during call-site re-resolution. \
-                     Resolving defaults per-monomorphization is deferred work; \
-                     see WEP 2026-04-11 `docs/wep-2026-04-11-default-arguments.md`. \
-                     Default span: {:?}",
-                    default_expr.span()
-                );
+        self.with_default_scope_module(callee_module, |s| {
+            for i in args.len()..param_types.len() {
+                let (name, default_ast) = match defaults.get(i) {
+                    Some((n, Some(d))) => (n.clone(), d.clone()),
+                    _ => break,
+                };
+                let mut default_expr = default_ast;
+                default_expr.substitute_idents(&subs);
+                let expected_type = param_types[i];
+                let resolved = s.resolve_expr(&default_expr, ctx, Some(expected_type));
+                if resolved == TypeTable::UNIT
+                    && expected_type != TypeTable::UNIT
+                    && expected_type != TypeTable::ERROR
+                    && expected_type != TypeTable::UNKNOWN
+                {
+                    let expected_name = s.tysys.type_table.borrow().type_name(expected_type);
+                    panic!(
+                        "compiler bug: default expression for parameter '{name}' \
+                         re-resolved to () at call site but parameter expects '{expected_name}'. \
+                         Likely cause: the default references callee-only scope \
+                         (e.g. a callee type parameter like `T::default()`) that is \
+                         invisible during call-site re-resolution. \
+                         Resolving defaults per-monomorphization is deferred work; \
+                         see WEP 2026-04-11 `docs/wep-2026-04-11-default-arguments.md`. \
+                         Default span: {:?}",
+                        default_expr.span()
+                    );
+                }
+                args.push(placeholder(resolved, default_expr.span()));
+                subs.insert(name, default_expr);
             }
-            args.push(placeholder(resolved, default_expr.span()));
-            subs.insert(name, default_expr);
-        }
-        self.default_scope_module = saved_fallback;
+        });
     }
 
     /// Look up the default-value AST and parameter name for each parameter of a
@@ -2090,19 +2075,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let n = space.len();
 
-        let defaults: Vec<Option<TypeId>> = {
-            let saved_scope_module = self.default_scope_module.replace(callee.module.clone());
-            let mut scope = self.enter_inherited_type_param_scope();
-            scope.annotate_ctx.trait_ctx.type_params.clear();
-            scope.register_generic_params(&params, 0);
-            let resolved = space
-                .iter()
-                .map(|p| p.default.as_ref().map(|ty| scope.resolve_type(ty)))
-                .collect();
-            drop(scope);
-            self.default_scope_module = saved_scope_module;
-            resolved
-        };
+        let defaults: Vec<Option<TypeId>> =
+            self.with_default_scope_module(Some(callee.module.clone()), |s| {
+                let mut scope = s.enter_inherited_type_param_scope();
+                scope.annotate_ctx.trait_ctx.type_params.clear();
+                scope.register_generic_params(&params, 0);
+                space
+                    .iter()
+                    .map(|p| p.default.as_ref().map(|ty| scope.resolve_type(ty)))
+                    .collect()
+            });
 
         if type_args.is_empty() {
             *type_args = space
@@ -2633,28 +2615,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Temporarily set up the callee's generic-param scope so its parameter
         // types resolve under the same effect / type-param bindings as the
         // callee itself would. Effect params have their own channel
-        // (`current_effect_param_decls`); without seeding it, names like the
+        // (`trait_ctx.effect_params`); without seeding it, names like the
         // `E` in `fn each<effect E>(... fn() with E)` would re-resolve to
         // `EffectRef::Concrete { name: "E" }` and leak out as a phantom
         // local effect.
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
-        let old_effect_params = std::mem::take(&mut scope.current_effect_params);
-        let old_effect_param_decls = std::mem::take(&mut scope.current_effect_param_decls);
-        let effect_params: Vec<&ast::GenericParam> =
-            fn_type_params.iter().filter(|p| p.is_effect).collect();
-        scope.current_effect_params = effect_params.iter().map(|p| p.name.clone()).collect();
-        scope.current_effect_param_decls = effect_params
-            .iter()
-            .map(|p| (p.name.clone(), p.id))
-            .collect();
+        scope
+            .annotate_ctx
+            .trait_ctx
+            .install_effect_params(&fn_type_params);
         scope.register_generic_params(&fn_type_params, 0);
         let param_types: Vec<TypeId> = fn_params
             .iter()
             .map(|p| scope.resolve_type(&p.ty))
             .collect();
-        scope.current_effect_params = old_effect_params;
-        scope.current_effect_param_decls = old_effect_param_decls;
         drop(scope);
 
         // Substitute type params with explicit type args
@@ -2677,7 +2652,7 @@ impl TypeSystem {
     /// and we are in a non-generic context — preserving the legacy behaviour.
     pub(super) fn infer_variant_type_args(
         &mut self,
-        ctx: &AnnotateCtx,
+        ctx: &Scope,
         variant_name: &str,
         variant_info: &super::types::VariantInfo,
         case_data: &super::types::VariantCaseData,

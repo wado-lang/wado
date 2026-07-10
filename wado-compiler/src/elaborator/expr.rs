@@ -625,7 +625,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // definition module's private globals and functions, and to
         // qualified type paths (`Mode::Fast`) whose type the use site
         // never imported (issue #1486).
-        if let Some(fallback) = self.default_scope_module.clone()
+        if let Some(fallback) = self.annotate_ctx.default_scope_module.clone()
             && fallback != self.current_module_source
         {
             if let Some(result) = self.resolve_ident_in_fallback_module(&ident.name, &fallback) {
@@ -684,7 +684,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// struct name and its defining module. `None` when no default scope is
     /// active or the name doesn't resolve there.
     fn lookup_struct_in_default_scope(&mut self, name: &str) -> Option<(String, ModuleSource)> {
-        let fallback = self.default_scope_module.clone()?;
+        let fallback = self.annotate_ctx.default_scope_module.clone()?;
         if fallback == self.current_module_source {
             return None;
         }
@@ -3414,13 +3414,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let resolved = if struct_module_source == self.current_module_source {
                         self.resolve_expr(&default_expr, ctx, Some(*expected_type_id))
                     } else {
-                        let prev_scope = self
-                            .default_scope_module
-                            .replace(struct_module_source.clone());
-                        let resolved =
-                            self.resolve_expr(&default_expr, ctx, Some(*expected_type_id));
-                        self.default_scope_module = prev_scope;
-                        resolved
+                        self.with_default_scope_module(Some(struct_module_source.clone()), |s| {
+                            s.resolve_expr(&default_expr, ctx, Some(*expected_type_id))
+                        })
                     };
                     self.typecheck(resolved, *expected_type_id, struct_lit.span);
                     fields.push(TirStructField {
