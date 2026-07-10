@@ -1843,9 +1843,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let method_key = func.id;
         scope.sem.types.function_effects.insert(method_key, effects);
 
-        // Restore effect params (Elaborator fields the type-param scope guard
-        // does not track). `trait_ctx` — including Self type — is auto-restored
-        // on `drop(scope)`.
         scope.current_effect_params = old_effect_params;
         scope.current_effect_param_decls = old_effect_param_decls;
         drop(scope);

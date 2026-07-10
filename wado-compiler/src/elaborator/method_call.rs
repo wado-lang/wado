@@ -2222,7 +2222,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .as_ref()
                     .map(|t| scope.resolve_type(t))
                     .unwrap_or(TypeTable::UNIT);
-                // `trait_ctx` (including `self_type`) is auto-restored on `drop(scope)`.
                 drop(scope);
                 return result;
             }
