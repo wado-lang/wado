@@ -2358,6 +2358,24 @@ fn run() {
 }
 
 #[test]
+fn test_roundtrip_cast_left_of_lt_keeps_parens() {
+    // A cast immediately left of `<` re-parses as `T<...>` generic args, so
+    // the formatter must not drop the parens the parser needs. Covers a bare
+    // cast, a cast reached through a higher-precedence operator's right spine
+    // (`a - b as T < c`), and a chained middle operand (`a < b as T < c`).
+    assert_format_preserves_ast(
+        r"
+fn run(x: char) -> bool {
+    let a = (x as u32) < 26;
+    let b = (x as u32) - ('a' as u32) < 26;
+    let c = 0 < (x as u32) < 26;
+    return a && b && c;
+}
+",
+    );
+}
+
+#[test]
 fn test_roundtrip_ast_all_fixtures() {
     let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     let mut failures = Vec::new();
