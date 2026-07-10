@@ -52,20 +52,19 @@ pub fn parse_document(source: &String) -> Node {
 fn collect_ref_defs(lines: &List<String>) -> RefTable {
     let mut table = new_ref_table();
     let n = lines.len();
-    let mut i = 0;
+    let mut start = 0;
     if let Some([_, consumed]) = try_front_matter(lines) {
-        i = consumed;
+        start = consumed;
     }
     let mut in_fence = false;
     let mut fence_ch = '`';
     let mut fence_len = 0;
-    while i < n {
+    for let mut i = start; i < n; i += 1 {
         let line = &lines[i];
         if in_fence {
             if is_code_fence_close(line, fence_ch, fence_len) {
                 in_fence = false;
             }
-            i += 1;
             continue;
         }
         let chars = chars_of(line);
@@ -73,13 +72,11 @@ fn collect_ref_defs(lines: &List<String>) -> RefTable {
             in_fence = true;
             fence_ch = ch;
             fence_len = flen;
-            i += 1;
             continue;
         }
         if let Some(def) = try_ref_def_line(line) {
             ref_table_insert(&mut table, def);
         }
-        i += 1;
     }
     return table;
 }
@@ -146,9 +143,8 @@ fn try_front_matter(lines: &List<String>) -> Option<[FrontMatterNode, i32]> {
             return null;
         },
     };
-    let mut i = 1;
     let mut body_lines: List<String> = [];
-    while i < lines.len() {
+    for let mut i = 1; i < lines.len(); i += 1 {
         if lines[i].trim_end() == delim {
             return Option::Some([
                 FrontMatterNode { kind: k, body: body_lines.join("\n") },
@@ -156,7 +152,6 @@ fn try_front_matter(lines: &List<String>) -> Option<[FrontMatterNode, i32]> {
             ]);
         }
         body_lines.push(lines[i]);
-        i += 1;
     }
     return null;
 }

@@ -209,8 +209,7 @@ fn process_emphasis(toks: &mut List<InlineTok>) {
 }
 
 fn find_opener(toks: &List<InlineTok>, ci: i32, closer: &DelimTok) -> Option<i32> {
-    let mut oi = ci - 1;
-    while oi >= 0 {
+    for let mut oi = ci - 1; oi >= 0; oi -= 1 {
         match toks[oi] {
             InlineTok::Delim(o) => {
                 if o.open && o.count > 0 && o.ch == closer.ch && rule_of_three(&o, closer) {
@@ -220,7 +219,6 @@ fn find_opener(toks: &List<InlineTok>, ci: i32, closer: &DelimTok) -> Option<i32
             _ => {
             },
         }
-        oi -= 1;
     }
     return null;
 }
