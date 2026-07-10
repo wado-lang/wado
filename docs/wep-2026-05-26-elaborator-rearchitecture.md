@@ -514,34 +514,12 @@ null/unknown reader had to be ported before the block-result-type reader.
 
 ## Status
 
-- [x] **Stages 1–4** — God Object decomposed; `TypeAnnotations` is the
-      per-`AstId` fact store (bare `AstId`-keyed since the identity rework).
-- [x] **Stage 5** — reify is the sole TIR source for every module (incl. trait
-      default-method synthesis, via per-impl `ModuleSemantics` snapshots on
-      `default_method_semantics`).
-- [x] **Stage 7a** — routing removed; the combined walk survives only as the
-      `annotate` fact-recorder.
-- [x] **Stage 6** — Liveness / DCE: landed and the reify gate is enabled
-      (`reify_module` skips dead user free functions; globals stay ungated). Both
-      prerequisites — diagnostics from `Semantics`, cross-module graph
-      completeness — are in place.
-- [x] **Stage 7-A — reify is mechanical.** Every decision-bearing read goes
-      through a recorded fact (signatures, effect/resource ops, decl type-param
-      defaults, struct field types, method-call/free-call type args, const and
-      let-annotated types, closure param types, cast targets, the mangled-name
-      class, from-conversion shapes, namespace/static-method dispatch). Per-fact
-      detail in git.
-- [x] **Stage 5 completions.** Trait default-method synthesis moved to reify
-      (the body walk snapshots a per-impl `ModuleSemantics` on
-      `default_method_semantics`; `reify_impl_default_methods` consumes it —
-      reify is the sole `TirFunction` producer). Missing-return analysis ported
-      off the combined walk's body TIR onto the parsed AST
-      (`elaborator/control_flow.rs` via `CtrlFlowCtx`).
-- [x] **Stage 7-B — `annotate` builds no TIR; LSP runs `annotate` only.** Every
-      expression resolver returns a `TypeId` and every statement is records-only;
-      `resolve_module` assembles no `TirModule`; `build_tir_from_state` gates
-      reify on a `build_tir` flag (LSP passes `false`). Reify is the sole TIR
-      producer; the duplicate combined-walk TIR construction is deleted.
+- [x] **Stages 1–4** — God Object decomposed; `TypeAnnotations` is the per-`AstId` fact store.
+- [x] **Stage 5** — reify is the sole TIR producer (incl. trait default-method synthesis via per-impl `default_method_semantics`); missing-return ported onto the AST (`CtrlFlowCtx`).
+- [x] **Stage 6** — Liveness / DCE landed; reify gate enabled (dead user free functions skipped, globals ungated); both prerequisites in place.
+- [x] **Stage 7a** — routing removed; the combined walk survives only as the `annotate` fact-recorder.
+- [x] **Stage 7-A** — reify is mechanical: every decision-bearing read goes through a recorded fact.
+- [x] **Stage 7-B** — `annotate` builds no TIR; `resolve_*` return only `TypeId`; LSP runs `annotate` alone; the duplicate combined-walk TIR construction is deleted.
 
 ### Landing log
 
@@ -563,151 +541,26 @@ Three independent tracks; each slice keeps `mise run test` green (E2E 2934/0).
 
 ### Done
 
-- [x] **Pure type-system ops → `impl TypeSystem`.** Operations answerable from
-      the type table alone moved off `impl Elaborator`: impl-type matching
-      (`build_type_param_mapping`, `verify_impl_type_compatibility`,
-      `impl_type_matches_concrete`), the type-shape helpers
-      (`struct_name_for_type`, `get_base_type`, `get_ultimate_base_struct_name`,
-      `newtype_base_lookup`, `substitute_newtype_in_type`, `type_id_to_string`,
-      `build_declared_type_params`, `auto_derive_eligible_kind`), and
-      `inherent_impl_type_args_match` / `concrete_arg_mangled`. They read
-      `self.type_table` directly; both the body walk and reify reach them via
-      `self.tysys`.
-- [x] **`TraitEnv` build-time decl digests (the "read facts, not ASTs" track).**
-      So resolution queries stop scanning `loaded_modules`, `TraitEnv::build`
-      now pre-computes, keyed by `(ModuleSource, item_idx)` or type/fn name:
-      `ImplHeader` (trait_name / ty / type_params / methods / associated_types),
-      `TraitDeclHeader` (name / type_params / methods{name,type_params,has_body}),
-      `function_type_params`, `struct_like_decl_modules` + `newtype_decl_modules`,
-      and `module_import_scopes` (the per-module `use`-derived
-      `imported_type_sources` / `import_original_names`, lifted to the free fn
-      `trait_env::module_import_scope`). Queries converted to read the digests:
-      `find_trait_impl_for_type_with_args` (+ blanket loop),
-      `register_assoc_types_for_concrete_type_and_trait`,
-      `find_method_type_params_in_trait_bounds`, `find_method_type_param_names`,
-      `find_struct_module_source`, `lookup_function_type_params`,
-      `find_trait_decl_type_params`, `collect_trait_impl_refs(_multi)`,
-      `lookup_static_method_type_params`, the `find_trait_method_for_type_uncached`
-      blanket loop, and the **nine dispatch-core import-context sites**
-      (`lookup_method_info_uncached`, `method_call`, `call`, `expr`) now read
-      `trait_env.import_scope(module)`. `check_impl_block_bounds` takes the
-      digest fields (`&type_params`, `&impl_ty`) rather than `&ImplBlock`.
-- [x] **Track B Stage A — bundle the per-function scope.**
-      `trait_env::AnnotateCtx { trait_ctx, trait_check_stack }` replaces the two
-      Elaborator fields with a single `annotate_ctx`; the `TypeParamScope` guard
-      saves/restores `annotate_ctx.trait_ctx`.
-- [x] **Track B Stage B — thread the scope through the recursion guard.**
-      `type_implements_trait` / `type_implements_trait_inner` take an explicit
-      `ctx: &AnnotateCtx` (recursion guard = `ctx.trait_check_stack`, type-param
-      bound check = `ctx.trait_ctx.type_param_bounds`); the inner fn forwards
-      `ctx` through its nine recursive calls; every external caller passes
-      `&self.annotate_ctx` (identical behaviour, since `ctx` _is_
-      `&self.annotate_ctx` until Stage D).
+- [x] **Pure type-system ops → `impl TypeSystem`** — impl-type matching, type-shape helpers, `inherent_impl_type_args_match` etc. moved off `impl Elaborator`; they read `self.type_table` directly, reached via `self.tysys`.
+- [x] **`TraitEnv` build-time decl digests** — `TraitEnv::build` pre-computes `ImplHeader` / `TraitDeclHeader` / `function_type_params` / import scopes, so resolution queries read digests instead of scanning `loaded_modules`.
+- [x] **Track B Stage A** — `AnnotateCtx { trait_ctx, trait_check_stack }` bundles the per-function scope into one `annotate_ctx` field; `TypeParamScope` guard save/restores it.
+- [x] **Track B Stage B** — `type_implements_trait(_inner)` take explicit `ctx: &AnnotateCtx` (recursion guard + type-param bound check); callers pass `&self.annotate_ctx`.
+- [x] **Track B Stage C — done.** Every `trait_ctx` _query_ now takes `ctx: &AnnotateCtx` explicitly: the trait-impl-lookup cluster (`find_trait_impl_for_type(_with_args)`, `has_real_trait_impl_for_type`, `blanket_trait_impl_applies`, `check_impl_block_bounds`), the `resolve_type` family (6 fns, 118 call sites; `AnnotateCtx` gained `#[derive(Clone)]` and is cloned at each read point to satisfy the `&mut self` borrow), `classify_call_callee`, `infer_variant_type_args`, `resolve_type_with_param_mapping`, and `record_type_name_reference`. Scope _producers_ (`register_generic_params`, `bind_trait_type_params_from_impl`, `enter_inherited_type_param_scope`, the `Item::Impl` / `self_type` save-restores) keep `&mut self.annotate_ctx` — they build the scope, can't take `&AnnotateCtx`, and are reworked in Stage E. Membership criterion: query (reads `trait_ctx` to answer) threads `ctx`; producer (builds `trait_ctx`) stays on `Elaborator`. Audited over all five `TraitContext` fields; per-fn detail in git.
 
 ### Remaining (next to pick up, in order)
 
-- [x] **Track B Stage C, trait-impl-lookup cluster** — `find_trait_impl_for_type`,
-      `find_trait_impl_for_type_with_args`, `has_real_trait_impl_for_type`,
-      `blanket_trait_impl_applies`, and `check_impl_block_bounds` now take
-      `ctx: &AnnotateCtx` explicitly instead of reading `self.annotate_ctx`
-      internally (`trait_query.rs`); every call site across `trait_query.rs`,
-      `method_lookup.rs`, and `elaborator.rs` passes `ctx` (usually
-      `&self.annotate_ctx` at the outer leaf). `type_implements_trait(_inner)`
-      already took `ctx` explicitly from Stage B. Diagnostic-only readers
-      (`collect_trait_unimpl_reason`, `structurally_derivable_for_explicit_request`
-      callers) are left reading `&self.annotate_ctx` at their own call sites —
-      they are true leaves of the query graph, not part of the cluster moving to
-      `TypeSystem`, so passing the field directly there is the terminal shape.
-- [x] **Track B Stage C, `resolve_type` family** — `resolve_type`,
-      `resolve_named_type`, `resolve_namespaced_generic_type`,
-      `resolve_generic_type`, `find_direct_assoc_type_binding`, and
-      `compute_assoc_type_bindings` (`type_resolution.rs`) now take
-      `ctx: &AnnotateCtx` explicitly. `resolve_type` alone had 118 external call
-      sites — the true shape of the WEP's original "~120 read sites" estimate:
-      one hot, deeply-recursive function threaded everywhere, not 120
-      independent judgment calls. All call sites across the tree updated
-      (mechanical, `cargo check`-driven).
-  - **`AnnotateCtx` gained `#[derive(Clone)]`** (`trait_env.rs`). Required
-    because `resolve_type` takes `&mut self`: `self.resolve_type(&self.annotate_ctx, …)`
-    does not compile (E0502 — two-phase borrows don't cover a `&mut self`
-    receiver reached through `TypeParamScope`'s `Deref`/`DerefMut`, nor a
-    plain `&mut self` call whose argument borrows a _different_ field
-    indefinitely). The fix clones `AnnotateCtx` at each read point:
-    `self.resolve_type(&self.annotate_ctx.clone(), x)` compiles (the clone is
-    a temporary, not a borrow of `self`) for plain `self`/`s` receivers; a
-    `scope: TypeParamScope` receiver additionally needs the clone hoisted
-    into its own `let` statement first (`Deref`/`DerefMut` are opaque to the
-    borrow checker's field-sensitivity, so even the temporary-producing
-    `.clone()` call conflicts with the receiver's `DerefMut` reservation).
-    Hoisted once above a loop only where no intervening call (`resolve_expr`,
-    a scope mutation) could change `trait_ctx` between reads; otherwise
-    cloned fresh at each read to preserve exact original read timing.
-    Cost: one small-`IndexMap` clone per top-level `resolve_type` invocation
-    (not per recursive sub-call — the family threads the same `ctx` through
-    its own recursion by reference), matching the WEP's accepted
-    migration-time trade-off (see Trade-offs).
-  - **Also blocked from Stage D**, joining the trait-impl-lookup cluster
-    below: `resolve_type` calls `record_type_name_reference` (mutates
-    `ModuleSemantics.bindings`), reads module-scoped struct/newtype/variant
-    registries via `self.lookup_*` (`TypeLookup`, same `local_*` coupling as
-    the trait-impl cluster), and falls back through
-    `with_module_perspective_for` (an `Elaborator`-only mechanism) for
-    cross-module defaults. None of these have a `TypeSystem`-only shape.
-- [x] **Track B Stage C, complete** — `classify_call_callee` (`call.rs`, its
-      one call site), `infer_variant_type_args` (`call.rs`, 4 call sites across
-      `call.rs` / `expr.rs` / `method_call.rs`), `resolve_type_with_param_mapping`
-      (`method_lookup.rs`, mutually recursive, 5 external call sites), and
-      `record_type_name_reference` (`elaborator.rs`, 2 call sites in
-      `resolve_type`) now take `ctx: &AnnotateCtx` explicitly.
-  - The completeness claim rests on a **query-vs-producer boundary**, made
-    precise here because it is the criterion that decides membership: a
-    _query_ reads `trait_ctx` to answer a question (a `TypeId`, a use→def
-    target, a bound check) and threads `ctx`; a _producer_
-    (`register_generic_params`, `bind_trait_type_params_from_impl`,
-    `enter_inherited_type_param_scope`, the `Item::Impl` setup in
-    `resolve_module`, the `self_type` save/restore in `method_lookup.rs`)
-    _builds_ `trait_ctx` and stays on `Elaborator`. A producer cannot take
-    `&AnnotateCtx`: it needs `&mut self.annotate_ctx` to `insert`/`clear`, and
-    its reads are inseparable from that mutation (`type_params.len()` computes
-    the next insert index; `type_params.contains_key(name)` is a dedup guard
-    immediately before `insert`). Producers also never move to `TypeSystem`,
-    so threading them buys nothing; the manual save/restores are reworked in
-    Stage E, not Stage C.
-  - An audit over **all five** `TraitContext` fields (`type_params`,
-    `type_param_decls`, `type_param_bounds`, `assoc_type_bindings`,
-    `self_type`) confirms every surviving `self.annotate_ctx.trait_ctx.*` read
-    is a producer. `record_type_name_reference` was the one genuine query the
-    first pass missed — its earlier "complete" audit filtered on four fields
-    and skipped `type_param_decls`. It reads `type_param_decls` to pick a
-    use→def target and is called only from the already-threaded `resolve_type`,
-    so leaving it on `self.annotate_ctx` was a latent scope-divergence hazard
-    (a caller passing a `ctx` other than `self.annotate_ctx` — which the clone
-    pattern already permits — would resolve the type-param reference against
-    the wrong scope). Threading it is behaviour-preserving today (`ctx` equals
-    `self.annotate_ctx` at both call sites) and closes the hazard. It stays on
-    `Elaborator` (it mutates `bindings`), so it is a threaded query, not a
-    Stage D candidate.
-  - The WEP's original "~50 methods / ~120 read sites" estimate was almost
-    entirely the `resolve_type` family's fan-out (118 call sites on one
-    function); the distinct query _functions_ converted across all of Stage C
-    were the trait-impl-lookup cluster, the `resolve_type` family, and these
-    four.
 - [ ] **Track B Stage D — move the now-Elaborator-free queries to
-      `impl TypeSystem`.** Once they read only `self.tysys.*` + the passed
-      `ctx`: `classify_call_callee` and `infer_variant_type_args` (`call.rs`)
-      read only `self.tysys.*` already — genuinely unblocked candidates, not
-      yet moved. The operator-trait bound lookups in `operators.rs` are
-      un-audited. `resolve_type_with_param_mapping` joins the blocked list
-      below (it calls the blocked `resolve_type` and the module-scoped
-      `lookup_struct_fields` / `lookup_variant_case`). `find_trait_impl_for_type(_with_args)`,
-      `check_impl_block_bounds`, and the whole `resolve_type` family are
-      blocked per the entries above — Stage D needs a decision on the
-      `TypeLookup` coupling (see the blocker note under the trait-impl-lookup
-      cluster) before it can proceed on any of them.
-  - **Blocked for `type_implements_trait(_inner)` and, transitively,
-    `check_impl_block_bounds` / `find_trait_impl_for_type(_with_args)` /
-    `blanket_trait_impl_applies` / `has_real_trait_impl_for_type`** (found
-    2026-07-10): `type_implements_trait_inner`'s structural-derive walk
+      `impl TypeSystem`.** Unblocked, not yet moved: `classify_call_callee`,
+      `infer_variant_type_args` (`call.rs`) read only `self.tysys.* + ctx`;
+      `operators.rs` operator-trait bound lookups un-audited. Blocked (need the
+      `TypeLookup`-coupling decision below): the `resolve_type` family (mutates
+      `ModuleSemantics.bindings` via `record_type_name_reference`, reads
+      module-scoped `TypeLookup` registries, falls back through
+      `with_module_perspective_for`), `resolve_type_with_param_mapping` (calls
+      both), and the whole trait-impl-lookup cluster.
+  - **Blocker: the trait-impl-lookup cluster and the `resolve_type` family are
+    coupled to module-scoped `TypeLookup`** (found 2026-07-10).
+    `type_implements_trait_inner`'s structural-derive walk
     resolves struct/variant field types via `Elaborator::lookup_struct_fields_in`
     / `lookup_variant_case_in` (`self.type_lookup()`), which reads
     `ModuleSemantics.decls.local_struct_fields` /
