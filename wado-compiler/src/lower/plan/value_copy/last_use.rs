@@ -313,6 +313,54 @@ impl Analyzer<'_> {
         }
     }
 
+    /// The scrutinee root locals a match-binding `local` aliases. A binding
+    /// shares its scrutinee's interior storage, so a mutation of the scrutinee
+    /// reaches the binding.
+    fn binding_aliases_any(&self, local: u32, roots: &[u32]) -> bool {
+        self.match_sources
+            .iter()
+            .filter(|(l, _)| *l == local)
+            .any(|(_, scrut)| alias_root(scrut).is_some_and(|s| roots.contains(&s)))
+    }
+
+    /// Keep the copy of any by-value argument that aliases a sibling `&mut`
+    /// argument of the same call: the callee mutates the shared storage while
+    /// still holding the moved value, so a move would let the mutation leak
+    /// into it (a match binding passed beside `&mut` of its scrutinee —
+    /// wado-lang/wado#1544). The live-out alias check misses this because the
+    /// scrutinee is mutated *within* the arm, not read after the match.
+    fn mark_sibling_mut_aliases(&mut self, args: &[&TirExpr]) {
+        let mut_roots: Vec<u32> = args
+            .iter()
+            .filter_map(|a| match &a.kind {
+                TirExprKind::Unary {
+                    op: TirUnaryOp::MutRef,
+                    expr: place,
+                } => alias_root(place),
+                _ => None,
+            })
+            .collect();
+        if mut_roots.is_empty() {
+            return;
+        }
+        for a in args {
+            if matches!(
+                &a.kind,
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                    ..
+                }
+            ) {
+                continue;
+            }
+            if let Some(t) = alias_root(a)
+                && (mut_roots.contains(&t) || self.binding_aliases_any(t, &mut_roots))
+            {
+                self.aliases_live.insert(t);
+            }
+        }
+    }
+
     fn kill_pattern(&self, pat: &TirPattern, live: &mut IndexSet<u32>) {
         let mut binds: IndexSet<u32> = IndexSet::default();
         super::analyze::collect_pattern_bindings(pat, &mut binds);
@@ -517,6 +565,10 @@ impl Analyzer<'_> {
             // Calls classify each `&`/`&mut` argument as a transient borrow (see
             // `walk_call_arg`); the callee / receiver is an ordinary read.
             TirExprKind::Call { func, args, .. } => {
+                if record {
+                    let exprs: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
+                    self.mark_sibling_mut_aliases(&exprs);
+                }
                 for arg in args.iter().rev() {
                     self.walk_call_arg(&arg.expr, Some(func), live, record);
                 }
@@ -527,6 +579,10 @@ impl Analyzer<'_> {
                 args,
                 ..
             } => {
+                if record {
+                    let exprs: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
+                    self.mark_sibling_mut_aliases(&exprs);
+                }
                 for arg in args.iter().rev() {
                     self.walk_call_arg(&arg.expr, Some(func), live, record);
                 }

@@ -458,6 +458,9 @@ impl AliasWalk<'_> {
                     }
                     self.push_block_tail_expr(*dflt, &mut stack);
                 }
+                ExprKind::Block(block) => {
+                    self.push_block_tail_expr(*block, &mut stack);
+                }
                 ExprKind::LabeledBlock { block, .. } => {
                     self.push_block_value_exprs(*block, &mut stack);
                 }
