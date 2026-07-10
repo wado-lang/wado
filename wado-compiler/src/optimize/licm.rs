@@ -2074,7 +2074,7 @@ fn operand_assigns_local(body: &Body, op: Operand, idx: u32) -> bool {
 
 fn expr_assigns_local(body: &Body, e: ExprId, idx: u32) -> bool {
     if let ExprKind::Assign { target, .. } = &body.exprs[e].kind
-        && super::arena_query::projection_root_local(body, *target) == Some(idx)
+        && super::arena_query::storage_root(body, *target) == Some(idx)
     {
         return true;
     }

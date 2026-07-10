@@ -145,7 +145,7 @@ pub(super) fn build_copy_bindings(body: &crate::nir_arena::Body) -> Binds {
         if let NodeRef::Expr(e) = node {
             match &body.exprs[e].kind {
                 ExprKind::Assign { target, .. } => {
-                    if let Some(r) = super::arena_query::projection_root_local(body, *target) {
+                    if let Some(r) = super::arena_query::storage_root(body, *target) {
                         reassigned.insert(r);
                     }
                 }
@@ -154,7 +154,7 @@ pub(super) fn build_copy_bindings(body: &crate::nir_arena::Body) -> Binds {
                     expr,
                 } => {
                     if let Some(ie) = expr.as_expr()
-                        && let Some(r) = super::arena_query::projection_root_local(body, ie)
+                        && let Some(r) = super::arena_query::storage_root(body, ie)
                     {
                         reassigned.insert(r);
                     }
@@ -212,12 +212,29 @@ pub(super) fn opaque_local(engine: &Engine, v: crate::nir_value_graph::ValueId) 
 /// a `local.field` read over a by-value local root. Handles both the skeleton
 /// form and a **promoted** `Operand::Value` (the freeze promotes a `FieldAccess`
 /// bound), decomposed through the value **pool** (`body.values`, not `value_of`).
+/// The root a [`BoundKey::Field`] may key on. Path-sensitive on purpose: the
+/// key is `(root, field_index)`, so the walk must not collapse projections
+/// that change which aggregate the index addresses — a variant payload's
+/// field 0 is not its scrutinee's field 0. Kept to the historical projection
+/// set (`&`/`&mut`/`*`/cast/field/index chains) rather than
+/// `arena_query::storage_root`, which is a root-only query.
+fn field_bound_root(body: &crate::nir_arena::Body, expr: ExprId) -> Option<u32> {
+    match &body.exprs[expr].kind {
+        ExprKind::Local { index, .. } => Some(*index),
+        ExprKind::Unary { expr: inner, .. }
+        | ExprKind::Cast { expr: inner, .. }
+        | ExprKind::FieldAccess { expr: inner, .. }
+        | ExprKind::Index { expr: inner, .. } => field_bound_root(body, inner.as_expr()?),
+        _ => None,
+    }
+}
+
 pub(super) fn parse_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<BoundKey> {
     match resolve(engine, binds, op) {
         Operand::Expr(e) => match &engine.body.exprs[e].kind {
             ExprKind::Local { index, .. } => Some(BoundKey::Local(*index)),
             ExprKind::FieldAccess { field_index, .. } => {
-                let root = super::arena_query::projection_root_local(engine.body, e)?;
+                let root = field_bound_root(engine.body, e)?;
                 Some(BoundKey::Field(root, *field_index))
             }
             _ => None,
@@ -643,8 +660,7 @@ pub(super) fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: Bou
         if let NodeRef::Expr(e) = node {
             match &engine.body.exprs[e].kind {
                 ExprKind::Assign { target, .. } => {
-                    if let Some(root) =
-                        super::arena_query::projection_root_local(engine.body, *target)
+                    if let Some(root) = super::arena_query::storage_root(engine.body, *target)
                         && is_root(root)
                     {
                         hit = true;
@@ -655,8 +671,7 @@ pub(super) fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: Bou
                     expr: inner,
                 } => {
                     if let Some(ie) = inner.as_expr()
-                        && let Some(root) =
-                            super::arena_query::projection_root_local(engine.body, ie)
+                        && let Some(root) = super::arena_query::storage_root(engine.body, ie)
                         && is_root(root)
                     {
                         hit = true;
@@ -664,8 +679,7 @@ pub(super) fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: Bou
                 }
                 ExprKind::MethodCall { receiver, .. } => {
                     if let Some(re) = receiver.as_expr()
-                        && let Some(root) =
-                            super::arena_query::projection_root_local(engine.body, re)
+                        && let Some(root) = super::arena_query::storage_root(engine.body, re)
                         && is_root(root)
                     {
                         hit = true;

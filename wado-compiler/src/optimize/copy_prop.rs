@@ -25,7 +25,7 @@ use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
-use super::arena_query::{place_root_local, projection_root_local};
+use super::arena_query::{place_root_local, storage_root};
 use super::gate::{FunctionGate, GatedPass};
 
 #[derive(Debug, Clone)]
@@ -573,7 +573,7 @@ fn mark_potentially_mutated_local_operand(body: &Body, op: Operand, result: &mut
 }
 
 fn mark_potentially_mutated_local(body: &Body, expr: ExprId, result: &mut AnalysisResult) {
-    if let Some(root) = projection_root_local(body, expr) {
+    if let Some(root) = storage_root(body, expr) {
         result.usage.entry(root).or_default().has_field_mutation = true;
     }
 }

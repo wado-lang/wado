@@ -41,8 +41,9 @@ use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
+use super::arena_query::storage_root;
 use super::escape::EscapeMap;
-use super::value_copy::{arg_source_root, carries_identity};
+use super::value_copy::carries_identity;
 
 /// Strips `$value_copy$T(arg)` wrappers off observably read-only bindings, run
 /// as a rule inside the unified peephole session (formerly the standalone
@@ -668,7 +669,7 @@ fn mark_root_field_mutated_operand(
 /// potentially field-mutated, following pure projections (`FieldAccess`,
 /// `VariantPayload`, `Cast`, `Unary`, `Index`) and, conservatively, a
 /// `MethodCall` receiver. Mirrors `copy_prop`'s `mark_potentially_mutated_local`
-/// (and [`super::value_copy::arg_source_root`]) in which projections share
+/// (and [`storage_root`]) in which projections share
 /// storage with their root; `Index` was previously missing here, which
 /// under-counted mutation through an indexed element (`x[i].field.push(...)`)
 /// as not touching `x`.
@@ -1029,7 +1030,7 @@ impl ValueCopyElideRule<'_> {
             if reads_through_deref(body, ae) {
                 continue;
             }
-            let root = arg_source_root(body, ae);
+            let root = storage_root(body, ae);
             // A fresh arg is stripped by `collect_fresh_copies` instead; this scan
             // needs only the two escape-aware grounds.
             //

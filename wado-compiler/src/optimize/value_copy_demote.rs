@@ -40,9 +40,9 @@ use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKin
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
+use super::arena_query::storage_root;
 use super::arena_query::{expr_mentions_local, is_local, reachable_blocks, strip_refs};
 use super::gate::{FunctionGate, GatedPass};
-use super::value_copy::arg_source_root;
 use crate::nir::FuncId;
 use cranelift_entity::EntityRef;
 
@@ -479,7 +479,7 @@ fn demote_candidate(
     // the root local must itself be element-clean.
     // A promoted `Operand::Value` arg is a constant: a fresh, uniquely-owned
     // rvalue with no root local — the `None` (clean) case.
-    match arg0.as_expr().and_then(|e| arg_source_root(body, e)) {
+    match arg0.as_expr().and_then(|e| storage_root(body, e)) {
         None => true,
         Some(root) => {
             let clean = is_immutable_ref_param(params, an.type_table, root)

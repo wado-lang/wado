@@ -216,7 +216,7 @@ pub(super) fn builder_alias_sets(
                     Some(call_immutability),
                 )
             {
-                projection_root_local(body, re)
+                storage_root(body, re)
             } else {
                 None
             }
@@ -412,7 +412,7 @@ impl<'a> CallImmutability<'a> {
     }
 }
 
-use super::arena_query::projection_root_local;
+use super::arena_query::storage_root;
 
 /// Call exprs that **mutate no caller local**: a free `Call` or `&self`
 /// `MethodCall` whose every argument is safe — not `mut`, an immutable `&`
@@ -616,7 +616,7 @@ fn summarize_receiver_writes(
     type_table: &TypeTable,
 ) -> (bool, Vec<FuncId>) {
     let projects_p0 = |e: crate::nir_arena::ExprId| -> bool {
-        super::arena_query::projection_root_local(body, e) == Some(p0)
+        super::arena_query::storage_root(body, e) == Some(p0)
     };
     let mut direct = false;
     let mut pending: Vec<FuncId> = Vec::new();
@@ -733,7 +733,7 @@ fn collect_ref_arg_escapes(
         if call_immutability.is_call_immutable(body.exprs[ae].type_id) {
             continue;
         }
-        if let Some(r) = projection_root_local(body, ae) {
+        if let Some(r) = storage_root(body, ae) {
             aliased.insert(r);
             syntactic_mut.insert(r);
         }
@@ -758,7 +758,7 @@ fn collect_mut_escaped_node(
         } => {
             // A promoted `Operand::Value` inner has no projection root local.
             if let Some(ie) = inner.as_expr()
-                && let Some(r) = projection_root_local(body, ie)
+                && let Some(r) = storage_root(body, ie)
             {
                 out.insert(r);
             }
@@ -768,7 +768,7 @@ fn collect_mut_escaped_node(
                 // A `mut` arg is a place; a promoted constant references no local.
                 if arg.is_mut
                     && let Some(e) = arg.expr.as_expr()
-                    && let Some(r) = projection_root_local(body, e)
+                    && let Some(r) = storage_root(body, e)
                 {
                     out.insert(r);
                 }
@@ -794,16 +794,13 @@ fn collect_mut_escaped_node(
                     true,
                     Some(call_immutability),
                 )
-                && let Some(r) = projection_root_local(body, re)
+                && let Some(r) = storage_root(body, re)
             {
                 out.insert(r);
             }
             for arg in args {
                 if arg.is_mut
-                    && let Some(r) = arg
-                        .expr
-                        .as_expr()
-                        .and_then(|e| projection_root_local(body, e))
+                    && let Some(r) = arg.expr.as_expr().and_then(|e| storage_root(body, e))
                 {
                     out.insert(r);
                 }
