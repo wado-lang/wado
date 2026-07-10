@@ -585,3 +585,38 @@ preserve source fidelity), so sharing would have compromised one of them.
       sequentially from `start` (all render identically to the original).
       One pre-existing authoring bug was found and fixed in the process (see
       below).
+
+### Known defects (deferred)
+
+A recall-oriented review surfaced these CommonMark/GFM conformance defects and
+CLI-robustness gaps. None is triggered by this repo's corpus — every one
+produces output that is still idempotent and dprint-diff-reasonable on the real
+files (which is why the acceptance checks are green) — so they are deferred,
+not blocking. Fix them if Marl is ever pointed at arbitrary Markdown outside
+this repo. Each was confirmed by running the code, not just by reading.
+
+- [ ] Paragraph-interruption rules are not enforced. `parse_blocks` reuses its
+      "first line of a new block" detectors on every line, so a line that
+      should stay paragraph continuation instead starts a new block: a
+      `[label]: url`-shaped line (missing the `para.is_empty()` guard the
+      indented-code branch has), a list marker or thematic break indented 4+
+      spaces (`parse_list_marker` / `is_thematic_break` lack the 3-space cap
+      `skip_indent` applies), and an ordered-list marker not starting at `1`
+      (CommonMark allows only `1.` to interrupt a paragraph).
+- [ ] Reference definitions nested in a blockquote or list item are never
+      registered. `collect_ref_defs` scans raw, un-stripped lines, so it never
+      sees `> [id]: url` or `- [id]: url`; a reference to such a label anywhere
+      in the document then fails to resolve and prints as literal `[id]` text.
+- [ ] A failed inline-link tail drops the link. When `[text](…` fails to parse
+      as an inline link, `try_link` returns `null` instead of falling back to
+      reference/shortcut resolution, so a defined `[text]` reference is lost.
+- [ ] GFM tables with a header/delimiter column-count mismatch are accepted;
+      `is_delimiter_row` validates each cell but not the count against the
+      header, where GFM rejects the whole construct as a paragraph.
+- [ ] No shortcut-image form. `![alt]` (shortcut reference image) is always
+      expanded to `![alt][alt]` on the first pass — there is no `ShortcutImage`
+      node paralleling `ShortcutLink`.
+- [ ] The CLI does not deduplicate overlapping path arguments, so
+      `marl-format docs docs/foo.md` formats/reports `docs/foo.md` twice; and
+      `write_file` truncates the target before the new content is confirmed
+      written, risking a truncated file on a mid-write I/O failure.

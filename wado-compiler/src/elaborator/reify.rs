@@ -5478,6 +5478,29 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ResolvedType::Function { return_type, .. } => Some(*return_type),
                 _ => None,
             });
+
+        // A block body with explicit `return X` has a NEVER/UNIT tail, so its
+        // logical return type comes from the returned expressions, which
+        // annotate already recorded (independent of the body TIR). Compute it
+        // now, before reifying the body: a `return X` statement reifies its
+        // value against `ctx.return_type` (see the `ast::Stmt::Return` arm), so
+        // leaving it UNKNOWN makes a bare `return null` emit a nullref against
+        // the non-null `(ref $Option)` slot another arm's `return
+        // Option::Some(..)` fixes — an invalid closure. Prefer an explicit
+        // expected fn return type; fall back to the block-return type.
+        let block_return_type = if let crate::ast::Expr::Block(ref block) = closure.body {
+            let ctrl_ctx = super::control_flow::CtrlFlowCtx {
+                expression_types: &self.sem.types.expression_types,
+                type_table: &self.tysys.type_table,
+            };
+            super::control_flow::find_return_type_in_block(ctrl_ctx, block)
+        } else {
+            None
+        };
+        if let Some(rt) = body_expected.or(block_return_type) {
+            closure_ctx.return_type = rt;
+        }
+
         let body = self.reify_expr(&closure.body, &mut closure_ctx, body_expected);
 
         // Step 5: assemble the capture list from the recorded entries.
@@ -5492,23 +5515,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             })
             .collect();
 
-        // Block bodies with explicit `return X` have a NEVER/UNIT
-        // tail; the closure's logical return is the returned type.
-        // Use the AST-walker (consults `expression_types`) so this
-        // doesn't depend on the combined walk's body TIR. Block-gated
-        // to match the original TIR walker's
-        // `if let TirExprKind::Block(ref block) = body.kind` —
-        // single-expression closure bodies (e.g. `|c| c.method()`)
-        // take their body's type as the return type directly.
-        let return_type = if let crate::ast::Expr::Block(ref block) = closure.body {
-            let ctrl_ctx = super::control_flow::CtrlFlowCtx {
-                expression_types: &self.sem.types.expression_types,
-                type_table: &self.tysys.type_table,
-            };
-            super::control_flow::find_return_type_in_block(ctrl_ctx, block).unwrap_or(body.type_id)
-        } else {
-            body.type_id
-        };
+        // Single-expression closure bodies (e.g. `|c| c.method()`) take their
+        // body's type as the return type directly; block bodies use the
+        // return-expression type computed above.
+        let return_type = block_return_type.unwrap_or(body.type_id);
 
         let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
         let func_type = self.tysys.type_table.borrow_mut().make_function_with_mut(
