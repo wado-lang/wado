@@ -562,12 +562,13 @@ fn classify_expr(
     // Whether the callee mutates the caller's storage through argument `idx`:
     // the callee's parameter `&mut`-ness when known, else (bodyless callee) a
     // fall-back on the argument expression's own reference type.
-    let arg_mutates = |func_id: FuncId, idx: usize, ae: ExprId, arg_is_mut: bool| {
-        match callee_param_mut_ref(param_mut, func_id, idx) {
+    let arg_mutates =
+        |func_id: FuncId, idx: usize, ae: ExprId, arg_is_mut: bool| match callee_param_mut_ref(
+            param_mut, func_id, idx,
+        ) {
             Some(mutates) => mutates,
             None => arg_is_mut || is_mutable_witness_type(body.exprs[ae].type_id, type_table),
-        }
-    };
+        };
     match &body.exprs[id].kind {
         ExprKind::Assign { target, .. } => match &body.exprs[*target].kind {
             ExprKind::Local { index, .. } => {
@@ -1020,7 +1021,8 @@ impl ValueCopyElideRule<'_> {
             .enumerate()
             .filter_map(|(i, a)| {
                 let e = a.expr.as_expr()?;
-                let mutates = match callee_param_mut_ref(self.param_mut, func_id, param_offset + i) {
+                let mutates = match callee_param_mut_ref(self.param_mut, func_id, param_offset + i)
+                {
                     Some(m) => m,
                     None => is_mutable_witness_type(body.exprs[e].type_id, self.type_table),
                 };

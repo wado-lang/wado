@@ -38,8 +38,10 @@ fn capture_param_mut_ref(flat: &mut FlatPackage) {
     for func in &flat.functions {
         let mut func = func.borrow_mut();
         for param in &mut func.params {
-            param.is_mut_ref =
-                matches!(type_table.get(param.type_id), crate::tir::ResolvedType::MutRef(_));
+            param.is_mut_ref = matches!(
+                type_table.get(param.type_id),
+                crate::tir::ResolvedType::MutRef(_)
+            );
         }
     }
 }
