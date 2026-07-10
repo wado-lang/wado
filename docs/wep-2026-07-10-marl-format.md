@@ -13,9 +13,7 @@ toolchain, alongside Sheaf and Kiln.
 The formatter's bar is "sufficiently reasonable Markdown output," not
 byte-for-byte parity with dprint. dprint stays the design reference: it is
 mature, and this repo's Markdown is already in its canonical form, which makes
-it a convenient corpus for round-trip / idempotency testing. Whether Marl
-Format ever replaces dprint in `mise run format` is out of scope here (see
-Non-goals).
+it a convenient corpus for round-trip / idempotency testing.
 
 ## Decision
 
@@ -71,8 +69,6 @@ allowed an approximation, but the exact table is small enough to ship whole.
 
 ### Non-goals (this iteration)
 
-- Wiring into `wado-dev-tools` / `mise run format`, and removing the dprint
-  dependency — a separate, later decision.
 - Byte-for-byte dprint parity.
 - Footnotes and `$…$` math (zero genuine corpus occurrences); a footnote-shaped
   line is only protected from being misparsed as a link reference definition.
@@ -91,7 +87,7 @@ allowed an approximation, but the exact table is small enough to ship whole.
   the width table is independently reusable.
 - Running from source pays the usual fixed `wado run` startup each invocation —
   fine for an occasional standalone tool, a real cost only if it is ever wired
-  into a hot path (another reason that is out of scope here).
+  into a hot path.
 
 ## Progress
 
