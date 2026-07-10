@@ -8,7 +8,15 @@
 //! runs into `Open`/`Close` markers), then walk the flat stream once more
 //! with an explicit stack to build the tree.
 
-use { Node, EmphasisNode, LinkNode, ImageNode, ReferenceLinkNode, ReferenceImageNode } from "./fmt_ast.wado";
+use {
+    Node,
+    EmphasisNode,
+    LinkNode,
+    ImageNode,
+    ReferenceLinkNode,
+    ReferenceImageNode,
+    AutoLinkNode,
+} from "./fmt_ast.wado";
 use { RefTable, ref_table_get, parse_dest_and_title } from "./fmt_links.wado";
 use { StrCursor, chars_of } from "./str_cursor.wado";
 
@@ -392,7 +400,7 @@ fn try_bare_autolink(cur: &StrCursor, i: i32) -> Option<[Node, i32]> {
     if j <= i {
         return null;
     }
-    return Option::Some([Node::AutoLink(cur.slice(i, j)), j]);
+    return Option::Some([Node::AutoLink(AutoLinkNode { url: cur.slice(i, j), bracketed: false }), j]);
 }
 
 fn url_run_end(cur: &StrCursor, start: i32) -> i32 {
@@ -444,7 +452,7 @@ fn try_autolink_scheme(cur: &StrCursor, i: i32) -> Option<[Node, i32]> {
             return null;
         }
         if c == '>' {
-            return Option::Some([Node::AutoLink(cur.slice(i + 1, j)), j + 1]);
+            return Option::Some([Node::AutoLink(AutoLinkNode { url: cur.slice(i + 1, j), bracketed: true }), j + 1]);
         }
         j += 1;
     }

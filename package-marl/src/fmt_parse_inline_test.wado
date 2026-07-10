@@ -130,8 +130,9 @@ test "parse_inline widens the code span delimiter when the content has a backtic
 test "parse_inline reads a bare http autolink" {
     let nodes = parse_inline(&"see https://example.com/x for more", &no_refs());
     assert nodes.len() == 3;
-    if let Some(Node::AutoLink(url)) = nodes.get(1) {
-        assert url == "https://example.com/x";
+    if let Some(Node::AutoLink(link)) = nodes.get(1) {
+        assert link.url == "https://example.com/x";
+        assert !link.bracketed;
     } else {
         panic("expected an AutoLink node");
     }
@@ -139,8 +140,8 @@ test "parse_inline reads a bare http autolink" {
 
 test "parse_inline drops trailing punctuation from a bare autolink" {
     let nodes = parse_inline(&"see https://example.com.", &no_refs());
-    if let Some(Node::AutoLink(url)) = nodes.get(1) {
-        assert url == "https://example.com";
+    if let Some(Node::AutoLink(link)) = nodes.get(1) {
+        assert link.url == "https://example.com";
     } else {
         panic("expected an AutoLink node");
     }
@@ -149,8 +150,9 @@ test "parse_inline drops trailing punctuation from a bare autolink" {
 test "parse_inline reads an angle-bracketed scheme autolink" {
     let nodes = parse_inline(&"<https://example.com>", &no_refs());
     assert nodes.len() == 1;
-    if let Some(Node::AutoLink(url)) = nodes.get(0) {
-        assert url == "https://example.com";
+    if let Some(Node::AutoLink(link)) = nodes.get(0) {
+        assert link.url == "https://example.com";
+        assert link.bracketed;
     } else {
         panic("expected an AutoLink node");
     }

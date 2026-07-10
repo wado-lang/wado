@@ -222,7 +222,7 @@ fn render_inline_node(node: &Node, refs: &RefTable, out: &mut String) {
         Node::InlineLink(link) => render_link(&link.url, &link.title, &link.children, refs, out),
         Node::ReferenceLink(link) => render_reference_link(link, refs, out),
         Node::ShortcutLink(link) => render_reference_link(link, refs, out),
-        Node::AutoLink(url) => render_autolink(url, out),
+        Node::AutoLink(link) => render_autolink(&link.url, out),
         Node::InlineImage(img) => render_image(&img.alt, &img.url, &img.title, out),
         Node::ReferenceImage(img) => render_reference_image(img, refs, out),
         Node::Html(s) => out.push_str(&escape_text(s)),

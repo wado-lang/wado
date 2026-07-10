@@ -398,10 +398,14 @@ fn print_inline_node(node: &Node, out: &mut String) {
         Node::InlineLink(link) => print_inline_link(link, out),
         Node::ReferenceLink(link) => print_reference_link(link, out),
         Node::ShortcutLink(link) => print_shortcut_link(link, out),
-        Node::AutoLink(url) => {
-            out.push('<');
-            out.push_str(url);
-            out.push('>');
+        Node::AutoLink(link) => {
+            if link.bracketed {
+                out.push('<');
+                out.push_str(&link.url);
+                out.push('>');
+            } else {
+                out.push_str(&link.url);
+            }
         },
         Node::InlineImage(img) => print_inline_image(img, out),
         Node::ReferenceImage(img) => print_reference_image(img, out),

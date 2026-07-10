@@ -116,6 +116,15 @@ internal struct FrontMatterNode {
     internal body: String,
 }
 
+internal struct AutoLinkNode {
+    internal url: String,
+    /// The source wrapped the URL in `<…>`. Only `<…>` is a CommonMark
+    /// autolink; a bare URL is plain text that GFM merely linkifies when
+    /// rendering. The printer echoes this so it never adds `<…>` the source
+    /// did not have; both forms still render to `<a>`.
+    internal bracketed: bool,
+}
+
 internal variant Node {
     // Blocks
     Document(List<Node>),
@@ -139,7 +148,7 @@ internal variant Node {
     InlineLink(LinkNode),
     ReferenceLink(ReferenceLinkNode),
     ShortcutLink(ReferenceLinkNode),
-    AutoLink(String),
+    AutoLink(AutoLinkNode),
     InlineImage(ImageNode),
     ReferenceImage(ReferenceImageNode),
     SoftBreak,
