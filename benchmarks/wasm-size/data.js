@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783702525121,
+  "lastUpdate": 1783716812805,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -39085,6 +39085,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a8d025cdd344786ef389393bc00547aa0e35fb8e"
         },
         "date": 1783702524545,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16351,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 266775,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "da73320f3677fae4ce59fe03b2ef5243c8f7d076",
+          "message": "Merge pull request #1545 from wado-lang/claude/package-marl-markdown-format-j74hj2\n\nfeat(package-marl): implement Marl Format, a self-hosted Markdown formatter",
+          "timestamp": "2026-07-11T05:44:13+09:00",
+          "tree_id": "75f2ae39e1fb8cd3d3a92b47805f034c56626ac7",
+          "url": "https://github.com/wado-lang/wado/commit/da73320f3677fae4ce59fe03b2ef5243c8f7d076"
+        },
+        "date": 1783716812080,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
