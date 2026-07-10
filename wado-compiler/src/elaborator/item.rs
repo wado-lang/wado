@@ -1018,6 +1018,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
+        // Local item declarations (`Stmt::Item`) are scoped to a single
+        // function: clear the previous function's leftovers so sibling
+        // functions never see each other's local items.
+        scope.sem.decls.clear_fn_local_items();
 
         // Set effect params in scope before `register_generic_params`. Eager
         // `<F: fn() with E>` bound resolution runs inside
@@ -1267,6 +1271,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let return_type = TypeTable::UNIT;
         let mut ctx = FunctionContext::new(return_type, function_name.clone());
 
+        // Local item declarations (`Stmt::Item`) are scoped to a single
+        // test body: clear the previous one's leftovers (mirrors
+        // `resolve_function`/`resolve_method`; a `test` block does not go
+        // through either).
+        self.sem.decls.clear_fn_local_items();
+
         // Walk the test body for its side-effect fact recording (its
         // per-`AstId` expression types, recorded under the `function_name`
         // context so `#function` literals match what reify emits); the
@@ -1372,6 +1382,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // behavior.
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
+        // Local item declarations (`Stmt::Item`) are scoped to a single
+        // function/method: clear the previous one's leftovers.
+        scope.sem.decls.clear_fn_local_items();
         let mut type_param_list = Vec::new();
 
         // Bare base trait name (e.g. `"Stream"` for an `impl Stream<u8>`).

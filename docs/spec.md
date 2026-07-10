@@ -192,6 +192,47 @@ let x = 2;  // Error: cannot redeclare 'x' in the same scope
 let x = |x: i32| x + 1;  // Error: the x inside is the closure parameter, not the outer variable
 ```
 
+### Local Item Definitions
+
+`struct` and `type` (newtype) may be declared inside a function or method
+body, scoped to that function:
+
+```wado
+fn area(width: i32, height: i32) -> i32 {
+    struct Size {
+        width: i32,
+        height: i32,
+    }
+    let s = Size { width, height };
+    return s.width * s.height;
+}
+```
+
+Local items follow `let`'s scoping rules, not a nested block's: a local item
+declared anywhere in the function — including inside a nested `if`/`while`/
+`for` — is visible for the rest of the function, but must be declared before
+its first use (no hoisting, no forward references, including between two
+local items). Two unrelated functions may declare same-named local items
+without collision. A local item cannot be `pub` or `internal`: it is always
+private to its enclosing function.
+
+Local structs support their own generic parameters:
+
+```wado
+fn wrap<T>(value: T) -> i32 {
+    struct Box<T> {
+        value: T,
+    }
+    let b = Box { value };
+    return 0;
+}
+```
+
+`enum`/`variant`/`flags` declarations, methods on a local type (a local
+`impl`/`trait` block), and generic local `type` (newtype) are not yet
+supported inside a function body. See
+[WEP: Local Item Definitions](./wep-2026-07-09-local-item-definitions.md).
+
 ### Global Variables
 
 Global variables are module-level state that compile directly to WebAssembly globals. Unlike local variables (`let`), globals have module lifetime and are accessed via `global.get`/`global.set` instructions.

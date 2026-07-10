@@ -138,3 +138,4 @@ It may include TODOs on WIP.
 - [Wasm CM Component Import (`use`-based)](./wep-2026-06-26-wasm-cm-component-import.md)
 - [Sheaf & Marl — A Minimal Blog System](./wep-2026-07-05-sheaf.md)
 - [Iterator Reference Model](./wep-2026-07-05-iterator-reference-model.md)
+- [Local Item Definitions](./wep-2026-07-09-local-item-definitions.md)

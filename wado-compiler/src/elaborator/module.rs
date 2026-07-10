@@ -42,6 +42,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             module_source.clone(),
                             base_type_id,
                         );
+                        self.tysys
+                            .type_table
+                            .borrow_mut()
+                            .register_decl_type(newtype_decl.id, newtype_id);
                         self.sem
                             .decls
                             .local_newtypes
@@ -130,6 +134,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         StructFieldInfo {
                             name: struct_decl.name.clone(),
                             module_source,
+                            defined_at: struct_decl.id,
                             fields,
                             field_ast_ids,
                             field_defaults,
@@ -149,6 +154,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             self.current_module_source.clone(),
                             base_type_id,
                         );
+                        self.tysys
+                            .type_table
+                            .borrow_mut()
+                            .register_decl_type(newtype_decl.id, newtype_id);
                         self.sem
                             .decls
                             .local_newtypes
@@ -221,6 +230,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         VariantInfo {
                             name: variant_decl.name.clone(),
                             module_source: module_source.clone(),
+                            defined_at: variant_decl.id,
                             type_params,
                             cases,
                             type_param_type_ids,
@@ -268,6 +278,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         EnumInfo::new(
                             enum_decl.name.clone(),
                             self.current_module_source.clone(),
+                            enum_decl.id,
                             cases,
                         ),
                     );
@@ -305,6 +316,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .type_table
                         .borrow_mut()
                         .make_flags(flags_decl.name.clone(), self.current_module_source.clone());
+                    self.tysys
+                        .type_table
+                        .borrow_mut()
+                        .register_decl_type(flags_decl.id, flags_type);
                     // Add to newtypes so it can be used as a type name
                     self.sem
                         .decls

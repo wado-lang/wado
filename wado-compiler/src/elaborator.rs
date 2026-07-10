@@ -241,6 +241,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             local_flags_cases: &self.sem.decls.local_flags_cases,
             local_generic_newtypes: &self.sem.decls.local_generic_newtypes,
             local_variant_cases: &self.sem.decls.local_variant_cases,
+            fn_local_struct_fields: &self.sem.decls.fn_local_struct_fields,
+            fn_local_newtypes: &self.sem.decls.fn_local_newtypes,
+            fn_local_enum_cases: &self.sem.decls.fn_local_enum_cases,
+            fn_local_flags_cases: &self.sem.decls.fn_local_flags_cases,
+            fn_local_variant_cases: &self.sem.decls.fn_local_variant_cases,
         }
     }
 
@@ -1047,6 +1052,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         module_source: &ModuleSource,
     ) -> Option<&StructFieldInfo> {
         self.type_lookup().struct_fields_in(name, module_source)
+    }
+
+    /// Like [`Self::lookup_struct_fields_in`], but also considers the
+    /// current function's own local structs — for resolving a
+    /// source-written struct-literal name against a module, not an
+    /// already-known type identity. See `TypeLookup::struct_fields_in_scope`.
+    pub(super) fn lookup_struct_fields_in_scope(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<&StructFieldInfo> {
+        self.type_lookup()
+            .struct_fields_in_scope(name, module_source)
     }
 
     pub(super) fn lookup_variant_case_in(

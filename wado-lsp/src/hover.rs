@@ -340,6 +340,9 @@ fn find_let_in_stmt(stmt: &Stmt, target: AstId, name: &str) -> Option<String> {
         Stmt::Break(_) | Stmt::Continue(_) => None,
         Stmt::Assert(_) => None,
         Stmt::LabeledBlock(s) => find_let_in_block(&s.block, target, name),
+        // A local item's methods have their own local variables, unrelated
+        // to the enclosing function's — never the source of `target`.
+        Stmt::Item(_) => None,
         Stmt::Error(_) => None,
     }
 }

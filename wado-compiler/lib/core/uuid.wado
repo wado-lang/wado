@@ -13,15 +13,7 @@
 //! which maps directly onto the lane layout. Equality and ordering compare the
 //! 16 bytes in big-endian order, so `v7` values sort by timestamp.
 //!
-//! Usage:
-//!
-//!   use { Uuid } from "core:uuid";
-//!
-//!   let id = Uuid::v4();              // with Random
-//!   let id = Uuid::v7();              // with Random, SystemClock
-//!   let s = `{id}`;                   // "0190b6e0-...-..." (canonical form)
-//!   if let Some(parsed) = Uuid::parse(&s) { ... }
-//!
+//! `Uuid::v4()` needs `Random`; `Uuid::v7()` needs `Random` and `SystemClock`.
 //! `parse` accepts both the hyphenated form and the 32-digit hyphenless
 //! "simple" form, matching Rust's `uuid` and Go's `google/uuid`.
 
@@ -31,9 +23,8 @@ use { SystemClock } from "wasi:clocks";
 
 #[synopsis]
 test {
-    let id = Uuid::parse(&"550e8400-e29b-41d4-a716-446655440000").unwrap();
-    assert id.version() == 4;
-    assert id.to_string() == "550e8400-e29b-41d4-a716-446655440000";
+    assert Uuid::parse(&"550e8400-e29b-41d4-a716-446655440000") matches { Some(id) && id.version() == 4
+        && id.to_string() == "550e8400-e29b-41d4-a716-446655440000" };
 }
 
 /// A 128-bit universally unique identifier.

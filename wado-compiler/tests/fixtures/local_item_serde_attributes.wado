@@ -1,0 +1,25 @@
+use { Deserialize } from "core:serde";
+use { parse } from "core:args";
+
+// Regression: `reify_local_struct` once hardcoded every field's serde
+// metadata (`#[serde(positional)]`, `serde_default`, `default_expr`) to
+// false/None instead of reading it off the AST like top-level
+// `reify_struct` does, silently dropping a local struct's positional fields
+// and defaults — `core:args::parse` then rejected every positional token as
+// `TooManyPositionals`.
+
+test "local struct field attributes (#[serde(positional)]) and defaults resolve" {
+    struct Options {
+        #[serde(positional)]
+        input: String,
+        verbose: bool = false,
+        jobs: i32 = 1,
+    }
+    impl Deserialize for Options;
+
+    let with_flags = parse::<Options>(["in.txt", "--verbose", "--jobs", "4"]);
+    assert with_flags matches { Ok(opts) && opts.input == "in.txt" && opts.verbose && opts.jobs == 4 };
+
+    let defaults_only = parse::<Options>(["in.txt"]);
+    assert defaults_only matches { Ok(opts) && opts.input == "in.txt" && !opts.verbose && opts.jobs == 1 };
+}

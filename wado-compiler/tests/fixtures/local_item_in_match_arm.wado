@@ -1,0 +1,26 @@
+// A local item declared inside a `match` arm's block body must still be
+// visible for the rest of the enclosing function (function-scoped, not
+// block-scoped). Regression test for a bug where the fast pre-check pass's
+// name collector recursed into `if`/`while`/`for`/`loop`/labeled blocks but
+// had no arm for `Stmt::Match`, so it missed local items declared inside a
+// match arm and false-positived "unknown type" on a legal later reference.
+
+fn f(x: i32) -> i32 {
+    match x {
+        1 => {
+            struct Point {
+                v: i32,
+            }
+            let p = Point { v: 10 };
+            return p.v;
+        }
+        _ => {}
+    }
+    let q: Point = Point { v: 20 };
+    return q.v;
+}
+
+test "local item declared inside a match arm is visible later in the function" {
+    assert f(1) == 10;
+    assert f(0) == 20;
+}

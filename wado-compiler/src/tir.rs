@@ -804,6 +804,23 @@ impl TypeTable {
         id
     }
 
+    /// Mint a brand-new `TypeId` for `ty`, bypassing `intern`'s structural
+    /// dedup: even a `ResolvedType` identical to an already-interned one
+    /// gets its own fresh id.
+    ///
+    /// `intern_map`/`struct_name_index` are deliberately NOT updated: they
+    /// are keyed by `(name, module_source)` alone, so inserting a second,
+    /// same-named entry would silently overwrite the first one's mapping.
+    /// This is the primitive a function-scoped local type declaration mints
+    /// through — identity comes from the caller's own `AstId` (via
+    /// `register_decl_type`), not from this type's name, so two local
+    /// declarations that happen to share a name never alias.
+    pub fn push_fresh(&mut self, ty: ResolvedType) -> TypeId {
+        let id = self.types.next_id();
+        self.types.push(ty);
+        id
+    }
+
     pub fn get(&self, id: TypeId) -> &ResolvedType {
         let id = self.redirects.get(id).copied().unwrap_or(id);
         self.types
@@ -906,6 +923,32 @@ impl TypeTable {
     /// elaborator has not yet created a `TypeId` for it.
     pub fn type_of_symbol(&self, key: &crate::ast::AstId) -> Option<TypeId> {
         self.type_by_symbol.get(key).copied()
+    }
+
+    /// Canonical `TypeId` for a declared-type [`AstId`](crate::ast::AstId),
+    /// for callers that already hold one (e.g. `StructFieldInfo::defined_at`)
+    /// and know the declaration was interned during `collect_types`.
+    ///
+    /// Prefer this over re-deriving a `TypeId` from `(name, module_source)`
+    /// via `make_struct`/`make_enum`/`make_variant`/`make_resource`: the
+    /// `AstId` is a cheap `Copy` key with no string clone or re-hash, and —
+    /// unlike name+module — it stays unique even for declarations that do
+    /// not have a unique `(name, module_source)` (a function-scoped local
+    /// type declared under the same name as another).
+    ///
+    /// # Panics
+    /// If `collect_types` has not yet run for this declaration. Every
+    /// decl-backed `TypeId` is registered by `register_decl_type` at the
+    /// point it is minted, so a miss here means the caller queried before
+    /// collection completed, or the `AstId` does not name a decl-backed type
+    /// — both are compiler bugs, not recoverable conditions.
+    pub fn type_id_of_decl(&self, key: crate::ast::AstId) -> TypeId {
+        self.type_of_symbol(&key).unwrap_or_else(|| {
+            panic!(
+                "type_id_of_decl: no TypeId registered for {key:?} — \
+                 collect_types must run before type resolution queries it"
+            )
+        })
     }
 
     /// Walk a decl-backed `TypeId` (including monomorphizations) back to the
@@ -2356,7 +2399,7 @@ impl TypeTable {
             ResolvedType::BuiltinArray(elem) => {
                 format!("Array<{}>", self.type_name(*elem))
             }
-            ResolvedType::Struct { name, .. } => name.clone(),
+            ResolvedType::Struct { name, .. } => crate::name::strip_local_item_id(name).to_string(),
             ResolvedType::Enum { name, .. } => name.clone(),
             ResolvedType::Resource { name, .. } => name.clone(),
             ResolvedType::Function {
@@ -2399,10 +2442,17 @@ impl TypeTable {
                 if Self::is_tuple_type(name) {
                     format!("[{}]", arg_names.join(", "))
                 } else {
-                    format!("{}<{}>", name, arg_names.join(", "))
+                    format!(
+                        "{}<{}>",
+                        crate::name::strip_local_item_id(name),
+                        arg_names.join(", ")
+                    )
                 }
             }
-            ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => name.clone(),
+            ResolvedType::Newtype { name, .. } => {
+                crate::name::strip_local_item_id(name).to_string()
+            }
+            ResolvedType::Flags { name, .. } => name.clone(),
             ResolvedType::TypePack { name, .. } => format!("..{name}"),
         }
     }
@@ -4591,5 +4641,48 @@ mod tests {
         assert_eq!(arr1, arr2);
         // Verify as_array works
         assert_eq!(table.as_list(arr1), Some(TypeTable::I32));
+    }
+
+    #[test]
+    fn register_decl_type_disambiguates_same_name_same_module_by_ast_id() {
+        // Two distinct declaration sites for the same source name in the
+        // same module — the shape a function-scoped local type produces
+        // when the enclosing function is called from two different bodies
+        // (or the same body twice). `AstId` distinguishes them even though
+        // `(name, module_source)` alone would collide.
+        let mut table = TypeTable::new();
+        let module = ModuleSource::entry_point_synthetic();
+        let space = crate::ast::AstIdSpace::next();
+        let first = crate::ast::AstId::new(space, 10);
+        let second = crate::ast::AstId::new(space, 20);
+
+        let first_type = table.make_struct("Point".to_string(), module.clone());
+        table.register_decl_type(first, first_type);
+
+        // A second, distinct declaration reusing the same source name
+        // must not be silently aliased to the first: mint its own TypeId
+        // (bypassing the name-keyed intern_map, as a local declaration's
+        // constructor will) and register it under its own AstId.
+        let second_type = table.push_fresh(ResolvedType::Struct {
+            name: "Point".to_string(),
+            module_source: module,
+            is_monomorphized: false,
+            base_name: None,
+        });
+        table.register_decl_type(second, second_type);
+
+        assert_ne!(first_type, second_type);
+        assert_eq!(table.type_of_symbol(&first), Some(first_type));
+        assert_eq!(table.type_of_symbol(&second), Some(second_type));
+        assert_eq!(table.type_id_of_decl(first), first_type);
+        assert_eq!(table.type_id_of_decl(second), second_type);
+    }
+
+    #[test]
+    #[should_panic(expected = "type_id_of_decl")]
+    fn type_id_of_decl_panics_when_unregistered() {
+        let table = TypeTable::new();
+        let unregistered = crate::ast::AstId::new(crate::ast::AstIdSpace::next(), 0);
+        let _ = table.type_id_of_decl(unregistered);
     }
 }

@@ -259,6 +259,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         CalleeIdentKind::AsIs(ident)
     }
 
+    /// Whether `name` is a declared effect (`interface`) or resource —
+    /// the set of identifiers `resolve_call`'s qualified-call fallback may
+    /// treat as a deferred effect operation (`Stdout::write()`, etc.).
+    fn is_declared_effect_or_resource(&self, name: &str) -> bool {
+        let key = self.canonical_decl_key(name);
+        self.tysys.trait_env.effect_decl_index.contains_key(&key)
+            || self.tysys.trait_env.resource_decl_index.contains_key(&key)
+    }
+
     pub(super) fn resolve_call(
         &mut self,
         call: &ast::CallExpr,
@@ -772,10 +781,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     // Infer variant type: use GenericInstance for generic variants
                     let variant_type = if variant_info.type_params.is_empty() {
-                        self.tysys.type_table.borrow_mut().make_variant(
-                            variant_info.name.clone(),
-                            variant_info.module_source.clone(),
-                        )
+                        self.tysys
+                            .type_table
+                            .borrow()
+                            .type_id_of_decl(variant_info.defined_at)
                     } else {
                         self.infer_variant_type_args(
                             &prefix_owned,
@@ -808,10 +817,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 // If no matching case, check for From<T> synthesis requests
                 else if suffix == "from" && args.len() == 1 {
-                    let target_type_id = self.tysys.type_table.borrow_mut().make_variant(
-                        variant_info.name.clone(),
-                        variant_info.module_source.clone(),
-                    );
+                    let target_type_id = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .type_id_of_decl(variant_info.defined_at);
                     let from_type = args[0].type_id;
                     let from_type_name = self.tysys.type_table.borrow().type_name(from_type);
                     let from_trait_name = self
@@ -912,10 +922,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             }
                             let payload = args.into_iter().next().map(Box::new);
                             let variant_type = if variant_info.type_params.is_empty() {
-                                self.tysys.type_table.borrow_mut().make_variant(
-                                    variant_info.name.clone(),
-                                    variant_info.module_source.clone(),
-                                )
+                                self.tysys
+                                    .type_table
+                                    .borrow()
+                                    .type_id_of_decl(variant_info.defined_at)
                             } else {
                                 self.infer_variant_type_args(
                                     type_name,
@@ -1059,9 +1069,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     effective_name.to_string(),
                 )
             }
-            // Effect operations and module namespace calls - pass through to codegen.
-            // This covers Stdout::write(), etc.
-            else {
+            // Effect operations - pass through to codegen. This covers
+            // `Stdout::write()`, etc. Effects/resources have no static-method
+            // registration to check against above, so validate `prefix`
+            // against the declared effect/resource indices directly; a
+            // `prefix` that names neither leaves `callee_opt` `None` so the
+            // caller falls through to the standard "unknown function" error
+            // instead of deferring an unvalidated call to codegen, where it
+            // would panic instead of failing cleanly.
+            else if self.is_declared_effect_or_resource(prefix) {
                 (
                     Some(CalleeRef::local_namespace(
                         &mut self.interner.borrow_mut(),
@@ -1070,6 +1086,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     )),
                     effective_name.to_string(),
                 )
+            } else {
+                (None, effective_name.to_string())
             }
         }
         // Check if it's a local function (defined in this module) or
@@ -1475,7 +1493,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         operation: &str,
     ) -> Option<(Vec<TypeId>, Option<TypeId>)> {
         let canonical_key = self.canonical_decl_key(effect);
-        let (module_source, item_idx) = self
+        let (module_source, item_id) = self
             .tysys
             .trait_env
             .effect_decl_index
@@ -1483,7 +1501,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .or_else(|| self.tysys.trait_env.resource_decl_index.get(&canonical_key))?
             .clone();
         let module = self.loaded_modules.get(&module_source)?;
-        let methods = match module.items.get(item_idx)? {
+        let methods = match module.item_by_id(item_id)? {
             crate::ast::Item::Interface(decl) => &decl.methods,
             crate::ast::Item::Resource(decl) => &decl.methods,
             _ => return None,
@@ -2718,10 +2736,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .any(|&t| self.tysys.type_table.borrow().contains_type_param(t));
 
         if has_unresolved && self.annotate_ctx.trait_ctx.type_params.is_empty() {
-            return self.tysys.type_table.borrow_mut().make_variant(
-                variant_info.name.clone(),
-                variant_info.module_source.clone(),
-            );
+            return self
+                .tysys
+                .type_table
+                .borrow()
+                .type_id_of_decl(variant_info.defined_at);
         }
 
         self.tysys.type_table.borrow_mut().make_generic_instance(

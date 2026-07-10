@@ -450,6 +450,7 @@ fn visit_stmt(spans: &mut TypeSpans, stmt: &Stmt) {
             }
         }
         Stmt::LabeledBlock(lb) => visit_block(spans, &lb.block),
+        Stmt::Item(item) => visit_item(spans, item),
         Stmt::Error(_) => {}
     }
 }

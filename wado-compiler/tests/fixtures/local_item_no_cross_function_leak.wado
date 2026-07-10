@@ -1,0 +1,27 @@
+// A local item declared in one function must not leak into a sibling
+// function's resolution. Regression test for a bug where `resolve_function`
+// never cleared the per-function ephemeral local-item registry (only
+// `resolve_method`/`resolve_test_decl` did), so a struct declared in one
+// top-level function silently resolved — with the wrong field layout — in
+// the very next one too.
+
+fn f1() -> i32 {
+    struct S {
+        x: i32,
+    }
+    let s = S { x: 1 };
+    return s.x;
+}
+
+fn f2() -> i32 {
+    // `S` is not declared in this function; must not see `f1`'s local `S`.
+    let s = S { x: 2 };
+    return s.x;
+}
+
+export fn run() -> i32 {
+    return f1() + f2();
+}
+
+__DATA__
+{"compile_error": "unknown type 'S'"}

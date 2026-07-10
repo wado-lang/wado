@@ -759,10 +759,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // Infer variant type for generic variants
                 let variant_type = if variant_info.type_params.is_empty() {
-                    self.tysys.type_table.borrow_mut().make_variant(
-                        variant_info.name.clone(),
-                        variant_info.module_source.clone(),
-                    )
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .type_id_of_decl(variant_info.defined_at)
                 } else {
                     self.infer_variant_type_args(
                         prefix,
@@ -797,12 +797,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(case_data) = enum_info.find_case(suffix).cloned()
         {
             self.record_qualified_case(ident, prefix, case_data.ast_id);
-            // Use canonical name (not import alias) for consistent TypeId interning
             let enum_type = self
                 .tysys
                 .type_table
-                .borrow_mut()
-                .make_enum(enum_info.name.clone(), enum_info.module_source);
+                .borrow()
+                .type_id_of_decl(enum_info.defined_at);
 
             // Stage 7-B: reify rebuilds the `EnumConstruct`. Not an l-value.
             return Some(enum_type);
@@ -3152,7 +3151,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Resolve struct name and module_source.
         // Local definitions shadow imported/prelude structs.
         let (struct_name, struct_module_source) = if self
-            .lookup_struct_fields_in(name, &self.current_module_source)
+            .lookup_struct_fields_in_scope(name, &self.current_module_source)
             .is_some()
         {
             (name.clone(), self.current_module_source.clone())
@@ -3189,9 +3188,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (name.clone(), self.current_module_source.clone())
         };
 
-        // Use canonical name from struct_fields info (not import alias) for consistent TypeId
+        // Use canonical name from struct_fields info (not import alias) for
+        // consistent TypeId. `struct_name` may still be a bare, pre-
+        // canonicalization name matched via the current function's own
+        // local structs above, so this lookup needs the same function-local
+        // awareness — its result's `info.name` is what makes it canonical
+        // (the internal mangled identity for a local struct).
         let struct_name = self
-            .lookup_struct_fields_in(&struct_name, &struct_module_source)
+            .lookup_struct_fields_in_scope(&struct_name, &struct_module_source)
             .map(|info| info.name.clone())
             .unwrap_or(struct_name);
 
@@ -3462,13 +3466,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Check if this is a generic struct and infer type arguments.
         // Stage 7-B: reify rebuilds the mangled name + fields; the combined
         // walk only needs the substitution / coercion side effects below and
-        // the resulting struct type.
-        let (struct_type, _mangled_struct_name, _fields) = if self
-            .sem
-            .decls
-            .generic_struct_names
-            .contains(&struct_name)
-        {
+        // the resulting struct type. `struct_name`/`struct_module_source`
+        // were just reassigned (above) to the canonical storage identity —
+        // the internal mangled name for a local struct (`Stmt::Item`, see
+        // `resolve_local_struct`), or the bare declared name for a
+        // module-level one — so a single `struct_fields_in` lookup on that
+        // identity decides "is this generic" the same way it decides "which
+        // struct's info is this", instead of checking `generic_struct_names`
+        // (module-level only) and a local-struct table separately: two
+        // lookups that could name different structs if a local struct
+        // shadows a same-named module-level generic one.
+        let is_generic_struct = self
+            .lookup_struct_fields_in(&struct_name, &struct_module_source)
+            .is_some_and(|info| !info.type_param_bounds.is_empty());
+        let (struct_type, _mangled_struct_name, _fields) = if is_generic_struct {
             // This is a generic struct - infer type arguments from field values.
             // `expected_type` lets the caller's annotation (e.g.
             // `let x: Container<i32> = Container { value: 0 }`) fill phantom
@@ -3584,11 +3595,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
             (struct_type, mangled_name, fields)
         } else {
-            let struct_type = self
-                .tysys
-                .type_table
-                .borrow_mut()
-                .make_struct(struct_name.clone(), struct_module_source);
+            let defined_at = self
+                .lookup_struct_fields_in(&struct_name, &struct_module_source)
+                .map(|info| info.defined_at);
+            let struct_type = match defined_at {
+                Some(defined_at) => self.tysys.type_table.borrow().type_id_of_decl(defined_at),
+                None => self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_struct(struct_name.clone(), struct_module_source),
+            };
             (struct_type, struct_name, fields)
         };
 
@@ -3865,6 +3882,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let field_info = super::types::StructFieldInfo {
             name: anon_name.clone(),
             module_source,
+            // Anonymous struct literals have no `StructDecl`; the literal
+            // expression's own `AstId` is the closest thing to a declaration
+            // site and is unique per literal, which is what matters here.
+            defined_at: struct_lit.id,
             fields: effective_fields
                 .iter()
                 .map(|(fname, fty)| (fname.clone(), *fty, crate::ast::Visibility::Public))

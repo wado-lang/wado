@@ -60,6 +60,31 @@ pub fn namespace_member_alias(namespace: &str, member: &str) -> String {
     format!("{namespace}{NAMESPACE_MEMBER_SEP}{member}")
 }
 
+/// Separator between a local item's declared name and its disambiguating
+/// `AstId` in the internal storage name a function-scoped `struct`/`type`
+/// declaration (`Stmt::Item`) is minted under (see the local-item-definitions
+/// WEP). `@` is not a valid Wado identifier character. This is the type's
+/// *storage identity*, used to key the durable, module-wide field/case
+/// tables so two sibling functions' same-named local items never collide;
+/// [`crate::tir::TypeTable::type_name`] strips it back off before the name
+/// reaches a diagnostic.
+pub const LOCAL_ITEM_ID_SEP: char = '@';
+
+/// Build the internal storage name for a local item declaration: the
+/// declared name plus its disambiguating `AstId`, unique per declaration
+/// site so same-named local items in different functions never collide in
+/// the module-wide storage tables they're interned into.
+pub fn mangle_local_item_name(name: &str, id: crate::ast::AstId) -> String {
+    format!("{name}{LOCAL_ITEM_ID_SEP}{id:?}")
+}
+
+/// Recover a local item's user-declared name from its internal storage name
+/// (see [`mangle_local_item_name`]). Returns `name` unchanged if it isn't a
+/// local-item storage name (no [`LOCAL_ITEM_ID_SEP`]).
+pub fn strip_local_item_id(name: &str) -> &str {
+    name.split(LOCAL_ITEM_ID_SEP).next().unwrap_or(name)
+}
+
 /// Convert a Wado identifier (`snake_case` / `PascalCase` / `camelCase`) to
 /// Component Model kebab-case (`my-api`, `http-server`, `error-code`).
 ///

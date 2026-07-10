@@ -341,6 +341,18 @@ impl Module {
         }
         finder.best.map(|(id, _)| id)
     }
+
+    /// Find the top-level [`Item`] whose own `AstId` (i.e. [`Item::id`])
+    /// equals `id`.
+    ///
+    /// Used to resolve an `AstId` recorded by an index (e.g.
+    /// `TraitEnv::impl_headers`) back to its declaration, instead of a
+    /// positional index into `items` that a reload could reorder. `id` must
+    /// name a top-level item, not a nested node (field, method, case, …) —
+    /// those have no entry here.
+    pub fn item_by_id(&self, id: AstId) -> Option<&Item> {
+        self.items.iter().find(|item| item.id() == id)
+    }
 }
 
 /// Returns true if `(line, column)` lies in `[span.line:column, span.end_line:end_column)`.
@@ -648,6 +660,7 @@ pub fn walk_stmt<V: AstVisitor>(v: &mut V, stmt: &Stmt) {
             }
         }
         Stmt::LabeledBlock(s) => v.visit_block(&s.block),
+        Stmt::Item(item) => v.visit_item(item),
         Stmt::Error(_) => {}
     }
 }
@@ -1005,6 +1018,56 @@ pub enum Item {
 }
 
 impl Item {
+    /// The `AstId` of this item's declaration node. Every variant carries
+    /// one — there is no id-less item — so this is the canonical way to
+    /// find an item by identity (e.g. resolving an index built during
+    /// `TraitEnv::build` back to the source item) instead of a positional
+    /// index into `Module::items`, which a reload can reorder.
+    pub fn id(&self) -> AstId {
+        match self {
+            Item::Use(d) => d.id,
+            Item::Function(d) => d.id,
+            Item::Interface(d) => d.id,
+            Item::Struct(d) => d.id,
+            Item::Enum(d) => d.id,
+            Item::Variant(d) => d.id,
+            Item::Flags(d) => d.id,
+            Item::Newtype(d) => d.id,
+            Item::TupleTypeDecl(d) => d.id,
+            Item::BuiltinTypeDecl(d) => d.id,
+            Item::Impl(d) => d.id,
+            Item::Trait(d) => d.id,
+            Item::Resource(d) => d.id,
+            Item::World(d) => d.id,
+            Item::Test(d) => d.id,
+            Item::Global(d) => d.id,
+            Item::Error(d) => d.id,
+        }
+    }
+
+    /// The source [`Span`] of this item's declaration.
+    pub fn span(&self) -> Span {
+        match self {
+            Item::Use(d) => d.span,
+            Item::Function(d) => d.span,
+            Item::Interface(d) => d.span,
+            Item::Struct(d) => d.span,
+            Item::Enum(d) => d.span,
+            Item::Variant(d) => d.span,
+            Item::Flags(d) => d.span,
+            Item::Newtype(d) => d.span,
+            Item::TupleTypeDecl(d) => d.span,
+            Item::BuiltinTypeDecl(d) => d.span,
+            Item::Impl(d) => d.span,
+            Item::Trait(d) => d.span,
+            Item::Resource(d) => d.span,
+            Item::World(d) => d.span,
+            Item::Test(d) => d.span,
+            Item::Global(d) => d.span,
+            Item::Error(d) => d.span,
+        }
+    }
+
     /// Declared visibility, or `None` for items that carry no modifier.
     pub fn visibility(&self) -> Option<Visibility> {
         match self {
@@ -1697,6 +1760,15 @@ pub enum Stmt {
     Continue(ContinueStmt),
     Assert(AssertStmt),
     LabeledBlock(LabeledBlockStmt),
+    /// A type/impl declaration local to the enclosing function: `struct`,
+    /// `enum`, `variant`, `flags`, `type` (newtype), `impl`, or `trait`.
+    /// Scoped to the function body — not visible outside it — and resolved
+    /// sequentially like a `let` binding (no forward reference, no mutual
+    /// reference between two local declarations). `Parser::at_local_item_start`
+    /// decides which keywords start one; `Parser::at_visibility_prefixed_local_item_start`
+    /// gives a dedicated error for a `pub`/`internal`/`export` prefix, since a
+    /// local item is always private.
+    Item(Box<Item>),
     /// Placeholder for a statement that failed to parse, emitted by error
     /// recovery so a broken statement inside a block leaves a node (with a
     /// stable span/id) instead of vanishing. Inert in every later phase; the
@@ -1894,6 +1966,7 @@ impl Stmt {
             Stmt::Continue(s) => s.id,
             Stmt::Assert(s) => s.id,
             Stmt::LabeledBlock(s) => s.id,
+            Stmt::Item(item) => item.id(),
             Stmt::Error(s) => s.id,
         }
     }
@@ -1915,6 +1988,7 @@ impl Stmt {
             Stmt::Continue(s) => s.span,
             Stmt::Assert(s) => s.span,
             Stmt::LabeledBlock(s) => s.span,
+            Stmt::Item(item) => item.span(),
             Stmt::Error(s) => s.span,
         }
     }

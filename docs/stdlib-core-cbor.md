@@ -10,12 +10,7 @@ Concise Binary Object Representation. The data model is a strict superset of
 JSON's, so any type that serializes to `core:json` serializes to CBOR with no
 source changes — the derived `Serialize`/`Deserialize` impls drive both.
 
-The API is bytes-only (CBOR is binary):
-
-use { to_bytes, from_bytes } from "core:cbor";
-
-let bytes = to_bytes::<i32>(&42)?; // [0x18, 0x2a]
-let v: i32 = from_bytes(bytes)?; // 42
+The API is bytes-only (CBOR is binary).
 
 Encoding uses preferred (shortest) serialization (RFC 8949 §4.1). Decoding is
 variation-tolerant (§4.1): it accepts any well-formed encoding, preferred or
@@ -30,9 +25,15 @@ cite section numbers from it.
 ## Synopsis
 
 ```wado
-let bytes = to_bytes(&[1, 2, 3]).unwrap();
-let back: List<i32> = from_bytes(bytes).unwrap();
-assert back == [1, 2, 3];
+struct Point {
+    x: i32,
+    y: i32,
+}
+impl Serialize for Point;
+impl Deserialize for Point;
+
+let encoded = to_bytes(&Point { x: 1, y: 2 });
+assert encoded matches { Ok(b) && from_bytes::<Point>(b) matches { Ok(p) && p.x == 1 && p.y == 2 } };
 ```
 
 ## Functions

@@ -2017,12 +2017,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `self.tysys.trait_env` releases before we touch `self` mutably.
         let indexed: Option<(ModuleSource, ast::Type, ast::Function)> =
             if let Some(methods) = self.tysys.trait_env.static_method_index.get(&static_key) {
-                methods.iter().find_map(|(name, ms, item_idx, method_idx)| {
+                methods.iter().find_map(|(name, ms, item_id, method_idx)| {
                     if name != method_name {
                         return None;
                     }
                     let module = self.loaded_modules.get(ms)?;
-                    let Item::Impl(impl_block) = &module.items[*item_idx] else {
+                    let Some(Item::Impl(impl_block)) = module.item_by_id(*item_id) else {
                         return None;
                     };
                     Some((
@@ -2126,10 +2126,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .resource_static_method_index
             .get(&static_key)
         {
-            for (name, ms, item_idx, method_idx) in methods {
+            for (name, ms, item_id, method_idx) in methods {
                 if name == method_name
                     && let Some(module) = self.loaded_modules.get(ms)
-                    && let Item::Resource(resource) = &module.items[*item_idx]
+                    && let Some(Item::Resource(resource)) = module.item_by_id(*item_id)
                 {
                     let method = &resource.methods[*method_idx];
 
@@ -2253,9 +2253,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return found;
         }
         if let Some(entries) = self.tysys.trait_env.impl_index.get(struct_name) {
-            for (module_source, item_idx) in entries {
+            for (module_source, item_id) in entries {
                 if let Some(module) = self.loaded_modules.get(module_source)
-                    && let Item::Impl(impl_block) = &module.items[*item_idx]
+                    && let Some(Item::Impl(impl_block)) = module.item_by_id(*item_id)
                     && let Some(trait_type) = &impl_block.trait_type
                     && Self::get_type_name_static(trait_type) == trait_name
                 {
@@ -2335,10 +2335,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.tysys.trait_env.static_method_index.get(&static_key)
         {
             let mut found = None;
-            for (name, module_source, item_idx, method_idx) in methods {
+            for (name, module_source, item_id, method_idx) in methods {
                 if name == method_name
                     && let Some(module) = self.loaded_modules.get(module_source)
-                    && let Item::Impl(impl_block) = &module.items[*item_idx]
+                    && let Some(Item::Impl(impl_block)) = module.item_by_id(*item_id)
                 {
                     let method = &impl_block.methods[*method_idx];
                     found = Some((module_source.clone(), impl_block.ty.clone(), method.clone()));
@@ -2442,10 +2442,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .cloned()
             .unwrap_or_else(|| self.canonical_decl_key(struct_name));
         if let Some(methods) = self.tysys.trait_env.static_method_index.get(&static_key) {
-            for (name, module_source, item_idx, method_idx) in methods {
+            for (name, module_source, item_id, method_idx) in methods {
                 if name == method_name
                     && let Some(module) = self.loaded_modules.get(module_source)
-                    && let Item::Impl(impl_block) = &module.items[*item_idx]
+                    && let Some(Item::Impl(impl_block)) = module.item_by_id(*item_id)
                 {
                     return extract(&impl_block.methods[*method_idx]);
                 }
@@ -2589,10 +2589,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Check indexed modules — index keyed by canonical decl key.
         let static_key = self.canonical_decl_key(struct_name);
         if let Some(methods) = self.tysys.trait_env.static_method_index.get(&static_key) {
-            for (name, module_source, item_idx, method_idx) in methods {
+            for (name, module_source, item_id, method_idx) in methods {
                 if name == method_name
                     && let Some(module) = self.loaded_modules.get(module_source)
-                    && let Item::Impl(impl_block) = &module.items[*item_idx]
+                    && let Some(Item::Impl(impl_block)) = module.item_by_id(*item_id)
                 {
                     let names = extract_impl_type_param_names(&impl_block.ty);
                     return Some((names, impl_block.methods[*method_idx].clone()));
@@ -2614,7 +2614,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(Item::Impl(impl_block)) = self
                 .loaded_modules
                 .get(&key.0)
-                .and_then(|m| m.items.get(key.1))
+                .and_then(|m| m.item_by_id(key.1))
             else {
                 continue;
             };
@@ -2887,9 +2887,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Use trait_env.impl_index for O(1) lookup instead of scanning all modules
         if let Some(entries) = self.tysys.trait_env.impl_index.get(struct_name) {
-            for (module_source, item_idx) in entries {
+            for (module_source, item_id) in entries {
                 if let Some(module) = self.loaded_modules.get(module_source)
-                    && let Item::Impl(impl_block) = &module.items[*item_idx]
+                    && let Some(Item::Impl(impl_block)) = module.item_by_id(*item_id)
                     && let Some(trait_name) = check_impl(impl_block, module_source)
                 {
                     return Some(StaticMethodRef::new(

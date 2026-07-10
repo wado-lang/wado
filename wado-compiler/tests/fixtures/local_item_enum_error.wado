@@ -1,0 +1,16 @@
+// A local enum parses, but resolving a case reference is not yet
+// implemented (unlike local struct/newtype — see
+// local_item_struct_definition.wado), so it surfaces as an unknown
+// identifier rather than a dedicated error.
+
+export fn run() {
+    enum Color {
+        Red,
+        Green,
+        Blue,
+    }
+    let c = Color::Red;
+}
+
+__DATA__
+{"compile_error": "unknown identifier 'Color::Red'"}

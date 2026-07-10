@@ -301,24 +301,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some(type_id) = self.lookup_newtype(name) {
                     type_id
                 } else if let Some(struct_info) = self.lookup_struct_fields(name) {
-                    // Use canonical name (not import alias) so interning produces the same TypeId
-                    let (n, src) = (struct_info.name.clone(), struct_info.module_source.clone());
-                    self.tysys.type_table.borrow_mut().make_struct(n, src)
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .type_id_of_decl(struct_info.defined_at)
                 } else if let Some(variant_info) = self.lookup_variant_case(name) {
-                    let (n, src) = (
-                        variant_info.name.clone(),
-                        variant_info.module_source.clone(),
-                    );
-                    self.tysys.type_table.borrow_mut().make_variant(n, src)
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .type_id_of_decl(variant_info.defined_at)
                 } else if let Some(enum_info) = self.lookup_enum_case(name) {
-                    let (n, src) = (enum_info.name.clone(), enum_info.module_source.clone());
-                    self.tysys.type_table.borrow_mut().make_enum(n, src)
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .type_id_of_decl(enum_info.defined_at)
                 } else if let Some(resource_info) = self.lookup_resource_type(name) {
-                    let (n, src) = (
-                        resource_info.name.clone(),
-                        resource_info.module_source.clone(),
-                    );
-                    self.tysys.type_table.borrow_mut().make_resource(n, src)
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .type_id_of_decl(resource_info.defined_at)
                 } else if let Some(scope_mod) = self.default_scope_module.clone()
                     && scope_mod != self.current_module_source
                 {
@@ -338,8 +339,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn bare_generic_type_arity(&self, name: &str) -> Option<usize> {
-        if self.sem.decls.generic_struct_names.contains(name)
-            && let Some(info) = self.lookup_struct_fields(name)
+        // `lookup_struct_fields` alone decides whether `name` is generic:
+        // it already applies the correct precedence (a local struct —
+        // `Stmt::Item`, see `resolve_local_struct` — shadows a same-named
+        // module-level one), so basing this on `info.type_param_bounds`
+        // directly keeps the "is this generic" question and "which struct's
+        // info is this" question about the *same* struct. A separate
+        // `generic_struct_names.contains(name)` gate here previously let
+        // the two disagree: dispatch entered on the module-level struct's
+        // registration while `lookup_struct_fields` had already returned a
+        // same-named local, non-generic shadow's info.
+        if let Some(info) = self.lookup_struct_fields(name)
             && !info.type_param_bounds.is_empty()
         {
             return Some(info.type_param_bounds.len());
@@ -443,14 +453,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .make_builtin_array(element_type)
             }
             _ => {
-                // Check if it's a user-defined generic struct
-                if self.sem.decls.generic_struct_names.contains(name) {
+                // Check if it's a user-defined generic struct.
+                // `lookup_struct_fields` alone decides this (see
+                // `bare_generic_type_arity` for why a separate
+                // `generic_struct_names.contains(name)` gate is wrong: it
+                // can name a different struct than the one this lookup
+                // returns when a local struct — `Stmt::Item`, see
+                // `resolve_local_struct` — shadows a same-named
+                // module-level generic one).
+                let struct_info = self.lookup_struct_fields(name).cloned();
+                if struct_info
+                    .as_ref()
+                    .is_some_and(|info| !info.type_param_bounds.is_empty())
+                {
                     // Resolve type arguments
                     let type_args: Vec<TypeId> =
                         args.iter().map(|t| self.resolve_type(t)).collect();
 
-                    // Get struct info for module source and bounds checking
-                    let struct_info = self.lookup_struct_fields(name).cloned();
+                    // `info.name` is the type's storage identity — the bare
+                    // declared name for a module-level struct, or the
+                    // internal mangled name for a local one (so the
+                    // `GenericInstance` below carries a name that
+                    // `struct_fields_in` can find later, the same way a
+                    // concrete local struct's `TypeId` does — see
+                    // `resolve_local_struct`).
+                    let identity_name = struct_info
+                        .as_ref()
+                        .map(|info| info.name.clone())
+                        .unwrap_or_else(|| name.to_string());
                     let module_source = struct_info
                         .as_ref()
                         .map(|info| info.module_source.clone())
@@ -486,7 +516,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     // Create a GenericInstance type
                     self.tysys.type_table.borrow_mut().make_generic_instance(
-                        name.to_string(),
+                        identity_name,
                         module_source,
                         type_args,
                     )

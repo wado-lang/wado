@@ -1,0 +1,30 @@
+// A local struct declared later in a function must not corrupt an earlier
+// reference to a same-named module-level struct. Regression test for a bug
+// where the ephemeral per-function local-item registry (bare-name-keyed,
+// mutated in place as annotate walks the function) had unconditional lookup
+// precedence even for reify's later, separate pass — so a struct value
+// built from the *outer* `Point` before the local `struct Point` was
+// declared silently reified against the *local* struct's field layout
+// (wrong field indices) instead of the outer one's.
+
+struct Point {
+    x: i32,
+    y: i32,
+    z: i32,
+}
+
+test "local item does not corrupt an earlier outer-struct reference" {
+    let outer = Point { x: 1, y: 2, z: 3 };
+    struct Point {
+        z: i32,
+        y: i32,
+        x: i32,
+    }
+    let inner = Point { z: 30, y: 20, x: 10 };
+    assert outer.x == 1;
+    assert outer.y == 2;
+    assert outer.z == 3;
+    assert inner.x == 10;
+    assert inner.y == 20;
+    assert inner.z == 30;
+}

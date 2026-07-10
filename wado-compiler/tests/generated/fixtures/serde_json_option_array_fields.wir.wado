@@ -376,17 +376,17 @@ type "functype//core:prelude/list.wado/List<i32>::push" = fn(ref "core:prelude//
 
 type "functype//serde_json_option_array_fields.wado/User^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "serde_json_option_array_fields.wado//User", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(127)
 
-type "functype//core:json/JsonSeqSerializer^SerializeSeq::element<i32>" = fn(ref "core:json//JsonSeqSerializer", i32) -> ref null "core:serde//SerializeError";  // TypeId(128)
+type "functype//core:json/JsonStructSerializer^SerializeStruct::field<core:prelude/list.wado/List<i32>>" = fn(ref "core:json//JsonStructSerializer", ref "core:prelude/string.wado//String", ref "core:prelude//List<i32>") -> ref null "core:serde//SerializeError";  // TypeId(128)
 
-type "functype//core:json/JsonStructSerializer^SerializeStruct::field<core:prelude/list.wado/List<i32>>" = fn(ref "core:json//JsonStructSerializer", ref "core:prelude/string.wado//String", ref "core:prelude//List<i32>") -> ref null "core:serde//SerializeError";  // TypeId(129)
+type "functype//core:json/JsonStructSerializer^SerializeStruct::field<core:prelude/types.wado/Option<core:prelude/string.wado/String>>" = fn(ref "core:json//JsonStructSerializer", ref "core:prelude/string.wado//String", ref null "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(129)
 
-type "functype//core:json/JsonStructSerializer^SerializeStruct::field<core:prelude/types.wado/Option<core:prelude/string.wado/String>>" = fn(ref "core:json//JsonStructSerializer", ref "core:prelude/string.wado//String", ref null "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(130)
+type "functype//core:json/JsonStructSerializer^SerializeStruct::field<core:prelude/string.wado/String>" = fn(ref "core:json//JsonStructSerializer", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(130)
 
-type "functype//core:json/JsonStructSerializer^SerializeStruct::field<core:prelude/string.wado/String>" = fn(ref "core:json//JsonStructSerializer", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(131)
+type "functype//core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(131)
 
-type "functype//core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(132)
+type "functype//core:serde/List<i32>^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "core:prelude//List<i32>", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(132)
 
-type "functype//core:serde/List<i32>^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "core:prelude//List<i32>", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(133)
+type "functype//core:json/JsonSeqSerializer^SerializeSeq::element<i32>" = fn(ref "core:json//JsonSeqSerializer", i32) -> ref null "core:serde//SerializeError";  // TypeId(133)
 
 type "functype//core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayRefIter<i32>") -> ref null "core:prelude/types.wado//Box<i32>";  // TypeId(134)
 
@@ -3310,19 +3310,6 @@ fn "serde_json_option_array_fields.wado/User^Serialize::serialize<core:json/Json
     }
 }
 
-fn "core:json/JsonSeqSerializer^SerializeSeq::element<i32>"(self, value) {
-    let r: ref null "core:serde//SerializeError";
-    let __sroa_ser_buf: ref "core:prelude/string.wado//String";
-    if self.count > 0 {
-        "core:prelude/string.wado/String::push"(self.buf, 44);
-    }
-    __sroa_ser_buf = self.buf;
-    r = "core:json/write_json_i32"(__sroa_ser_buf, value);
-    self.buf = __sroa_ser_buf;
-    self.count = self.count + 1;
-    return r;
-}
-
 fn "serde_json_option_array_fields.wado/User^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
     let __result: ref "core:prelude/types.wado//Result<core:json/JsonStructAccess,core:serde/DeserializeError>";
     let __local_2: ref "core:json//JsonStructAccess";
@@ -3358,8 +3345,8 @@ fn "serde_json_option_array_fields.wado/User^Deserialize::deserialize<core:json/
         __local_6 = 0;
         __local_7 = 0;
         __local_8 = 0;
-        b440: block {
-            l441: loop {
+        b439: block {
+            l440: loop {
                 let __sroa___local_9_discriminant: i32;
                 let __sroa___local_9_case0_payload_0: ref null "core:prelude/types.wado//Option<i32>";
                 let __sroa___local_9_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -3409,12 +3396,12 @@ fn "serde_json_option_array_fields.wado/User^Deserialize::deserialize<core:json/
                             }
                         }
                     } else {
-                        break b440;
+                        break b439;
                     }
                 } else {
                     return 1, ref.null none, ref.as_non_null(__sroa___local_9_case1_payload_0);
                 }
-                continue l441;
+                continue l440;
             };
         };
         if __local_6 == 0 {
@@ -3528,8 +3515,8 @@ fn "core:serde/List<i32>^Serialize::serialize<core:json/JsonSerializer>"(self, s
         return __qm_e_3;
     });
     __iter_5 = struct.new "core:prelude/slice.wado//ArrayRefIter<i32>" { repr: self.repr, index: 0, end: self.used };
-    b460: block {
-        l461: loop {
+    b459: block {
+        l460: loop {
             __match_9 = "core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(__iter_5);
             if ref.is_null(__match_9) == 0 {
                 item = ref.as_non_null(__match_9);
@@ -3541,9 +3528,9 @@ fn "core:serde/List<i32>^Serialize::serialize<core:json/JsonSerializer>"(self, s
                     return __qm_e_8;
                 }
             } else {
-                break b460;
+                break b459;
             }
-            continue l461;
+            continue l460;
         };
     };
     return "core:prelude/string.wado/String::push"(seq.buf, 93), ref.null none;
@@ -3647,44 +3634,6 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field<serde_json_option_a
     return 0, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: idx_15 }, ref.null none;
 }
 
-fn "core:json/JsonSeqAccess^DeserializeSeq::next_element<i32>"(self) {
-    let __qm_e_2: ref "core:serde//DeserializeError";
-    let __qm_v_3: i32;
-    let __qm_e_4: ref "core:serde//DeserializeError";
-    let v: i32;
-    let __match_6: ref null "core:serde//DeserializeError";
-    "core:json/JsonDeserializer::skip_whitespace"(self.de);
-    if @unlikely(self.de.pos >= (self.de.input.end - self.de.input.start)) {
-        cold_path;
-        return 1, 1, 0, ref.as_non_null("core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s(self.de.pos)));
-    }
-    if builtin::array_get<u8>(self.de.input.repr, self.de.input.start + self.de.pos) == 93 {
-        return 0, 1, 0, ref.null none;
-    }
-    if self.first == 0 {
-        __match_6 = "core:json/JsonDeserializer::expect_char"(self.de, 44);
-        if @likely(ref.is_null(__match_6)) {
-        } else {
-            __qm_e_2 = ref.as_non_null(__match_6);
-            cold_path;
-            return 1, 1, 0, __qm_e_2;
-        }
-    }
-    self.first = 0;
-    let __sroa___match_scrut_1_discriminant: i32;
-    let __sroa___match_scrut_1_case0_payload_0: i32;
-    let __sroa___match_scrut_1_case1_payload_0: ref null "core:serde//DeserializeError";
-    multivalue_bind [__sroa___match_scrut_1_discriminant, __sroa___match_scrut_1_case0_payload_0, __sroa___match_scrut_1_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(self.de);
-    v = (if @likely(__sroa___match_scrut_1_discriminant == 0) -> i32 {
-        local.tee __qm_v_3(__sroa___match_scrut_1_case0_payload_0);
-    } else {
-        __qm_e_4 = ref.as_non_null(__sroa___match_scrut_1_case1_payload_0);
-        cold_path;
-        return 1, 1, 0, __qm_e_4;
-    });
-    return 0, 0, v, ref.null none;
-}
-
 fn "core:serde/Option<core:prelude/string.wado/String>^Deserialize::deserialize<&mut core:json/JsonDeserializer>"(d) {
     let __qm_v_1: bool;
     let __qm_e_2: ref "core:serde//DeserializeError";
@@ -3758,7 +3707,7 @@ fn "core:serde/List<i32>^Deserialize::deserialize<&mut core:json/JsonDeserialize
         items = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(2), used: 0 };
         "core:prelude/list.wado/List<i32>::push"(items, first_elem);
         block {
-            l488: loop {
+            l482: loop {
                 let __sroa___match_scrut_4_discriminant: i32;
                 let __sroa___match_scrut_4_case1_payload_0: ref null "core:serde//DeserializeError";
                 let __sroa___match_scrut_4_case0_payload_0__ndisc: i32;
@@ -3783,7 +3732,7 @@ fn "core:serde/List<i32>^Deserialize::deserialize<&mut core:json/JsonDeserialize
                     }
                     return 0, items, ref.null none;
                 }
-                continue l488;
+                continue l482;
             };
         };
     } else {
@@ -3798,6 +3747,19 @@ fn "core:serde/List<i32>^Deserialize::deserialize<&mut core:json/JsonDeserialize
     }
 }
 
+fn "core:json/JsonSeqSerializer^SerializeSeq::element<i32>"(self, value) {
+    let r: ref null "core:serde//SerializeError";
+    let __sroa_ser_buf: ref "core:prelude/string.wado//String";
+    if self.count > 0 {
+        "core:prelude/string.wado/String::push"(self.buf, 44);
+    }
+    __sroa_ser_buf = self.buf;
+    r = "core:json/write_json_i32"(__sroa_ser_buf, value);
+    self.buf = __sroa_ser_buf;
+    self.count = self.count + 1;
+    return r;
+}
+
 fn "core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(self) {
     let val: ref "core:prelude/types.wado//Box<i32>";
     if self.index >= self.end {
@@ -3806,6 +3768,44 @@ fn "core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(self) {
     val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get<i32>(self.repr, self.index) };
     self.index = self.index + 1;
     return val;
+}
+
+fn "core:json/JsonSeqAccess^DeserializeSeq::next_element<i32>"(self) {
+    let __qm_e_2: ref "core:serde//DeserializeError";
+    let __qm_v_3: i32;
+    let __qm_e_4: ref "core:serde//DeserializeError";
+    let v: i32;
+    let __match_6: ref null "core:serde//DeserializeError";
+    "core:json/JsonDeserializer::skip_whitespace"(self.de);
+    if @unlikely(self.de.pos >= (self.de.input.end - self.de.input.start)) {
+        cold_path;
+        return 1, 1, 0, ref.as_non_null("core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s(self.de.pos)));
+    }
+    if builtin::array_get<u8>(self.de.input.repr, self.de.input.start + self.de.pos) == 93 {
+        return 0, 1, 0, ref.null none;
+    }
+    if self.first == 0 {
+        __match_6 = "core:json/JsonDeserializer::expect_char"(self.de, 44);
+        if @likely(ref.is_null(__match_6)) {
+        } else {
+            __qm_e_2 = ref.as_non_null(__match_6);
+            cold_path;
+            return 1, 1, 0, __qm_e_2;
+        }
+    }
+    self.first = 0;
+    let __sroa___match_scrut_1_discriminant: i32;
+    let __sroa___match_scrut_1_case0_payload_0: i32;
+    let __sroa___match_scrut_1_case1_payload_0: ref null "core:serde//DeserializeError";
+    multivalue_bind [__sroa___match_scrut_1_discriminant, __sroa___match_scrut_1_case0_payload_0, __sroa___match_scrut_1_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(self.de);
+    v = (if @likely(__sroa___match_scrut_1_discriminant == 0) -> i32 {
+        local.tee __qm_v_3(__sroa___match_scrut_1_case0_payload_0);
+    } else {
+        __qm_e_4 = ref.as_non_null(__sroa___match_scrut_1_case1_payload_0);
+        cold_path;
+        return 1, 1, 0, __qm_e_4;
+    });
+    return 0, 0, v, ref.null none;
 }
 
 export fn "serde_json_option_array_fields.wado/__cm_export____test_0_serialize_with_some_and_non_empty_array" as "__test_0_serialize_with_some_and_non_empty_array"

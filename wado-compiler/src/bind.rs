@@ -336,9 +336,13 @@ fn stmt_references_var(stmt: &crate::ast::Stmt, name: &str) -> bool {
         crate::ast::Stmt::LabeledBlock(lb) => {
             lb.block.stmts.iter().any(|s| stmt_references_var(s, name))
         }
-        crate::ast::Stmt::Break(_) | crate::ast::Stmt::Continue(_) | crate::ast::Stmt::Error(_) => {
-            false
-        }
+        // A local type/impl declaration's methods aren't closures — they
+        // can't capture `name` from the enclosing function — so it never
+        // references an outer variable.
+        crate::ast::Stmt::Item(_)
+        | crate::ast::Stmt::Break(_)
+        | crate::ast::Stmt::Continue(_)
+        | crate::ast::Stmt::Error(_) => false,
     }
 }
 
@@ -506,6 +510,9 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             Stmt::Continue(_) => {} // No bindings for continue
             Stmt::Assert(assert_stmt) => self.bind_assert(assert_stmt)?,
             Stmt::LabeledBlock(labeled_block) => self.bind_block(&labeled_block.block)?,
+            // Local type/impl declaration: only its methods (impl/trait) have
+            // local scopes to bind, same as a top-level item.
+            Stmt::Item(item) => self.bind_item(item)?,
             Stmt::Error(_) => {} // Parser error-recovery placeholder: nothing to bind
         }
         Ok(())
