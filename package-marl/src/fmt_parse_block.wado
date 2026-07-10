@@ -224,7 +224,7 @@ fn parse_blocks(lines: &List<String>, start: i32, end: i32, refs: &RefTable) -> 
             i = parse_list(lines, i, end, refs, &mut out);
             continue;
         }
-        if i + 1 < end && line_has_pipe(line) && line_has_pipe(&lines[i + 1]) && is_delimiter_row(&lines[i + 1]) {
+        if i + 1 < end && line_has_pipe(line) && line_has_pipe(&lines[i + 1]) && is_table_header(line, &lines[i + 1]) {
             flush_paragraph(&mut out, &mut para, refs);
             i = parse_table(lines, i, end, refs, &mut out);
             continue;
@@ -724,6 +724,13 @@ fn line_indent(line: &String) -> i32 {
 
 fn line_has_pipe(line: &String) -> bool {
     return line.contains("|");
+}
+
+/// A GFM table requires a well-formed delimiter row whose column count equals
+/// the header's; otherwise the two lines are not a table (they stay a
+/// paragraph), matching pulldown-cmark / dprint.
+fn is_table_header(header: &String, delim: &String) -> bool {
+    return is_delimiter_row(delim) && split_row(header).len() == split_row(delim).len();
 }
 
 fn is_delimiter_row(line: &String) -> bool {

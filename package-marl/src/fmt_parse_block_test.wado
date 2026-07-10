@@ -170,6 +170,16 @@ test "parse_document reads a task list item" {
     }
 }
 
+test "parse_document rejects a table whose delimiter row column count differs from the header" {
+    // GFM requires the header and delimiter rows to have equal cell counts;
+    // otherwise it is not a table and stays a paragraph (matches
+    // pulldown-cmark / dprint). Here the header has 3 columns, the delimiter 2.
+    let source = "| a | b | c |\n| - | - |\n| 1 | 2 | 3 |";
+    let children = doc_children(&source);
+    assert children.len() == 1;
+    assert children.get(0) matches { Some(Node::Paragraph(_)) };
+}
+
 test "parse_document reads a GFM table with alignment" {
     let source = "| a | b | c |\n| :-- | :-: | --: |\n| 1 | 2 | 3 |";
     let children = doc_children(&source);
