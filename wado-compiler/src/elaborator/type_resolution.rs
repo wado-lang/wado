@@ -55,11 +55,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_type(&mut self, ctx: &AnnotateCtx, ty: &Type) -> TypeId {
         match ty {
             Type::Named(named) => {
-                self.record_type_name_reference(named.id, &named.name);
+                self.record_type_name_reference(ctx, named.id, &named.name);
                 self.resolve_named_type(ctx, &named.name, named.span, true)
             }
             Type::Generic(generic) => {
-                self.record_type_name_reference(generic.id, &generic.name);
+                self.record_type_name_reference(ctx, generic.id, &generic.name);
                 self.resolve_generic_type(ctx, &generic.name, &generic.args, generic.span)
             }
             Type::Function(func_ty) => {

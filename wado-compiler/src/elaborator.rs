@@ -474,8 +474,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// the `<T>` declaration rather than on a top-level item that happens
     /// to share the name. Falls through to the symbol-table lookup
     /// otherwise.
-    pub(super) fn record_type_name_reference(&mut self, use_id: crate::ast::AstId, name: &str) {
-        if let Some(&decl_id) = self.annotate_ctx.trait_ctx.type_param_decls.get(name) {
+    pub(in crate::elaborator) fn record_type_name_reference(
+        &mut self,
+        ctx: &trait_env::AnnotateCtx,
+        use_id: crate::ast::AstId,
+        name: &str,
+    ) {
+        if let Some(&decl_id) = ctx.trait_ctx.type_param_decls.get(name) {
             self.record_reference(use_id, decl_id);
         } else {
             self.record_item_reference_by_name(use_id, name);

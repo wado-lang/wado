@@ -653,26 +653,45 @@ Three independent tracks; each slice keeps `mise run test` green (E2E 2934/0).
     the trait-impl cluster), and falls back through
     `with_module_perspective_for` (an `Elaborator`-only mechanism) for
     cross-module defaults. None of these have a `TypeSystem`-only shape.
-- [x] **Track B Stage C, complete** — the last three direct
-      `self.annotate_ctx.trait_ctx` readers outside scope-mutation code now take
-      `ctx: &AnnotateCtx` explicitly: `classify_call_callee` (`call.rs`, its
+- [x] **Track B Stage C, complete** — `classify_call_callee` (`call.rs`, its
       one call site), `infer_variant_type_args` (`call.rs`, 4 call sites across
-      `call.rs` / `expr.rs` / `method_call.rs`), and
-      `resolve_type_with_param_mapping` (`method_lookup.rs`, mutually
-      recursive with itself, 5 external call sites). A full audit of every
-      remaining `self.annotate_ctx.trait_ctx.{self_type,type_params,
-      assoc_type_bindings,type_param_bounds}` read across the tree turned up
-      only comments and scope-mutation sites (`bind_trait_type_params_from_impl`,
-      `resolve_module`'s `Item::Impl` arm) — both explicitly exempt per the
-      "Scope mutation … stays on `Elaborator`" carve-out below. The WEP's
-      original "~50 methods / ~120 read sites" estimate was almost entirely
-      the `resolve_type` family's fan-out (118 call sites on one function);
-      the actual number of distinct query _functions_ needing conversion
-      across all of Stage C was five: the trait-impl-lookup cluster (one
-      unit), the `resolve_type` family (one unit), plus these three.
-      Scope **mutation** (`enter_inherited_type_param_scope`,
-      `register_generic_params`, `bind_trait_type_params_from_impl`) stays on
-      `Elaborator` and owns/produces the scope — never converted, by design.
+      `call.rs` / `expr.rs` / `method_call.rs`), `resolve_type_with_param_mapping`
+      (`method_lookup.rs`, mutually recursive, 5 external call sites), and
+      `record_type_name_reference` (`elaborator.rs`, 2 call sites in
+      `resolve_type`) now take `ctx: &AnnotateCtx` explicitly.
+  - The completeness claim rests on a **query-vs-producer boundary**, made
+    precise here because it is the criterion that decides membership: a
+    _query_ reads `trait_ctx` to answer a question (a `TypeId`, a use→def
+    target, a bound check) and threads `ctx`; a _producer_
+    (`register_generic_params`, `bind_trait_type_params_from_impl`,
+    `enter_inherited_type_param_scope`, the `Item::Impl` setup in
+    `resolve_module`, the `self_type` save/restore in `method_lookup.rs`)
+    _builds_ `trait_ctx` and stays on `Elaborator`. A producer cannot take
+    `&AnnotateCtx`: it needs `&mut self.annotate_ctx` to `insert`/`clear`, and
+    its reads are inseparable from that mutation (`type_params.len()` computes
+    the next insert index; `type_params.contains_key(name)` is a dedup guard
+    immediately before `insert`). Producers also never move to `TypeSystem`,
+    so threading them buys nothing; the manual save/restores are reworked in
+    Stage E, not Stage C.
+  - An audit over **all five** `TraitContext` fields (`type_params`,
+    `type_param_decls`, `type_param_bounds`, `assoc_type_bindings`,
+    `self_type`) confirms every surviving `self.annotate_ctx.trait_ctx.*` read
+    is a producer. `record_type_name_reference` was the one genuine query the
+    first pass missed — its earlier "complete" audit filtered on four fields
+    and skipped `type_param_decls`. It reads `type_param_decls` to pick a
+    use→def target and is called only from the already-threaded `resolve_type`,
+    so leaving it on `self.annotate_ctx` was a latent scope-divergence hazard
+    (a caller passing a `ctx` other than `self.annotate_ctx` — which the clone
+    pattern already permits — would resolve the type-param reference against
+    the wrong scope). Threading it is behaviour-preserving today (`ctx` equals
+    `self.annotate_ctx` at both call sites) and closes the hazard. It stays on
+    `Elaborator` (it mutates `bindings`), so it is a threaded query, not a
+    Stage D candidate.
+  - The WEP's original "~50 methods / ~120 read sites" estimate was almost
+    entirely the `resolve_type` family's fan-out (118 call sites on one
+    function); the distinct query _functions_ converted across all of Stage C
+    were the trait-impl-lookup cluster, the `resolve_type` family, and these
+    four.
 - [ ] **Track B Stage D — move the now-Elaborator-free queries to
       `impl TypeSystem`.** Once they read only `self.tysys.*` + the passed
       `ctx`: `classify_call_callee` and `infer_variant_type_args` (`call.rs`)
