@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783643590839,
+  "lastUpdate": 1783647333172,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -38929,6 +38929,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 267452,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bb0ee38a11ba1933531fb6073dcc8ec5d0b85b8f",
+          "message": "Merge pull request #1538 from wado-lang/claude/wado-compiler-optimizer-perf-iiujj6\n\nperf(lowering): native array.copy for builtin array clones",
+          "timestamp": "2026-07-10T10:27:28+09:00",
+          "tree_id": "8c6359796b3b99175786547a0ceb24baf62c3197",
+          "url": "https://github.com/wado-lang/wado/commit/bb0ee38a11ba1933531fb6073dcc8ec5d0b85b8f"
+        },
+        "date": 1783647332576,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8246,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15624,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 266655,
             "unit": "bytes"
           }
         ]
