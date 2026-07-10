@@ -9,7 +9,11 @@ test "normalize_label trims, folds case, and collapses internal whitespace" {
 
 test "ref_table_insert and ref_table_get round-trip by normalized label" {
     let mut table = new_ref_table();
-    ref_table_insert(&mut table, LinkReferenceDef { label: normalize_label(&"Some reference"), url: "https://dprint.dev", title: "" });
+    ref_table_insert(&mut table, LinkReferenceDef {
+        label: normalize_label(&"Some reference"),
+        url: "https://dprint.dev",
+        title: "",
+    });
     let found = ref_table_get(&table, &"  SOME   reference  ");
     assert found matches { Some(_) };
     if let Some(def) = found {
@@ -20,8 +24,16 @@ test "ref_table_insert and ref_table_get round-trip by normalized label" {
 
 test "ref_table_insert keeps the first definition for a duplicate label" {
     let mut table = new_ref_table();
-    ref_table_insert(&mut table, LinkReferenceDef { label: normalize_label(&"dup"), url: "https://first.example", title: "" });
-    ref_table_insert(&mut table, LinkReferenceDef { label: normalize_label(&"dup"), url: "https://second.example", title: "" });
+    ref_table_insert(&mut table, LinkReferenceDef {
+        label: normalize_label(&"dup"),
+        url: "https://first.example",
+        title: "",
+    });
+    ref_table_insert(&mut table, LinkReferenceDef {
+        label: normalize_label(&"dup"),
+        url: "https://second.example",
+        title: "",
+    });
     if let Some(def) = ref_table_get(&table, &"dup") {
         assert def.url == "https://first.example";
     } else {

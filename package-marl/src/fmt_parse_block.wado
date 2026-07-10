@@ -10,8 +10,19 @@
 //! forward references resolve.
 
 use {
-    Node, FrontMatterKind, FrontMatterNode, Heading, Paragraph, CodeBlock, MdList, MdItem, TaskMarker, MdTable,
-    MdTableRow, ColumnAlign, LinkReferenceDef,
+    Node,
+    FrontMatterKind,
+    FrontMatterNode,
+    Heading,
+    Paragraph,
+    CodeBlock,
+    MdList,
+    MdItem,
+    TaskMarker,
+    MdTable,
+    MdTableRow,
+    ColumnAlign,
+    LinkReferenceDef,
 } from "./fmt_ast.wado";
 use { RefTable, new_ref_table, ref_table_insert, parse_dest_and_title } from "./fmt_links.wado";
 use { parse_inline } from "./fmt_parse_inline.wado";
@@ -132,11 +143,11 @@ fn try_front_matter(lines: &List<String>) -> Option<[FrontMatterNode, i32]> {
     // `let` bound to an if/else mixing `Option::Some(...)` and a bare `null`
     // branch produces invalid Wasm (wado-lang/wado, filed separately).
     let kind: Option<FrontMatterKind> = if first == "---" {
-        Option::Some(FrontMatterKind::Yaml)
+        Option::Some(FrontMatterKind::Yaml);
     } else if first == "+++" {
-        Option::Some(FrontMatterKind::Toml)
+        Option::Some(FrontMatterKind::Toml);
     } else {
-        null
+        null;
     };
     let k = match kind {
         Some(k) => k,
@@ -152,7 +163,10 @@ fn try_front_matter(lines: &List<String>) -> Option<[FrontMatterNode, i32]> {
     let mut body_lines: List<String> = [];
     while i < lines.len() {
         if lines[i].trim_end() == delim {
-            return Option::Some([FrontMatterNode { kind: k, body: body_lines.join("\n") }, i + 1]);
+            return Option::Some([
+                FrontMatterNode { kind: k, body: body_lines.join("\n") },
+                i + 1,
+            ]);
         }
         body_lines.push(lines[i]);
         i += 1;
@@ -612,7 +626,9 @@ fn parse_list(lines: &List<String>, start: i32, end: i32, refs: &RefTable, out: 
                 break;
             }
             if is_blank(&lines[j]) {
-                let continues = j + 1 < end && !is_blank(&lines[j + 1]) && line_indent(&lines[j + 1]) >= content_col
+                let continues = j + 1 < end
+                    && !is_blank(&lines[j + 1])
+                    && line_indent(&lines[j + 1]) >= content_col
                     && parse_list_marker(&chars_of(&lines[j + 1])) matches { None };
                 if continues {
                     inner.push("");
@@ -661,7 +677,10 @@ fn strip_task_marker(line: &String) -> [Option<TaskMarker>, String] {
         if rest_start < len && chars[rest_start] == ' ' {
             rest_start += 1;
         }
-        return [Option::Some(TaskMarker { checked }), slice_chars(&chars, rest_start, len)];
+        return [
+            Option::Some(TaskMarker { checked }),
+            slice_chars(&chars, rest_start, len),
+        ];
     }
     return [null, *line];
 }

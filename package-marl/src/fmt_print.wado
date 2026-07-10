@@ -8,8 +8,21 @@
 //! places deliberately diverge (noted inline).
 
 use {
-    Node, FrontMatterKind, Heading, CodeBlock, MdList, MdItem, MdTable, MdTableRow, ColumnAlign, LinkReferenceDef,
-    EmphasisNode, LinkNode, ImageNode, ReferenceLinkNode, ReferenceImageNode,
+    Node,
+    FrontMatterKind,
+    Heading,
+    CodeBlock,
+    MdList,
+    MdItem,
+    MdTable,
+    MdTableRow,
+    ColumnAlign,
+    LinkReferenceDef,
+    EmphasisNode,
+    LinkNode,
+    ImageNode,
+    ReferenceLinkNode,
+    ReferenceImageNode,
 } from "./fmt_ast.wado";
 use { display_width } from "./unicode_width.wado";
 
@@ -168,7 +181,7 @@ fn print_code_block(cb: &CodeBlock, out: &mut String) {
 
 fn fence_string(code: &String) -> String {
     let run = longest_backtick_run(code);
-    let len = (if run > 2 { run } else { 2 }) + 1;
+    let len = if run > 2 { run } else { 2 } + 1;
     let mut s = String::new();
     for let _ of 0..<len {
         s.push('`');

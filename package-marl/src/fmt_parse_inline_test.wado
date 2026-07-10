@@ -228,7 +228,11 @@ test "parse_inline resolves a collapsed reference link, keeping the label's orig
 
 test "parse_inline resolves a shortcut reference link" {
     let mut refs = new_ref_table();
-    ref_table_insert(&mut refs, LinkReferenceDef { label: normalize_label(&"wado-lang/wado#1522"), url: "https://github.com/wado-lang/wado/issues/1522", title: "" });
+    ref_table_insert(&mut refs, LinkReferenceDef {
+        label: normalize_label(&"wado-lang/wado#1522"),
+        url: "https://github.com/wado-lang/wado/issues/1522",
+        title: "",
+    });
     let nodes = parse_inline(&"see [wado-lang/wado#1522] for details", &refs);
     assert nodes.get(1) matches { Some(Node::ShortcutLink(_)) };
 }
@@ -240,7 +244,11 @@ test "parse_inline resolves a shortcut reference link whose text is a code span"
     // `wado-bundled-icu/bdp-spike/README.md`'s
     // "[`BlobDataProvider`]: https://docs.rs/icu_provider_blob/".
     let mut refs = new_ref_table();
-    ref_table_insert(&mut refs, LinkReferenceDef { label: normalize_label(&"`BlobDataProvider`"), url: "https://docs.rs/icu_provider_blob/", title: "" });
+    ref_table_insert(&mut refs, LinkReferenceDef {
+        label: normalize_label(&"`BlobDataProvider`"),
+        url: "https://docs.rs/icu_provider_blob/",
+        title: "",
+    });
     let nodes = parse_inline(&"the [`BlobDataProvider`] type", &refs);
     if let Some(Node::ShortcutLink(link)) = nodes.get(1) {
         assert link.children.len() == 1;
