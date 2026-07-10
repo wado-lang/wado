@@ -823,7 +823,7 @@ fn union(mut a: Taint, b: Taint) -> Taint {
 /// Whether a value of `type_id` can carry another value's identity: an
 /// aggregate that shares GC storage when aliased, or a reference to one.
 /// Primitives (integers, floats, bools, bare enums, unit) cannot.
-fn carries_identity(type_id: TypeId, type_table: &TypeTable) -> bool {
+pub(super) fn carries_identity(type_id: TypeId, type_table: &TypeTable) -> bool {
     needs_value_copy(type_id, type_table)
         || matches!(
             type_table.get(type_id),

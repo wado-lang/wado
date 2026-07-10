@@ -166,7 +166,6 @@ fn generate_copy_function(
     );
 
     let mut extra_locals: Vec<TirLocal> = Vec::new();
-    let mut address_taken: IndexSet<u32> = IndexSet::default();
     let body = build_copy_body(
         type_id,
         &resolved,
@@ -175,7 +174,6 @@ fn generate_copy_function(
         type_table,
         span,
         &mut extra_locals,
-        &mut address_taken,
     );
 
     let param = TirParam {
@@ -213,7 +211,7 @@ fn generate_copy_function(
         span,
         local_count,
         locals,
-        address_taken_locals: address_taken,
+        address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
         is_dispatch_wrapper: false,
@@ -238,7 +236,6 @@ fn build_copy_body(
     type_table: &Rc<RefCell<TypeTable>>,
     span: Span,
     extra_locals: &mut Vec<TirLocal>,
-    address_taken: &mut IndexSet<u32>,
 ) -> TirBlock {
     // A bare `Array<T>` deep-copies via `array_clone::<T>(&v)`,
     // the same intrinsic `make_field_copy` emits for the `repr` field of
@@ -248,60 +245,57 @@ fn build_copy_body(
         let clone = build_array_clone(v_local.clone(), type_id, *elem_type, type_table, span);
         return single_return_block(clone, span);
     }
-    if let Some(cases) = variant_cases_concrete(resolved, project, type_table) {
-        let body =
-            build_variant_copy_body(type_id, &cases, v_local, type_table, span, extra_locals);
-        let _ = address_taken;
-        return body;
+    if let Some(cases) = variant_cases_concrete(resolved, type_table) {
+        return build_variant_copy_body(type_id, &cases, v_local, type_table, span, extra_locals);
     }
     let return_expr = build_copy_return_expr(type_id, resolved, v_local, project, type_table, span);
     if let Some(expr) = return_expr {
         return single_return_block(expr, span);
     }
-    let _ = (extra_locals, address_taken, type_table);
+    // References and resources intentionally share: identity.
     single_return_block(v_local.clone(), span)
 }
 
 /// Concrete `(case name, case index, payload type)` list for a variant type:
 /// a non-generic `variant` declaration as-is, a `GenericInstance` of a
 /// variant template with its `type_args` substituted into each payload.
-/// `None` when `resolved` is not a variant.
+/// `None` when `resolved` is not a variant. Reads the case templates
+/// `register_variant_cases` published on the type table — the same source
+/// `needs_value_copy` classifies from, so classification and synthesis
+/// cannot drift.
 fn variant_cases_concrete(
     resolved: &ResolvedType,
-    project: &FlatPackage,
     type_table: &Rc<RefCell<TypeTable>>,
 ) -> Option<Vec<(String, u32, TypeId)>> {
     match resolved {
         ResolvedType::Variant {
             name,
             module_source,
-        } => {
-            let decl = project.find_variant(module_source, name)?;
-            Some(
-                decl.cases
-                    .iter()
-                    .map(|c| (c.name.clone(), c.index, c.payload))
-                    .collect(),
-            )
-        }
+        } => type_table
+            .borrow()
+            .variant_template_cases(name, module_source)
+            .map(<[_]>::to_vec),
         ResolvedType::GenericInstance {
             name,
             module_source,
             type_args,
         } => {
-            let decl = project.find_variant(module_source, name)?;
+            let cases = type_table
+                .borrow()
+                .variant_template_cases(name, module_source)
+                .map(<[_]>::to_vec)?;
             let mut substitution = crate::hashmap::IndexMap::default();
             for (idx, ty) in type_args.iter().enumerate() {
                 substitution.insert(idx as u32, *ty);
             }
             Some(
-                decl.cases
-                    .iter()
-                    .map(|c| {
+                cases
+                    .into_iter()
+                    .map(|(case_name, index, payload)| {
                         let payload = type_table
                             .borrow_mut()
-                            .substitute_type_params(c.payload, &substitution);
-                        (c.name.clone(), c.index, payload)
+                            .substitute_type_params(payload, &substitution);
+                        (case_name, index, payload)
                     })
                     .collect(),
             )
@@ -314,7 +308,9 @@ fn variant_cases_concrete(
 /// value-typed payloads through their own `$value_copy$T` helpers. Recursive
 /// variants terminate because the reconstruction of a payload is a call to
 /// the payload type's helper, not an inline expansion — the helpers are
-/// mutually recursive functions.
+/// mutually recursive functions. A payload-free case has nothing to detach
+/// and its value is immutable, so its arm returns the input unchanged rather
+/// than allocating a fresh tag struct per copy.
 fn build_variant_copy_body(
     type_id: TypeId,
     cases: &[(String, u32, TypeId)],
@@ -326,57 +322,27 @@ fn build_variant_copy_body(
     let arms: Vec<TirMatchArm> = cases
         .iter()
         .map(|(case_name, case_index, payload_ty)| {
-            if *payload_ty == TypeTable::UNIT {
-                return TirMatchArm {
-                    pattern: TirPattern::Variant {
-                        enum_type: type_id,
-                        variant_name: case_name.clone(),
-                        bindings: vec![],
-                        payload_type: TypeTable::UNIT,
-                    },
-                    guard: None,
-                    body: TirExpr::new(
-                        TirExprKind::VariantConstruct {
-                            variant_type: type_id,
-                            case_index: *case_index,
-                            case_name: case_name.clone(),
-                            payload: None,
-                        },
-                        type_id,
-                        span,
-                    ),
-                    span,
-                };
-            }
-            // Local 0 is the `v` parameter; payload temps follow it.
-            let local_index = u32::try_from(extra_locals.len() + 1).expect("local index fits u32");
-            let local_name = format!("__vc_payload_{case_index}");
-            extra_locals.push(TirLocal {
-                name: local_name.clone(),
-                type_id: *payload_ty,
-                is_mut: false,
-            });
-            let payload_local = TirExpr::new(
-                TirExprKind::Local {
-                    index: local_index,
+            let (bindings, body) = if *payload_ty == TypeTable::UNIT {
+                (vec![], v_local.clone())
+            } else {
+                // Local 0 is the `v` parameter; payload temps follow it.
+                let local_index =
+                    u32::try_from(extra_locals.len() + 1).expect("local index fits u32");
+                let local_name = format!("__vc_payload_{case_index}");
+                extra_locals.push(TirLocal {
                     name: local_name.clone(),
-                },
-                *payload_ty,
-                span,
-            );
-            TirMatchArm {
-                pattern: TirPattern::Variant {
-                    enum_type: type_id,
-                    variant_name: case_name.clone(),
-                    bindings: vec![TirPattern::Binding {
-                        name: local_name,
-                        local_index,
-                        type_id: *payload_ty,
-                    }],
-                    payload_type: *payload_ty,
-                },
-                guard: None,
-                body: TirExpr::new(
+                    type_id: *payload_ty,
+                    is_mut: false,
+                });
+                let payload_local = TirExpr::new(
+                    TirExprKind::Local {
+                        index: local_index,
+                        name: local_name.clone(),
+                    },
+                    *payload_ty,
+                    span,
+                );
+                let construct = TirExpr::new(
                     TirExprKind::VariantConstruct {
                         variant_type: type_id,
                         case_index: *case_index,
@@ -390,7 +356,25 @@ fn build_variant_copy_body(
                     },
                     type_id,
                     span,
-                ),
+                );
+                (
+                    vec![TirPattern::Binding {
+                        name: local_name,
+                        local_index,
+                        type_id: *payload_ty,
+                    }],
+                    construct,
+                )
+            };
+            TirMatchArm {
+                pattern: TirPattern::Variant {
+                    enum_type: type_id,
+                    variant_name: case_name.clone(),
+                    bindings,
+                    payload_type: *payload_ty,
+                },
+                guard: None,
+                body,
                 span,
             }
         })
@@ -508,26 +492,6 @@ fn lookup_struct<'a>(
             .iter()
             .find(|s| s.name == mangled_name && &s.module_source == m),
         None => Some(first),
-    }
-}
-
-#[allow(dead_code)]
-fn generic_template_for<'a>(
-    resolved: &ResolvedType,
-    project: &'a FlatPackage,
-) -> Option<&'a TirStruct> {
-    if let ResolvedType::GenericInstance {
-        name,
-        module_source,
-        ..
-    } = resolved
-    {
-        project
-            .structs
-            .iter()
-            .find(|s| &s.name == name && &s.module_source == module_source)
-    } else {
-        None
     }
 }
 
@@ -684,58 +648,6 @@ fn build_tuple_copy(
                 name: field.name.clone(),
                 value: make_field_copy(v_local.clone(), &field, type_table, span),
                 field_index: idx as u32,
-            }
-        })
-        .collect();
-    TirExpr::new(
-        TirExprKind::StructLiteral {
-            struct_type: type_id,
-            struct_name: mangled_name.to_string(),
-            fields,
-        },
-        type_id,
-        span,
-    )
-}
-
-#[allow(dead_code)]
-fn build_struct_copy_with_substitution(
-    type_id: TypeId,
-    mangled_name: &str,
-    generic_struct: &TirStruct,
-    type_args: &[TypeId],
-    v_local: &TirExpr,
-    type_table: &Rc<RefCell<TypeTable>>,
-    span: Span,
-) -> TirExpr {
-    let mut substitution = crate::hashmap::IndexMap::default();
-    for (idx, ty) in type_args.iter().enumerate() {
-        substitution.insert(idx as u32, *ty);
-    }
-    let fields: Vec<TirStructField> = generic_struct
-        .fields
-        .iter()
-        .map(|field| {
-            let concrete_field_ty = type_table
-                .borrow_mut()
-                .substitute_type_params(field.type_id, &substitution);
-            let concrete_field = TirField {
-                name: field.name.clone(),
-                visibility: field.visibility,
-                type_id: concrete_field_ty,
-                index: field.index,
-                span: field.span,
-                is_hidden: field.is_hidden,
-                serde_rename: field.serde_rename.clone(),
-                serde_default: field.serde_default,
-                serde_positional: field.serde_positional,
-                default_expr: field.default_expr.clone(),
-            };
-            let value = make_field_copy(v_local.clone(), &concrete_field, type_table, span);
-            TirStructField {
-                name: field.name.clone(),
-                value,
-                field_index: field.index,
             }
         })
         .collect();

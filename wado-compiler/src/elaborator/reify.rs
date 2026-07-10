@@ -985,6 +985,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .ann_decl_type_params(variant_decl.id)
             .expect("resolve_variant_decl records the type params for every variant reify emits");
 
+        // Publish the case templates to the type table as soon as they exist,
+        // so `needs_value_copy` classifies this variant correctly in every
+        // later phase; `lower::plan::value_copy::plan` re-registers from the
+        // final `FlatPackage::variants` list, covering snapshot-seeded stdlib
+        // modules that skip this reify path.
+        self.tysys.type_table.borrow_mut().register_variant_cases(
+            variant_decl.name.clone(),
+            self.current_module_source.clone(),
+            cases
+                .iter()
+                .map(|c| (c.name.clone(), c.index, c.payload))
+                .collect(),
+        );
+
         TirVariantDecl {
             name: variant_decl.name.clone(),
             module_source: self.current_module_source.clone(),

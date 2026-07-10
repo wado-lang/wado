@@ -837,6 +837,14 @@ impl TypeTable {
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
     }
 
+    /// [`Self::get`] for ids that may have been pruned by DCE's `retain` —
+    /// a dead function's recorded type, for example. Returns `None` instead
+    /// of panicking on a punched-out id.
+    pub fn get_pruned(&self, id: TypeId) -> Option<&ResolvedType> {
+        let id = self.redirects.get(id).copied().unwrap_or(id);
+        self.types.get(id)
+    }
+
     /// True when `id` resolves to the never type `!`. An expression of this type
     /// diverges and never yields a value (`panic`, `unreachable`, …).
     pub fn is_never(&self, id: TypeId) -> bool {

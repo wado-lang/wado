@@ -1,0 +1,34 @@
+// value_copy_demote's list-wrapper recognizer matches any struct whose copy
+// helper clones a raw-array `repr` field — including user structs. The
+// element-leak gate must stay conservative for them: this one's elements
+// carry a copy-needing variant, so demoting its deep copy to a shallow
+// spine copy would alias the payloads.
+
+struct Mine {
+    repr: Array<Option<List<i32>>>,
+    used: i32,
+}
+
+fn make() -> Mine {
+    let one: List<i32> = [1];
+    let mut arr: Array<Option<List<i32>>> = builtin::array_new(1);
+    arr[0] = Option::Some(one);
+    return Mine { repr: arr, used: 1 };
+}
+
+test "user array-backed struct copy detaches variant payloads" {
+    let a = make();
+    let mut b = a;
+    if let Some(v) = &mut b.repr[0] {
+        v.push(2);
+    }
+    if let Some(v) = a.repr[0] {
+        assert v.len() == 1;
+    }
+    if let Some(v) = b.repr[0] {
+        assert v.len() == 2;
+    }
+}
+
+__DATA__
+{"test": {}}

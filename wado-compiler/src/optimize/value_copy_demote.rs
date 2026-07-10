@@ -77,18 +77,19 @@ pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) ->
 
     // Identify `$value_copy$T` helpers whose body is an `List<E>` wrapper
     // copy: `return StructLiteral { repr: array_clone(v.repr), used: ... }`.
-    // Helpers whose element type can leak a payload alias through a pattern
-    // binding are never demoted — see `element_may_leak_payload_alias`.
+    // Helpers whose deep copy transitively runs a variant deep-copy are never
+    // demoted — see `helpers_reaching_variant_copies`.
     let mut list_wrapper_copies: IndexSet<FuncKey> = IndexSet::default();
     {
         let type_table = project.type_table.borrow();
+        let variant_reaching = helpers_reaching_variant_copies(project, &descriptors, &type_table);
         for f in &project.functions {
             let f = f.borrow();
-            if let Some(copy_type) = f.value_copy_type()
+            if f.value_copy_type().is_some()
                 && let Some(body) = &f.body
                 && body_is_list_wrapper_copy(body, &descriptors)
                 && let Some(id) = f.id
-                && !list_element_may_leak_payload_alias(copy_type, project, &type_table)
+                && !variant_reaching.contains(&id)
             {
                 list_wrapper_copies.insert(id);
             }
@@ -263,88 +264,94 @@ fn body_is_list_wrapper_copy(body: &Body, descriptors: &[FunctionRef]) -> bool {
     false
 }
 
-/// Whether a shallow spine copy of a `List` of this wrapper type could be
-/// mutated through a shared element. A `match` payload binding aliases a
-/// variant's payload storage instead of copying it (`if let Some(v) = &mut
-/// xs[i]` reaches the element in place through a synthesized box), a flow the
-/// element-cleanliness analysis cannot see. Any element that transitively
-/// carries a copy-needing variant is therefore ineligible for demotion.
-fn list_element_may_leak_payload_alias(
-    copy_type: TypeId,
+/// Value-copy helpers whose deep copy transitively runs a variant deep-copy.
+/// A `match` payload binding aliases a variant's payload storage instead of
+/// copying it (`if let Some(v) = &mut xs[i]` reaches the element in place
+/// through a synthesized box), a flow the element-cleanliness analysis cannot
+/// see — so a wrapper whose deep helper reaches a variant copy must stay
+/// deep. Derived from the helper bodies themselves (direct `$value_copy$T`
+/// calls plus `array_clone` per-element helpers), so it tracks exactly what
+/// the deep copy does; no parallel type walk that could drift.
+fn helpers_reaching_variant_copies(
     project: &NirPackage,
+    descriptors: &[FunctionRef],
     type_table: &TypeTable,
-) -> bool {
-    let element = match type_table.get(copy_type) {
-        ResolvedType::GenericInstance { type_args, .. } => match type_args.first() {
-            Some(elem) => *elem,
-            None => return true,
-        },
-        // `String`'s wrapper copy has a `u8` element; other shapes that reach
-        // here without a type argument stay conservatively deep.
-        ResolvedType::Struct { .. } => return false,
-        _ => return true,
-    };
-    contains_copy_needing_variant(element, project, type_table, 0)
+) -> IndexSet<FuncKey> {
+    let value_copy_ids = project.value_copy_func_ids();
+    let mut helper_by_type: IndexMap<TypeId, FuncKey> = IndexMap::default();
+    let mut seeds: IndexSet<FuncKey> = IndexSet::default();
+    for f in &project.functions {
+        let f = f.borrow();
+        let (Some(copy_type), Some(id)) = (f.value_copy_type(), f.id) else {
+            continue;
+        };
+        helper_by_type.insert(copy_type, id);
+        if is_variant_type(copy_type, type_table) {
+            seeds.insert(id);
+        }
+    }
+    // caller helper → callee helpers, from the helper bodies.
+    let mut edges: IndexMap<FuncKey, IndexSet<FuncKey>> = IndexMap::default();
+    for f in &project.functions {
+        let f = f.borrow();
+        let (Some(_), Some(id), Some(body)) = (f.value_copy_type(), f.id, f.body.as_ref()) else {
+            continue;
+        };
+        let callees = edges.entry(id).or_default();
+        for e in reachable_exprs(body) {
+            if let ExprKind::Call { func_id, .. } = &body.exprs[e].kind {
+                if value_copy_ids.contains(func_id) {
+                    callees.insert(*func_id);
+                } else if is_array_clone(*func_id, descriptors)
+                    && let Some(elem) = array_clone_element_type(body, e)
+                    && let Some(elem_helper) = helper_by_type.get(&elem)
+                {
+                    callees.insert(*elem_helper);
+                }
+            }
+        }
+    }
+    // Reverse closure: a helper reaching a seed is itself leaky.
+    let mut leaky = seeds;
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for (caller, callees) in &edges {
+            if !leaky.contains(caller) && callees.iter().any(|c| leaky.contains(c)) {
+                leaky.insert(*caller);
+                changed = true;
+            }
+        }
+    }
+    leaky
 }
 
-fn contains_copy_needing_variant(
-    type_id: TypeId,
-    project: &NirPackage,
-    type_table: &TypeTable,
-    depth: usize,
-) -> bool {
-    if depth > 16 {
-        return true;
-    }
-    match type_table.get(type_id) {
-        ResolvedType::Variant { .. } => {
-            crate::lower::plan::value_copy::needs_value_copy(type_id, type_table)
-        }
-        ResolvedType::GenericInstance {
+/// Whether a value-copy helper's recorded type is a variant. Dead helpers can
+/// outlive their type's DCE pruning, so the pruned form is a (conservative)
+/// variant.
+fn is_variant_type(type_id: TypeId, type_table: &TypeTable) -> bool {
+    match type_table.get_pruned(type_id) {
+        Some(ResolvedType::Variant { .. }) => true,
+        Some(ResolvedType::GenericInstance {
             name,
             module_source,
-            type_args,
-        } => {
-            if type_table
-                .variant_template_cases(name, module_source)
-                .is_some()
-            {
-                return crate::lower::plan::value_copy::needs_value_copy(type_id, type_table);
-            }
-            if type_args
-                .iter()
-                .any(|arg| contains_copy_needing_variant(*arg, project, type_table, depth + 1))
-            {
-                return true;
-            }
-            struct_fields_contain_copy_needing_variant(type_id, project, type_table, depth)
-        }
-        ResolvedType::Struct { .. } => {
-            struct_fields_contain_copy_needing_variant(type_id, project, type_table, depth)
-        }
-        ResolvedType::BuiltinArray(elem) => {
-            contains_copy_needing_variant(*elem, project, type_table, depth + 1)
-        }
-        _ => false,
+            ..
+        }) => type_table
+            .variant_template_cases(name, module_source)
+            .is_some(),
+        Some(_) => false,
+        None => true,
     }
 }
 
-fn struct_fields_contain_copy_needing_variant(
-    type_id: TypeId,
-    project: &NirPackage,
-    type_table: &TypeTable,
-    depth: usize,
-) -> bool {
-    let mangled = type_table.mangle_type_name(type_id);
-    project
-        .structs
-        .iter()
-        .filter(|s| s.name == mangled)
-        .any(|s| {
-            s.fields
-                .iter()
-                .any(|f| contains_copy_needing_variant(f.type_id, project, type_table, depth + 1))
-        })
+/// The element type of a `builtin::array_clone::<T>` call, off its stamped
+/// monomorph info.
+fn array_clone_element_type(body: &Body, call: ExprId) -> Option<TypeId> {
+    if let ExprKind::Call { type_args, .. } = &body.exprs[call].kind {
+        type_args.first().copied()
+    } else {
+        None
+    }
 }
 
 /// Whether the call's stamped `func_id` resolves to `builtin::array_clone`.

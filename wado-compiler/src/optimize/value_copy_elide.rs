@@ -58,7 +58,7 @@ pub(super) struct ValueCopyElideRule<'a> {
     escape: &'a EscapeMap,
     type_table: &'a TypeTable,
     n_params: u32,
-    usage: IndexMap<u32, LocalUsage>,
+    usage: UsageInfo,
 }
 
 impl<'a> ValueCopyElideRule<'a> {
@@ -67,7 +67,7 @@ impl<'a> ValueCopyElideRule<'a> {
         escape: &'a EscapeMap,
         type_table: &'a TypeTable,
         n_params: u32,
-        usage: IndexMap<u32, LocalUsage>,
+        usage: UsageInfo,
     ) -> Self {
         Self {
             value_copy_ids,
@@ -79,6 +79,36 @@ impl<'a> ValueCopyElideRule<'a> {
     }
 }
 
+/// Per-function usage facts plus the alias relation they were closed over.
+///
+/// `locals` carries the flat profile with `has_field_mutation` already closed
+/// over the undirected alias relation: locals that may share storage (pattern
+/// bindings, projection temps, non-fresh call results) form components, and a
+/// field mutation observed on any member marks every member. `alias_rep` maps
+/// each local to its component representative so consumers can also ask
+/// "may these two locals share storage" (see `scan_call_args`).
+pub(super) struct UsageInfo {
+    locals: IndexMap<u32, LocalUsage>,
+    alias_rep: IndexMap<u32, u32>,
+}
+
+impl UsageInfo {
+    fn local(&self, index: u32) -> Option<&LocalUsage> {
+        self.locals.get(&index)
+    }
+
+    /// Component representative of `index`; a local with no alias edges is its
+    /// own representative.
+    fn rep(&self, index: u32) -> u32 {
+        self.alias_rep.get(&index).copied().unwrap_or(index)
+    }
+
+    /// Whether the two locals may share storage.
+    fn may_alias(&self, a: u32, b: u32) -> bool {
+        a == b || self.rep(a) == self.rep(b)
+    }
+}
+
 /// Build the per-function usage map a [`ValueCopyElideRule`] needs, from the
 /// pristine body before the engine session rewrites it.
 pub(super) fn build_usage(
@@ -86,7 +116,7 @@ pub(super) fn build_usage(
     type_table: &TypeTable,
     receiver_mut: &IndexMap<FuncId, bool>,
     escape: &EscapeMap,
-) -> IndexMap<u32, LocalUsage> {
+) -> UsageInfo {
     analyze_usage(body, type_table, receiver_mut, escape)
 }
 
@@ -108,10 +138,16 @@ pub(super) fn build_receiver_mut(
             continue;
         }
         let Some(id) = func.id else { continue };
+        // A replace-on-assign receiver (`&self` / `&mut self` on a variant,
+        // primitive, or fn value) is boxed by the boxing plan, so its param
+        // type is `Box<T>` rather than `&mut T` — and the box erases the
+        // mutability witness entirely. Treat any boxed receiver as mutating;
+        // under-marking here let a variant's `&mut self` method mutate the
+        // payload behind an elided copy.
         let mutates = func
             .params
             .first()
-            .is_some_and(|p| is_mut_ref_type(p.type_id, type_table));
+            .is_some_and(|p| is_mutable_witness_type(p.type_id, type_table));
         map.insert(id, mutates);
     }
     map
@@ -122,11 +158,10 @@ impl Rule for ValueCopyElideRule<'_> {
         if self.value_copy_ids.is_empty() {
             return false;
         }
-        let usage = &self.usage;
         let stmts = engine.body.blocks[block].stmts.clone();
         let mut changed = false;
         for stmt in stmts {
-            let mut targets = collect_strippable(engine.body, stmt, self.value_copy_ids, usage);
+            let mut targets = self.collect_strippable(engine.body, stmt);
             self.collect_call_arg_copies(engine.body, NodeRef::Stmt(stmt), &mut targets);
             self.collect_fresh_copies(engine.body, NodeRef::Stmt(stmt), &mut targets);
             for value in targets {
@@ -208,7 +243,7 @@ fn analyze_usage(
     type_table: &TypeTable,
     receiver_mut: &IndexMap<FuncId, bool>,
     escape: &EscapeMap,
-) -> IndexMap<u32, LocalUsage> {
+) -> UsageInfo {
     let mut usage: IndexMap<u32, LocalUsage> = IndexMap::default();
     let mut alias_edges: Vec<(u32, u32)> = Vec::new();
     let aliasing = AliasWalk {
@@ -228,8 +263,60 @@ fn analyze_usage(
         }
         body.for_each_child(node, |c| stack.push(c));
     }
-    propagate_alias_mutation(&alias_edges, &mut usage);
-    usage
+    let alias_rep = alias_components(&alias_edges);
+    close_alias_mutation(&alias_rep, &mut usage);
+    UsageInfo {
+        locals: usage,
+        alias_rep,
+    }
+}
+
+/// Union-find over the undirected alias relation: locals connected by an
+/// alias edge may share one object's storage. Returns each connected local's
+/// component representative (fully path-compressed).
+fn alias_components(edges: &[(u32, u32)]) -> IndexMap<u32, u32> {
+    let mut parent: IndexMap<u32, u32> = IndexMap::default();
+    fn find(parent: &mut IndexMap<u32, u32>, x: u32) -> u32 {
+        let p = *parent.entry(x).or_insert(x);
+        if p == x {
+            return x;
+        }
+        let root = find(parent, p);
+        parent.insert(x, root);
+        root
+    }
+    for &(a, b) in edges {
+        let ra = find(&mut parent, a);
+        let rb = find(&mut parent, b);
+        if ra != rb {
+            parent.insert(ra, rb);
+        }
+    }
+    let keys: Vec<u32> = parent.keys().copied().collect();
+    for k in keys {
+        find(&mut parent, k);
+    }
+    parent
+}
+
+/// Close `has_field_mutation` over the alias components: locals in one
+/// component may share storage, so a field mutation observed on any member is
+/// a mutation of every member's object. The closure must be symmetric — a
+/// sibling pattern binding (`match b { Some(t) => c = t }`) shares the payload
+/// with `b`, so a later mutation through `&mut b` reaches `t` too; the earlier
+/// alias→root-only propagation stripped `c`'s copy in exactly that shape.
+fn close_alias_mutation(alias_rep: &IndexMap<u32, u32>, usage: &mut IndexMap<u32, LocalUsage>) {
+    let mut mutated_reps: IndexSet<u32> = IndexSet::default();
+    for (local, rep) in alias_rep {
+        if usage.get(local).is_some_and(|u| u.has_field_mutation) {
+            mutated_reps.insert(*rep);
+        }
+    }
+    for (local, rep) in alias_rep {
+        if mutated_reps.contains(rep) {
+            usage.entry(*local).or_default().has_field_mutation = true;
+        }
+    }
 }
 
 /// Alias-edge collection over the pristine body. Shares the escape map so a
@@ -319,7 +406,18 @@ impl AliasWalk<'_> {
         let mut stack = vec![e];
         while let Some(e) = stack.pop() {
             match &body.exprs[e].kind {
-                ExprKind::Local { index, .. } => roots.push(*index),
+                // A local roots the value only when its type can carry
+                // identity — a scalar (an `i32` call argument, a loop
+                // counter) cannot alias the copied aggregate. Boxed
+                // replace-on-assign wrappers carry their payload's identity.
+                ExprKind::Local { index, .. } => {
+                    let ty = body.exprs[e].type_id;
+                    if super::escape::carries_identity(ty, self.type_table)
+                        || self.type_table.box_payload_of(ty).is_some()
+                    {
+                        roots.push(*index);
+                    }
+                }
                 ExprKind::FieldAccess { expr: inner, .. }
                 | ExprKind::VariantPayload { expr: inner, .. }
                 | ExprKind::Cast { expr: inner, .. }
@@ -368,6 +466,19 @@ impl AliasWalk<'_> {
                         }
                     }
                 }
+                ExprKind::Switch {
+                    arms,
+                    default: dflt,
+                    ..
+                } => {
+                    for arm in arms {
+                        self.push_block_tail_expr(*arm, &mut stack);
+                    }
+                    self.push_block_tail_expr(*dflt, &mut stack);
+                }
+                ExprKind::LabeledBlock { block, .. } => {
+                    self.push_block_value_exprs(*block, &mut stack);
+                }
                 ExprKind::Call { args, .. } => {
                     if !self.escape.rvalue_is_fresh(body, e, self.type_table) {
                         for arg in args {
@@ -408,6 +519,22 @@ impl AliasWalk<'_> {
         }
     }
 
+    /// Push every value a labeled block can yield: each `break … <value>`
+    /// anywhere inside it (any label — conservative) plus the tail expression.
+    fn push_block_value_exprs(&self, block: BlockId, stack: &mut Vec<ExprId>) {
+        let mut nodes = vec![NodeRef::Block(block)];
+        while let Some(n) = nodes.pop() {
+            if let NodeRef::Stmt(s) = n
+                && let StmtKind::Break { value: Some(v), .. } = &self.body.stmts[s].kind
+                && let Some(ve) = v.as_expr()
+            {
+                stack.push(ve);
+            }
+            self.body.for_each_child(n, |c| nodes.push(c));
+        }
+        self.push_block_tail_expr(block, stack);
+    }
+
     /// Collect an `alias local → scrutinee root` edge for every local a
     /// pattern binds. A binding captures (a projection of) the matched value,
     /// so it shares the root's storage unless a defensive copy intervenes —
@@ -443,26 +570,6 @@ impl AliasWalk<'_> {
     }
 }
 
-/// Close `has_field_mutation` over the alias graph: a field mutation observed
-/// on an alias local is a mutation of its root's object. Without this, a copy
-/// of the root would look strippable while the object is mutated through a
-/// pattern-lowering temp — aliasing the source (a value-semantics miscompile).
-fn propagate_alias_mutation(edges: &[(u32, u32)], usage: &mut IndexMap<u32, LocalUsage>) {
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for (alias, root) in edges {
-            if usage.get(alias).is_some_and(|u| u.has_field_mutation) {
-                let root_usage = usage.entry(*root).or_default();
-                if !root_usage.has_field_mutation {
-                    root_usage.has_field_mutation = true;
-                    changed = true;
-                }
-            }
-        }
-    }
-}
-
 /// Apply the usage-marking rules for a single expression node. No recursion:
 /// the caller's walk visits every node.
 fn classify_expr(
@@ -481,7 +588,7 @@ fn classify_expr(
                 usage.entry(*index).or_default().assign_count += 1;
             }
             ExprKind::FieldAccess { expr: inner, .. } => {
-                mark_root_field_mutated_operand(body, *inner, usage);
+                mark_root_field_mutated_operand(body, *inner, type_table, usage);
             }
             _ => {}
         },
@@ -490,15 +597,15 @@ fn classify_expr(
             expr: inner,
         } => {
             if let Some(e) = inner.as_expr() {
-                mark_root_field_mutated(body, e, usage);
+                mark_root_field_mutated(body, e, type_table, usage);
             }
         }
         ExprKind::Call { args, .. } => {
             for arg in args {
                 if let Some(ae) = arg.expr.as_expr()
-                    && (arg.is_mut || is_mut_ref_type(body.exprs[ae].type_id, type_table))
+                    && (arg.is_mut || is_mutable_witness_type(body.exprs[ae].type_id, type_table))
                 {
-                    mark_root_field_mutated(body, ae, usage);
+                    mark_root_field_mutated(body, ae, type_table, usage);
                 }
             }
         }
@@ -516,22 +623,22 @@ fn classify_expr(
             if receiver_mut.get(func_id).copied().unwrap_or(true)
                 && let Some(re) = receiver.as_expr()
             {
-                mark_root_field_mutated(body, re, usage);
+                mark_root_field_mutated(body, re, type_table, usage);
             }
             for arg in args {
                 if let Some(ae) = arg.expr.as_expr()
-                    && (arg.is_mut || is_mut_ref_type(body.exprs[ae].type_id, type_table))
+                    && (arg.is_mut || is_mutable_witness_type(body.exprs[ae].type_id, type_table))
                 {
-                    mark_root_field_mutated(body, ae, usage);
+                    mark_root_field_mutated(body, ae, type_table, usage);
                 }
             }
         }
         ExprKind::IndirectCall { args, .. } => {
             for &arg in args {
                 if let Some(ae) = arg.as_expr()
-                    && is_mut_ref_type(body.exprs[ae].type_id, type_table)
+                    && is_mutable_witness_type(body.exprs[ae].type_id, type_table)
                 {
-                    mark_root_field_mutated_operand(body, arg, usage);
+                    mark_root_field_mutated_operand(body, arg, type_table, usage);
                 }
             }
         }
@@ -539,14 +646,32 @@ fn classify_expr(
     }
 }
 
+/// Whether an argument of this type can carry a mutation into the caller's
+/// storage: a `&mut T`, or a `Box<T>` wrapper whose payload carries identity
+/// (a copyable variant, an aggregate). The boxing plan lowers both `&` and
+/// `&mut` to a replace-on-assign value into the same `Box<T>` shape, erasing
+/// the mutability witness — so such a boxed argument is conservatively
+/// treated as mutable. A box over an identity-less payload (`Box<i32>`
+/// formatter shims) shares nothing the callee could corrupt: interior
+/// mutation through it lands on the box cell, not on any caller object.
+fn is_mutable_witness_type(type_id: TypeId, type_table: &TypeTable) -> bool {
+    if is_mut_ref_type(type_id, type_table) {
+        return true;
+    }
+    type_table
+        .box_payload_of(type_id)
+        .is_some_and(|payload| super::escape::carries_identity(payload, type_table))
+}
+
 /// [`mark_root_field_mutated`] for an operand.
 fn mark_root_field_mutated_operand(
     body: &Body,
     op: Operand,
+    type_table: &TypeTable,
     usage: &mut IndexMap<u32, LocalUsage>,
 ) {
     if let Some(e) = op.as_expr() {
-        mark_root_field_mutated(body, e, usage);
+        mark_root_field_mutated(body, e, type_table, usage);
     }
 }
 
@@ -567,7 +692,12 @@ fn mark_root_field_mutated_operand(
 /// much rather than too little: `has_field_mutation` only ever *blocks*
 /// elision, so over-approximating it costs a missed optimization, never
 /// unsound aliasing.
-fn mark_root_field_mutated(body: &Body, expr: ExprId, usage: &mut IndexMap<u32, LocalUsage>) {
+fn mark_root_field_mutated(
+    body: &Body,
+    expr: ExprId,
+    type_table: &TypeTable,
+    usage: &mut IndexMap<u32, LocalUsage>,
+) {
     match &body.exprs[expr].kind {
         ExprKind::Local { index, .. } => {
             usage.entry(*index).or_default().has_field_mutation = true;
@@ -577,12 +707,50 @@ fn mark_root_field_mutated(body: &Body, expr: ExprId, usage: &mut IndexMap<u32, 
         | ExprKind::FieldAccess { expr: inner, .. }
         | ExprKind::VariantPayload { expr: inner, .. }
         | ExprKind::Index { expr: inner, .. } => {
-            mark_root_field_mutated_operand(body, *inner, usage);
+            mark_root_field_mutated_operand(body, *inner, type_table, usage);
         }
         ExprKind::MethodCall { receiver, .. } => {
-            mark_root_field_mutated_operand(body, *receiver, usage);
+            mark_root_field_mutated_operand(body, *receiver, type_table, usage);
+        }
+        // An aggregate literal in a mutation-witness position wraps its
+        // sources: the boxing plan passes a boxed receiver / argument as
+        // `Box { value: a }`, so the mutation lands on `a`'s object. Only
+        // identity-carrying element values can be so shared — a scalar
+        // element (`Box<i32> { value: result[0] }` formatter shims) is a
+        // by-value copy the callee cannot reach `result` through.
+        ExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                mark_identity_root_mutated(body, field.value, type_table, usage);
+            }
+        }
+        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+            for element in elements {
+                mark_identity_root_mutated(body, *element, type_table, usage);
+            }
+        }
+        ExprKind::VariantConstruct {
+            payload: Some(payload),
+            ..
+        } => {
+            mark_identity_root_mutated(body, *payload, type_table, usage);
         }
         _ => {}
+    }
+}
+
+/// [`mark_root_field_mutated`] for an aggregate-literal element, applied only
+/// when the element's type can carry the enclosing value's identity.
+fn mark_identity_root_mutated(
+    body: &Body,
+    op: Operand,
+    type_table: &TypeTable,
+    usage: &mut IndexMap<u32, LocalUsage>,
+) {
+    if let Some(e) = op.as_expr()
+        && (super::escape::carries_identity(body.exprs[e].type_id, type_table)
+            || type_table.box_payload_of(body.exprs[e].type_id).is_some())
+    {
+        mark_root_field_mutated(body, e, type_table, usage);
     }
 }
 
@@ -653,165 +821,139 @@ fn reads_through_deref(body: &Body, expr: ExprId) -> bool {
 /// mutation could make the alias observable). The alias a strip creates is
 /// unobservable only when this holds for both ends (the binding side here,
 /// the source side in [`copy_source_strippable`]).
-fn is_target_read_only(target_index: u32, usage: &IndexMap<u32, LocalUsage>) -> bool {
-    match usage.get(&target_index) {
+fn is_target_read_only(target_index: u32, usage: &UsageInfo) -> bool {
+    match usage.local(target_index) {
         Some(u) => !u.has_field_mutation,
         None => true,
     }
 }
 
-/// Whether `value` is a `$value_copy$T(arg)` call whose *source* side is safe to
-/// alias: the arg does not read through a reference deref (wado-lang/wado#1522),
-/// and its source root local is never mutated. The binding/consumer side is
-/// checked separately by the caller.
-fn copy_source_strippable(
-    body: &Body,
-    value: ExprId,
-    value_copy_ids: &IndexSet<FuncId>,
-    usage: &IndexMap<u32, LocalUsage>,
-) -> bool {
-    if !is_value_copy_call(body, value, value_copy_ids) {
-        return false;
+/// Whether `value` is a `$value_copy$T(arg)` call whose *source* side is safe
+/// to alias: the arg does not read through a reference deref
+/// (wado-lang/wado#1522), and every local whose storage the source may yield
+/// (its alias roots — the projection root, or each arm value / break value of
+/// an `if` / `match` / `switch` / labeled block) is never reassigned nor
+/// field-mutated. A source with no roots yields only fresh values, so the
+/// copy is a no-op. The binding/consumer side is checked separately by the
+/// caller.
+impl ValueCopyElideRule<'_> {
+    fn copy_source_strippable(&self, body: &Body, value: ExprId) -> bool {
+        if !is_value_copy_call(body, value, self.value_copy_ids) {
+            return false;
+        }
+        let ExprKind::Call { args, .. } = &body.exprs[value].kind else {
+            return false;
+        };
+        let Some(arg) = args.first() else {
+            return false;
+        };
+        let src = arg.expr.as_expr();
+        if src.is_some_and(|e| reads_through_deref(body, e)) {
+            return false;
+        }
+        let aliasing = AliasWalk {
+            body,
+            type_table: self.type_table,
+            escape: self.escape,
+        };
+        aliasing
+            .value_alias_roots(arg.expr)
+            .iter()
+            .all(|root| match self.usage.local(*root) {
+                Some(u) => !u.is_assigned() && !u.has_field_mutation,
+                None => true,
+            })
     }
-    let ExprKind::Call { args, .. } = &body.exprs[value].kind else {
-        return false;
-    };
-    let Some(arg) = args.first() else {
-        return false;
-    };
-    let src = arg.expr.as_expr();
-    if src.is_some_and(|e| reads_through_deref(body, e)) {
-        return false;
+
+    /// Check whether `value` is a `$value_copy$T(arg)` call whose wrapper can
+    /// be safely stripped given the binding target's local index and the
+    /// function-wide usage map.
+    fn elision_safe(&self, body: &Body, target_index: u32, value: ExprId) -> bool {
+        is_target_read_only(target_index, &self.usage) && self.copy_source_strippable(body, value)
     }
-    match src.and_then(|e| arg_source_root(body, e)) {
-        Some(root) => match usage.get(&root) {
-            Some(u) => !u.is_assigned() && !u.has_field_mutation,
-            None => true,
-        },
-        None => src.is_none_or(|e| !yields_subexpression(body, e)),
-    }
-}
 
-/// Whether `e` takes its value from one of several arms (`if` / `match`) that
-/// may be a live local, so a read-only binding of this rootless source must keep
-/// its copy rather than alias the arm. A `block` / labeled-block is excluded: a
-/// fresh single tail value is const-promoted and elided, so blocking it would
-/// only keep redundant copies of constants.
-fn yields_subexpression(body: &Body, e: ExprId) -> bool {
-    matches!(
-        body.exprs[e].kind,
-        ExprKind::If { .. } | ExprKind::Match { .. }
-    )
-}
-
-/// Check whether `value` is a `$value_copy$T(arg)` call whose wrapper can be
-/// safely stripped given the binding target's local index and the
-/// function-wide usage map.
-fn elision_safe(
-    body: &Body,
-    target_index: u32,
-    value: ExprId,
-    value_copy_ids: &IndexSet<FuncId>,
-    usage: &IndexMap<u32, LocalUsage>,
-) -> bool {
-    is_target_read_only(target_index, usage)
-        && copy_source_strippable(body, value, value_copy_ids, usage)
-}
-
-/// Collect `$value_copy$T(arg)` calls that sit directly in an aggregate literal
-/// (`Struct { f: copy(arg) }` / `[copy(arg), …]`), descending through nested
-/// literals. Each collected copy stores its source into a field/element of the
-/// literal; the caller only descends here when the literal's binding local is
-/// read-only, so those fields are never mutated and aliasing the (also read-only)
-/// source is unobservable. Non-literal, non-copy positions (e.g. a nested call)
-/// are not descended — a value crossing a call boundary can escape mutably.
-fn collect_literal_element_copies(
-    body: &Body,
-    expr: ExprId,
-    value_copy_ids: &IndexSet<FuncId>,
-    usage: &IndexMap<u32, LocalUsage>,
-    out: &mut Vec<ExprId>,
-) {
-    match &body.exprs[expr].kind {
-        ExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                if let Some(fe) = field.value.as_expr() {
-                    collect_literal_element_copies(body, fe, value_copy_ids, usage, out);
+    /// Collect `$value_copy$T(arg)` calls that sit directly in an aggregate
+    /// literal (`Struct { f: copy(arg) }` / `[copy(arg), …]`), descending
+    /// through nested literals. Each collected copy stores its source into a
+    /// field/element of the literal; the caller only descends here when the
+    /// literal's binding local is read-only, so those fields are never mutated
+    /// and aliasing the (also read-only) source is unobservable. Non-literal,
+    /// non-copy positions (e.g. a nested call) are not descended — a value
+    /// crossing a call boundary can escape mutably.
+    fn collect_literal_element_copies(&self, body: &Body, expr: ExprId, out: &mut Vec<ExprId>) {
+        match &body.exprs[expr].kind {
+            ExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    if let Some(fe) = field.value.as_expr() {
+                        self.collect_literal_element_copies(body, fe, out);
+                    }
                 }
             }
-        }
-        ExprKind::TupleLiteral { elements } => {
-            for element in elements {
-                if let Some(ee) = element.as_expr() {
-                    collect_literal_element_copies(body, ee, value_copy_ids, usage, out);
+            ExprKind::TupleLiteral { elements } => {
+                for element in elements {
+                    if let Some(ee) = element.as_expr() {
+                        self.collect_literal_element_copies(body, ee, out);
+                    }
                 }
             }
+            _ if self.copy_source_strippable(body, expr) => out.push(expr),
+            _ => {}
         }
-        _ if copy_source_strippable(body, expr, value_copy_ids, usage) => out.push(expr),
-        _ => {}
     }
-}
 
-/// Replace the `$value_copy$T(arg)` call at `value` with its single argument,
-/// in place. The call returns the argument's own type, so keeping `value`'s
-/// `type_id` / `span` matches the old `*value = arg` rewrite; the orphaned
-/// Return the `$value_copy$T(arg)` call expression of `stmt` when `stmt` binds /
-/// assigns a read-only local to such a call (and is thus safe to unwrap). The
-/// caller performs the unwrap via the engine edit API.
-fn collect_strippable(
-    body: &Body,
-    stmt: StmtId,
-    value_copy_ids: &IndexSet<FuncId>,
-    usage: &IndexMap<u32, LocalUsage>,
-) -> Vec<ExprId> {
-    match &body.stmts[stmt].kind {
-        // `let x = $value_copy$T(arg)` — a later whole-value reassignment of
-        // `x` does not itself defeat the alias (it only replaces which object
-        // `x` refers to; see `is_target_read_only`), so only field mutation
-        // and `skip_value_copy` block this.
-        StmtKind::Let {
-            local_index,
-            value,
-            skip_value_copy,
-            ..
-        } => {
-            let Some(ve) = value.as_expr() else {
-                return vec![];
-            };
-            if *skip_value_copy {
-                return vec![];
-            }
-            // `let x = $value_copy$T(arg)` — strip when both x and the source
-            // are read-only.
-            if elision_safe(body, *local_index, ve, value_copy_ids, usage) {
-                return vec![ve];
-            }
-            // `let c = Struct { f: $value_copy$T(arg), … }` — when the container
-            // `c` is never field-mutated its fields never change in place, so
-            // the copies stored into them may be elided (source-side check
-            // per copy).
-            if is_target_read_only(*local_index, usage) {
-                let mut out = Vec::new();
-                collect_literal_element_copies(body, ve, value_copy_ids, usage, &mut out);
-                return out;
-            }
-            vec![]
-        }
-        // `x = $value_copy$T(arg)` top-level — the Assign *is* the binding.
-        // Any number of other reassignments of `x` elsewhere are fine too
-        // (see `is_target_read_only`).
-        StmtKind::Expr(Operand::Expr(e)) => {
-            if let ExprKind::Assign { target, value } = &body.exprs[*e].kind
-                && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
-                && let Some(ve) = value.as_expr()
-                && elision_safe(body, *index, ve, value_copy_ids, usage)
-            {
-                vec![ve]
-            } else {
+    /// Return the `$value_copy$T(arg)` call expressions of `stmt` that bind /
+    /// assign a read-only local to such a call (and are thus safe to unwrap).
+    /// The caller performs the unwrap via the engine edit API.
+    fn collect_strippable(&self, body: &Body, stmt: StmtId) -> Vec<ExprId> {
+        match &body.stmts[stmt].kind {
+            // `let x = $value_copy$T(arg)` — a later whole-value reassignment
+            // of `x` does not itself defeat the alias (it only replaces which
+            // object `x` refers to; see `is_target_read_only`), so only field
+            // mutation and `skip_value_copy` block this.
+            StmtKind::Let {
+                local_index,
+                value,
+                skip_value_copy,
+                ..
+            } => {
+                let Some(ve) = value.as_expr() else {
+                    return vec![];
+                };
+                if *skip_value_copy {
+                    return vec![];
+                }
+                // `let x = $value_copy$T(arg)` — strip when both x and the
+                // source are read-only.
+                if self.elision_safe(body, *local_index, ve) {
+                    return vec![ve];
+                }
+                // `let c = Struct { f: $value_copy$T(arg), … }` — when the
+                // container `c` is never field-mutated its fields never change
+                // in place, so the copies stored into them may be elided
+                // (source-side check per copy).
+                if is_target_read_only(*local_index, &self.usage) {
+                    let mut out = Vec::new();
+                    self.collect_literal_element_copies(body, ve, &mut out);
+                    return out;
+                }
                 vec![]
             }
+            // `x = $value_copy$T(arg)` top-level — the Assign *is* the
+            // binding. Any number of other reassignments of `x` elsewhere are
+            // fine too (see `is_target_read_only`).
+            StmtKind::Expr(Operand::Expr(e)) => {
+                if let ExprKind::Assign { target, value } = &body.exprs[*e].kind
+                    && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
+                    && let Some(ve) = value.as_expr()
+                    && self.elision_safe(body, *index, ve)
+                {
+                    vec![ve]
+                } else {
+                    vec![]
+                }
+            }
+            _ => vec![],
         }
-        _ => vec![],
     }
 }
 
@@ -884,17 +1026,25 @@ impl ValueCopyElideRule<'_> {
         args: &[crate::nir_arena::ArenaCallArg],
         out: &mut Vec<ExprId>,
     ) {
-        // Source roots a sibling `&mut` argument may mutate while the call runs.
-        // A `mut` by-value parameter takes its own copy, so it cannot; only a
-        // `&mut` reference argument reaches the caller's value.
+        // Source roots a sibling mutable argument may mutate while the call
+        // runs. A `mut` by-value parameter takes its own copy, so it cannot;
+        // a `&mut` reference argument reaches the caller's value, and so does
+        // a boxed replace-on-assign argument (the boxing rewrite erases the
+        // `&mut` and may wrap the value in a `Box { value: root }` literal,
+        // so roots are collected through literals with the multi-root walk).
+        let aliasing = AliasWalk {
+            body,
+            type_table: self.type_table,
+            escape: self.escape,
+        };
         let mut_roots: Vec<u32> = args
             .iter()
             .filter_map(|a| {
                 let e = a.expr.as_expr()?;
-                is_mut_ref_type(body.exprs[e].type_id, self.type_table)
-                    .then(|| arg_source_root(body, e))
-                    .flatten()
+                is_mutable_witness_type(body.exprs[e].type_id, self.type_table)
+                    .then(|| aliasing.value_alias_roots(a.expr))
             })
+            .flatten()
             .collect();
         for (i, a) in args.iter().enumerate() {
             let Some(e) = a.expr.as_expr() else { continue };
@@ -920,13 +1070,16 @@ impl ValueCopyElideRule<'_> {
             // Move: `root` is a parameter used only here, so this copy is its
             // last use of a value the frame uniquely owns.
             let is_move = root.is_some_and(|r| {
-                r < self.n_params && self.usage.get(&r).map(|u| u.occurrences).unwrap_or(0) == 1
+                r < self.n_params && self.usage.local(r).map(|u| u.occurrences).unwrap_or(0) == 1
             });
             // Confined: a non-`mut`, non-escaping parameter, with no sibling
-            // `&mut` able to mutate the shared value. With a known root, guard
-            // that root; with an unknown root, any `&mut` sibling could alias it.
+            // mutable argument able to mutate the shared value during the
+            // call. Roots compare through the alias components — a pattern
+            // binding of `b`'s payload passed beside `&mut b` shares b's
+            // storage even though the local indices differ. With an unknown
+            // root, any mutable sibling could alias it.
             let no_mut_alias = match root {
-                Some(r) => !mut_roots.contains(&r),
+                Some(r) => !mut_roots.iter().any(|m| self.usage.may_alias(*m, r)),
                 None => mut_roots.is_empty(),
             };
             let is_confined =
