@@ -265,7 +265,14 @@ fn analyze_block(
     // builder chain — #1472 follow-up).
     let mut mut_indices: IndexMap<u32, Vec<usize>> = IndexMap::default();
     for (i, &stmt) in stmts.iter().enumerate() {
-        collect_mutated_locals(body, NodeRef::Stmt(stmt), &mut mut_indices, i);
+        collect_mutated_locals(
+            body,
+            NodeRef::Stmt(stmt),
+            &mut mut_indices,
+            i,
+            type_table,
+            fpt,
+        );
     }
     // Per-local earliest statement index whose subtree reads it. For a
     // single-use projection temp this is its unique use, bounding the interval
@@ -314,13 +321,19 @@ fn analyze_block(
 /// Record, into `mut_indices`, statement index `idx` for every local whose
 /// subtree `node` mutates. Called with ascending `idx`, so each local's list
 /// stays sorted; `.last()` is its final mutation and the list supports interval
-/// queries. Mirrors the mutation shapes recognised by [`subtree_mutates_local`],
-/// collecting all roots in one walk instead of testing a single local.
+/// queries, collecting all roots in one walk instead of testing a single local.
+///
+/// A method receiver is a mutation only when the callee actually writes
+/// through it (`method_mutates_receiver`, the same oracle `analyze_expr`'s
+/// `has_field_mutation` marking uses) — a read-only receiver (`x.len()`)
+/// must not end the scope-stability interval of `x`-sourced bindings.
 fn collect_mutated_locals(
     body: &Body,
     node: NodeRef,
     mut_indices: &mut IndexMap<u32, Vec<usize>>,
     idx: usize,
+    type_table: &TypeTable,
+    fpt: &FirstParamTypes,
 ) {
     let mut note = |l: u32| {
         let v = mut_indices.entry(l).or_default();
@@ -343,8 +356,15 @@ fn collect_mutated_locals(
                     note(l);
                 }
             }
-            ExprKind::MethodCall { receiver, .. } => {
-                if let Some(l) = receiver.as_expr().and_then(|e| place_root_local(body, e)) {
+            ExprKind::MethodCall {
+                receiver, func_id, ..
+            } => {
+                if let Some(re) = receiver.as_expr()
+                    && super::alias::method_mutates_receiver(
+                        body, re, *func_id, fpt, type_table, false, None,
+                    )
+                    && let Some(l) = place_root_local(body, re)
+                {
                     note(l);
                 }
             }
@@ -360,7 +380,9 @@ fn collect_mutated_locals(
             _ => {}
         }
     }
-    body.for_each_child(node, |c| collect_mutated_locals(body, c, mut_indices, idx));
+    body.for_each_child(node, |c| {
+        collect_mutated_locals(body, c, mut_indices, idx, type_table, fpt);
+    });
 }
 
 /// Record, into `first_read`, the earliest statement index `idx` whose subtree
