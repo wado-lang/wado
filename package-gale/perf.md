@@ -264,6 +264,14 @@ ATN literal is a measured problem.)
   ~1–2%, below the `syntax_highlight` benchmark's noise. A live example of the
   dev-vs-release standing rule — unlike the CST-column pre-size, which lands a
   clear ~6% because `sqlite_parse` is build-only. Left at `* 5`.
+- **`classify_keyword` lowercase micro-opt** — REGRESSION. Rewriting the emitted
+  keyword compares from `c.eq_ignore_ascii_case(&'x')` to `c.to_ascii_lowercase()
+  == 'x'` (dropping the constant-side lowercase) plus skipping the first-char
+  recheck already confirmed by the dispatch. The `char::to_ascii_lowercase` frame
+  vanished from the profile, but an interleaved same-machine A/B put the
+  wall-clock floor ~8% _worse_ (baseline ~8.6 ms, treatment never < 9.3 ms);
+  Cranelift codegens `eq_ignore_ascii_case` better. A profile-frame mirage — kept
+  `eq_ignore_ascii_case`.
 
 ## Correctness items with a performance flavor
 
