@@ -1,0 +1,219 @@
+use { print_document } from "./fmt_print.wado";
+use { parse_document } from "./fmt_parse_block.wado";
+use { Node } from "./fmt_ast.wado";
+
+fn roundtrip(source: &String) -> String {
+    return print_document(&parse_document(source));
+}
+
+test "print_document prints a paragraph with a trailing newline" {
+    assert roundtrip(&"hello world") == "hello world\n";
+}
+
+test "print_document preserves soft line breaks (text_wrap: Maintain)" {
+    assert roundtrip(&"line one\nline two") == "line one\nline two\n";
+}
+
+test "print_document separates paragraphs with exactly one blank line" {
+    assert roundtrip(&"first\n\n\n\nsecond") == "first\n\nsecond\n";
+}
+
+test "print_document prints ATX headings" {
+    assert roundtrip(&"# Title") == "# Title\n";
+    assert roundtrip(&"##   Spaced   ##") == "## Spaced\n";
+}
+
+test "print_document normalizes a thematic break to ---" {
+    assert roundtrip(&"first\n\n* * *\n\nsecond") == "first\n\n---\n\nsecond\n";
+}
+
+test "print_document normalizes single emphasis to underscores" {
+    assert roundtrip(&"a *word* b") == "a _word_ b\n";
+}
+
+test "print_document keeps the asterisk when it abuts an alphanumeric" {
+    assert roundtrip(&"*word*s") == "*word*s\n";
+}
+
+test "print_document keeps strong emphasis as asterisks" {
+    assert roundtrip(&"a __bold__ b") == "a **bold** b\n";
+}
+
+test "print_document nests emphasis inside strong for a triple run" {
+    // Strong stays asterisks (the default); the outer single emphasis
+    // normalizes to underscore since nothing alphanumeric follows its
+    // closing `*` (the GitHub-compatibility exception doesn't apply here).
+    assert roundtrip(&"***bold***") == "_**bold**_\n";
+}
+
+test "print_document normalizes a fenced code block to backticks" {
+    assert roundtrip(&"```wado\nlet x = 1;\n```") == "```wado\nlet x = 1;\n```\n";
+}
+
+test "print_document widens the fence when the body has its own backtick run" {
+    let source = "````\n```\ncode\n```\n````";
+    let printed = roundtrip(&source);
+    assert printed.starts_with("````\n");
+    assert printed.contains("```\ncode\n```");
+}
+
+test "print_document normalizes indented code to a 4-space-indented fenced-free block" {
+    assert roundtrip(&"    a\n    b") == "    a\n    b\n";
+}
+
+test "print_document normalizes bullet markers to a dash" {
+    assert roundtrip(&"* a\n* b\n* c") == "- a\n- b\n- c\n";
+}
+
+test "print_document renumbers an ordered list from its start index" {
+    assert roundtrip(&"3. a\n4. b") == "3. a\n4. b\n";
+}
+
+test "print_document keeps a blank line between loose list items" {
+    let printed = roundtrip(&"- a\n\n- b");
+    assert printed == "- a\n\n- b\n";
+}
+
+test "print_document indents a nested list under its parent item" {
+    let printed = roundtrip(&"- a\n  - nested\n- b");
+    assert printed == "- a\n  - nested\n- b\n";
+}
+
+test "print_document keeps a blank line between a nested list and a trailing paragraph in the same item" {
+    // Without the blank line, reparsing would lazily attach "trailing" to
+    // the nested list's last item instead of ending the list — found via a
+    // real corpus idempotency check against package-gale/antlr4-compatibility.md.
+    let source = "1. intro\n   - nested a\n   - nested b\n\n   trailing\n";
+    let printed = roundtrip(&source);
+    let second = roundtrip(&printed);
+    assert printed == second;
+    if let Node::Document(children) = parse_document(&printed) {
+        if let Some(Node::List(outer)) = children.get(0) {
+            if let Some(item) = outer.items.get(0) {
+                // intro paragraph, nested list, trailing paragraph — not
+                // merged into the nested list's last item.
+                assert item.children.len() == 3;
+                assert item.children.get(2) matches { Some(Node::Paragraph(_)) };
+            } else {
+                panic("expected an outer item");
+            }
+        } else {
+            panic("expected a List node");
+        }
+    } else {
+        panic("expected a Document node");
+    }
+}
+
+test "print_document keeps a blank line between a table and a trailing paragraph in the same item" {
+    // Same hazard as the nested-list case, but for a table: without the
+    // blank line, a following under-indented line can trigger a false
+    // indented-code detection on reparse — found via a real corpus
+    // idempotency check against docs/wep-2026-06-13-reference-representation.md.
+    let source = "- [ ] intro\n\n  | a | b |\n  | - | - |\n  | 1 | 2 |\n\n  trailing\n";
+    let printed = roundtrip(&source);
+    let second = roundtrip(&printed);
+    assert printed == second;
+    if let Node::Document(children) = parse_document(&printed) {
+        if let Some(Node::List(outer)) = children.get(0) {
+            if let Some(item) = outer.items.get(0) {
+                assert item.children.len() == 3;
+                assert item.children.get(2) matches { Some(Node::Paragraph(_)) };
+            } else {
+                panic("expected an outer item");
+            }
+        } else {
+            panic("expected a List node");
+        }
+    } else {
+        panic("expected a Document node");
+    }
+}
+
+test "print_document normalizes a task list checkbox" {
+    assert roundtrip(&"- [ ] todo\n- [x] done") == "- [ ] todo\n- [x] done\n";
+}
+
+test "print_document indents task list content to the bullet's own column" {
+    // Not past the checkbox: the checkbox is ordinary content, and indenting
+    // continuation lines to align under it would leave residual indentation
+    // on reparse relative to the parser's own (checkbox-agnostic)
+    // `content_col` — see `print_item`.
+    let printed = roundtrip(&"- [ ] a\n  continued");
+    assert printed == "- [ ] a\n  continued\n";
+}
+
+test "print_document reproduces a blockquote with a > marker per line" {
+    assert roundtrip(&"> a\n> b") == "> a\n> b\n";
+}
+
+test "print_document aligns a GFM table" {
+    // Column width is the max of the header, every cell, and the alignment
+    // marker's own minimum width (a colon needs at least one dash next to
+    // it) — here that minimum (2) is what actually sets both column widths,
+    // not the cell content (each cell is already width 1 or 2).
+    let source = "| a | bb |\n| :-- | --: |\n| 1 | 22 |";
+    let expected = "| a  | bb |\n| :- | -: |\n| 1  | 22 |\n";
+    assert roundtrip(&source) == expected;
+}
+
+test "print_document widens a table column to fit its widest cell" {
+    let source = "| name | n |\n| :-- | --: |\n| x | 22 |";
+    let expected = "| name |  n |\n| :--- | -: |\n| x    | 22 |\n";
+    assert roundtrip(&source) == expected;
+}
+
+test "print_document does not treat a pipe inside a table cell's code span as a column separator" {
+    // A bare, unescaped `|` inside a code span never needs escaping in GFM —
+    // found via a real corpus idempotency check against
+    // docs/operator-precedence-research.md's "`&` (8), `^` (9), `|` (10)"
+    // cell, which this mirrors.
+    let source = "| a | b |\n| - | - |\n| `x | y` | ok |";
+    let printed = roundtrip(&source);
+    assert printed.contains("`x | y`");
+    // still exactly 2 columns, not 3 (would be 3 if the `|` inside the code
+    // span were mistaken for a separator)
+    let second_printed = roundtrip(&printed);
+    assert printed == second_printed;
+}
+
+test "print_document reproduces YAML front matter verbatim" {
+    let source = "---\ntitle: x\n---\n\nBody.";
+    assert roundtrip(&source) == "---\ntitle: x\n---\n\nBody.\n";
+}
+
+test "print_document reproduces a raw HTML block verbatim" {
+    let source = "<div class=\"x\">\n  <span>y</span>\n</div>";
+    assert roundtrip(&source) == "<div class=\"x\">\n  <span>y</span>\n</div>\n";
+}
+
+test "print_document keeps a code span's backslash escape verbatim" {
+    assert roundtrip(&"1\\. not a list") == "1\\. not a list\n";
+}
+
+test "print_document reproduces an inline link with a title" {
+    let source = "[text](https://example.com \"Title\")";
+    assert roundtrip(&source) == "[text](https://example.com \"Title\")\n";
+}
+
+test "print_document reproduces a reference link and its definition" {
+    let source = "See [the WEP][cli-wep] for details.\n\n[cli-wep]: ./wep.md";
+    assert roundtrip(&source) == "See [the WEP][cli-wep] for details.\n\n[cli-wep]: ./wep.md\n";
+}
+
+test "print_document expands a collapsed reference link to full form" {
+    let source = "[RFC 8949][]\n\n[RFC 8949]: https://rfc-editor.org/8949";
+    assert roundtrip(&source) == "[RFC 8949][RFC 8949]\n\n[RFC 8949]: https://rfc-editor.org/8949\n";
+}
+
+test "print_document groups consecutive reference definitions without a blank line" {
+    let source = "text [a] and [b]\n\n[a]: ./a.md\n[b]: ./b.md";
+    assert roundtrip(&source) == "text [a] and [b]\n\n[a]: ./a.md\n[b]: ./b.md\n";
+}
+
+test "print_document is idempotent over its own output" {
+    let source = "# T\n\nSome *text* with a [link](https://example.com) and:\n\n- a\n- b\n  - nested\n\n| a | b |\n| - | - |\n| 1 | 2 |\n";
+    let once = roundtrip(&source);
+    let twice = print_document(&parse_document(&once));
+    assert once == twice;
+}

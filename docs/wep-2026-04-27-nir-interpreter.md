@@ -71,17 +71,17 @@ Status: done.
       "we haven't computed it yet". The lattice fixes this at the type
       level:
 
-      ```rust
-      pub enum Lattice {
-          Unevaluated,    // = SCCP Bottom: not yet computed / unreachable
-          Const(Value),   // provably this value
-          NonConst,       // = SCCP Top: non-constant (or modelled-out op)
-      }
-      ```
+  ```rust
+  pub enum Lattice {
+      Unevaluated,    // = SCCP Bottom: not yet computed / unreachable
+      Const(Value),   // provably this value
+      NonConst,       // = SCCP Top: non-constant (or modelled-out op)
+  }
+  ```
 
-      Names favour readability over the academic `Bottom` / `Top`.
-      Comments in `niri.rs` reference the SCCP lattice for readers
-      familiar with the abstract-interpretation literature.
+  Names favour readability over the academic `Bottom` / `Top`.
+  Comments in `niri.rs` reference the SCCP lattice for readers
+  familiar with the abstract-interpretation literature.
 
 - [x] `reduce_to_lattice(&NirExpr) -> Lattice` is the canonical engine
       API. Callers that only need "is this a literal?" use
@@ -130,14 +130,14 @@ since the lattice work for variant payloads is more involved than scalar
 - [x] `Lattice::join` (SCCP join over the chain
       `Unevaluated ⊑ Const(v) ⊑ NonConst`):
 
-      ```text
-      Unevaluated ⊔ x       = x        (infeasible-edge identity)
-      Const(v)    ⊔ Const(v) = Const(v) (arms agree)
-      Const(a)    ⊔ Const(b) = NonConst (a ≠ b)
-      NonConst    ⊔ _        = NonConst (Top is absorbing)
-      ```
+  ```text
+  Unevaluated ⊔ x       = x        (infeasible-edge identity)
+  Const(v)    ⊔ Const(v) = Const(v) (arms agree)
+  Const(a)    ⊔ Const(b) = NonConst (a ≠ b)
+  NonConst    ⊔ _        = NonConst (Top is absorbing)
+  ```
 
-      Commutative, associative, idempotent. Tests verify each property.
+  Commutative, associative, idempotent. Tests verify each property.
 
 - [x] Constant-condition expr-form `if` (`if true { A } else { B }` →
       `Block(A)`, `if false { A } else { B }` → `Block(B)`,

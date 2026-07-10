@@ -550,31 +550,38 @@ preserve source fidelity), so sharing would have compromised one of them.
 
 ### Phase 0: AST and parsing
 
-- [ ] `fmt_ast.wado` — node types
-- [ ] `fmt_parse_block.wado` — block scanner (front matter, headings,
+- [x] `fmt_ast.wado` — node types
+- [x] `fmt_parse_block.wado` — block scanner (front matter, headings,
       paragraphs, blockquotes, fenced + indented code, thematic breaks, lists,
       tables, raw HTML blocks, link reference definitions)
-- [ ] `fmt_parse_inline.wado` — tokenizer + delimiter-stack resolution
-- [ ] `fmt_links.wado` — inline/reference/collapsed/shortcut links and images,
+- [x] `fmt_parse_inline.wado` — tokenizer + delimiter-stack resolution
+- [x] `fmt_links.wado` — inline/reference/collapsed/shortcut links and images,
       autolinks, two-pass reference-definition table
 
 ### Phase 1: printing
 
-- [ ] `unicode_width.wado` — East Asian Width table + `char_display_width` /
+- [x] `unicode_width.wado` — East Asian Width table + `char_display_width` /
       `display_width`
-- [ ] `fmt_print.wado` — AST → canonical Markdown, mirroring `generate.rs`'s
+- [x] `fmt_print.wado` — AST → canonical Markdown, mirroring `generate.rs`'s
       node-adjacency spacing rules
-- [ ] `format.wado` — `pub fn format(source: &String) -> String`; re-exported
+- [x] `format.wado` — `pub fn format(source: &String) -> String`; re-exported
       from `lib.wado`
 
 ### Phase 2: standalone CLI
 
-- [ ] `package-marl/wado.toml`: add `[world]."wasi:cli/command" =
+- [x] `package-marl/wado.toml`: add `[world]."wasi:cli/command" =
       "src/main.wado"` alongside the existing `lib`
-- [ ] `package-marl/src/main.wado`: `core:args` CLI parsing (`--check`,
+- [x] `package-marl/src/main.wado`: `core:args` CLI parsing (`--check`,
       positional paths), recursive `wasi:filesystem` directory walk with
       `EXCLUDED_DIRS`, read/format/compare/write, `would reformat:` /
       `formatted:` messages, non-zero exit on `--check` with pending changes
-- [ ] Idempotency test over the corpus
-- [ ] Manual reference-diff pass against dprint's current output across the
-      real corpus, reviewing for reasonableness (not requiring a match)
+- [x] Idempotency test over the corpus — stable (0 files change on a second
+      pass) across all 202 tracked `.md` files in this repo
+- [x] Manual reference-diff pass against dprint's current output across the
+      real corpus, reviewing for reasonableness (not requiring a match) — the
+      differences found are all intentional and safe: bare autolinks gained
+      `<...>`, over-wide list-item continuation indent was normalized to the
+      marker's own content column, and ordered-list markers were renumbered
+      sequentially from `start` (all render identically to the original).
+      One pre-existing authoring bug was found and fixed in the process (see
+      below).

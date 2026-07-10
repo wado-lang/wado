@@ -1,0 +1,146 @@
+//! Marl Format AST.
+//!
+//! Package-local to `package-marl` (see `docs/wep-2026-07-10-marl-format.md`,
+//! "A separate AST and pipeline") — a Markdown document tree that preserves
+//! enough of the original source (delimiter choices, marker characters,
+//! table alignment) to round-trip through formatting, unlike `render`'s
+//! HTML-focused model in `marl.wado`/`inline.wado`.
+//!
+//! Container nodes (`MdList`, `MdTable`, …) hold their own concretely typed
+//! children rather than wrapping everything in `Node`, since printing
+//! dispatches on the concrete container type directly rather than walking a
+//! single homogeneous tree.
+
+internal enum FrontMatterKind {
+    Yaml,
+    Toml,
+}
+
+internal struct TaskMarker {
+    internal checked: bool,
+}
+
+internal struct Heading {
+    internal level: i32,
+    internal children: List<Node>,
+}
+
+internal struct Paragraph {
+    internal children: List<Node>,
+}
+
+internal struct CodeBlock {
+    internal fenced: bool,
+    internal tag: String,
+    internal code: String,
+}
+
+internal struct MdItem {
+    internal marker: Option<TaskMarker>,
+    internal children: List<Node>,
+    /// A blank line separated this item from the previous one in the source
+    /// — makes the enclosing list "loose" (paragraphs stay wrapped in `<p>`
+    /// conceptually; printed with a blank line between items) rather than
+    /// "tight".
+    internal loose: bool,
+}
+
+internal struct MdList {
+    internal ordered: bool,
+    /// Start number for ordered lists (ignored for unordered lists).
+    internal start: i32,
+    internal items: List<MdItem>,
+}
+
+internal enum ColumnAlign {
+    None,
+    Left,
+    Center,
+    Right,
+}
+
+internal struct MdTableRow {
+    internal cells: List<List<Node>>,
+}
+
+internal struct MdTable {
+    internal align: List<ColumnAlign>,
+    internal header: MdTableRow,
+    internal rows: List<MdTableRow>,
+}
+
+internal struct LinkNode {
+    internal children: List<Node>,
+    internal url: String,
+    internal title: String,
+}
+
+internal struct ImageNode {
+    internal alt: String,
+    internal url: String,
+    internal title: String,
+}
+
+internal struct LinkReferenceDef {
+    /// The label as written (raw, trimmed, not case-folded) — printing
+    /// echoes this verbatim. `fmt_links.wado`'s `RefTable` normalizes
+    /// internally for matching.
+    internal label: String,
+    internal url: String,
+    internal title: String,
+}
+
+internal struct EmphasisNode {
+    internal children: List<Node>,
+    /// The source used `*` immediately followed by an alphanumeric character
+    /// after the closing delimiter — GitHub does not treat `_..._` as
+    /// emphasis in that position, so the asterisk must be kept even though
+    /// `_..._` is otherwise preferred. See `docs/wep-2026-07-10-marl-format.md`,
+    /// "Printing".
+    internal keep_asterisk: bool,
+}
+
+internal struct ReferenceLinkNode {
+    internal children: List<Node>,
+    internal label: String,
+}
+
+internal struct ReferenceImageNode {
+    internal alt: String,
+    internal label: String,
+}
+
+internal struct FrontMatterNode {
+    internal kind: FrontMatterKind,
+    internal body: String,
+}
+
+internal variant Node {
+    // Blocks
+    Document(List<Node>),
+    FrontMatter(FrontMatterNode),
+    Heading(Heading),
+    Paragraph(Paragraph),
+    BlockQuote(List<Node>),
+    CodeBlock(CodeBlock),
+    List(MdList),
+    Table(MdTable),
+    ThematicBreak,
+    Html(String),
+    LinkReferenceDef(LinkReferenceDef),
+
+    // Inline
+    Text(String),
+    Emphasis(EmphasisNode),
+    Strong(List<Node>),
+    Strikethrough(List<Node>),
+    Code(String),
+    InlineLink(LinkNode),
+    ReferenceLink(ReferenceLinkNode),
+    ShortcutLink(ReferenceLinkNode),
+    AutoLink(String),
+    InlineImage(ImageNode),
+    ReferenceImage(ReferenceImageNode),
+    SoftBreak,
+    HardBreak,
+}

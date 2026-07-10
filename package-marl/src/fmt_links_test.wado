@@ -1,0 +1,48 @@
+use { normalize_label, new_ref_table, ref_table_insert, ref_table_get, parse_dest_and_title } from "./fmt_links.wado";
+use { LinkReferenceDef } from "./fmt_ast.wado";
+
+test "normalize_label trims, folds case, and collapses internal whitespace" {
+    assert normalize_label(&"  Some   Reference \t") == "some reference";
+    assert normalize_label(&"Foo") == "foo";
+    assert normalize_label(&"FOO") == "foo";
+}
+
+test "ref_table_insert and ref_table_get round-trip by normalized label" {
+    let mut table = new_ref_table();
+    ref_table_insert(&mut table, LinkReferenceDef { label: normalize_label(&"Some reference"), url: "https://dprint.dev", title: "" });
+    let found = ref_table_get(&table, &"  SOME   reference  ");
+    assert found matches { Some(_) };
+    if let Some(def) = found {
+        assert def.url == "https://dprint.dev";
+    }
+    assert ref_table_get(&table, &"missing") matches { None };
+}
+
+test "ref_table_insert keeps the first definition for a duplicate label" {
+    let mut table = new_ref_table();
+    ref_table_insert(&mut table, LinkReferenceDef { label: normalize_label(&"dup"), url: "https://first.example", title: "" });
+    ref_table_insert(&mut table, LinkReferenceDef { label: normalize_label(&"dup"), url: "https://second.example", title: "" });
+    if let Some(def) = ref_table_get(&table, &"dup") {
+        assert def.url == "https://first.example";
+    } else {
+        panic("expected a definition");
+    }
+}
+
+test "parse_dest_and_title splits a bare url" {
+    let [url, title] = parse_dest_and_title(&"https://example.com");
+    assert url == "https://example.com";
+    assert title == "";
+}
+
+test "parse_dest_and_title splits a url and a double-quoted title" {
+    let [url, title] = parse_dest_and_title(&"https://example.com \"Example Title\"");
+    assert url == "https://example.com";
+    assert title == "Example Title";
+}
+
+test "parse_dest_and_title handles an angle-bracketed url with spaces" {
+    let [url, title] = parse_dest_and_title(&"<https://example.com/a b> \"Title\"");
+    assert url == "https://example.com/a b";
+    assert title == "Title";
+}

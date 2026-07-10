@@ -3906,6 +3906,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         expected_type: Option<TypeId>,
         recorded_type: TypeId,
     ) -> TirExpr {
+        // When no expected type propagated from the use site (e.g. an
+        // unannotated `let x = if cond { Option::Some(v) } else { null };`),
+        // fall back to the if-expression's own already-unified `recorded_type`
+        // (computed by `Elaborator::resolve_if_expr`'s branch-agreement logic,
+        // expr.rs:1829-1858) so a bare `null` branch reifies with a concrete
+        // `Option<T>` type instead of `UNKNOWN` (`ann_expression_types`,
+        // reify.rs:317-329, discards UNKNOWN-containing recorded types and
+        // falls back to `expected_type` — which was `None` here without this).
+        // An inconsistency between the `If` node's own type and an untyped
+        // branch produces invalid Wasm at codegen (mismatched block/branch
+        // types). Mirrors the same fallback already used for labeled-block
+        // break values (reify.rs:2374-2381, `LabeledBlockTarget`).
+        let branch_expected = expected_type.or(Some(recorded_type));
         let cond_expr = match &if_expr.condition {
             ast::Condition::Expr(e) => e,
             ast::Condition::LetChain { elements, .. } => {
@@ -3919,14 +3932,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let else_block = if_expr
                     .else_block
                     .as_ref()
-                    .map(|b| self.reify_block_value(b, ctx, expected_type));
+                    .map(|b| self.reify_block_value(b, ctx, branch_expected));
                 ctx.enter_scope();
                 let stmts = self.reify_let_chain_stmts(
                     elements,
                     &if_expr.then_block,
                     else_block.as_ref(),
                     ctx,
-                    expected_type,
+                    branch_expected,
                     true,
                     if_expr.span,
                 );
@@ -3940,11 +3953,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         };
         let condition = self.reify_expr(cond_expr, ctx, Some(crate::tir::TypeTable::BOOL));
-        let then_branch = self.reify_block_value(&if_expr.then_block, ctx, expected_type);
+        let then_branch = self.reify_block_value(&if_expr.then_block, ctx, branch_expected);
         let else_branch = if_expr
             .else_block
             .as_ref()
-            .map(|b| self.reify_block_value(b, ctx, expected_type));
+            .map(|b| self.reify_block_value(b, ctx, branch_expected));
         TirExpr::new(
             crate::tir::TirExprKind::If {
                 condition: Box::new(condition),
@@ -6530,6 +6543,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let scrutinee = self.reify_expr(&match_expr.expr, ctx, None);
         let scrutinee_type = scrutinee.type_id;
 
+        // Same fallback as `reify_if_expr` (this file, above): without a
+        // top-down expected type, an arm body that is a bare `null` reifies
+        // as `UNKNOWN` unless it falls back to the match's own already-unified
+        // `recorded_type`, producing the same invalid-Wasm shape for
+        // `let x = match v { A => Option::Some(1), B => null };`.
+        let branch_expected = expected_type.or(Some(recorded_type));
+
         let arms: Vec<TirMatchArm> = match_expr
             .arms
             .iter()
@@ -6540,7 +6560,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .guard
                     .as_ref()
                     .map(|g| self.reify_expr(g, ctx, Some(TypeTable::BOOL)));
-                let body = self.reify_expr(&arm.body, ctx, expected_type);
+                let body = self.reify_expr(&arm.body, ctx, branch_expected);
                 ctx.exit_scope();
                 TirMatchArm {
                     pattern,

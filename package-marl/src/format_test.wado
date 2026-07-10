@@ -1,0 +1,12 @@
+use { format } from "./format.wado";
+
+test "format is idempotent" {
+    let source = "# Title\n\nSome *text* with a [link](https://example.com).\n\n- a\n- b\n";
+    let once = format(&source);
+    let twice = format(&once);
+    assert once == twice;
+}
+
+test "format normalizes a heading and collapses inline whitespace runs" {
+    assert format(&"#   Title   \n\nhello   world") == "# Title\n\nhello world\n";
+}
