@@ -58,6 +58,25 @@ test "list of options copies independently" {
     }
 }
 
+struct Item {
+    tag: Option<List<i32>>,
+}
+
+test "list of structs with variant fields copies independently" {
+    let one: List<i32> = [1];
+    let a: List<Item> = [Item { tag: Option::Some(one) }];
+    let mut b = a;
+    if let Some(v) = &mut b[0].tag {
+        v.push(2);
+    }
+    if let Some(v) = &a[0].tag {
+        assert v.len() == 1;
+    }
+    if let Some(v) = &b[0].tag {
+        assert v.len() == 2;
+    }
+}
+
 test "tuple with variant element copies independently" {
     let list: List<i32> = [1];
     let a = [Option::Some(list), 7];

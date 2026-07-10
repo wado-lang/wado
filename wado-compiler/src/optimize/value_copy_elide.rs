@@ -34,7 +34,9 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, NirUnaryOp};
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
+use crate::nir_arena::{
+    BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
+};
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -83,8 +85,9 @@ pub(super) fn build_usage(
     body: &Body,
     type_table: &TypeTable,
     receiver_mut: &IndexMap<FuncId, bool>,
+    escape: &EscapeMap,
 ) -> IndexMap<u32, LocalUsage> {
-    analyze_usage(body, type_table, receiver_mut)
+    analyze_usage(body, type_table, receiver_mut, escape)
 }
 
 /// Whether each function mutates its receiver, keyed by id: `true` when the
@@ -204,16 +207,260 @@ fn analyze_usage(
     body: &Body,
     type_table: &TypeTable,
     receiver_mut: &IndexMap<FuncId, bool>,
+    escape: &EscapeMap,
 ) -> IndexMap<u32, LocalUsage> {
     let mut usage: IndexMap<u32, LocalUsage> = IndexMap::default();
+    let mut alias_edges: Vec<(u32, u32)> = Vec::new();
+    let aliasing = AliasWalk {
+        body,
+        type_table,
+        escape,
+    };
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
-        if let NodeRef::Expr(id) = node {
-            classify_expr(body, id, type_table, receiver_mut, &mut usage);
+        match node {
+            NodeRef::Expr(id) => {
+                classify_expr(body, id, type_table, receiver_mut, &mut usage);
+                aliasing.collect_expr_alias_edge(id, &mut alias_edges);
+            }
+            NodeRef::Stmt(id) => aliasing.collect_stmt_alias_edge(id, &mut alias_edges),
+            NodeRef::Block(_) | NodeRef::Pat(_) => {}
         }
         body.for_each_child(node, |c| stack.push(c));
     }
+    propagate_alias_mutation(&alias_edges, &mut usage);
     usage
+}
+
+/// Alias-edge collection over the pristine body. Shares the escape map so a
+/// call whose result may alias its inputs (an accessor such as
+/// `index_value(&self, i)`) contributes edges from its receiver / arguments.
+struct AliasWalk<'a> {
+    body: &'a Body,
+    type_table: &'a TypeTable,
+    escape: &'a EscapeMap,
+}
+
+impl AliasWalk<'_> {
+    /// Record `alias local → root local` for a `let x = <projection of r>;`.
+    /// Pattern lowering binds a match scrutinee and its payload through chains
+    /// of such temps (`__match = b; __scrut = __match.value; v =
+    /// as_non_null(__scrut)`), so a mutation through the last temp is a
+    /// mutation of the root's object — [`propagate_alias_mutation`] carries
+    /// `has_field_mutation` back to the root.
+    fn collect_stmt_alias_edge(&self, stmt: StmtId, edges: &mut Vec<(u32, u32)>) {
+        match &self.body.stmts[stmt].kind {
+            StmtKind::Let {
+                local_index, value, ..
+            } => {
+                for root in self.value_alias_roots(*value) {
+                    if root != *local_index {
+                        edges.push((*local_index, root));
+                    }
+                }
+            }
+            StmtKind::LetDestructure { pattern, value, .. } => {
+                for root in self.value_alias_roots(*value) {
+                    self.collect_pattern_binding_edges(*pattern, root, edges);
+                }
+            }
+            StmtKind::Expr(_)
+            | StmtKind::Return { .. }
+            | StmtKind::Break { .. }
+            | StmtKind::Continue
+            | StmtKind::If { .. }
+            | StmtKind::Loop { .. }
+            | StmtKind::LabeledBlock { .. } => {}
+        }
+    }
+
+    /// Same as [`Self::collect_stmt_alias_edge`] for the `x = <projection of
+    /// r>` form — pattern lowering pre-declares its temps and assigns them —
+    /// and for `match` arms, whose pattern bindings alias the scrutinee's
+    /// payload storage (`match b.value { Some(v) => v.push(4) }` mutates `b`'s
+    /// object).
+    fn collect_expr_alias_edge(&self, id: ExprId, edges: &mut Vec<(u32, u32)>) {
+        match &self.body.exprs[id].kind {
+            ExprKind::Assign { target, value } => {
+                if let ExprKind::Local { index, .. } = &self.body.exprs[*target].kind {
+                    for root in self.value_alias_roots(*value) {
+                        if root != *index {
+                            edges.push((*index, root));
+                        }
+                    }
+                }
+            }
+            ExprKind::Match { expr, arms } => {
+                for root in self.value_alias_roots(*expr) {
+                    for arm in arms {
+                        self.collect_pattern_binding_edges(arm.pattern, root, edges);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Every local whose storage the value of a binding may share: the
+    /// projection roots of the value itself, plus — unlike
+    /// [`arg_source_root`] — the roots of every field / element / payload
+    /// stored into an aggregate literal, of every `if` / `match` arm value,
+    /// and of the receiver / arguments of a call whose result is not provably
+    /// fresh (an accessor returns a projection of its receiver). The `&mut
+    /// <place>` carve-out wraps a place projection in a `Box { value: b.v }`
+    /// literal, so a chain-of-custody walk that stops at the literal would
+    /// lose the `b` alias.
+    fn value_alias_roots(&self, value: Operand) -> Vec<u32> {
+        let body = self.body;
+        let mut roots = Vec::new();
+        let Some(e) = value.as_expr() else {
+            return roots;
+        };
+        let mut stack = vec![e];
+        while let Some(e) = stack.pop() {
+            match &body.exprs[e].kind {
+                ExprKind::Local { index, .. } => roots.push(*index),
+                ExprKind::FieldAccess { expr: inner, .. }
+                | ExprKind::VariantPayload { expr: inner, .. }
+                | ExprKind::Cast { expr: inner, .. }
+                | ExprKind::Unary { expr: inner, .. }
+                | ExprKind::Index { expr: inner, .. } => {
+                    if let Some(ie) = inner.as_expr() {
+                        stack.push(ie);
+                    }
+                }
+                ExprKind::StructLiteral { fields, .. } => {
+                    for field in fields {
+                        if let Some(fe) = field.value.as_expr() {
+                            stack.push(fe);
+                        }
+                    }
+                }
+                ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+                    for element in elements {
+                        if let Some(ee) = element.as_expr() {
+                            stack.push(ee);
+                        }
+                    }
+                }
+                ExprKind::VariantConstruct {
+                    payload: Some(payload),
+                    ..
+                } => {
+                    if let Some(pe) = payload.as_expr() {
+                        stack.push(pe);
+                    }
+                }
+                ExprKind::If {
+                    then_branch,
+                    else_branch,
+                    ..
+                } => {
+                    self.push_block_tail_expr(*then_branch, &mut stack);
+                    if let Some(eb) = else_branch {
+                        self.push_block_tail_expr(*eb, &mut stack);
+                    }
+                }
+                ExprKind::Match { arms, .. } => {
+                    for arm in arms {
+                        if let Some(ae) = arm.body.as_expr() {
+                            stack.push(ae);
+                        }
+                    }
+                }
+                ExprKind::Call { args, .. } => {
+                    if !self.escape.rvalue_is_fresh(body, e, self.type_table) {
+                        for arg in args {
+                            if let Some(ae) = arg.expr.as_expr() {
+                                stack.push(ae);
+                            }
+                        }
+                    }
+                }
+                ExprKind::MethodCall { receiver, args, .. } => {
+                    if !self.escape.rvalue_is_fresh(body, e, self.type_table) {
+                        if let Some(re) = receiver.as_expr() {
+                            stack.push(re);
+                        }
+                        for arg in args {
+                            if let Some(ae) = arg.expr.as_expr() {
+                                stack.push(ae);
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        roots
+    }
+
+    /// Push the tail expression of a block (its value position) for the alias
+    /// walk. A `$value_copy` call in tail position is fresh per
+    /// [`EscapeMap::rvalue_is_fresh`], so it roots nothing, matching the
+    /// treatment of copies everywhere else.
+    fn push_block_tail_expr(&self, block: BlockId, stack: &mut Vec<ExprId>) {
+        if let Some(last) = self.body.blocks[block].stmts.last()
+            && let StmtKind::Expr(op) = &self.body.stmts[*last].kind
+            && let Some(e) = op.as_expr()
+        {
+            stack.push(e);
+        }
+    }
+
+    /// Collect an `alias local → scrutinee root` edge for every local a
+    /// pattern binds. A binding captures (a projection of) the matched value,
+    /// so it shares the root's storage unless a defensive copy intervenes —
+    /// which this analysis must not assume.
+    fn collect_pattern_binding_edges(&self, pat: PatId, root: u32, edges: &mut Vec<(u32, u32)>) {
+        match &self.body.pats[pat].kind {
+            PatKind::Binding { local_index, .. } => {
+                if *local_index != root {
+                    edges.push((*local_index, root));
+                }
+            }
+            PatKind::Tuple(subs, _) | PatKind::Or(subs) => {
+                for sub in subs {
+                    self.collect_pattern_binding_edges(*sub, root, edges);
+                }
+            }
+            PatKind::Variant { bindings, .. } => {
+                for sub in bindings {
+                    self.collect_pattern_binding_edges(*sub, root, edges);
+                }
+            }
+            PatKind::Struct { fields, .. } => {
+                for field in fields {
+                    self.collect_pattern_binding_edges(field.pattern, root, edges);
+                }
+            }
+            PatKind::Wildcard
+            | PatKind::Literal(_)
+            | PatKind::Enum { .. }
+            | PatKind::ConstantValue { .. }
+            | PatKind::Range { .. } => {}
+        }
+    }
+}
+
+/// Close `has_field_mutation` over the alias graph: a field mutation observed
+/// on an alias local is a mutation of its root's object. Without this, a copy
+/// of the root would look strippable while the object is mutated through a
+/// pattern-lowering temp — aliasing the source (a value-semantics miscompile).
+fn propagate_alias_mutation(edges: &[(u32, u32)], usage: &mut IndexMap<u32, LocalUsage>) {
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for (alias, root) in edges {
+            if usage.get(alias).is_some_and(|u| u.has_field_mutation) {
+                let root_usage = usage.entry(*root).or_default();
+                if !root_usage.has_field_mutation {
+                    root_usage.has_field_mutation = true;
+                    changed = true;
+                }
+            }
+        }
+    }
 }
 
 /// Apply the usage-marking rules for a single expression node. No recursion:

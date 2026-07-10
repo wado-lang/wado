@@ -120,7 +120,8 @@ pub(super) fn run_peephole(
                 func.body
                     .as_ref()
                     .zip(receiver_mut.as_ref())
-                    .map(|(b, rm)| build_usage(b, &type_table, rm))
+                    .zip(escape_map.as_ref())
+                    .map(|((b, rm), escape)| build_usage(b, &type_table, rm, escape))
             })
             .flatten();
         let n_params = func.params.len() as u32;
