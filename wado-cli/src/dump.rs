@@ -385,7 +385,26 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
-    let host = FilesystemCompilerHost::new(base_path);
+    let host = FilesystemCompilerHost::new(base_path.clone());
+
+    let manifest_pair = crate::compile::load_nearest_manifest(path);
+    let host = crate::compile::attach_manifest_and_component_deps(
+        host,
+        manifest_pair.as_ref(),
+        &base_path,
+        &source,
+        false,
+    )
+    .await
+    .map_err(CliExit::error)?;
+
+    // Run any Kiln generators the entry declares (`use x from "<schema>" with
+    // { generator: ... }`), so the loader below redirects to their generated
+    // output instead of falling through to the raw (non-Wado) schema file.
+    let invocations = crate::compile::maybe_run_pipeline(path, &host, false, manifest_pair)
+        .await
+        .map_err(|e| CliExit::error(format!("wado dump: {e}")))?
+        .invocations;
 
     let target_world = opts.target_world.clone();
 
@@ -402,6 +421,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         &opts.codegen_flags,
         &opts.param_overrides,
         opts.param_policy,
+        invocations,
     )
     .await
     .map_err(|_bail| CliExit::silent_failure(1))?;

@@ -1932,19 +1932,26 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_comparison_chain(&mut self, chain: &ComparisonChainExpr) {
-        // `x as T < y` would re-parse as `x as T<y>` (generic), so cast scrutinees
-        // require parens when the first comparison is `<`.
-        let first_needs_parens = matches!(&chain.first, Expr::Cast(_))
-            && chain
+        // An operand whose unparse ends in a bare `as T` cast, immediately
+        // followed by `<`, re-parses as `T<...>` generic args (`x as T < y` →
+        // `x as T<y>`). Parenthesize any such operand. This covers a bare cast
+        // and a cast reached through the right spine of a higher-precedence
+        // operator (`a - b as T < c`), and every operand in a chain that is
+        // followed by `<` (`a < b as T < c`).
+        let next_is_lt = |i: usize| {
+            chain
                 .comparisons
-                .first()
-                .is_some_and(|c| c.op == BinaryOp::Lt);
-        self.with_parens_if(first_needs_parens, |s| s.unparse_expr(&chain.first));
-        for cmp in &chain.comparisons {
+                .get(i)
+                .is_some_and(|c| c.op == BinaryOp::Lt)
+        };
+        let wrap_first = next_is_lt(0) && ends_in_trailing_cast(&chain.first);
+        self.with_parens_if(wrap_first, |s| s.unparse_expr(&chain.first));
+        for (i, cmp) in chain.comparisons.iter().enumerate() {
             self.output.push(' ');
             self.output.push_str(binary_op_str(cmp.op));
             self.output.push(' ');
-            self.unparse_expr(&cmp.right);
+            let wrap = next_is_lt(i + 1) && ends_in_trailing_cast(&cmp.right);
+            self.with_parens_if(wrap, |s| s.unparse_expr(&cmp.right));
         }
     }
 
@@ -2961,7 +2968,28 @@ fn collect_logical_chain_expr<'a>(expr: &'a Expr, op: BinaryOp, parts: &mut Vec<
     }
 }
 
+/// Whether `expr` unparses to a form whose final surface token is a bare `as
+/// T` cast — which, immediately left of `<`, re-parses as `T<...>` generic
+/// args. Follows the right spine only where the unparser renders the operand
+/// without its own wrapping parens; a wrapped operand ends in `)` and is
+/// unambiguous. `unparse_unary` always parenthesizes a `Cast` / `Binary`
+/// operand, so a unary can never expose a trailing cast.
+fn ends_in_trailing_cast(expr: &Expr) -> bool {
+    match expr {
+        Expr::Cast(_) => true,
+        Expr::Binary(b) => !needs_parens(&b.right, b.op, false) && ends_in_trailing_cast(&b.right),
+        _ => false,
+    }
+}
+
 fn needs_parens(expr: &Expr, parent_op: BinaryOp, is_left: bool) -> bool {
+    // A left operand of `<` whose unparse ends in a bare `as T` cast re-parses
+    // the `<` as generic args (`x as T < y` → `x as T<y>`, and likewise
+    // `a - b as T < c`), so it must be parenthesized. Covers a bare cast and a
+    // cast reached through a higher-precedence operator's right spine.
+    if is_left && parent_op == BinaryOp::Lt && ends_in_trailing_cast(expr) {
+        return true;
+    }
     match expr {
         Expr::Binary(inner) => {
             let inner_prec = binary_op_precedence(inner.op);
@@ -2994,9 +3022,8 @@ fn needs_parens(expr: &Expr, parent_op: BinaryOp, is_left: bool) -> bool {
         // Range expressions have lower precedence than all binary operators,
         // so they always need parentheses when nested inside a binary expression.
         Expr::Range(_) => true,
-        // `x as T < y` is re-parsed as `x as T<y>` (generic type), so the cast
-        // must be parenthesized when it appears as the left operand of `<`.
-        Expr::Cast(_) if is_left && parent_op == BinaryOp::Lt => true,
+        // The `is_left && parent_op == Lt` cast guard is handled up front (see
+        // `ends_in_trailing_cast`), covering both a bare cast and a nested one.
         _ => false,
     }
 }

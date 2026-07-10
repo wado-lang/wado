@@ -912,19 +912,11 @@ fn "core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>^
 }
 
 fn "iterator_trait_map.wado/__Closure_0::__call"(self, c) {
-    return c | ((if c >=u 65 -> i32 {
-        c <=u 90;
-    } else {
-        0;
-    }) * 32);
+    return c | (((c - 65) <u 26) * 32);
 }
 
 fn "iterator_trait_map.wado/__Closure_1::__call"(self, c) {
-    return c ^ ((if c >=u 97 -> i32 {
-        c <=u 122;
-    } else {
-        0;
-    }) * 32);
+    return c ^ (((c - 97) <u 26) * 32);
 }
 
 fn "closure/iterator_trait_map.wado/__closure_wrapper_0"(__env, __p0) {

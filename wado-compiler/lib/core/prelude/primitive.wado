@@ -356,12 +356,15 @@ impl char {
 
     /// Returns true if the character is an ASCII lowercase letter: a-z.
     pub fn is_ascii_lowercase(&self) -> bool {
-        return *self >= 'a' && *self <= 'z';
+        // Branchless: `c - 'a'` wraps for `c < 'a'`, so a single unsigned
+        // compare covers both bounds — no short-circuit `&&` control-flow
+        // diamond (fewer Wasm instructions in `to_ascii_*` and their callers).
+        return (*self as u32 - 'a' as u32) < 26;
     }
 
     /// Returns true if the character is an ASCII uppercase letter: A-Z.
     pub fn is_ascii_uppercase(&self) -> bool {
-        return *self >= 'A' && *self <= 'Z';
+        return (*self as u32 - 'A' as u32) < 26;
     }
 
     /// Converts an ASCII uppercase letter to lowercase. Non-ASCII and
