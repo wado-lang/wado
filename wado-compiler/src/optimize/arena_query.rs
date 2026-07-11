@@ -44,9 +44,13 @@ pub(super) fn single_payload_binding(body: &Body, bindings: &[PatId]) -> Option<
 }
 
 /// If `expr` is a place rooted at a local — `x`, `x.f`, `x[i]`, `*x`, and any
-/// chain thereof — return that root local index; otherwise `None`. Used by
-/// passes that need the local a place projects from (parameter SROA) or that
-/// detect mutation of a local through any projection (copy propagation).
+/// chain thereof — return that root local index; otherwise `None`.
+///
+/// Deliberately narrower than [`storage_root`]: stopping at `&x` lets
+/// `copy_prop`'s mutation collector dispatch on the wrapper (a `&T` receiver is
+/// not written through, so it is correctly not marked; `&mut x` is caught by
+/// its own arm). Widening through references would over-mark and cost
+/// propagations.
 pub(super) fn place_root_local(body: &Body, expr: ExprId) -> Option<u32> {
     match &body.exprs[expr].kind {
         ExprKind::Local { index, .. } => Some(*index),
@@ -103,21 +107,28 @@ pub(super) fn place_overlaps(a: &Place, b: &Place) -> bool {
     is_place_prefix(a, b) || is_place_prefix(b, a)
 }
 
-/// The root local of an *escape* expression, looking through every projection
-/// plus `&`/`&mut`/`Cast`: `&mut a.b.f`, `(a.b as T)`, and `a.b[i]` all root at
-/// `a`. Distinct from [`place_root_local`], which looks through `Deref` only (a
-/// true place walk) — here `&v` is "about" `v`, so reference and cast wrappers
-/// are transparent. Used by the mutable-escape analyses (`alias`, `copy_prop`).
-pub(super) fn projection_root_local(body: &Body, expr: ExprId) -> Option<u32> {
+/// The local whose interior storage `expr` reaches, seeing through the
+/// projections that share it: field access, indexing, variant payload, a
+/// transparent cast, and `&`/`&mut`/`*`. Arithmetic unaries produce fresh
+/// scalars and do not descend. The root-only storage query for the escape /
+/// aliasing / mutation-witness analyses; distinct from [`place_root_local`]
+/// (narrower, paired with the caller's own wrapper dispatch) and the
+/// path-sensitive [`place_path`].
+///
+/// `None` does *not* mean "fresh": `container.index_value(i)` also returns
+/// `None` yet aliases the container, so callers pair this with a freshness
+/// gate (`EscapeMap::rvalue_is_fresh`) or treat `None` conservatively.
+pub(super) fn storage_root(body: &Body, expr: ExprId) -> Option<u32> {
     match &body.exprs[expr].kind {
         ExprKind::Local { index, .. } => Some(*index),
-        ExprKind::Unary { expr: inner, .. }
+        ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
+            expr: inner,
+        }
         | ExprKind::Cast { expr: inner, .. }
         | ExprKind::FieldAccess { expr: inner, .. }
-        | ExprKind::Index { expr: inner, .. } => {
-            // A promoted `Operand::Value` inner has no skeleton root local.
-            projection_root_local(body, inner.as_expr()?)
-        }
+        | ExprKind::VariantPayload { expr: inner, .. }
+        | ExprKind::Index { expr: inner, .. } => storage_root(body, inner.as_expr()?),
         _ => None,
     }
 }

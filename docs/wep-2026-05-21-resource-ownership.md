@@ -373,11 +373,20 @@ affine clients do not need:
   shown, the site falls back to `copy`.
 
 One independent soundness bug is fixed alongside: a recursive value type's
-`$value_copy$T` helper currently falls back to identity (`return v`) to avoid
-unbounded synthesis, which silently shares storage. A materialized copy must be
+`$value_copy$T` helper used to fall back to identity (`return v`) to avoid
+unbounded synthesis, which silently shared storage. A materialized copy must be
 a true deep copy, so the helper for a recursive type is emitted as a
 mutually-recursive function that copies through the indirection rather than
-returning its argument.
+returning its argument. This is implemented: the identity fallback covered not
+just recursive types but every variant with a value-typed payload, every struct
+transitively containing a variant, and `List<variant>` — copying any of those
+aliased the payload (or the whole struct), and `VariantConstruct` did not copy
+its payload at all. `needs_value_copy` now classifies a variant by its case
+payloads (via the variant-case index registered on the `TypeTable`), the
+synthesized variant helper is a `match` that re-constructs the matched case
+with a copied payload, and variant construction copies a live payload like a
+struct field. Recursive cycles terminate because a nested copy is a call to
+the nested type's own helper — the helpers are mutually recursive.
 
 #### Retirement of the freshness / escape machinery
 
@@ -642,8 +651,11 @@ note in that WEP.
 - [ ] `lower::plan::value_copy` inserts `$value_copy$T` only at `copy` sites.
 - [ ] Read-only-share refinement from local `let` / `let mut` / `&mut`
       mutability, defaulting to `copy`.
-- [ ] Fix recursive-type `$value_copy$T` synthesis to a true deep copy
-      (mutually-recursive helper), replacing the identity `return v` fallback.
+- [x] Fix recursive-type `$value_copy$T` synthesis to a true deep copy
+      (mutually-recursive helper), replacing the identity `return v` fallback —
+      covers variant payload deep copy, structs containing variants,
+      `List<variant>`, and payload copy at `VariantConstruct` sites (pinned by
+      the `value_copy_variant_*` e2e fixtures).
 - [ ] Delete `optimize::escape` and `optimize::value_copy_elide`.
 - [ ] Pin representative move / copy / share decisions as e2e
       `wir_not_expect` / `wir_expect` fixtures (serde `?`-chain, accumulator

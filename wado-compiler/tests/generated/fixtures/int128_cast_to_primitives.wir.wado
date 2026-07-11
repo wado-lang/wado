@@ -593,32 +593,32 @@ fn "int128_cast_to_primitives.wado/__test_11_newtype_of_i128_u128_casts_like_its
 
 fn "int128_cast_to_primitives.wado/__test_12_trait_default_method_casting_i128_to_f64"() {
     let n: ref "core:prelude/int128.wado//i128";
-    let p: ref "int128_cast_to_primitives.wado//Pt";
-    let __v0: i64;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    let self_9: ref "core:prelude/types.wado//Result<int128_cast_to_primitives.wado/Pt,core:prelude/string.wado/String>";
+    let v_9: ref "int128_cast_to_primitives.wado//Pt";
+    let self_10: ref "core:prelude/types.wado//Result<int128_cast_to_primitives.wado/Pt,core:prelude/string.wado/String>";
     let msg: ref "core:prelude/string.wado//String";
-    let v_11: ref "int128_cast_to_primitives.wado//Pt";
+    let v_12: ref "int128_cast_to_primitives.wado//Pt";
     let e: ref "core:prelude/string.wado//String";
     let magnitude: f64;
-    let v_18: f64;
+    let v_19: f64;
+    let __sroa_p_x: i64;
     n = struct.new "core:prelude/int128.wado//i128" { low: 5_i64, high: 0_i64 };
-    v_18 = local.tee magnitude("core:prelude/int128.wado/u128::as_f64"("core:prelude/int128.wado/i128::abs_u128"(n)));
-    self_9 = struct.new "core:prelude/types.wado//Result<int128_cast_to_primitives.wado/Pt,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: struct.new "int128_cast_to_primitives.wado//Pt" { x: builtin::i64_trunc_f64_s(v_18) } };
+    v_19 = local.tee magnitude("core:prelude/int128.wado/u128::as_f64"("core:prelude/int128.wado/i128::abs_u128"(n)));
+    self_10 = struct.new "core:prelude/types.wado//Result<int128_cast_to_primitives.wado/Pt,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: struct.new "int128_cast_to_primitives.wado//Pt" { x: builtin::i64_trunc_f64_s(v_19) } };
     msg = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("visit"), used: 5 };
-    p = (if @likely(ref.test "core:prelude/types.wado//Result<int128_cast_to_primitives.wado/Pt,core:prelude/string.wado/String>::Ok"(self_9)) -> ref "int128_cast_to_primitives.wado//Pt" {
-        v_11 = ref.cast "core:prelude/types.wado//Result<int128_cast_to_primitives.wado/Pt,core:prelude/string.wado/String>::Ok"(self_9).payload_0;
-        v_11;
+    v_9 = (if @likely(ref.test "core:prelude/types.wado//Result<int128_cast_to_primitives.wado/Pt,core:prelude/string.wado/String>::Ok"(self_10)) -> ref "int128_cast_to_primitives.wado//Pt" {
+        v_12 = ref.cast "core:prelude/types.wado//Result<int128_cast_to_primitives.wado/Pt,core:prelude/string.wado/String>::Ok"(self_10).payload_0;
+        v_12;
     } else {
-        e = ref.cast "core:prelude/types.wado//Result<int128_cast_to_primitives.wado/Pt,core:prelude/string.wado/String>::Err"(self_9).payload_0;
+        e = ref.cast "core:prelude/types.wado//Result<int128_cast_to_primitives.wado/Pt,core:prelude/string.wado/String>::Err"(self_10).payload_0;
         "core:prelude/types.wado/core/prelude/types.wado/unwrap_failed<core:prelude/string.wado/String>"(msg, e);
         unreachable;
     });
-    __v0 = p.x;
-    if @unlikely(__v0 != 5_i64) {
+    __sroa_p_x = v_9.x;
+    if @unlikely(__sroa_p_x != 5_i64) {
         cold_path;
-        "core:rt/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(116); "core:prelude/string.wado/String::push_str"(__local_5, global:core:prelude/fpfmt.wado::__const_obj_11); "core:prelude/string.wado/String::push_str"(__local_5, global:int128_cast_to_primitives.wado::__const_obj_166); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, global:int128_cast_to_primitives.wado::__const_obj_54); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 153 }, __local_6); "core:prelude/string.wado/String::push_str"(__local_5, global:int128_cast_to_primitives.wado::__const_obj_164); "core:prelude/string.wado/String::push"(__local_5, 112); "core:prelude/string.wado/String::push"(__local_5, 46); "core:prelude/string.wado/String::push"(__local_5, 120); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i64^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i64>" { value: __v0 }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); __local_5);
+        "core:rt/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(116); "core:prelude/string.wado/String::push_str"(__local_5, global:core:prelude/fpfmt.wado::__const_obj_11); "core:prelude/string.wado/String::push_str"(__local_5, global:int128_cast_to_primitives.wado::__const_obj_166); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, global:int128_cast_to_primitives.wado::__const_obj_54); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 153 }, __local_6); "core:prelude/string.wado/String::push_str"(__local_5, global:int128_cast_to_primitives.wado::__const_obj_164); "core:prelude/string.wado/String::push"(__local_5, 112); "core:prelude/string.wado/String::push"(__local_5, 46); "core:prelude/string.wado/String::push"(__local_5, 120); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i64^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i64>" { value: __sroa_p_x }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); __local_5);
         unreachable;
     }
 }
@@ -1904,7 +1904,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
     b184: block {
         l185: loop {
             break_if b184 i < 0;
-            remainder = "core:prelude/int128.wado/u128^Shl::shl"(remainder, 1);
+            remainder = "int128_cast_to_primitives.wado/$value_copy$T21"("core:prelude/int128.wado/u128^Shl::shl"(remainder, 1));
             bit = "core:prelude/int128.wado/u128::get_bit"(self, i);
             if bit {
                 remainder = struct.new "core:prelude/int128.wado//u128" { low: remainder.low | 1_i64, high: remainder.high | 0_i64 };
@@ -1917,7 +1917,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
             continue l185;
         };
     };
-    return ref.as_non_null("int128_cast_to_primitives.wado/$value_copy$T21"(quotient)), ref.as_non_null("int128_cast_to_primitives.wado/$value_copy$T21"(remainder));
+    return quotient, remainder;
 }
 
 fn "core:prelude/int128.wado/u128::get_bit"(self, i) {

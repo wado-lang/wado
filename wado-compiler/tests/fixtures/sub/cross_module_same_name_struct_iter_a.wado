@@ -1,7 +1,7 @@
 // Module A: defines a private `struct Pair` whose name COLLIDES
 // with the public struct in module B. Module A's function does:
 //   * binds a local `let mut pairs: List<Pair> = []`
-//   * iterates `for let p of &mut pairs` and writes to a struct field
+//   * iterates it by index and writes to a struct field
 //
 // The combination forces WIR codegen down a path that previously
 // confused module A's `Pair` with module B's same-named `Pair`,
@@ -14,7 +14,7 @@ struct Pair {
 
 pub fn drive() {
     let mut pairs: List<Pair> = [];
-    for let p of &mut pairs {
-        p.counts.push(1);
+    for let mut i = 0; i < pairs.len(); i += 1 {
+        pairs[i].counts.push(1);
     }
 }

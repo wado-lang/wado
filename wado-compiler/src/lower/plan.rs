@@ -28,8 +28,29 @@ pub struct LowerPlan {
     pub value_copy: value_copy::ValueCopyPlan,
 }
 
+/// Set each parameter's `is_mut_ref` from its type while it is still a
+/// `MutRef`. `boxing::prepare_types` then collapses `&mut T` and `&T` onto the
+/// same `Box<T>`, so this is the last point where the two are distinguishable.
+/// A `&T` cannot be written through, so only a `&mut` parameter can mutate the
+/// caller's argument storage — the fact the value-copy elision oracle needs.
+fn capture_param_mut_ref(flat: &mut FlatPackage) {
+    let type_table = flat.type_table.borrow();
+    for func in &flat.functions {
+        let mut func = func.borrow_mut();
+        for param in &mut func.params {
+            param.is_mut_ref = matches!(
+                type_table.get(param.type_id),
+                crate::tir::ResolvedType::MutRef(_)
+            );
+        }
+    }
+}
+
 pub fn plan(flat: &mut FlatPackage) -> LowerPlan {
     globals::extract(flat);
+    // Record each parameter's `&mut`-ness before `boxing::prepare_types`
+    // rewrites `&mut T` / `&T` to the same `Box<T>`, erasing the distinction.
+    capture_param_mut_ref(flat);
     let box_plan = boxing::prepare_types(flat);
     boxing::shadow_params(flat, &box_plan);
     let lifted_from = flat.functions.len();

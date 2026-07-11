@@ -143,6 +143,12 @@ impl TirRefVisitor for SeedWalker<'_> {
                     self.record_if_wrap(element);
                 }
             }
+            TirExprKind::VariantConstruct {
+                payload: Some(payload),
+                ..
+            } => {
+                self.record_if_wrap(payload);
+            }
             _ => {}
         }
         self.walk_expr(expr);

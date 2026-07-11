@@ -49,51 +49,70 @@ struct core:prelude/types.wado//Result<core:json/JsonStructSerializer,core:serde
     payload_0: ref "core:serde//SerializeError",
 }
 
-enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(9)
+variant core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError> {  // TypeId(9)
+    Ok(ref "core:prelude/string.wado//String"),
+    Err(ref "core:serde//SerializeError"),
+}
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(10)
+struct core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Ok {  // TypeId(10)
+    discriminant: i32,
+    payload_0: ref "core:prelude/string.wado//String",
+}
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(11)
+struct core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Err {  // TypeId(11)
+    discriminant: i32,
+    payload_0: ref "core:serde//SerializeError",
+}
 
-type "functype//serde_bound_driven_absence.wado/__cm_export__run" = fn();  // TypeId(12)
+enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(12)
 
-type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(13)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(13)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, i64, i32);  // TypeId(14)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(14)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64_base" = fn(i64, i32) -> i32;  // TypeId(15)
+type "functype//serde_bound_driven_absence.wado/__cm_export__run" = fn();  // TypeId(15)
 
-type "functype//core:prelude/primitive.wado/write_u64_base_digits" = fn(ref Array<u8>, i32, i64, i32, i32, i32, bool);  // TypeId(16)
+type "functype//serde_bound_driven_absence.wado/$value_copy$T26" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(16)
 
-type "functype//core:json/write_escaped_string" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(17)
+type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(17)
 
-type "functype//core:json/write_json_i32" = fn(ref "core:prelude/string.wado//String", i32) -> ref null "core:serde//SerializeError";  // TypeId(18)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, i64, i32);  // TypeId(18)
 
-type "functype//core:base64/__initialize_module" = fn();  // TypeId(19)
+type "functype//core:prelude/primitive.wado/count_digits_u64_base" = fn(i64, i32) -> i32;  // TypeId(19)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(20)
+type "functype//core:prelude/primitive.wado/write_u64_base_digits" = fn(ref Array<u8>, i32, i64, i32, i32, i32, bool);  // TypeId(20)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(21)
+type "functype//core:json/write_escaped_string" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(21)
 
-type "functype//core:prelude/primitive.wado/u64::fmt_base" = fn(u64, ref "core:prelude/format.wado//Formatter", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(22)
+type "functype//core:json/write_json_i32" = fn(ref "core:prelude/string.wado//String", i32) -> ref null "core:serde//SerializeError";  // TypeId(22)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(23)
+type "functype//core:json/core/json/to_string<serde_bound_driven_absence.wado/UsedForSerialize>" = fn(ref "serde_bound_driven_absence.wado//UsedForSerialize") -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>";  // TypeId(23)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(24)
+type "functype//core:base64/__initialize_module" = fn();  // TypeId(24)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(25)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(25)
 
-type "functype//core:prelude/string.wado/String::push_str_range_unchecked" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32, i32);  // TypeId(26)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(26)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(27)
+type "functype//core:prelude/primitive.wado/u64::fmt_base" = fn(u64, ref "core:prelude/format.wado//Formatter", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(27)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(28)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(28)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(29)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(29)
 
-type "functype//serde_bound_driven_absence.wado/UsedForSerialize^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "serde_bound_driven_absence.wado//UsedForSerialize", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(30)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(30)
 
-type "functype//core:json/JsonStructSerializer^SerializeStruct::field<i32>" = fn(ref "core:json//JsonStructSerializer", ref "core:prelude/string.wado//String", i32) -> ref null "core:serde//SerializeError";  // TypeId(31)
+type "functype//core:prelude/string.wado/String::push_str_range_unchecked" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32, i32);  // TypeId(31)
+
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(32)
+
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(33)
+
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(34)
+
+type "functype//serde_bound_driven_absence.wado/UsedForSerialize^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "serde_bound_driven_absence.wado//UsedForSerialize", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(35)
+
+type "functype//core:json/JsonStructSerializer^SerializeStruct::field<i32>" = fn(ref "core:json//JsonStructSerializer", ref "core:prelude/string.wado//String", i32) -> ref null "core:serde//SerializeError";  // TypeId(36)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -109,8 +128,6 @@ global global:serde_bound_driven_absence.wado::__const_obj_60: ref null "core:pr
 
 fn "serde_bound_driven_absence.wado/__cm_export__run"() {
     let a: ref "serde_bound_driven_absence.wado//UsedForSerialize";
-    let buf: ref "core:prelude/string.wado//String";
-    let __local_5: ref null "core:serde//SerializeError";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:serde_bound_driven_absence.wado::__modules_initialized);
         cold_path;
@@ -126,17 +143,12 @@ fn "serde_bound_driven_absence.wado/__cm_export__run"() {
         global:serde_bound_driven_absence.wado::__modules_initialized = 1;
     };
     a = struct.new "serde_bound_driven_absence.wado//UsedForSerialize" { x: 1 };
-    __inline_core_json_to_string_serde_bound_driven_absence_wado_UsedForSerialize__0: block {
-        buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
-        __local_5 = "serde_bound_driven_absence.wado/UsedForSerialize^Serialize::serialize<core:json/JsonSerializer>"(a, buf);
-        if @likely(ref.is_null(__local_5)) {
-        } else {
-            drop(ref.as_non_null(__local_5));
-            break __inline_core_json_to_string_serde_bound_driven_absence_wado_UsedForSerialize__0: cold_path;
-        }
-        break __inline_core_json_to_string_serde_bound_driven_absence_wado_UsedForSerialize__0;
-    };
+    drop("core:json/core/json/to_string<serde_bound_driven_absence.wado/UsedForSerialize>"(a));
     "wasi/task-return"(0);
+}
+
+fn "serde_bound_driven_absence.wado/$value_copy$T26"(v) {
+    return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v.used };
 }
 
 fn "core:prelude/primitive.wado/count_digits_i64"(val) {
@@ -147,12 +159,12 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b2: block {
-        l3: loop {
-            break_if b2 t <= 0_i64;
+    b1: block {
+        l2: loop {
+            break_if b1 t <= 0_i64;
             n = n + 1;
             t = t / 10_i64;
-            continue l3;
+            continue l2;
         };
     };
     return n;
@@ -166,13 +178,13 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b5: block {
-            l6: loop {
-                break_if b5 temp <= 0_i64;
+        b4: block {
+            l5: loop {
+                break_if b4 temp <= 0_i64;
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l6;
+                continue l5;
             };
         };
     }
@@ -188,28 +200,28 @@ fn "core:prelude/primitive.wado/count_digits_u64_base"(val_i64, bits_per_digit) 
     highest_bit = 0;
     if ((val_i64 >> 32_i64) & 4294967295_i64) != 0_i64 {
         b_4 = 63;
-        b9: block {
-            l10: loop {
-                break_if b9 b_4 < 32;
+        b8: block {
+            l9: loop {
+                break_if b8 b_4 < 32;
                 if ((val_i64 >> builtin::i64_extend_i32_s(b_4)) & 1_i64) != 0_i64 {
                     highest_bit = b_4;
-                    break b9;
+                    break b8;
                 }
                 b_4 = b_4 - 1;
-                continue l10;
+                continue l9;
             };
         };
     } else {
         b_5 = 31;
-        b12: block {
-            l13: loop {
-                break_if b12 b_5 < 0;
+        b11: block {
+            l12: loop {
+                break_if b11 b_5 < 0;
                 if ((val_i64 >> builtin::i64_extend_i32_s(b_5)) & 1_i64) != 0_i64 {
                     highest_bit = b_5;
-                    break b12;
+                    break b11;
                 }
                 b_5 = b_5 - 1;
-                continue l13;
+                continue l12;
             };
         };
     }
@@ -227,9 +239,9 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = val_i64;
-        b16: block {
-            l17: loop {
-                break_if b16 temp == 0_i64;
+        b15: block {
+            l16: loop {
+                break_if b15 temp == 0_i64;
                 pos = pos - 1;
                 digit = builtin::i32_wrap_i64(temp & mask64);
                 builtin::array_set_u8(arr, pos, (if digit < 10 -> i32 {
@@ -238,7 +250,7 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
                     select i32(upper, (65 + digit) - 10, (97 + digit) - 10);
                 }) & 255);
                 temp = temp >>u builtin::i64_extend_i32_s(bits_per_digit);
-                continue l17;
+                continue l16;
             };
         };
     }
@@ -255,9 +267,9 @@ fn "core:json/write_escaped_string"(buf, s) {
     n = s.used;
     run_start = 0;
     i = 0;
-    b19: block {
-        l20: loop {
-            break_if b19 i >= n;
+    b18: block {
+        l19: loop {
+            break_if b18 i >= n;
             __for_0_body: block {
                 b = builtin::array_get<u8>(s.repr, i);
                 break_if __for_0_body (if (if b >=u 32 -> i32 {
@@ -286,7 +298,7 @@ fn "core:json/write_escaped_string"(buf, s) {
                 run_start = i + 1;
             };
             i = i + 1;
-            continue l20;
+            continue l19;
         };
     };
     "core:prelude/string.wado/String::push_str_range_unchecked"(buf, s, run_start, n);
@@ -298,6 +310,21 @@ fn "core:json/write_json_i32"(buf, v) {
     f_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf };
     "core:prelude/primitive.wado/i32::fmt_decimal"(v, f_5);
     return ref.null none;
+}
+
+fn "core:json/core/json/to_string<serde_bound_driven_absence.wado/UsedForSerialize>"(value) {
+    let buf: ref "core:prelude/string.wado//String";
+    let __qm_e: ref "core:serde//SerializeError";
+    let __match_5: ref null "core:serde//SerializeError";
+    buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
+    __match_5 = "serde_bound_driven_absence.wado/UsedForSerialize^Serialize::serialize<core:json/JsonSerializer>"(value, buf);
+    if @likely(ref.is_null(__match_5)) {
+    } else {
+        __qm_e = ref.as_non_null(__match_5);
+        cold_path;
+        return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Err" { discriminant: 1, payload_0: __qm_e };
+    }
+    return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Ok" { discriminant: 0, payload_0: ref.as_non_null("serde_bound_driven_absence.wado/$value_copy$T26"(buf)) };
 }
 
 fn "core:base64/__initialize_module"() {
@@ -521,6 +548,8 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 fn "serde_bound_driven_absence.wado/UsedForSerialize^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
     let __result: ref "core:prelude/types.wado//Result<core:json/JsonStructSerializer,core:serde/SerializeError>";
     let __local_3: ref "core:json//JsonStructSerializer";
+    let v_8: ref "core:serde//SerializeError";
+    let v_9: ref "core:prelude/string.wado//String";
     "core:prelude/string.wado/String::push"(s, 123);
     __result = struct.new "core:prelude/types.wado//Result<core:json/JsonStructSerializer,core:serde/SerializeError>::Ok" { discriminant: 0, payload_0: struct.new "core:json//JsonStructSerializer" { buf: s, count: 0 } };
     if ref.test "core:prelude/types.wado//Result<core:json/JsonStructSerializer,core:serde/SerializeError>::Ok"(__result) {
@@ -528,7 +557,7 @@ fn "serde_bound_driven_absence.wado/UsedForSerialize^Serialize::serialize<core:j
         drop("core:json/JsonStructSerializer^SerializeStruct::field<i32>"(__local_3, global:serde_bound_driven_absence.wado::__const_obj_60, self.x));
         return "core:prelude/string.wado/String::push"(__local_3.buf, 125), ref.null none;
     } else {
-        return ref.cast "core:prelude/types.wado//Result<core:json/JsonStructSerializer,core:serde/SerializeError>::Err"(__result).payload_0;
+        return ref.as_non_null(v_8 = ref.cast "core:prelude/types.wado//Result<core:json/JsonStructSerializer,core:serde/SerializeError>::Err"(__result).payload_0; struct.new "core:serde//SerializeError" { kind: v_8.kind, message: ref.as_non_null(v_9 = v_8.message; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_9.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_9.used }) });
     }
 }
 

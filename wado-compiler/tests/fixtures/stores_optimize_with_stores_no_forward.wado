@@ -11,17 +11,17 @@ struct Pair {
 }
 
 struct Holder {
-    pair: &Pair,
+    pair: &mut Pair,
 }
 
 // This function STORES the reference — caller's local becomes aliased.
-fn hold_ref(p: &Pair) -> Holder with stores[p] {
+fn hold_ref(p: &mut Pair) -> Holder with stores[p] {
     return Holder { pair: p };
 }
 
 export fn run() with Stdout {
-    let p = Pair { a: 42, b: 99 };
-    let h = hold_ref(&p);
+    let mut p = Pair { a: 42, b: 99 };
+    let h = hold_ref(&mut p);
     // Mutate `p` through the stored reference: `p.a` is now 7, not 42.
     h.pair.a = 7;
     // Forwarding the stale 42 here would be unsound, so the check survives.

@@ -735,8 +735,9 @@ fn "display_2.wado/test_format_padding"() with Stdout {
     let len_a_71: i32;
     let len_a_78: i32;
     let len_a_85: i32;
-    let len_a_98: i32;
-    let len_a_105: i32;
+    let len_a_99: i32;
+    let len_a_106: i32;
+    let __sroa_v_repr: ref Array<u8>;
     __v0_3 = "display_2.wado/fmt_int"(42, 32, 2, 0, 0, 10);
     __cond_4 = __inline_String_Eq__eq_0: block -> bool {
         len_a_43 = __v0_3.used;
@@ -844,14 +845,14 @@ condition: fmt_int(&x, '*', Alignment::Center, false, false, 10) == \"****42****
     }
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(64), used: 0 };
     f_18 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 0, sign_plus: 0, zero_pad: 0, width: 8, precision: -1, indent: 0, buf: buf };
-    "core:prelude/format.wado/Formatter::pad"(f_18, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 });
+    "core:prelude/format.wado/Formatter::pad"(f_18, __sroa_v_repr = array.new_fixed<u8>(116, 114, 117, 101); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<u8>; __array_clone_src_9 = __sroa_v_repr; let __array_clone_len_9: i32; __array_clone_len_9 = builtin::array_len(__array_clone_src_9); let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: 4 });
     __v0_19 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<u8>; __array_clone_src_9 = buf.repr; let __array_clone_len_9: i32; __array_clone_len_9 = builtin::array_len(__array_clone_src_9); let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: buf.used };
-    __cond_20 = __inline_String_Eq__eq_39: block -> bool {
-        len_a_98 = __v0_19.used;
-        if len_a_98 != 8 {
-            break __inline_String_Eq__eq_39: 0;
+    __cond_20 = __inline_String_Eq__eq_40: block -> bool {
+        len_a_99 = __v0_19.used;
+        if len_a_99 != 8 {
+            break __inline_String_Eq__eq_40: 0;
         }
-        break __inline_String_Eq__eq_39: "core:prelude/string.wado/String^Eq::eq_bytes"(__v0_19.repr, array.new_data<u8>("true    "), len_a_98);
+        break __inline_String_Eq__eq_40: "core:prelude/string.wado/String^Eq::eq_bytes"(__v0_19.repr, array.new_data<u8>("true    "), len_a_99);
     };
     if @unlikely(__cond_20 == 0) {
         cold_path;
@@ -859,12 +860,12 @@ condition: fmt_int(&x, '*', Alignment::Center, false, false, 10) == \"****42****
         unreachable;
     }
     __v0_21 = "display_2.wado/fmt_int"(12345, 32, 2, 0, 0, 2);
-    __cond_22 = __inline_String_Eq__eq_44: block -> bool {
-        len_a_105 = __v0_21.used;
-        if len_a_105 != 5 {
-            break __inline_String_Eq__eq_44: 0;
+    __cond_22 = __inline_String_Eq__eq_45: block -> bool {
+        len_a_106 = __v0_21.used;
+        if len_a_106 != 5 {
+            break __inline_String_Eq__eq_45: 0;
         }
-        break __inline_String_Eq__eq_44: "core:prelude/string.wado/String^Eq::eq_bytes"(__v0_21.repr, array.new_data<u8>("12345"), len_a_105);
+        break __inline_String_Eq__eq_45: "core:prelude/string.wado/String^Eq::eq_bytes"(__v0_21.repr, array.new_data<u8>("12345"), len_a_106);
     };
     if @unlikely(__cond_22 == 0) {
         cold_path;
@@ -1257,12 +1258,14 @@ fn "display_2.wado/test_template_specifiers"() with Stdout {
     let len_a_1018: i32;
     let len_a_1026: i32;
     let len_a_1034: i32;
-    let len_a_1047: i32;
-    let len_a_1060: i32;
-    let len_a_1071: i32;
-    let len_a_1082: i32;
-    let len_a_1093: i32;
-    let len_a_1104: i32;
+    let len_a_1048: i32;
+    let len_a_1062: i32;
+    let len_a_1073: i32;
+    let len_a_1084: i32;
+    let len_a_1095: i32;
+    let len_a_1106: i32;
+    let __sroa_v_repr_1111: ref Array<u8>;
+    let __sroa_v_repr_1113: ref Array<u8>;
     __local_141 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __local_142 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_141 };
     "core:prelude/primitive.wado/i32::fmt_decimal"(42, __local_142);
@@ -2124,13 +2127,13 @@ condition: `{neg_i128:b}` == \"1111111111111111111111111111111111111111111111111
     }
     __local_367 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __local_368 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_367 };
-    "core:prelude/format.wado/Formatter::pad"(__local_368, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 });
-    __cond_129 = __inline_String_Eq__eq_467: block -> bool {
-        len_a_1047 = __local_367.used;
-        if len_a_1047 != 4 {
-            break __inline_String_Eq__eq_467: 0;
+    "core:prelude/format.wado/Formatter::pad"(__local_368, __sroa_v_repr_1113 = array.new_fixed<u8>(116, 114, 117, 101); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<u8>; __array_clone_src_9 = __sroa_v_repr_1113; let __array_clone_len_9: i32; __array_clone_len_9 = builtin::array_len(__array_clone_src_9); let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: 4 });
+    __cond_129 = __inline_String_Eq__eq_468: block -> bool {
+        len_a_1048 = __local_367.used;
+        if len_a_1048 != 4 {
+            break __inline_String_Eq__eq_468: 0;
         }
-        break __inline_String_Eq__eq_467: "core:prelude/string.wado/String^Eq::eq_bytes"(__local_367.repr, array.new_fixed<u8>(116, 114, 117, 101), len_a_1047);
+        break __inline_String_Eq__eq_468: "core:prelude/string.wado/String^Eq::eq_bytes"(__local_367.repr, array.new_fixed<u8>(116, 114, 117, 101), len_a_1048);
     };
     if @unlikely(__cond_129 == 0) {
         cold_path;
@@ -2139,13 +2142,13 @@ condition: `{neg_i128:b}` == \"1111111111111111111111111111111111111111111111111
     }
     __local_371 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __local_372 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_371 };
-    "core:prelude/format.wado/Formatter::pad"(__local_372, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 });
-    __cond_131 = __inline_String_Eq__eq_476: block -> bool {
-        len_a_1060 = __local_371.used;
-        if len_a_1060 != 5 {
-            break __inline_String_Eq__eq_476: 0;
+    "core:prelude/format.wado/Formatter::pad"(__local_372, __sroa_v_repr_1111 = array.new_data<u8>("false"); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<u8>; __array_clone_src_9 = __sroa_v_repr_1111; let __array_clone_len_9: i32; __array_clone_len_9 = builtin::array_len(__array_clone_src_9); let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: 5 });
+    __cond_131 = __inline_String_Eq__eq_478: block -> bool {
+        len_a_1062 = __local_371.used;
+        if len_a_1062 != 5 {
+            break __inline_String_Eq__eq_478: 0;
         }
-        break __inline_String_Eq__eq_476: "core:prelude/string.wado/String^Eq::eq_bytes"(__local_371.repr, array.new_data<u8>("false"), len_a_1060);
+        break __inline_String_Eq__eq_478: "core:prelude/string.wado/String^Eq::eq_bytes"(__local_371.repr, array.new_data<u8>("false"), len_a_1062);
     };
     if @unlikely(__cond_131 == 0) {
         cold_path;
@@ -2155,12 +2158,12 @@ condition: `{neg_i128:b}` == \"1111111111111111111111111111111111111111111111111
     __local_375 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __local_376 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_375 };
     "core:prelude/primitive.wado/u64::fmt_base"(4294967254_i64, __local_376, 2, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 });
-    __cond_134 = __inline_String_Eq__eq_484: block -> bool {
-        len_a_1071 = __local_375.used;
-        if len_a_1071 != 32 {
-            break __inline_String_Eq__eq_484: 0;
+    __cond_134 = __inline_String_Eq__eq_486: block -> bool {
+        len_a_1073 = __local_375.used;
+        if len_a_1073 != 32 {
+            break __inline_String_Eq__eq_486: 0;
         }
-        break __inline_String_Eq__eq_484: "core:prelude/string.wado/String^Eq::eq_bytes"(__local_375.repr, array.new_data<u8>("11111111111111111111111111010110"), len_a_1071);
+        break __inline_String_Eq__eq_486: "core:prelude/string.wado/String^Eq::eq_bytes"(__local_375.repr, array.new_data<u8>("11111111111111111111111111010110"), len_a_1073);
     };
     if @unlikely(__cond_134 == 0) {
         cold_path;
@@ -2170,12 +2173,12 @@ condition: `{neg_i128:b}` == \"1111111111111111111111111111111111111111111111111
     __local_379 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __local_380 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_379 };
     "core:prelude/primitive.wado/u64::fmt_base"(4294967254_i64, __local_380, 8, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 });
-    __cond_136 = __inline_String_Eq__eq_492: block -> bool {
-        len_a_1082 = __local_379.used;
-        if len_a_1082 != 11 {
-            break __inline_String_Eq__eq_492: 0;
+    __cond_136 = __inline_String_Eq__eq_494: block -> bool {
+        len_a_1084 = __local_379.used;
+        if len_a_1084 != 11 {
+            break __inline_String_Eq__eq_494: 0;
         }
-        break __inline_String_Eq__eq_492: "core:prelude/string.wado/String^Eq::eq_bytes"(__local_379.repr, array.new_data<u8>("37777777726"), len_a_1082);
+        break __inline_String_Eq__eq_494: "core:prelude/string.wado/String^Eq::eq_bytes"(__local_379.repr, array.new_data<u8>("37777777726"), len_a_1084);
     };
     if @unlikely(__cond_136 == 0) {
         cold_path;
@@ -2185,12 +2188,12 @@ condition: `{neg_i128:b}` == \"1111111111111111111111111111111111111111111111111
     __local_383 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __local_384 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_383 };
     "core:prelude/primitive.wado/u64::fmt_base"(4294967254_i64, __local_384, 16, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 });
-    __cond_138 = __inline_String_Eq__eq_500: block -> bool {
-        len_a_1093 = __local_383.used;
-        if len_a_1093 != 8 {
-            break __inline_String_Eq__eq_500: 0;
+    __cond_138 = __inline_String_Eq__eq_502: block -> bool {
+        len_a_1095 = __local_383.used;
+        if len_a_1095 != 8 {
+            break __inline_String_Eq__eq_502: 0;
         }
-        break __inline_String_Eq__eq_500: "core:prelude/string.wado/String^Eq::eq_bytes"(__local_383.repr, array.new_data<u8>("ffffffd6"), len_a_1093);
+        break __inline_String_Eq__eq_502: "core:prelude/string.wado/String^Eq::eq_bytes"(__local_383.repr, array.new_data<u8>("ffffffd6"), len_a_1095);
     };
     if @unlikely(__cond_138 == 0) {
         cold_path;
@@ -2200,12 +2203,12 @@ condition: `{neg_i128:b}` == \"1111111111111111111111111111111111111111111111111
     __local_387 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __local_388 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_387 };
     "core:prelude/primitive.wado/u64::fmt_base"(4294967254_i64, __local_388, 16, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 });
-    __cond_140 = __inline_String_Eq__eq_508: block -> bool {
-        len_a_1104 = __local_387.used;
-        if len_a_1104 != 10 {
-            break __inline_String_Eq__eq_508: 0;
+    __cond_140 = __inline_String_Eq__eq_510: block -> bool {
+        len_a_1106 = __local_387.used;
+        if len_a_1106 != 10 {
+            break __inline_String_Eq__eq_510: 0;
         }
-        break __inline_String_Eq__eq_508: "core:prelude/string.wado/String^Eq::eq_bytes"(__local_387.repr, array.new_data<u8>("0xffffffd6"), len_a_1104);
+        break __inline_String_Eq__eq_510: "core:prelude/string.wado/String^Eq::eq_bytes"(__local_387.repr, array.new_data<u8>("0xffffffd6"), len_a_1106);
     };
     if @unlikely(__cond_140 == 0) {
         cold_path;

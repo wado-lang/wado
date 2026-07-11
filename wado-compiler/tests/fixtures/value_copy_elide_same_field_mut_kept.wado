@@ -1,0 +1,29 @@
+// Field-sensitive elision must NOT strip a copy whose source read and the
+// mutation touch the SAME field: reading `self.rows[0]` then mutating
+// `self.rows[0]` in place. The read path and the mutated path are identical
+// (self.rows[*]), so they are not disjoint and the copy stays. Were it wrongly
+// stripped, `row` would alias the element and observe the push (len 4).
+
+struct Store {
+    rows: List<List<i32>>,
+}
+
+impl Store {
+    fn snapshot_then_mutate(&mut self) -> i32 {
+        let row = self.rows[0];
+        self.rows[0].push(99);
+        return row.len();
+    }
+}
+
+export fn run() {
+    let mut s = Store { rows: [[1, 2, 3]] };
+    let snap = s.snapshot_then_mutate();
+    assert snap == 3;
+    assert s.rows[0].len() == 4;
+}
+
+__DATA__
+{
+    "stdout": ""
+}

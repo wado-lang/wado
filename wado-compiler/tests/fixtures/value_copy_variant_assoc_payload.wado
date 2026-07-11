@@ -1,0 +1,73 @@
+// A generic variant whose payload is an associated-type projection
+// (`Data(T::Output)`) must monomorphize to the impl's concrete type — both
+// for WIR type registration (this used to ICE with "unsubstituted
+// AssocTypeProjection reached codegen") and for the value-copy classifier,
+// which must see through the projection to the copy-needing payload.
+
+trait Producer {
+    type Output;
+
+    fn dummy(&self) -> i32;
+}
+
+struct P {}
+
+impl Producer for P {
+    type Output = List<i32>;
+
+    fn dummy(&self) -> i32 {
+        return 0;
+    }
+}
+
+variant Holder<T: Producer> {
+    Data(T::Output),
+    Empty,
+}
+
+variant Nested<T: Producer> {
+    Data(Option<T::Output>),
+    Empty,
+}
+
+test "projected payload copy is payload-independent" {
+    let list: List<i32> = [1];
+    let a: Holder<P> = Holder::Data(list);
+    let mut b = a;
+    if let Data(v) = &mut b {
+        v.push(2);
+    }
+    if let Data(v) = &a {
+        assert v.len() == 1;
+    }
+    if let Data(v) = &b {
+        assert v.len() == 2;
+    }
+}
+
+test "projected payload construction copies its argument" {
+    let mut list: List<i32> = [1];
+    let w: Holder<P> = Holder::Data(list);
+    list.push(2);
+    if let Data(v) = &w {
+        assert v.len() == 1;
+    }
+}
+
+test "projection nested in a generic payload copies deeply" {
+    let list: List<i32> = [1];
+    let a: Nested<P> = Nested::Data(Option::Some(list));
+    let mut b = a;
+    if let Data(Some(v)) = &mut b {
+        v.push(2);
+    }
+    if let Data(Some(v)) = &a {
+        assert v.len() == 1;
+    }
+    if let Data(Some(v)) = &b {
+        assert v.len() == 2;
+    }
+}
+
+__DATA__
+{"test": {}}

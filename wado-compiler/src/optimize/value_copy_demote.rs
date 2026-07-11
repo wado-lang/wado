@@ -38,8 +38,9 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FunctionKind, FunctionRef, NirFunction, NirParam, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
-use crate::tir::{ResolvedType, TypeTable};
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 
+use super::arena_query::storage_root;
 use super::arena_query::{expr_mentions_local, is_local, reachable_blocks, strip_refs};
 use super::gate::{FunctionGate, GatedPass};
 use crate::nir::FuncId;
@@ -76,16 +77,22 @@ pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) ->
     let descriptors = super::dce::build_callee_descriptors(project);
 
     // Identify `$value_copy$T` helpers whose body is an `List<E>` wrapper
-    // copy: `return StructLiteral { repr: array_clone(v.repr), used: ... }`.
+    // copy: `return StructLiteral { repr: array_clone(v.repr), used: ... }`,
+    // excluding helpers that reach a variant deep-copy.
     let mut list_wrapper_copies: IndexSet<FuncKey> = IndexSet::default();
-    for f in &project.functions {
-        let f = f.borrow();
-        if f.value_copy_type().is_some()
-            && let Some(body) = &f.body
-            && body_is_list_wrapper_copy(body, &descriptors)
-            && let Some(id) = f.id
-        {
-            list_wrapper_copies.insert(id);
+    {
+        let type_table = project.type_table.borrow();
+        let variant_reaching = helpers_reaching_variant_copies(project, &descriptors, &type_table);
+        for f in &project.functions {
+            let f = f.borrow();
+            if f.value_copy_type().is_some()
+                && let Some(body) = &f.body
+                && body_is_list_wrapper_copy(body, &descriptors)
+                && let Some(id) = f.id
+                && !variant_reaching.contains(&id)
+            {
+                list_wrapper_copies.insert(id);
+            }
         }
     }
     crate::compiler_trace!(
@@ -257,6 +264,88 @@ fn body_is_list_wrapper_copy(body: &Body, descriptors: &[FunctionRef]) -> bool {
     false
 }
 
+/// Value-copy helpers whose deep copy transitively runs a variant
+/// deep-copy. A `match` payload binding aliases the payload storage in
+/// place, a flow the element-cleanliness analysis cannot see, so such
+/// wrappers must stay deep. Derived from the helper bodies themselves,
+/// so it cannot drift from what the deep copy does.
+fn helpers_reaching_variant_copies(
+    project: &NirPackage,
+    descriptors: &[FunctionRef],
+    type_table: &TypeTable,
+) -> IndexSet<FuncKey> {
+    let value_copy_ids = project.value_copy_func_ids();
+    let mut helper_by_type: IndexMap<TypeId, FuncKey> = IndexMap::default();
+    let mut seeds: IndexSet<FuncKey> = IndexSet::default();
+    for f in &project.functions {
+        let f = f.borrow();
+        let (Some(copy_type), Some(id)) = (f.value_copy_type(), f.id) else {
+            continue;
+        };
+        helper_by_type.insert(copy_type, id);
+        if is_variant_type(copy_type, type_table) {
+            seeds.insert(id);
+        }
+    }
+    let mut edges: IndexMap<FuncKey, IndexSet<FuncKey>> = IndexMap::default();
+    for f in &project.functions {
+        let f = f.borrow();
+        let (Some(_), Some(id), Some(body)) = (f.value_copy_type(), f.id, f.body.as_ref()) else {
+            continue;
+        };
+        let callees = edges.entry(id).or_default();
+        for e in reachable_exprs(body) {
+            if let ExprKind::Call { func_id, .. } = &body.exprs[e].kind {
+                if value_copy_ids.contains(func_id) {
+                    callees.insert(*func_id);
+                } else if is_array_clone(*func_id, descriptors)
+                    && let Some(elem) = array_clone_element_type(body, e)
+                    && let Some(elem_helper) = helper_by_type.get(&elem)
+                {
+                    callees.insert(*elem_helper);
+                }
+            }
+        }
+    }
+    let mut leaky = seeds;
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for (caller, callees) in &edges {
+            if !leaky.contains(caller) && callees.iter().any(|c| leaky.contains(c)) {
+                leaky.insert(*caller);
+                changed = true;
+            }
+        }
+    }
+    leaky
+}
+
+/// Dead helpers can outlive their type's DCE pruning; a pruned id counts
+/// as a variant (conservative).
+fn is_variant_type(type_id: TypeId, type_table: &TypeTable) -> bool {
+    match type_table.get_pruned(type_id) {
+        Some(ResolvedType::Variant { .. }) => true,
+        Some(ResolvedType::GenericInstance {
+            name,
+            module_source,
+            ..
+        }) => type_table
+            .variant_template_cases(name, module_source)
+            .is_some(),
+        Some(_) => false,
+        None => true,
+    }
+}
+
+fn array_clone_element_type(body: &Body, call: ExprId) -> Option<TypeId> {
+    if let ExprKind::Call { type_args, .. } = &body.exprs[call].kind {
+        type_args.first().copied()
+    } else {
+        None
+    }
+}
+
 /// Whether the call's stamped `func_id` resolves to `builtin::array_clone`.
 fn is_array_clone(func_id: FuncId, descriptors: &[FunctionRef]) -> bool {
     builtin_gname(super::dce::callee_descriptor(descriptors, func_id)).as_deref()
@@ -351,25 +440,6 @@ fn collect_sites(
     }
 }
 
-/// Walk the projections (`*`, `&`, `.field`, `[i]`, cast) that share storage
-/// with their inner expression to the local the value-copy argument reads
-/// from. `None` for a genuinely fresh rvalue (call result, literal,
-/// constructor) — those are uniquely owned, so a shallow copy of them is
-/// always safe.
-fn arg_source_root(body: &Body, id: ExprId) -> Option<u32> {
-    match &body.exprs[id].kind {
-        ExprKind::Local { index, .. } => Some(*index),
-        ExprKind::FieldAccess { expr: inner, .. }
-        | ExprKind::Index { expr: inner, .. }
-        | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::Unary { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. } => {
-            inner.as_expr().and_then(|ie| arg_source_root(body, ie))
-        }
-        _ => None,
-    }
-}
-
 /// True when `idx` is a parameter declared as an immutable reference (`&T`):
 /// the body cannot mutate `*idx` at all, so its elements are element-clean.
 fn is_immutable_ref_param(
@@ -409,7 +479,7 @@ fn demote_candidate(
     // the root local must itself be element-clean.
     // A promoted `Operand::Value` arg is a constant: a fresh, uniquely-owned
     // rvalue with no root local — the `None` (clean) case.
-    match arg0.as_expr().and_then(|e| arg_source_root(body, e)) {
+    match arg0.as_expr().and_then(|e| storage_root(body, e)) {
         None => true,
         Some(root) => {
             let clean = is_immutable_ref_param(params, an.type_table, root)

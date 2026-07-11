@@ -34,6 +34,12 @@ use super::types::{FunctionContext, MethodInfo, TypeError};
 /// to file an entry.
 pub(super) struct MethodCallInput<'a> {
     pub receiver: TirExpr,
+    /// The receiver's source AST when the call comes from user syntax.
+    /// `resolve_ident` leaves placeholder TIR at annotate time, so the
+    /// `&mut self` receiver-mutability check walks this instead. `None`
+    /// for synthetic dispatches (for-of desugaring), whose receivers are
+    /// compiler-owned locals.
+    pub receiver_ast: Option<&'a ast::Expr>,
     pub method_name: &'a str,
     pub method_id: Option<AstId>,
     pub call_id: Option<AstId>,
@@ -109,6 +115,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_method_call_with(
             MethodCallInput {
                 receiver,
+                receiver_ast: Some(&method_call.receiver),
                 method_name: &method_call.method,
                 method_id: Some(method_call.method_id),
                 call_id: Some(method_call.id),
@@ -133,6 +140,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> MethodCallOutcome {
         let MethodCallInput {
             mut receiver,
+            receiver_ast,
             method_name,
             method_id,
             call_id,
@@ -607,6 +615,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // arm marks `address_taken_locals` on the TIR it emits); the combined
         // walk no longer computes it now that `resolve_ident` returns a
         // placeholder.
+
+        if self_kind == ast::SelfKind::MutRef && !is_ref_impl {
+            self.check_mut_receiver(&receiver, receiver_ast, method_name, span);
+        }
 
         // Adjust receiver based on what the method expects (self_kind)
         receiver = self.adjust_receiver_for_self_kind(receiver, self_kind, is_ref_impl, span);

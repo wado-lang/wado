@@ -1,0 +1,100 @@
+// value_copy_elide must not strip a variant copy whose storage is mutated
+// through shapes its usage oracle previously missed: a boxed `&mut self`
+// receiver, a boxed `&mut` argument (both collapse to a bare Box-typed
+// value under the boxing rewrite), a sibling pattern-binding alias, and a
+// copy argument passed alongside `&mut root`.
+
+variant Wrapper {
+    Data(List<i32>),
+    Empty,
+}
+
+trait Grow {
+    fn grow(&mut self);
+    fn size(&self) -> i32;
+}
+
+impl Grow for Wrapper {
+    pub fn grow(&mut self) {
+        if let Data(v) = self {
+            v.push(99);
+        }
+    }
+    pub fn size(&self) -> i32 {
+        if let Data(v) = *self {
+            return v.len();
+        }
+        return 0;
+    }
+}
+
+test "copy is independent of mutation through boxed receiver" {
+    let mut a = Wrapper::Data([1]);
+    let b = a;
+    a.grow();
+    assert b.size() == 1;
+    assert a.size() == 2;
+}
+
+fn grow_slot(slot: &mut Option<List<i32>>) {
+    if let Some(v) = slot {
+        v.push(5);
+    }
+}
+
+test "copy is independent of mutation through boxed mut argument" {
+    let mut base: Option<List<i32>> = Option::Some([1] as List<i32>);
+    let y = base;
+    grow_slot(&mut base);
+    if let Some(v) = &y {
+        assert v.len() == 1;
+    }
+    if let Some(v) = &base {
+        assert v.len() == 2;
+    }
+}
+
+test "target copy is independent of source mutated through boxed mut argument" {
+    let base: Option<List<i32>> = Option::Some([1] as List<i32>);
+    let mut y = base;
+    grow_slot(&mut y);
+    if let Some(v) = &base {
+        assert v.len() == 1;
+    }
+    if let Some(v) = &y {
+        assert v.len() == 2;
+    }
+}
+
+test "sibling pattern-binding copy is independent of root mutation" {
+    let mut b = Option::Some([1] as List<i32>);
+    let mut c: List<i32> = [];
+    match b {
+        Some(t) => { c = t; }
+        None => {}
+    }
+    if let Some(u) = &mut b {
+        u.push(2);
+    }
+    assert c.len() == 1;
+}
+
+fn observe(x: List<i32>, y: &mut Option<List<i32>>) -> i32 {
+    if let Some(v) = y {
+        v.push(9);
+    }
+    return x.len();
+}
+
+test "call-arg copy is independent of sibling mut alias" {
+    let mut b = Option::Some([1] as List<i32>);
+    let mut n = 0;
+    match b {
+        Some(t) => { n = observe(t, &mut b); }
+        None => {}
+    }
+    assert n == 1;
+}
+
+__DATA__
+{"test": {}}

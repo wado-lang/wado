@@ -727,6 +727,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     type_id,
                     local_index: next_local,
                     is_mut: p.is_mut,
+                    is_mut_ref: false,
                     span: p.span,
                 });
                 next_local += 1;
@@ -1163,6 +1164,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 type_id,
                 local_index: index,
                 is_mut: param.is_mut,
+                is_mut_ref: false,
                 span: param.span,
             });
         }
@@ -1786,6 +1788,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 type_id,
                 local_index: index,
                 is_mut: param.is_mut,
+                is_mut_ref: false,
                 span: param.span,
             });
         }

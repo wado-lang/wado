@@ -38,11 +38,12 @@
 //! `array.new_fixed`).
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::lower::plan::value_copy::needs_value_copy;
 use crate::nir::FuncId;
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
+
+use super::value_copy::{carries_identity, needs_value_copy};
 
 /// The two escape channels of one parameter.
 #[derive(Clone, Default, PartialEq)]
@@ -818,17 +819,6 @@ fn collect_pattern_bindings(body: &Body, pat: crate::nir_arena::PatId, out: &mut
 fn union(mut a: Taint, b: Taint) -> Taint {
     a.extend(b);
     a
-}
-
-/// Whether a value of `type_id` can carry another value's identity: an
-/// aggregate that shares GC storage when aliased, or a reference to one.
-/// Primitives (integers, floats, bools, bare enums, unit) cannot.
-fn carries_identity(type_id: TypeId, type_table: &TypeTable) -> bool {
-    needs_value_copy(type_id, type_table)
-        || matches!(
-            type_table.get(type_id),
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-        )
 }
 
 /// Whether `e`'s type is `&mut T`.
