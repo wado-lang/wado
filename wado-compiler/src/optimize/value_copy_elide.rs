@@ -44,6 +44,7 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 use super::arena_query::storage_root;
 use super::escape::EscapeMap;
 use super::value_copy::carries_identity;
+use super::value_copy::mutation::{MutationOracle, Witness, expr_witnesses};
 
 /// Strips `$value_copy$T(arg)` wrappers off observably read-only bindings, run
 /// as a rule inside the unified peephole session (formerly the standalone
@@ -60,6 +61,7 @@ pub(super) struct ValueCopyElideRule<'a> {
     escape: &'a EscapeMap,
     type_table: &'a TypeTable,
     param_mut: &'a IndexMap<FuncId, Vec<bool>>,
+    call_immutability: &'a super::alias::CallImmutability<'a>,
     n_params: u32,
     usage: UsageInfo,
 }
@@ -70,6 +72,7 @@ impl<'a> ValueCopyElideRule<'a> {
         escape: &'a EscapeMap,
         type_table: &'a TypeTable,
         param_mut: &'a IndexMap<FuncId, Vec<bool>>,
+        call_immutability: &'a super::alias::CallImmutability<'a>,
         n_params: u32,
         usage: UsageInfo,
     ) -> Self {
@@ -78,6 +81,7 @@ impl<'a> ValueCopyElideRule<'a> {
             escape,
             type_table,
             param_mut,
+            call_immutability,
             n_params,
             usage,
         }
@@ -111,10 +115,10 @@ impl UsageInfo {
 pub(super) fn build_usage(
     body: &Body,
     type_table: &TypeTable,
-    param_mut: &IndexMap<FuncId, Vec<bool>>,
+    oracle: &MutationOracle<'_>,
     escape: &EscapeMap,
 ) -> UsageInfo {
-    analyze_usage(body, type_table, param_mut, escape)
+    analyze_usage(body, type_table, oracle, escape)
 }
 
 /// Per-parameter `&mut`-ness of every callee, keyed by id: bit `i` is `true`
@@ -137,20 +141,6 @@ pub(super) fn build_param_mut(project: &NirPackage) -> IndexMap<FuncId, Vec<bool
         map.insert(id, func.params.iter().map(|p| p.is_mut_ref).collect());
     }
     map
-}
-
-/// Whether parameter `idx` of `func_id` is a `&mut` borrow, or `None` when the
-/// callee is bodyless (its parameter mutability is unknown here). A present
-/// callee with `idx` past its parameter count answers `false` — cannot happen
-/// for a well-formed call.
-fn callee_param_mut_ref(
-    param_mut: &IndexMap<FuncId, Vec<bool>>,
-    func_id: FuncId,
-    idx: usize,
-) -> Option<bool> {
-    param_mut
-        .get(&func_id)
-        .map(|bits| bits.get(idx).copied().unwrap_or(false))
 }
 
 impl Rule for ValueCopyElideRule<'_> {
@@ -241,7 +231,7 @@ impl LocalUsage {
 fn analyze_usage(
     body: &Body,
     type_table: &TypeTable,
-    param_mut: &IndexMap<FuncId, Vec<bool>>,
+    oracle: &MutationOracle<'_>,
     escape: &EscapeMap,
 ) -> UsageInfo {
     let mut usage: IndexMap<u32, LocalUsage> = IndexMap::default();
@@ -255,7 +245,7 @@ fn analyze_usage(
     while let Some(node) = stack.pop() {
         match node {
             NodeRef::Expr(id) => {
-                classify_expr(body, id, type_table, param_mut, &mut usage);
+                classify_expr(body, id, type_table, oracle, &mut usage);
                 aliasing.collect_expr_alias_edge(id, &mut alias_edges);
             }
             NodeRef::Stmt(id) => aliasing.collect_stmt_alias_edge(id, &mut alias_edges),
@@ -558,86 +548,48 @@ fn classify_expr(
     body: &Body,
     id: ExprId,
     type_table: &TypeTable,
-    param_mut: &IndexMap<FuncId, Vec<bool>>,
+    oracle: &MutationOracle<'_>,
     usage: &mut IndexMap<u32, LocalUsage>,
 ) {
     if let ExprKind::Local { index, .. } = &body.exprs[id].kind {
         usage.entry(*index).or_default().occurrences += 1;
     }
-    // Whether the callee mutates the caller's storage through argument `idx`:
-    // the callee's parameter `&mut`-ness when known, else (bodyless callee) a
-    // fall-back on the argument expression's own reference type.
-    let arg_mutates =
-        |func_id: FuncId, idx: usize, ae: ExprId, arg_is_mut: bool| match callee_param_mut_ref(
-            param_mut, func_id, idx,
-        ) {
-            Some(mutates) => mutates,
-            None => arg_is_mut || is_mutable_witness_type(body.exprs[ae].type_id, type_table),
-        };
-    match &body.exprs[id].kind {
-        ExprKind::Assign { target, .. } => match &body.exprs[*target].kind {
-            ExprKind::Local { index, .. } => {
-                usage.entry(*index).or_default().assign_count += 1;
-            }
-            ExprKind::FieldAccess { expr: inner, .. } => {
-                mark_root_field_mutated_operand(body, *inner, type_table, usage);
-            }
-            _ => {}
-        },
-        ExprKind::Unary {
-            op: NirUnaryOp::MutRef,
-            expr: inner,
+    expr_witnesses(body, id, oracle, &mut |w| match w {
+        Witness::Rebind(index) => {
+            usage.entry(index).or_default().assign_count += 1;
+        }
+        Witness::Write(inner) => {
+            mark_root_field_mutated_operand(body, inner, type_table, usage);
+        }
+        Witness::MutBorrow(e) => {
+            mark_root_field_mutated(body, e, type_table, usage);
+        }
+        // Bodyless callee: fall back on the site's `mut` flag or the
+        // argument expression's own reference/box type.
+        Witness::CalleeArg {
+            expr: ae,
+            verdict,
+            is_mut,
         } => {
-            if let Some(e) = inner.as_expr() {
-                mark_root_field_mutated(body, e, type_table, usage);
+            if verdict.unwrap_or_else(|| {
+                is_mut || is_mutable_witness_type(body.exprs[ae].type_id, type_table)
+            }) {
+                mark_root_field_mutated(body, ae, type_table, usage);
             }
         }
-        ExprKind::Call { func_id, args, .. } => {
-            for (i, arg) in args.iter().enumerate() {
-                if let Some(ae) = arg.expr.as_expr()
-                    && arg_mutates(*func_id, i, ae, arg.is_mut)
-                {
-                    mark_root_field_mutated(body, ae, type_table, usage);
-                }
-            }
-        }
-        ExprKind::MethodCall {
-            receiver,
-            func_id,
-            args,
-            ..
-        } => {
-            // Auto-ref carries the receiver as `T` even for `&mut self`
-            // methods, so its expr type can't witness the `self` mode; consult
-            // the callee's parameter 0 (unknown ids treated conservatively as
-            // mutating). A `&self` / by-value method never mutates the caller's
-            // receiver, so its receiver stays read-only and a binding copy of
-            // it can strip.
-            if callee_param_mut_ref(param_mut, *func_id, 0).unwrap_or(true)
-                && let Some(re) = receiver.as_expr()
-            {
+        // Auto-ref carries the receiver as `T` even for `&mut self`
+        // methods, so an unknown callee is treated as mutating.
+        Witness::Receiver { expr: re, verdict } => {
+            if verdict.unwrap_or(true) {
                 mark_root_field_mutated(body, re, type_table, usage);
             }
-            // Method arguments occupy parameters 1.. (parameter 0 is `self`).
-            for (i, arg) in args.iter().enumerate() {
-                if let Some(ae) = arg.expr.as_expr()
-                    && arg_mutates(*func_id, i + 1, ae, arg.is_mut)
-                {
-                    mark_root_field_mutated(body, ae, type_table, usage);
-                }
+        }
+        Witness::IndirectArg(ae) => {
+            if is_mutable_witness_type(body.exprs[ae].type_id, type_table) {
+                mark_root_field_mutated(body, ae, type_table, usage);
             }
         }
-        ExprKind::IndirectCall { args, .. } => {
-            for &arg in args {
-                if let Some(ae) = arg.as_expr()
-                    && is_mutable_witness_type(body.exprs[ae].type_id, type_table)
-                {
-                    mark_root_field_mutated_operand(body, arg, type_table, usage);
-                }
-            }
-        }
-        _ => {}
-    }
+    });
 }
 
 /// Whether an argument of this type can carry a mutation into the
@@ -1004,8 +956,8 @@ impl ValueCopyElideRule<'_> {
             .enumerate()
             .filter_map(|(i, a)| {
                 let e = a.expr.as_expr()?;
-                let mutates = match callee_param_mut_ref(self.param_mut, func_id, param_offset + i)
-                {
+                let oracle = MutationOracle::new(self.param_mut, self.call_immutability);
+                let mutates = match oracle.arg_mutates(func_id, param_offset + i) {
                     Some(m) => m,
                     None => is_mutable_witness_type(body.exprs[e].type_id, self.type_table),
                 };

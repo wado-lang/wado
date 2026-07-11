@@ -8,11 +8,14 @@
 //!
 //! - [`identity`] — whether a value shares storage with its source on a
 //!   shallow copy.
+//! - [`mutation`] — the mutation-witness recognizer and its composite
+//!   callee oracle (declared `&mut` bits ∧ receiver-writes fixpoint).
 //!
 //! Storage-root resolution is `arena_query::storage_root`, shared with the
 //! escape / aliasing analyses. `value_copy_elide` (full wrapper removal) and
 //! `value_copy_demote` (deep → shallow spine copy) are the consumers.
 
 pub(in crate::optimize) mod identity;
+pub(in crate::optimize) mod mutation;
 
 pub(in crate::optimize) use identity::{carries_identity, needs_value_copy};
