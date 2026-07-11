@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783740866763,
+  "lastUpdate": 1783753201082,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -39261,6 +39261,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3e53c0626a276960a6b4f44e2414a3842bbf5d46"
         },
         "date": 1783740866325,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16351,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 266775,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e97f08121596af690886905366a2bdfdad5cd072",
+          "message": "Merge pull request #1550 from wado-lang/claude/elaborator-refactoring-design-i2dwjc\n\nrefactor(elaborator): dismantle the god object — Scope, dispatch outcomes, decl-first driver, signature digests (S1–S4)",
+          "timestamp": "2026-07-11T15:51:27+09:00",
+          "tree_id": "12663b0d38758a99dbefeffc211e645810ad2bbb",
+          "url": "https://github.com/wado-lang/wado/commit/e97f08121596af690886905366a2bdfdad5cd072"
+        },
+        "date": 1783753200584,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
