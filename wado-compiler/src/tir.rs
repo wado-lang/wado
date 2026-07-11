@@ -4273,6 +4273,11 @@ pub struct TirEffectOp {
     /// resource call sites — which carry `cm_name` on their
     /// `MethodInfo` — back to the right per-monomorphisation wrapper.
     pub cm_name: Option<String>,
+    /// `async fn` operation (`return_type` is the `AsyncCall<T>`
+    /// wrapper). A handler for an async op resumes with the resolved
+    /// `T`; the dispatch wrapper repackages the handler's result as an
+    /// already-completed `AsyncCall<T>`.
+    pub is_async: bool,
 }
 
 /// Resource declaration captured in TIR for effect propagation.

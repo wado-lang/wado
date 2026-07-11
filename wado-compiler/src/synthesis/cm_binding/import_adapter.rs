@@ -344,6 +344,135 @@ fn synthesize_async_lift_function(
     )
 }
 
+/// Synthesize the per-import completed-`AsyncCall` wrap function
+/// `__cm_wrap_async__<iface>_<method>(value: T) -> AsyncCall<T>`.
+///
+/// Called by the effect dispatch wrapper when a handler intercepts an async
+/// import operation: the handler resumes with the resolved `T`, and this
+/// function repackages it as an `AsyncCall<T>` indistinguishable from a
+/// synchronously-completed real call — the value is lowered into a
+/// realloc'd result buffer through the canonical ABI, and the returned
+/// struct carries subtask handle `0` plus the import's own `__cm_lift__*`
+/// function, so `AsyncCall::wait` follows its ordinary completed-call path
+/// (skip the wait, lift from the buffer, free the buffer).
+#[allow(clippy::too_many_arguments)]
+fn synthesize_async_wrap_function(
+    name: String,
+    func_info: &CmFunctionInfo,
+    inner_type_id: TypeId,
+    subtask_type: TypeId,
+    outptr_size: u32,
+    outptr_align: u32,
+    lift_fn_ref: TirExpr,
+    entry_source: &ModuleSource,
+    cm_interface_registry: &CmInterfaceRegistry,
+    type_table: &RefCell<TypeTable>,
+) -> Rc<RefCell<TirFunction>> {
+    let _ = entry_source;
+    let span = synth_span();
+    let mut next_local: u32 = 0;
+    let mut locals: Vec<TirLocal> = Vec::new();
+    let mut body_stmts: Vec<TirStmt> = Vec::new();
+
+    let mut params: Vec<TirParam> = Vec::new();
+    if inner_type_id != TypeTable::UNIT {
+        let value_local = next_local;
+        locals.push(TirLocal::synth(value_local, inner_type_id, false));
+        next_local += 1;
+        params.push(TirParam {
+            name: "__value".to_string(),
+            type_id: inner_type_id,
+            local_index: value_local,
+            is_mut: false,
+            span,
+        });
+    }
+
+    let outptr_expr = if outptr_size > 0 {
+        let outptr_local = next_local;
+        locals.push(TirLocal::synth(outptr_local, TypeTable::I32, false));
+        next_local += 1;
+        body_stmts.push(let_stmt(
+            "__outptr",
+            outptr_local,
+            TypeTable::I32,
+            builtin_call(
+                "realloc",
+                vec![
+                    i32_const(0),
+                    i32_const(0),
+                    i32_const(outptr_align as i32),
+                    i32_const(outptr_size as i32),
+                ],
+                TypeTable::I32,
+            ),
+        ));
+        let return_type = func_info
+            .return_type
+            .as_ref()
+            .expect("outptr_size > 0 implies a result type");
+        body_stmts.extend(synthesize_lower_wasi_type_to_memory(
+            return_type,
+            local_ref(params[0].local_index, "__value", inner_type_id),
+            local_ref(outptr_local, "__outptr", TypeTable::I32),
+            &mut next_local,
+            &mut locals,
+            cm_interface_registry,
+            &func_info.package,
+            type_table,
+        ));
+        local_ref(outptr_local, "__outptr", TypeTable::I32)
+    } else {
+        i32_const(0)
+    };
+
+    let completed = TirExpr::new(
+        TirExprKind::StructLiteral {
+            struct_type: subtask_type,
+            struct_name: "AsyncCall".to_string(),
+            fields: vec![
+                TirStructField {
+                    name: "__cm_packed".to_string(),
+                    value: i32_const(0),
+                    field_index: 0,
+                },
+                TirStructField {
+                    name: "__cm_outptr".to_string(),
+                    value: outptr_expr,
+                    field_index: 1,
+                },
+                TirStructField {
+                    name: "__cm_size".to_string(),
+                    value: i32_const(outptr_size as i32),
+                    field_index: 2,
+                },
+                TirStructField {
+                    name: "__cm_align".to_string(),
+                    value: i32_const(outptr_align as i32),
+                    field_index: 3,
+                },
+                TirStructField {
+                    name: "__cm_lift".to_string(),
+                    value: lift_fn_ref,
+                    field_index: 4,
+                },
+            ],
+        },
+        subtask_type,
+        span,
+    );
+    body_stmts.push(return_stmt(Some(completed)));
+
+    make_binding_function(
+        name,
+        params,
+        subtask_type,
+        block(body_stmts),
+        next_local,
+        locals,
+    )
+}
+
 /// Synthesize a CM binding function for a WASI import.
 ///
 /// The binding function:
@@ -1429,6 +1558,42 @@ pub(super) fn synthesize_adapter(
         body_stmts.push(return_stmt(Some(subtask_struct)));
         adapter_return_type = subtask_type;
         auxiliary.push(lift_fn);
+
+        // Truly async imports additionally get the completed-`AsyncCall`
+        // wrap function the effect dispatch wrapper calls when a handler
+        // mocks this operation. Sync-with-streaming imports also take this
+        // branch but are not `async fn` at the Wado level, so no dispatch
+        // wrapper ever asks for their wrap.
+        if func_info.is_async {
+            let (wrap_size, wrap_align) = match async_outptr_info {
+                Some((_, size, align)) => (size, align),
+                None => (0, 0),
+            };
+            let wrap_lift_ref = TirExpr::new(
+                TirExprKind::FuncRef {
+                    module_source: entry_source.clone(),
+                    name: lift_func_name(&func_info.interface_name, &func_info.method_name),
+                    type_args: Vec::new(),
+                },
+                lift_fn_type,
+                synth_span(),
+            );
+            auxiliary.push(synthesize_async_wrap_function(
+                crate::name::cm_wrap_async_func_name(
+                    &func_info.interface_name,
+                    &func_info.method_name,
+                ),
+                func_info,
+                inner_type_id,
+                subtask_type,
+                wrap_size,
+                wrap_align,
+                wrap_lift_ref,
+                entry_source,
+                cm_interface_registry,
+                type_table,
+            ));
+        }
     } else if let Some((alloc_size, alloc_align)) = outptr_alloc {
         body_stmts.push(expr_stmt(raw_call_expr));
         let outptr_local = next_local - 1;

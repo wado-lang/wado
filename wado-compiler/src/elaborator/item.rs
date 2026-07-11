@@ -753,6 +753,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return_type,
                 span: method.span,
                 cm_name,
+                is_async: method.is_async,
             });
         }
         ops
@@ -1710,11 +1711,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // current module's import context so two modules with same-
             // named effects / resources don't get a false negative here.
             let canonical_key = scope.canonical_decl_key(name);
-            if scope
+            let effect_decl = scope
                 .tysys
                 .trait_env
                 .effect_decl_index
-                .contains_key(&canonical_key)
+                .get(&canonical_key)
+                .cloned();
+            if effect_decl.is_some()
                 || scope
                     .tysys
                     .trait_env
@@ -1722,6 +1725,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .contains_key(&canonical_key)
             {
                 ctx.in_handler_method = true;
+            }
+            // A handled async op is repackaged as a completed `AsyncCall`
+            // through the import's canonical-ABI lower/lift pair; a
+            // user-defined effect has no such pair, so reject its async
+            // ops here rather than ICE in dispatch synthesis.
+            if let Some((decl_module, decl_id)) = effect_decl
+                && let Some(module) = scope.loaded_modules.get(&decl_module)
+                && let Some(ast::Item::Interface(decl)) = module.item_by_id(decl_id)
+                && let Some(method) = decl.methods.iter().find(|m| m.name == func.name)
+                && method.is_async
+                && method
+                    .attrs
+                    .iter()
+                    .find_map(ast::Attribute::cm_identifier)
+                    .is_none()
+            {
+                let _ = scope
+                    .logger
+                    .error(TypeError::AsyncUserEffectHandlerUnsupported {
+                        interface_name: name.to_string(),
+                        op_name: func.name.clone(),
+                        span: func.span,
+                    });
             }
         }
 

@@ -438,6 +438,17 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// Handler method provided for an `async fn` operation of an effect
+    /// with no Component Model import binding. The dispatch wrapper
+    /// repackages a handler's resolved result through the import's
+    /// canonical-ABI lower/lift pair, which does not exist for a
+    /// user-defined effect.
+    AsyncUserEffectHandlerUnsupported {
+        interface_name: String,
+        op_name: String,
+        span: Span,
+    },
+
     /// Bundled-handler form `with &mut h do { ... }` where the handler value's
     /// underlying type does not implement any effect. There is nothing for
     /// `with h do` to install in this case — the user almost certainly meant
@@ -878,6 +889,17 @@ impl TypeError {
             TypeError::ResumeOutsideHandler { span } => (
                 Code::UnsupportedFeature,
                 "`resume` is only valid inside an effect handler method body".to_string(),
+                *span,
+            ),
+            TypeError::AsyncUserEffectHandlerUnsupported {
+                interface_name,
+                op_name,
+                span,
+            } => (
+                Code::UnsupportedFeature,
+                format!(
+                    "cannot handle async operation '{interface_name}::{op_name}': only async operations backed by a Component Model import (e.g. wasi:http 'Client::send') can be handled"
+                ),
                 *span,
             ),
             TypeError::HandlerEffectNotImplemented {
