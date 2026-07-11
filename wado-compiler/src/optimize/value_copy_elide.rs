@@ -119,12 +119,20 @@ fn place_path(body: &Body, expr: ExprId) -> Option<AccessPath> {
 fn disjoint(mutated: &AccessPath, read: &AccessPath) -> bool {
     for (a, b) in mutated.selectors.iter().zip(read.selectors.iter()) {
         match (a, b) {
+            // Distinct struct fields or variant cases prove disjointness.
             (Selector::Field(x), Selector::Field(y)) if x != y => return true,
             (Selector::Variant(x), Selector::Variant(y)) if x != y => return true,
+            // Same field / same variant / two dynamic indices: compatible so far,
+            // keep comparing deeper selectors.
             (Selector::Field(_), Selector::Field(_))
             | (Selector::Variant(_), Selector::Variant(_))
             | (Selector::Index, Selector::Index) => continue,
-            _ => return false,
+            // Mixed selector kinds on the same storage cannot arise for two paths
+            // that share a prefix (the type at each depth is fixed); treat any as
+            // conservatively overlapping.
+            (Selector::Field(_), Selector::Variant(_) | Selector::Index)
+            | (Selector::Variant(_), Selector::Field(_) | Selector::Index)
+            | (Selector::Index, Selector::Field(_) | Selector::Variant(_)) => return false,
         }
     }
     false
@@ -744,29 +752,26 @@ fn classify_expr(
     if let ExprKind::Local { index, .. } = &body.exprs[id].kind {
         usage.entry(*index).or_default().occurrences += 1;
     }
-    // Precise mutated-path recording for a direct field/index/variant write.
-    // The shared `Witness::Write` carries only the operand *under* the outer
-    // projection, so read the assignment target here to keep the outer
-    // selector (a whole-local target is a `Rebind`, handled below).
+    // A direct field/index/variant write. The shared `Witness::Write` carries
+    // only the operand *under* the outer projection, so mark the assignment
+    // target place here to keep the outer selector (a whole-local target is a
+    // `Rebind`, handled below).
     if let ExprKind::Assign { target, .. } = &body.exprs[id].kind
         && matches!(
             &body.exprs[*target].kind,
             ExprKind::FieldAccess { .. } | ExprKind::Index { .. } | ExprKind::VariantPayload { .. }
         )
     {
-        record_direct_mutation(body, *target, type_table, usage);
+        mark_mutation(body, *target, type_table, usage);
     }
     expr_witnesses(body, id, oracle, &mut |w| match w {
         Witness::Rebind(index) => {
             usage.entry(index).or_default().assign_count += 1;
         }
-        Witness::Write(inner) => {
-            mark_root_field_mutated_operand(body, inner, type_table, usage);
-        }
-        Witness::MutBorrow(e) => {
-            mark_root_field_mutated(body, e, type_table, usage);
-            record_direct_mutation(body, e, type_table, usage);
-        }
+        // Marked from the assignment target place above; the witness's inner
+        // operand has already dropped the outer selector.
+        Witness::Write(_) => {}
+        Witness::MutBorrow(e) => mark_mutation(body, e, type_table, usage),
         Witness::CalleeArg {
             expr: ae,
             verdict,
@@ -775,33 +780,33 @@ fn classify_expr(
             if verdict.unwrap_or_else(|| {
                 is_mut || is_mutable_witness_type(body.exprs[ae].type_id, type_table)
             }) {
-                mark_root_field_mutated(body, ae, type_table, usage);
-                record_direct_mutation(body, ae, type_table, usage);
+                mark_mutation(body, ae, type_table, usage);
             }
         }
         // Auto-ref hides a `&mut self` receiver's mode, so an unknown callee is
         // assumed to mutate.
         Witness::Receiver { expr: re, verdict } => {
             if verdict.unwrap_or(true) {
-                mark_root_field_mutated(body, re, type_table, usage);
-                record_direct_mutation(body, re, type_table, usage);
+                mark_mutation(body, re, type_table, usage);
             }
         }
         Witness::IndirectArg(ae) => {
             if is_mutable_witness_type(body.exprs[ae].type_id, type_table) {
-                mark_root_field_mutated(body, ae, type_table, usage);
-                record_direct_mutation(body, ae, type_table, usage);
+                mark_mutation(body, ae, type_table, usage);
             }
         }
     });
 }
 
-/// Record a direct mutation at `place`: its exact access path when it is a
-/// local-rooted place, otherwise mark the roots imprecise so the field-
-/// sensitive check falls back to the coarse bit. A whole-local place (path with
-/// no selectors, e.g. `&mut self`) is precise and correctly blocks every read
-/// under that root via the prefix rule.
-fn record_direct_mutation(
+/// Mark a direct mutation at `place`, recording both the coarse
+/// `has_field_mutation` bit (the binding-side gate and the field-insensitive
+/// fallback) and, when `place` is a local-rooted place, its exact access path
+/// for the field-sensitive source-side check. A whole-local place (empty
+/// selector path, e.g. `&mut self`) is precise and correctly blocks every read
+/// under that root via the prefix rule; a place that is not local-rooted (a
+/// `Deref`, computed receiver, or literal-wrapped `&mut`) is marked imprecise
+/// so its root falls back to the coarse bit.
+fn mark_mutation(
     body: &Body,
     place: ExprId,
     type_table: &TypeTable,
@@ -810,19 +815,27 @@ fn record_direct_mutation(
     match place_path(body, place) {
         Some(ap) => {
             let u = usage.entry(ap.root).or_default();
+            u.has_field_mutation = true;
             u.direct_field_mutation = true;
             u.direct_mutated_paths.push(ap);
         }
-        None => mark_roots_imprecise(body, place, type_table, usage),
+        None => mark_roots_mutated(body, place, type_table, usage),
     }
 }
 
-/// [`mark_root_field_mutated`]'s traversal, but flagging each root's mutation as
-/// direct-yet-imprecise (a `Deref`, a computed receiver, or a literal-wrapped
-/// `&mut`, whose exact path is not a local-rooted place). This disables the
-/// precise check for those roots without weakening the coarse bit, which
-/// `mark_root_field_mutated` sets separately.
-fn mark_roots_imprecise(
+/// [`mark_mutation`] for a place with no single local-rooted access path:
+/// follow pure projections (`FieldAccess`, `VariantPayload`, `Cast`, `Unary`,
+/// `Index`) and, conservatively, a `MethodCall` receiver and identity-carrying
+/// literal elements, marking every root field-mutated *and* imprecise.
+/// Imprecise disables the field-sensitive check (the exact mutated path is
+/// unknown), leaving the root on the coarse bit; since that bit only ever
+/// *blocks* elision, over-approximating here costs a missed optimization, never
+/// an unsound alias.
+///
+/// `List<T>::index_value(i)` (raw `x[i]` before `inline` expands the trait
+/// call) returns storage aliased into the receiver but arrives as an opaque
+/// `MethodCall`, so recursing into every receiver errs toward marking too much.
+fn mark_roots_mutated(
     body: &Body,
     expr: ExprId,
     type_table: &TypeTable,
@@ -831,6 +844,7 @@ fn mark_roots_imprecise(
     match &body.exprs[expr].kind {
         ExprKind::Local { index, .. } => {
             let u = usage.entry(*index).or_default();
+            u.has_field_mutation = true;
             u.direct_field_mutation = true;
             u.imprecise_mutation = true;
         }
@@ -839,111 +853,10 @@ fn mark_roots_imprecise(
         | ExprKind::FieldAccess { expr: inner, .. }
         | ExprKind::VariantPayload { expr: inner, .. }
         | ExprKind::Index { expr: inner, .. } => {
-            if let Some(e) = inner.as_expr() {
-                mark_roots_imprecise(body, e, type_table, usage);
-            }
+            mark_roots_mutated_operand(body, *inner, type_table, usage);
         }
         ExprKind::MethodCall { receiver, .. } => {
-            if let Some(e) = receiver.as_expr() {
-                mark_roots_imprecise(body, e, type_table, usage);
-            }
-        }
-        ExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                mark_identity_root_imprecise(body, field.value, type_table, usage);
-            }
-        }
-        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-            for element in elements {
-                mark_identity_root_imprecise(body, *element, type_table, usage);
-            }
-        }
-        ExprKind::VariantConstruct {
-            payload: Some(payload),
-            ..
-        } => {
-            mark_identity_root_imprecise(body, *payload, type_table, usage);
-        }
-        _ => {}
-    }
-}
-
-/// [`mark_roots_imprecise`] for an aggregate-literal element carrying identity.
-fn mark_identity_root_imprecise(
-    body: &Body,
-    op: Operand,
-    type_table: &TypeTable,
-    usage: &mut IndexMap<u32, LocalUsage>,
-) {
-    if let Some(e) = op.as_expr()
-        && (carries_identity(body.exprs[e].type_id, type_table)
-            || type_table.box_payload_of(body.exprs[e].type_id).is_some())
-    {
-        mark_roots_imprecise(body, e, type_table, usage);
-    }
-}
-
-/// Whether an argument of this type can carry a mutation into the
-/// caller's storage: a `&mut T`, or a `Box<T>` whose payload carries
-/// identity — the boxing plan lowers `&` and `&mut` to the same `Box<T>`
-/// shape, erasing the mutability witness.
-fn is_mutable_witness_type(type_id: TypeId, type_table: &TypeTable) -> bool {
-    if is_mut_ref_type(type_id, type_table) {
-        return true;
-    }
-    type_table
-        .box_payload_of(type_id)
-        .is_some_and(|payload| carries_identity(payload, type_table))
-}
-
-/// [`mark_root_field_mutated`] for an operand.
-fn mark_root_field_mutated_operand(
-    body: &Body,
-    op: Operand,
-    type_table: &TypeTable,
-    usage: &mut IndexMap<u32, LocalUsage>,
-) {
-    if let Some(e) = op.as_expr() {
-        mark_root_field_mutated(body, e, type_table, usage);
-    }
-}
-
-/// Mark every local that contributes to `expr`'s observable storage as
-/// potentially field-mutated, following pure projections (`FieldAccess`,
-/// `VariantPayload`, `Cast`, `Unary`, `Index`) and, conservatively, a
-/// `MethodCall` receiver. Mirrors `copy_prop`'s `mark_potentially_mutated_local`
-/// (and [`storage_root`]) in which projections share
-/// storage with their root; `Index` was previously missing here, which
-/// under-counted mutation through an indexed element (`x[i].field.push(...)`)
-/// as not touching `x`.
-///
-/// `List<T>::index_value(i)` (raw `x[i]` before `inline` expands the trait
-/// call) returns storage aliased into the receiver, same as a raw `Index`, but
-/// arrives here as an opaque `MethodCall` — indistinguishable, without a
-/// signature-shape classifier, from a method that returns a genuinely fresh
-/// value. Recursing into every `MethodCall` receiver errs toward marking too
-/// much rather than too little: `has_field_mutation` only ever *blocks*
-/// elision, so over-approximating it costs a missed optimization, never
-/// unsound aliasing.
-fn mark_root_field_mutated(
-    body: &Body,
-    expr: ExprId,
-    type_table: &TypeTable,
-    usage: &mut IndexMap<u32, LocalUsage>,
-) {
-    match &body.exprs[expr].kind {
-        ExprKind::Local { index, .. } => {
-            usage.entry(*index).or_default().has_field_mutation = true;
-        }
-        ExprKind::Unary { expr: inner, .. }
-        | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::FieldAccess { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. }
-        | ExprKind::Index { expr: inner, .. } => {
-            mark_root_field_mutated_operand(body, *inner, type_table, usage);
-        }
-        ExprKind::MethodCall { receiver, .. } => {
-            mark_root_field_mutated_operand(body, *receiver, type_table, usage);
+            mark_roots_mutated_operand(body, *receiver, type_table, usage);
         }
         // A literal in a mutation-witness position (`Box { value: a }`)
         // wraps its sources; only identity-carrying elements are shared.
@@ -967,8 +880,20 @@ fn mark_root_field_mutated(
     }
 }
 
-/// [`mark_root_field_mutated`] for an aggregate-literal element, applied only
-/// when the element's type can carry the enclosing value's identity.
+/// [`mark_roots_mutated`] for an operand.
+fn mark_roots_mutated_operand(
+    body: &Body,
+    op: Operand,
+    type_table: &TypeTable,
+    usage: &mut IndexMap<u32, LocalUsage>,
+) {
+    if let Some(e) = op.as_expr() {
+        mark_roots_mutated(body, e, type_table, usage);
+    }
+}
+
+/// [`mark_roots_mutated`] for an aggregate-literal element, applied only when
+/// the element's type can carry the enclosing value's identity.
 fn mark_identity_root_mutated(
     body: &Body,
     op: Operand,
@@ -979,8 +904,21 @@ fn mark_identity_root_mutated(
         && (carries_identity(body.exprs[e].type_id, type_table)
             || type_table.box_payload_of(body.exprs[e].type_id).is_some())
     {
-        mark_root_field_mutated(body, e, type_table, usage);
+        mark_roots_mutated(body, e, type_table, usage);
     }
+}
+
+/// Whether an argument of this type can carry a mutation into the
+/// caller's storage: a `&mut T`, or a `Box<T>` whose payload carries
+/// identity — the boxing plan lowers `&` and `&mut` to the same `Box<T>`
+/// shape, erasing the mutability witness.
+fn is_mutable_witness_type(type_id: TypeId, type_table: &TypeTable) -> bool {
+    if is_mut_ref_type(type_id, type_table) {
+        return true;
+    }
+    type_table
+        .box_payload_of(type_id)
+        .is_some_and(|payload| carries_identity(payload, type_table))
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
