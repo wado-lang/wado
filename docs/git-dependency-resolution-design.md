@@ -84,8 +84,10 @@ The provider trait is the seam: a later swap to `gix` changes only
 `FilesystemProvider`, never the resolver or the compiler wiring. A missing
 `git` binary is reported as a clear, actionable `ProviderError`, not a panic.
 
-Submodules are **not** recursed initially (documented limitation); Wado has no
-build scripts, so a checkout is inert source with no code-execution risk.
+Submodules are populated by default (safe side): a dependency's submodules are
+part of its source, so materialization runs `git submodule update --init
+--recursive` in the worktree (a no-op without submodules). Wado has no build
+scripts, so a checkout is inert source with no code-execution risk.
 
 ### git invocations
 
@@ -460,8 +462,10 @@ impl stays pure.
   `root` key, and precedence are decided; open only on whether other
   machine-global settings (default registry auth, `--offline` default, …)
   eventually share this file.
-- **Submodules**: left unrecursed initially. Revisit if a real dependency needs
-  them; would become a `--recurse-submodules`-style opt-in, not a default.
+- **Submodules**: populated by default (`git submodule update --init
+  --recursive` in the worktree), since a dependency's submodules are part of its
+  source. Local (`file`) submodule transport stays git-default-blocked; only
+  tests re-enable it via `GIT_CONFIG_GLOBAL`.
 - **Lock `directory`**: not recorded in the lock (the consumer's manifest still
   carries it, and the cache key excludes it). Revisit only if a future feature
   needs to reconstruct the entry purely from the lock.

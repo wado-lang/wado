@@ -110,6 +110,103 @@ fn git_dependency_resolves_fetches_and_runs() {
         .success();
 }
 
+/// Submodules are populated by default: a git dependency whose repository has a
+/// submodule gets that submodule checked out into the materialized worktree, so
+/// the dependency's full source is present.
+#[test]
+fn git_dependency_materializes_submodules_by_default() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let cache = root.join("wado-cache");
+
+    // A throwaway global git config allowing local (`file`) submodule transport,
+    // which git blocks by default. Scoped to this test's processes via
+    // GIT_CONFIG_GLOBAL, so the production default stays secure.
+    let gitconfig = root.join("gitconfig");
+    fs::write(&gitconfig, "[protocol \"file\"]\n\tallow = always\n").unwrap();
+    let cfg = |cmd: &mut Command| {
+        cmd.env("GIT_CONFIG_GLOBAL", &gitconfig)
+            .env("GIT_AUTHOR_NAME", "t")
+            .env("GIT_AUTHOR_EMAIL", "t@t")
+            .env("GIT_COMMITTER_NAME", "t")
+            .env("GIT_COMMITTER_EMAIL", "t@t");
+    };
+    let git_cfg = |dir: &Path, args: &[&str]| {
+        let mut c = Command::new("git");
+        c.current_dir(dir).args(args);
+        cfg(&mut c);
+        assert!(c.status().unwrap().success(), "git {args:?} failed");
+    };
+
+    // The submodule repository carries a marker file.
+    let sub = root.join("sub");
+    fs::create_dir_all(&sub).unwrap();
+    git_cfg(&sub, &["init", "-q", "-b", "main"]);
+    fs::write(sub.join("token.txt"), "SUBTOKEN\n").unwrap();
+    git_cfg(&sub, &["add", "-A"]);
+    git_cfg(&sub, &["commit", "-q", "-m", "sub"]);
+
+    // The dependency repository embeds it as a submodule.
+    let greet = root.join("greet");
+    fs::create_dir_all(greet.join("src")).unwrap();
+    git_cfg(&greet, &["init", "-q", "-b", "main"]);
+    fs::write(
+        greet.join("wado.toml"),
+        "[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    fs::write(greet.join("src/lib.wado"), "export fn hello() -> String { return \"hi\"; }\n")
+        .unwrap();
+    git_cfg(
+        &greet,
+        &["submodule", "add", &format!("file://{}", sub.display()), "vendor/sub"],
+    );
+    git_cfg(&greet, &["add", "-A"]);
+    git_cfg(&greet, &["commit", "-q", "-m", "greet with submodule"]);
+    let url = format!("file://{}", greet.display());
+
+    let app = root.join("app");
+    fs::create_dir_all(&app).unwrap();
+    fs::write(
+        app.join("wado.toml"),
+        format!(
+            "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+             [dependencies]\ngreet = {{ git = \"{url}\", ref = \"main\" }}\n"
+        ),
+    )
+    .unwrap();
+
+    wado_in(&app)
+        .env("WADO_ROOT", &cache)
+        .env("GIT_CONFIG_GLOBAL", &gitconfig)
+        .arg("update")
+        .assert()
+        .success();
+    wado_in(&app)
+        .env("WADO_ROOT", &cache)
+        .env("GIT_CONFIG_GLOBAL", &gitconfig)
+        .arg("fetch")
+        .assert()
+        .success();
+
+    // The materialized worktree must contain the checked-out submodule file.
+    let worktrees = cache
+        .join(wado_manifest::cache::git_repo_relative(&url).unwrap())
+        .join(".worktrees");
+    let entry = fs::read_dir(&worktrees)
+        .unwrap()
+        .next()
+        .expect("a worktree exists")
+        .unwrap()
+        .path();
+    let token = entry.join("vendor/sub/token.txt");
+    assert!(
+        token.is_file(),
+        "submodule file should be checked out at {}",
+        token.display()
+    );
+}
+
 /// A single-file script (no `wado.toml`) pins a git source inline on the `use`
 /// clause. `wado run <file>` resolves the ref, materializes the worktree, and
 /// compiles the git-sourced library into the script.

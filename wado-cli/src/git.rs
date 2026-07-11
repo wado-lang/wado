@@ -120,6 +120,14 @@ pub fn materialize(url: &str, version: &str, sha: &str) -> Result<PathBuf, Provi
             message: format!("worktree did not check out to {sha}"),
         });
     }
+    // Populate submodules by default (safe side): a dependency's submodules are
+    // part of its source, so a checkout that omitted them would miss code the
+    // library needs. A no-op for a repo without submodules. Only on (re)create,
+    // not the warm-hit path above — a worktree this code built already has them.
+    run_git(
+        Some(&worktree),
+        &["submodule", "update", "--init", "--recursive"],
+    )?;
     Ok(worktree)
 }
 

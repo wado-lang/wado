@@ -247,9 +247,10 @@ root with per-version git worktrees, `wado clean` as their GC.
 - [x] Auto-materialize git worktrees inside `build`/`run` (like registry
       `fetch_component_dependencies`) so a locked git dep builds without an
       explicit `wado fetch` (`manifest_and_component_index`).
-- [ ] Submodules (`--recurse-submodules`) and a bare-mirror/shallow-fetch
-      optimization; a git dep in a monorepo subgroup (`host/group/sub/repo`) is
-      currently keyed as local.
+- [x] Submodules are populated by default (`git submodule update --init
+      --recursive` on materialize; `tests/git_dependency.rs`).
+- [ ] A bare-mirror/shallow-fetch optimization; a git dep in a monorepo subgroup
+      (`host/group/sub/repo`) is currently keyed as local.
 
 ### Phase 7 — PubGrub resolver
 
