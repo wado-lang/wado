@@ -49,6 +49,10 @@ pub struct EffectError {
     pub kind: EffectKind,
     /// Source location of the call
     pub span: Span,
+    /// Source path of the module the span belongs to. Carried on the error
+    /// so the emitted diagnostic never falls back to the logger's stale
+    /// file context (issue #1553).
+    pub module: String,
 }
 
 impl std::fmt::Display for EffectError {
@@ -79,7 +83,7 @@ impl From<EffectError> for crate::compiler_host::Diagnostic {
                 e.missing_effect,
                 e.callee
             ),
-            span: Some(DiagnosticSpan::from_span(&e.span, None)),
+            span: Some(DiagnosticSpan::from_span(&e.span, Some(&e.module))),
         }
     }
 }
@@ -91,6 +95,8 @@ pub struct StoresError {
     pub message: String,
     /// Source location
     pub span: Span,
+    /// Source path of the module the span belongs to (see [`EffectError`]).
+    pub module: String,
 }
 
 impl std::fmt::Display for StoresError {
@@ -112,7 +118,7 @@ impl From<StoresError> for crate::compiler_host::Diagnostic {
             severity: Severity::Error,
             code: Code::TypeMismatch,
             message: e.message.clone(),
-            span: Some(DiagnosticSpan::from_span(&e.span, None)),
+            span: Some(DiagnosticSpan::from_span(&e.span, Some(&e.module))),
         }
     }
 }
@@ -122,6 +128,8 @@ impl From<StoresError> for crate::compiler_host::Diagnostic {
 pub struct DefaultPurityError {
     pub callee: String,
     pub span: Span,
+    /// Source path of the module the span belongs to (see [`EffectError`]).
+    pub module: String,
 }
 
 impl std::fmt::Display for DefaultPurityError {
@@ -146,7 +154,7 @@ impl From<DefaultPurityError> for crate::compiler_host::Diagnostic {
                 "default value expression must be pure (no effects), but calls effectful function '{}'",
                 e.callee
             ),
-            span: Some(DiagnosticSpan::from_span(&e.span, None)),
+            span: Some(DiagnosticSpan::from_span(&e.span, Some(&e.module))),
         }
     }
 }
@@ -562,6 +570,7 @@ fn check_function_effects_sem(
         index,
         current,
         param_types,
+        module: module.source_path(),
         out,
     };
     ast::walk_block(&mut walker, body);
@@ -787,6 +796,8 @@ struct SemEffectWalker<'a> {
     /// indirect call through a function-typed parameter (which leaves no
     /// `references` edge or recorded expression type at the call site).
     param_types: IndexMap<String, TypeId>,
+    /// Source path of the module under check, stamped on every violation.
+    module: String,
     out: &'a mut Vec<EffectError>,
 }
 
@@ -972,6 +983,7 @@ impl SemEffectWalker<'_> {
                 missing_effect: effect.name().to_string(),
                 kind,
                 span,
+                module: self.module.clone(),
             });
         }
     }
@@ -1157,11 +1169,11 @@ pub fn check_stores_semantic(sem: &Semantics) -> Vec<StoresError> {
         for item in &module.items {
             match item {
                 Item::Function(func) => {
-                    check_function_stores_sem(sem, func, annotations, &mut out);
+                    check_function_stores_sem(sem, src, func, annotations, &mut out);
                 }
                 Item::Impl(impl_block) => {
                     for method in &impl_block.methods {
-                        check_function_stores_sem(sem, method, annotations, &mut out);
+                        check_function_stores_sem(sem, src, method, annotations, &mut out);
                     }
                 }
                 _ => {}
@@ -1173,6 +1185,7 @@ pub fn check_stores_semantic(sem: &Semantics) -> Vec<StoresError> {
 
 fn check_function_stores_sem(
     sem: &Semantics,
+    module: &ModuleSource,
     func: &Function,
     annotations: Option<&crate::elaborator::sem::types::TypeAnnotations>,
     out: &mut Vec<StoresError>,
@@ -1216,6 +1229,7 @@ fn check_function_stores_sem(
         annotations,
         ref_params,
         stores,
+        module: module.source_path(),
         out,
     };
     ast::walk_block(&mut walker, body);
@@ -1229,6 +1243,8 @@ struct StoresWalker<'a> {
     ref_params: IndexSet<String>,
     /// `stores[...]`-declared parameter names — escapes of these are allowed.
     stores: IndexSet<String>,
+    /// Source path of the module under check, stamped on every violation.
+    module: String,
     out: &'a mut Vec<StoresError>,
 }
 
@@ -1258,6 +1274,7 @@ impl AstVisitor for StoresWalker<'_> {
                     "returning reference parameter '{param}' requires `stores[{param}]` declaration"
                 ),
                 span: value.span(),
+                module: self.module.clone(),
             });
         }
         ast::walk_stmt(self, stmt);
@@ -1273,6 +1290,7 @@ impl AstVisitor for StoresWalker<'_> {
                                 "storing reference parameter '{param}' in struct field requires `stores[{param}]` declaration"
                             ),
                             span: field.value.span(),
+                            module: self.module.clone(),
                         });
                     }
                 }
@@ -1290,6 +1308,7 @@ impl AstVisitor for StoresWalker<'_> {
                             "storing reference parameter '{param}' in global '{name}' requires `stores[{param}]` declaration"
                         ),
                         span: assign.value.span(),
+                        module: self.module.clone(),
                     });
                 }
             }
@@ -1327,11 +1346,12 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<Default
         return;
     };
     let walk = |annotations: Option<&crate::elaborator::sem::types::TypeAnnotations>,
+                module: &ModuleSource,
                 params: &[crate::ast::Param],
                 out: &mut Vec<DefaultPurityError>| {
         for param in params {
             if let Some(default) = &param.default {
-                purity_walk_default(sem, annotations, index, default, out);
+                purity_walk_default(sem, annotations, index, module, default, out);
             }
         }
     };
@@ -1343,10 +1363,10 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<Default
         let annotations = state.module_semantics.get(src).map(|m| &m.types);
         for item in &module.items {
             match item {
-                Item::Function(func) => walk(annotations, &func.params, out),
+                Item::Function(func) => walk(annotations, src, &func.params, out),
                 Item::Impl(impl_block) => {
                     for method in &impl_block.methods {
-                        walk(annotations, &method.params, out);
+                        walk(annotations, src, &method.params, out);
                     }
                 }
                 Item::Trait(trait_decl) => {
@@ -1357,13 +1377,13 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<Default
                     // default's calls leave no `references` edge for the walker
                     // to flag until that annotation lands.
                     for method in &trait_decl.methods {
-                        walk(annotations, &method.params, out);
+                        walk(annotations, src, &method.params, out);
                     }
                 }
                 Item::Struct(struct_decl) => {
                     for field in &struct_decl.fields {
                         if let Some(default) = &field.default {
-                            purity_walk_default(sem, annotations, index, default, out);
+                            purity_walk_default(sem, annotations, index, src, default, out);
                         }
                     }
                 }
@@ -1377,6 +1397,7 @@ fn purity_walk_default(
     sem: &Semantics,
     annotations: Option<&crate::elaborator::sem::types::TypeAnnotations>,
     index: &EffectIndex,
+    module: &ModuleSource,
     default: &Expr,
     out: &mut Vec<DefaultPurityError>,
 ) {
@@ -1384,6 +1405,7 @@ fn purity_walk_default(
         sem,
         annotations,
         index,
+        module: module.source_path(),
         out,
     };
     walker.visit_expr(default);
@@ -1395,6 +1417,8 @@ struct PurityWalker<'a> {
     sem: &'a Semantics,
     annotations: Option<&'a crate::elaborator::sem::types::TypeAnnotations>,
     index: &'a EffectIndex<'a>,
+    /// Source path of the module under check, stamped on every violation.
+    module: String,
     out: &'a mut Vec<DefaultPurityError>,
 }
 
@@ -1404,6 +1428,7 @@ impl PurityWalker<'_> {
             self.out.push(DefaultPurityError {
                 callee: callee.to_string(),
                 span,
+                module: self.module.clone(),
             });
         }
     }
@@ -1454,6 +1479,7 @@ impl AstVisitor for PurityWalker<'_> {
                 self.out.push(DefaultPurityError {
                     callee: "<with-handler>".to_string(),
                     span: with_handler.span,
+                    module: self.module.clone(),
                 });
             }
             _ => {}
@@ -1480,10 +1506,13 @@ mod tests {
                 end_line: 10,
                 end_column: 12,
             },
+            module: "example/hello.wado".to_string(),
         };
         assert_eq!(
             error.to_string(),
             "10:5: missing effect 'Stdout' required by 'println'"
         );
+        let diag = crate::compiler_host::Diagnostic::from(error);
+        assert_eq!(diag.span.expect("span").file, "example/hello.wado");
     }
 }
